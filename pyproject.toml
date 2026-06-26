@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "analytics"
+version = "0.1.0"
+description = "SSM Capstone — analytics pipeline (ETL, ABC, SARIMA, LP)"
+requires-python = ">=3.11"
+
+# ---------------------------------------------------------------
+# ARCHITECTURE BOUNDARY (CLAUDE.md Part 6):
+#   The `analytics` package owns the full pipeline:
+#     ETL → ABC classification → SARIMA forecasting → LP optimization.
+#   It writes results to Supabase.
+#
+#   The `backend` (FastAPI) reads forecasts and recommendations
+#   FROM Supabase via SQL/SQLAlchemy.  It does NOT import `analytics`
+#   at runtime.  This decouples the batch pipeline from the API
+#   and avoids pulling heavy ML dependencies into the web process.
+# ---------------------------------------------------------------
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["analytics*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]

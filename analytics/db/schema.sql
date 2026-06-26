@@ -1,0 +1,15 @@
+-- analytics/db/schema.sql
+-- Phase 3A (CLAUDE.md Step 2 — Checkpoint: matches Section 3.3.1 and 3.3.2)
+--
+-- Galaxy / Fact-Constellation schema for SSM Capstone.
+-- Principals in scope: Unilever Philippines · Del Monte Philippines ONLY.
+--
+-- Execution order:
+--   1. Dimension tables (no foreign-key dependencies)
+--   2. Fact tables (reference dimension PKs)
+--   3. ABC_Classification (derived from Sales_Fact)
+--
+-- Yuan reviews this file against the manuscript ERD before running in Supabase.
+--
+-- TODO: Write full DDL for all 10 tables listed in CLAUDE.md Part 1.
+--       Confirm column names, data types, and constraint definitions with Yuan.
