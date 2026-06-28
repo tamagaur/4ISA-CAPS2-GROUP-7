@@ -88,9 +88,3 @@ pytest
 uvicorn backend.main:app --reload
 ```
 
----
-
-## Phase status
-
-See `STATE.md` for the current build phase and next steps.  
-See `CLAUDE.md` for the full phase-by-phase build plan.
