@@ -1,6 +1,7 @@
 # Agent context files — session memory, rules, state (local only)
 CLAUDE.md
 agent/
+.claude/
 
 # Environment
 .env
