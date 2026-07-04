@@ -1,0 +1,214 @@
+.login-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Left Side - Branding */
+.login-left {
+  flex: 6;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.logo-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo-image {
+  width: 700px;
+  max-width: 90%;
+  height: auto;
+  animation: pulse 3s infinite ease-in-out;
+}
+
+.dashboard-title {
+  color: #8c98a4;
+  font-size: 1.1rem;
+  margin-top: 2rem;
+}
+
+/* Right Side - Login */
+.login-right {
+  flex: 4;
+  background-color: #1C2230;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+}
+
+.login-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 3.5rem 4rem;
+  width: 100%;
+  max-width: 650px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.login-card h2 {
+  color: #1a202c;
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+}
+
+.subtitle {
+  color: #718096;
+  font-size: 1.1rem;
+  margin: 0 0 2.5rem 0;
+}
+
+.login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.input-group {
+  position: relative;
+  width: 100%;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 1.2rem 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  color: #2d3748;
+  background-color: #f7fafc;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: #cbd5e0;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(226, 232, 240, 0.5);
+}
+
+.input-group input::placeholder {
+  color: #a0aec0;
+}
+
+.password-group input {
+  padding-right: 2.5rem;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.toggle-password:hover {
+  color: #4a5568;
+}
+
+.toggle-password svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.submit-btn {
+  background: linear-gradient(135deg, #E54545 0%, #C4302B 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 1.2rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.2s ease;
+  margin-top: 1rem;
+  font-family: inherit;
+}
+
+.submit-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(196, 48, 43, 0.3);
+}
+
+.submit-btn:active {
+  transform: translateY(1px);
+}
+
+.submit-btn.submitting {
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+.auth-notice {
+  color: #a0aec0;
+  font-size: 0.9rem;
+  margin: 2rem 0 0 0;
+}
+
+.help-text {
+  color: #4a5568;
+  font-size: 0.9rem;
+  margin-top: 2rem;
+  position: absolute;
+  bottom: 2rem;
+}
+
+/* Animations */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .login-container {
+    flex-direction: column;
+  }
+  
+  .login-left {
+    flex: 3;
+    padding: 2rem;
+  }
+  
+  .login-right {
+    flex: 7;
+    padding: 1rem;
+  }
+  
+  .login-card {
+    padding: 2rem;
+  }
+  
+  .help-text {
+    position: static;
+    margin-top: 1.5rem;
+  }
+}
