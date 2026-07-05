@@ -218,7 +218,7 @@
 }
 
 .sku-table th {
-  text-align: left;
+  text-align: center;
   padding: 1rem 1.2rem;
   font-size: 0.7rem;
   font-weight: 600;
@@ -237,6 +237,7 @@
 }
 
 .sku-table td {
+  text-align: center;
   padding: 0.9rem 1.2rem;
   color: #4a5568;
   white-space: nowrap;
@@ -262,7 +263,7 @@
 }
 
 .reorder-cell {
-  text-align: right;
+  text-align: center;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -304,13 +305,13 @@
 }
 
 .status-active {
-  background-color: #f0fff4;
-  color: #38a169;
+  background-color: #22543d;
+  color: #ffffff;
 }
 
 .status-inactive {
-  background-color: #fff5f5;
-  color: #e53e3e;
+  background-color: #9b2c2c;
+  color: #ffffff;
 }
 
 /* View Button */

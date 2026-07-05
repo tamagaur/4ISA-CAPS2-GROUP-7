@@ -185,3 +185,33 @@
 .privacy-btn:hover {
   opacity: 0.9;
 }
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #4a5568;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.5rem 0;
+  cursor: pointer;
+  margin-top: 0.75rem;
+  transition: color 0.2s ease;
+}
+
+.logout-btn:hover {
+  color: #c53030; /* Matches the active module item color */
+}
+
+.logout-icon {
+  color: #4a5568;
+  transition: color 0.2s ease;
+}
+
+.logout-btn:hover .logout-icon {
+  color: #c53030;
+}

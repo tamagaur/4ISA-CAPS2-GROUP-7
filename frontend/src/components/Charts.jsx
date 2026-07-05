@@ -73,7 +73,7 @@ export const DonutChartWidget = () => {
             <Pie
               data={abcData}
               cx="50%"
-              cy="60%"
+              cy="45%"
               innerRadius={70}
               outerRadius={100}
               paddingAngle={5}

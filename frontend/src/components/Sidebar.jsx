@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   List, 
@@ -8,7 +8,8 @@ import {
   RotateCcw, 
   Box, 
   AlertTriangle, 
-  Upload 
+  Upload,
+  LogOut
 } from 'lucide-react';
 import './Sidebar.css';
 
@@ -24,6 +25,12 @@ const navItems = [
 ];
 
 const Sidebar = ({ isOpen }) => {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    navigate('/login');
+  };
+
   return (
     <aside className={`sidebar ${isOpen ? '' : 'sidebar-hidden'}`}>
       {/* Top Profile */}
@@ -77,6 +84,11 @@ const Sidebar = ({ isOpen }) => {
           </div>
           <span className="status-date">APR-22</span>
         </div>
+
+        <button className="logout-btn" onClick={handleLogout}>
+          <LogOut size={16} className="logout-icon" />
+          <span>Log out</span>
+        </button>
       </div>
     </aside>
   );
