@@ -4,6 +4,9 @@ import Login from './Login';
 import DashboardLayout from './components/DashboardLayout';
 import Dashboard from './components/Dashboard';
 import SKUManagement from './components/SKUManagement';
+import ABCClassification from './components/ABCClassification';
+import SKUForecast from './components/SKUForecast';
+import ReorderRecommendations from './components/ReorderRecommendations';
 import './App.css';
 
 function App() {
@@ -14,6 +17,9 @@ function App() {
         <Route path="/" element={<DashboardLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="sku-management" element={<SKUManagement />} />
+          <Route path="abc" element={<ABCClassification />} />
+          <Route path="forecast" element={<SKUForecast />} />
+          <Route path="reorder" element={<ReorderRecommendations />} />
         </Route>
       </Routes>
     </div>

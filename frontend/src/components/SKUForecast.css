@@ -1,0 +1,281 @@
+.forecast-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.forecast-content {
+  padding: 0 3rem 3rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Header */
+.forecast-header {
+  margin-bottom: 0.5rem;
+}
+
+.forecast-title {
+  font-size: 2rem;
+  color: #1a202c;
+  margin: 0 0 0.2rem 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.forecast-title span {
+  font-family: 'Brush Script MT', 'Dancing Script', cursive;
+  color: #e53e3e;
+  font-weight: normal;
+  font-size: 2.6rem;
+}
+
+.forecast-subtitle {
+  color: #a0aec0;
+  font-size: 0.85rem;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+/* Selection Area */
+.forecast-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.selection-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #a0aec0;
+  text-transform: uppercase;
+}
+
+.search-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.search-icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #a0aec0;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.8rem 1rem 0.8rem 2.8rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #1a202c;
+  background-color: #ffffff;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.search-input::placeholder {
+  color: #a0aec0;
+}
+
+.search-input:focus {
+  border-color: #3182ce;
+}
+
+/* Selected SKU Card */
+.selected-sku-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 1.5rem 2rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #e53e3e;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.sku-info-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.sku-code-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #a0aec0;
+  text-transform: uppercase;
+  margin-bottom: 0.2rem;
+}
+
+.sku-code-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin-bottom: 0.1rem;
+}
+
+.sku-product-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.sku-brand-name {
+  font-size: 0.8rem;
+  color: #718096;
+}
+
+.sku-info-right .forecast-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1.2rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  line-height: 1;
+  width: auto;
+  height: auto;
+}
+
+.sku-info-right .forecast-cat-badge.cat-A {
+  background-color: #fff5f5;
+  color: #e53e3e;
+  border-color: #fed7d7;
+}
+
+.sku-info-right .forecast-cat-badge.cat-B {
+  background-color: #ebf8ff;
+  color: #3182ce;
+  border-color: #bee3f8;
+}
+
+.sku-info-right .forecast-cat-badge.cat-C {
+  background-color: #fffff0;
+  color: #d69e2e;
+  border-color: #fef08a;
+}
+
+/* Chart Section */
+.forecast-chart-container {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 1.5rem 2rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  border: 1px solid #e2e8f0;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  padding-left: 0.5rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.legend-line {
+  width: 24px;
+  height: 2px;
+  display: inline-block;
+}
+
+.line-actual {
+  background-color: #e53e3e;
+}
+
+.line-forecast {
+  background-image: linear-gradient(to right, #3182ce 50%, transparent 50%);
+  background-size: 8px 100%;
+  background-repeat: repeat-x;
+  height: 2px;
+  width: 24px;
+}
+
+.legend-area {
+  width: 24px;
+  height: 12px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.area-ci {
+  background-color: #ebf8ff;
+}
+
+.legend-label {
+  font-size: 0.8rem;
+  color: #4a5568;
+  font-family: monospace;
+  font-weight: 500;
+}
+
+.chart-wrapper {
+  margin-top: 1rem;
+  width: 100%;
+}
+
+/* Tooltip Customization */
+.forecast-tooltip {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.tooltip-label {
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0 0 0.5rem 0;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #edf2f7;
+  padding-bottom: 0.4rem;
+}
+
+.tooltip-item {
+  font-size: 0.8rem;
+  margin: 0.3rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #4a5568;
+}
+
+.tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Recharts Overrides */
+.recharts-cartesian-axis-tick-value {
+  font-family: monospace;
+}
+
+@media (max-width: 768px) {
+  .forecast-content {
+    padding: 0 1.5rem 1.5rem 1.5rem;
+  }
+
+  .chart-legend {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}

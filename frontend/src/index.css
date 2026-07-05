@@ -8,7 +8,7 @@ html, body, #root, .App {
   width: 100vw;
   height: 100vh;
   font-family: var(--font-inter);
-  font-size: 18px; /* Scaled up from default 16px */
+  font-size: 20.7px; /* Scaled up by ~15% from 18px */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #f7fafc;
