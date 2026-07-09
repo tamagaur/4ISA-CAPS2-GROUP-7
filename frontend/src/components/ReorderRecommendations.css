@@ -286,6 +286,7 @@
 .action-status-container {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   min-height: 28px;
 }
