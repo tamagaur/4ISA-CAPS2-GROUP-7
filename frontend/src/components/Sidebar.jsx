@@ -60,7 +60,15 @@ const Sidebar = ({ isOpen }) => {
           >
             <div className="nav-item-left">
               <item.icon className="nav-icon" size={18} />
-              <span>{item.name}</span>
+              <span className="nav-item-text">
+                {item.name === 'Warehouse Movement' ? (
+                  <>
+                    Warehouse<br />Movement
+                  </>
+                ) : (
+                  item.name
+                )}
+              </span>
             </div>
             <span className="nav-badge">{item.badge}</span>
           </NavLink>

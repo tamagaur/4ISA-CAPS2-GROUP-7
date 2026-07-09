@@ -160,7 +160,8 @@
 .abc-table-wrapper {
   background-color: #ffffff;
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
@@ -168,6 +169,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  table-layout: fixed;
 }
 
 .abc-table thead {
@@ -175,13 +177,15 @@
 }
 
 .abc-table th {
-  text-align: left;
-  padding: 1rem 1.2rem;
+  text-align: center;
+  padding: 1rem 0.8rem;
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: #a0aec0;
-  white-space: nowrap;
+  white-space: normal;
+  vertical-align: middle;
+  width: 12.5%;
 }
 
 .abc-table tbody tr {
@@ -194,9 +198,13 @@
 }
 
 .abc-table td {
-  padding: 0.85rem 1.2rem;
+  padding: 0.85rem 0.8rem;
   color: #4a5568;
-  white-space: nowrap;
+  white-space: normal;
+  vertical-align: middle;
+  text-align: center;
+  width: 12.5%;
+  word-break: break-word;
 }
 
 .abc-row-num {
@@ -208,6 +216,7 @@
   color: #e53e3e;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .abc-sku-cell:hover {

@@ -16,6 +16,19 @@ const mockSKUs = [
   { id: '010', code: 'SKU-99999', brand: 'Del Monte', supplier: 'Del Monte Philippines', product: 'Ketchup 320g (Discontinued)', cat: 'C', leadTime: 'N/A', reorderPt: 0, status: 'INACTIVE' },
 ];
 
+// Helper to extract product name and weight
+const parseProductAndWeight = (product) => {
+  const weightRegex = /\b(\d+(?:g|ml|L|kg))\b/i;
+  const match = product.match(weightRegex);
+  if (match) {
+    const weight = `(${match[1]})`;
+    let name = product.replace(weightRegex, '').replace(/\s+/g, ' ').trim();
+    name = name.replace(/\(\s*\)/g, '').trim();
+    return { name, weight };
+  }
+  return { name: product, weight: '' };
+};
+
 const SKUManagement = () => {
   const [skus, setSkus] = useState(mockSKUs);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -188,7 +201,21 @@ const SKUManagement = () => {
                   <td className="sku-code-cell">{sku.code}</td>
                   <td>{sku.brand}</td>
                   <td className="supplier-cell">{sku.supplier}</td>
-                  <td className="product-cell">{sku.product}</td>
+                  <td className="product-cell">
+                    {(() => {
+                      const { name, weight } = parseProductAndWeight(sku.product);
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <span className="sku-product-name">{name}</span>
+                          {weight && (
+                            <span className="sku-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
+                              {weight}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td><span className={getCatClass(sku.cat)}>{sku.cat}</span></td>
                   <td>{sku.leadTime}</td>
                   <td className="reorder-cell">{sku.reorderPt.toLocaleString()}</td>

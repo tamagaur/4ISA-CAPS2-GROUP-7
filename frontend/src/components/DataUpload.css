@@ -1,0 +1,291 @@
+.du-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.du-content {
+  padding: 0 3rem 3rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Page Header */
+.du-page-header {
+  margin-bottom: 0.5rem;
+}
+
+.du-page-title {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0 0 0.3rem 0;
+}
+
+.du-page-subtitle {
+  color: #4a5568;
+  font-size: 0.9rem;
+  margin: 0;
+  line-height: 1.6;
+  max-width: 850px;
+}
+
+/* Accepted Formats */
+.du-formats-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.du-section-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #718096;
+  text-transform: uppercase;
+}
+
+.du-badges-row {
+  display: flex;
+  gap: 0.8rem;
+}
+
+.du-badge {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #4a5568;
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+/* File Cards */
+.du-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.du-file-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.du-file-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.du-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.du-blue-dot {
+  width: 7px;
+  height: 7px;
+  background-color: #2b6cb0;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.du-card-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #a0aec0;
+  text-transform: uppercase;
+}
+
+.du-card-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+}
+
+.du-card-desc {
+  font-size: 0.8rem;
+  color: #718096;
+  margin: 0;
+}
+
+/* Dropzone */
+.du-dropzone {
+  background-color: #ffffff;
+  border: 2px dashed #cbd5e0;
+  border-radius: 12px;
+  padding: 3.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.du-dropzone:hover,
+.du-dropzone.drag-active {
+  border-color: #3182ce;
+  background-color: #f7fafc;
+}
+
+.du-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  background-color: #f7fafc;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a0aec0;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.du-dropzone:hover .du-icon-wrapper {
+  background-color: #ebf8ff;
+  color: #3182ce;
+}
+
+.du-dropzone-text {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+}
+
+.du-dropzone-subtext {
+  font-size: 0.8rem;
+  color: #718096;
+  margin: 0;
+}
+
+.du-select-btn {
+  background-color: #1a56db;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 1.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.du-select-btn:hover {
+  background-color: #1e429f;
+}
+
+/* Uploading Progress list */
+.du-upload-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.du-upload-item {
+  background-color: #ffffff;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  padding: 0.8rem 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01);
+}
+
+.du-item-left {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.du-item-icon {
+  color: #3182ce;
+}
+
+.du-item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.du-item-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.du-item-size {
+  font-size: 0.75rem;
+  color: #a0aec0;
+}
+
+.du-item-progress-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 150px;
+}
+
+.du-progress-bar {
+  flex: 1;
+  height: 6px;
+  background-color: #edf2f7;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.du-progress-fill {
+  height: 100%;
+  background-color: #38a169;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.du-item-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #38a169;
+}
+
+.du-item-status.status-loading {
+  color: #3182ce;
+}
+
+/* Responsive styles */
+@media (max-width: 900px) {
+  .du-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .du-content {
+    padding: 0 1.5rem 1.5rem 1.5rem;
+  }
+
+  .du-page-title {
+    font-size: 1.8rem;
+  }
+
+  .du-dropzone {
+    padding: 2.5rem 1.5rem;
+  }
+}

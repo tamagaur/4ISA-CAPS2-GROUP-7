@@ -100,7 +100,8 @@
 .reorder-table-wrapper {
   background-color: #ffffff;
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   border: 1px solid #e2e8f0;
 }
@@ -108,7 +109,8 @@
 .reorder-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
+  table-layout: fixed;
 }
 
 .reorder-table thead {
@@ -116,13 +118,14 @@
 }
 
 .reorder-table th {
-  text-align: left;
-  padding: 1rem 1.2rem;
-  font-size: 0.7rem;
+  text-align: center;
+  padding: 0.8rem 0.4rem;
+  font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: #a0aec0;
-  white-space: nowrap;
+  white-space: normal;
+  vertical-align: middle;
 }
 
 .reorder-table tbody tr {
@@ -135,16 +138,31 @@
 }
 
 .reorder-table td {
-  padding: 0.85rem 1.2rem;
+  padding: 0.6rem 0.4rem;
   color: #4a5568;
-  white-space: nowrap;
+  white-space: normal;
   vertical-align: middle;
+  text-align: center;
+  word-break: break-word;
 }
+
+/* Custom proportional widths and minimum widths for the 10 columns */
+.reorder-table th:nth-child(1), .reorder-table td:nth-child(1) { width: 10%; min-width: 90px; }
+.reorder-table th:nth-child(2), .reorder-table td:nth-child(2) { width: 8%; min-width: 80px; }
+.reorder-table th:nth-child(3), .reorder-table td:nth-child(3) { width: 18%; min-width: 150px; }
+.reorder-table th:nth-child(4), .reorder-table td:nth-child(4) { width: 6%; min-width: 60px; }
+.reorder-table th:nth-child(5), .reorder-table td:nth-child(5) { width: 8%; min-width: 80px; }
+.reorder-table th:nth-child(6), .reorder-table td:nth-child(6) { width: 8%; min-width: 80px; }
+.reorder-table th:nth-child(7), .reorder-table td:nth-child(7) { width: 9%; min-width: 90px; }
+.reorder-table th:nth-child(8), .reorder-table td:nth-child(8) { width: 9%; min-width: 80px; }
+.reorder-table th:nth-child(9), .reorder-table td:nth-child(9) { width: 9%; min-width: 80px; }
+.reorder-table th:nth-child(10), .reorder-table td:nth-child(10) { width: 15%; min-width: 180px; }
 
 .reorder-sku-cell {
   color: #3182ce;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .reorder-sku-cell:hover {
@@ -208,6 +226,8 @@
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
+  display: inline-block;
 }
 
 .details-btn:hover {
@@ -216,44 +236,50 @@
 
 .action-buttons {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  justify-content: center;
 }
 
 .action-btn {
-  background: transparent;
   font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.3rem 0.6rem;
+  font-weight: 500;
+  padding: 0.3rem 0.5rem;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
+  text-align: center;
+  outline: none;
+  white-space: nowrap;
 }
 
 .approve-btn {
-  border: 1px solid #38a169;
-  color: #38a169;
+  background-color: #e6f4ea;
+  border: 1px solid #ceead6;
+  color: #137333;
 }
 
 .approve-btn:hover {
-  background-color: #f0fff4;
+  background-color: #d2ecd5;
 }
 
 .hold-btn {
-  border: 1px solid #d69e2e;
-  color: #d69e2e;
+  background-color: #fef7e0;
+  border: 1px solid #feefc3;
+  color: #b06000;
 }
 
 .hold-btn:hover {
-  background-color: #fffff0;
+  background-color: #fde293;
 }
 
 .reject-btn {
-  border: 1px solid #e53e3e;
-  color: #e53e3e;
+  background-color: #fce8e6;
+  border: 1px solid #fad2cf;
+  color: #c5221f;
 }
 
 .reject-btn:hover {
-  background-color: #fff5f5;
+  background-color: #f9d2cd;
 }
 
 /* Action Status */

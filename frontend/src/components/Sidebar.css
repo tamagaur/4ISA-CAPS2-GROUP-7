@@ -124,6 +124,12 @@
   gap: 0.8rem;
 }
 
+.nav-item-text {
+  white-space: normal;
+  line-height: 1.25;
+  display: inline-block;
+}
+
 .nav-badge {
   font-size: 0.7rem;
   opacity: 0.7;

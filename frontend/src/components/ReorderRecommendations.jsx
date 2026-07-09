@@ -12,6 +12,29 @@ const mockReorderData = [
   { id: 6, sku: 'SKU-9234', brand: 'Del Monte', product: 'Sweet Corn 425g', rop: 140, stock: 102, orderQty: 160, urgency: 'PLANNED', estCost: '₱11,700', actionStatus: null, loadingAction: null },
 ];
 
+// Helper to extract product name and weight
+const parseProductAndWeight = (product) => {
+  const weightRegex = /\b(\d+(?:g|ml|L|kg))\b/i;
+  const match = product.match(weightRegex);
+  if (match) {
+    const weight = `(${match[1]})`;
+    let name = product.replace(weightRegex, '').replace(/\s+/g, ' ').trim();
+    name = name.replace(/\(\s*\)/g, '').trim();
+    return { name, weight };
+  }
+  return { name: product, weight: '' };
+};
+
+// Helper to format SKU to 5 digits (SKU-#####)
+const formatSKU = (sku) => {
+  if (!sku) return '';
+  const match = sku.match(/^SKU-(\d+)$/i);
+  if (match) {
+    return `SKU-${match[1].padStart(5, '0')}`;
+  }
+  return sku;
+};
+
 const ReorderRecommendations = () => {
   const [data, setData] = useState(mockReorderData);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -138,9 +161,23 @@ const ReorderRecommendations = () => {
             <tbody>
               {data.map((item) => (
                 <tr key={item.id}>
-                  <td className="reorder-sku-cell">{item.sku}</td>
+                  <td className="reorder-sku-cell">{formatSKU(item.sku)}</td>
                   <td>{item.brand}</td>
-                  <td className="reorder-product-cell">{item.product}</td>
+                  <td className="reorder-product-cell">
+                    {(() => {
+                      const { name, weight } = parseProductAndWeight(item.product);
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <span className="reorder-product-name">{name}</span>
+                          {weight && (
+                            <span className="reorder-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
+                              {weight}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td>{item.rop}</td>
                   <td className="reorder-stock-cell">{item.stock}</td>
                   <td className="reorder-qty-cell">{item.orderQty}</td>

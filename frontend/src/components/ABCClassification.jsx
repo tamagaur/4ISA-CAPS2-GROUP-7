@@ -28,6 +28,29 @@ const mockABCData = [
   { id: 24, sku: 'SKU-1155', product: 'Prune Juice 240ml', brand: 'Del Monte', cat: 'C', avgMo: 89, revPct: 0.3, status: 'IN STOCK' },
 ];
 
+// Helper to extract product name and weight
+const parseProductAndWeight = (product) => {
+  const weightRegex = /\b(\d+(?:g|ml|L|kg))\b/i;
+  const match = product.match(weightRegex);
+  if (match) {
+    const weight = `(${match[1]})`;
+    let name = product.replace(weightRegex, '').replace(/\s+/g, ' ').trim();
+    name = name.replace(/\(\s*\)/g, '').trim();
+    return { name, weight };
+  }
+  return { name: product, weight: '' };
+};
+
+// Helper to format SKU to 5 digits (SKU-#####)
+const formatSKU = (sku) => {
+  if (!sku) return '';
+  const match = sku.match(/^SKU-(\d+)$/i);
+  if (match) {
+    return `SKU-${match[1].padStart(5, '0')}`;
+  }
+  return sku;
+};
+
 const ABCClassification = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
@@ -148,8 +171,22 @@ const ABCClassification = () => {
               {filteredData.map((item, index) => (
                 <tr key={item.id}>
                   <td className="abc-row-num">{index + 1}</td>
-                  <td className="abc-sku-cell">{item.sku}</td>
-                  <td className="abc-product-cell">{item.product}</td>
+                  <td className="abc-sku-cell">{formatSKU(item.sku)}</td>
+                  <td className="abc-product-cell">
+                    {(() => {
+                      const { name, weight } = parseProductAndWeight(item.product);
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <span className="abc-product-name">{name}</span>
+                          {weight && (
+                            <span className="abc-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
+                              {weight}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td className="abc-brand-cell">{item.brand}</td>
                   <td><span className={getCatBadgeClass(item.cat)}>{item.cat}</span></td>
                   <td className="abc-avg-cell">{item.avgMo.toLocaleString()}</td>
