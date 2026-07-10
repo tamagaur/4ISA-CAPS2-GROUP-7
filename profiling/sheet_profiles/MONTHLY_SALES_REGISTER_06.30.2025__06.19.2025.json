@@ -1,0 +1,137 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/MONTHLY SALES REGISTER 06.30.2025.xlsx",
+  "sheet": "06.19.2025",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Customers",
+    "Area",
+    "Reference #",
+    "Net Value",
+    "Discount Amount",
+    "Tax amount",
+    "Amount"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Customers": "text",
+    "Area": "text",
+    "Reference #": "text",
+    "Net Value": "numeric",
+    "Discount Amount": "numeric",
+    "Tax amount": "text",
+    "Amount": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 12.0,
+    "Salesman": 18.0,
+    "Customers": 16.0,
+    "Area": 12.0,
+    "Reference #": 18.0,
+    "Net Value": 16.0,
+    "Discount Amount": 16.0,
+    "Tax amount": 10.0,
+    "Amount": 16.0
+  },
+  "distinct_count": {
+    "Invoice Date": 4,
+    "Salesman": 5,
+    "Customers": 42,
+    "Area": 11,
+    "Reference #": 41,
+    "Net Value": 36,
+    "Discount Amount": 1,
+    "Tax amount": 39,
+    "Amount": 36
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-06-19",
+      "ENCODER",
+      "TOTAL",
+      "ASHLY M. APOLONIO"
+    ],
+    "Salesman": [
+      "TTS-EAST",
+      "SSS1",
+      "SSS3",
+      "TTS-WEST",
+      "TTS-LUNORTH"
+    ],
+    "Customers": [
+      "PDT DRUGSTORE",
+      "NITZ",
+      "GREAT SAVE ",
+      "MELANIE (SAN QUINTIN)",
+      "MARQUEZ STORE (LU)"
+    ],
+    "Area": [
+      "RECEIVABLE",
+      "BONTOC (Capital)",
+      "NAGUILIAN",
+      "SAN QUINTIN",
+      "         JERWIN B. ORDONIO"
+    ],
+    "Reference #": [
+      "SSGT4916",
+      "SSGT4891",
+      "SSGT4903",
+      "SSGT4897",
+      "SSGT4909"
+    ],
+    "Net Value": [
+      "3438.11",
+      "165.59",
+      "504.36",
+      "151.36",
+      "105.91"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax amount": [
+      "3350.01",
+      "96.4",
+      "43.52",
+      "6490.43",
+      "59.28"
+    ],
+    "Amount": [
+      "899.75",
+      "282.86",
+      "31266.74",
+      "270.36",
+      "2288.1"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 45,
+  "header_signature": "885ac878ed5c",
+  "header_tokens": [
+    "amount",
+    "area",
+    "customers",
+    "discount amount",
+    "invoice date",
+    "net value",
+    "reference #",
+    "salesman",
+    "tax amount"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

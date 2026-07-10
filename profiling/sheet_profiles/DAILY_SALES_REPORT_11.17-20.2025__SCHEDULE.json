@@ -1,0 +1,101 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/DAILY SALES REPORT 11.17-20.2025.xlsx",
+  "sheet": "SCHEDULE",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.694,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "DATE",
+    "__col1__",
+    "CUSTOMERS",
+    "NET OF VAT",
+    "VAT",
+    "AMOUNT W/VAT"
+  ],
+  "dtypes": {
+    "DATE": "text",
+    "__col1__": "text",
+    "CUSTOMERS": "numeric",
+    "NET OF VAT": "numeric",
+    "VAT": "numeric",
+    "AMOUNT W/VAT": "numeric"
+  },
+  "null_pct": {
+    "DATE": 0.0,
+    "__col1__": 0.0,
+    "CUSTOMERS": 0.0,
+    "NET OF VAT": 0.0,
+    "VAT": 0.0,
+    "AMOUNT W/VAT": 0.0
+  },
+  "distinct_count": {
+    "DATE": 10,
+    "__col1__": 1,
+    "CUSTOMERS": 10,
+    "NET OF VAT": 10,
+    "VAT": 10,
+    "AMOUNT W/VAT": 10
+  },
+  "samples": {
+    "DATE": [
+      "11.15.2025",
+      "11.12.2025",
+      "11.18.2025",
+      "11.14.2025",
+      "11.07.2025"
+    ],
+    "__col1__": [
+      "VARIOUS CUSTOMER"
+    ],
+    "CUSTOMERS": [
+      "95",
+      "88",
+      "17",
+      "217",
+      "2"
+    ],
+    "NET OF VAT": [
+      "106769.33999999997",
+      "114425.73999999995",
+      "386779.04000000004",
+      "275400.10999999987",
+      "187612.64999999997"
+    ],
+    "VAT": [
+      "13961.739999999996",
+      "22513.409999999993",
+      "3310.9500000000007",
+      "46413.479999999996",
+      "12812.239999999994"
+    ],
+    "AMOUNT W/VAT": [
+      "259660.0399999999",
+      "205029.2899999998",
+      "433192.52",
+      "124522.6300000001",
+      "30902.460000000006"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 10,
+  "header_signature": "35641ed6b8d7",
+  "header_tokens": [
+    "amount w/vat",
+    "customers",
+    "date",
+    "net of vat",
+    "vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

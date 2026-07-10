@@ -1,0 +1,127 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/SALES REGISTER_5.2025 (1).xlsx",
+  "sheet": "SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Customer Name",
+    "Town Display",
+    "REFNBR",
+    "Untaxed Amount",
+    "Tax",
+    "Net Amount"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Customer Name": "text",
+    "Town Display": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Customer Name": 0.0,
+    "Town Display": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 19,
+    "Salesman": 17,
+    "Customer Name": 2318,
+    "Town Display": 79,
+    "REFNBR": 3362,
+    "Untaxed Amount": 2760,
+    "Tax": 2674,
+    "Net Amount": 2761
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-05-29",
+      "2025-05-26",
+      "2025-05-16",
+      "2025-05-31",
+      "2025-05-19"
+    ],
+    "Salesman": [
+      "Aljonel Encoder",
+      "TTS-CENTRAL",
+      "SSS2",
+      "PMS-EAST",
+      "PMS-WEST"
+    ],
+    "Customer Name": [
+      "ALLIED SUPERMART (AGOO SM)",
+      "TERSOL",
+      "JHESSIE (LINGAYEN)",
+      "GARCIA MANAOAG",
+      "JIMENEZ"
+    ],
+    "Town Display": [
+      "SANTA BARBARA",
+      "MANKAYAN",
+      "MAPANDAN",
+      "CITY OF ALAMINOS",
+      "TUBAO"
+    ],
+    "REFNBR": [
+      "SSGT3315",
+      "GT9097",
+      "SSGT3208",
+      "GT9717",
+      "SSGT3954"
+    ],
+    "Untaxed Amount": [
+      "4533.35",
+      "454.89",
+      "7546.62",
+      "332.2",
+      "501.79"
+    ],
+    "Tax": [
+      "179.81",
+      "9.35",
+      "25261.54",
+      "2925.37",
+      "59.79"
+    ],
+    "Net Amount": [
+      "1599.59",
+      "512.05",
+      "85868.55",
+      "349.26",
+      "8248.32"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 3362,
+  "header_signature": "ccfe8fba5385",
+  "header_tokens": [
+    "customer name",
+    "invoice date",
+    "net amount",
+    "refnbr",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'",
+    "REFNBR 'FGT0202501' matches prefix 'FG' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

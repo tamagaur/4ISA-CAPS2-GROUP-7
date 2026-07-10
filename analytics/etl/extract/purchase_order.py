@@ -1,9 +1,17 @@
 """
-analytics.etl.extract.purchase_order — Purchase Order parser.
+analytics.etl.extract.purchase_order — Purchases / Purchase Order Extract driver.
 
-Phase 3B (CLAUDE.md Step 6):
-  Source: Purchase Order files from SSM.
-  Column schema TBD — confirm with Yuan before implementing (Step 5 checkpoint).
-
-TODO: Implement parse_purchase_order(filepath: Path) -> pd.DataFrame.
+Invoice-level like Sales Register (header ~row 1, per-region sheets, same
+money/code type fidelity rules apply). Grain = invoice.
 """
+from __future__ import annotations
+
+from pathlib import Path
+
+from analytics.etl.extract._shared import REPO_ROOT, ExtractRunResult, parse_doc_type_files
+
+DOC_TYPE = "purchase_order"
+
+
+def parse_purchase_order(raw_dir: Path | None = None, repo_root: Path = REPO_ROOT) -> ExtractRunResult:
+    return parse_doc_type_files(DOC_TYPE, raw_dir=raw_dir, repo_root=repo_root)

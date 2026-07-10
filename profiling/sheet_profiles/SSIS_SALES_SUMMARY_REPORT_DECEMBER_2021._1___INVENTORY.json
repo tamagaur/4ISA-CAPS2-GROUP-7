@@ -1,0 +1,74 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT DECEMBER 2021. (1).xlsx",
+  "sheet": "INVENTORY",
+  "real_format": "xlsx",
+  "header_row_index": 5,
+  "header_confidence": 0.48,
+  "junk_ranges": [
+    [
+      0,
+      4
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Schedules of Ending Invty DECEMBER 27, 2021",
+    "INVTY",
+    "INVTY",
+    "AT COST"
+  ],
+  "dtypes": {
+    "__col0__": "empty",
+    "Schedules of Ending Invty DECEMBER 27, 2021": "text",
+    "INVTY": "text",
+    "AT COST": "text"
+  },
+  "null_pct": {
+    "__col0__": 100.0,
+    "Schedules of Ending Invty DECEMBER 27, 2021": 20.0,
+    "INVTY": 20.0,
+    "AT COST": 20.0
+  },
+  "distinct_count": {
+    "__col0__": 0,
+    "Schedules of Ending Invty DECEMBER 27, 2021": 4,
+    "INVTY": 4,
+    "AT COST": 4
+  },
+  "samples": {
+    "__col0__": [],
+    "Schedules of Ending Invty DECEMBER 27, 2021": [
+      "Extruck Invty - ",
+      "Whse Inventory  - Retail",
+      "BO Invty -  NOVEMBER 2021",
+      "TOTAL:"
+    ],
+    "INVTY": [
+      "27073580.32",
+      "27802726.61",
+      "729146.29",
+      "WITHOUT VAT"
+    ],
+    "AT COST": [
+      "25517342.482658",
+      "669210.464962",
+      "24848132.017696",
+      "WITHOUT VAT"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 5,
+  "header_signature": "62d0b794b2f0",
+  "header_tokens": [
+    "at cost",
+    "invty",
+    "invty",
+    "schedules of ending invty december 27, 2021"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

@@ -1,0 +1,188 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT OCTOBER 2022.xlsx",
+  "sheet": "RAW DATA",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "text",
+    "__col1__": "text",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 0.0,
+    "__col1__": 0.0,
+    "CALENDAR DAY": 0.0,
+    "REASON CODE": 0.0,
+    "OUTLET": 0.0,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.0,
+    "Sale After TPR & UW": 0.0,
+    "NIV": 0.0,
+    "VAT": 0.0,
+    "Total Sales Amt Inc. Tax": 0.0,
+    "REMARKS": 0.0
+  },
+  "distinct_count": {
+    "Salesman": 11,
+    "__col1__": 11,
+    "CALENDAR DAY": 26,
+    "REASON CODE": 10,
+    "OUTLET": 2071,
+    "OUTLET NAME": 1960,
+    "GSV": 3174,
+    "TPR + UW/DT Discount": 633,
+    "Sale After TPR & UW": 3253,
+    "NIV": 3253,
+    "VAT": 3131,
+    "Total Sales Amt Inc. Tax": 3253,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [
+      "29808",
+      "10706",
+      "21607",
+      "29809",
+      "10699"
+    ],
+    "__col1__": [
+      "MARIA ELENA CASTILLO",
+      "BONIFACIO UDANI JR.",
+      "ADONIS PIAMONTE",
+      "JOHN RANIEL SAJONIA",
+      "JOEVIC L. BABAY JR."
+    ],
+    "CALENDAR DAY": [
+      "2022-10-15 00:00:00",
+      "2022-10-06 00:00:00",
+      "2022-10-26 00:00:00",
+      "2022-10-22 00:00:00",
+      "2022-10-14 00:00:00"
+    ],
+    "REASON CODE": [
+      "Overlanded/Shortlanded",
+      "Damaged Products",
+      "Near Expiry/Expired",
+      "Order cancelled by customer",
+      "Expired stock/Near expiry"
+    ],
+    "OUTLET": [
+      "3702525",
+      "3004408",
+      "3271988",
+      "3246408",
+      "1696469"
+    ],
+    "OUTLET NAME": [
+      "RICA STORE",
+      "NIDA'S STORE",
+      "PRIMADEL GROCERY",
+      "LOURDES 2 STORE",
+      "CABRAS STORE"
+    ],
+    "GSV": [
+      "-605.36",
+      "122.4",
+      "1157.15",
+      "3937.94",
+      "488.03"
+    ],
+    "TPR + UW/DT Discount": [
+      "1.79",
+      "52.57",
+      "16.85",
+      "-1155.41",
+      "-1291.39"
+    ],
+    "Sale After TPR & UW": [
+      "-605.36",
+      "122.4",
+      "43701.72",
+      "1157.15",
+      "2287.84"
+    ],
+    "NIV": [
+      "-605.36",
+      "122.4",
+      "43701.72",
+      "1157.15",
+      "2287.84"
+    ],
+    "VAT": [
+      "21.28",
+      "339.18",
+      "-7.97",
+      "-43.76",
+      "157.37"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "12773.76",
+      "22087.17",
+      "-749.03",
+      "393277.43",
+      "13191.02"
+    ],
+    "REMARKS": [
+      "RETURN",
+      "INVOICE"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 5142,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'gsv'",
+    "header contains 'tpr'",
+    "header contains 'niv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

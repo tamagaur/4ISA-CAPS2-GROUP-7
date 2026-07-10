@@ -1,0 +1,231 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT OCTOBER 2025.xlsx",
+  "sheet": "INVOICE REG(OCTOBER 2025)",
+  "real_format": "xlsx",
+  "header_row_index": 8,
+  "header_confidence": 0.221,
+  "junk_ranges": [
+    [
+      0,
+      7
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "__col1__",
+    "__col2__",
+    "__col3__",
+    "__col4__",
+    "__col5__",
+    "__col6__",
+    "__col7__",
+    "__col8__",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "UL GSV",
+    "Mark-up/Mark-down Value in %"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "__col1__": "text",
+    "__col2__": "text",
+    "__col3__": "text",
+    "__col4__": "text",
+    "__col5__": "text",
+    "__col6__": "text",
+    "__col7__": "text",
+    "__col8__": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "UL GSV": "numeric",
+    "Mark-up/Mark-down Value in %": "text"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "__col1__": 0.01,
+    "__col2__": 0.0,
+    "__col3__": 0.01,
+    "__col4__": 0.0,
+    "__col5__": 0.0,
+    "__col6__": 0.0,
+    "__col7__": 0.0,
+    "__col8__": 0.01,
+    "GSV": 0.01,
+    "TPR + UW/DT Discount": 0.01,
+    "Sale After TPR & UW": 0.01,
+    "NIV": 0.01,
+    "VAT": 0.01,
+    "Total Sales Amt Inc. Tax": 0.01,
+    "UL GSV": 0.01,
+    "Mark-up/Mark-down Value in %": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 6,
+    "__col1__": 5,
+    "__col2__": 17,
+    "__col3__": 16,
+    "__col4__": 28,
+    "__col5__": 6878,
+    "__col6__": 12,
+    "__col7__": 2121,
+    "__col8__": 2059,
+    "GSV": 5216,
+    "TPR + UW/DT Discount": 1113,
+    "Sale After TPR & UW": 5327,
+    "NIV": 5327,
+    "VAT": 4933,
+    "Total Sales Amt Inc. Tax": 5327,
+    "UL GSV": 5213,
+    "Mark-up/Mark-down Value in %": 4879
+  },
+  "samples": {
+    "__col0__": [
+      "Billing Type",
+      "ZID4",
+      "ZRSS",
+      "ZID1",
+      "ZID5"
+    ],
+    "__col1__": [
+      "Credit Ret W/O Ref",
+      "RSS Invoice",
+      "Credit- Part.returns",
+      "Invoice",
+      "Credit for Returns"
+    ],
+    "__col2__": [
+      "40900",
+      "29808",
+      "10699",
+      "42717",
+      "35153"
+    ],
+    "__col3__": [
+      "WARREN AFROILAN",
+      "REYCARDS PEREZ",
+      "JAYNARD ESPEJO",
+      "JOEVIC LUCERO",
+      "WALTER V. POLCA"
+    ],
+    "__col4__": [
+      "Calendar Day",
+      "2025-10-06 00:00:00",
+      "2025-10-02 00:00:00",
+      "2025-10-27 00:00:00",
+      "2025-10-20 00:00:00"
+    ],
+    "__col5__": [
+      "CZ31286424",
+      "CZ31284264",
+      "CZ40210604",
+      "CZ31279236",
+      "CZ31276118"
+    ],
+    "__col6__": [
+      "GOOD - Slow moving",
+      "Poor/Weak Sealing/Leakers",
+      "Reason Code",
+      "Caking/Brittle/Soft/Moldy",
+      "Packaging Defect (Torn/Deformed/Broken)"
+    ],
+    "__col7__": [
+      "3004525",
+      "4927837",
+      "1533063",
+      "664876",
+      "5053671"
+    ],
+    "__col8__": [
+      "JPV STORE",
+      "SOMERA STORE",
+      "JURIC CONSUMER GOODS",
+      "NILDA",
+      "EDVIE STORE"
+    ],
+    "GSV": [
+      "5606.91",
+      "-4187.84",
+      "626.17",
+      "2886.87",
+      "172490"
+    ],
+    "TPR + UW/DT Discount": [
+      "-3560.86",
+      "37.31",
+      "41.83",
+      "-866.12",
+      "-1569.27"
+    ],
+    "Sale After TPR & UW": [
+      "15750.38",
+      "-4187.84",
+      "626.17",
+      "2886.87",
+      "-3912.54"
+    ],
+    "NIV": [
+      "15750.38",
+      "-4187.84",
+      "626.17",
+      "2886.87",
+      "-3912.54"
+    ],
+    "VAT": [
+      "10314.87",
+      "84.41",
+      "26.85",
+      "210.35",
+      "74.36"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "-2303.52",
+      "2194.14",
+      "452.36",
+      "4625.04",
+      "-8.4"
+    ],
+    "UL GSV": [
+      "430.7",
+      "-2736.42",
+      "1780.53",
+      "1962.97",
+      "2477.15"
+    ],
+    "Mark-up/Mark-down Value in %": [
+      "11.996958966232961",
+      "27.997075984271994",
+      "10.014396840497927",
+      "123.99581329492288",
+      "24.00120953380341"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 6878,
+  "header_signature": "222b57ab0800",
+  "header_tokens": [
+    "gsv",
+    "mark-up/mark-down value in %",
+    "niv",
+    "sale after tpr & uw",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "ul gsv",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'tpr'",
+    "header contains 'gsv'",
+    "header contains 'niv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

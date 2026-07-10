@@ -1,0 +1,176 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT AUGUST 2022.xlsx",
+  "sheet": "RAW DATA",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.0,
+    "REASON CODE": 0.0,
+    "OUTLET": 0.0,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.0,
+    "Sale After TPR & UW": 0.0,
+    "NIV": 0.0,
+    "VAT": 0.0,
+    "Total Sales Amt Inc. Tax": 0.0,
+    "REMARKS": 0.0
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 25,
+    "REASON CODE": 11,
+    "OUTLET": 2031,
+    "OUTLET NAME": 1924,
+    "GSV": 3078,
+    "TPR + UW/DT Discount": 637,
+    "Sale After TPR & UW": 3135,
+    "NIV": 3135,
+    "VAT": 3002,
+    "Total Sales Amt Inc. Tax": 3135,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2022-08-10 00:00:00",
+      "2022-08-16 00:00:00",
+      "2022-08-18 00:00:00",
+      "2022-08-01 00:00:00",
+      "2022-08-11 00:00:00"
+    ],
+    "REASON CODE": [
+      "Order cancelled by customer",
+      "Damaged Products",
+      "Stock not available",
+      "Expired stock/Near expiry",
+      "Overlanded/Shortlanded"
+    ],
+    "OUTLET": [
+      "2854773",
+      "3694641",
+      "3694616",
+      "3211781",
+      "3855410"
+    ],
+    "OUTLET NAME": [
+      "PERALTA STORE",
+      "ST. MARTIN DE PORRES HOSPITAL",
+      "AZELEIS STORE",
+      "AIDA & SUSAN",
+      "ARTEO MINI GROCERY"
+    ],
+    "GSV": [
+      "118.39",
+      "-982.19",
+      "2363.57",
+      "885.15",
+      "20380.2"
+    ],
+    "TPR + UW/DT Discount": [
+      "-2972.65",
+      "-602.58",
+      "-178.97",
+      "-531.5",
+      "-454.36"
+    ],
+    "Sale After TPR & UW": [
+      "-1743.01",
+      "3841.2",
+      "118.39",
+      "-982.19",
+      "2363.57"
+    ],
+    "NIV": [
+      "-1743.01",
+      "3841.2",
+      "118.39",
+      "-982.19",
+      "2363.57"
+    ],
+    "VAT": [
+      "133.39",
+      "5252.15",
+      "810.55",
+      "20760.55",
+      "7805.25"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "9745.42",
+      "2496",
+      "162562.72",
+      "407.41",
+      "7327.63"
+    ],
+    "REMARKS": [
+      "INVOICE",
+      "RETURN"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 4213,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'gsv'",
+    "header contains 'niv'",
+    "header contains 'tpr'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

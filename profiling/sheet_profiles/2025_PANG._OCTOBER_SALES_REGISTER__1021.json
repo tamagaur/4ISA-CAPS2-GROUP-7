@@ -1,0 +1,140 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/DAILY REPORT - 10.2025/2025 PANG. OCTOBER SALES REGISTER.xlsx",
+  "sheet": "1021",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "AREA",
+    "Customer Name",
+    "REFERENCE #",
+    "NET VALUE",
+    "DISCOUNT AMNT.",
+    "TAX AMNT.",
+    "AMOUNT"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "AREA": "text",
+    "Customer Name": "text",
+    "REFERENCE #": "text",
+    "NET VALUE": "numeric",
+    "DISCOUNT AMNT.": "numeric",
+    "TAX AMNT.": "text",
+    "AMOUNT": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 10.81,
+    "Salesman": 10.81,
+    "AREA": 13.51,
+    "Customer Name": 8.11,
+    "REFERENCE #": 16.22,
+    "NET VALUE": 13.51,
+    "DISCOUNT AMNT.": 13.51,
+    "TAX AMNT.": 10.81,
+    "AMOUNT": 8.11
+  },
+  "distinct_count": {
+    "Invoice Date": 3,
+    "Salesman": 8,
+    "AREA": 14,
+    "Customer Name": 34,
+    "REFERENCE #": 31,
+    "NET VALUE": 30,
+    "DISCOUNT AMNT.": 11,
+    "TAX AMNT.": 31,
+    "AMOUNT": 32
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-10-21",
+      "TOTAL",
+      "Prepared by:"
+    ],
+    "Salesman": [
+      "BENJAMIN AQUINO",
+      "ANNA MARIE MANAPSAL",
+      "ADMIN SALES",
+      "JOEL WACANGAN",
+      "VOLTAIRE FINOGUAR"
+    ],
+    "AREA": [
+      "CITY OF URDANETA",
+      "CALASIAO",
+      "BAGUIO CITY",
+      "MAPANDAN",
+      "31"
+    ],
+    "Customer Name": [
+      "CESARIO RESTAURANT",
+      "J's RICE BURGER (La Trinidad)",
+      "BLACK & BROWN FOOD & REFRESHMENT HUB",
+      "DHD PIZZA HOUSE",
+      "PSD BB - RESTO"
+    ],
+    "REFERENCE #": [
+      "DMP024887",
+      "DMP024881",
+      "DMP024811-2",
+      "DMP024893",
+      "DMP024888"
+    ],
+    "NET VALUE": [
+      "3340.72",
+      "2040.64",
+      "2955.87",
+      "4239.4",
+      "2970.88"
+    ],
+    "DISCOUNT AMNT.": [
+      "108.15",
+      "253.52",
+      "4467.96",
+      "1707.05",
+      "18.32"
+    ],
+    "TAX AMNT.": [
+      "371.44",
+      "1767.56",
+      "29886.25",
+      "900.2",
+      "205.46"
+    ],
+    "AMOUNT": [
+      "1115.41",
+      "2710.69",
+      "3310.57",
+      "2948.77",
+      "88023.45"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 35,
+  "header_signature": "c3aa1de5b8d1",
+  "header_tokens": [
+    "amount",
+    "area",
+    "customer name",
+    "discount amnt.",
+    "invoice date",
+    "net value",
+    "reference #",
+    "salesman",
+    "tax amnt."
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

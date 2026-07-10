@@ -1,0 +1,208 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 05.2023/PANGASINAN&ILOCOS MAY 1-MAY 31 2023 SALE REGISTER.xlsx",
+  "sheet": "ILOCOS SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Invoice Num",
+    "REFNBR",
+    "Customer Name",
+    "Salesman",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Customer Name": "text",
+    "Salesman": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Customer Name": 0.0,
+    "Salesman": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 29,
+    "Invoice Num": 227,
+    "REFNBR": 227,
+    "Customer Name": 138,
+    "Salesman": 3,
+    "Untaxed Amount": 194,
+    "Discount Rate": 5,
+    "Discount Amount": 41,
+    "Tax": 191,
+    "Net Amount": 194,
+    "Balance": 113,
+    "Posted": 2,
+    "Return Slip #": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2023-05-17 00:00:00",
+      "2023-05-20",
+      "2023-05-31",
+      "2023-05-24",
+      "2023-05-18"
+    ],
+    "Invoice Num": [
+      "INV/2023/0884",
+      "INV/2023/1079",
+      "INV/2023/1013",
+      "INV/2023/0839",
+      "INV/2023/0916"
+    ],
+    "REFNBR": [
+      "DMIS005469",
+      "DMIS005516",
+      "DMIS005434",
+      "DMIS005360",
+      "DMIS005507"
+    ],
+    "Customer Name": [
+      "EASYVEGE BAKESHOP",
+      "ILOCOS ACRA CONSUMER COOP",
+      " M CADIENTE STORE",
+      "FIDO DIDAS STORE & CARINDERIA",
+      "FREDDO SUPERSTORE"
+    ],
+    "Salesman": [
+      "GHIMBOY TAAN",
+      "MARVIN DIOSO",
+      "FREDERICK C. GUZON"
+    ],
+    "Untaxed Amount": [
+      "4216.28",
+      "279.74",
+      "2411.59",
+      "19903.7",
+      "2607.48"
+    ],
+    "Discount Rate": [
+      "Public Pricelist",
+      "LESS 2%",
+      "LESS 4%",
+      "LESS 3%",
+      "LESS 4% LESS 2%"
+    ],
+    "Discount Amount": [
+      "113.23",
+      "256.5",
+      "71.63",
+      "198.78",
+      "31.03"
+    ],
+    "Tax": [
+      "1282.22",
+      "1086.06",
+      "17.19",
+      "107.23",
+      "1335.06"
+    ],
+    "Net Amount": [
+      "718.08",
+      "520.57",
+      "3575.03",
+      "212.6",
+      "1062.72"
+    ],
+    "Balance": [
+      "520.57",
+      "212.6",
+      "2088",
+      "1826.22",
+      "18166.9"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 227,
+  "header_signature": "822a0d127970",
+  "header_tokens": [
+    "balance",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "header contains 'return slip #'",
+    "REFNBR 'DMIS005496' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005496-2' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005484' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005438' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'ODM002396-2' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'ODM002396' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'DMIS005477' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005466' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005463' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'ODM002395' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'DMIS005467' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005462' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005461' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005460' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005440' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005458' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005456' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMP005853' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMIS005452' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005442' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005426' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005423' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005372' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005355-2' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005387' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005446' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS005399' matches prefix 'DMIS' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

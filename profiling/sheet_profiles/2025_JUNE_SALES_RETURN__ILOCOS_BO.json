@@ -1,0 +1,221 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 06.2025/2025 JUNE SALES RETURN.xlsx",
+  "sheet": "ILOCOS BO",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "text",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 9.09,
+    "Salesman": 18.18,
+    "Town Display": 18.18,
+    "Branch Code": 18.18,
+    "Customer Name": 18.18,
+    "Invoice Num": 18.18,
+    "REFNBR": 18.18,
+    "Untaxed Amount": 18.18,
+    "Discount Rate": 18.18,
+    "Discount Amount": 18.18,
+    "Tax": 18.18,
+    "Net Amount": 18.18,
+    "Balance": 18.18,
+    "Posted": 18.18,
+    "Return Slip #": 18.18,
+    "Return Type": 18.18
+  },
+  "distinct_count": {
+    "Invoice Date": 8,
+    "Salesman": 3,
+    "Town Display": 5,
+    "Branch Code": 9,
+    "Customer Name": 9,
+    "Invoice Num": 9,
+    "REFNBR": 9,
+    "Untaxed Amount": 9,
+    "Discount Rate": 3,
+    "Discount Amount": 4,
+    "Tax": 9,
+    "Net Amount": 9,
+    "Balance": 2,
+    "Posted": 2,
+    "Return Slip #": 9,
+    "Return Type": 1
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-06-10",
+      "Bad Stock",
+      "2025-06-09",
+      "2025-06-18",
+      "2025-06-25"
+    ],
+    "Salesman": [
+      "BARBI LABRADOR",
+      "CARLON DAHILIG",
+      "ADMIN SALES"
+    ],
+    "Town Display": [
+      "SAN ILDEFONSO",
+      "SANTA MARIA",
+      "TAGUDIN",
+      "SANTO DOMINGO",
+      "LAOAG CITY (Capital)"
+    ],
+    "Branch Code": [
+      "L12E-000624",
+      "L12E-000834",
+      "L12E-001007",
+      "L12E-000859",
+      "L12E-000875"
+    ],
+    "Customer Name": [
+      "CALTEX (STA. MARIA)",
+      "*MULTIPURPOSE CONVENIENCE STORE",
+      "SG OHANA GAS CONVENIENCE STORE",
+      "ERIC FARINAS (EAGLESNEST BAR & RESTAURANT)",
+      "BUNSO CONSUMER GOODS WHOLESALING "
+    ],
+    "Invoice Num": [
+      "INV/2025/2339",
+      "INV/2025/2377",
+      "INV/2025/2459",
+      "INV/2025/2464",
+      "INV/2025/2211"
+    ],
+    "REFNBR": [
+      "DMIS0064937",
+      "False",
+      "ODM002812*",
+      "DMIS0064961",
+      "DMIS0064760"
+    ],
+    "Untaxed Amount": [
+      "259.2",
+      "32.57",
+      "2108.14",
+      "564.38",
+      "243.34"
+    ],
+    "Discount Rate": [
+      "LESS 4%",
+      "Public Pricelist",
+      "LESS 2%"
+    ],
+    "Discount Amount": [
+      "43.02",
+      "0",
+      "14.31",
+      "4.97"
+    ],
+    "Tax": [
+      "29.2",
+      "41.21",
+      "3.91",
+      "43.01",
+      "252.98"
+    ],
+    "Net Amount": [
+      "632.11",
+      "194.29",
+      "401.41",
+      "290.3",
+      "384.66"
+    ],
+    "Balance": [
+      "0",
+      "36.48"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": [
+      "RMR 39187",
+      "RMR38886",
+      "RMR 39139",
+      "RMR  39245 ",
+      "RMR 38839"
+    ],
+    "Return Type": [
+      "BO"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 10,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'DMIS0064937' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064961' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064803-3*' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060385' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064870' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'ODM002812*' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'DMIS0064480*' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064760' matches prefix 'DMIS' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

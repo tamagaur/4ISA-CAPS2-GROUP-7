@@ -1,0 +1,139 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/DAILY REPORT - 11.2025/2025 ILOCOS NOVEMBER SALES REGISTER.xlsx",
+  "sheet": "1106",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "AREA",
+    "Customer Name",
+    "REFERENCE #",
+    "NET VALUE",
+    "DISCOUNT AMNT.",
+    "TAX AMNT.",
+    "AMOUNT"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "AREA": "text",
+    "Customer Name": "text",
+    "REFERENCE #": "text",
+    "NET VALUE": "numeric",
+    "DISCOUNT AMNT.": "numeric",
+    "TAX AMNT.": "text",
+    "AMOUNT": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 9.3,
+    "Salesman": 9.3,
+    "AREA": 11.63,
+    "Customer Name": 6.98,
+    "REFERENCE #": 13.95,
+    "NET VALUE": 11.63,
+    "DISCOUNT AMNT.": 11.63,
+    "TAX AMNT.": 9.3,
+    "AMOUNT": 6.98
+  },
+  "distinct_count": {
+    "Invoice Date": 3,
+    "Salesman": 4,
+    "AREA": 11,
+    "Customer Name": 39,
+    "REFERENCE #": 37,
+    "NET VALUE": 36,
+    "DISCOUNT AMNT.": 5,
+    "TAX AMNT.": 37,
+    "AMOUNT": 38
+  },
+  "samples": {
+    "Invoice Date": [
+      "TOTAL",
+      "2025-11-06",
+      "Prepared by:"
+    ],
+    "Salesman": [
+      "ADMIN SALES",
+      "BARBI LABRADOR",
+      "ENCODER",
+      "ELYSSA L. MASON"
+    ],
+    "AREA": [
+      "SANTO DOMINGO",
+      "CABUGAO",
+      "SANTA CATALINA",
+      "CITY OF VIGAN (Capital)",
+      "BANTAY"
+    ],
+    "Customer Name": [
+      "ELI CONVENIENCE STORE",
+      "*J&C RETAIL & WHOLESALER",
+      "*DICKRAINE COVENIENCE STORE",
+      "*WILFREDO ROSARIO REFRESHMENT",
+      "RECEIVABLE"
+    ],
+    "REFERENCE #": [
+      "DMIS0066480",
+      "DMIS0066463",
+      "DMIS0066486",
+      "DMIS0066477",
+      "DMIS0066467"
+    ],
+    "NET VALUE": [
+      "499.18",
+      "642.86",
+      "7590.8",
+      "477.81",
+      "602.14"
+    ],
+    "DISCOUNT AMNT.": [
+      "1404.52",
+      "0",
+      "1526.8799999999999",
+      "23.51",
+      "98.85"
+    ],
+    "TAX AMNT.": [
+      "18.16",
+      "59.9",
+      "1338.31",
+      "118.05",
+      "72.26"
+    ],
+    "AMOUNT": [
+      "1846.39",
+      "1774.24",
+      "1539.36",
+      "3387.05",
+      "176314.1"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 41,
+  "header_signature": "c3aa1de5b8d1",
+  "header_tokens": [
+    "amount",
+    "area",
+    "customer name",
+    "discount amnt.",
+    "invoice date",
+    "net value",
+    "reference #",
+    "salesman",
+    "tax amnt."
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

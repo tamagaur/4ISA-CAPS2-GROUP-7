@@ -1,0 +1,134 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/Copy of DAILY SALES REPORT 07.31.2025.xlsx",
+  "sheet": "07.15.2025",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Customer Name",
+    "Town Display",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Amount",
+    "Tax",
+    "Net Amount"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Customer Name": "text",
+    "Town Display": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Amount": "numeric",
+    "Tax": "text",
+    "Net Amount": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 9.23,
+    "Salesman": 12.31,
+    "Customer Name": 10.77,
+    "Town Display": 7.69,
+    "REFNBR": 12.31,
+    "Untaxed Amount": 10.77,
+    "Discount Amount": 10.77,
+    "Tax": 6.15,
+    "Net Amount": 10.77
+  },
+  "distinct_count": {
+    "Invoice Date": 3,
+    "Salesman": 2,
+    "Customer Name": 58,
+    "Town Display": 6,
+    "REFNBR": 57,
+    "Untaxed Amount": 51,
+    "Discount Amount": 1,
+    "Tax": 54,
+    "Net Amount": 51
+  },
+  "samples": {
+    "Invoice Date": [
+      "JENNY D. ANDRADA",
+      "2025-07-15",
+      "ENCODER"
+    ],
+    "Salesman": [
+      "PMS-EAST",
+      "PMS-LU"
+    ],
+    "Customer Name": [
+      "LETECIA",
+      "MARK (BAY)",
+      "COST WISE (BASISTA) ",
+      "FELISING",
+      "CARIÑO SPICES (BAUANG)"
+    ],
+    "Town Display": [
+      "RECEIVABLE",
+      "BAUANG",
+      "         JERWIN B. ORDONIO",
+      "BASISTA",
+      "Checked by:"
+    ],
+    "REFNBR": [
+      "GT11745",
+      "GT11723",
+      "GT11703",
+      "GT11719",
+      "GT11742"
+    ],
+    "Untaxed Amount": [
+      "242.37",
+      "967.47",
+      "593.7",
+      "3557.59",
+      "151.36"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax": [
+      "498.38",
+      "37.96",
+      "45.62",
+      "84.9",
+      "336.09"
+    ],
+    "Net Amount": [
+      "1131.36",
+      "3136.81",
+      "813.44",
+      "210.48",
+      "565.68"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 61,
+  "header_signature": "be9165d06129",
+  "header_tokens": [
+    "customer name",
+    "discount amount",
+    "invoice date",
+    "net amount",
+    "refnbr",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

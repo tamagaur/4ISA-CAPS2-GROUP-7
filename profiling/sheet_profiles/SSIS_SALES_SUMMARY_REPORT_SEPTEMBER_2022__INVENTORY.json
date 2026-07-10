@@ -1,0 +1,74 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT SEPTEMBER 2022.xlsx",
+  "sheet": "INVENTORY",
+  "real_format": "xlsx",
+  "header_row_index": 5,
+  "header_confidence": 0.48,
+  "junk_ranges": [
+    [
+      0,
+      4
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Schedules of Ending Invty SEPTEMBER, 2022",
+    "INVTY",
+    "INVTY",
+    "AT COST"
+  ],
+  "dtypes": {
+    "__col0__": "empty",
+    "Schedules of Ending Invty SEPTEMBER, 2022": "text",
+    "INVTY": "text",
+    "AT COST": "text"
+  },
+  "null_pct": {
+    "__col0__": 100.0,
+    "Schedules of Ending Invty SEPTEMBER, 2022": 20.0,
+    "INVTY": 20.0,
+    "AT COST": 20.0
+  },
+  "distinct_count": {
+    "__col0__": 0,
+    "Schedules of Ending Invty SEPTEMBER, 2022": 4,
+    "INVTY": 4,
+    "AT COST": 4
+  },
+  "samples": {
+    "__col0__": [],
+    "Schedules of Ending Invty SEPTEMBER, 2022": [
+      "Extruck Invty - ",
+      "TOTAL:",
+      "Whse Inventory  - Retail",
+      "BO Invty - AUGUST-SEPTEMEBER 2022"
+    ],
+    "INVTY": [
+      "WITHOUT VAT",
+      "24744861.03",
+      "27811554.115833335",
+      "3066693.0858333344"
+    ],
+    "AT COST": [
+      "WITHOUT VAT",
+      "22710833.453334004",
+      "25525444.36751184",
+      "2814610.9141778345"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 5,
+  "header_signature": "37d7b4dead2f",
+  "header_tokens": [
+    "at cost",
+    "invty",
+    "invty",
+    "schedules of ending invty september, 2022"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

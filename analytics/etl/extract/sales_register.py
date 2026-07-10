@@ -1,15 +1,23 @@
 """
-analytics.etl.extract.sales_register — Sales Register parser.
+analytics.etl.extract.sales_register — Sales Register Extract driver.
 
-Phase 3B (CLAUDE.md Step 6):
-  Source: Sales Register xlsx files (2021–2025).
-  Confirmed columns (CLAUDE.md Part 2):
-    Invoice Date | Salesman | Town Display | Customer Name |
-    Untaxed Amount | Discount Amount | Tax | Net Amount |
-    Balance | Return Slip # | Return Type
-  Granularity: INVOICE-LEVEL only — no SKU breakdown.
-
-TODO: Implement parse_sales_register(filepath: Path) -> pd.DataFrame.
-      Validate all expected columns are present before returning.
-      Raise ValueError with descriptive message on schema mismatch.
+Selects files whose filename matches the sales_register doc-type pattern
+(profiling.profile_files.infer_doc_type) and runs them through the shared
+Extract core (_shared.py). Extract never renames columns — the vocab A/B/C
+column-name drift documented in ARCHITECTURE.md §6.3 passes through
+untouched under each file's own raw column names; reconciling that drift
+is Transform's job, not Extract's. Also picks up daily-report files (same
+base doc_type, split from the monthly register via _shared.refine_doc_type
+into doc_type=daily_sales_report — tagged, not dropped).
 """
+from __future__ import annotations
+
+from pathlib import Path
+
+from analytics.etl.extract._shared import REPO_ROOT, ExtractRunResult, parse_doc_type_files
+
+DOC_TYPE = "sales_register"
+
+
+def parse_sales_register(raw_dir: Path | None = None, repo_root: Path = REPO_ROOT) -> ExtractRunResult:
+    return parse_doc_type_files(DOC_TYPE, raw_dir=raw_dir, repo_root=repo_root)

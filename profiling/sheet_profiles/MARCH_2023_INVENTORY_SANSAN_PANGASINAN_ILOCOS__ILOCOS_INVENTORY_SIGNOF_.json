@@ -1,0 +1,143 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 03.2023/MARCH_2023_INVENTORY_SANSAN_PANGASINAN&ILOCOS.xlsx",
+  "sheet": "ILOCOS INVENTORY SIGNOF ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.72,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "PCS",
+    "in Cases"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric",
+    "in Cases": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.64,
+    "in Cases": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 156,
+    "Quantity": 122,
+    "Cost": 154,
+    "Valuation": 154,
+    "Valuation with VAT": 154,
+    "CAS": 36,
+    "PCS": 116,
+    "PKG": 14,
+    "in Cases": 122
+  },
+  "samples": {
+    "__col0__": [
+      "          9DMR56716 DM QUICK N EASY BBQ MARINADE 200ml (R)",
+      "          9TOL57434 DM PINEAPPLE TIDBITS SUP (200G X24)",
+      "          9DMZ55103 DM PINE ORANGE 24x240ML 100% STEVIA",
+      "          9FSE58154 HOT SAUCE 7g x 250",
+      "          9DMR57072 DM QUICK N EASY KARE KARE MIX SACHET 36 x 50g"
+    ],
+    "Quantity": [
+      "6.166667",
+      "32.08333",
+      "1.791667",
+      "3.208333",
+      "4"
+    ],
+    "Cost": [
+      "23702.81",
+      "4871.123",
+      "5740.891",
+      "114954",
+      "4041.15"
+    ],
+    "Valuation": [
+      "23702.81",
+      "4871.123",
+      "5740.891",
+      "114954",
+      "4041.15"
+    ],
+    "Valuation with VAT": [
+      "1870.003",
+      "5628.391",
+      "4665.091",
+      "4960.62",
+      "13415.17"
+    ],
+    "CAS": [
+      "5",
+      "6",
+      "9",
+      "42",
+      "18"
+    ],
+    "PCS": [
+      "463",
+      "933",
+      "117",
+      "6",
+      "42"
+    ],
+    "PKG": [
+      "6",
+      "250",
+      "18",
+      "20",
+      "24"
+    ],
+    "in Cases": [
+      "5.416666666666667",
+      "1.8888888888888888",
+      "0.4791666666666667",
+      "3.4583333333333335",
+      "4"
+    ]
+  },
+  "grain": "sku",
+  "usable_row_count": 156,
+  "header_signature": "5d7ed8f9427e",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "in cases",
+    "pcs",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

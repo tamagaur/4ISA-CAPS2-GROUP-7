@@ -1,0 +1,233 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 01.2024/2024 JANUARY SALES REGISTER.xlsx",
+  "sheet": "PANGASINAN SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Dscount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Dscount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Dscount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 24,
+    "Salesman": 5,
+    "Town Display": 46,
+    "Branch Code": 343,
+    "Customer Name": 343,
+    "Invoice Num": 524,
+    "REFNBR": 524,
+    "Untaxed Amount": 409,
+    "Discount Rate": 5,
+    "Dscount Amount": 89,
+    "Tax": 408,
+    "Net Amount": 409,
+    "Balance": 409,
+    "Posted": 1,
+    "Return Slip #": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2024-01-04",
+      "2024-01-24",
+      "2024-01-26",
+      "2024-01-19",
+      "2024-01-22"
+    ],
+    "Salesman": [
+      "RAYMON ESTRADA",
+      "BENJAMIN AQUINO",
+      "CORFEL PARAS",
+      "EUGENE CALICA",
+      "MARTIN GONZALES"
+    ],
+    "Town Display": [
+      "URBIZTONDO",
+      "DAGUPAN CITY",
+      "ITOGON",
+      "SANTA MARIA",
+      "VILLASIS"
+    ],
+    "Branch Code": [
+      "L12C-9000646",
+      "L12F-002113",
+      "L12F-002109",
+      "L12F-002132",
+      "L12F-002205"
+    ],
+    "Customer Name": [
+      "GILIGANS ISLAND",
+      "TAIHAO RESTAURANT**",
+      "MICRO BURGER",
+      "VILLA ISABELLE",
+      "CUEVAS BAKERY-MANGALDAN"
+    ],
+    "Invoice Num": [
+      "INV/2024/0324",
+      "INV/2024/0332",
+      "INV/2024/0050",
+      "INV/2024/0284",
+      "INV/2024/0336"
+    ],
+    "REFNBR": [
+      "DMP013855",
+      "DMP013676",
+      "DMP014074",
+      "DMP014095",
+      "FG1541198"
+    ],
+    "Untaxed Amount": [
+      "9183.15",
+      "2683.5",
+      "6526.86",
+      "4502.05",
+      "9324.28"
+    ],
+    "Discount Rate": [
+      "LESS 4% LESS 1%",
+      "Less 2%",
+      "Public Pricelist",
+      "LESS 3%",
+      "LESS 4%"
+    ],
+    "Dscount Amount": [
+      "122.44",
+      "7125.51",
+      "270.9",
+      "1642.06",
+      "26.94"
+    ],
+    "Tax": [
+      "143.99",
+      "73.47",
+      "46.01",
+      "72",
+      "976.16"
+    ],
+    "Net Amount": [
+      "21512.28",
+      "1114.33",
+      "2194.32",
+      "29667.77",
+      "6074.07"
+    ],
+    "Balance": [
+      "21512.28",
+      "1114.33",
+      "2194.32",
+      "29667.77",
+      "6074.07"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 524,
+  "header_signature": "421b6a85bd1a",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount rate",
+    "dscount amount",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'DMP014173-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014207' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014206' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014205' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014195-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014208' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'TDM001842' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'TDM001841' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'DMP014199' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014198' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014197' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014201' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014200' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014204' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014203' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014135-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'TDM001840' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'DMP014161' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014160' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014159' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014164' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014163' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014162' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014125-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'FG1541465' matches prefix 'FG' -> delmonte",
+    "REFNBR 'DMP014166' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP014168' matches prefix 'DMP' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

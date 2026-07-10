@@ -1,0 +1,153 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 02.2025/2024 FEBRUARY INVENTORY SIGN OFF.xlsx",
+  "sheet": "ILOCOS  SIGN OFF INVENTORY",
+  "real_format": "xlsx",
+  "header_row_index": 3,
+  "header_confidence": 0.49,
+  "junk_ranges": [
+    [
+      0,
+      2
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "68649",
+    "2902.0827777777777"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric",
+    "68649": "numeric",
+    "2902.0827777777777": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.68,
+    "68649": 0.68,
+    "2902.0827777777777": 0.68
+  },
+  "distinct_count": {
+    "__col0__": 146,
+    "Quantity": 123,
+    "Cost": 144,
+    "Valuation": 144,
+    "Valuation with VAT": 144,
+    "CAS": 46,
+    "PCS": 33,
+    "PKG": 16,
+    "68649": 127,
+    "2902.0827777777777": 122
+  },
+  "samples": {
+    "__col0__": [
+      "     9DMC57802 DM Pine Blueberry Juice Drink 1L Tetra",
+      "     9DMR57073 DM QUICK N EASY GATA MIX SACHET 36 x 40g",
+      "     DKY58450 DMV-DKY Strawberry 48/180ml",
+      "     DKK34984 KIKKOMAN TERIYAKI BASTE and GLAZE 12/290ML",
+      "     DMP58424 DEL MONTE SPAGHETTI 800g"
+    ],
+    "Quantity": [
+      "40.625",
+      "1.83333333333333",
+      "2.58333333333333",
+      "20",
+      "5"
+    ],
+    "Cost": [
+      "535.7125",
+      "27732.298",
+      "6349.7",
+      "8156.5575",
+      "3102.32"
+    ],
+    "Valuation": [
+      "535.7125",
+      "27732.298",
+      "6349.7",
+      "8156.5575",
+      "3102.32"
+    ],
+    "Valuation with VAT": [
+      "39210.3693333333",
+      "19867.1592",
+      "300.0004",
+      "35167.9533333333",
+      "186519.913066667"
+    ],
+    "CAS": [
+      "13",
+      "110",
+      "11",
+      "23",
+      "20"
+    ],
+    "PCS": [
+      "1387",
+      "11",
+      "20",
+      "26",
+      "5"
+    ],
+    "PKG": [
+      "25",
+      "4",
+      "50",
+      "48",
+      "10"
+    ],
+    "68649": [
+      "276",
+      "403",
+      "110",
+      "11",
+      "20"
+    ],
+    "2902.0827777777777": [
+      "0.4583333333333333",
+      "0.3055555555555556",
+      "40.625",
+      "20",
+      "5"
+    ]
+  },
+  "grain": "sku",
+  "usable_row_count": 146,
+  "header_signature": "3336646a1fb0",
+  "header_tokens": [
+    "2902.0827777777777",
+    "68649",
+    "cas",
+    "cost",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

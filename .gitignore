@@ -12,6 +12,9 @@ agent/
 data/raw/*
 !data/raw/.gitkeep
 
+# Extract stage output — generated from raw SSM client data, never committed
+staging/
+
 # Python
 __pycache__/
 *.py[cod]

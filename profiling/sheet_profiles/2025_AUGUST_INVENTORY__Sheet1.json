@@ -1,0 +1,151 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 08.2025/2025 AUGUST INVENTORY.xlsx",
+  "sheet": "Sheet1",
+  "real_format": "xlsx",
+  "header_row_index": 4,
+  "header_confidence": 0.826,
+  "junk_ranges": [
+    [
+      0,
+      3
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "CATEGORY",
+    "PRODUCT/ SKU CODE",
+    "DESCRIPTION",
+    "BASE UNIT",
+    "CASE PACK",
+    "SKU BARCODE",
+    "SHIP ID CODE",
+    "CUR",
+    "PRODUCT LIST PRICE (VAT-EX) CASE",
+    "PRODUCT LIST PRICE (VAT-INC) CASE"
+  ],
+  "dtypes": {
+    "__col0__": "empty",
+    "CATEGORY": "text",
+    "PRODUCT/ SKU CODE": "text",
+    "DESCRIPTION": "text",
+    "BASE UNIT": "text",
+    "CASE PACK": "numeric",
+    "SKU BARCODE": "text",
+    "SHIP ID CODE": "text",
+    "CUR": "text",
+    "PRODUCT LIST PRICE (VAT-EX) CASE": "numeric",
+    "PRODUCT LIST PRICE (VAT-INC) CASE": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 100.0,
+    "CATEGORY": 0.0,
+    "PRODUCT/ SKU CODE": 0.0,
+    "DESCRIPTION": 0.0,
+    "BASE UNIT": 0.0,
+    "CASE PACK": 0.0,
+    "SKU BARCODE": 1.26,
+    "SHIP ID CODE": 0.84,
+    "CUR": 0.0,
+    "PRODUCT LIST PRICE (VAT-EX) CASE": 0.0,
+    "PRODUCT LIST PRICE (VAT-INC) CASE": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 0,
+    "CATEGORY": 6,
+    "PRODUCT/ SKU CODE": 238,
+    "DESCRIPTION": 238,
+    "BASE UNIT": 1,
+    "CASE PACK": 20,
+    "SKU BARCODE": 235,
+    "SHIP ID CODE": 236,
+    "CUR": 1,
+    "PRODUCT LIST PRICE (VAT-EX) CASE": 153,
+    "PRODUCT LIST PRICE (VAT-INC) CASE": 153
+  },
+  "samples": {
+    "__col0__": [],
+    "CATEGORY": [
+      "Beverages",
+      "Fruits & Snacks",
+      "Culinary",
+      "Snacks",
+      "Dairy"
+    ],
+    "PRODUCT/ SKU CODE": [
+      "55828",
+      "58430",
+      "58465",
+      "11980",
+      "58541"
+    ],
+    "DESCRIPTION": [
+      "DM Potato Crisp Original 14g X 144",
+      "DM Fruity Munchsters Orange (10x26g)",
+      "DM 100% PA Juice w/ Vit ACE 202 6-Pack",
+      "Del Monte Tipco - Kiwi 12 x 1L",
+      "DM PINE TIDBITS ELS 24 - 1 1/2"
+    ],
+    "BASE UNIT": [
+      "CAS"
+    ],
+    "CASE PACK": [
+      "18",
+      "40",
+      "50",
+      "12",
+      "4"
+    ],
+    "SKU BARCODE": [
+      "4901515119804",
+      "4800024568328",
+      "4800024584694",
+      "4800024579317",
+      "4800024550057"
+    ],
+    "SHIP ID CODE": [
+      "14800024584493",
+      "14800024581126",
+      "14800024586374",
+      "14800024003659",
+      "78851013797491"
+    ],
+    "CUR": [
+      "PHP"
+    ],
+    "PRODUCT LIST PRICE (VAT-EX) CASE": [
+      "938.25",
+      "681.32",
+      "201.61",
+      "165.75",
+      "933.7"
+    ],
+    "PRODUCT LIST PRICE (VAT-INC) CASE": [
+      "1013.04",
+      "1162.8",
+      "1096.38",
+      "818.28",
+      "1387.33"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 238,
+  "header_signature": "137a341be992",
+  "header_tokens": [
+    "base unit",
+    "case pack",
+    "category",
+    "cur",
+    "description",
+    "product list price (vat-ex) case",
+    "product list price (vat-inc) case",
+    "product/ sku code",
+    "ship id code",
+    "sku barcode"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

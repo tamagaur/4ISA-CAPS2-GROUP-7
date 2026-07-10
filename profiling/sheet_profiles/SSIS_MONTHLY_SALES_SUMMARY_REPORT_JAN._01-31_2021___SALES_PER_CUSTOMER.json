@@ -1,0 +1,188 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS MONTHLY SALES SUMMARY REPORT (JAN. 01-31, 2021).xlsx",
+  "sheet": "SALES PER CUSTOMER",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "text",
+    "__col1__": "text",
+    "CALENDAR DAY": "text",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 4.17,
+    "__col1__": 4.17,
+    "CALENDAR DAY": 0.08,
+    "REASON CODE": 0.13,
+    "OUTLET": 0.13,
+    "OUTLET NAME": 0.05,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.05,
+    "Sale After TPR & UW": 0.05,
+    "NIV": 0.05,
+    "VAT": 0.05,
+    "Total Sales Amt Inc. Tax": 0.05,
+    "REMARKS": 0.13
+  },
+  "distinct_count": {
+    "Salesman": 13,
+    "__col1__": 13,
+    "CALENDAR DAY": 24,
+    "REASON CODE": 8,
+    "OUTLET": 1442,
+    "OUTLET NAME": 1399,
+    "GSV": 2837,
+    "TPR + UW/DT Discount": 520,
+    "Sale After TPR & UW": 2859,
+    "NIV": 2859,
+    "VAT": 2744,
+    "Total Sales Amt Inc. Tax": 2859,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [
+      "17555",
+      "11825",
+      "10699",
+      "3684",
+      "24182"
+    ],
+    "__col1__": [
+      "KRISTIAN P. DEL PINADO",
+      "LEO NIÑO PABLICO JR",
+      "MARK. GALLARDO.",
+      "NARDITO ANDALLO",
+      "JESSIE MIRADIOS"
+    ],
+    "CALENDAR DAY": [
+      "2021-01-15 00:00:00",
+      "2021-01-26 00:00:00",
+      "2021-01-22 00:00:00",
+      "2021-01-13 00:00:00",
+      "2021-01-14 00:00:00"
+    ],
+    "REASON CODE": [
+      "Order cancelled by customer",
+      "Good - Full Return",
+      "Stock Recall",
+      "Packaging Defect (Torn/Deformed/Broken)",
+      "Stock not available"
+    ],
+    "OUTLET": [
+      "1121044",
+      "3345685",
+      "3477539",
+      "3662187",
+      "3271948"
+    ],
+    "OUTLET NAME": [
+      "QUINMAR - SAN JUAN",
+      "RIVERSIDE-806",
+      "MAR GLO",
+      "DORONILLA",
+      "JHOAN'S STORE"
+    ],
+    "GSV": [
+      "209.47",
+      "259.83",
+      "3844.57",
+      "19157.3",
+      "46.21"
+    ],
+    "TPR + UW/DT Discount": [
+      "-2162.57",
+      "161.96",
+      "-503.42",
+      "-471.92",
+      "-1207.28"
+    ],
+    "Sale After TPR & UW": [
+      "209.47",
+      "259.83",
+      "3844.57",
+      "19829.61",
+      "46.21"
+    ],
+    "NIV": [
+      "209.47",
+      "259.83",
+      "3844.57",
+      "19829.61",
+      "46.21"
+    ],
+    "VAT": [
+      "8.71",
+      "64.96",
+      "33.05",
+      "74.43",
+      "691.03"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "263.98",
+      "1856.4",
+      "14188.82",
+      "42257.26",
+      "168011.64"
+    ],
+    "REMARKS": [
+      "INVOICE",
+      "RETURNS"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 3979,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'niv'",
+    "header contains 'gsv'",
+    "header contains 'tpr'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": true
+}

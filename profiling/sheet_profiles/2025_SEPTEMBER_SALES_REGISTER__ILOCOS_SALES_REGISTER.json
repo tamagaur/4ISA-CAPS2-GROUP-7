@@ -1,0 +1,262 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 09.2025/2025 SEPTEMBER SALES REGISTER.xlsx",
+  "sheet": "ILOCOS SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Total CAS",
+    "Total PCS",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Total CAS": "numeric",
+    "Total PCS": "numeric",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty",
+    "Return Type": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Total CAS": 0.0,
+    "Total PCS": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0,
+    "Return Type": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 17,
+    "Salesman": 3,
+    "Town Display": 32,
+    "Branch Code": 263,
+    "Customer Name": 263,
+    "Invoice Num": 368,
+    "REFNBR": 368,
+    "Total CAS": 34,
+    "Total PCS": 77,
+    "Untaxed Amount": 333,
+    "Discount Rate": 4,
+    "Discount Amount": 48,
+    "Tax": 329,
+    "Net Amount": 333,
+    "Balance": 216,
+    "Posted": 2,
+    "Return Slip #": 0,
+    "Return Type": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-09-24",
+      "2025-09-10",
+      "2025-09-29",
+      "2025-09-16",
+      "2025-09-08"
+    ],
+    "Salesman": [
+      "CARLON DAHILIG",
+      "ADMIN SALES",
+      "BARBI LABRADOR"
+    ],
+    "Town Display": [
+      "PAOAY",
+      "SANTO DOMINGO",
+      "CITY OF CANDON",
+      "CABUGAO",
+      "BANTAY"
+    ],
+    "Branch Code": [
+      "L12E-001312",
+      "L12E-000645",
+      "L12E-001040",
+      "L12E-B000083",
+      "L12E-001096"
+    ],
+    "Customer Name": [
+      "TRISHABELLETHEA'S FOOD HOUSE",
+      "LMS CONVENIENCE STORE",
+      "SMART CITY GREEN FOOD COURT ",
+      "JILAB CONVENIENCE STORE",
+      "CEEKAY "
+    ],
+    "Invoice Num": [
+      "INV/2025/3421",
+      "INV/2025/3521",
+      "INV/2025/3582",
+      "INV/2025/3733",
+      "INV/2025/3411"
+    ],
+    "REFNBR": [
+      "DMIS0065997",
+      "DMIS0065844",
+      "DMIS0065792",
+      "DMIS0065909",
+      "DMIS0065767"
+    ],
+    "Total CAS": [
+      "41",
+      "20",
+      "27",
+      "10",
+      "292"
+    ],
+    "Total PCS": [
+      "101",
+      "27",
+      "147",
+      "4",
+      "86"
+    ],
+    "Untaxed Amount": [
+      "2689.14",
+      "1088.54",
+      "531.02",
+      "2678.35",
+      "1836"
+    ],
+    "Discount Rate": [
+      "LESS 3%",
+      "LESS 4%",
+      "Public Pricelist",
+      "LESS 2%"
+    ],
+    "Discount Amount": [
+      "171.58",
+      "1165.71",
+      "17.24",
+      "1104.6",
+      "27.3"
+    ],
+    "Tax": [
+      "194.04",
+      "1084.48",
+      "226.31",
+      "28.75",
+      "245.33"
+    ],
+    "Net Amount": [
+      "1415.52",
+      "4933.75",
+      "3666.44",
+      "2165.73",
+      "2754.58"
+    ],
+    "Balance": [
+      "177.4",
+      "1348.79",
+      "1415.52",
+      "4933.75",
+      "4274.96"
+    ],
+    "Posted": [
+      "Yes",
+      "No"
+    ],
+    "Return Slip #": [],
+    "Return Type": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 368,
+  "header_signature": "e74d7688a7c1",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "total cas",
+    "total pcs",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'",
+    "header contains 'return slip #'",
+    "REFNBR 'DMIS0066087' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066086' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066085' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066084' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066083' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066082' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066081' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'ODM002831' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'DMIS0066103' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066102' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066092' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066091' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066090' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066089' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066101' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066100' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066099' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066098' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066097' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066096' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066095' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066094' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066093' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066080' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066079' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066078' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066077' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066088' matches prefix 'DMIS' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

@@ -1,0 +1,200 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT JULY 2024.xlsx",
+  "sheet": "RAW DATA",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.871,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "UL GSV",
+    "Mark-up/Mark-down Value in %",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "UL GSV": "numeric",
+    "Mark-up/Mark-down Value in %": "text",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.0,
+    "REASON CODE": 0.0,
+    "OUTLET": 0.0,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.0,
+    "Sale After TPR & UW": 0.0,
+    "NIV": 0.0,
+    "VAT": 0.0,
+    "Total Sales Amt Inc. Tax": 0.0,
+    "UL GSV": 0.0,
+    "Mark-up/Mark-down Value in %": 0.0,
+    "REMARKS": 0.0
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 25,
+    "REASON CODE": 15,
+    "OUTLET": 2050,
+    "OUTLET NAME": 1976,
+    "GSV": 3743,
+    "TPR + UW/DT Discount": 863,
+    "Sale After TPR & UW": 3784,
+    "NIV": 3784,
+    "VAT": 3678,
+    "Total Sales Amt Inc. Tax": 3784,
+    "UL GSV": 3729,
+    "Mark-up/Mark-down Value in %": 3677,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2024-07-25 00:00:00",
+      "2024-07-23 00:00:00",
+      "2024-07-09 00:00:00",
+      "2024-07-29 00:00:00",
+      "2024-07-03 00:00:00"
+    ],
+    "REASON CODE": [
+      "Packaging Defect (Torn/Deformed/Broken)",
+      "Overlanded/Shortlanded",
+      "Damaged Products",
+      "GOOD - Slow moving",
+      "Good - Full Return"
+    ],
+    "OUTLET": [
+      "664948",
+      "4400375",
+      "3004440",
+      "3160413",
+      "4422919"
+    ],
+    "OUTLET NAME": [
+      "CANDIDA STORE",
+      "VICKY STORE",
+      "PIDOS STORE",
+      "QUINN STORE",
+      "LORETA"
+    ],
+    "GSV": [
+      "3568.7",
+      "900.79",
+      "24303.51",
+      "195226.03",
+      "601.6"
+    ],
+    "TPR + UW/DT Discount": [
+      "6.87",
+      "1891.08",
+      "83.32",
+      "-48",
+      "-339.93"
+    ],
+    "Sale After TPR & UW": [
+      "3568.7",
+      "900.79",
+      "601.6",
+      "7318.83",
+      "983.13"
+    ],
+    "NIV": [
+      "3568.7",
+      "900.79",
+      "601.6",
+      "7318.83",
+      "983.13"
+    ],
+    "VAT": [
+      "1024.55",
+      "-268.28",
+      "3418.51",
+      "9776.05",
+      "576.24"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "-161.55",
+      "1581.38",
+      "2379.68",
+      "503.66",
+      "898.9"
+    ],
+    "UL GSV": [
+      "89645.02",
+      "67711.98",
+      "1231.87",
+      "443.59",
+      "525.69"
+    ],
+    "Mark-up/Mark-down Value in %": [
+      "15.99996142081359",
+      "80.00001746184451",
+      "3.999426898909061",
+      "86.02577809284747",
+      "31.988220808628093"
+    ],
+    "REMARKS": [
+      "RETURN",
+      "INVOICE"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 6932,
+  "header_signature": "686327ad1a64",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "mark-up/mark-down value in %",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "ul gsv",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'tpr'",
+    "header contains 'niv'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

@@ -1,0 +1,69 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 09.2023/SEPTEMBER 2023_SELL OUT.xlsx",
+  "sheet": "ILOCOS_SELL OUT",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.444,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Total Without Tax",
+    "Product Quantity"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Total Without Tax": "numeric",
+    "Product Quantity": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Total Without Tax": 0.0,
+    "Product Quantity": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 68,
+    "Total Without Tax": 68,
+    "Product Quantity": 60
+  },
+  "samples": {
+    "__col0__": [
+      "     /FIBER/PROMO",
+      "     /KETCHUPS/OTHER SAUCES - BASE",
+      "     /SPAG SAUCE/GOURMET SPAG SAUCE - BASE REGULAR",
+      "     /CHUNKS/NPI",
+      "     /TIPCO/BASE"
+    ],
+    "Total Without Tax": [
+      "6621.3",
+      "4207.51",
+      "1811.26",
+      "2201.91",
+      "226055.46"
+    ],
+    "Product Quantity": [
+      "18",
+      "187.04166666666666",
+      "0.33333333333333337",
+      "31.38888888888889",
+      "29.666666666666668"
+    ]
+  },
+  "grain": "category",
+  "usable_row_count": 68,
+  "header_signature": "a16033f08d57",
+  "header_tokens": [
+    "product quantity",
+    "total without tax"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

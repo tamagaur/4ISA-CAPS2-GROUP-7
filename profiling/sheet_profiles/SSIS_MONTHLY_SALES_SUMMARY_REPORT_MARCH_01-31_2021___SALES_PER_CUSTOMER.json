@@ -1,0 +1,188 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS MONTHLY SALES SUMMARY REPORT (MARCH 01-31,2021).xlsx",
+  "sheet": "SALES PER CUSTOMER",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.862,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "INVOICE NO.",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "INVOICE NO.": "text",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.16,
+    "INVOICE NO.": 0.16,
+    "REASON CODE": 0.16,
+    "OUTLET": 0.16,
+    "OUTLET NAME": 0.04,
+    "GSV": 0.02,
+    "TPR + UW/DT Discount": 0.06,
+    "Sale After TPR & UW": 0.06,
+    "NIV": 0.06,
+    "VAT": 0.06,
+    "Total Sales Amt Inc. Tax": 0.06,
+    "REMARKS": 0.16
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 24,
+    "INVOICE NO.": 4960,
+    "REASON CODE": 12,
+    "OUTLET": 1691,
+    "OUTLET NAME": 1627,
+    "GSV": 3897,
+    "TPR + UW/DT Discount": 695,
+    "Sale After TPR & UW": 3929,
+    "NIV": 3929,
+    "VAT": 3742,
+    "Total Sales Amt Inc. Tax": 3929,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2021-03-02 00:00:00",
+      "2021-03-08 00:00:00",
+      "2021-03-03 00:00:00",
+      "2021-03-17 00:00:00",
+      "2021-03-04 00:00:00"
+    ],
+    "INVOICE NO.": [
+      "CZ30759759",
+      "CZ30763533",
+      "CZ30760490",
+      "CZ30760991",
+      "CZ30761257"
+    ],
+    "REASON CODE": [
+      "Order cancelled by customer",
+      "Packaging Defect (Torn/Deformed/Broken)",
+      "Near Expiry/Expired",
+      "Good - Full Return",
+      "Customer refusals due to no longer need"
+    ],
+    "OUTLET": [
+      "1990461",
+      "665507",
+      "846495",
+      "3167000",
+      "3247753"
+    ],
+    "OUTLET NAME": [
+      "JANELLA AND JEK CORNER STORE",
+      "IJ AND CA STORE",
+      "KK DRUGSTORE",
+      "BOTICA LIWAYWAY",
+      "JANAH & CARINDERIA"
+    ],
+    "GSV": [
+      "128.84",
+      "316.04",
+      "155609.38",
+      "2274.11",
+      "7418.58"
+    ],
+    "TPR + UW/DT Discount": [
+      "176.27",
+      "37.29",
+      "6.82",
+      "-75",
+      "-4042.24"
+    ],
+    "Sale After TPR & UW": [
+      "128.84",
+      "316.04",
+      "-5846.53",
+      "2512.14",
+      "1915.09"
+    ],
+    "NIV": [
+      "128.84",
+      "316.04",
+      "-5846.53",
+      "2512.14",
+      "1915.09"
+    ],
+    "VAT": [
+      "132.72",
+      "-114.7",
+      "-35.33",
+      "82.35",
+      "37.29"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "-645.61",
+      "192.2",
+      "4650.8",
+      "9400.46",
+      "-1634.25"
+    ],
+    "REMARKS": [
+      "RETURNS",
+      "INVOICED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 4967,
+  "header_signature": "db8dcf91148d",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "invoice no.",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'niv'",
+    "header contains 'gsv'",
+    "header contains 'tpr'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

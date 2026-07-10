@@ -1,0 +1,179 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS DAILY SALES SUMMARY REPORT APRIL 2022.xlsx",
+  "sheet": "SOH(APRIL30,2022)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "MOVING AVERAGE PRICE(CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route",
+    "Batch"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "MOVING AVERAGE PRICE(CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty",
+    "Batch": "text"
+  },
+  "null_pct": {
+    "Storage Location": 0.13,
+    "Article No": 0.13,
+    "Article Description": 0.13,
+    "PACK SIZE": 0.13,
+    "Stock Quantity (CS/PC)": 0.13,
+    "Stock Value": 0.0,
+    "PO Qty": 69.11,
+    "Open SO Quantity": 63.67,
+    "Balance Quantity": 0.13,
+    "MOVING AVERAGE PRICE(CS)": 0.13,
+    "Status": 0.13,
+    "CATEGORY DESC": 0.13,
+    "Sales Route": 100.0,
+    "Batch": 0.13
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 789,
+    "Article Description": 787,
+    "PACK SIZE": 23,
+    "Stock Quantity (CS/PC)": 493,
+    "Stock Value": 788,
+    "PO Qty": 42,
+    "Open SO Quantity": 130,
+    "Balance Quantity": 518,
+    "MOVING AVERAGE PRICE(CS)": 713,
+    "Status": 1,
+    "CATEGORY DESC": 13,
+    "Sales Route": 0,
+    "Batch": 1
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "68188788",
+      "68202851",
+      "67060705",
+      "67834804",
+      "67033812"
+    ],
+    "Article Description": [
+      "CREAMSILK TKR REPSHINE P-OFF 6(1+1)340ML",
+      "REXONA MEN RO MS INVISIBLE DRY 24X50ML",
+      "SURF POWDER KALAMANSI S 12X1100G",
+      "CLEAR SH CMPLTE SOFT CARE 24X170ML",
+      "PONDS BRIGHT TONER 36X60ML"
+    ],
+    "PACK SIZE": [
+      "288",
+      "12",
+      "20",
+      "18",
+      "360"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "9/19",
+      "11/0",
+      "3/96",
+      "103/68",
+      "0/55"
+    ],
+    "Stock Value": [
+      "1669.48",
+      "169339.97",
+      "23977.51",
+      "9123.93",
+      "22786.33"
+    ],
+    "PO Qty": [
+      "71/0",
+      "5/0",
+      "30/0",
+      "32/0",
+      "101/0"
+    ],
+    "Open SO Quantity": [
+      "0/84",
+      "12/2",
+      "10/12",
+      "1/210",
+      "26/180"
+    ],
+    "Balance Quantity": [
+      "11/0",
+      "0/55",
+      "4/0",
+      "83/1",
+      "92/5"
+    ],
+    "MOVING AVERAGE PRICE(CS)": [
+      "3645.75",
+      "1250.87",
+      "5671.79",
+      "1418.38",
+      "1845.41"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "ORAL CARE",
+      "SCRATCH COOKING AIDS",
+      "FABRIC CLEANING",
+      "SKIN CLEANSING",
+      "SKIN CARE"
+    ],
+    "Sales Route": [],
+    "Batch": [
+      "VALUATED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 790,
+  "header_signature": "677bb2e5891f",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "category desc",
+    "moving average price(cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

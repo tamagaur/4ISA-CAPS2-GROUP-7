@@ -1,0 +1,225 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 02.2025/2024 FEBRUARY SALES REGISTER.xlsx",
+  "sheet": "ILOCOS SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Dscount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Dscount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Dscount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 15,
+    "Salesman": 2,
+    "Town Display": 28,
+    "Branch Code": 154,
+    "Customer Name": 154,
+    "Invoice Num": 222,
+    "REFNBR": 221,
+    "Untaxed Amount": 200,
+    "Discount Rate": 4,
+    "Dscount Amount": 28,
+    "Tax": 200,
+    "Net Amount": 200,
+    "Balance": 108,
+    "Posted": 2
+  },
+  "samples": {
+    "Invoice Date": [
+      "2024-02-14",
+      "2024-02-23",
+      "2024-02-20",
+      "2024-02-05",
+      "2024-02-24"
+    ],
+    "Salesman": [
+      "JOENATHAN ARIZABAL",
+      "CARLON DAHILIG"
+    ],
+    "Town Display": [
+      "PAOAY",
+      "SARRAT",
+      "NARVACAN",
+      "CITY OF VIGAN (Capital)",
+      "SANTA"
+    ],
+    "Branch Code": [
+      "L12E-001009",
+      "L12E-001052",
+      "L12E-000936",
+      "L12E-000787",
+      "L12E-000657"
+    ],
+    "Customer Name": [
+      "BLESSIE'S 24 HOURS CONVENIENCE STORE",
+      "MD MANUFACTURING CORP.",
+      "WHOLEDAY MART CONSUMER GOODS WHOLESALING",
+      "MC FAVE ",
+      "*SENIORITA DULCE"
+    ],
+    "Invoice Num": [
+      "INV/2024/0376",
+      "INV/2024/0496",
+      "INV/2024/0541",
+      "INV/2024/0507",
+      "INV/2024/0538"
+    ],
+    "REFNBR": [
+      "DMIS0060809",
+      "DMIS0060807",
+      "DMIS0060637",
+      "FG0060807",
+      "DMIS0060754"
+    ],
+    "Untaxed Amount": [
+      "23234.5",
+      "236.6",
+      "3736.7",
+      "1278.92",
+      "1539.22"
+    ],
+    "Discount Rate": [
+      "LESS 4%",
+      "LESS 3%",
+      "LESS 2%",
+      "Public Pricelist"
+    ],
+    "Dscount Amount": [
+      "17799.83",
+      "1234.32",
+      "2920.36",
+      "2621.75",
+      "15.32"
+    ],
+    "Tax": [
+      "389.39",
+      "110.21",
+      "5774.55",
+      "17.06",
+      "235.11"
+    ],
+    "Net Amount": [
+      "2454.97",
+      "166.44",
+      "2481.36",
+      "2187.76",
+      "159.26"
+    ],
+    "Balance": [
+      "166.44",
+      "159.26",
+      "1315.33",
+      "1851.44",
+      "26022.64"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 222,
+  "header_signature": "76cab885107e",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount rate",
+    "dscount amount",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'DMIS0060815' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060814' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060813' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060812' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060811' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060810' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060809' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060808' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'FG0060807' matches prefix 'FG' -> delmonte",
+    "REFNBR 'DMIS0060807' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'FGPJ0060806' matches prefix 'FG' -> delmonte",
+    "REFNBR 'DMIS0060806' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060805' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060804' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060803' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060802' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060801' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060800' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060799' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060798' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060797' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060796' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'ODM002739' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'DMIS0060795' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060794' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060793' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060792' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060791' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060781' matches prefix 'DMIS' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

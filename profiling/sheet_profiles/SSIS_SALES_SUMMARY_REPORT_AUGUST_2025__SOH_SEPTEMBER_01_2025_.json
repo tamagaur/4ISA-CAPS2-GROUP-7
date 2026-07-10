@@ -1,0 +1,180 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT AUGUST 2025.xlsx",
+  "sheet": "SOH(SEPTEMBER 01, 2025)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "Last Purchase Price(GSV/CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Blocked Stock(CS/PC)",
+    "Batch"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "Last Purchase Price(GSV/CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Batch": "text"
+  },
+  "null_pct": {
+    "Storage Location": 0.14,
+    "Article No": 0.14,
+    "Article Description": 0.14,
+    "PACK SIZE": 0.14,
+    "Stock Quantity (CS/PC)": 0.14,
+    "Stock Value": 0.0,
+    "PO Qty": 59.08,
+    "Open SO Quantity": 80.4,
+    "Balance Quantity": 0.14,
+    "Last Purchase Price(GSV/CS)": 0.14,
+    "Status": 0.14,
+    "CATEGORY DESC": 0.14,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Batch": 0.14
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 693,
+    "Article Description": 693,
+    "PACK SIZE": 24,
+    "Stock Quantity (CS/PC)": 407,
+    "Stock Value": 684,
+    "PO Qty": 92,
+    "Open SO Quantity": 43,
+    "Balance Quantity": 461,
+    "Last Purchase Price(GSV/CS)": 336,
+    "Status": 1,
+    "CATEGORY DESC": 12,
+    "Blocked Stock(CS/PC)": 0,
+    "Batch": 1
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "64964337",
+      "68690509",
+      "68690511",
+      "64958998",
+      "64918079"
+    ],
+    "Article Description": [
+      "MASTER CLEANSER ACTIVE BRGHTNG 144X70ML",
+      "AXE DEO RO BLACK 24X40ML",
+      "MASTER CLEANSER ANT-ACNE/PIMPLE 72X135ML",
+      "SURF PWD CB+ LP L 6(1+6)X(2200G+25ML)",
+      "DOVE BS BAR PINK FBX 48X135G"
+    ],
+    "PACK SIZE": [
+      "40",
+      "96",
+      "6",
+      "8",
+      "108"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "20/4",
+      "4/10",
+      "66/14",
+      "61/2",
+      "52/2"
+    ],
+    "Stock Value": [
+      "51650.63",
+      "654.38",
+      "3921.43",
+      "5473.21",
+      "25423.13"
+    ],
+    "PO Qty": [
+      "41/0",
+      "4/0",
+      "400/0",
+      "15/0",
+      "49/0"
+    ],
+    "Open SO Quantity": [
+      "0/28",
+      "1/108",
+      "1/0",
+      "0/6",
+      "0/8"
+    ],
+    "Balance Quantity": [
+      "0/4",
+      "2/6",
+      "10/4",
+      "26/36",
+      "4/11"
+    ],
+    "Last Purchase Price(GSV/CS)": [
+      "2211.43",
+      "3921.43",
+      "1198.93",
+      "990.54",
+      "1599.64"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "SKIN CLEANSING",
+      "OTHER FOODS",
+      "FABRIC ENHANCERS",
+      "COOKING AIDS",
+      "DEODORANTS & FRAGRANCES"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Batch": [
+      "VALUATED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 694,
+  "header_signature": "749a9f1e57d4",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "last purchase price(gsv/cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'gsv'",
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

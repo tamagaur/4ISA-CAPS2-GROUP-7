@@ -1,0 +1,153 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 12.2023/DECEMBER 2023_SIGN OFF INVENTORY.xlsx",
+  "sheet": "PANG - SIGN OFF",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.81,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "in PCS",
+    "in Cases"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric",
+    "in PCS": "numeric",
+    "in Cases": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.63,
+    "in PCS": 0.0,
+    "in Cases": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 158,
+    "Quantity": 142,
+    "Cost": 156,
+    "Valuation": 156,
+    "Valuation with VAT": 156,
+    "CAS": 66,
+    "PCS": 34,
+    "PKG": 15,
+    "in PCS": 148,
+    "in Cases": 142
+  },
+  "samples": {
+    "__col0__": [
+      "     9DMR57713 DM SWEET BLND KET SUP W SPOUT 320G ROYCE",
+      "     DKY58450 DMV-DKY Strawberry 48/180ml",
+      "     9FNR57001 Fit 'n Right Burn Pineapple 330ml",
+      "     9DMQ58086 DMSS CREAMY & CHEESY 900G PARTY PACK",
+      "     9DMR56101 DM TOMATO PASTE 70G SUP - ROYCE DESIGN"
+    ],
+    "Quantity": [
+      "3.19444444444444",
+      "5.16666666666667",
+      "163",
+      "4.125",
+      "70.8333333333333"
+    ],
+    "Cost": [
+      "27868.03",
+      "846.626666666667",
+      "200316.375",
+      "5170",
+      "226.465"
+    ],
+    "Valuation": [
+      "27868.03",
+      "846.626666666667",
+      "200316.375",
+      "5170",
+      "226.465"
+    ],
+    "Valuation with VAT": [
+      "7019.7512",
+      "15175.0890666667",
+      "5345.424",
+      "87716.5632",
+      "6784.7472"
+    ],
+    "CAS": [
+      "16",
+      "604",
+      "24",
+      "213",
+      "20"
+    ],
+    "PCS": [
+      "16",
+      "32",
+      "28",
+      "20",
+      "18"
+    ],
+    "PKG": [
+      "6",
+      "4",
+      "35",
+      "36",
+      "48"
+    ],
+    "in PCS": [
+      "114",
+      "16",
+      "127",
+      "1258000",
+      "220"
+    ],
+    "in Cases": [
+      "163",
+      "7.333333333333333",
+      "2.7083333333333335",
+      "2.2916666666666665",
+      "4.125"
+    ]
+  },
+  "grain": "sku",
+  "usable_row_count": 158,
+  "header_signature": "4c962a7c0436",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "in cases",
+    "in pcs",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

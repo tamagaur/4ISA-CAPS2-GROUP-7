@@ -1,0 +1,101 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/DAILY SALES REPORT 08.30.2025.xlsx",
+  "sheet": "SCHEDULE",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.694,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "DATE",
+    "__col1__",
+    "CUSTOMERS",
+    "NET OF VAT",
+    "VAT",
+    "AMOUNT W/VAT"
+  ],
+  "dtypes": {
+    "DATE": "text",
+    "__col1__": "text",
+    "CUSTOMERS": "numeric",
+    "NET OF VAT": "numeric",
+    "VAT": "numeric",
+    "AMOUNT W/VAT": "numeric"
+  },
+  "null_pct": {
+    "DATE": 0.0,
+    "__col1__": 0.0,
+    "CUSTOMERS": 0.0,
+    "NET OF VAT": 0.0,
+    "VAT": 0.0,
+    "AMOUNT W/VAT": 0.0
+  },
+  "distinct_count": {
+    "DATE": 19,
+    "__col1__": 1,
+    "CUSTOMERS": 17,
+    "NET OF VAT": 19,
+    "VAT": 19,
+    "AMOUNT W/VAT": 19
+  },
+  "samples": {
+    "DATE": [
+      "08.09.2025",
+      "08.15.2025",
+      "08.19.2025",
+      "08.27.2025",
+      "08.22.2025 "
+    ],
+    "__col1__": [
+      "VARIOUS CUSTOMER"
+    ],
+    "CUSTOMERS": [
+      "37",
+      "53",
+      "28",
+      "75",
+      "115"
+    ],
+    "NET OF VAT": [
+      "195790.85000000003",
+      "151583.76999999996",
+      "133286.85",
+      "154359.45999999996",
+      "106851.44999999997"
+    ],
+    "VAT": [
+      "13103.51",
+      "17600.190000000006",
+      "37259.06",
+      "18523.139999999996",
+      "22923.939999999988"
+    ],
+    "AMOUNT W/VAT": [
+      "347752.2499999998",
+      "104238.24999999999",
+      "149281.19000000003",
+      "213957.94999999978",
+      "164269.4799999999"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 19,
+  "header_signature": "35641ed6b8d7",
+  "header_tokens": [
+    "amount w/vat",
+    "customers",
+    "date",
+    "net of vat",
+    "vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

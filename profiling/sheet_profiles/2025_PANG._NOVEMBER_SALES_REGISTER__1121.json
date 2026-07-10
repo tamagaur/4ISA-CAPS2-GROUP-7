@@ -1,0 +1,140 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/DAILY REPORT - 11.2025/2025 PANG. NOVEMBER SALES REGISTER.xlsx",
+  "sheet": "1121",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "AREA",
+    "Customer Name",
+    "REFERENCE #",
+    "NET VALUE",
+    "DISCOUNT AMNT.",
+    "TAX AMNT.",
+    "AMOUNT"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "AREA": "text",
+    "Customer Name": "text",
+    "REFERENCE #": "text",
+    "NET VALUE": "numeric",
+    "DISCOUNT AMNT.": "numeric",
+    "TAX AMNT.": "text",
+    "AMOUNT": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 8.2,
+    "Salesman": 8.2,
+    "AREA": 9.84,
+    "Customer Name": 6.56,
+    "REFERENCE #": 11.48,
+    "NET VALUE": 9.84,
+    "DISCOUNT AMNT.": 9.84,
+    "TAX AMNT.": 8.2,
+    "AMOUNT": 6.56
+  },
+  "distinct_count": {
+    "Invoice Date": 3,
+    "Salesman": 8,
+    "AREA": 19,
+    "Customer Name": 54,
+    "REFERENCE #": 54,
+    "NET VALUE": 50,
+    "DISCOUNT AMNT.": 16,
+    "TAX AMNT.": 50,
+    "AMOUNT": 52
+  },
+  "samples": {
+    "Invoice Date": [
+      "TOTAL",
+      "2025-11-21",
+      "Prepared by:"
+    ],
+    "Salesman": [
+      "JOEL WACANGAN",
+      "BENJAMIN AQUINO",
+      "ELYSSA L. MASON",
+      "ADMIN SALES",
+      "GERRY LACANARIA"
+    ],
+    "AREA": [
+      "BUGALLON",
+      "BAGUIO CITY",
+      "SAN FABIAN",
+      "BAYAMBANG",
+      "MAPANDAN"
+    ],
+    "Customer Name": [
+      "BIG NACKS PIZZA",
+      "JAYCOB IHAW IHAW",
+      "LEAPING CARP CORP",
+      "JINRO WHOLESALER",
+      "BAGUIO BENGUET COMMUNITY CREDIT COOPERATIVE "
+    ],
+    "REFERENCE #": [
+      "DMP025397",
+      "DMP025425",
+      "DMP025387",
+      "DMP025409",
+      "DMP025401"
+    ],
+    "NET VALUE": [
+      "1009.19",
+      "4812.79",
+      "3938.57",
+      "1103.64",
+      "4244.55"
+    ],
+    "DISCOUNT AMNT.": [
+      "10991.94",
+      "171.89",
+      "47.76",
+      "493.08",
+      "438.31"
+    ],
+    "TAX AMNT.": [
+      "535.45",
+      "154.29",
+      "1307.68",
+      "151.82",
+      "1542.86"
+    ],
+    "AMOUNT": [
+      "1577.04",
+      "1047.24",
+      "37171.77",
+      "5390.32",
+      "545173.5199999999"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 58,
+  "header_signature": "c3aa1de5b8d1",
+  "header_tokens": [
+    "amount",
+    "area",
+    "customer name",
+    "discount amnt.",
+    "invoice date",
+    "net value",
+    "reference #",
+    "salesman",
+    "tax amnt."
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

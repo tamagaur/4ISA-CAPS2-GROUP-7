@@ -1,0 +1,135 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/MONTHLY SALES REGISTER 06.30.2025.xlsx",
+  "sheet": "06.26.2025",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Customers",
+    "Area",
+    "Reference #",
+    "Net Value",
+    "Discount Amount",
+    "Tax amount",
+    "Amount"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Customers": "text",
+    "Area": "text",
+    "Reference #": "text",
+    "Net Value": "numeric",
+    "Discount Amount": "numeric",
+    "Tax amount": "text",
+    "Amount": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 8.7,
+    "Salesman": 13.04,
+    "Customers": 11.59,
+    "Area": 8.7,
+    "Reference #": 13.04,
+    "Net Value": 11.59,
+    "Discount Amount": 11.59,
+    "Tax amount": 7.25,
+    "Amount": 11.59
+  },
+  "distinct_count": {
+    "Invoice Date": 4,
+    "Salesman": 3,
+    "Customers": 49,
+    "Area": 7,
+    "Reference #": 60,
+    "Net Value": 44,
+    "Discount Amount": 1,
+    "Tax amount": 47,
+    "Amount": 44
+  },
+  "samples": {
+    "Invoice Date": [
+      "ENCODER",
+      "2025-06-26",
+      "TOTAL",
+      "ASHLY M. APOLONIO"
+    ],
+    "Salesman": [
+      "TTS-EAST",
+      "TTS-CENTRAL",
+      "TTS-WEST"
+    ],
+    "Customers": [
+      "CRC(NATIVIDAD)",
+      "MELITON store",
+      "SALDITO(NATIVIDAD)",
+      "ESPINOZA(MANGALDAN)",
+      "LITZ(SAN FABIAN)"
+    ],
+    "Area": [
+      "RECEIVABLE",
+      "MANGALDAN",
+      "TAYUG",
+      "         JERWIN B. ORDONIO",
+      "NATIVIDAD"
+    ],
+    "Reference #": [
+      "SSGT5237",
+      "SSGT5250-2",
+      "SSGT5240",
+      "SSGT5264",
+      "SSGT5246"
+    ],
+    "Net Value": [
+      "769.62",
+      "894.33",
+      "614.45",
+      "175.32",
+      "716.32"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax amount": [
+      "64.24",
+      "33.83",
+      "75.22",
+      "45",
+      "31.23"
+    ],
+    "Amount": [
+      "178.06",
+      "802.28",
+      "231.43",
+      "100.3",
+      "599.57"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 64,
+  "header_signature": "885ac878ed5c",
+  "header_tokens": [
+    "amount",
+    "area",
+    "customers",
+    "discount amount",
+    "invoice date",
+    "net value",
+    "reference #",
+    "salesman",
+    "tax amount"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

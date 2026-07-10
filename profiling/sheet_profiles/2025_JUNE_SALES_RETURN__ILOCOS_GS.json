@@ -1,0 +1,244 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 06.2025/2025 JUNE SALES RETURN.xlsx",
+  "sheet": "ILOCOS GS",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "text",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 3.12,
+    "Town Display": 3.12,
+    "Branch Code": 3.12,
+    "Customer Name": 3.12,
+    "Invoice Num": 3.12,
+    "REFNBR": 3.12,
+    "Untaxed Amount": 3.12,
+    "Discount Rate": 3.12,
+    "Discount Amount": 3.12,
+    "Tax": 3.12,
+    "Net Amount": 3.12,
+    "Balance": 3.12,
+    "Posted": 3.12,
+    "Return Slip #": 3.12,
+    "Return Type": 3.12
+  },
+  "distinct_count": {
+    "Invoice Date": 12,
+    "Salesman": 3,
+    "Town Display": 17,
+    "Branch Code": 28,
+    "Customer Name": 28,
+    "Invoice Num": 31,
+    "REFNBR": 31,
+    "Untaxed Amount": 31,
+    "Discount Rate": 3,
+    "Discount Amount": 4,
+    "Tax": 31,
+    "Net Amount": 31,
+    "Balance": 4,
+    "Posted": 2,
+    "Return Slip #": 31,
+    "Return Type": 1
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-06-27",
+      "2025-06-10",
+      "2025-06-09",
+      "2025-06-30",
+      "2025-06-16"
+    ],
+    "Salesman": [
+      "BARBI LABRADOR",
+      "CARLON DAHILIG",
+      "ADMIN SALES"
+    ],
+    "Town Display": [
+      "CABUGAO",
+      "SAN ILDEFONSO",
+      "NARVACAN",
+      "SINAIT",
+      "SAN NICOLAS"
+    ],
+    "Branch Code": [
+      "L12E-001038",
+      "L12E-001256",
+      "L12E-001170",
+      "L12E-001247",
+      "L12E-000946"
+    ],
+    "Customer Name": [
+      "AILYN ",
+      "TRIPLE VJ WHOLESALER",
+      "IBEA'S FOODHOUSE",
+      "TAURUIZ ENTERPRISES ",
+      "JOMIE'S FOOD HOUSE "
+    ],
+    "Invoice Num": [
+      "INV/2025/2456",
+      "INV/2025/2550",
+      "INV/2025/2455",
+      "INV/2025/2454",
+      "INV/2025/1743"
+    ],
+    "REFNBR": [
+      "DMIS0064358",
+      "DMIS0064814",
+      "DMIS0065013",
+      " ODM002812*",
+      "DMIS0064866"
+    ],
+    "Untaxed Amount": [
+      "246.18",
+      "1089.4",
+      "248.75",
+      "1473.56",
+      "3295.64"
+    ],
+    "Discount Rate": [
+      "LESS 4%",
+      "LESS 2%",
+      "Public Pricelist"
+    ],
+    "Discount Amount": [
+      "137.32",
+      "30.87",
+      "0",
+      "40.41"
+    ],
+    "Tax": [
+      "116.37",
+      "2.53",
+      "813.23",
+      "187.2",
+      "77.51"
+    ],
+    "Net Amount": [
+      "678.08",
+      "79.55",
+      "2161.33",
+      "1219.92",
+      "1747.17"
+    ],
+    "Balance": [
+      "339.05",
+      "677.41",
+      "0",
+      "0.51"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": [
+      "RMR38885",
+      "RMR38880",
+      "RMR 39163",
+      "RMR38884",
+      "RMR38890"
+    ],
+    "Return Type": [
+      "GS"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 32,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'ODM002812*' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'DMIS0064743' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0065013' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0065038' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064896' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064988' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0065031' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064655' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064903' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064814' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064779' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064803-3' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064947' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064892' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064873' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064886-2' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064694-2' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'ODM002812' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'DMIS0064736' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064866' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064803' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064741' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064796' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064757' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064721' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064780' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064282' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064120' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064358' matches prefix 'DMIS' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

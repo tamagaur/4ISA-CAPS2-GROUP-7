@@ -1,0 +1,208 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/MONTHLY REPORT APRIL 2025-Ashly.xlsx",
+  "sheet": "APRIL 2025",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty",
+    "Return Type": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0,
+    "Return Type": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 20,
+    "Salesman": 15,
+    "Town Display": 78,
+    "Branch Code": 1843,
+    "Customer Name": 1832,
+    "Invoice Num": 2756,
+    "REFNBR": 2756,
+    "Untaxed Amount": 2386,
+    "Discount Rate": 9,
+    "Discount Amount": 79,
+    "Tax": 2312,
+    "Net Amount": 2387,
+    "Balance": 946,
+    "Posted": 2,
+    "Return Slip #": 0,
+    "Return Type": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-04-12",
+      "2025-04-14",
+      "2025-04-07",
+      "2025-04-16",
+      "2025-04-11"
+    ],
+    "Salesman": [
+      "DKAS-BAG",
+      "TTS-WEST",
+      "PMS-LU",
+      "DKAS-PANG",
+      "PMS-CENTRAL"
+    ],
+    "Town Display": [
+      "NATIVIDAD",
+      "BASISTA",
+      "SAGADA",
+      "BAUKO",
+      "DASOL"
+    ],
+    "Branch Code": [
+      "BPOT2660320210223152133",
+      "L12C-8005390",
+      "BPOT2660920221109130718",
+      "L06P-A000484",
+      "BPOT2660520221006113041"
+    ],
+    "Customer Name": [
+      "AISHI(ALCALA)",
+      "MICHE-THONY(SFC)",
+      "MANNY (MALASIQUI)",
+      "ROUTE 160",
+      "SAN RIOS "
+    ],
+    "Invoice Num": [
+      "INV/2025/9816",
+      "INV/2025/10353",
+      "INV/2025/8950",
+      "INV/2025/9433",
+      "INV/2025/8129"
+    ],
+    "REFNBR": [
+      "GT6388",
+      "SSGT2108",
+      "GT7145",
+      "GT7620",
+      "MGT202505"
+    ],
+    "Untaxed Amount": [
+      "991.23",
+      "225.21",
+      "5088.39",
+      "1044.63",
+      "589.93"
+    ],
+    "Discount Rate": [
+      "Less 1%",
+      "Markup 2%",
+      "Public Pricelist",
+      "less 8%",
+      "less 2%"
+    ],
+    "Discount Amount": [
+      "6042.5",
+      "645.93",
+      "3646.72",
+      "191.84",
+      "129.19"
+    ],
+    "Tax": [
+      "1046.94",
+      "51.01",
+      "153.92",
+      "327.37",
+      "37.56"
+    ],
+    "Net Amount": [
+      "1815.23",
+      "43757.49",
+      "2144.49",
+      "642166.63",
+      "4263.62"
+    ],
+    "Balance": [
+      "2991.43",
+      "1815.23",
+      "810.2",
+      "2893.77",
+      "2929.83"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": [],
+    "Return Type": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 2756,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "header contains 'return slip #'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

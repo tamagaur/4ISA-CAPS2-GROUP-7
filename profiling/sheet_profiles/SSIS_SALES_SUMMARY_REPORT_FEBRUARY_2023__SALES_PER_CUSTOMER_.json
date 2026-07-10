@@ -1,0 +1,176 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT FEBRUARY 2023.xlsx",
+  "sheet": "SALES PER CUSTOMER ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.12,
+    "REASON CODE": 0.12,
+    "OUTLET": 0.12,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.04,
+    "Sale After TPR & UW": 0.04,
+    "NIV": 0.04,
+    "VAT": 0.04,
+    "Total Sales Amt Inc. Tax": 0.04,
+    "REMARKS": 0.12
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 23,
+    "REASON CODE": 14,
+    "OUTLET": 2210,
+    "OUTLET NAME": 2098,
+    "GSV": 3167,
+    "TPR + UW/DT Discount": 642,
+    "Sale After TPR & UW": 3258,
+    "NIV": 3258,
+    "VAT": 3106,
+    "Total Sales Amt Inc. Tax": 3258,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2023-02-13 00:00:00",
+      "2023-02-08 00:00:00",
+      "2023-02-11 00:00:00",
+      "2023-02-22 00:00:00",
+      "2023-02-10 00:00:00"
+    ],
+    "REASON CODE": [
+      "Caking/Brittle/Soft/Moldy",
+      "Expired stock/Near expiry",
+      "Stock not available",
+      "Order cancelled by customer",
+      "Good - Full Return"
+    ],
+    "OUTLET": [
+      "1641797",
+      "4400461",
+      "3832783",
+      "3834653",
+      "3773922"
+    ],
+    "OUTLET NAME": [
+      "APRHIAL DRUGS AND MERCHANDISE",
+      "SABAOT",
+      "LORING",
+      "PERLITA CANDON",
+      "RAMOS"
+    ],
+    "GSV": [
+      "764.42",
+      "246.39",
+      "10141.73",
+      "2982.46",
+      "2499.99"
+    ],
+    "TPR + UW/DT Discount": [
+      "-494.41",
+      "-2047.09",
+      "-1260.19",
+      "50.11",
+      "231.02"
+    ],
+    "Sale After TPR & UW": [
+      "764.42",
+      "246.39",
+      "1436.73",
+      "2982.46",
+      "2499.99"
+    ],
+    "NIV": [
+      "764.42",
+      "246.39",
+      "1436.73",
+      "2982.46",
+      "2499.99"
+    ],
+    "VAT": [
+      "29.57",
+      "-74.12",
+      "115.41",
+      "4338.14",
+      "323.13"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "785.19",
+      "5149.52",
+      "2787.88",
+      "1717.59",
+      "3396.9"
+    ],
+    "REMARKS": [
+      "INVOICE",
+      "RETURN"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 4994,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'tpr'",
+    "header contains 'gsv'",
+    "header contains 'niv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

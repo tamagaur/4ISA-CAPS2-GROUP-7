@@ -1,0 +1,176 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS DAILY SALES SUMMARY REPORT MAY 2022.xlsx",
+  "sheet": "SALES PER CUSTOMER ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.14,
+    "REASON CODE": 0.14,
+    "OUTLET": 0.14,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.05,
+    "Sale After TPR & UW": 0.05,
+    "NIV": 0.05,
+    "VAT": 0.05,
+    "Total Sales Amt Inc. Tax": 0.05,
+    "REMARKS": 0.14
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 22,
+    "REASON CODE": 7,
+    "OUTLET": 1977,
+    "OUTLET NAME": 1881,
+    "GSV": 3147,
+    "TPR + UW/DT Discount": 713,
+    "Sale After TPR & UW": 3236,
+    "NIV": 3236,
+    "VAT": 3103,
+    "Total Sales Amt Inc. Tax": 3236,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2022-05-26 00:00:00",
+      "2022-05-16 00:00:00",
+      "2022-05-18 00:00:00",
+      "2022-05-19 00:00:00",
+      "2022-05-21 00:00:00"
+    ],
+    "REASON CODE": [
+      "Overlanded/Shortlanded",
+      "Order cancelled by customer",
+      "Good - Full Return",
+      "Damaged Products",
+      "Not assigned"
+    ],
+    "OUTLET": [
+      "1143745",
+      "3004710",
+      "664933",
+      "2607361",
+      "754633"
+    ],
+    "OUTLET NAME": [
+      "FIVE STAR",
+      "COOP QUINARAYAN STORE",
+      "PRECIOUS KIARA STORE",
+      "WILMA2 TADEO",
+      "CASTANEDA STORE"
+    ],
+    "GSV": [
+      "585.43",
+      "209.28",
+      "4127.13",
+      "7201.33",
+      "109861.94"
+    ],
+    "TPR + UW/DT Discount": [
+      "-14263.16",
+      "36.06",
+      "667.28",
+      "-6504.94",
+      "-4025.37"
+    ],
+    "Sale After TPR & UW": [
+      "585.43",
+      "-100.1",
+      "209.28",
+      "4127.13",
+      "7636.16"
+    ],
+    "NIV": [
+      "585.43",
+      "-100.1",
+      "209.28",
+      "4127.13",
+      "7636.16"
+    ],
+    "VAT": [
+      "149.5",
+      "21.28",
+      "257.02",
+      "478.98",
+      "-2.22"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "33087.48",
+      "8201.6",
+      "1368.8",
+      "-782.4",
+      "9479.97"
+    ],
+    "REMARKS": [
+      "RETURNS",
+      "INVOICED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 4274,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'tpr'",
+    "header contains 'niv'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

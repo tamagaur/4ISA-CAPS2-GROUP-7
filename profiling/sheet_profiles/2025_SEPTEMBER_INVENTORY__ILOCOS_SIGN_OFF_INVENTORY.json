@@ -1,0 +1,161 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 09.2025/2025 SEPTEMBER INVENTORY.xlsx",
+  "sheet": "ILOCOS  SIGN OFF INVENTORY",
+  "real_format": "xlsx",
+  "header_row_index": 4,
+  "header_confidence": 0.298,
+  "junk_ranges": [
+    [
+      0,
+      3
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "__col1__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "__col8__",
+    "__col9__",
+    "__col10__"
+  ],
+  "dtypes": {
+    "__col0__": "numeric",
+    "__col1__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "__col8__": "numeric",
+    "__col9__": "numeric",
+    "__col10__": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.7,
+    "__col1__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "__col8__": 0.7,
+    "__col9__": 0.7,
+    "__col10__": 0.7
+  },
+  "distinct_count": {
+    "__col0__": 139,
+    "__col1__": 143,
+    "Quantity": 118,
+    "Cost": 141,
+    "Valuation": 141,
+    "Valuation with VAT": 141,
+    "CAS": 39,
+    "PCS": 34,
+    "__col8__": 17,
+    "__col9__": 109,
+    "__col10__": 117
+  },
+  "samples": {
+    "__col0__": [
+      "364",
+      "1615",
+      "57434",
+      "55830",
+      "1339"
+    ],
+    "__col1__": [
+      "     DMN58305 MM Mango Yoghurt Flavored Milk 80ML",
+      "     9DMR56101 DM TOMATO PASTE 70G SUP - ROYCE DESIGN",
+      "     9DMR55549 DM TOMATO SAUCE ORIGSTYLE 200G SUP ROYCE",
+      "     DMR55612 ELBOW MACARONI 400G - ROYCE",
+      "     9DMS01588 DM PINE TIDBITS ELS 24 - 1 1/2"
+    ],
+    "Quantity": [
+      "13.66666667",
+      "11.74285714",
+      "25.9",
+      "1.833333333",
+      "3.854166667"
+    ],
+    "Cost": [
+      "3808.57",
+      "21464.74",
+      "16582.69333",
+      "1204.284",
+      "4270.880833"
+    ],
+    "Valuation": [
+      "3808.57",
+      "21464.74",
+      "16582.69333",
+      "1204.284",
+      "4270.880833"
+    ],
+    "Valuation with VAT": [
+      "2175450.828",
+      "3857.0448",
+      "19748.9376",
+      "165237.7701",
+      "5165.988333"
+    ],
+    "CAS": [
+      "23",
+      "137",
+      "17",
+      "65",
+      "69"
+    ],
+    "PCS": [
+      "17",
+      "32",
+      "30",
+      "12",
+      "20"
+    ],
+    "__col8__": [
+      "4",
+      "18",
+      "250",
+      "10",
+      "16"
+    ],
+    "__col9__": [
+      "364",
+      "30",
+      "87",
+      "44",
+      "12"
+    ],
+    "__col10__": [
+      "7.666666666666667",
+      "137.16666666666666",
+      "0.5416666666666666",
+      "25.9",
+      "0.3333333333333333"
+    ]
+  },
+  "grain": "inventory",
+  "usable_row_count": 143,
+  "header_signature": "20c0847d5ce2",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "pcs",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

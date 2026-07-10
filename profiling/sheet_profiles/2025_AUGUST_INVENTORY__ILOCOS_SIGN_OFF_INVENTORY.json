@@ -1,0 +1,161 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 08.2025/2025 AUGUST INVENTORY.xlsx",
+  "sheet": "ILOCOS  SIGN OFF INVENTORY",
+  "real_format": "xlsx",
+  "header_row_index": 4,
+  "header_confidence": 0.298,
+  "junk_ranges": [
+    [
+      0,
+      3
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "__col1__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "__col8__",
+    "__col9__",
+    "__col10__"
+  ],
+  "dtypes": {
+    "__col0__": "numeric",
+    "__col1__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "__col8__": "numeric",
+    "__col9__": "numeric",
+    "__col10__": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.68,
+    "__col1__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "__col8__": 0.68,
+    "__col9__": 0.68,
+    "__col10__": 0.68
+  },
+  "distinct_count": {
+    "__col0__": 132,
+    "__col1__": 146,
+    "Quantity": 120,
+    "Cost": 145,
+    "Valuation": 145,
+    "Valuation with VAT": 145,
+    "CAS": 43,
+    "PCS": 34,
+    "__col8__": 16,
+    "__col9__": 114,
+    "__col10__": 119
+  },
+  "samples": {
+    "__col0__": [
+      "11980",
+      "56261",
+      "57544",
+      "57542",
+      "34618"
+    ],
+    "__col1__": [
+      "     DKK12990 KIKKOMAN LESS 43% SALT SOY SCE 12/250ML",
+      "     9DMP56273 DM 100% PINE JUICE W/ACE 12 x 46oz",
+      "     9TOS55850 TODAYS FRUIT COCKTAIL 432g in ELS",
+      "     9DMP58798 DM Fruity Zing Calamansi Lemon 330ml",
+      "     9DMR56830 DM QUICK N EASY MENUDO SAUCE 36 x 80g"
+    ],
+    "Quantity": [
+      "1.16666666666667",
+      "4",
+      "7.75",
+      "47.9166666666667",
+      "7.625"
+    ],
+    "Cost": [
+      "2140530.20455659",
+      "14343.75",
+      "1350.79625",
+      "576.295833333333",
+      "14224.13"
+    ],
+    "Valuation": [
+      "2140530.20455659",
+      "14343.75",
+      "1350.79625",
+      "576.295833333333",
+      "14224.13"
+    ],
+    "Valuation with VAT": [
+      "1193.00222222222",
+      "407.148",
+      "2036.30933333333",
+      "26775.8614666667",
+      "215880.959466667"
+    ],
+    "CAS": [
+      "3",
+      "12",
+      "4",
+      "0",
+      "9"
+    ],
+    "PCS": [
+      "18",
+      "3",
+      "12",
+      "4",
+      "0"
+    ],
+    "__col8__": [
+      "18",
+      "250",
+      "50",
+      "12",
+      "4"
+    ],
+    "__col9__": [
+      "50",
+      "1150",
+      "367",
+      "52",
+      "225"
+    ],
+    "__col10__": [
+      "4",
+      "4.791666666666667",
+      "37.229166666666664",
+      "7.75",
+      "33.083333333333336"
+    ]
+  },
+  "grain": "inventory",
+  "usable_row_count": 146,
+  "header_signature": "20c0847d5ce2",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "pcs",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

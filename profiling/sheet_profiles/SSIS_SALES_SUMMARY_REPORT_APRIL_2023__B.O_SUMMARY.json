@@ -1,0 +1,146 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT APRIL 2023.xlsx",
+  "sheet": "B.O  SUMMARY",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.735,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "ACCOUNT NAME",
+    "RMR #",
+    "TYPE",
+    "CATEGORY",
+    "RMR COVERAGE",
+    "RMR QTY",
+    "RMR AMOUNT",
+    "DATE APPROVED",
+    "DATE PULL OUT",
+    "RMR ACTIVITY",
+    "STATUS",
+    "REMARKS",
+    "__col12__",
+    "__col13__"
+  ],
+  "dtypes": {
+    "ACCOUNT NAME": "text",
+    "RMR #": "text",
+    "TYPE": "text",
+    "CATEGORY": "text",
+    "RMR COVERAGE": "text",
+    "RMR QTY": "empty",
+    "RMR AMOUNT": "numeric",
+    "DATE APPROVED": "empty",
+    "DATE PULL OUT": "empty",
+    "RMR ACTIVITY": "text",
+    "STATUS": "empty",
+    "REMARKS": "empty",
+    "__col12__": "text",
+    "__col13__": "text"
+  },
+  "null_pct": {
+    "ACCOUNT NAME": 33.33,
+    "RMR #": 33.33,
+    "TYPE": 33.33,
+    "CATEGORY": 33.33,
+    "RMR COVERAGE": 22.22,
+    "RMR QTY": 100.0,
+    "RMR AMOUNT": 22.22,
+    "DATE APPROVED": 100.0,
+    "DATE PULL OUT": 100.0,
+    "RMR ACTIVITY": 33.33,
+    "STATUS": 100.0,
+    "REMARKS": 100.0,
+    "__col12__": 33.33,
+    "__col13__": 88.89
+  },
+  "distinct_count": {
+    "ACCOUNT NAME": 1,
+    "RMR #": 6,
+    "TYPE": 1,
+    "CATEGORY": 2,
+    "RMR COVERAGE": 4,
+    "RMR QTY": 0,
+    "RMR AMOUNT": 7,
+    "DATE APPROVED": 0,
+    "DATE PULL OUT": 0,
+    "RMR ACTIVITY": 1,
+    "STATUS": 0,
+    "REMARKS": 0,
+    "__col12__": 1,
+    "__col13__": 1
+  },
+  "samples": {
+    "ACCOUNT NAME": [
+      "SANSAN ILOCOS SUR"
+    ],
+    "RMR #": [
+      "SSIS-40190000-0082",
+      "SSIS-40190000-0080",
+      "SSIS-40190000-0081",
+      "SSIS-40190000-0083",
+      "SSIS-40190000-0084"
+    ],
+    "TYPE": [
+      "BS"
+    ],
+    "CATEGORY": [
+      "FOODS",
+      "HPC"
+    ],
+    "RMR COVERAGE": [
+      "FEBRUARY.2023",
+      "JANUARY.2023",
+      "TOTAL:",
+      "MARCH.2023"
+    ],
+    "RMR QTY": [],
+    "RMR AMOUNT": [
+      "160858.11833333335",
+      "506118.62500000006",
+      "139449.9591666667",
+      "165576.05000000002",
+      "345260.5066666667"
+    ],
+    "DATE APPROVED": [],
+    "DATE PULL OUT": [],
+    "RMR ACTIVITY": [
+      "REGULAR RMR"
+    ],
+    "STATUS": [],
+    "REMARKS": [],
+    "__col12__": [
+      "TRADE"
+    ],
+    "__col13__": [
+      "TENTATIVE"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 7,
+  "header_signature": "6b94964ad18f",
+  "header_tokens": [
+    "account name",
+    "category",
+    "date approved",
+    "date pull out",
+    "remarks",
+    "rmr #",
+    "rmr activity",
+    "rmr amount",
+    "rmr coverage",
+    "rmr qty",
+    "status",
+    "type"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

@@ -1,0 +1,136 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/MONTHLY SALES REGISTER 06.30.2025.xlsx",
+  "sheet": "06.16.2025",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Customers",
+    "Area",
+    "Reference #",
+    "Net Value",
+    "Discount Amount",
+    "Tax amount",
+    "Amount"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Customers": "text",
+    "Area": "text",
+    "Reference #": "text",
+    "Net Value": "numeric",
+    "Discount Amount": "numeric",
+    "Tax amount": "text",
+    "Amount": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 9.41,
+    "Salesman": 12.94,
+    "Customers": 11.76,
+    "Area": 9.41,
+    "Reference #": 12.94,
+    "Net Value": 11.76,
+    "Discount Amount": 11.76,
+    "Tax amount": 8.24,
+    "Amount": 11.76
+  },
+  "distinct_count": {
+    "Invoice Date": 4,
+    "Salesman": 4,
+    "Customers": 72,
+    "Area": 14,
+    "Reference #": 74,
+    "Net Value": 71,
+    "Discount Amount": 1,
+    "Tax amount": 74,
+    "Amount": 71
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-06-16",
+      "ENCODER",
+      "TOTAL",
+      "ASHLY M. APOLONIO"
+    ],
+    "Salesman": [
+      "TTS-EAST",
+      "TTS-CENTRAL",
+      "TTS-WEST",
+      "TTS-LUNORTH"
+    ],
+    "Customers": [
+      "CRIS(SAN MANUEL)",
+      "CMP'S FROZEN FOOD STORE",
+      "ATENGS(SAN MANUEL)",
+      "SANJO STORE(SAN MANUEL)",
+      "DULATRE STORE (POBLACION EAST PUGO L.U)"
+    ],
+    "Area": [
+      "SAN NICOLAS",
+      "RECEIVABLE",
+      "AGOO",
+      "SAN JACINTO",
+      "         JERWIN B. ORDONIO"
+    ],
+    "Reference #": [
+      "SSGT4658",
+      "SSGT4678",
+      "SSGT4652",
+      "SSGT4720",
+      "SSGT4657"
+    ],
+    "Net Value": [
+      "310.45",
+      "414.21",
+      "1127.17",
+      "617.2",
+      "381.12"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax amount": [
+      "204.29",
+      "50.13",
+      "49.71",
+      "8.33",
+      "45.73"
+    ],
+    "Amount": [
+      "2831.25",
+      "311.05",
+      "39.54",
+      "124.1",
+      "1906.67"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 78,
+  "header_signature": "885ac878ed5c",
+  "header_tokens": [
+    "amount",
+    "area",
+    "customers",
+    "discount amount",
+    "invoice date",
+    "net value",
+    "reference #",
+    "salesman",
+    "tax amount"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

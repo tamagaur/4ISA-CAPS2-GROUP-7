@@ -1,0 +1,203 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT AUGUST 2022.xlsx",
+  "sheet": "SOH(SEPTEMBER 1,2022)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "MOVING AVERAGE PRICE(CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route",
+    "Batch",
+    "Hierarchy Node",
+    "Blocked Stock(CS/PC)",
+    "Sales Route Description"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "MOVING AVERAGE PRICE(CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty",
+    "Batch": "text",
+    "Hierarchy Node": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Sales Route Description": "empty"
+  },
+  "null_pct": {
+    "Storage Location": 0.12,
+    "Article No": 0.12,
+    "Article Description": 0.12,
+    "PACK SIZE": 0.12,
+    "Stock Quantity (CS/PC)": 0.12,
+    "Stock Value": 0.0,
+    "PO Qty": 56.14,
+    "Open SO Quantity": 98.55,
+    "Balance Quantity": 0.12,
+    "MOVING AVERAGE PRICE(CS)": 0.12,
+    "Status": 0.12,
+    "CATEGORY DESC": 0.12,
+    "Sales Route": 100.0,
+    "Batch": 0.12,
+    "Hierarchy Node": 0.12,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Sales Route Description": 100.0
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 829,
+    "Article Description": 829,
+    "PACK SIZE": 23,
+    "Stock Quantity (CS/PC)": 464,
+    "Stock Value": 821,
+    "PO Qty": 79,
+    "Open SO Quantity": 6,
+    "Balance Quantity": 541,
+    "MOVING AVERAGE PRICE(CS)": 727,
+    "Status": 1,
+    "CATEGORY DESC": 13,
+    "Sales Route": 0,
+    "Batch": 1,
+    "Hierarchy Node": 13,
+    "Blocked Stock(CS/PC)": 0,
+    "Sales Route Description": 0
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "68199009",
+      "67327206",
+      "68178531",
+      "65004623",
+      "67834801"
+    ],
+    "Article Description": [
+      "BESTFOODS SNDWCH SPRD SLD MATE 12X470ML",
+      "BREEZE PWD ROSE GOLD 24X(6+1)X(66G+66G)",
+      "CLEAR SH CMPLTE SOFT CARE 24X170ML",
+      "SURF NSD BAR BLOSSOM FRESH MP 32X3X120G",
+      "LADYS CHC SPR HAMDOY+CANGDS12(1+1)470ML"
+    ],
+    "PACK SIZE": [
+      "360",
+      "6",
+      "3",
+      "40",
+      "36"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "26/4",
+      "1/45",
+      "56/18",
+      "135/10",
+      "16/5"
+    ],
+    "Stock Value": [
+      "31643.35",
+      "119.06",
+      "253.73",
+      "2866.45",
+      "26736.3"
+    ],
+    "PO Qty": [
+      "95/0",
+      "336/0",
+      "100/0",
+      "39/0",
+      "210/0"
+    ],
+    "Open SO Quantity": [
+      "0/4",
+      "0/6",
+      "1/0",
+      "3/0",
+      "0/144"
+    ],
+    "Balance Quantity": [
+      "1/45",
+      "21/252",
+      "5/23",
+      "39/5",
+      "135/10"
+    ],
+    "MOVING AVERAGE PRICE(CS)": [
+      "960.38",
+      "1957.87",
+      "2107.44",
+      "1205.16",
+      "2219.65"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "ORAL CARE",
+      "SKIN CARE",
+      "DEODORANTS & FRAGRANCES",
+      "FABRIC CLEANING",
+      "NON CORPORATE PERSONAL CARE CATEGORY"
+    ],
+    "Sales Route": [],
+    "Batch": [
+      "VALUATED"
+    ],
+    "Hierarchy Node": [
+      "4419",
+      "3103",
+      "4431",
+      "3106",
+      "4418"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Sales Route Description": []
+  },
+  "grain": "summary",
+  "usable_row_count": 830,
+  "header_signature": "3c47de2ac84a",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "hierarchy node",
+    "moving average price(cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "sales route description",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

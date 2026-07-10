@@ -1,0 +1,153 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 09.2023/SEPTEMBER 2023_SIGN OFF INVENTORY.xlsx",
+  "sheet": "ILOCOS - SIGN OFF",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.81,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "in PCS",
+    "in Cases"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric",
+    "in PCS": "numeric",
+    "in Cases": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.66,
+    "in PCS": 0.0,
+    "in Cases": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 152,
+    "Quantity": 124,
+    "Cost": 150,
+    "Valuation": 150,
+    "Valuation with VAT": 150,
+    "CAS": 39,
+    "PCS": 35,
+    "PKG": 15,
+    "in PCS": 115,
+    "in Cases": 124
+  },
+  "samples": {
+    "__col0__": [
+      "     DKK11961 KIKKOMAN STD GRADE SOY SAUCE 24/150ML",
+      "     9DMP58509 DM Melon Cucumber Juice Drink 1L Tetra x 12",
+      "     9DMR57354 DM SWEET STYLE SPAG SAUCE 1KG SUP ROYCE",
+      "     9DMR55549 DM TOMATO SAUCE ORIGSTYLE 200G SUP ROYCE",
+      "     9DMP56260 DM FIBER-ENRICHED 100% PINE JUICE 12 x 46oz"
+    ],
+    "Quantity": [
+      "1.875",
+      "0.0555555555555556",
+      "3.16666666666667",
+      "18.8",
+      "2.625"
+    ],
+    "Cost": [
+      "7805.5",
+      "503.426666666667",
+      "7636.32",
+      "6631.60333333333",
+      "1656.2"
+    ],
+    "Valuation": [
+      "7805.5",
+      "503.426666666667",
+      "7636.32",
+      "6631.60333333333",
+      "1656.2"
+    ],
+    "Valuation with VAT": [
+      "2391.34",
+      "49768.3872",
+      "8918.27626666667",
+      "299.53",
+      "13267.5685333333"
+    ],
+    "CAS": [
+      "15",
+      "24",
+      "17",
+      "92",
+      "1"
+    ],
+    "PCS": [
+      "15",
+      "17",
+      "1",
+      "30",
+      "8"
+    ],
+    "PKG": [
+      "24",
+      "16",
+      "250",
+      "200",
+      "8"
+    ],
+    "in PCS": [
+      "320",
+      "210",
+      "307",
+      "500",
+      "4343"
+    ],
+    "in Cases": [
+      "0.16666666666666666",
+      "1.875",
+      "50.645833333333336",
+      "18.8",
+      "2.625"
+    ]
+  },
+  "grain": "sku",
+  "usable_row_count": 152,
+  "header_signature": "4c962a7c0436",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "in cases",
+    "in pcs",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

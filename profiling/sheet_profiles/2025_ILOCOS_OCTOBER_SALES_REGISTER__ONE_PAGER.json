@@ -1,0 +1,140 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/DAILY REPORT - 10.2025/2025 ILOCOS OCTOBER SALES REGISTER.xlsx",
+  "sheet": "ONE PAGER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "AREA",
+    "Customer Name",
+    "REFERENCE #",
+    "NET VALUE",
+    "DISCOUNT AMNT.",
+    "TAX AMNT.",
+    "AMOUNT"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "AREA": "text",
+    "Customer Name": "text",
+    "REFERENCE #": "text",
+    "NET VALUE": "numeric",
+    "DISCOUNT AMNT.": "numeric",
+    "TAX AMNT.": "numeric",
+    "AMOUNT": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "AREA": 0.0,
+    "Customer Name": 0.0,
+    "REFERENCE #": 0.0,
+    "NET VALUE": 0.0,
+    "DISCOUNT AMNT.": 0.0,
+    "TAX AMNT.": 0.0,
+    "AMOUNT": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 24,
+    "Salesman": 3,
+    "AREA": 31,
+    "Customer Name": 262,
+    "REFERENCE #": 383,
+    "NET VALUE": 345,
+    "DISCOUNT AMNT.": 48,
+    "TAX AMNT.": 341,
+    "AMOUNT": 345
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-10-08",
+      "2025-10-22",
+      "2025-10-30",
+      "2025-10-04",
+      "2025-10-03"
+    ],
+    "Salesman": [
+      "BARBI LABRADOR",
+      "CARLON DAHILIG",
+      "ADMIN SALES"
+    ],
+    "AREA": [
+      "CITY OF BATAC",
+      "SANTIAGO",
+      "PIDDIG",
+      "CITY OF VIGAN (Capital)",
+      "SAN ESTEBAN"
+    ],
+    "Customer Name": [
+      "EL PAULINO BAKESHOP",
+      "CEFERINO'S RESTAURANT",
+      "CARINDERIA DE TORREJAS",
+      "CLIEGEND EATERY",
+      "J & C CAGAYAN BATIL PATONG EATERY "
+    ],
+    "REFERENCE #": [
+      "DMIS0066109",
+      "DMIS0066265",
+      "ODM002834",
+      "DMIS0066204",
+      "DMIS0066186-2"
+    ],
+    "NET VALUE": [
+      "24884.11",
+      "21081.37",
+      "1609.13",
+      "1033.39",
+      "1387.4"
+    ],
+    "DISCOUNT AMNT.": [
+      "316.48",
+      "3.28",
+      "373.26",
+      "457.93",
+      "2.48"
+    ],
+    "TAX AMNT.": [
+      "51.54",
+      "141.7",
+      "236.31",
+      "101.54",
+      "151.82"
+    ],
+    "AMOUNT": [
+      "674.4",
+      "3922.07",
+      "1524.9",
+      "1894.74",
+      "1091.04"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 383,
+  "header_signature": "c3aa1de5b8d1",
+  "header_tokens": [
+    "amount",
+    "area",
+    "customer name",
+    "discount amnt.",
+    "invoice date",
+    "net value",
+    "reference #",
+    "salesman",
+    "tax amnt."
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

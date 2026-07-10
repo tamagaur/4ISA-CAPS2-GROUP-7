@@ -1,0 +1,180 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT NOVEMBER 2024.xlsx",
+  "sheet": "SOH(DECEMBER 2, 2024)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "Last Purchase Price(GSV/CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route",
+    "Batch"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "Last Purchase Price(GSV/CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty",
+    "Batch": "text"
+  },
+  "null_pct": {
+    "Storage Location": 0.15,
+    "Article No": 0.15,
+    "Article Description": 0.15,
+    "PACK SIZE": 0.15,
+    "Stock Quantity (CS/PC)": 0.15,
+    "Stock Value": 0.0,
+    "PO Qty": 51.22,
+    "Open SO Quantity": 76.45,
+    "Balance Quantity": 0.15,
+    "Last Purchase Price(GSV/CS)": 0.15,
+    "Status": 0.15,
+    "CATEGORY DESC": 0.15,
+    "Sales Route": 100.0,
+    "Batch": 0.15
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 653,
+    "Article Description": 653,
+    "PACK SIZE": 23,
+    "Stock Quantity (CS/PC)": 376,
+    "Stock Value": 643,
+    "PO Qty": 92,
+    "Open SO Quantity": 42,
+    "Balance Quantity": 447,
+    "Last Purchase Price(GSV/CS)": 317,
+    "Status": 1,
+    "CATEGORY DESC": 12,
+    "Sales Route": 0,
+    "Batch": 1
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "62715300",
+      "64346552",
+      "68777821",
+      "68764018",
+      "69618749"
+    ],
+    "Article Description": [
+      "AXE DEO RO GOLD TEMPTATION 24X40ML",
+      "LADYS CHOICE PENT BUTR CHUNKY12X340G",
+      "BESTFOODS SNDWCH SPRD 72X80ML",
+      "CREAM SILK ULT REBORN HF 24(11+1)13ML",
+      "DOVE S-CON RESTOR OIL NOURCARE 288X10ML"
+    ],
+    "PACK SIZE": [
+      "32",
+      "60",
+      "57",
+      "120",
+      "20"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "8/264",
+      "21/1",
+      "3/173",
+      "2/19",
+      "26/123"
+    ],
+    "Stock Value": [
+      "773.84",
+      "3062.5",
+      "135.71",
+      "15474.5",
+      "5255.89"
+    ],
+    "PO Qty": [
+      "144/0",
+      "15/0",
+      "21/0",
+      "789/0",
+      "4/0"
+    ],
+    "Open SO Quantity": [
+      "1/2",
+      "0/72",
+      "0/7",
+      "1/0",
+      "0/180"
+    ],
+    "Balance Quantity": [
+      "62/16",
+      "8/264",
+      "0/34",
+      "33/15",
+      "46/1"
+    ],
+    "Last Purchase Price(GSV/CS)": [
+      "773.84",
+      "1157.14",
+      "5255.89",
+      "3351.43",
+      "1170"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "FABRIC ENHANCERS",
+      "HAIR CARE",
+      "DEODORANTS & FRAGRANCES",
+      "DRESSINGS",
+      "HEALTHY SNACKING"
+    ],
+    "Sales Route": [],
+    "Batch": [
+      "VALUATED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 654,
+  "header_signature": "8967d1c90136",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "category desc",
+    "last purchase price(gsv/cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'gsv'",
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

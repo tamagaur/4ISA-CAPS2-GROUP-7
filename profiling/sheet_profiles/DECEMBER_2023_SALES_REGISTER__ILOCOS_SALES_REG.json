@@ -1,0 +1,179 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 12.2023/DECEMBER 2023 SALES REGISTER.xlsx",
+  "sheet": "ILOCOS_SALES REG",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Invoice Num",
+    "REFNBR",
+    "Customer Name",
+    "Salesman",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Customer Name": "text",
+    "Salesman": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 44.21,
+    "Invoice Num": 44.21,
+    "REFNBR": 44.21,
+    "Customer Name": 44.21,
+    "Salesman": 44.21,
+    "Untaxed Amount": 44.21,
+    "Discount Rate": 44.21,
+    "Discount Amount": 44.21,
+    "Tax": 44.21,
+    "Net Amount": 44.21,
+    "Balance": 44.21,
+    "Posted": 44.21,
+    "Return Slip #": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 15,
+    "Invoice Num": 159,
+    "REFNBR": 159,
+    "Customer Name": 110,
+    "Salesman": 3,
+    "Untaxed Amount": 154,
+    "Discount Rate": 4,
+    "Discount Amount": 30,
+    "Tax": 153,
+    "Net Amount": 154,
+    "Balance": 154,
+    "Posted": 1,
+    "Return Slip #": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2023-12-16",
+      "2023-12-29",
+      "2023-12-15",
+      "2023-12-05",
+      "2023-12-21"
+    ],
+    "Invoice Num": [
+      "INV/2023/2374",
+      "INV/2023/2455",
+      "INV/2023/2476",
+      "INV/2023/2334",
+      "INV/2023/2422"
+    ],
+    "REFNBR": [
+      "DMIS0060293",
+      "DMIS0060364",
+      "DMIS0060371",
+      "DMIS0060355",
+      "DMIS0060285"
+    ],
+    "Customer Name": [
+      "JOWTOO RESTAURANT",
+      "FREDDO SUPERSTORE",
+      "*ED LEAN LORENE CONVENIENCE STORE",
+      "JEX'Z PIZZA",
+      "DE AMOR FOODHOUSE"
+    ],
+    "Salesman": [
+      "GHIMBOY TAAN",
+      "CARLON DAHILIG",
+      "JOENATHAN ARIZABAL"
+    ],
+    "Untaxed Amount": [
+      "5717.14",
+      "7468.45",
+      "1165.28",
+      "940.55",
+      "8682.98"
+    ],
+    "Discount Rate": [
+      "LESS 3%",
+      "Public Pricelist",
+      "LESS 4%",
+      "LESS 2%"
+    ],
+    "Discount Amount": [
+      "44.06",
+      "1463.25",
+      "2200.44",
+      "75.22",
+      "87.55"
+    ],
+    "Tax": [
+      "791.98",
+      "1078.37",
+      "34.7",
+      "238.05",
+      "462.86"
+    ],
+    "Net Amount": [
+      "2120",
+      "7427.38",
+      "12507.26",
+      "2693.42",
+      "18425.18"
+    ],
+    "Balance": [
+      "2120",
+      "7427.38",
+      "12507.26",
+      "2693.42",
+      "18425.18"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 159,
+  "header_signature": "822a0d127970",
+  "header_tokens": [
+    "balance",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "header contains 'return slip #'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

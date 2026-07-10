@@ -1,0 +1,147 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT JANUARY 2023.xlsx",
+  "sheet": "B.O  SUMMARY",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "ACCOUNT NAME",
+    "RMR #",
+    "TYPE",
+    "CATEGORY",
+    "RMR COVERAGE",
+    "RMR QTY",
+    "RMR AMOUNT",
+    "DATE APPROVED",
+    "DATE PULL OUT",
+    "RMR ACTIVITY",
+    "STATUS",
+    "REMARKS",
+    "__col12__"
+  ],
+  "dtypes": {
+    "ACCOUNT NAME": "text",
+    "RMR #": "text",
+    "TYPE": "text",
+    "CATEGORY": "text",
+    "RMR COVERAGE": "text",
+    "RMR QTY": "text",
+    "RMR AMOUNT": "numeric",
+    "DATE APPROVED": "empty",
+    "DATE PULL OUT": "empty",
+    "RMR ACTIVITY": "text",
+    "STATUS": "empty",
+    "REMARKS": "empty",
+    "__col12__": "text"
+  },
+  "null_pct": {
+    "ACCOUNT NAME": 10.0,
+    "RMR #": 10.0,
+    "TYPE": 10.0,
+    "CATEGORY": 10.0,
+    "RMR COVERAGE": 5.0,
+    "RMR QTY": 85.0,
+    "RMR AMOUNT": 5.0,
+    "DATE APPROVED": 100.0,
+    "DATE PULL OUT": 100.0,
+    "RMR ACTIVITY": 10.0,
+    "STATUS": 100.0,
+    "REMARKS": 100.0,
+    "__col12__": 25.0
+  },
+  "distinct_count": {
+    "ACCOUNT NAME": 1,
+    "RMR #": 18,
+    "TYPE": 2,
+    "CATEGORY": 3,
+    "RMR COVERAGE": 6,
+    "RMR QTY": 3,
+    "RMR AMOUNT": 19,
+    "DATE APPROVED": 0,
+    "DATE PULL OUT": 0,
+    "RMR ACTIVITY": 1,
+    "STATUS": 0,
+    "REMARKS": 0,
+    "__col12__": 2
+  },
+  "samples": {
+    "ACCOUNT NAME": [
+      "SANSAN ILOCOS SUR"
+    ],
+    "RMR #": [
+      "SSIS-40190000-0065",
+      "SSIS-40190000-0059",
+      "SSIS-40190000-0068",
+      "SSIS-40190000-0064",
+      "SSIS-40190000-0075"
+    ],
+    "TYPE": [
+      "GS",
+      "BS"
+    ],
+    "CATEGORY": [
+      "HPC",
+      "FOODS",
+      "COMFORT PULL OUT"
+    ],
+    "RMR COVERAGE": [
+      "OCTOBER.2022",
+      "AUGUST.2022",
+      "DECEMBER.2022",
+      "SEPTEMBER.2022",
+      "NOVEMBER.2022"
+    ],
+    "RMR QTY": [
+      "158156.9",
+      "/ 3,357 ",
+      "/ 12,495 "
+    ],
+    "RMR AMOUNT": [
+      "5080429.632395836",
+      "597866.1666666667",
+      "423714.78083333344",
+      "158156.9",
+      "160510.91"
+    ],
+    "DATE APPROVED": [],
+    "DATE PULL OUT": [],
+    "RMR ACTIVITY": [
+      "REGULAR RMR"
+    ],
+    "STATUS": [],
+    "REMARKS": [],
+    "__col12__": [
+      "WHBO",
+      "TRADE"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 19,
+  "header_signature": "6b94964ad18f",
+  "header_tokens": [
+    "account name",
+    "category",
+    "date approved",
+    "date pull out",
+    "remarks",
+    "rmr #",
+    "rmr activity",
+    "rmr amount",
+    "rmr coverage",
+    "rmr qty",
+    "status",
+    "type"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

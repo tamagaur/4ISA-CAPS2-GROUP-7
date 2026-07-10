@@ -1,0 +1,69 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 05.2023/PANGASINAN&ILOCOS MAY 1-MAY 31 2023 SELL OUT.xlsx",
+  "sheet": "PANGASINAN SELL OUT ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.444,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Total Without Tax",
+    "Product Quantity"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Total Without Tax": "numeric",
+    "Product Quantity": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Total Without Tax": 0.0,
+    "Product Quantity": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 65,
+    "Total Without Tax": 65,
+    "Product Quantity": 65
+  },
+  "samples": {
+    "__col0__": [
+      "     False  (7)",
+      "     /TOM SAUCE/ORIGINAL TOMATO SAUCE - BASE REGULAR",
+      "     /CRUSHED/BASE",
+      "     /FILIPINO SPAG SAUCE/BASE",
+      "     /DISPENSER JUICE/DISPENSER JUICE - BASE REGULAR"
+    ],
+    "Total Without Tax": [
+      "225142.3",
+      "46394.75",
+      "931677.3",
+      "15367.98",
+      "526909.2"
+    ],
+    "Product Quantity": [
+      "69.41667",
+      "17.41667",
+      "34.78",
+      "6.75",
+      "45.16667"
+    ]
+  },
+  "grain": "category",
+  "usable_row_count": 65,
+  "header_signature": "a16033f08d57",
+  "header_tokens": [
+    "product quantity",
+    "total without tax"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

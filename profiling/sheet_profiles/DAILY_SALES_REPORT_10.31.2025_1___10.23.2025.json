@@ -1,0 +1,135 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/DAILY SALES REPORT  10.31.2025 (1).xlsx",
+  "sheet": "10.23.2025",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Customer Name",
+    "Town Display",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Amount",
+    "Tax",
+    "Net Amount"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Customer Name": "text",
+    "Town Display": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Amount": "numeric",
+    "Tax": "text",
+    "Net Amount": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 7.07,
+    "Salesman": 9.09,
+    "Customer Name": 8.08,
+    "Town Display": 6.06,
+    "REFNBR": 9.09,
+    "Untaxed Amount": 8.08,
+    "Discount Amount": 8.08,
+    "Tax": 5.05,
+    "Net Amount": 8.08
+  },
+  "distinct_count": {
+    "Invoice Date": 3,
+    "Salesman": 3,
+    "Customer Name": 89,
+    "Town Display": 12,
+    "REFNBR": 90,
+    "Untaxed Amount": 89,
+    "Discount Amount": 1,
+    "Tax": 92,
+    "Net Amount": 89
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-10-23",
+      "ENCODER",
+      "CYRILLE GRAMAJE"
+    ],
+    "Salesman": [
+      "PMS-EAST - Rommel Prestoza",
+      "PMS-LU - Ramil Laguerta",
+      "PMS-CENTRAL - Eugene Cadaoas"
+    ],
+    "Customer Name": [
+      "Snooky (MANAOAG) ",
+      "MARIE (MANGALDAN)",
+      "JULIE (MAP)",
+      "DELIA ",
+      "GREY\"S "
+    ],
+    "Town Display": [
+      "         JERWIN B. ORDONIO",
+      "ARINGAY",
+      "CABA",
+      "MAPANDAN",
+      "NAGUILIAN"
+    ],
+    "REFNBR": [
+      "GT16947",
+      "GT16902",
+      "GT16900",
+      "GT16992",
+      "GT16904"
+    ],
+    "Untaxed Amount": [
+      "1419.65",
+      "69.43",
+      "1178.62",
+      "3207.8",
+      "10.96"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax": [
+      "42.41",
+      "170.36",
+      "96.67",
+      "ABRAHAM TABIAN",
+      "44.86"
+    ],
+    "Net Amount": [
+      "1488.65",
+      "1497.12",
+      "1293.16",
+      "920.15",
+      "218.61"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 94,
+  "header_signature": "be9165d06129",
+  "header_tokens": [
+    "customer name",
+    "discount amount",
+    "invoice date",
+    "net amount",
+    "refnbr",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

@@ -1,0 +1,188 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 11.2023/NOVEMBER 2023_PURCHASE ORDER.xlsx",
+  "sheet": "ILOCOS_PURCHASE",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Invoice Num",
+    "REFNBR",
+    "Customer Name",
+    "Salesman",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Customer Name": "text",
+    "Salesman": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Customer Name": 0.0,
+    "Salesman": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 5,
+    "Invoice Num": 23,
+    "REFNBR": 23,
+    "Customer Name": 1,
+    "Salesman": 1,
+    "Untaxed Amount": 20,
+    "Discount Rate": 1,
+    "Discount Amount": 1,
+    "Tax": 20,
+    "Net Amount": 20,
+    "Balance": 20,
+    "Posted": 1,
+    "Return Slip #": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2023-11-21",
+      "2023-11-10",
+      "2023-11-28",
+      "2023-11-30",
+      "2023-11-29"
+    ],
+    "Invoice Num": [
+      "BILL/2023/0087",
+      "BILL/2023/0101",
+      "BILL/2023/0106",
+      "BILL/2023/0104",
+      "BILL/2023/0090"
+    ],
+    "REFNBR": [
+      "PO00724",
+      "PO00770",
+      "PO00721",
+      "PO00754",
+      "PO00771"
+    ],
+    "Customer Name": [
+      "DMPI"
+    ],
+    "Salesman": [
+      "ILOCOS SITE"
+    ],
+    "Untaxed Amount": [
+      "543777.65",
+      "17181.44",
+      "14259.32",
+      "264271.27",
+      "627844.38"
+    ],
+    "Discount Rate": [
+      "Public Pricelist"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax": [
+      "1367.48",
+      "17933.1",
+      "1711.12",
+      "30849",
+      "757.47"
+    ],
+    "Net Amount": [
+      "651535.83",
+      "19243.21",
+      "703185.71",
+      "295983.82",
+      "7069.71"
+    ],
+    "Balance": [
+      "651535.83",
+      "19243.21",
+      "703185.71",
+      "295983.82",
+      "7069.71"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 23,
+  "header_signature": "822a0d127970",
+  "header_tokens": [
+    "balance",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'",
+    "REFNBR 'PO00775' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00774' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00773' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00772' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00771' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00770' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00766' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00763' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00762' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00761' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00759' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00758' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00757' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00756' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00754' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00753' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00752' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00731' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00728' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00727' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00724' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00721' matches prefix 'PO' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

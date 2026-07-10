@@ -1,0 +1,181 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT MARCH 2025.xlsx",
+  "sheet": "SOH(APRIL 1, 2025)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "Last Purchase Price(GSV/CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Blocked Stock(CS/PC)",
+    "Batch"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "Last Purchase Price(GSV/CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Batch": "text"
+  },
+  "null_pct": {
+    "Storage Location": 0.15,
+    "Article No": 0.15,
+    "Article Description": 0.15,
+    "PACK SIZE": 0.15,
+    "Stock Quantity (CS/PC)": 0.15,
+    "Stock Value": 0.0,
+    "PO Qty": 55.49,
+    "Open SO Quantity": 88.41,
+    "Balance Quantity": 0.15,
+    "Last Purchase Price(GSV/CS)": 0.15,
+    "Status": 0.15,
+    "CATEGORY DESC": 0.15,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Batch": 0.15
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 646,
+    "Article Description": 646,
+    "PACK SIZE": 25,
+    "Stock Quantity (CS/PC)": 341,
+    "Stock Value": 639,
+    "PO Qty": 89,
+    "Open SO Quantity": 27,
+    "Balance Quantity": 429,
+    "Last Purchase Price(GSV/CS)": 339,
+    "Status": 2,
+    "CATEGORY DESC": 12,
+    "Blocked Stock(CS/PC)": 0,
+    "Batch": 1
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "21061907",
+      "69668150",
+      "67000436",
+      "62715279",
+      "64356047"
+    ],
+    "Article Description": [
+      "LIFEBUOY BAR TOTAL10 COL MP 32X3X100G",
+      "DOVE HYACERAMIDE REPAIR TMT 288X18ML",
+      "LADY'S CHOICE RAL MAYO JAR 24X220ML",
+      "BREEZE LQD RG PMC 12(1+4)X(980ML+60ML)",
+      "BREEZE LIQ PMACHN RSE GLDPRCOFF 12X980ML"
+    ],
+    "PACK SIZE": [
+      "108",
+      "18",
+      "40",
+      "57",
+      "4"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "4/33",
+      "5/18",
+      "3/2",
+      "1/44",
+      "45/0"
+    ],
+    "Stock Value": [
+      "1551.79",
+      "217.95",
+      "6968.58",
+      "5096.88",
+      "425.71"
+    ],
+    "PO Qty": [
+      "15/0",
+      "9/0",
+      "18/0",
+      "10/0",
+      "45/0"
+    ],
+    "Open SO Quantity": [
+      "0/2",
+      "0/24",
+      "0/66",
+      "0/72",
+      "0/132"
+    ],
+    "Balance Quantity": [
+      "30/1",
+      "4/33",
+      "21/2",
+      "33/21",
+      "18/0"
+    ],
+    "Last Purchase Price(GSV/CS)": [
+      "4368.75",
+      "2328.21",
+      "2394.64",
+      "1577.14",
+      "1602.86"
+    ],
+    "Status": [
+      "Inactive",
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "FABRIC CLEANING",
+      "DEODORANTS & FRAGRANCES",
+      "CONDIMENTS",
+      "MINI MEALS",
+      "FABRIC ENHANCERS"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Batch": [
+      "VALUATED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 647,
+  "header_signature": "749a9f1e57d4",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "last purchase price(gsv/cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

@@ -1,0 +1,249 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 08.2025/2025 AUGUST SALES RETURN.xlsx",
+  "sheet": "PANGASINAN GS",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "text",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "text",
+    "Discount Rate": "text",
+    "Discount Amount": "text",
+    "Tax": "text",
+    "Net Amount": "text",
+    "Balance": "text",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 1.79,
+    "Town Display": 1.79,
+    "Branch Code": 1.79,
+    "Customer Name": 1.79,
+    "Invoice Num": 1.79,
+    "REFNBR": 1.79,
+    "Untaxed Amount": 1.79,
+    "Discount Rate": 1.79,
+    "Discount Amount": 1.79,
+    "Tax": 1.79,
+    "Net Amount": 1.79,
+    "Balance": 1.79,
+    "Posted": 1.79,
+    "Return Slip #": 1.79,
+    "Return Type": 1.79
+  },
+  "distinct_count": {
+    "Invoice Date": 16,
+    "Salesman": 7,
+    "Town Display": 29,
+    "Branch Code": 51,
+    "Customer Name": 51,
+    "Invoice Num": 55,
+    "REFNBR": 55,
+    "Untaxed Amount": 51,
+    "Discount Rate": 5,
+    "Discount Amount": 15,
+    "Tax": 51,
+    "Net Amount": 51,
+    "Balance": 8,
+    "Posted": 3,
+    "Return Slip #": 55,
+    "Return Type": 2
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-08-30",
+      "2025-08-16",
+      "2025-08-29",
+      "2025-08-14",
+      "2025-08-11"
+    ],
+    "Salesman": [
+      "ADMIN SALES",
+      "BENJAMIN AQUINO",
+      "Salesman",
+      "VOLTAIRE FINOGUAR",
+      "EDUARDO AGAS"
+    ],
+    "Town Display": [
+      "AGOO",
+      "BOLINAO",
+      "MANGALDAN",
+      "SUAL",
+      "LINGAYEN (Capital)"
+    ],
+    "Branch Code": [
+      "L12F-001964",
+      "L12F-002170",
+      "L12F-002163",
+      "L12F-002208",
+      "L12F-002865"
+    ],
+    "Customer Name": [
+      " ONE 8 CONSUMER GOODS TRADING CORPORATION*",
+      "LOS PEDRITOS",
+      "ST. JOSEPH COOP (AGUILAR) T12",
+      "STEAK TO JUAN ELYU**",
+      "EMYGUILL FROZEN FOODS RESELLER"
+    ],
+    "Invoice Num": [
+      "INV/2025/5575",
+      "INV/2025/5818",
+      "INV/2025/5569",
+      "INV/2025/5998",
+      "INV/2025/6046"
+    ],
+    "REFNBR": [
+      "DMP023369",
+      "False",
+      "DMP023724",
+      "DMP231266",
+      "DMP023648"
+    ],
+    "Untaxed Amount": [
+      "2979.42",
+      "Untaxed Amount",
+      "1127.57",
+      "590.83",
+      "418.84"
+    ],
+    "Discount Rate": [
+      "LESS 4%",
+      "Public Pricelist",
+      "Discount Rate",
+      "Less 2%",
+      "LESS 3%"
+    ],
+    "Discount Amount": [
+      "1455.3",
+      "64.29",
+      "8692.66",
+      "33.75",
+      "257.14"
+    ],
+    "Tax": [
+      "242.07",
+      "Tax",
+      "70.9",
+      "756",
+      "87.02"
+    ],
+    "Net Amount": [
+      "214.91",
+      "2259.36",
+      "1178.18",
+      "714.25",
+      "Net Amount"
+    ],
+    "Balance": [
+      "3600.02",
+      "0.01",
+      "18711.91",
+      "1440.01",
+      "3528.01"
+    ],
+    "Posted": [
+      "Yes",
+      "Posted",
+      "No"
+    ],
+    "Return Slip #": [
+      "RMR17083",
+      "RMR18142",
+      "Return Slip #",
+      "RMR46997",
+      "RMR19355"
+    ],
+    "Return Type": [
+      "GS",
+      "Return Type"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 56,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'",
+    "REFNBR 'DMP023902' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023855' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023911' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP231309' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021826' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'SDM145560-2' matches prefix 'SDM' -> delmonte",
+    "REFNBR 'DMP023748' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023769' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023724' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023710' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023641' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023383' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'TDM002031**' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'TDM002032**' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'DMP019809' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023447-3' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023648' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023772' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023751' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023668' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023723' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023719' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023317' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022732-' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023702' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP019988' matches prefix 'DMP' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

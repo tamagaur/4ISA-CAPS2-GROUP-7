@@ -1,0 +1,176 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS MONTHLY SALES SUMMARY REPORT (APRIL,2021).xlsx",
+  "sheet": "RAW DATA",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.0,
+    "REASON CODE": 0.0,
+    "OUTLET": 0.0,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.0,
+    "Sale After TPR & UW": 0.0,
+    "NIV": 0.0,
+    "VAT": 0.0,
+    "Total Sales Amt Inc. Tax": 0.0,
+    "REMARKS": 0.0
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 20,
+    "REASON CODE": 10,
+    "OUTLET": 1751,
+    "OUTLET NAME": 1673,
+    "GSV": 3145,
+    "TPR + UW/DT Discount": 562,
+    "Sale After TPR & UW": 3177,
+    "NIV": 3177,
+    "VAT": 3005,
+    "Total Sales Amt Inc. Tax": 3177,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2021-04-29 00:00:00",
+      "2021-04-12 00:00:00",
+      "2021-04-26 00:00:00",
+      "2021-04-21 00:00:00",
+      "2021-04-13 00:00:00"
+    ],
+    "REASON CODE": [
+      "Stock not available",
+      "Good - Full Return",
+      "SBWAP: Difference Clearing (Qty/Value)",
+      "Not assigned",
+      "Near Expiry/Expired"
+    ],
+    "OUTLET": [
+      "1696475",
+      "1705347",
+      "1696260",
+      "665595",
+      "664673"
+    ],
+    "OUTLET NAME": [
+      "INOCELDA STORE",
+      "JAM STORE",
+      "JNC STORE",
+      "RILLY`S",
+      "ADAMS STORE"
+    ],
+    "GSV": [
+      "1768.84",
+      "180",
+      "426.79",
+      "1321.43",
+      "5040"
+    ],
+    "TPR + UW/DT Discount": [
+      "-10.38",
+      "35.36",
+      "-2818.05",
+      "-720",
+      "-7029.41"
+    ],
+    "Sale After TPR & UW": [
+      "5063.4",
+      "1768.84",
+      "-10580.53",
+      "180",
+      "426.79"
+    ],
+    "NIV": [
+      "5063.4",
+      "1768.84",
+      "-10580.53",
+      "180",
+      "426.79"
+    ],
+    "VAT": [
+      "1931.1",
+      "-699.28",
+      "377.07",
+      "268.75",
+      "158.16"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "127.8",
+      "-562.42",
+      "2920.06",
+      "232.79",
+      "-1049.61"
+    ],
+    "REMARKS": [
+      "RETURNS",
+      "INVOICED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 4074,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'niv'",
+    "header contains 'tpr'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

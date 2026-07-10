@@ -1,0 +1,49 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT JANUARY 2025 (2).xlsx",
+  "sheet": "Sheet4",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Not assigned",
+    "INVOICE"
+  ],
+  "dtypes": {
+    "Not assigned": "text",
+    "INVOICE": "text"
+  },
+  "null_pct": {
+    "Not assigned": 0.0,
+    "INVOICE": 0.0
+  },
+  "distinct_count": {
+    "Not assigned": 23,
+    "INVOICE": 1
+  },
+  "samples": {
+    "Not assigned": [
+      "Accident",
+      "Overlanded/Shortlanded",
+      "Order cancelled by customer",
+      "Order cancelled by salesmen",
+      "GOOD - Slow moving"
+    ],
+    "INVOICE": [
+      "RETURN"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 24,
+  "header_signature": "45c7951d7b68",
+  "header_tokens": [
+    "invoice",
+    "not assigned"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

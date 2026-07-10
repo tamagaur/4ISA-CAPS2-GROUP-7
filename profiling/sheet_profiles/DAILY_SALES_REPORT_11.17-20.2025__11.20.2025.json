@@ -1,0 +1,140 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/DAILY SALES REPORT 11.17-20.2025.xlsx",
+  "sheet": "11.20.2025",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Customer Name",
+    "Town Display",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Amount",
+    "Tax",
+    "Net Amount"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Customer Name": "text",
+    "Town Display": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Amount": "numeric",
+    "Tax": "text",
+    "Net Amount": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 7.22,
+    "Salesman": 9.28,
+    "Customer Name": 8.25,
+    "Town Display": 6.19,
+    "REFNBR": 9.28,
+    "Untaxed Amount": 8.25,
+    "Discount Amount": 8.25,
+    "Tax": 5.15,
+    "Net Amount": 8.25
+  },
+  "distinct_count": {
+    "Invoice Date": 3,
+    "Salesman": 6,
+    "Customer Name": 81,
+    "Town Display": 12,
+    "REFNBR": 88,
+    "Untaxed Amount": 70,
+    "Discount Amount": 4,
+    "Tax": 72,
+    "Net Amount": 70
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-11-20",
+      "ASHLY M. APOLONIO",
+      "ENCODER"
+    ],
+    "Salesman": [
+      "TTS-CENTRAL - Fernando Capua",
+      "TTS_LUSOUTH - John Gabreil Basa",
+      "TTS-EAST - Darwin Ortaleza",
+      "TTS-WEST - Eric Collado",
+      "SSS1 - Nelson Balanag"
+    ],
+    "Customer Name": [
+      "Greatsave(SAN QUINTIN) ",
+      "TRIOMART",
+      "TINA (BAYAMBANG)",
+      "ACE & GALE (BAYAMBANG)",
+      "DELA CRUZ (SAN QUINTIN)"
+    ],
+    "Town Display": [
+      "INFANTA",
+      "RECEIVABLE",
+      "DASOL",
+      "BAUTISTA",
+      "SAN QUINTIN"
+    ],
+    "REFNBR": [
+      "SSGT11621",
+      "SSGT11662",
+      "SSGT11590-2",
+      "SSGT11654-2",
+      "SSGT11606-2"
+    ],
+    "Untaxed Amount": [
+      "293.11",
+      "654.19",
+      "379.81",
+      "1206.61",
+      "1342.84"
+    ],
+    "Discount Amount": [
+      "462.66",
+      "0",
+      "407.02",
+      "869.6800000000001"
+    ],
+    "Tax": [
+      "211.5",
+      "67.58",
+      "27.24",
+      "98.94",
+      "99.1"
+    ],
+    "Net Amount": [
+      "240.74",
+      "1719.12",
+      "22337.4",
+      "374.43",
+      "718.54"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 92,
+  "header_signature": "be9165d06129",
+  "header_tokens": [
+    "customer name",
+    "discount amount",
+    "invoice date",
+    "net amount",
+    "refnbr",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

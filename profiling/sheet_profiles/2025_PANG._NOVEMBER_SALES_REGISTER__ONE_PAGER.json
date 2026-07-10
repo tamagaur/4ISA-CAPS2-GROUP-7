@@ -1,0 +1,142 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/DAILY REPORT - 11.2025/2025 PANG. NOVEMBER SALES REGISTER.xlsx",
+  "sheet": "ONE PAGER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "AREA",
+    "Customer Name",
+    "REFERENCE #",
+    "NET VALUE",
+    "DISCOUNT AMNT.",
+    "TAX AMNT.",
+    "AMOUNT"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "AREA": "text",
+    "Customer Name": "text",
+    "REFERENCE #": "text",
+    "NET VALUE": "numeric",
+    "DISCOUNT AMNT.": "numeric",
+    "TAX AMNT.": "text",
+    "AMOUNT": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.58,
+    "Salesman": 0.58,
+    "AREA": 0.73,
+    "Customer Name": 0.44,
+    "REFERENCE #": 0.87,
+    "NET VALUE": 0.73,
+    "DISCOUNT AMNT.": 0.73,
+    "TAX AMNT.": 0.58,
+    "AMOUNT": 0.44
+  },
+  "distinct_count": {
+    "Invoice Date": 21,
+    "Salesman": 8,
+    "AREA": 54,
+    "Customer Name": 467,
+    "REFERENCE #": 683,
+    "NET VALUE": 575,
+    "DISCOUNT AMNT.": 143,
+    "TAX AMNT.": 573,
+    "AMOUNT": 577
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-11-28",
+      "2025-11-14",
+      "2025-11-21",
+      "2025-11-06",
+      "2025-11-24"
+    ],
+    "Salesman": [
+      "JOEL WACANGAN",
+      "BENJAMIN AQUINO",
+      "ELYSSA L. MASON",
+      "ADMIN SALES",
+      "GERRY LACANARIA"
+    ],
+    "AREA": [
+      "BUGALLON",
+      "BAGUIO CITY",
+      "ROSARIO",
+      "BAYAMBANG",
+      "SAN FABIAN"
+    ],
+    "Customer Name": [
+      "PUNTA RIVERA DEL MAR INC. / RESORT",
+      "LEAPING CARP CORP",
+      "B&T CATERING AND RESTAURANT ",
+      "PAULINE'S PONCIAAN & CATERING",
+      "SUPREME HOTEL"
+    ],
+    "REFERENCE #": [
+      "DMP025248",
+      "DMP025538",
+      "DMP025526",
+      "DMP025294",
+      "DMP025322-2"
+    ],
+    "NET VALUE": [
+      "1341.76",
+      "13293.94",
+      "3193.72",
+      "3938.57",
+      "213.59"
+    ],
+    "DISCOUNT AMNT.": [
+      "1623.6",
+      "141.27",
+      "12.86",
+      "76.03",
+      "89.55"
+    ],
+    "TAX AMNT.": [
+      "160.41",
+      "750.92",
+      "785.99",
+      "220.4",
+      "9667.36"
+    ],
+    "AMOUNT": [
+      "1571.53",
+      "680.25",
+      "10039.52",
+      "2643.4",
+      "3604.65"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 687,
+  "header_signature": "c3aa1de5b8d1",
+  "header_tokens": [
+    "amount",
+    "area",
+    "customer name",
+    "discount amnt.",
+    "invoice date",
+    "net value",
+    "reference #",
+    "salesman",
+    "tax amnt."
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

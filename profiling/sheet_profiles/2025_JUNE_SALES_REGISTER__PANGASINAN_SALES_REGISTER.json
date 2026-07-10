@@ -1,0 +1,222 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 06.2025/2025 JUNE SALES REGISTER.xlsx",
+  "sheet": "PANGASINAN SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 99.88,
+    "Return Type": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 23,
+    "Salesman": 6,
+    "Town Display": 53,
+    "Branch Code": 392,
+    "Customer Name": 392,
+    "Invoice Num": 850,
+    "REFNBR": 850,
+    "Untaxed Amount": 555,
+    "Discount Rate": 5,
+    "Discount Amount": 156,
+    "Tax": 550,
+    "Net Amount": 555,
+    "Balance": 426,
+    "Posted": 2,
+    "Return Slip #": 1,
+    "Return Type": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-06-23",
+      "2025-06-16",
+      "2025-06-17",
+      "2025-06-27",
+      "2025-06-18"
+    ],
+    "Salesman": [
+      "ADMIN SALES",
+      "BENJAMIN AQUINO",
+      "VOLTAIRE FINOGUAR",
+      "CORFEL PARAS",
+      "DSP7-LATRINIDAD"
+    ],
+    "Town Display": [
+      "CABA",
+      "MANGATAREM",
+      "SAN JACINTO",
+      "CITY OF URDANETA",
+      "BAUANG"
+    ],
+    "Branch Code": [
+      "L12F-B000358",
+      "L12F-002625",
+      "L12F-002030",
+      "000124",
+      "L12F-002195"
+    ],
+    "Customer Name": [
+      "JULIE'S BAKESHOP",
+      "BALANAG CVS",
+      "TEYANG BULALOHAN ",
+      "NEW GOOD TASTE DANGWA",
+      "PRIMA RESTO & GRILL"
+    ],
+    "Invoice Num": [
+      "INV/2025/4642",
+      "INV/2025/4339",
+      "INV/2025/4487",
+      "INV/2025/4516",
+      "INV/2025/3964"
+    ],
+    "REFNBR": [
+      "PPF0018",
+      "DMP022773",
+      "DMP023096",
+      "DMP023207",
+      "DM10020"
+    ],
+    "Untaxed Amount": [
+      "2255.14",
+      "559.83",
+      "5006.16",
+      "13285.1",
+      "72076.62"
+    ],
+    "Discount Rate": [
+      "Public Pricelist",
+      "Less 3% (PHP) ",
+      "Less 2%",
+      "LESS 4%",
+      "LESS 3%"
+    ],
+    "Discount Amount": [
+      "2984.25",
+      "271.12",
+      "107.56",
+      "271.36",
+      "21.63"
+    ],
+    "Tax": [
+      "76.53",
+      "705.32",
+      "515.93",
+      "1316.1",
+      "2396.92"
+    ],
+    "Net Amount": [
+      "6192.84",
+      "678.08",
+      "423.39",
+      "1383.79",
+      "36139.49"
+    ],
+    "Balance": [
+      "6192.84",
+      "678.08",
+      "1383.79",
+      "36139.49",
+      "545.52"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": [
+      "LATE VALIDATION"
+    ],
+    "Return Type": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 850,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'return slip #'",
+    "header contains 'refnbr'",
+    "REFNBR 'DMP231223-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP231234' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP231235' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP231233' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'TDM002084' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'TDM002083' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'SDM145554' matches prefix 'SDM' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}
