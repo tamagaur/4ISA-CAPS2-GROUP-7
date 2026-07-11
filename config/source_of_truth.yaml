@@ -1,0 +1,48 @@
+# config/source_of_truth.yaml
+#
+# Encodes ARCHITECTURE.md DEC-04 (§5.2): one system-of-record sheet_role
+# per (fact, principal); everything else is a cross-check, never loaded.
+# Transform filters staged tables against this map before dedup/grain work.
+#
+# doc_type here refers to the *refined* _doc_type tag Extract attaches
+# (see ARCHITECTURE.md §6.5), not the file-selection family.
+
+sales:
+  unilever:
+    doc_type: ssis_summary
+    system_of_record_role: raw_data
+    cross_check_roles: [invoice_reg, per_customer_summary]
+    natural_key: [invoice_num]        # confirm against real data before trusting
+  delmonte:
+    doc_type: sales_register
+    system_of_record_role: data
+    cross_check_roles: [scratch]
+    natural_key: [invoice_num, principal, region]
+
+sales_return:
+  both:
+    doc_type: rmr_gs_bo
+    system_of_record_role: [gs, bo]    # GS + BO split IS the system of record
+    cross_check_roles: [one_pager]     # ONE PAGER == GS union BO, never loaded
+    natural_key: [return_slip_num]     # falls back to invoice_num if blank
+
+purchase:
+  both:
+    doc_type: purchases
+    system_of_record_role: data
+    cross_check_roles: []
+    natural_key: [invoice_num]         # BILL/... prefix or PO ref
+
+inventory:
+  both:
+    doc_type: inventory
+    system_of_record_role: data
+    cross_check_roles: [ssis_summary]  # INVENTORY / SOH echoes in SSIS
+    natural_key: [sku_code, snapshot_date]
+
+sell_out:
+  delmonte:
+    doc_type: sell_out
+    system_of_record_role: data
+    cross_check_roles: [ssis_summary]  # SALES PER CUSTOMER, different view
+    natural_key: [category, period]

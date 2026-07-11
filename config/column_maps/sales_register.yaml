@@ -1,0 +1,73 @@
+# config/column_maps/sales_register.yaml
+#
+# Maps the confirmed Del Monte Sales Register column vocabularies
+# (ARCHITECTURE.md §6.3) onto one canonical schema. Extract leaves raw
+# column names untouched; Transform applies this map.
+#
+# canonical_field: [list of raw header spellings seen across vocab A / B / C
+#                    plus minor drift, e.g. typos]
+#
+# Matching is case-insensitive and whitespace-normalized (see transform.py).
+
+invoice_date:
+  - "Invoice Date"
+
+salesman:
+  - "Salesman"
+
+region:
+  - "Town Display"      # vocab A
+  - "AREA"               # vocab B
+  - "Area"               # vocab C
+
+customer_name:
+  - "Customer Name"
+  - "Customers"          # vocab C
+
+invoice_num:
+  - "Invoice Num"
+  - "REFNBR"             # vocab A
+  - "REFERENCE #"        # vocab B
+
+untaxed_amount:
+  - "Untaxed Amount"
+  - "NET VALUE"          # vocab B
+  - "Net Value"          # vocab C
+
+discount_amount:
+  - "Discount Amount"
+  - "DISCOUNT AMNT."     # vocab B
+  - "Dscount Amount"     # confirmed typo in source files
+
+tax_amount:
+  - "Tax"
+  - "TAX AMNT."          # vocab B
+  - "Tax amount"         # vocab C
+
+net_amount:
+  - "Net Amount"
+  - "AMOUNT"             # vocab B
+  - "Amount"             # vocab C
+
+balance:
+  - "Balance"
+
+return_slip_num:
+  - "Return Slip #"
+
+return_type:
+  - "Return Type"
+
+discount_rate_label:
+  - "Discount Rate"      # NOTE: this is a text label, not numeric
+                         # (e.g. "Public Pricelist", "LESS 2%") — never coerce to number
+
+total_discount_claim:
+  - "Total Discount to be claim"
+
+total_cas_pcs:
+  - "Total CAS/PCS"
+
+branch_code:
+  - "Branch Code"
+  - "Outlet"
