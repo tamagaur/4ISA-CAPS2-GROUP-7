@@ -1,0 +1,86 @@
+# config/column_maps/purchase_order.yaml
+#
+# Maps confirmed Del Monte Purchase file column vocabularies onto one
+# canonical schema. Checked against profiling/sheet_profiles for both
+# regions (Ilocos/Pangasinan) and both 2023 and 2025 exports - vocab is
+# stable across that whole span, only one real drift spotted (see
+# return_type below).
+#
+# Extract leaves raw column names untouched; Transform applies this map.
+# Matching is case-insensitive and whitespace-normalized (see transform.py).
+#
+# NOTE: this file's template is nearly identical to sales_register.yaml's
+# (same POS export tool), but it is a DIFFERENT relationship - "Customer
+# Name" here holds the SUPPLIER'S name (e.g. "DMPI" = Del Monte Philippines
+# Inc., who Sansan buys FROM), not a customer. Do not merge this map with
+# sales_register.yaml's or alias supplier_name into customer_name.
+
+invoice_date:
+  - "Invoice Date"
+
+salesman:
+  - "Salesman"      # site/branch label in this file (e.g. "ILOCOS SITE"), not a person - kept as-is, not renamed to avoid asserting more than the header says
+
+region:
+  - "Town Display"
+
+branch_code:
+  - "Branch Code"
+
+supplier_name:
+  - "Customer Name"   # NOTE: despite the header, this is the supplier (DMPI) in a purchase file - see module note above
+
+invoice_num:
+  - "Invoice Num"     # e.g. "BILL/2025/0127" - this is the natural key half used in schema.sql's UNIQUE(invoice_num, principal, region)
+
+po_reference:
+  - "REFNBR"          # e.g. "PO01391" - a purchase-order reference, NOT the same thing as sales_register.yaml's REFNBR (which aliased invoice_num there). Do not conflate the two files' REFNBR meanings.
+
+untaxed_amount:
+  - "Untaxed Amount"
+
+discount_rate_label:
+  - "Discount Rate"   # text label (e.g. "Public Pricelist"), never coerce to numeric
+
+discount_amount:
+  - "Discount Amount"
+
+tax_amount:
+  - "Tax"
+
+net_amount:
+  - "Net Amount"
+
+balance:
+  - "Balance"
+
+return_slip_num:
+  - "Return Slip #"
+
+return_type:
+  - "Return Type"
+  - "Returns"          # vocab drift confirmed in PANGASINAN 2025 exports
+
+# --- Columns seen in the source but deliberately NOT mapped here ---
+# "Posted"                    - a workflow status flag, not part of the canonical
+#                               fact schema; no destination column exists for it.
+# "Net Amount ( Actual Invoice)" - appears only in some 2025 exports, sits right next
+#                               to "Net Amount". Likely a cross-check/echo column
+#                               (same pattern as Sales Register's totals-row check),
+#                               not confirmed as a second source of truth. Do NOT
+#                               alias it into net_amount without confirming with
+#                               Yuan which one is authoritative - that decision
+#                               belongs in source_of_truth.yaml, not silently made
+#                               here.
+#
+# OPEN ITEM FOR YUAN: schema.sql's Purchase_Fact table currently only has
+# columns for net_amount, tax_amount, and units_received - it does NOT yet
+# have columns for untaxed_amount, discount_amount, discount_rate_label,
+# balance, salesman, or branch_code, even though this map surfaces them
+# (Transform can rename them; Load will simply have nowhere to put them
+# until Purchase_Fact is extended). Flagging so this isn't silently
+# dropped on the floor at Load time - confirm which of these actually
+# need to persist before extending the table.
+# Also note: no literal "units" column exists anywhere in this file
+# family - Purchase_Fact.units_received will need a decision on what
+# feeds it (this file has no quantity column at all).
