@@ -1,0 +1,76 @@
+# config/column_maps/unilever_sku.yaml
+#
+# Maps the Unilever La Union Sales-per-SKU file's column vocabulary onto
+# one canonical schema. Only one file/template exists for this doc_type
+# (single source, no vocab drift to check across regions/years the way
+# the Del Monte files needed).
+#
+# Extract leaves raw column names untouched; Transform applies this map.
+# Matching is case-insensitive and whitespace-normalized (see transform.py) -
+# note the source headers contain embedded "\r\n" line breaks (e.g.
+# "Calendar\r\n  Month"), which normalize away fine under transform.py's
+# whitespace collapsing, but keep this in mind if you ever hand-inspect
+# the raw file and the headers look "broken" - they're not, that's just
+# a wrapped Excel header cell.
+#
+# GRAIN NOTE (DEC-03): this is the confirmed SOLE per-SKU demand source for
+# Unilever (feeds Unilever_SKU_Demand_Fact, not Sales_Fact - different
+# grain, see schema.sql's note on that table).
+
+calendar_month:
+  - "Calendar\r\n  Month"
+  # TRANSFORM TODO: raw values are "MM.YYYY" (e.g. "10.2025", "01.2026"),
+  # NOT "YYYY-MM" like the rest of the project's _period convention.
+  # Needs an explicit reformat step in transform.py before this can match
+  # Unilever_SKU_Demand_Fact.calendar_month's 'YYYY-MM' convention - do not
+  # assume it's already in the right shape.
+
+sku_code:
+  - "Product"
+  # NOTE: despite the header name "Product", the actual values are numeric
+  # SKU codes (e.g. "64997199"), not product names. The product NAME is in
+  # the next column instead (mapped below). This is a real header/content
+  # mismatch confirmed directly from source samples - don't "fix" the
+  # mapping to look more intuitive, map what the header actually says.
+
+product_name:
+  - "__col2__"
+  # NOTE: this column has NO header text in the source (confirmed blank,
+  # not a detection failure) and sits right after "Product" (which
+  # confusingly holds the SKU code, not the name - see above). Values are
+  # brand + description text, e.g. "REXONA\r\n  MEN RO MS INVISIBLE DRY
+  # 24X50ML" (also carries the same embedded line-break pattern).
+
+pack_size:
+  - "Pack Size"
+  # NOTE: sample values are small integers (e.g. "360", "18", "288").
+  # Mapped literally per the header - not confirmed whether this means
+  # "units per pack" or something else; do not assume it matches the pack
+  # count implied by the product_name text (e.g. "24X50ML").
+
+sale_quantity_cases:
+  - "Sale Quantity in\r\n  Aggr.CS"
+  # TRANSFORM TODO: values are text with a decimal point (e.g. "20.04",
+  # "-422.58" - negatives are real, likely returns/adjustments, do not
+  # clamp to zero). Needs numeric coercion in transform.py.
+
+sale_quantity_pieces:
+  - "Sale Quantity in\r\n  Aggr.PC"
+  # TRANSFORM TODO: values use comma thousands separators as TEXT (e.g.
+  # "24,190", "8,465") - a real type trap. Needs comma-stripping before
+  # numeric coercion; do not pass through pandas' default numeric parser
+  # without handling this first or it will silently fail or truncate.
+
+gsv:
+  - "GSV"
+  # TRANSFORM TODO: same comma-separated text-as-number issue as above
+  # (e.g. "6,711.21", "-422.58"). Gross Sales Value - not yet confirmed
+  # which canonical fact field (if any) this should ultimately feed;
+  # Unilever_SKU_Demand_Fact.quantity_sold is populated from the
+  # quantity columns above, not from GSV. Flag to Yuan on whether GSV or
+  # "Total Sales Amt Inc. Tax" below is the intended revenue figure for
+  # Unilever SKU-level ABC classification.
+
+net_amount_inc_tax:
+  - "Total Sales Amt\r\n  Inc. Tax"
+  # Same comma-separated text-as-number issue as gsv above.
