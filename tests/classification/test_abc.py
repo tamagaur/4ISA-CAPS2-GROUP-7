@@ -7,12 +7,90 @@ Phase 3C (CLAUDE.md Steps 10–11 — Checkpoint: all active SKUs have a tier; n
   test_revenue_sort_descending    — SKUs sorted correctly before cumulative sum
   test_no_negative_revenue        — guard against data cleaning gaps upstream
 
-TODO: Implement after ETL pipeline is complete (Phase 3B).
 """
 
+import pandas as pd
 import pytest
 
+from analytics.classification.abc import classify_abc
 
-def test_placeholder():
-    """Placeholder — remove when real tests are implemented."""
-    assert True
+
+@pytest.fixture
+def revenue_df() -> pd.DataFrame:
+    """10 SKUs with a deliberately skewed revenue distribution so all
+    three tiers are exercised."""
+    return pd.DataFrame({
+        "sku_id": [f"SKU-{i}" for i in range(1, 11)],
+        "total_revenue": [4000, 3000, 1500, 800, 400, 200, 100, 50, 30, 20],
+    })
+
+
+def test_tier_assignment_coverage(revenue_df):
+    """Every SKU receives a tier (no nulls)."""
+    result = classify_abc(revenue_df)
+    assert result["tier"].notna().all()
+    assert set(result["tier"].unique()) <= {"A", "B", "C"}
+    assert len(result) == len(revenue_df)
+
+
+def test_pareto_split(revenue_df):
+    """A-tier cumulative share <= 80%, C-tier >= 95% (each tier's rows
+    sit on the correct side of its cumulative-share cutoff)."""
+    result = classify_abc(revenue_df)
+
+    a_rows = result[result["tier"] == "A"]
+    b_rows = result[result["tier"] == "B"]
+    c_rows = result[result["tier"] == "C"]
+
+    assert (a_rows["cumulative_share"] <= 0.80).all()
+    assert (b_rows["cumulative_share"] > 0.80).all()
+    assert (b_rows["cumulative_share"] <= 0.95).all()
+    assert (c_rows["cumulative_share"] > 0.95).all()
+    # with this fixture's skew, at least one SKU should land in C
+    assert not c_rows.empty
+
+
+def test_revenue_sort_descending(revenue_df):
+    """SKUs are sorted by revenue descending before the cumulative sum
+    is taken (a Pareto curve is meaningless unsorted)."""
+    result = classify_abc(revenue_df)
+    revenues = result["total_revenue"].tolist()
+    assert revenues == sorted(revenues, reverse=True)
+
+
+def test_no_negative_revenue():
+    """Guard against data cleaning gaps upstream: negative revenue must
+    raise, never be silently classified."""
+    bad_df = pd.DataFrame({
+        "sku_id": ["SKU-1", "SKU-2"],
+        "total_revenue": [100, -5],
+    })
+    with pytest.raises(ValueError):
+        classify_abc(bad_df)
+
+
+def test_missing_required_column_raises():
+    bad_df = pd.DataFrame({"sku_id": ["SKU-1"]})
+    with pytest.raises(ValueError):
+        classify_abc(bad_df)
+
+
+def test_duplicate_sku_id_raises():
+    dup_df = pd.DataFrame({
+        "sku_id": ["SKU-1", "SKU-1"],
+        "total_revenue": [100, 50],
+    })
+    with pytest.raises(ValueError):
+        classify_abc(dup_df)
+
+
+def test_empty_input_returns_empty_output():
+    empty_df = pd.DataFrame({"sku_id": [], "total_revenue": []})
+    result = classify_abc(empty_df)
+    assert result.empty
+    assert list(result.columns) == ["sku_id", "total_revenue", "revenue_share", "cumulative_share", "tier"]
+
+
+def test_revenue_share_sums_to_one(revenue_df):
+    result = classify_abc(revenue_df)
+    assert result["revenue_share"].sum() == pytest.approx(1.0)
