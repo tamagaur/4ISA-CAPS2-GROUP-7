@@ -1,4 +1,5 @@
-# config/column_maps/purchase_order.yaml
+# config/column_maps/purchases.yaml (renamed 2025-07 from purchase_order.yaml
+# to match source_of_truth.yaml's doc_type: "purchases")
 #
 # Maps confirmed Del Monte Purchase file column vocabularies onto one
 # canonical schema. Checked against profiling/sheet_profiles for both
