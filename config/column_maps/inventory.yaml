@@ -1,4 +1,5 @@
-# config/column_maps/inventory_signoff.yaml
+# config/column_maps/inventory.yaml (renamed 2025-07 from inventory_signoff.yaml
+# to match source_of_truth.yaml's doc_type: "inventory")
 #
 # Maps confirmed Del Monte Inventory Sign-Off file column vocabulary onto
 # one canonical schema. Checked profiling/sheet_profiles across both
