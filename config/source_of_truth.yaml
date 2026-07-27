@@ -7,17 +7,46 @@
 # doc_type here refers to the *refined* _doc_type tag Extract attaches
 # (see ARCHITECTURE.md §6.5), not the file-selection family.
 
+# NOTE on doc_type <-> column_maps/*.yaml naming: doc_type here must equal
+# the filename (minus .yaml) of the map transform.py loads via
+# load_column_map(). Previously "purchases" and "inventory" pointed at
+# files named purchase_order.yaml / inventory_signoff.yaml and would have
+# raised FileNotFoundError the first time transform_fact() ran for those
+# facts - renamed the files to match (2025-07 fix). transform_fact() also
+# now derives doc_type from this rule automatically instead of taking it
+# as a separate caller-supplied argument, so this file is the single
+# source of truth for the pairing.
+
 sales:
   unilever:
     doc_type: ssis_summary
     system_of_record_role: raw_data
     cross_check_roles: [invoice_reg, per_customer_summary]
-    natural_key: [invoice_num]        # confirm against real data before trusting
+    # BLOCKED, do not "fix" this without new evidence: every profiled
+    # SSIS RAW_DATA sheet (checked ~10 months, Jan-Nov 2022 confirmed
+    # identical schema) has NO invoice/reference column of any kind.
+    # Columns are: Salesman, CALENDAR DAY, REASON CODE, OUTLET,
+    # OUTLET NAME, GSV, TPR + UW/DT Discount, Sale After TPR & UW, NIV,
+    # VAT, Total Sales Amt Inc. Tax, REMARKS. The grain looks like
+    # outlet + calendar_day (+ reason_code?), not invoice. Filling in
+    # "invoice_num" here would be inventing a key the source doesn't
+    # have - per ARCHITECTURE.md principle #1, this must be confirmed
+    # against a real file (or with Yuan) before transform_fact() can run
+    # for this fact/principal at all. Column map for this doc_type
+    # (config/column_maps/ssis_summary.yaml) only has the confirmed
+    # renames for this reason - do not extend it with a guessed key.
+    natural_key: null   # UNCONFIRMED - see note above. transform_fact()
+                         # raises loudly if this is used, rather than
+                         # silently deduping on a fabricated key.
   delmonte:
     doc_type: sales_register
     system_of_record_role: data
     cross_check_roles: [scratch]
-    natural_key: [invoice_num, principal, region]
+    # "principal" is not a raw header anywhere - it only exists as the
+    # provenance column Extract attaches (_principal). apply_column_map
+    # never touches underscore-prefixed columns, so the natural key must
+    # reference the real post-mapping column name.
+    natural_key: [invoice_num, _principal, region]
 
 sales_return:
   both:
@@ -25,6 +54,18 @@ sales_return:
     system_of_record_role: [gs, bo]    # GS + BO split IS the system of record
     cross_check_roles: [one_pager]     # ONE PAGER == GS union BO, never loaded
     natural_key: [return_slip_num]     # falls back to invoice_num if blank
+    # BLOCKED - this is an Extract-stage problem, not something Transform
+    # can work around: every profiled RMR_GS_BO sheet (GS, BO, and
+    # ONE_PAGER views alike) has header_confidence ~0.001 and
+    # header_row_index=0. The "columns" Extract staged are ~500
+    # __colN__ placeholders with the workbook's merged title text
+    # ("RMR GOODSTOCK & BADSTOCK OF <month> 2025") repeated every 8
+    # columns - i.e. this file is laid out as many small side-by-side
+    # blocks/tables per sheet, and Extract's single-header-row detector
+    # can't parse that shape. No column_maps/rmr_gs_bo.yaml exists yet
+    # on purpose: there is nothing real to map raw headers to until
+    # Extract gets a block-aware reader for this file family. Flag to
+    # whoever owns Extract before picking this back up here.
 
 purchase:
   both:
@@ -38,6 +79,17 @@ inventory:
     doc_type: inventory
     system_of_record_role: data
     cross_check_roles: [ssis_summary]  # INVENTORY / SOH echoes in SSIS
+    # sku_code and snapshot_date are NOT raw headers - neither exists as
+    # a literal column anywhere in the source (confirmed via profiling).
+    # Both are computed by transform.py, not renamed by column_maps/inventory.yaml:
+    #   - sku_code: parsed out of sku_description_raw by
+    #     transform.split_sku_description() (leading alphanumeric token,
+    #     e.g. "9DMR56831" from "9DMR56831 DM QUICK N EASY..."). Rows
+    #     that don't match the pattern get sku_code=null and are flagged,
+    #     never guessed.
+    #   - snapshot_date: filled from the _period provenance column
+    #     (these exports are monthly, so _period is the honest proxy -
+    #     there's no finer-grained date in the sheet itself).
     natural_key: [sku_code, snapshot_date]
 
 sell_out:
@@ -45,4 +97,8 @@ sell_out:
     doc_type: sell_out
     system_of_record_role: data
     cross_check_roles: [ssis_summary]  # SALES PER CUSTOMER, different view
-    natural_key: [category, period]
+    # column_maps/sell_out.yaml's canonical field is "category_path", not
+    # "category" - and there is no period cell in the sheet (see that
+    # file's comment), only the _period provenance tag. Key must
+    # reference the real post-mapping / provenance names.
+    natural_key: [category_path, _period]
