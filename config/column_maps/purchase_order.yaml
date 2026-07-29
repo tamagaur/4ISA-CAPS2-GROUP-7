@@ -1,4 +1,9 @@
 # config/column_maps/purchase_order.yaml
+# (an earlier fix attempt renamed this to purchases.yaml, matching
+# source_of_truth.yaml's old, since-corrected "purchases" label — DEC-07
+# reverted that direction: this filename must match Extract's real
+# _doc_type tag "purchase_order" for load_column_map() to resolve. See
+# source_of_truth.yaml's top-of-file note for the full story.)
 #
 # Maps confirmed Del Monte Purchase file column vocabularies onto one
 # canonical schema. Checked against profiling/sheet_profiles for both

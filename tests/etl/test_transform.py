@@ -15,6 +15,9 @@ from analytics.etl.transform import (
     apply_column_map,
     dedup_facts,
     filter_source_of_truth,
+    load_source_of_truth,
+    split_sku_description,
+    transform_fact,
 )
 
 
@@ -65,3 +68,55 @@ def test_missing_natural_key_column_raises():
     df = pd.DataFrame({"net_amount": [100.0]})
     with pytest.raises(KeyError):
         dedup_facts(df, ["invoice_num"])
+
+
+def test_transform_fact_derives_doc_type_from_rule_end_to_end():
+    """delmonte sales: sot filter (drops scratch) -> column map (vocab B)
+    -> discount alias -> dedup, all driven by fact/principal alone."""
+    df = pd.DataFrame({
+        "REFERENCE #": ["INV-1", "INV-2", "INV-3"],
+        "AMOUNT": [100.0, 200.0, 999.0],
+        "DISCOUNT AMNT.": [5.0, 0.0, 0.0],
+        "Discount Rate": ["LESS 2%", "Public Pricelist", "Public Pricelist"],
+        "_sheet_role": ["data", "data", "scratch"],
+        "_principal": ["delmonte", "delmonte", "delmonte"],
+        "Area": ["PANGASINAN", "ILOCOS", "ILOCOS"],
+    })
+    out, report = transform_fact(df, fact="sales", principal="delmonte")
+
+    assert report["doc_type"] == "sales_register"
+    assert len(out) == 2  # scratch-role row dropped by source-of-truth filter
+    assert set(out["invoice_num"]) == {"INV-1", "INV-2"}
+    assert out.loc[out["invoice_num"] == "INV-1", "discount_rate_label"].iloc[0] == "LESS_2PCT"
+
+
+def test_transform_fact_raises_on_unconfirmed_natural_key():
+    """sales/unilever has natural_key: null in source_of_truth.yaml on
+    purpose (no invoice/reference column exists in the real source) -
+    transform_fact must refuse rather than guess a key."""
+    df = pd.DataFrame({"_sheet_role": ["raw_data"], "_principal": ["unilever"]})
+    with pytest.raises(ValueError):
+        transform_fact(df, fact="sales", principal="unilever")
+
+
+def test_load_source_of_truth_exposes_none_natural_key():
+    rule = load_source_of_truth("sales", "unilever")
+    assert rule.natural_key is None
+    assert rule.doc_type == "ssis_summary"
+
+
+def test_split_sku_description_separates_code_and_name():
+    df = pd.DataFrame({
+        "sku_description_raw": [
+            "9DMR56831 DM QUICK N EASY MECHADO SAUCE (Royce)",
+            "58740",          # bare numeric ID - must NOT be guessed at
+            None,
+        ]
+    })
+    out, report = split_sku_description(df)
+    assert out["sku_code"].iloc[0] == "9DMR56831"
+    assert out["product_name"].iloc[0] == "DM QUICK N EASY MECHADO SAUCE (Royce)"
+    assert pd.isna(out["sku_code"].iloc[1])   # unmatched, not guessed
+    assert pd.isna(out["sku_code"].iloc[2])
+    assert report.matched == 1
+    assert report.unmatched == 2

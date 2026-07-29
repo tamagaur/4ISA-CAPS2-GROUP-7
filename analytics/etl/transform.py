@@ -145,12 +145,66 @@ def apply_alias_table(
     return out
 
 
+# Matches the leading SKU-code token in inventory_signoff's unsplit
+# "sku_description_raw" cells, e.g. "9DMR56831 DM QUICK N EASY MECHADO
+# SAUCE (Royce)" -> code="9DMR56831". Tested against ~480 real samples
+# pulled from profiling/sheet_profiles/*INVENTOR*.json: correctly splits
+# the "code + name" rows and correctly REFUSES to match bare numeric IDs
+# (the unrelated 2025-era leading ID column, e.g. "58740") and bare
+# codes with no name text (e.g. "9DMS03748") rather than guessing at
+# them - those come back as unmatched, per anti-fabrication.
+_SKU_CODE_RE = re.compile(r"^\s*([A-Z0-9]{4,})\s+(.+?)\s*$")
+
+
+@dataclass
+class SkuSplitReport:
+    input_rows: int
+    matched: int
+    unmatched: int
+
+
+def split_sku_description(
+    df: pd.DataFrame, column: str = "sku_description_raw",
+    code_col: str = "sku_code", name_col: str = "product_name",
+) -> tuple[pd.DataFrame, SkuSplitReport]:
+    """Split inventory_signoff's combined 'SKU code + product name' cell
+    into sku_code / product_name. A cell that doesn't match the expected
+    shape (bare numeric ID, bare code with no name, blank, etc.) is left
+    as null in both output columns and counted in the report - never
+    guessed at (ARCHITECTURE.md principle #1)."""
+    out = df.copy()
+    if column not in out.columns:
+        out[code_col] = pd.NA
+        out[name_col] = pd.NA
+        return out, SkuSplitReport(input_rows=len(out), matched=0, unmatched=0)
+
+    codes, names, matched = [], [], 0
+    for val in out[column]:
+        if pd.isna(val):
+            codes.append(pd.NA)
+            names.append(pd.NA)
+            continue
+        m = _SKU_CODE_RE.match(str(val))
+        if m and any(ch.isdigit() for ch in m.group(1)):
+            codes.append(m.group(1))
+            names.append(m.group(2))
+            matched += 1
+        else:
+            codes.append(pd.NA)
+            names.append(pd.NA)
+
+    out[code_col] = codes
+    out[name_col] = names
+    report = SkuSplitReport(input_rows=len(out), matched=matched, unmatched=len(out) - matched)
+    return out, report
+
+
 @dataclass
 class SourceOfTruthRule:
     doc_type: str
     system_of_record_role: list[str]
     cross_check_roles: list[str]
-    natural_key: list[str]
+    natural_key: list[str] | None   # None = deliberately unconfirmed, see source_of_truth.yaml
     # Other _doc_type values (not _sheet_role values — cross_check_roles is
     # scoped to roles *within* doc_type above) that are a demoted duplicate
     # view of this same fact, e.g. daily_sales_report vs sales_register —
@@ -176,7 +230,7 @@ def load_source_of_truth(fact: str, principal: str, config_dir: Path = DEFAULT_C
         doc_type=entry["doc_type"],
         system_of_record_role=role,
         cross_check_roles=entry.get("cross_check_roles", []),
-        natural_key=entry["natural_key"],
+        natural_key=entry.get("natural_key"),  # may be None - see anti-fabrication note below
         cross_check_doc_types=entry.get("cross_check_doc_types", []),
     )
 
@@ -237,16 +291,49 @@ def dedup_facts(df: pd.DataFrame, natural_key: list[str], amount_col: str | None
 
 
 def transform_fact(
-    df: pd.DataFrame, doc_type: str, fact: str, principal: str, config_dir: Path = DEFAULT_CONFIG_DIR,
+    df: pd.DataFrame, fact: str, principal: str, config_dir: Path = DEFAULT_CONFIG_DIR,
+    amount_col: str | None = None, discount_alias_table: str | None = "discount_rate_labels",
 ) -> tuple[pd.DataFrame, dict]:
-    """Convenience pipeline: source-of-truth filter -> column map -> dedup.
-    Returns the transformed DataFrame plus a combined report dict for QC."""
-    sot_df = filter_source_of_truth(df, fact, principal, config_dir)
-    mapped_df, map_report = apply_column_map(sot_df, doc_type, config_dir)
+    """Convenience pipeline: source-of-truth filter -> column map ->
+    alias-standardize discount labels -> dedup.
+
+    doc_type is no longer a separate caller-supplied argument - it is
+    read from the source_of_truth.yaml rule for (fact, principal), so
+    there is exactly one place that pairing is declared (previously a
+    caller could pass a doc_type that didn't match the rule's, and nothing
+    checked that). Returns the transformed DataFrame plus a combined
+    report dict for QC.
+
+    Raises ValueError if the rule's natural_key is None (deliberately
+    unconfirmed - see source_of_truth.yaml) rather than deduping on a
+    fabricated key.
+    """
     rule = load_source_of_truth(fact, principal, config_dir)
-    deduped_df, dedup_report = dedup_facts(mapped_df, rule.natural_key)
+    if rule.natural_key is None:
+        raise ValueError(
+            f"source_of_truth.yaml has natural_key=null for fact='{fact}', principal='{principal}' "
+            f"(doc_type='{rule.doc_type}') - this fact/principal is flagged as unconfirmed against "
+            f"real data, not a config gap. See the comment on that entry before proceeding; "
+            f"transform_fact() will not guess a key."
+        )
+
+    sot_df = filter_source_of_truth(df, fact, principal, config_dir)
+    mapped_df, map_report = apply_column_map(sot_df, rule.doc_type, config_dir)
+
+    if discount_alias_table and "discount_rate_label" in mapped_df.columns:
+        mapped_df = apply_alias_table(mapped_df, "discount_rate_label", discount_alias_table, config_dir)
+
+    sku_split_report = None
+    if rule.doc_type == "inventory_sign_off" and "sku_description_raw" in mapped_df.columns:
+        mapped_df, sku_split_report = split_sku_description(mapped_df)
+        if "_period" in mapped_df.columns and "snapshot_date" not in mapped_df.columns:
+            mapped_df["snapshot_date"] = mapped_df["_period"]
+
+    deduped_df, dedup_report = dedup_facts(mapped_df, rule.natural_key, amount_col=amount_col)
     return deduped_df, {
+        "doc_type": rule.doc_type,
         "column_map": map_report,
+        "sku_split": sku_split_report,
         "dedup": dedup_report,
         "rows_in": len(df),
         "rows_after_sot_filter": len(sot_df),

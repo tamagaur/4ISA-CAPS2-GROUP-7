@@ -1,6 +1,10 @@
 # config/column_maps/inventory_sign_off.yaml
 # (renamed from inventory_signoff.yaml — DEC-07, must match Extract's real
-# _doc_type tag "inventory_sign_off" exactly for load_column_map() to resolve)
+# _doc_type tag "inventory_sign_off" exactly for load_column_map() to
+# resolve. An earlier fix attempt renamed this file to inventory.yaml
+# instead, matching source_of_truth.yaml's old, since-corrected "inventory"
+# label — that direction is reverted here; see source_of_truth.yaml's
+# top-of-file note for the full story.)
 #
 # Maps confirmed Del Monte Inventory Sign-Off file column vocabulary onto
 # one canonical schema. Checked profiling/sheet_profiles across both
