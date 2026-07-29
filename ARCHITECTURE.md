@@ -74,6 +74,8 @@ The **Decision Support Dashboard (DSD)** — always "DSD", never "DSS" — repla
 | DEC-04 | **Source-of-truth per fact per principal** | **DECIDED (2025-07)** | One authoritative source per fact; overlapping views demoted to reconciliation cross-checks (never loaded). Prevents double/triple-counting. Full map in §5.2. Dedup natural key confirmed by a uniqueness test during Extract QC. |
 | DEC-05 | Totals-row used as extraction **checksum** | **DECIDED** | Row-0 sums validate that extraction lost/added nothing. |
 | DEC-06 | SCD strategy = Type 1 (overwrite) for dimensions | **PROPOSED** | Acceptable for demand forecasting (we care about the time series, not attribute history). Revisit if customer/salesman reassignment matters. |
+| DEC-07 | Canonical `doc_type` vocabulary = Extract's staged `_doc_type` tags | **DECIDED (2026-07), applied (2026-07)** | Three vocabularies drifted apart (Extract tags vs `source_of_truth.yaml` labels vs `column_maps/*.yaml` filenames), breaking `load_column_map()` lookups. The staged tags win because they are already validated against the real corpus. `source_of_truth.yaml` and column-map filenames renamed to match (`purchases`→`purchase_order`, `inventory`→`inventory_sign_off`, `inventory_signoff.yaml`→`inventory_sign_off.yaml`); a `sales_unilever_sku_demand` fact entry was added (previously missing entirely). A second instance of the same bug class was found and fixed while applying this: `cross_check_roles` (a `_sheet_role` list) was being used to name *doc_types* (`ssis_summary`) — moved to a new `cross_check_doc_types` field, which also now documents `daily_sales_report` as a demoted duplicate of `sales_register` (both share `_sheet_role="data"`, so role alone can't distinguish them). `tests/test_transform_config.py` (new) asserts every staged `_doc_type` has a column map + source-of-truth entry, and the reverse — no config entry names a doc_type Extract never actually staged. |
+| DEC-08 | EOQ inclusion in the prescriptive model | **OPEN — verify first** | EOQ does **not** appear in any of the three panel scribe's notes on record. Before adding: confirm the exact panel/adviser requirement (verbal comment? RRL conflation?). If confirmed, EOQ enters as a **benchmark/reference quantity** that the multi-objective LP refines under SSM's real constraints — never as a second, competing order-quantity decision alongside LP. Log framing + source here when resolved. |
 
 ### 5.1 Grain map (DEC-03)
 
@@ -88,11 +90,12 @@ The **Decision Support Dashboard (DSD)** — always "DSD", never "DSS" — repla
 | Fact | Principal | **System of record (loaded)** | Demoted to cross-check (not loaded) | Dedup natural key* |
 |---|---|---|---|---|
 | Sales | Unilever | SSIS `RAW DATA` sheet | `INVOICE REG`, `SALES PER CUSTOMER` (same txns, other views) | invoice/reference (confirm) |
-| Sales | Del Monte | Monthly Sales Register (vocab A/B/C) | Daily reports, summary echoes | `Invoice Num` (+ principal, region) |
+| Sales | Del Monte | Monthly Sales Register (vocab A/B/C) | Daily reports (`daily_sales_report` — different `_doc_type`, same `_sheet_role`, see DEC-07), summary echoes | `Invoice Num` (+ principal, region) |
 | Sales Return | both | Sales Return files; RMR **`GS` + `BO` split** | RMR **`ONE PAGER`** (= GS ∪ BO) | `Return Slip #` / `Invoice Num` |
 | Purchase | both | Purchases / Purchase Order files | — | `Invoice Num` (`BILL/…`) / PO ref |
 | Inventory | both | Inventory Sign-Off | SSIS `INVENTORY` / `SOH` echoes | SKU code + snapshot date |
 | Sell Out | Del Monte | Sell Out files | SSIS `SALES PER CUSTOMER` (different view) | category + period |
+| Unilever SKU Demand | Unilever | `UnileverLaUnionSalesperSKU…` (sole source) | — | `sku_code` + `calendar_month` |
 
 \* Extract QC runs a uniqueness test to confirm the true key; default to the composite shown until proven otherwise. Note the key's *column name* drifts by layout (`Invoice Num` vs `REFERENCE #` vs `REFNBR`) — canonicalized in Transform, not Extract.
 
@@ -144,7 +147,7 @@ Each staged table keeps **raw column names** (no renaming) plus these provenance
 | `_principal` | `unilever` / `delmonte` / `ambiguous` (from filename + REFNBR/REFERENCE # prefix) |
 | `_region` | `pangasinan` / `ilocos` / `la_union` (from filename/sheet tokens) |
 | `_period` | `YYYY-MM` |
-| `_doc_type` | `sales_register` / `purchases` / `sales_return` / `sell_out` / `inventory` / `rmr_gs_bo` / `ssis_summary` / `unilever_sku` |
+| `_doc_type` | `sales_register` / `daily_sales_report` / `purchase_order` / `sales_return` / `sell_out` / `inventory_sign_off` / `rmr_gs_bo` / `ssis_summary` / `unilever_sku` — canonical per DEC-07 |
 | `_sheet_role` | `data` / `raw_data` / `per_customer_summary` / `invoice_reg` / `one_pager` / `scratch` |
 | `_grain` | detected: `invoice` / `sku` / `category` / `summary` |
 
@@ -163,13 +166,35 @@ Rename/map columns · resolve vocab A/B/C to canonical fields · dedup or choose
 ## 7. Downstream (placeholders — expand later)
 
 - **Transform:** apply `column_maps`/`alias_tables` to map A/B/C → canonical schema; dedup and apply DEC-04 source-of-truth; resolve DEC-03 grain per principal; conform to dimensions; standardize discount labels, regions, doc-type prefixes.
+  - **Remaining gaps blocking a safe run (2026-07):**
+    - ~~(1) `doc_type` naming mismatch across config layers~~ — **CLOSED.** DEC-07 applied: `source_of_truth.yaml` and `column_maps/*.yaml` now use Extract's real staged `_doc_type` values exactly; `tests/test_transform_config.py` gates against regressions in either direction.
+    - ~~(2) no column maps for `daily_sales_report` / `rmr_gs_bo`~~ — **CLOSED.** Both written from real `staging/_manifest.json` evidence. `daily_sales_report` turned out to have two distinct sheet shapes (per-day transactional, leaner than Sales Register vocab A; one SCHEDULE rollup/workbook) — documented in the map file itself.
+    - (3) **Still open:** no Extract driver exists for `ssis_summary` (~60 workbooks) even though DEC-04 names its `RAW DATA` sheet as Unilever's sales system-of-record — either the driver is built or DEC-04 is formally amended, nothing in between. Team decision, not yet made.
+    - (4) **Still open:** `transform.py` and `granularity.py` were written ahead of the Extract review checkpoint and require line-by-line reconciliation against §4 and §5.2 before first run — the doc_type-vocabulary fix above is necessary but not sufficient; the actual transform/dedup/grain logic itself is unreviewed.
+  - **Transform QC gate (must pass before Load):** 0 config lookup errors; every staged sheet accounted for (promoted / demoted / rejected-with-reason — zero silent skips); dedup uniqueness tests pass; row counts reconcile to Extract QC totals; deterministic re-run.
 - **Load / Warehouse:** Supabase/Postgres. Transaction mart (invoice grain) + product mart (SKU grain) per DEC-02. Idempotent upserts on natural keys; money `NUMERIC(14,2)`; codes TEXT.
+  - **Gating rule:** Supabase project setup, DDL (`schema.sql`), and `Date_Dimension` seeding are **parallel-safe** and may proceed now — they depend only on the schema, not on Transform. The Load run itself is **hard-gated** on the Transform QC gate above; running Load first would crash on unmapped doc_types or persist misaligned data. Load evidence required: idempotency proof (second run inserts 0 rows), FK integrity, and a spot-check provenance walk-back curated → staging → source cell.
 - **Analytics:** ABC/Pareto → SARIMA (statsmodels) → safety stock & ROP → LP optimization (PuLP, w₁=0.45, w₂=0.35, w₃=0.20). Results stored as `Forecast_Result`, `LP_Recommendation`.
 - **Serving:** FastAPI backend, Next.js + Tailwind dashboard.
 
 ---
 
 ## 8. Status & change log
-- **Now:** DEC-03 (grain) and DEC-04 (source-of-truth) **closed** — see §5.1 / §5.2. Discovery/profiling complete. Extract code = TODO stubs → building Extract to the §6 contract next.
-- **No open blockers for Extract.** Extract stages faithfully and tags `_grain` / `_sheet_role` / `_principal`; DEC-03 and DEC-04 are consumed by Transform/Load, not Extract — so it can be built now and those decisions applied at the Transform boundary.
-- Still to confirm later: **DEC-02** (two-marts model) and **DEC-06** (SCD Type 1) move PROPOSED → DECIDED when Transform/Load work begins.
+
+### Current status (2026-07)
+- **Extract: DONE and verified.** Full corpus staged (161 files / 72,046 rows across 6 document families), 49/49 tests, checksum-verified, byte-identical determinism, 0 unresolved rejects. QC artifacts: `staging/_extract_qc.md` + HTML review viewer.
+- **Transform: config vocabulary fixed (DEC-07); pipeline logic still NOT safe to run.** The doc_type naming mismatch and the two missing column maps are closed (see §7). Still blocking: no `ssis_summary` extractor (team decision pending), and `transform.py`/`granularity.py` still need line-by-line reconciliation against §4/§5.2 before a first real run.
+- **Load: written, never run against a live DB.** Hard-gated on the Transform QC gate; Supabase setup itself is parallel-safe and proceeding.
+- **Analytics / backend:** ABC, SARIMA, LP, and FastAPI scaffolding are code-complete-looking but **unverified end-to-end** — none has run against real staged/loaded data. Router files are stubs (no endpoint logic yet).
+- **Process note:** Transform work proceeded past the Extract review checkpoint. Recorded here not to assign fault but because the doc_type drift it caused (DEC-07) is exactly the failure class the checkpoint exists to catch — checkpoints are reaffirmed as blocking for all future stage transitions.
+
+### Change log
+- **2026-07 (later):** DEC-07 applied — `source_of_truth.yaml` doc_type labels and `column_maps/*.yaml` filenames renamed to match Extract's real staged tags exactly; added the previously-missing `sales_unilever_sku_demand` fact entry; introduced `cross_check_doc_types` (fixes the same drift class for `daily_sales_report` and the `ssis_summary` cross-check references under Inventory/Sell Out); added `column_maps/daily_sales_report.yaml` and `column_maps/rmr_gs_bo.yaml`, both evidence-based from real staged output; added `tests/test_transform_config.py` as a permanent regression gate.
+- **2026-07:** Added DEC-07 (canonical doc_type vocabulary — DECIDED) and DEC-08 (EOQ — OPEN pending verification of the actual panel requirement; not present in any scribe's notes on record). Expanded §7 Transform/Load placeholders with known gaps, Transform QC gate, and Load gating rule. Updated status to reflect Extract completion.
+- **2025-07:** DEC-03 (grain) and DEC-04 (source-of-truth) closed — see §5.1 / §5.2.
+
+### Still open
+- **DEC-02** (two-marts model) and **DEC-06** (SCD Type 1): move PROPOSED → DECIDED as Transform/Load work formally begins.
+- **DEC-08** (EOQ): verify the requirement's source before any model or manuscript change.
+- `ssis_summary` resolution: build the extractor or amend DEC-04 — a team decision, logged when made.
+- `transform.py` / `granularity.py` line-by-line reconciliation against §4/§5.2 (checklist T4) — not yet done.

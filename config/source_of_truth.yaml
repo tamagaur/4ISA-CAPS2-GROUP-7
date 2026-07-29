@@ -5,11 +5,19 @@
 # Transform filters staged tables against this map before dedup/grain work.
 #
 # doc_type here refers to the *refined* _doc_type tag Extract attaches
-# (see ARCHITECTURE.md §6.5), not the file-selection family.
+# (see ARCHITECTURE.md §6.5), not the file-selection family. Per DEC-07,
+# these must be Extract's actual staged _doc_type values, verified
+# directly against staging/_manifest.json — not a hand-picked label. The
+# canonical 7: sales_register, daily_sales_report, purchase_order,
+# inventory_sign_off, sell_out, rmr_gs_bo, unilever_sku (+ssis_summary,
+# not yet extracted — see T3, tracked separately, not a naming issue).
 
 sales:
   unilever:
-    doc_type: ssis_summary
+    doc_type: ssis_summary   # PENDING T3 — no Extract driver exists yet for this
+                              # doc_type (~60 workbooks). Do not treat this entry
+                              # as active until the driver is built or DEC-04 is
+                              # formally amended (team decision, see ARCHITECTURE.md §7).
     system_of_record_role: raw_data
     cross_check_roles: [invoice_reg, per_customer_summary]
     natural_key: [invoice_num]        # confirm against real data before trusting
@@ -17,7 +25,26 @@ sales:
     doc_type: sales_register
     system_of_record_role: data
     cross_check_roles: [scratch]
+    # daily_sales_report is a DIFFERENT _doc_type (not a _sheet_role), so
+    # cross_check_roles above can't catch it — both it and sales_register's
+    # per-day sheets carry _sheet_role="data". Listing it here explicitly
+    # so Transform's fact driver excludes it by _doc_type before any
+    # _sheet_role filtering, preventing a daily-vs-monthly double count.
+    # Its own column map exists (config/column_maps/daily_sales_report.yaml)
+    # so Transform can tag/report on it — it is never promoted to load.
+    cross_check_doc_types: [daily_sales_report]
     natural_key: [invoice_num, principal, region]
+
+sales_unilever_sku_demand:
+  unilever:
+    doc_type: unilever_sku
+    # Sole source for this fact (ARCHITECTURE.md §5.1, DEC-03) — no other
+    # sheet/doc_type competes for it, so there is nothing to cross-check.
+    system_of_record_role: data
+    cross_check_roles: []
+    natural_key: [sku_code, calendar_month]   # matches schema.sql's
+                                                # Unilever_SKU_Demand_Fact
+                                                # UNIQUE(sku_code, calendar_month)
 
 sales_return:
   both:
@@ -28,21 +55,32 @@ sales_return:
 
 purchase:
   both:
-    doc_type: purchases
+    doc_type: purchase_order   # DEC-07 fix: was "purchases", didn't match
+                                 # Extract's real _doc_type tag
     system_of_record_role: data
     cross_check_roles: []
     natural_key: [invoice_num]         # BILL/... prefix or PO ref
 
 inventory:
   both:
-    doc_type: inventory
+    doc_type: inventory_sign_off   # DEC-07 fix: was "inventory", didn't match
+                                     # Extract's real _doc_type tag
     system_of_record_role: data
-    cross_check_roles: [ssis_summary]  # INVENTORY / SOH echoes in SSIS
+    cross_check_roles: []
+    # ssis_summary is a different _doc_type, not a _sheet_role within this
+    # one — same class of bug DEC-07 fixed for daily_sales_report above;
+    # cross_check_roles can't express it, cross_check_doc_types can.
+    # PENDING T3 (no ssis_summary Extract driver exists yet).
+    cross_check_doc_types: [ssis_summary]
     natural_key: [sku_code, snapshot_date]
 
 sell_out:
   delmonte:
     doc_type: sell_out
     system_of_record_role: data
-    cross_check_roles: [ssis_summary]  # SALES PER CUSTOMER, different view
+    cross_check_roles: []
+    # Same as inventory above — SALES PER CUSTOMER lives in the
+    # ssis_summary doc_type, not as a sheet_role inside sell_out itself.
+    # PENDING T3.
+    cross_check_doc_types: [ssis_summary]
     natural_key: [category, period]

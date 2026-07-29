@@ -151,6 +151,14 @@ class SourceOfTruthRule:
     system_of_record_role: list[str]
     cross_check_roles: list[str]
     natural_key: list[str]
+    # Other _doc_type values (not _sheet_role values — cross_check_roles is
+    # scoped to roles *within* doc_type above) that are a demoted duplicate
+    # view of this same fact, e.g. daily_sales_report vs sales_register —
+    # both carry _sheet_role="data", so cross_check_roles can't express the
+    # distinction. NOT YET enforced by filter_source_of_truth (T4 scope,
+    # building the Transform driver) — parsed here so it isn't silently
+    # dropped by callers that read it directly off the rule.
+    cross_check_doc_types: list[str] = field(default_factory=list)
 
 
 def load_source_of_truth(fact: str, principal: str, config_dir: Path = DEFAULT_CONFIG_DIR) -> SourceOfTruthRule:
@@ -169,6 +177,7 @@ def load_source_of_truth(fact: str, principal: str, config_dir: Path = DEFAULT_C
         system_of_record_role=role,
         cross_check_roles=entry.get("cross_check_roles", []),
         natural_key=entry["natural_key"],
+        cross_check_doc_types=entry.get("cross_check_doc_types", []),
     )
 
 
