@@ -1,0 +1,91 @@
+.alerts-widget {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.alerts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.alerts-header h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #1a202c;
+  font-weight: 600;
+}
+
+.view-all-btn {
+  background: none;
+  border: none;
+  color: #718096;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.view-all-btn:hover {
+  color: #4a5568;
+}
+
+.alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.alert-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.alert-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.alert-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.alert-subtitle {
+  font-size: 0.75rem;
+  color: #a0aec0;
+}
+
+.alert-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.badge-red {
+  background-color: #fed7d7;
+  color: #c53030;
+}
+
+.badge-yellow {
+  background-color: #fefcbf;
+  color: #b7791f;
+}
+
+.badge-green {
+  background-color: #c6f6d5;
+  color: #2f855a;
+}
+
+.badge-default {
+  background-color: #edf2f7;
+  color: #4a5568;
+}

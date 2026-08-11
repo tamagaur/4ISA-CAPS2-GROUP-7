@@ -1,0 +1,126 @@
+/* Modal Overlay */
+.reorder-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: modalFadeIn 0.2s ease;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal Card */
+.reorder-modal-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  animation: modalSlideUp 0.25s ease;
+}
+
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Header */
+.reorder-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+}
+
+.reorder-modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0 0 0.3rem 0;
+}
+
+.reorder-modal-subtitle {
+  font-size: 0.75rem;
+  color: #718096;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.reorder-modal-close {
+  background: none;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.reorder-modal-close:hover {
+  color: #1a202c;
+  background-color: #f7fafc;
+}
+
+/* Data Grid */
+.reorder-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  row-gap: 1.5rem;
+  column-gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.reorder-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.reorder-grid-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #a0aec0;
+  text-transform: uppercase;
+}
+
+.reorder-grid-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+/* Footer Note */
+.reorder-modal-footer-note {
+  background-color: #f7fafc;
+  padding: 1rem 1.2rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: #718096;
+  line-height: 1.5;
+}
+
+/* Responsive */
+@media (max-width: 500px) {
+  .reorder-modal-card {
+    margin: 1rem;
+    padding: 1.5rem;
+  }
+}
