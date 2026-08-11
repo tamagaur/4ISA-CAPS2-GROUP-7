@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Search, Clock, X, RotateCcw, Tag, Filter } from 'lucide-react';
 import './ABCClassification.css';
 
 const mockABCData = [
@@ -28,9 +29,10 @@ const mockABCData = [
   { id: 24, sku: 'SKU-1155', product: 'Prune Juice 240ml', brand: 'Del Monte', cat: 'C', avgMo: 89, revPct: 0.3, status: 'IN STOCK' },
 ];
 
-// Helper to extract product name and weight
+// Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
-  const weightRegex = /\b(\d+(?:g|ml|L|kg))\b/i;
+  if (!product) return { name: '', weight: '' };
+  const weightRegex = /\b(\d+(?:\.\d+)?\s*(?:g|ml|l|kg|L|KG|ML|G))\b/;
   const match = product.match(weightRegex);
   if (match) {
     const weight = `(${match[1]})`;
@@ -54,11 +56,38 @@ const formatSKU = (sku) => {
 const ABCClassification = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [brandFilter, setBrandFilter] = useState('ALL');
+
+  const [isComboboxOpen, setIsComboboxOpen] = useState(false);
+  const [highlightedSKUId, setHighlightedSKUId] = useState(null);
+  const comboboxRef = useRef(null);
+
+  // Persistent Recently Searched SKUs
+  const [recentSearches, setRecentSearches] = useState(() => {
+    try {
+      const saved = localStorage.getItem('san2_recent_abc_searches');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Handle click outside combobox to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
+        setIsComboboxOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const catACount = mockABCData.filter(d => d.cat === 'A').length;
   const catBCount = mockABCData.filter(d => d.cat === 'B').length;
   const catCCount = mockABCData.filter(d => d.cat === 'C').length;
-  const totalCount = mockABCData.length;
+
+  const brandsList = ['ALL', ...Array.from(new Set(mockABCData.map(d => d.brand)))];
 
   const filteredData = useMemo(() => {
     return mockABCData.filter(item => {
@@ -67,9 +96,44 @@ const ABCClassification = () => {
         item.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.brand.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCat = categoryFilter === 'ALL' || item.cat === categoryFilter;
-      return matchesSearch && matchesCat;
+      const matchesBrand = brandFilter === 'ALL' || item.brand === brandFilter;
+      return matchesSearch && matchesCat && matchesBrand;
     });
-  }, [searchQuery, categoryFilter]);
+  }, [searchQuery, categoryFilter, brandFilter]);
+
+  const handleSelectSuggestion = (item) => {
+    setSearchQuery(item.sku);
+    setIsComboboxOpen(false);
+
+    // Save to recent searches
+    setRecentSearches(prev => {
+      const filtered = prev.filter(s => s.id !== item.id);
+      const updated = [item, ...filtered].slice(0, 5);
+      localStorage.setItem('san2_recent_abc_searches', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Scroll & Highlight row
+    setHighlightedSKUId(item.id);
+    setTimeout(() => {
+      const el = document.getElementById(`abc-row-${item.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 80);
+
+    setTimeout(() => {
+      setHighlightedSKUId(null);
+    }, 2000);
+  };
+
+  const hasActiveFilters = searchQuery !== '' || categoryFilter !== 'ALL' || brandFilter !== 'ALL';
+
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setCategoryFilter('ALL');
+    setBrandFilter('ALL');
+  };
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -94,7 +158,7 @@ const ABCClassification = () => {
       <div className="abc-content">
         {/* Page Header */}
         <div className="abc-page-header">
-          <h2 className="abc-page-title">A. B. C.</h2>
+          <h2 className="abc-page-title">ABC Classification</h2>
           <p className="abc-page-subtitle">
             Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue. Click a code to open its forecast.
           </p>
@@ -123,34 +187,189 @@ const ABCClassification = () => {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Searchable Combobox & Filters Bar */}
         <div className="abc-filters-row">
-          <div className="abc-search-wrapper">
-            <svg className="abc-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input
-              type="text"
-              placeholder="Search by product name, SKU, or brand..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="abc-search-input"
-            />
+          {/* Search Combobox */}
+          <div className="abc-combobox-container" ref={comboboxRef}>
+            <div className="abc-search-wrapper">
+              <Search className="abc-search-icon" size={16} />
+              <input
+                type="text"
+                placeholder="Search by product name, SKU, or brand..."
+                value={searchQuery}
+                onFocus={() => setIsComboboxOpen(true)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsComboboxOpen(true);
+                }}
+                className="abc-search-input"
+              />
+              {searchQuery && (
+                <button className="abc-input-clear-btn" onClick={() => setSearchQuery('')} title="Clear search">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Combobox Dropdown Panel */}
+            {isComboboxOpen && (
+              <div className="abc-combobox-dropdown">
+                {searchQuery.trim() !== '' ? (
+                  /* Live Suggestions */
+                  <div className="abc-combobox-section">
+                    <div className="abc-section-header">
+                      <span>SUGGESTIONS ({filteredData.length})</span>
+                    </div>
+                    {filteredData.length > 0 ? (
+                      filteredData.map((item) => (
+                        <div
+                          key={item.id}
+                          className="abc-suggestion-row"
+                          onClick={() => handleSelectSuggestion(item)}
+                        >
+                          <div className="abc-row-left">
+                            <span className="abc-row-sku">{formatSKU(item.sku)}</span>
+                            <span className="abc-row-brand">{item.brand}</span>
+                          </div>
+                          <div className="abc-row-middle">
+                            <span className="abc-row-product">{item.product}</span>
+                            <span className="abc-row-rev">{item.revPct}% of revenue</span>
+                          </div>
+                          <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="abc-no-suggestions">No matching products found.</div>
+                    )}
+                  </div>
+                ) : (
+                  /* Quick Access Panel */
+                  <div className="abc-combobox-default">
+                    {recentSearches.length > 0 && (
+                      <div className="abc-combobox-section">
+                        <div className="abc-section-header">
+                          <Clock size={12} />
+                          <span>RECENTLY SEARCHED</span>
+                        </div>
+                        {recentSearches.map((item) => (
+                          <div
+                            key={item.id}
+                            className="abc-suggestion-row"
+                            onClick={() => handleSelectSuggestion(item)}
+                          >
+                            <div className="abc-row-left">
+                              <span className="abc-row-sku">{formatSKU(item.sku)}</span>
+                              <span className="abc-row-brand">{item.brand}</span>
+                            </div>
+                            <div className="abc-row-middle">
+                              <span className="abc-row-product">{item.product}</span>
+                            </div>
+                            <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="abc-combobox-section">
+                      <div className="abc-section-header">
+                        <span>TOP ABC CLASSIFIED SKUS</span>
+                      </div>
+                      {filteredData.slice(0, 5).map((item) => (
+                        <div
+                          key={item.id}
+                          className="abc-suggestion-row"
+                          onClick={() => handleSelectSuggestion(item)}
+                        >
+                          <div className="abc-row-left">
+                            <span className="abc-row-sku">{formatSKU(item.sku)}</span>
+                            <span className="abc-row-brand">{item.brand}</span>
+                          </div>
+                          <div className="abc-row-middle">
+                            <span className="abc-row-product">{item.product}</span>
+                            <span className="abc-row-rev">{item.revPct}% revenue</span>
+                          </div>
+                          <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="abc-cat-toggle-group">
-            {['ALL', 'A', 'B', 'C'].map(cat => (
-              <button
-                key={cat}
-                className={`abc-cat-toggle-btn ${categoryFilter === cat ? 'active' : ''}`}
-                onClick={() => setCategoryFilter(cat)}
+          {/* Filter Controls Row */}
+          <div className="abc-filter-controls">
+            <div className="abc-filter-select-wrapper">
+              <span className="abc-filter-icon-label"><Tag size={12} /> Brand:</span>
+              <select
+                value={brandFilter}
+                onChange={(e) => setBrandFilter(e.target.value)}
               >
-                {cat === 'ALL' ? 'ALL' : `CAT ${cat}`}
-              </button>
-            ))}
+                {brandsList.map(b => (
+                  <option key={b} value={b}>{b === 'ALL' ? 'All Brands' : b}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="abc-cat-toggle-group">
+              {['ALL', 'A', 'B', 'C'].map(cat => (
+                <button
+                  key={cat}
+                  className={`abc-cat-toggle-btn ${categoryFilter === cat ? 'active' : ''}`}
+                  onClick={() => setCategoryFilter(cat)}
+                >
+                  {cat === 'ALL' ? 'ALL' : `CAT ${cat}`}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
+
+        {/* Active Filter Chips Bar */}
+        {hasActiveFilters && (
+          <div className="abc-active-chips-row">
+            <span className="abc-chips-label">
+              <Filter size={12} /> Active Filters:
+            </span>
+
+            {searchQuery && (
+              <span className="abc-active-chip">
+                Search: "{searchQuery}"
+                <button className="abc-chip-remove" onClick={() => setSearchQuery('')}>
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+
+            {brandFilter !== 'ALL' && (
+              <span className="abc-active-chip">
+                Brand: {brandFilter}
+                <button className="abc-chip-remove" onClick={() => setBrandFilter('ALL')}>
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+
+            {categoryFilter !== 'ALL' && (
+              <span className="abc-active-chip">
+                Category: CAT {categoryFilter}
+                <button className="abc-chip-remove" onClick={() => setCategoryFilter('ALL')}>
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+
+            <button
+              className="abc-clear-all-chips-btn"
+              onClick={handleClearFilters}
+              title="Reset all filters"
+            >
+              <RotateCcw size={12} />
+              Clear all filters
+            </button>
+          </div>
+        )}
 
         {/* Table */}
         <div className="abc-table-wrapper">
@@ -169,7 +388,11 @@ const ABCClassification = () => {
             </thead>
             <tbody>
               {filteredData.map((item, index) => (
-                <tr key={item.id}>
+                <tr
+                  key={item.id}
+                  id={`abc-row-${item.id}`}
+                  className={highlightedSKUId === item.id ? 'highlighted-row-flash' : ''}
+                >
                   <td className="abc-row-num">{index + 1}</td>
                   <td className="abc-sku-cell">{formatSKU(item.sku)}</td>
                   <td className="abc-product-cell">

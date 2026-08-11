@@ -1,11 +1,13 @@
 import React, { useMemo } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import KPICard from './KPICard';
 import { LineChartWidget, DonutChartWidget } from './Charts';
 import AlertsList from './AlertsList';
+import { COLORS } from '../theme/colors';
 import './Dashboard.css';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { selectedMonth, selectedYear } = useOutletContext() || { selectedMonth: 'Apr', selectedYear: '2026' };
 
   const reorderAlerts = [
@@ -51,37 +53,37 @@ const Dashboard = () => {
           <KPICard 
             title="TRAPPED CAPITAL" 
             value={dynamicKPIs.trappedCapital} 
-            subtext="+ 8.2% vs. baseline" 
-            subtextColor="#a0aec0" 
-            borderColor="#e53e3e"
+            subtext="↑ 8.2% vs. baseline" 
+            subtextColor={COLORS.critical} 
+            borderColor={COLORS.critical}
           />
           <KPICard 
             title="ACTIVE SKUS" 
             value="1,247" 
             subtext="187 Category A" 
-            subtextColor="#a0aec0" 
-            borderColor="#3182ce"
+            subtextColor="#718096" 
+            borderColor={COLORS.abcA}
           />
           <KPICard 
             title="SPOILAGE COST" 
             value={dynamicKPIs.spoilageCost} 
             subtext={`this month · ${dynamicKPIs.incidents} incidents`} 
-            subtextColor="#a0aec0" 
-            borderColor="#d69e2e"
+            subtextColor={COLORS.critical} 
+            borderColor={COLORS.warning}
           />
           <KPICard 
             title="STOCKOUT RATE" 
             value={dynamicKPIs.stockoutRate} 
             subtext="↓ from 4.8% baseline" 
-            subtextColor="#a0aec0" 
-            borderColor="#38a169"
+            subtextColor={COLORS.success} 
+            borderColor={COLORS.success}
           />
         </div>
 
         {/* Charts Section */}
         <div className="charts-grid">
           <div className="chart-large">
-            <LineChartWidget />
+            <LineChartWidget selectedMonth={selectedMonth} selectedYear={selectedYear} />
           </div>
           <div className="chart-small">
             <DonutChartWidget />
@@ -90,8 +92,16 @@ const Dashboard = () => {
 
         {/* Alerts Section */}
         <div className="alerts-grid">
-          <AlertsList title="Reorder alerts" alerts={reorderAlerts} />
-          <AlertsList title="Recent bad orders" alerts={badOrders} />
+          <AlertsList 
+            title="Reorder alerts" 
+            alerts={reorderAlerts} 
+            onViewAll={() => navigate('/reorder')}
+          />
+          <AlertsList 
+            title="Recent bad orders" 
+            alerts={badOrders} 
+            onViewAll={() => navigate('/bad-orders')}
+          />
         </div>
       </div>
     </div>

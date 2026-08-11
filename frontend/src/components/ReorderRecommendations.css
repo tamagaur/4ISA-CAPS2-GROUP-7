@@ -17,10 +17,9 @@
 }
 
 .reorder-page-title {
-  font-family: 'Brush Script MT', 'Dancing Script', cursive;
-  font-size: 2.4rem;
-  color: #e53e3e;
-  font-weight: normal;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a202c;
   margin: 0 0 0.3rem 0;
 }
 
@@ -108,9 +107,9 @@
 
 .reorder-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
   font-size: 0.78rem;
-  table-layout: fixed;
 }
 
 .reorder-table thead {
@@ -124,7 +123,7 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   color: #a0aec0;
-  white-space: normal;
+  white-space: nowrap;
   vertical-align: middle;
 }
 
@@ -140,23 +139,9 @@
 .reorder-table td {
   padding: 0.6rem 0.4rem;
   color: #4a5568;
-  white-space: normal;
   vertical-align: middle;
   text-align: center;
-  word-break: break-word;
 }
-
-/* Custom proportional widths and minimum widths for the 10 columns */
-.reorder-table th:nth-child(1), .reorder-table td:nth-child(1) { width: 10%; min-width: 90px; }
-.reorder-table th:nth-child(2), .reorder-table td:nth-child(2) { width: 8%; min-width: 80px; }
-.reorder-table th:nth-child(3), .reorder-table td:nth-child(3) { width: 18%; min-width: 150px; }
-.reorder-table th:nth-child(4), .reorder-table td:nth-child(4) { width: 6%; min-width: 60px; }
-.reorder-table th:nth-child(5), .reorder-table td:nth-child(5) { width: 8%; min-width: 80px; }
-.reorder-table th:nth-child(6), .reorder-table td:nth-child(6) { width: 8%; min-width: 80px; }
-.reorder-table th:nth-child(7), .reorder-table td:nth-child(7) { width: 9%; min-width: 90px; }
-.reorder-table th:nth-child(8), .reorder-table td:nth-child(8) { width: 9%; min-width: 80px; }
-.reorder-table th:nth-child(9), .reorder-table td:nth-child(9) { width: 9%; min-width: 80px; }
-.reorder-table th:nth-child(10), .reorder-table td:nth-child(10) { width: 15%; min-width: 180px; }
 
 .reorder-sku-cell {
   color: #3182ce;
@@ -175,18 +160,20 @@
 }
 
 .reorder-stock-cell {
-  color: #e53e3e;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .reorder-qty-cell {
   font-weight: 700;
   color: #1a202c;
+  white-space: nowrap;
 }
 
 .reorder-cost-cell {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Urgency Badges */
@@ -198,6 +185,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .badge-critical {
@@ -331,22 +319,17 @@
 }
 
 /* Responsive */
-@media (max-width: 1200px) {
+@media (max-width: 1300px) {
+  .reorder-content {
+    padding: 0 1.5rem 1.5rem 1.5rem;
+  }
   .reorder-summary-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 768px) {
-  .reorder-content {
-    padding: 0 1.5rem 1.5rem 1.5rem;
-  }
-  
+@media (max-width: 640px) {
   .reorder-summary-grid {
     grid-template-columns: 1fr;
-  }
-
-  .reorder-table-wrapper {
-    overflow-x: auto;
   }
 }

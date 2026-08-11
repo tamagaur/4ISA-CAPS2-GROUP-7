@@ -1,5 +1,5 @@
-import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Login from './Login';
 import DashboardLayout from './components/DashboardLayout';
 import Dashboard from './components/Dashboard';
@@ -12,9 +12,32 @@ import BadOrders from './components/BadOrders';
 import DataUpload from './components/DataUpload';
 import './App.css';
 
+const routeTitles = {
+  '/login': 'SAN2 | Login',
+  '/': 'SAN2 | Dashboard',
+  '/sku-management': 'SAN2 | SKU Management',
+  '/abc': 'SAN2 | ABC Classification',
+  '/forecast': 'SAN2 | SKU Forecast',
+  '/reorder': 'SAN2 | Reorder Recommendations',
+  '/warehouse': 'SAN2 | Warehouse Movement',
+  '/bad-orders': 'SAN2 | Bad Orders',
+  '/upload': 'SAN2 | Data Upload',
+};
+
+function DynamicTitle() {
+  const location = useLocation();
+
+  useEffect(() => {
+    document.title = routeTitles[location.pathname] || 'SAN2 | Inventory DSS';
+  }, [location]);
+
+  return null;
+}
+
 function App() {
   return (
     <div className="App">
+      <DynamicTitle />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<DashboardLayout />}>

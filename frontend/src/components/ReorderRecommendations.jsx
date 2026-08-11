@@ -12,9 +12,10 @@ const mockReorderData = [
   { id: 6, sku: 'SKU-9234', brand: 'Del Monte', product: 'Sweet Corn 425g', rop: 140, stock: 102, orderQty: 160, urgency: 'PLANNED', estCost: '₱11,700', actionStatus: null, loadingAction: null },
 ];
 
-// Helper to extract product name and weight
+// Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
-  const weightRegex = /\b(\d+(?:g|ml|L|kg))\b/i;
+  if (!product) return { name: '', weight: '' };
+  const weightRegex = /\b(\d+(?:\.\d+)?\s*(?:g|ml|l|kg|L|KG|ML|G))\b/;
   const match = product.match(weightRegex);
   if (match) {
     const weight = `(${match[1]})`;
@@ -103,7 +104,7 @@ const ReorderRecommendations = () => {
         {/* Page Header */}
         <div className="reorder-page-header">
           <h2 className="reorder-page-title">
-            Reorder recommendations
+            Reorder Recommendations
           </h2>
           <p className="reorder-page-subtitle">
             LP-optimized purchase quantities for Category A SKUs. Minimizes total inventory cost while preventing stockouts.
@@ -179,7 +180,7 @@ const ReorderRecommendations = () => {
                     })()}
                   </td>
                   <td>{item.rop}</td>
-                  <td className="reorder-stock-cell">{item.stock}</td>
+                  <td className="reorder-stock-cell" style={{ color: item.stock < item.rop * 0.5 ? '#e53e3e' : item.stock < item.rop ? '#d69e2e' : '#4a5568' }}>{item.stock}</td>
                   <td className="reorder-qty-cell">{item.orderQty}</td>
                   <td>
                     <span className={getUrgencyBadge(item.urgency)}>

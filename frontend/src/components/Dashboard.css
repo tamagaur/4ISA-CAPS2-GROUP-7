@@ -25,10 +25,9 @@
 }
 
 .dashboard-header h2 span {
-  font-family: 'Brush Script MT', cursive;
-  color: #e53e3e;
-  font-weight: normal;
-  font-size: 2.6rem;
+  color: #c53030;
+  font-weight: 600;
+  font-size: 2rem;
 }
 
 .dashboard-header p {
@@ -55,7 +54,10 @@
   gap: 2rem;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1300px) {
+  .dashboard-content {
+    padding: 0 1.5rem 1.5rem 1.5rem;
+  }
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }

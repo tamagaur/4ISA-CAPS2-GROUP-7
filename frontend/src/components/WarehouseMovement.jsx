@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import { Search, Building, Calendar, Clock, X } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -11,9 +12,10 @@ import {
 } from 'recharts';
 import './WarehouseMovement.css';
 
-// Helper to extract product name and weight
+// Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
-  const weightRegex = /\b(\d+(?:g|ml|L|kg))\b/i;
+  if (!product) return { name: '', weight: '' };
+  const weightRegex = /\b(\d+(?:\.\d+)?\s*(?:g|ml|l|kg|L|KG|ML|G))\b/;
   const match = product.match(weightRegex);
   if (match) {
     const weight = `(${match[1]})`;
@@ -58,7 +60,7 @@ const mockMovementLog = [
   { id: 10, date: '2026-04-18', sku: 'SKU-4567', product: 'Spaghetti Sauce 500g', type: 'DISPATCHED', qty: 420, ref: 'SO-2026-0883', supplier: 'Del Monte Philippines' },
 ];
 
-// Mock data: SKU Inventory (matching Figma prototype)
+// Mock data: SKU Inventory
 const mockInventory = [
   { id: 1, sku: 'SKU-4721', brand: 'Unilever', product: 'Surf Powder Detergent 1kg', currentStock: 45, receivedMts: 1200, dispatchedMts: 1080, status: 'CRITICAL' },
   { id: 2, sku: 'SKU-8934', brand: 'Del Monte', product: 'Pineapple Juice 1L', currentStock: 12, receivedMts: 950, dispatchedMts: 1100, status: 'CRITICAL' },
@@ -67,14 +69,6 @@ const mockInventory = [
   { id: 5, sku: 'SKU-7642', brand: 'Unilever', product: 'Dove Shampoo 340ml', currentStock: 66, receivedMts: 880, dispatchedMts: 1010, status: 'LOW' },
   { id: 6, sku: 'SKU-9234', brand: 'Del Monte', product: 'Sweet Corn 425g', currentStock: 102, receivedMts: 1450, dispatchedMts: 1380, status: 'IN STOCK' },
 ];
-
-// Mock data: Capacity Monitor (matching Figma prototype)
-const warehouseCapacity = {
-  totalCapacity: 80000,
-  currentStock: 54400,
-  availableSpace: 25600,
-  utilizationPct: 68,
-};
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -103,8 +97,38 @@ const WarehouseMovement = () => {
   const [activeTab, setActiveTab] = useState('MOVEMENT_LOG');
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
+  const [selectedSupplier, setSelectedSupplier] = useState('ALL');
+  const [selectedDateRange, setSelectedDateRange] = useState('CURRENT_PERIOD');
+  const [isComboboxOpen, setIsComboboxOpen] = useState(false);
+  const [activeFilterChip, setActiveFilterChip] = useState(null);
+
+  const dropdownRef = useRef(null);
 
   const { selectedMonth, selectedYear } = useOutletContext() || { selectedMonth: 'Apr', selectedYear: '2026' };
+
+  // Persistent Recently Searched history (Max 5)
+  const [recentSearches, setRecentSearches] = useState(() => {
+    try {
+      const saved = localStorage.getItem('san2_recent_warehouse_searches');
+      return saved ? JSON.parse(saved) : [
+        { sku: 'SKU-4721', product: 'Surf Powder Detergent 1kg', ref: 'PO-2026-0412', supplier: 'Unilever Philippines' },
+        { sku: 'SKU-8934', product: 'Pineapple Juice 1L', ref: 'SO-2026-0891', supplier: 'Del Monte Philippines' }
+      ];
+    } catch {
+      return [];
+    }
+  });
+
+  // Close combobox on click outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsComboboxOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Calculate dynamic movement values based on selectedMonth/selectedYear
   const dynamicData = useMemo(() => {
@@ -136,17 +160,70 @@ const WarehouseMovement = () => {
     };
   }, [dynamicData]);
 
+  // Handle selecting a combobox suggestion item
+  const handleSelectSuggestion = (item) => {
+    setActiveFilterChip(item);
+    setSearchQuery(item.product || item.sku || item.ref);
+    setIsComboboxOpen(false);
+
+    // Save to recent searches (prepend, deduplicate, keep last 5)
+    const newEntry = {
+      sku: item.sku,
+      product: item.product,
+      ref: item.ref,
+      supplier: item.supplier
+    };
+    const updated = [newEntry, ...recentSearches.filter(s => s.sku !== item.sku || s.ref !== item.ref)].slice(0, 5);
+    setRecentSearches(updated);
+    localStorage.setItem('san2_recent_warehouse_searches', JSON.stringify(updated));
+  };
+
+  const handleClearFilterChip = () => {
+    setActiveFilterChip(null);
+    setSearchQuery('');
+  };
+
+  // List of suppliers
+  const suppliersList = ['ALL', ...Array.from(new Set(mockMovementLog.map(i => i.supplier)))];
+
+  // Combobox Live Suggestions matching search query
+  const searchSuggestions = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return mockMovementLog.filter(item => 
+      item.sku.toLowerCase().includes(q) ||
+      item.product.toLowerCase().includes(q) ||
+      item.ref.toLowerCase().includes(q) ||
+      item.supplier.toLowerCase().includes(q)
+    );
+  }, [searchQuery]);
+
   // Movement log filtering
   const filteredLog = useMemo(() => {
     return mockMovementLog.filter(item => {
-      const matchesSearch = searchQuery === '' ||
+      // Search / Chip filter
+      const matchesSearch = searchQuery.trim() === '' ||
         item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.ref.toLowerCase().includes(searchQuery.toLowerCase());
+
+      // Type filter (ALL / RECEIVED / DISPATCHED)
       const matchesType = typeFilter === 'ALL' || item.type === typeFilter;
-      return matchesSearch && matchesType;
+
+      // Supplier filter
+      const matchesSupplier = selectedSupplier === 'ALL' || item.supplier === selectedSupplier;
+
+      // Date Range filter
+      let matchesDate = true;
+      if (selectedDateRange === 'LAST_7_DAYS') {
+        matchesDate = item.date >= '2026-04-18';
+      } else if (selectedDateRange === 'LAST_30_DAYS') {
+        matchesDate = item.date >= '2026-04-01';
+      }
+
+      return matchesSearch && matchesType && matchesSupplier && matchesDate;
     });
-  }, [searchQuery, typeFilter]);
+  }, [searchQuery, typeFilter, selectedSupplier, selectedDateRange]);
 
   // Inventory status helpers
   const getInvStatusClass = (status) => {
@@ -173,9 +250,9 @@ const WarehouseMovement = () => {
           <span className="wm-card-desc">units sent out</span>
         </div>
         <div className="wm-summary-card wm-card-net">
-          <span className="wm-card-label">NET CHANGE</span>
-          <span className="wm-card-value">{(dynamicData.netChange >= 0 ? '+' : '') + dynamicData.netChange.toLocaleString()}</span>
-          <span className="wm-card-desc positive">↑ 13% MoM</span>
+          <span className="wm-card-label">NET MOVEMENT</span>
+          <span className="wm-card-value">+{dynamicData.netChange.toLocaleString()}</span>
+          <span className="wm-card-desc">stock delta</span>
         </div>
         <div className="wm-summary-card wm-card-turnover">
           <span className="wm-card-label">TURNOVER RATE</span>
@@ -204,51 +281,210 @@ const WarehouseMovement = () => {
                 tickFormatter={(val) => (val / 1000) + 'k'}
               />
               <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="received" name="received" fill="#38a169" radius={[2, 2, 0, 0]} barSize={28} />
-              <Bar dataKey="dispatched" name="dispatched" fill="#e53e3e" radius={[2, 2, 0, 0]} barSize={28} />
+              <Bar dataKey="received" name="received" fill="#2E9E5B" radius={[2, 2, 0, 0]} barSize={28} />
+              <Bar dataKey="dispatched" name="dispatched" fill="#14919B" radius={[2, 2, 0, 0]} barSize={28} />
             </BarChart>
           </ResponsiveContainer>
         </div>
         <div className="wm-chart-legend">
           <div className="wm-legend-item">
-            <span className="wm-legend-color" style={{ backgroundColor: '#38a169' }}></span>
+            <span className="wm-legend-color" style={{ backgroundColor: '#2E9E5B' }}></span>
             <span>received</span>
           </div>
           <div className="wm-legend-item">
-            <span className="wm-legend-color" style={{ backgroundColor: '#e53e3e' }}></span>
+            <span className="wm-legend-color" style={{ backgroundColor: '#14919B' }}></span>
             <span>dispatched</span>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters Bar */}
       <div className="wm-filters-row">
-        <div className="wm-search-wrapper">
-          <svg className="wm-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-          <input
-            type="text"
-            placeholder="Search by SKU, product, or reference..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="wm-search-input"
-          />
+        {/* Search Combobox */}
+        <div className="wm-combobox-container" ref={dropdownRef}>
+          <div className="wm-search-wrapper">
+            <Search className="wm-search-icon" size={18} />
+            <input
+              type="text"
+              placeholder="Search by SKU, product, or reference..."
+              value={searchQuery}
+              onFocus={() => setIsComboboxOpen(true)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setIsComboboxOpen(true);
+                if (!e.target.value) setActiveFilterChip(null);
+              }}
+              className="wm-search-input"
+            />
+            {searchQuery && (
+              <button className="wm-input-clear-btn" onClick={handleClearFilterChip}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Combobox Panel */}
+          {isComboboxOpen && (
+            <div className="wm-combobox-dropdown">
+              {searchQuery.trim() !== '' ? (
+                /* Live Suggestions */
+                <div className="wm-combobox-section">
+                  <div className="wm-section-header">
+                    <span>SUGGESTIONS ({searchSuggestions.length})</span>
+                  </div>
+                  {searchSuggestions.length > 0 ? (
+                    searchSuggestions.map((item) => (
+                      <div 
+                        key={item.id} 
+                        className="wm-suggestion-row"
+                        onClick={() => handleSelectSuggestion(item)}
+                      >
+                        <div className="wm-row-left">
+                          <span className="wm-row-sku">{formatSKU(item.sku)}</span>
+                          <span className="wm-row-ref">{item.ref}</span>
+                        </div>
+                        <div className="wm-row-middle">
+                          <span className="wm-row-product">{item.product}</span>
+                          <span className="wm-row-supplier">{item.supplier}</span>
+                        </div>
+                        <span className={`wm-type-badge ${item.type === 'RECEIVED' ? 'wm-type-received' : 'wm-type-dispatched'}`}>
+                          {item.type}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="wm-no-suggestions">No matching products or SKU codes found.</div>
+                  )}
+                </div>
+              ) : (
+                /* Default Panel (Empty Search) */
+                <div className="wm-combobox-default">
+                  {recentSearches.length > 0 && (
+                    <div className="wm-combobox-section">
+                      <div className="wm-section-header">
+                        <Clock size={12} />
+                        <span>RECENTLY SEARCHED</span>
+                      </div>
+                      {recentSearches.map((item, idx) => (
+                        <div 
+                          key={idx} 
+                          className="wm-suggestion-row"
+                          onClick={() => handleSelectSuggestion(item)}
+                        >
+                          <div className="wm-row-left">
+                            <span className="wm-row-sku">{formatSKU(item.sku)}</span>
+                            {item.ref && <span className="wm-row-ref">{item.ref}</span>}
+                          </div>
+                          <div className="wm-row-middle">
+                            <span className="wm-row-product">{item.product}</span>
+                            {item.supplier && <span className="wm-row-supplier">{item.supplier}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="wm-combobox-section">
+                    <div className="wm-section-header">
+                      <span>RECENT MOVEMENT LOG ENTRIES</span>
+                    </div>
+                    {mockMovementLog.slice(0, 5).map((item) => (
+                      <div 
+                        key={item.id} 
+                        className="wm-suggestion-row"
+                        onClick={() => handleSelectSuggestion(item)}
+                      >
+                        <div className="wm-row-left">
+                          <span className="wm-row-sku">{formatSKU(item.sku)}</span>
+                          <span className="wm-row-ref">{item.ref}</span>
+                        </div>
+                        <div className="wm-row-middle">
+                          <span className="wm-row-product">{item.product}</span>
+                          <span className="wm-row-supplier">{item.supplier}</span>
+                        </div>
+                        <span className={`wm-type-badge ${item.type === 'RECEIVED' ? 'wm-type-received' : 'wm-type-dispatched'}`}>
+                          {item.type}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="wm-type-toggle-group">
-          {['ALL', 'RECEIVED', 'DISPATCHED'].map(type => (
-            <button
-              key={type}
-              className={`wm-type-toggle-btn ${typeFilter === type ? 'active' : ''}`}
-              onClick={() => setTypeFilter(type)}
+        {/* Filter Controls Row: Supplier & Date Range */}
+        <div className="wm-secondary-filters">
+          <div className="wm-filter-select-wrapper">
+            <span className="wm-filter-icon-label"><Building size={12} /> Supplier:</span>
+            <select 
+              value={selectedSupplier}
+              onChange={(e) => setSelectedSupplier(e.target.value)}
+              className="wm-select-input"
             >
-              {type}
-            </button>
-          ))}
+              {suppliersList.map(s => (
+                <option key={s} value={s}>{s === 'ALL' ? 'All Suppliers' : s}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="wm-filter-select-wrapper">
+            <span className="wm-filter-icon-label"><Calendar size={12} /> Range:</span>
+            <select 
+              value={selectedDateRange}
+              onChange={(e) => setSelectedDateRange(e.target.value)}
+              className="wm-select-input"
+            >
+              <option value="CURRENT_PERIOD">Current Period ({selectedMonth} {selectedYear})</option>
+              <option value="LAST_7_DAYS">Last 7 Days</option>
+              <option value="LAST_30_DAYS">Last 30 Days</option>
+              <option value="ALL">All Time</option>
+            </select>
+          </div>
+
+          {/* Type Toggle Buttons (ALL / RECEIVED / DISPATCHED) */}
+          <div className="wm-type-toggle-group">
+            {['ALL', 'RECEIVED', 'DISPATCHED'].map(type => (
+              <button
+                key={type}
+                className={`wm-type-toggle-btn ${typeFilter === type ? 'active' : ''}`}
+                onClick={() => setTypeFilter(type)}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Active Filter Chip Indicator */}
+      {(activeFilterChip || selectedSupplier !== 'ALL' || selectedDateRange !== 'CURRENT_PERIOD' || searchQuery) && (
+        <div className="wm-active-filter-bar">
+          <span className="wm-filter-chip-text">
+            Filtering by: {activeFilterChip ? (
+              <strong>{activeFilterChip.product} ({formatSKU(activeFilterChip.sku)})</strong>
+            ) : searchQuery ? (
+              <strong>"{searchQuery}"</strong>
+            ) : null}
+            {selectedSupplier !== 'ALL' && <span> · Supplier: <strong>{selectedSupplier}</strong></span>}
+            {selectedDateRange !== 'CURRENT_PERIOD' && <span> · Range: <strong>{selectedDateRange.replace('_', ' ')}</strong></span>}
+          </span>
+
+          <button 
+            className="wm-clear-all-chip-btn"
+            onClick={() => {
+              setActiveFilterChip(null);
+              setSearchQuery('');
+              setSelectedSupplier('ALL');
+              setSelectedDateRange('CURRENT_PERIOD');
+              setTypeFilter('ALL');
+            }}
+          >
+            <X size={12} /> Clear filter
+          </button>
+        </div>
+      )}
 
       {/* Movement Log Table */}
       <div className="wm-table-wrapper">
@@ -305,185 +541,160 @@ const WarehouseMovement = () => {
     </>
   );
 
-  const renderSKUInventoryTab = () => (
-    <>
-      {/* Same KPI Cards as Movement Log */}
-      <div className="wm-summary-grid">
-        <div className="wm-summary-card wm-card-received">
-          <span className="wm-card-label">RECEIVED</span>
-          <span className="wm-card-value">{dynamicData.received.toLocaleString()}</span>
-          <span className="wm-card-desc">units this month</span>
-        </div>
-        <div className="wm-summary-card wm-card-dispatched">
-          <span className="wm-card-label">DISPATCHED</span>
-          <span className="wm-card-value">{dynamicData.dispatched.toLocaleString()}</span>
-          <span className="wm-card-desc">units sent out</span>
-        </div>
-        <div className="wm-summary-card wm-card-net">
-          <span className="wm-card-label">NET CHANGE</span>
-          <span className="wm-card-value">{(dynamicData.netChange >= 0 ? '+' : '') + dynamicData.netChange.toLocaleString()}</span>
-          <span className="wm-card-desc positive">↑ 13% MoM</span>
-        </div>
-        <div className="wm-summary-card wm-card-turnover">
-          <span className="wm-card-label">TURNOVER RATE</span>
-          <span className="wm-card-value">{dynamicData.turnover}×</span>
-          <span className="wm-card-desc">cycles / month</span>
-        </div>
-      </div>
+  const renderInventoryTab = () => {
+    const totalSKUs = mockInventory.length;
+    const inStockCount = mockInventory.filter(i => i.status === 'IN STOCK').length;
+    const lowStockCount = mockInventory.filter(i => i.status === 'LOW').length;
+    const criticalCount = mockInventory.filter(i => i.status === 'CRITICAL').length;
 
-      {/* Section Header */}
-      <div className="wm-section-header">
-        <h3 className="wm-section-title">Current SKU Inventory Levels</h3>
-        <p className="wm-section-subtitle">Stock levels reflect last order deductions and recent movements.</p>
-      </div>
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div className="wm-inventory-grid">
+          <div className="wm-inv-card wm-inv-total">
+            <span className="wm-card-label">TOTAL MONITORED SKUS</span>
+            <span className="wm-card-value">{totalSKUs}</span>
+            <span className="wm-card-desc">active inventory items</span>
+          </div>
+          <div className="wm-inv-card wm-inv-instock">
+            <span className="wm-card-label">IN STOCK</span>
+            <span className="wm-card-value">{inStockCount}</span>
+            <span className="wm-card-desc">healthy inventory level</span>
+          </div>
+          <div className="wm-inv-card wm-inv-low">
+            <span className="wm-card-label">LOW STOCK</span>
+            <span className="wm-card-value">{lowStockCount}</span>
+            <span className="wm-card-desc">nearing reorder point</span>
+          </div>
+          <div className="wm-inv-card wm-inv-out">
+            <span className="wm-card-label">CRITICAL REORDER</span>
+            <span className="wm-card-value">{criticalCount}</span>
+            <span className="wm-card-desc">requires immediate action</span>
+          </div>
+        </div>
 
-      {/* Inventory Table */}
-      <div className="wm-table-wrapper">
-        <table className="wm-table">
-          <thead>
-            <tr>
-              <th>SKU</th>
-              <th>BRAND</th>
-              <th>PRODUCT</th>
-              <th>CURRENT STOCK</th>
-              <th>RECEIVED (MTS)</th>
-              <th>DISPATCHED (MTS)</th>
-              <th>STATUS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {mockInventory.map((item) => (
-              <tr key={item.id}>
-                <td className="wm-sku-cell">{formatSKU(item.sku)}</td>
-                <td>{item.brand}</td>
-                <td className="wm-product-cell">
-                  {(() => {
-                    const { name, weight } = parseProductAndWeight(item.product);
-                    return (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <span className="wm-product-name">{name}</span>
-                        {weight && (
-                          <span className="wm-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
-                            {weight}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </td>
-                <td className="wm-qty-cell">{item.currentStock}</td>
-                <td className="wm-qty-cell">{item.receivedMts.toLocaleString()}</td>
-                <td className="wm-qty-cell">{item.dispatchedMts.toLocaleString()}</td>
-                <td>
-                  <span className={getInvStatusClass(item.status)}>{item.status}</span>
-                </td>
+        <div className="wm-table-wrapper">
+          <table className="wm-table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>BRAND</th>
+                <th>PRODUCT NAME</th>
+                <th>CURRENT STOCK</th>
+                <th>REC (MTS)</th>
+                <th>DISP (MTS)</th>
+                <th>STATUS</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-
-  const renderCapacityMonitorTab = () => (
-    <>
-      {/* Same KPI Cards as Movement Log */}
-      <div className="wm-summary-grid">
-        <div className="wm-summary-card wm-card-received">
-          <span className="wm-card-label">RECEIVED</span>
-          <span className="wm-card-value">{dynamicData.received.toLocaleString()}</span>
-          <span className="wm-card-desc">units this month</span>
-        </div>
-        <div className="wm-summary-card wm-card-dispatched">
-          <span className="wm-card-label">DISPATCHED</span>
-          <span className="wm-card-value">{dynamicData.dispatched.toLocaleString()}</span>
-          <span className="wm-card-desc">units sent out</span>
-        </div>
-        <div className="wm-summary-card wm-card-net">
-          <span className="wm-card-label">NET CHANGE</span>
-          <span className="wm-card-value">{(dynamicData.netChange >= 0 ? '+' : '') + dynamicData.netChange.toLocaleString()}</span>
-          <span className="wm-card-desc positive">↑ 13% MoM</span>
-        </div>
-        <div className="wm-summary-card wm-card-turnover">
-          <span className="wm-card-label">TURNOVER RATE</span>
-          <span className="wm-card-value">{dynamicData.turnover}×</span>
-          <span className="wm-card-desc">cycles / month</span>
-        </div>
-      </div>
-
-      {/* Capacity Utilization Section */}
-      <div className="wm-capacity-section">
-        <h3 className="wm-section-title">Warehouse capacity utilization</h3>
-
-        <div className="wm-capacity-bar-row">
-          <div className="wm-capacity-bar-area">
-            <div className="wm-cap-bar-large-wrapper">
-              <div
-                className="wm-cap-bar-large-fill"
-                style={{ width: `${dynamicCapacity.utilizationPct}%` }}
-              ></div>
-            </div>
-            <div className="wm-cap-bar-labels">
-              <span>0%</span>
-              <span>{dynamicCapacity.utilizationPct}% utilized</span>
-              <span>100%</span>
-            </div>
-          </div>
-          <div className="wm-capacity-pct-display">
-            <span className="wm-capacity-pct-value">{dynamicCapacity.utilizationPct}%</span>
-            <span className="wm-capacity-pct-label">of total capacity</span>
-          </div>
-        </div>
-
-        {/* Capacity Stats */}
-        <div className="wm-capacity-stats">
-          <div className="wm-cap-stat">
-            <span className="wm-card-label">TOTAL CAPACITY</span>
-            <span className="wm-cap-stat-value">{dynamicCapacity.totalCapacity.toLocaleString()}</span>
-            <span className="wm-card-desc">units</span>
-          </div>
-          <div className="wm-cap-stat">
-            <span className="wm-card-label">CURRENT STOCK</span>
-            <span className="wm-cap-stat-value">{dynamicCapacity.currentStock.toLocaleString()}</span>
-            <span className="wm-card-desc">units</span>
-          </div>
-          <div className="wm-cap-stat">
-            <span className="wm-card-label">AVAILABLE SPACE</span>
-            <span className="wm-cap-stat-value">{dynamicCapacity.availableSpace.toLocaleString()}</span>
-            <span className="wm-card-desc">units</span>
-          </div>
+            </thead>
+            <tbody>
+              {mockInventory.map((item) => (
+                <tr key={item.id}>
+                  <td className="wm-sku-cell">{formatSKU(item.sku)}</td>
+                  <td className="wm-brand-cell">{item.brand}</td>
+                  <td className="wm-product-cell">
+                    {(() => {
+                      const { name, weight } = parseProductAndWeight(item.product);
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <span className="wm-product-name">{name}</span>
+                          {weight && (
+                            <span className="wm-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
+                              {weight}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="wm-qty-cell">{item.currentStock.toLocaleString()}</td>
+                  <td className="wm-qty-cell">{item.receivedMts.toLocaleString()}</td>
+                  <td className="wm-qty-cell">{item.dispatchedMts.toLocaleString()}</td>
+                  <td>
+                    <span className={getInvStatusClass(item.status)}>
+                      {item.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-    </>
+    );
+  };
+
+  const renderCapacityTab = () => (
+    <div className="wm-capacity-section">
+      <h4 className="wm-chart-title">Warehouse Capacity Monitor <span>— Urdaneta Facility</span></h4>
+      
+      <div className="wm-capacity-bar-row">
+        <div className="wm-capacity-bar-area">
+          <div className="wm-cap-bar-large-wrapper">
+            <div 
+              className="wm-cap-bar-large-fill" 
+              style={{ width: `${dynamicCapacity.utilizationPct}%` }}
+            ></div>
+          </div>
+          <div className="wm-cap-bar-labels">
+            <span>0 units (0%)</span>
+            <span>{dynamicCapacity.totalCapacity.toLocaleString()} units (100%)</span>
+          </div>
+        </div>
+
+        <div className="wm-capacity-pct-display">
+          <span className="wm-capacity-pct-value">{dynamicCapacity.utilizationPct}%</span>
+          <span className="wm-capacity-pct-label">Capacity Utilized</span>
+        </div>
+      </div>
+
+      <div className="wm-capacity-stats">
+        <div className="wm-cap-stat">
+          <span className="wm-card-label">TOTAL CAPACITY</span>
+          <span className="wm-cap-stat-value">{dynamicCapacity.totalCapacity.toLocaleString()}</span>
+          <span className="wm-card-desc">units max volume</span>
+        </div>
+        <div className="wm-cap-stat">
+          <span className="wm-card-label">CURRENT OCCUPIED</span>
+          <span className="wm-cap-stat-value">{dynamicCapacity.currentStock.toLocaleString()}</span>
+          <span className="wm-card-desc">units currently stored</span>
+        </div>
+        <div className="wm-cap-stat">
+          <span className="wm-card-label">AVAILABLE SPACE</span>
+          <span className="wm-cap-stat-value" style={{ color: '#2E9E5B' }}>{dynamicCapacity.availableSpace.toLocaleString()}</span>
+          <span className="wm-card-desc">units free space remaining</span>
+        </div>
+      </div>
+    </div>
   );
 
   return (
     <div className="wm-page">
       <div className="wm-content">
-        {/* Page Header */}
-        <div className="wm-page-header">
-          <h2 className="wm-page-title">Stock in motion</h2>
-          <p className="wm-page-subtitle">
-            Track all stock coming in, going out, and current storage capacity across the Urdaneta warehouse.
+        {/* Header */}
+        <div className="wm-header">
+          <h2 className="wm-title">
+            Warehouse <span>movement</span>
+          </h2>
+          <p className="wm-subtitle">
+            Stock movement log, SKU inventory status & warehouse capacity for {selectedMonth} {selectedYear}
           </p>
         </div>
 
-        {/* Tabs */}
-        <div className="wm-tabs">
+        {/* Tab Navigation */}
+        <div className="wm-tabs-row">
           <button
-            className={`wm-tab ${activeTab === 'MOVEMENT_LOG' ? 'active' : ''}`}
+            className={`wm-tab-btn ${activeTab === 'MOVEMENT_LOG' ? 'active' : ''}`}
             onClick={() => setActiveTab('MOVEMENT_LOG')}
           >
             MOVEMENT LOG
           </button>
           <button
-            className={`wm-tab ${activeTab === 'SKU_INVENTORY' ? 'active' : ''}`}
+            className={`wm-tab-btn ${activeTab === 'SKU_INVENTORY' ? 'active' : ''}`}
             onClick={() => setActiveTab('SKU_INVENTORY')}
           >
             SKU INVENTORY
           </button>
           <button
-            className={`wm-tab ${activeTab === 'CAPACITY_MONITOR' ? 'active' : ''}`}
+            className={`wm-tab-btn ${activeTab === 'CAPACITY_MONITOR' ? 'active' : ''}`}
             onClick={() => setActiveTab('CAPACITY_MONITOR')}
           >
             CAPACITY MONITOR
@@ -492,8 +703,8 @@ const WarehouseMovement = () => {
 
         {/* Tab Content */}
         {activeTab === 'MOVEMENT_LOG' && renderMovementLogTab()}
-        {activeTab === 'SKU_INVENTORY' && renderSKUInventoryTab()}
-        {activeTab === 'CAPACITY_MONITOR' && renderCapacityMonitorTab()}
+        {activeTab === 'SKU_INVENTORY' && renderInventoryTab()}
+        {activeTab === 'CAPACITY_MONITOR' && renderCapacityTab()}
       </div>
     </div>
   );

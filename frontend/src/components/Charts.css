@@ -9,7 +9,17 @@
 }
 
 .chart-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.chart-title-area {
+  display: flex;
+  flex-direction: column;
 }
 
 .chart-header h4 {
@@ -23,6 +33,104 @@
   margin: 0;
   font-size: 0.75rem;
   color: #a0aec0;
+}
+
+/* Range Controls on Chart Card */
+.chart-range-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.range-preset-group {
+  display: flex;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.2rem;
+}
+
+.range-preset-btn {
+  padding: 0.28rem 0.7rem;
+  border: none;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.range-preset-btn:hover:not(.active) {
+  color: #1e293b;
+  background-color: #e2e8f0;
+}
+
+.range-preset-btn.active {
+  background-color: #ffffff;
+  color: #c53030;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.chart-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: #fef2f2;
+  color: #c53030;
+  border: 1px solid #fecaca;
+  border-radius: 16px;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(197, 48, 48, 0.08);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chart-reset-btn:hover:not(:disabled) {
+  background-color: #c53030;
+  color: #ffffff;
+  border-color: #c53030;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(197, 48, 48, 0.25);
+}
+
+.chart-reset-btn:disabled, .chart-reset-btn.disabled {
+  opacity: 0.5;
+  background-color: #f8fafc;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+.custom-range-pickers {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.custom-picker-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.chart-picker-select {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
 }
 
 .chart-container {
@@ -59,13 +167,12 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.8rem;
-  color: #4a5568;
+  font-size: 0.75rem;
+  color: #718096;
 }
 
 .legend-color {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  display: inline-block;
 }
