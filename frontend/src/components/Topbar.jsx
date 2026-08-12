@@ -18,19 +18,6 @@ const Topbar = ({
   realWorldYear = '2026'
 }) => {
   const location = useLocation();
-
-  const getPathBadge = () => {
-    const path = location.pathname;
-    if (path === '/sku-management') return '01';
-    if (path === '/abc') return '02';
-    if (path === '/forecast') return '03';
-    if (path === '/reorder') return '04';
-    if (path === '/warehouse') return '05';
-    if (path === '/bad-orders') return '06';
-    if (path === '/upload') return '07';
-    return '00';
-  };
-
   const isToday = pendingMonth === realWorldMonth && pendingYear === realWorldYear;
   const isForecastPage = location.pathname === '/forecast';
 
@@ -44,7 +31,6 @@ const Topbar = ({
             <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
         </button>
-        <span className="breadcrumb-path">§ {getPathBadge()} / 07</span>
         
         {!isForecastPage && (
           <div className="period-selector-wrapper">

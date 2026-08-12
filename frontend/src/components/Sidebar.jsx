@@ -15,14 +15,14 @@ import {
 import './Sidebar.css';
 
 const navItems = [
-  { name: 'Dashboard', icon: LayoutDashboard, path: '/', badge: '00' },
-  { name: 'SKU Management', icon: List, path: '/sku-management', badge: '01' },
-  { name: 'ABC Classification', icon: Layers, path: '/abc', badge: '02' },
-  { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast', badge: '03' },
-  { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder', badge: '04' },
-  { name: 'Warehouse Movement', icon: Box, path: '/warehouse', badge: '05' },
-  { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders', badge: '06' },
-  { name: 'Data Upload', icon: Upload, path: '/upload', badge: '07' },
+  { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
+  { name: 'SKU Management', icon: List, path: '/sku-management' },
+  { name: 'ABC Classification', icon: Layers, path: '/abc' },
+  { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
+  { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
+  { name: 'Warehouse Movement', icon: Box, path: '/warehouse' },
+  { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders' },
+  { name: 'Data Upload', icon: Upload, path: '/upload' },
 ];
 
 const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
@@ -84,7 +84,6 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
                   )}
                 </span>
               </div>
-              <span className="nav-badge">{item.badge}</span>
             </NavLink>
           ))}
         </nav>

@@ -187,6 +187,8 @@ const SKUForecast = () => {
     });
   }, [searchQuery, selectedCategory, selectedBrand]);
 
+  const hasActiveFilterOrSearch = selectedCategory !== 'ALL' || selectedBrand !== 'ALL' || searchQuery.trim() !== '';
+
   const pinnedSKUObjects = mockSKUDatabase.filter(sku => pinnedSKUs.includes(sku.code));
   const recentSKUObjects = mockSKUDatabase.filter(sku => recentSKUs.includes(sku.code) && !pinnedSKUs.includes(sku.code));
   const catASKUObjects = mockSKUDatabase.filter(
