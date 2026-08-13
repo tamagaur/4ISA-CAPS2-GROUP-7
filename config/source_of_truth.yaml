@@ -66,10 +66,12 @@ sales:
     # so Transform can tag/report on it — it is never promoted to load.
     cross_check_doc_types: [daily_sales_report]
     # "principal" is not a raw header anywhere - it only exists as the
-    # provenance column Extract attaches (_principal). apply_column_map
-    # never touches underscore-prefixed columns, so the natural key must
-    # reference the real post-mapping column name.
-    natural_key: [invoice_num, _principal, region]
+    # provenance column Extract attaches (_principal). transform.py's
+    # backfill_provenance_fields() (2026-08) copies _principal -> principal
+    # right after apply_column_map, before dedup_facts runs, so the natural
+    # key references the same bare "principal" schema.sql's Sales_Fact
+    # UNIQUE constraint uses - not the underscore-prefixed provenance name.
+    natural_key: [invoice_num, principal, region]
 
 sales_unilever_sku_demand:
   unilever:
@@ -87,7 +89,16 @@ sales_return:
     doc_type: rmr_gs_bo
     system_of_record_role: [gs, bo]    # GS + BO split IS the system of record
     cross_check_roles: [one_pager]     # ONE PAGER == GS union BO, never loaded
-    natural_key: [return_slip_num]     # falls back to invoice_num if blank
+    # Fixed 2026-08 (Transform reconciliation, story #16): matches
+    # schema.sql's SalesReturn_Fact UNIQUE constraint literally - the
+    # previous [return_slip_num] alone, plus a "falls back to invoice_num
+    # if blank" comment, described fallback semantics dedup_facts()never
+    # actually implements (it groups on the literal key columns as-is, no
+    # null-coalescing). The 5-tuple below already disambiguates real rows
+    # without needing that logic; dedup_facts()'s existing conflict-
+    # flagging (same key, differing amount -> both kept, reported, never
+    # silently dropped) is the safety net if that assumption is ever wrong.
+    natural_key: [return_slip_num, invoice_num, principal, region, return_type]
     # RESOLVED (was flagged BLOCKED against stale evidence — see below):
     # the ~500 __colN__ placeholders / header_confidence~0.001 / merged
     # title text repeated every 8 columns was a real Extract-stage bug
@@ -112,7 +123,12 @@ purchase:
                                  # Extract's real _doc_type tag
     system_of_record_role: data
     cross_check_roles: []
-    natural_key: [invoice_num]         # BILL/... prefix or PO ref
+    # Fixed 2026-08 (Transform reconciliation, story #16): matches
+    # schema.sql's Purchase_Fact UNIQUE(invoice_num, principal, region) -
+    # invoice_num alone would collide same-invoice-number purchases across
+    # different regions/principals. principal/region come from
+    # transform.backfill_provenance_fields() where no raw header maps them.
+    natural_key: [invoice_num, principal, region]  # BILL/... prefix or PO ref
 
 inventory:
   both:
@@ -137,7 +153,14 @@ inventory:
     #   - snapshot_date: filled from the _period provenance column
     #     (these exports are monthly, so _period is the honest proxy -
     #     there's no finer-grained date in the sheet itself).
-    natural_key: [sku_code, snapshot_date]
+    # Fixed 2026-08 (Transform reconciliation, story #16): matches
+    # schema.sql's Inventory_Fact UNIQUE(sku_code, snapshot_date, region) -
+    # without region, two real rows (same SKU/month, Pangasinan vs Ilocos)
+    # would collapse into one key and dedup_facts() would silently keep
+    # only one region's inventory count. inventory_sign_off has no raw
+    # "region" header (confirmed via column_maps/inventory_sign_off.yaml),
+    # so this comes from transform.backfill_provenance_fields() (_region).
+    natural_key: [sku_code, snapshot_date, region]
 
 sell_out:
   delmonte:
@@ -152,4 +175,8 @@ sell_out:
     # "category" - and there is no period cell in the sheet (see that
     # file's comment), only the _period provenance tag. Key must
     # reference the real post-mapping / provenance names.
-    natural_key: [category_path, _period]
+    # Fixed 2026-08 (Transform reconciliation, story #16): matches
+    # schema.sql's SellOut_Fact UNIQUE(category_path, region, _period) -
+    # sell_out has no raw "region" header either (same gap as inventory
+    # above), so region comes from backfill_provenance_fields() (_region).
+    natural_key: [category_path, region, _period]

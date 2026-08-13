@@ -21,7 +21,12 @@ from dataclasses import dataclass
 import pandas as pd
 
 REQUIRED_OUTPUT_COLUMNS = [
-    "invoice_num", "net_amount", "_principal", "_period", "_outlier_flag",
+    # "principal" (bare) not "_principal" — transform.backfill_provenance_fields
+    # (2026-08) now populates the real canonical column before clean_pipeline
+    # ever sees the frame; checking the stale provenance name here would let
+    # validate_output_schema "pass" on output actually missing the column
+    # every fact table's schema.sql NOT NULL constraint requires.
+    "invoice_num", "net_amount", "principal", "_period", "_outlier_flag",
 ]
 
 

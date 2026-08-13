@@ -31,8 +31,13 @@ def test_bo_rate_null_when_bo_units_missing():
 
 
 def test_branch_code_leading_zero_preserved():
+    # "principal" (bare), not "_principal" — clean_pipeline's docstring says
+    # it expects input that has already been through transform.transform_fact,
+    # which now backfills the bare column (2026-08, story #16 Step 1a) before
+    # this stage ever runs. _period stays underscore-prefixed - transform.py
+    # never renames it to a bare "period" field.
     df = pd.DataFrame({
-        "invoice_num": ["A"], "net_amount": [100.0], "_principal": ["delmonte"],
+        "invoice_num": ["A"], "net_amount": [100.0], "principal": ["delmonte"],
         "_period": ["2024-01"], "branch_code": [" 0032 "],
     })
     out, result = clean_pipeline(df)

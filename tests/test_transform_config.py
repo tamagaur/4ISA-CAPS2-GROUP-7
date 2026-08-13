@@ -68,12 +68,31 @@ def test_source_of_truth_doc_types_match_staged_doc_types_exactly():
     entry naming a doc_type Extract never actually produces (e.g. the old
     "purchases"/"inventory" labels) is itself a silent config error —
     load_column_map() would only fail once someone tries to transform that
-    fact, not at config-load time."""
+    fact, not at config-load time.
+
+    One exemption below — daily_sales_report: PERMANENT. Investigated
+    2026-08 (Transform reconciliation, story #16) — the current corpus
+    has zero files matching the true daily-report naming convention (see
+    the comment on DAILY_REPORT_RE in analytics/etl/extract/_shared.py).
+    This is a structural fact about the corpus, not an accident, so it
+    stays exempt permanently.
+
+    (unilever_sku and ssis_summary were both previously listed here as
+    temporary exemptions — "no Extract driver yet" for ssis_summary,
+    "source file not in our possession" for unilever_sku. Both are now
+    resolved: T3 shipped ssis_summary's driver, and the La Union SKU
+    file was delivered 2026-08 and stages 24,906 real rows every run —
+    removed rather than left as stale no-op exemptions. Mixing a
+    permanent structural fact with a temporary data-availability gap
+    under one exemption set would encode an accident as config truth,
+    the exact failure mode DEC-07 itself exists to catch — that's why
+    this docstring calls out daily_sales_report's permanence explicitly
+    rather than just listing names.)
+    """
     staged = _staged_doc_types()
     referenced = _known_doc_types_in_source_of_truth()
-    # ssis_summary is a known, intentionally-pending exception (T3, no
-    # Extract driver yet) — referenced in config but never staged.
-    unexpected = referenced - staged - {"ssis_summary"}
+    permanent_exemptions = {"daily_sales_report"}
+    unexpected = referenced - staged - permanent_exemptions
     assert not unexpected, (
         f"source_of_truth.yaml references doc_type(s) {sorted(unexpected)} that Extract "
         f"never actually staged — check for a naming drift (DEC-07)"

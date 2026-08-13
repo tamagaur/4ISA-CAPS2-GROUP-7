@@ -29,8 +29,21 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from analytics.etl._coerce import to_decimal
+from analytics.etl.extract._shared import MM_YYYY_RE
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_CONFIG_DIR = REPO_ROOT / "config"
+
+# config/column_maps/unilever_sku.yaml flags these four fields as raw
+# comma-separated / decimal-string TEXT that needs coercion before use
+# (its own "TRANSFORM TODO" comments) - apply_column_map only renames
+# headers, it never touches cell values. Kept as an explicit list (not
+# config-driven) because this is currently the only doc_type needing it;
+# revisit if a second doc_type needs the same treatment.
+UNILEVER_SKU_NUMERIC_COLUMNS = [
+    "sale_quantity_cases", "sale_quantity_pieces", "gsv", "net_amount_inc_tax",
+]
 
 PROVENANCE_COLUMNS = [
     "_src_file", "_src_sheet", "_header_row", "_row_ordinal", "_principal",
@@ -82,6 +95,54 @@ class ColumnMapReport:
     mapped: dict[str, str]           # raw header -> canonical field, actually applied
     unmapped_raw: list[str]          # raw headers present in df but not in the map
     unmapped_canonical: list[str]    # canonical fields in the map but absent from df
+    # 2026-08 fix (backlog story #11 regression): rows where more than one
+    # raw-vocab variant of the same canonical field was simultaneously
+    # non-null - see _coalesce_duplicate_columns. Empty in the normal case
+    # (one file/sheet at a time); a real conflict here means two different
+    # real values were fighting for the same canonical field on the same
+    # row, and the first (leftmost) one silently won - never expected in
+    # practice (each real file uses exactly one vocabulary), so any entry
+    # here is worth a human look, not something this function resolves.
+    duplicate_column_conflicts: list[dict] = field(default_factory=list)
+
+
+def _coalesce_duplicate_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
+    """When a batch spans more than one raw-header vocabulary for the same
+    canonical field (e.g. Sales Register's "Invoice Num"/"REFNBR"/
+    "REFERENCE #" all -> invoice_num), apply_column_map's rename produces
+    one real column per vocab variant with duplicate labels - each file
+    only ever populates its own vocabulary's column, leaving the others
+    NaN for that file's rows (pd.concat upstream produces the union of
+    all raw columns across files). Renaming them all to one canonical
+    name creates duplicate-labeled columns, which breaks any groupby/
+    dedup downstream (confirmed: real staging/sales_register/*.parquet
+    combined across 2023-2025 crashes dedup_facts with "Grouper for
+    'invoice_num' not 1-dimensional" before this fix).
+
+    Coalesces by taking, per row, the first non-null value across the
+    duplicate-named columns - since each row comes from exactly one
+    source file with exactly one active vocabulary, at most one of the
+    duplicate columns should ever be non-null for a given row. This is
+    resolving a rename-induced artifact, not guessing between two real
+    differing values - but if a row DOES have more than one non-null
+    value in the group (never observed, but not something to silently
+    paper over if it ever happens), that row is reported as a conflict,
+    matching dedup_facts' existing anti-fabrication pattern."""
+    if not df.columns.duplicated().any():
+        return df, []
+
+    out = df.copy()
+    conflicts: list[dict] = []
+    for dup_name in out.columns[out.columns.duplicated()].unique():
+        dup_block = out.loc[:, out.columns == dup_name]
+        non_null_counts = dup_block.notna().sum(axis=1)
+        conflicting = int((non_null_counts > 1).sum())
+        if conflicting:
+            conflicts.append({"canonical": dup_name, "conflicting_row_count": conflicting})
+        coalesced = dup_block.bfill(axis=1).iloc[:, 0]
+        out = out.loc[:, out.columns != dup_name]
+        out[dup_name] = coalesced
+    return out, conflicts
 
 
 def apply_column_map(
@@ -108,13 +169,89 @@ def apply_column_map(
             unmapped_raw.append(col)
 
     out = df.rename(columns=rename)
+    out, duplicate_column_conflicts = _coalesce_duplicate_columns(out)
     unmapped_canonical = [c for c in cmap.canonical_to_raw if c not in out.columns]
 
     report = ColumnMapReport(
         doc_type=doc_type, mapped=mapped,
         unmapped_raw=unmapped_raw, unmapped_canonical=unmapped_canonical,
+        duplicate_column_conflicts=duplicate_column_conflicts,
     )
     return out, report
+
+
+def backfill_provenance_fields(df: pd.DataFrame, fields: tuple[str, ...] = ("principal", "region")) -> pd.DataFrame:
+    """For each canonical field in `fields` not already produced by a
+    raw-header column map (e.g. inventory_sign_off/sell_out have no raw
+    "region" header at all — see config/source_of_truth.yaml's comments),
+    copy it from the matching provenance column Extract always attaches
+    (_<field>). Generalizes the existing snapshot_date-from-_period
+    pattern in transform_fact() below instead of special-casing per
+    doc_type.
+
+    Every fact table in analytics/db/schema.sql declares a bare
+    `principal TEXT NOT NULL` — Extract only ever produces `_principal`
+    (provenance), and load.py's upsert intentionally skips underscore-
+    prefixed columns, so without this the NOT NULL constraint fails at
+    Load. Must run after apply_column_map (so a real mapped column is
+    never overwritten) and before dedup_facts (natural keys reference the
+    bare field names)."""
+    out = df.copy()
+    for field_name in fields:
+        if field_name in out.columns:
+            continue
+        prov_col = f"_{field_name}"
+        if prov_col in out.columns:
+            out[field_name] = out[prov_col]
+    return out
+
+
+def reformat_calendar_month(df: pd.DataFrame, column: str = "calendar_month") -> pd.DataFrame:
+    """Unilever's raw Calendar Month values are 'MM.YYYY' (e.g. '10.2025'),
+    not the project's 'YYYY-MM' convention every other _period tag and
+    Unilever_SKU_Demand_Fact.calendar_month use (config/column_maps/
+    unilever_sku.yaml's own TRANSFORM TODO). Reuses
+    extract._shared.MM_YYYY_RE rather than redefining the pattern. A
+    value that doesn't match the expected shape is left as-is, not
+    guessed at — surfaced downstream as an unparseable date, not silently
+    dropped."""
+    if column not in df.columns:
+        return df
+    out = df.copy()
+
+    def _reformat(v):
+        if pd.isna(v):
+            return v
+        m = MM_YYYY_RE.match(str(v).strip())
+        if not m:
+            return v
+        month, year = m.groups()
+        return f"{year}-{month}"
+
+    out[column] = out[column].map(_reformat)
+    return out
+
+
+def coerce_numeric_columns(df: pd.DataFrame, columns: list[str]) -> tuple[pd.DataFrame, list[str]]:
+    """Parses each named column via the shared to_decimal() helper
+    (analytics.etl._coerce — the same comma-stripping/decimal-quantizing
+    logic Extract's checksum pass already uses, reused rather than
+    duplicated so the two stages can't drift apart on what "numeric"
+    means). Never drops a row: a cell that fails to parse becomes null
+    (not zero, not guessed), and that column's name is returned in the
+    second tuple element for the QC report — never a silent failure."""
+    out = df.copy()
+    unparseable_columns: list[str] = []
+    for col in columns:
+        if col not in out.columns:
+            continue
+        original_null = out[col].isna()
+        parsed = out[col].map(lambda v: None if pd.isna(v) else to_decimal(v))
+        newly_null = parsed.isna() & ~original_null
+        if newly_null.any():
+            unparseable_columns.append(col)
+        out[col] = parsed
+    return out, unparseable_columns
 
 
 def load_alias_table(name: str, config_dir: Path = DEFAULT_CONFIG_DIR) -> dict[str, str]:
@@ -238,11 +375,25 @@ def load_source_of_truth(fact: str, principal: str, config_dir: Path = DEFAULT_C
 def filter_source_of_truth(df: pd.DataFrame, fact: str, principal: str, config_dir: Path = DEFAULT_CONFIG_DIR) -> pd.DataFrame:
     """Keep only rows whose _sheet_role is the system of record for this
     fact/principal per DEC-04. Drops cross-check views (e.g. INVOICE REG
-    when RAW DATA is present) so downstream never double-counts."""
+    when RAW DATA is present) so downstream never double-counts.
+
+    Also drops cross_check_doc_types rows (2026-08, Transform
+    reconciliation story #16) — a different _doc_type that is a demoted
+    duplicate view of this same fact (e.g. daily_sales_report vs
+    sales_register, both carrying _sheet_role="data", so the role check
+    alone can't tell them apart). Previously parsed onto SourceOfTruthRule
+    but never enforced here, per that field's own docstring — closing
+    that gap now, before it's a live double-count instead of a documented
+    one (see the _shared.py note: no daily_sales_report rows exist in the
+    current corpus, so this had zero observable effect until now, but the
+    guard must exist for when real ones show up)."""
     rule = load_source_of_truth(fact, principal, config_dir)
     if "_sheet_role" not in df.columns:
         raise KeyError("DataFrame missing '_sheet_role' — did this come from Extract staging?")
-    return df[df["_sheet_role"].isin(rule.system_of_record_role)].copy()
+    out = df
+    if rule.cross_check_doc_types and "_doc_type" in out.columns:
+        out = out[~out["_doc_type"].isin(rule.cross_check_doc_types)]
+    return out[out["_sheet_role"].isin(rule.system_of_record_role)].copy()
 
 
 @dataclass
@@ -319,6 +470,7 @@ def transform_fact(
 
     sot_df = filter_source_of_truth(df, fact, principal, config_dir)
     mapped_df, map_report = apply_column_map(sot_df, rule.doc_type, config_dir)
+    mapped_df = backfill_provenance_fields(mapped_df)
 
     if discount_alias_table and "discount_rate_label" in mapped_df.columns:
         mapped_df = apply_alias_table(mapped_df, "discount_rate_label", discount_alias_table, config_dir)
@@ -329,11 +481,18 @@ def transform_fact(
         if "_period" in mapped_df.columns and "snapshot_date" not in mapped_df.columns:
             mapped_df["snapshot_date"] = mapped_df["_period"]
 
+    numeric_coercion_report = None
+    if rule.doc_type == "unilever_sku":
+        mapped_df = reformat_calendar_month(mapped_df)
+        mapped_df, unparseable_cols = coerce_numeric_columns(mapped_df, UNILEVER_SKU_NUMERIC_COLUMNS)
+        numeric_coercion_report = {"unparseable_columns": unparseable_cols}
+
     deduped_df, dedup_report = dedup_facts(mapped_df, rule.natural_key, amount_col=amount_col)
     return deduped_df, {
         "doc_type": rule.doc_type,
         "column_map": map_report,
         "sku_split": sku_split_report,
+        "numeric_coercion": numeric_coercion_report,
         "dedup": dedup_report,
         "rows_in": len(df),
         "rows_after_sot_filter": len(sot_df),

@@ -14,6 +14,10 @@ PyYAML==6.0.2
 scipy==1.14.1
 xlrd==2.0.1
 pyarrow==18.1.0
+lxml==6.1.1  # 2026-08: required by pandas.read_html for the Unilever La
+             # Union MHTML archive (profiling/reader.py) - was missing
+             # entirely; only discovered once a real MHTML file was
+             # available to test against. Release 2026-05, >7 days old.
 
 # --- Database ---
 SQLAlchemy==2.0.36

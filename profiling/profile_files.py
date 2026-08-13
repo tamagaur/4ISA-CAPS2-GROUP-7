@@ -68,13 +68,25 @@ DOC_TYPE_PATTERNS = [
     ("sales_register", re.compile(r"sale[s]?\s*regist(er)?|daily\s*sales\s*report", re.I)),
     ("ssis_summary", re.compile(r"ssis", re.I)),
     ("price_list", re.compile(r"pricelist|price\s*list", re.I)),
-    ("unilever_sku", re.compile(r"la.union.*sku|sku.*la.union", re.I)),
+    # Fixed 2026-08: the real delivered filename is
+    # "UnileverLaUnionSalesperSKU2023to2026.xls" - "La" and "Union" run
+    # together with zero characters between them. The original `la.union`
+    # required exactly one arbitrary character there (matches "La Union",
+    # "La.Union", etc. but not "LaUnion"), so this never matched the one
+    # real file it exists to detect until now - confirmed via
+    # infer_doc_type() returning "unknown" for it. `la[\s_]*union` covers
+    # zero-or-more spaces/underscores, a strict superset of realistic
+    # separator variants including the real no-separator case.
+    ("unilever_sku", re.compile(r"la[\s_]*union.*sku|sku.*la[\s_]*union", re.I)),
 ]
 
 REGION_PATTERNS = [
     ("pangasinan", re.compile(r"pangasinan|pang\b|pang\.", re.I)),
     ("ilocos", re.compile(r"ilocos", re.I)),
-    ("la_union", re.compile(r"la.union", re.I)),
+    # Fixed 2026-08: same root cause as DOC_TYPE_PATTERNS's unilever_sku
+    # entry above - the real filename has zero characters between "La"
+    # and "Union".
+    ("la_union", re.compile(r"la[\s_]*union", re.I)),
 ]
 
 

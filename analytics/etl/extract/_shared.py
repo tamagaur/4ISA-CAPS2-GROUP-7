@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -39,6 +39,8 @@ from profiling.profile_files import (
     sanitize_filename,
 )
 from profiling.reader import WorkbookRead, read_workbook
+
+from analytics.etl._coerce import MONEY_QUANT, NUMERIC_CELL_RE, to_decimal, to_number
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -84,11 +86,9 @@ QUANTITY_NAME_RE = re.compile(
     r"\bqty\b|quantity|\bcas\b|\bpcs\b|\bpkg\b|\bcases\b|\bpieces\b", re.I
 )
 
-NUMERIC_CELL_RE = re.compile(r"^-?[\d,]+\.?\d*$")
-
-# Row above the header is consumed as a checksum, not staged as data — see
-# ARCHITECTURE.md §6.4 step 6 / §6.6.
-MONEY_QUANT = Decimal("0.01")
+# NUMERIC_CELL_RE, MONEY_QUANT moved to analytics/etl/_coerce.py (2026-08,
+# shared with Transform — see that module's docstring). Re-imported above
+# rather than redefined here.
 
 
 def select_source_files(raw_dir: Path) -> list[Path]:
@@ -146,6 +146,17 @@ def infer_sheet_period(path: Path, sheet_name: str) -> str:
 
 
 DAILY_REPORT_RE = re.compile(r"daily\s*sales\s*report|daily\s*report", re.I)
+
+# Investigated 2026-08 (Transform reconciliation, story #16 prerequisite):
+# the current corpus has zero files matching the true daily-report naming
+# convention this regex targets ("DAILY SALES REPORT MM.DD.YYYY.xlsx" with
+# per-day sheets). The files under data/raw/Del Monte/DAILY REPORT - .../
+# are ordinary monthly Sales Register/RMR files someone filed under an
+# inconsistently-named folder — DAILY_REPORT_RE correctly does not match
+# their filenames, so daily_sales_report staging 0 rows in a real Extract
+# run is expected, permanent behavior given this corpus, not a driver bug.
+# Do not re-investigate this as a mystery; re-open only if a file matching
+# the real convention actually shows up in data/raw/.
 
 
 def refine_doc_type(path: Path, doc_type: str) -> str:
@@ -245,18 +256,6 @@ def classify_column(name: str, values: list) -> str:
     return "text"
 
 
-def _to_decimal(v) -> Decimal | None:
-    s = v.strip().replace(",", "") if isinstance(v, str) else str(v)
-    try:
-        d = Decimal(s)
-    except (InvalidOperation, ValueError):
-        return None
-    # Source currency is centavo-denominated; quantizing corrects float
-    # representation artifacts (e.g. 6619.859999999999 from openpyxl) back
-    # to the value's real precision rather than inventing new precision.
-    return d.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
-
-
 def _force_text(v):
     """str(v) for a float that's a whole number (e.g. Excel storing a bare
     SKU code as 9012345.0) would inject a spurious ".0" — never seen in
@@ -264,21 +263,6 @@ def _force_text(v):
     if isinstance(v, float) and v.is_integer():
         return str(int(v))
     return str(v).strip()
-
-
-def _to_number(v):
-    """Best-effort real int/float for kind="numeric" — handles both native
-    openpyxl numbers and comma-formatted numeric strings from MHTML/CSV
-    sources (e.g. "1.08", "154"). Returns the original value unchanged if
-    it isn't parseable (shouldn't happen given classify_column's own
-    numeric-string pre-check, but never fabricate on a surprise)."""
-    if not isinstance(v, str):
-        return v
-    s = v.strip().replace(",", "")
-    try:
-        return int(s) if re.fullmatch(r"-?\d+", s) else float(s)
-    except ValueError:
-        return v
 
 
 def _to_date(v):
@@ -303,7 +287,7 @@ def coerce_column(name: str, values: list) -> tuple[list, str]:
     kind = classify_column(name, values)
     non_blank = [v for v in values if not is_blank(v)]
 
-    if kind == "decimal" and any(_to_decimal(v) is None for v in non_blank):
+    if kind == "decimal" and any(to_decimal(v) is None for v in non_blank):
         kind = "text"
     elif kind == "date" and any(_to_date(v) is None for v in non_blank):
         kind = "text"
@@ -316,11 +300,11 @@ def coerce_column(name: str, values: list) -> tuple[list, str]:
         if kind == "text_code":
             out.append(_force_text(v))
         elif kind == "decimal":
-            out.append(_to_decimal(v))
+            out.append(to_decimal(v))
         elif kind == "date":
             out.append(_to_date(v))
         elif kind == "numeric":
-            out.append(_to_number(v))
+            out.append(to_number(v))
         else:
             out.append(_force_text(v))
     return out, kind

@@ -7,15 +7,28 @@ tests/etl/test_transform.py — Tests for analytics.etl.transform.
   test_dedup_collapses_true_duplicate
   test_dedup_flags_conflicting_amount_without_choosing
   test_missing_natural_key_column_raises
+  test_backfill_provenance_fields_copies_from_underscore_columns
+  test_backfill_provenance_fields_does_not_overwrite_real_column
+  test_filter_source_of_truth_drops_cross_check_doc_type
+  test_inventory_natural_key_no_longer_collapses_cross_region_rows
+  test_sell_out_natural_key_no_longer_collapses_cross_region_rows
+  test_purchase_natural_key_no_longer_collapses_cross_region_rows
+  test_coerce_numeric_columns_handles_commas_and_decimals
+  test_coerce_numeric_columns_flags_unparseable_without_dropping_row
+  test_reformat_calendar_month_converts_mm_dot_yyyy
+  test_reformat_calendar_month_leaves_unrecognized_value_untouched
 """
 import pandas as pd
 import pytest
 
 from analytics.etl.transform import (
     apply_column_map,
+    backfill_provenance_fields,
+    coerce_numeric_columns,
     dedup_facts,
     filter_source_of_truth,
     load_source_of_truth,
+    reformat_calendar_month,
     split_sku_description,
     transform_fact,
 )
@@ -120,3 +133,108 @@ def test_split_sku_description_separates_code_and_name():
     assert pd.isna(out["sku_code"].iloc[2])
     assert report.matched == 1
     assert report.unmatched == 2
+
+
+def test_backfill_provenance_fields_copies_from_underscore_columns():
+    df = pd.DataFrame({"_principal": ["delmonte"], "_region": ["ilocos"], "invoice_num": ["INV-1"]})
+    out = backfill_provenance_fields(df)
+    assert out["principal"].iloc[0] == "delmonte"
+    assert out["region"].iloc[0] == "ilocos"
+
+
+def test_backfill_provenance_fields_does_not_overwrite_real_column():
+    """A real mapped "region" column (e.g. from sales_register's "Area"
+    header) must win over the provenance tag, never be clobbered."""
+    df = pd.DataFrame({"_principal": ["delmonte"], "_region": ["ilocos"], "region": ["pangasinan"]})
+    out = backfill_provenance_fields(df)
+    assert out["region"].iloc[0] == "pangasinan"
+
+
+def test_filter_source_of_truth_drops_cross_check_doc_type():
+    """sales/delmonte's cross_check_doc_types: [daily_sales_report] must
+    be dropped even though daily_sales_report shares _sheet_role="data"
+    with sales_register (role alone can't distinguish them - DEC-07)."""
+    df = pd.DataFrame({
+        "invoice_num": ["INV-1", "INV-2"],
+        "_sheet_role": ["data", "data"],
+        "_doc_type": ["sales_register", "daily_sales_report"],
+    })
+    out = filter_source_of_truth(df, fact="sales", principal="delmonte")
+    assert len(out) == 1
+    assert out["_doc_type"].iloc[0] == "sales_register"
+
+
+def test_inventory_natural_key_no_longer_collapses_cross_region_rows():
+    """Fixed 2026-08: inventory's natural_key now includes region -
+    two real rows (same SKU/month, different region) must both survive
+    dedup instead of one being silently discarded."""
+    rule = load_source_of_truth("inventory", "both")
+    df = pd.DataFrame({
+        "sku_code": ["9DMR56831", "9DMR56831"],
+        "snapshot_date": ["2025-08", "2025-08"],
+        "region": ["pangasinan", "ilocos"],
+        "quantity_on_hand": [100.0, 50.0],
+    })
+    out, report = dedup_facts(df, rule.natural_key)
+    assert len(out) == 2
+    assert report.duplicate_groups == 0
+
+
+def test_sell_out_natural_key_no_longer_collapses_cross_region_rows():
+    rule = load_source_of_truth("sell_out", "delmonte")
+    df = pd.DataFrame({
+        "category_path": ["/ACE/BASE", "/ACE/BASE"],
+        "_period": ["2025-08", "2025-08"],
+        "region": ["pangasinan", "ilocos"],
+        "net_amount": [1000.0, 500.0],
+    })
+    out, report = dedup_facts(df, rule.natural_key)
+    assert len(out) == 2
+    assert report.duplicate_groups == 0
+
+
+def test_purchase_natural_key_no_longer_collapses_cross_region_rows():
+    rule = load_source_of_truth("purchase", "both")
+    df = pd.DataFrame({
+        "invoice_num": ["BILL/2025/001", "BILL/2025/001"],
+        "principal": ["delmonte", "delmonte"],
+        "region": ["pangasinan", "ilocos"],
+        "untaxed_amount": [1000.0, 500.0],
+    })
+    out, report = dedup_facts(df, rule.natural_key)
+    assert len(out) == 2
+    assert report.duplicate_groups == 0
+
+
+def test_coerce_numeric_columns_handles_commas_and_decimals():
+    df = pd.DataFrame({
+        "sale_quantity_pieces": ["24,190", "8,465"],
+        "gsv": ["6,711.21", "-422.58"],
+        "untouched": ["x", "y"],
+    })
+    out, unparseable = coerce_numeric_columns(df, ["sale_quantity_pieces", "gsv"])
+    assert float(out["sale_quantity_pieces"].iloc[0]) == 24190.0
+    assert float(out["gsv"].iloc[1]) == -422.58
+    assert unparseable == []
+    assert out["untouched"].iloc[0] == "x"  # column not in the coercion list, left alone
+
+
+def test_coerce_numeric_columns_flags_unparseable_without_dropping_row():
+    df = pd.DataFrame({"gsv": ["6,711.21", "not a number"]})
+    out, unparseable = coerce_numeric_columns(df, ["gsv"])
+    assert len(out) == 2  # row kept, never dropped
+    assert pd.isna(out["gsv"].iloc[1])  # unparseable cell -> null, not zero, not guessed
+    assert unparseable == ["gsv"]
+
+
+def test_reformat_calendar_month_converts_mm_dot_yyyy():
+    df = pd.DataFrame({"calendar_month": ["10.2025", "01.2026"]})
+    out = reformat_calendar_month(df)
+    assert list(out["calendar_month"]) == ["2025-10", "2026-01"]
+
+
+def test_reformat_calendar_month_leaves_unrecognized_value_untouched():
+    df = pd.DataFrame({"calendar_month": ["already-2025-10", None]})
+    out = reformat_calendar_month(df)
+    assert out["calendar_month"].iloc[0] == "already-2025-10"
+    assert pd.isna(out["calendar_month"].iloc[1])
