@@ -19,11 +19,13 @@
 
 calendar_month:
   - "Calendar\r\n  Month"
-  # TRANSFORM TODO: raw values are "MM.YYYY" (e.g. "10.2025", "01.2026"),
+  # RESOLVED (DEC-10): raw values are "MM.YYYY" (e.g. "10.2025", "01.2026"),
   # NOT "YYYY-MM" like the rest of the project's _period convention.
-  # Needs an explicit reformat step in transform.py before this can match
-  # Unilever_SKU_Demand_Fact.calendar_month's 'YYYY-MM' convention - do not
-  # assume it's already in the right shape.
+  # transform.reformat_calendar_month() now converts this (reusing the
+  # same MM_YYYY_RE pattern Extract's own row_periods_from_calendar_month()
+  # already applies to the internal _period provenance column), wired into
+  # transform_fact() for doc_type="unilever_sku" - do not assume the raw
+  # column-mapped value alone is already in the right shape.
 
 sku_code:
   - "Product"
@@ -47,19 +49,28 @@ pack_size:
   # Mapped literally per the header - not confirmed whether this means
   # "units per pack" or something else; do not assume it matches the pack
   # count implied by the product_name text (e.g. "24X50ML").
+  # DEC-09: transform.normalize_quantities() coerces this to numeric (its
+  # header doesn't match Extract's QUANTITY_NAME_RE, so Extract itself may
+  # leave it as text on MHTML-sourced rows) and uses it ONLY for the
+  # cases x pack_size QC cross-check against sale_quantity_pieces below -
+  # never as the source of quantity_sold itself.
 
 sale_quantity_cases:
   - "Sale Quantity in\r\n  Aggr.CS"
-  # TRANSFORM TODO: values are text with a decimal point (e.g. "20.04",
-  # "-422.58" - negatives are real, likely returns/adjustments, do not
-  # clamp to zero). Needs numeric coercion in transform.py.
+  # RESOLVED (DEC-09): comma/decimal coercion now lives in
+  # transform.normalize_quantities(). This column is used only as a QC
+  # cross-check (cases x pack_size vs. reported pieces) - it does NOT feed
+  # quantity_sold directly. See sale_quantity_pieces below for why.
 
 sale_quantity_pieces:
   - "Sale Quantity in\r\n  Aggr.PC"
-  # TRANSFORM TODO: values use comma thousands separators as TEXT (e.g.
-  # "24,190", "8,465") - a real type trap. Needs comma-stripping before
-  # numeric coercion; do not pass through pandas' default numeric parser
-  # without handling this first or it will silently fail or truncate.
+  # RESOLVED (DEC-09): transform.normalize_quantities() coerces the
+  # comma-formatted text and sets Unilever_SKU_Demand_Fact.quantity_sold
+  # directly from this column. Confirmed against real data: cases x
+  # pack_size agrees with this column only ~84% of the time, so the
+  # reported pieces figure - not the cases/pack_size derivation - is
+  # treated as the value of record. Disagreement is flagged in
+  # QuantityReconciliationReport for review, never silently resolved.
 
 gsv:
   - "GSV"

@@ -29,6 +29,8 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from analytics.etl.extract._shared import MM_YYYY_RE
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_CONFIG_DIR = REPO_ROOT / "config"
 
@@ -200,6 +202,151 @@ def split_sku_description(
 
 
 @dataclass
+class DateReformatReport:
+    input_rows: int
+    reformatted: int
+    unparsable: int
+
+
+def reformat_calendar_month(
+    df: pd.DataFrame, column: str = "calendar_month",
+) -> tuple[pd.DataFrame, DateReformatReport]:
+    """Reformats unilever_sku's raw 'MM.YYYY' calendar_month cells (e.g.
+    "01.2023") into the project's 'YYYY-MM' period-key convention
+    (DEC-10), matching Unilever_SKU_Demand_Fact.calendar_month's declared
+    format and natural key. Extract's own row_periods_from_calendar_month()
+    (extract/_shared.py) already parses this same raw value into the
+    internal _period provenance column per row — this reuses the identical
+    MM_YYYY_RE pattern rather than a second copy, but operates on the
+    visible, column-mapped business field instead.
+
+    A cell that doesn't match 'MM.YYYY' is left as null and counted, never
+    guessed (ARCHITECTURE.md principle #1)."""
+    out = df.copy()
+    if column not in out.columns:
+        return out, DateReformatReport(input_rows=len(out), reformatted=0, unparsable=0)
+
+    reformatted, unparsable = 0, 0
+    values = []
+    for v in out[column]:
+        if pd.isna(v):
+            values.append(pd.NA)
+            continue
+        m = MM_YYYY_RE.match(str(v).strip())
+        if m:
+            month, year = m.groups()
+            values.append(f"{year}-{month}")
+            reformatted += 1
+        else:
+            values.append(pd.NA)
+            unparsable += 1
+
+    out[column] = values
+    report = DateReformatReport(input_rows=len(out), reformatted=reformatted, unparsable=unparsable)
+    return out, report
+
+
+def _snapshot_date_from_period(period):
+    """Inventory_Fact.snapshot_date (DEC-10): these exports are monthly —
+    there is no real day-of-month anywhere in the source, so this returns
+    a documented SYNTHETIC first-of-month marker, not a reported date.
+    Extract's explicit "unknown" sentinel (unparseable _period) returns
+    None rather than fabricating a date from it."""
+    if period is None or (isinstance(period, float) and pd.isna(period)) or period == "unknown":
+        return None
+    try:
+        return pd.Period(period, freq="M").start_time.date()
+    except ValueError:
+        return None
+
+
+def _coerce_numeric(v):
+    """Best-effort float for a quantity/pack_size cell that may arrive as
+    a comma-formatted string (e.g. "24,190") rather than a native number —
+    Extract's own coercion (extract/_shared.py::_to_number) only fires for
+    string cells whose COLUMN NAME matches its money/quantity regexes, and
+    "Pack Size" matches neither, so it can still reach here as text.
+    Returns None (never guesses) if the cell isn't a real number."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace(",", "")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+@dataclass
+class QuantityReconciliationReport:
+    """QC cross-check output for normalize_quantities() — never used to
+    pick a value, only to surface disagreement for a human look, same
+    anti-fabrication stance as DedupReport.conflicting_groups."""
+    input_rows: int
+    checked_rows: int          # rows where both the trusted and cross-check values were present
+    mismatched: list[dict]     # rows where they disagreed beyond tolerance
+
+
+def normalize_quantities(
+    df: pd.DataFrame, doc_type: str, tolerance: float = 0.01,
+) -> tuple[pd.DataFrame, QuantityReconciliationReport | None]:
+    """Normalize quantity fields to a comparable unit (pieces) per
+    principal (units-of-measure story, ARCHITECTURE.md DEC-09).
+
+    unilever_sku: quantity_sold is set from the reported
+    sale_quantity_pieces column directly — sale_quantity_cases x pack_size
+    is only ~84%-consistent with it on real data (profiled evidence), so
+    it is never used to override the reported figure, only to flag
+    disagreement for review.
+
+    inventory_sign_off: quantity_pieces is set from the reported pieces
+    (PCS) column directly. cases/packages (CAS/PKG) are deliberately NOT
+    converted — no confirmed pack_size exists anywhere in Del Monte's
+    files, so a conversion here would be fabricated, not derived.
+
+    Any other doc_type is a no-op passthrough.
+    """
+    if doc_type == "unilever_sku":
+        out = df.copy()
+        pieces = out["sale_quantity_pieces"].map(_coerce_numeric) if "sale_quantity_pieces" in out.columns else pd.Series([None] * len(out), index=out.index)
+        cases = out["sale_quantity_cases"].map(_coerce_numeric) if "sale_quantity_cases" in out.columns else pd.Series([None] * len(out), index=out.index)
+        pack_size = out["pack_size"].map(_coerce_numeric) if "pack_size" in out.columns else pd.Series([None] * len(out), index=out.index)
+
+        out["quantity_sold"] = pieces
+
+        mismatched = []
+        checked_rows = 0
+        for idx in out.index:
+            p, c, ps = pieces.get(idx), cases.get(idx), pack_size.get(idx)
+            if p is None or c is None or ps is None:
+                continue
+            checked_rows += 1
+            expected = c * ps
+            denom = max(abs(p), abs(expected), 1.0)
+            if abs(expected - p) / denom > tolerance:
+                mismatched.append({
+                    "row": idx, "reported_pieces": p, "cases": c,
+                    "pack_size": ps, "expected_pieces": expected,
+                })
+
+        report = QuantityReconciliationReport(
+            input_rows=len(out), checked_rows=checked_rows, mismatched=mismatched,
+        )
+        return out, report
+
+    if doc_type == "inventory_sign_off":
+        out = df.copy()
+        if "pieces" in out.columns:
+            out["quantity_pieces"] = out["pieces"].map(_coerce_numeric)
+        else:
+            out["quantity_pieces"] = None
+        return out, None
+
+    return df, None
+
+
+@dataclass
 class SourceOfTruthRule:
     doc_type: str
     system_of_record_role: list[str]
@@ -326,16 +473,31 @@ def transform_fact(
     sku_split_report = None
     if rule.doc_type == "inventory_sign_off" and "sku_description_raw" in mapped_df.columns:
         mapped_df, sku_split_report = split_sku_description(mapped_df)
-        if "_period" in mapped_df.columns and "snapshot_date" not in mapped_df.columns:
-            mapped_df["snapshot_date"] = mapped_df["_period"]
+
+    date_reformat_report = None
+    if rule.doc_type == "unilever_sku" and "calendar_month" in mapped_df.columns:
+        mapped_df, date_reformat_report = reformat_calendar_month(mapped_df)
+
+    if rule.doc_type == "inventory_sign_off" and "_period" in mapped_df.columns and "snapshot_date" not in mapped_df.columns:
+        mapped_df["snapshot_date"] = mapped_df["_period"].map(_snapshot_date_from_period)
+
+    mapped_df, quantity_report = normalize_quantities(mapped_df, rule.doc_type)
 
     deduped_df, dedup_report = dedup_facts(mapped_df, rule.natural_key, amount_col=amount_col)
     return deduped_df, {
         "doc_type": rule.doc_type,
         "column_map": map_report,
         "sku_split": sku_split_report,
+        "date_reformat": date_reformat_report,
+        "quantity_reconciliation": quantity_report,
         "dedup": dedup_report,
         "rows_in": len(df),
         "rows_after_sot_filter": len(sot_df),
         "rows_out": len(deduped_df),
+        # Pre-dedup, post-column-map frame (still carries _src_file/_src_sheet
+        # provenance) - exposed so callers needing per-sheet traceability
+        # (e.g. transform_driver.py's Transform-stage QC manifest) can map a
+        # dedup conflict's natural-key values back to the source sheet(s)
+        # that produced it, without reimplementing this pipeline themselves.
+        "mapped_df": mapped_df,
     }

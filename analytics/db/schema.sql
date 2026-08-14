@@ -209,10 +209,27 @@ CREATE TABLE IF NOT EXISTS Inventory_Fact (
     inventory_key     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     product_key        BIGINT REFERENCES Product_Dimension(product_key),
     sku_code            TEXT NOT NULL,       -- kept raw alongside the FK; Extract never renames, Transform maps it
+    -- DEC-10: these exports are monthly - no real day-of-month exists
+    -- anywhere in the source. snapshot_date is kept a valid DATE by
+    -- setting it to the 1st of _period below (transform._snapshot_date_from_period()) -
+    -- a documented SYNTHETIC marker, not an independently reported date.
+    -- _period (added DEC-10) is the real join/period key, straight from
+    -- Extract's own _period provenance column, mirroring Sales_Fact/
+    -- Purchase_Fact/SalesReturn_Fact/SellOut_Fact's existing pattern so
+    -- Inventory can be joined to monthly-only facts (e.g. Unilever SKU
+    -- demand's calendar_month, SellOut_Fact._period) on a common format.
     snapshot_date        DATE NOT NULL REFERENCES Date_Dimension(date_key),
+    _period                TEXT,             -- 'YYYY-MM', the real period key (see note above)
     principal             TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
     region                 TEXT,
     quantity_on_hand        NUMERIC(14,2),
+    -- DEC-09: comparable-unit quantity, Del Monte only for now — set
+    -- directly from the source file's PCS (pieces) column via
+    -- transform.normalize_quantities(). CAS/PKG (cases/packages) are
+    -- deliberately NOT converted into this field: no confirmed pack_size
+    -- exists anywhere in Del Monte's files, so a conversion would be
+    -- fabricated, not derived. See config/column_maps/inventory_sign_off.yaml.
+    quantity_pieces          NUMERIC(14,2),
     _src_file                TEXT NOT NULL,
     _src_sheet                TEXT NOT NULL,
     UNIQUE (sku_code, snapshot_date, region)  -- DEC-04 natural key (config/source_of_truth.yaml: inventory)
@@ -255,6 +272,11 @@ CREATE TABLE IF NOT EXISTS Unilever_SKU_Demand_Fact (
     sku_code             TEXT NOT NULL,
     calendar_month         TEXT NOT NULL,    -- 'YYYY-MM', from the source's own 'Calendar Month' cell (per-row, not sheet-wide)
     region                   TEXT NOT NULL DEFAULT 'la_union',
+    -- DEC-09: in pieces — set from the source's reported
+    -- sale_quantity_pieces column (transform.normalize_quantities()),
+    -- not derived from sale_quantity_cases x pack_size (only ~84%
+    -- consistent with reported pieces on real data; that comparison is
+    -- a QC cross-check only, never the value of record).
     quantity_sold             NUMERIC(14,2),
     _src_file                  TEXT NOT NULL,
     _src_sheet                   TEXT NOT NULL,
@@ -352,3 +374,69 @@ LEFT JOIN SalesReturn_Fact r
    AND r._period = p._period
    AND r.return_type = 'BO'
 GROUP BY p.principal, p.region, p._period;
+
+-- ============================================================
+-- SECTION 6 — Unified product-demand read shape (DEC-11)
+-- Downstream models (ABC classification, SARIMA, LP - analytics/) need to
+-- read Unilever and Del Monte demand through one common shape. Storage
+-- stays grain-honest per DEC-02 (still PROPOSED - two marts, not decided
+-- to physically merge) / DEC-03 (Unilever_SKU_Demand_Fact = real SKU
+-- grain; SellOut_Fact = real category grain, Del Monte has no SKU column
+-- anywhere) - this view unifies only the READ side, via Product_Dimension's
+-- already-shared product_key, the same "two marts, one read shape"
+-- resolution BO_Monitoring_View above uses for BO rate.
+--
+-- quantity_unit matters and must not be ignored: Unilever's quantity is
+-- confirmed pieces (DEC-09, transform.normalize_quantities() sets it from
+-- the source's reported sale_quantity_pieces). Del Monte's
+-- SellOut_Fact.quantity has NO confirmed unit (DEC-09 explicitly left
+-- this out of scope - no pack_size exists anywhere in Del Monte's files
+-- to confirm it against). Do not treat the two "quantity" values as
+-- directly comparable just because they share a column here -
+-- quantity_unit tells a caller which is which. net_amount is NULL for
+-- Unilever rows - that source has no revenue field at all, never
+-- fabricated here, not a bug.
+--
+-- LEFT JOIN + COALESCE on the Del Monte side: SellOut_Fact.product_key is
+-- nullable (unlike Unilever's NOT NULL FK), so a category not yet
+-- resolved into Product_Dimension still surfaces here (with
+-- product_key/grain NULL) rather than being silently dropped, matching
+-- this project's no-silent-drop QC philosophy; COALESCE keeps
+-- principal/category_path visible from SellOut_Fact's own columns even
+-- when unresolved. Unilever_SKU_Demand_Fact.product_key is NOT NULL, so a
+-- plain JOIN there always matches - no fallback needed.
+--
+-- Deliberately NOT mapped in models.py, same reasoning as
+-- BO_Monitoring_View above - see the NOTE block at the end of that file.
+-- No live Postgres instance has run this yet (Load has never run against
+-- a live DB - see ARCHITECTURE.md status); verify against real data
+-- before treating this as more than reviewed-by-construction.
+-- ============================================================
+
+CREATE OR REPLACE VIEW Product_Demand_View AS
+SELECT
+    pd.product_key, pd.principal, pd.grain, pd.sku_code,
+    pd.category_path, pd.product_name,
+    u.calendar_month AS period,
+    u.quantity_sold   AS quantity,
+    'pieces'            AS quantity_unit,
+    NULL::numeric          AS net_amount,   -- Unilever SKU source has no revenue field
+    u.region, u._src_file, u._src_sheet
+FROM Unilever_SKU_Demand_Fact u
+JOIN Product_Dimension pd ON pd.product_key = u.product_key   -- NOT NULL FK, always resolves
+
+UNION ALL
+
+SELECT
+    pd.product_key,
+    COALESCE(pd.principal, s.principal)         AS principal,
+    pd.grain, pd.sku_code,
+    COALESCE(pd.category_path, s.category_path) AS category_path,
+    pd.product_name,
+    s._period AS period,
+    s.quantity AS quantity,
+    'unconfirmed' AS quantity_unit,   -- DEC-09: no pack_size evidence exists for Del Monte
+    s.net_amount,
+    s.region, s._src_file, s._src_sheet
+FROM SellOut_Fact s
+LEFT JOIN Product_Dimension pd ON pd.product_key = s.product_key;
