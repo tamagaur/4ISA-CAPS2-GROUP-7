@@ -12,6 +12,7 @@ import {
   LogOut,
   X
 } from 'lucide-react';
+import { logout } from '../auth';
 import './Sidebar.css';
 
 const navItems = [
@@ -31,6 +32,7 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
 
   const handleConfirmLogout = () => {
     setShowLogoutModal(false);
+    logout();
     navigate('/login');
   };
 

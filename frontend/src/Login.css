@@ -166,6 +166,18 @@
   cursor: not-allowed;
 }
 
+.error-message {
+  color: #c53030;
+  background-color: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+
 .auth-notice {
   color: #a0aec0;
   font-size: 0.9rem;
