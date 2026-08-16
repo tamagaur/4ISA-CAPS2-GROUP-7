@@ -238,10 +238,18 @@ class InventoryFact(Base):
     inventory_key: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     product_key: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("product_dimension.product_key"))
     sku_code: Mapped[str] = mapped_column(Text, nullable=False)     # kept raw alongside the FK
+    # DEC-12: synthetic first-of-_period marker (these exports are
+    # monthly, no real day-of-month exists) — see schema.sql for the full
+    # note. _period below is the real join key.
     snapshot_date: Mapped[datetime.date] = mapped_column(ForeignKey("date_dimension.date_key"), nullable=False)
+    _period: Mapped[str | None] = mapped_column(Text)               # 'YYYY-MM', the real period key
     principal: Mapped[str] = mapped_column(Text, nullable=False)
     region: Mapped[str | None] = mapped_column(Text)
     quantity_on_hand: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
+    # DEC-11: comparable-unit quantity, Del Monte only for now — set
+    # directly from PCS (pieces); CAS/PKG deliberately NOT converted (no
+    # confirmed Del Monte pack_size). See schema.sql for the full note.
+    quantity_pieces: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
     _src_file: Mapped[str] = mapped_column(Text, nullable=False)
     _src_sheet: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -290,7 +298,11 @@ class UnileverSkuDemandFact(Base):
     sku_code: Mapped[str] = mapped_column(Text, nullable=False)
     calendar_month: Mapped[str] = mapped_column(Text, nullable=False)  # 'YYYY-MM', from the row's own source cell
     region: Mapped[str] = mapped_column(Text, nullable=False, default="la_union")
-    quantity_sold: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))  # which raw field feeds this is still open - see ARCHITECTURE.md
+    # DEC-11: in pieces — set from the source's reported
+    # sale_quantity_pieces column, not derived from sale_quantity_cases x
+    # pack_size (only ~84% consistent with reported pieces on real data;
+    # see schema.sql for the full note).
+    quantity_sold: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
     # Added 2026-08: classify_abc() needs total_revenue per SKU; this is
     # the only Unilever SKU-grain fact table. See schema.sql's comment.
     net_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
@@ -390,4 +402,12 @@ class LPRecommendation(Base):
 # `Table("bo_monitoring_view", ..., autoload_with=engine)` from the
 # router once that question is resolved — mapping it to a fake ORM
 # class now would lock in an unconfirmed contract.
+#
+# Same reasoning applies to Product_Demand_View (schema.sql §7, DEC-13) —
+# a plain SQL view unifying Unilever_SKU_Demand_Fact + SellOut_Fact into
+# one read shape for downstream models (ABC/SARIMA/LP), not itself a
+# table. No consumer reads from it yet (analytics/ hasn't run against a
+# live DB) - query it via `Table("product_demand_view", ...,
+# autoload_with=engine)` once one does, rather than locking in an ORM
+# class ahead of any real usage.
 # ============================================================

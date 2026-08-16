@@ -2,14 +2,6 @@
 backend.schemas.inventory — Pydantic models for GET /inventory/current.
 
 Phase 6 (CLAUDE.md Step 22):
-TODO: Define InventoryItem and InventoryResponse Pydantic models.
-      Fields: sku_id, product_name, current_stock, unit, last_updated.
-"""
-
-"""
-backend.schemas.inventory — Pydantic models for GET /inventory/current.
-
-Phase 6 (CLAUDE.md Step 22):
 Fields: sku_id, product_name, current_stock, unit, last_updated.
 
 NOTE: `unit` is always null. Inventory_Fact (analytics/db/schema.sql) has

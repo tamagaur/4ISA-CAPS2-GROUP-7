@@ -8,9 +8,9 @@
 # (see ARCHITECTURE.md §6.5), not the file-selection family. Per DEC-07,
 # these must be Extract's actual staged _doc_type values, verified
 # directly against staging/_manifest.json — not a hand-picked label. The
-# canonical 7: sales_register, daily_sales_report, purchase_order,
-# inventory_sign_off, sell_out, rmr_gs_bo, unilever_sku (+ssis_summary,
-# not yet extracted — see T3, tracked separately, not a naming issue).
+# canonical 8: sales_register, daily_sales_report, purchase_order,
+# inventory_sign_off, sell_out, rmr_gs_bo, unilever_sku, ssis_summary
+# (extractor added T3 Option A, 2026-07 — see ARCHITECTURE.md §7).
 
 # NOTE on doc_type <-> column_maps/*.yaml naming: doc_type here must equal
 # the filename (minus .yaml) of the map transform.py loads via
@@ -31,10 +31,11 @@
 
 sales:
   unilever:
-    doc_type: ssis_summary   # PENDING T3 — no Extract driver exists yet for this
-                              # doc_type (~60 workbooks). Do not treat this entry
-                              # as active until the driver is built or DEC-04 is
-                              # formally amended (team decision, see ARCHITECTURE.md §7).
+    doc_type: ssis_summary   # T3 Option A CLOSED (2026-07) — Extract driver
+                              # (analytics/etl/extract/ssis_summary.py) exists and
+                              # is wired into driver.py's FAMILY_PARSERS. Confirmed
+                              # running against real data (2026-08): stages ~805
+                              # real sheets every run. See ARCHITECTURE.md §7.
     system_of_record_role: raw_data
     cross_check_roles: [invoice_reg, per_customer_summary]
     # BLOCKED, do not "fix" this without new evidence: every profiled
@@ -147,7 +148,7 @@ inventory:
     # ssis_summary is a different _doc_type, not a _sheet_role within this
     # one — same class of bug DEC-07 fixed for daily_sales_report above;
     # cross_check_roles can't express it, cross_check_doc_types can.
-    # PENDING T3 (no ssis_summary Extract driver exists yet).
+    # T3 Option A CLOSED (2026-07) — ssis_summary Extract driver exists.
     cross_check_doc_types: [ssis_summary]
     # sku_code and snapshot_date are NOT raw headers - neither exists as
     # a literal column anywhere in the source (confirmed via profiling).
@@ -177,7 +178,7 @@ sell_out:
     cross_check_roles: []
     # Same as inventory above — SALES PER CUSTOMER lives in the
     # ssis_summary doc_type, not as a sheet_role inside sell_out itself.
-    # PENDING T3.
+    # T3 Option A CLOSED (2026-07) — ssis_summary Extract driver exists.
     cross_check_doc_types: [ssis_summary]
     # column_maps/sell_out.yaml's canonical field is "category_path", not
     # "category" - and there is no period cell in the sheet (see that

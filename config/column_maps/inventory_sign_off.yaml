@@ -71,6 +71,13 @@ valuation:
 valuation_with_vat:
   - "Valuation with VAT"
 
+# DEC-09 (units-of-measure story): pieces feeds Inventory_Fact.quantity_pieces
+# directly via transform.normalize_quantities() - it's already the target
+# comparable unit. cases/packages below are deliberately NOT converted into
+# quantity_pieces: unlike Unilever, no pack_size column exists anywhere in
+# Del Monte's files (checked this map and the source samples), so a
+# cases/packages -> pieces conversion here would be fabricated, not derived.
+# Revisit if a real Del Monte pack_size source is ever confirmed.
 cases:
   - "CAS"
 

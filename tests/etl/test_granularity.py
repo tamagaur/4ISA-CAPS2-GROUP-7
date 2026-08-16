@@ -7,11 +7,9 @@ tests/etl/test_granularity.py — Tests for analytics.etl.granularity.
   test_unknown_principal_raises
   test_delmonte_category_grain_rejects_wrong_doc_type
   test_delmonte_category_grain_accepts_matching_doc_type
-  test_unilever_sku_grain_requires_explicit_quantity_col
-  test_unilever_sku_grain_rejects_unconfirmed_quantity_col
-  test_unilever_sku_grain_detects_month_gap
-  test_unilever_sku_grain_no_gap_on_continuous_months
-  test_resolve_granularity_requires_unilever_quantity_col
+  test_unilever_sku_grain_requires_real_transform_output_columns
+  test_unilever_sku_grain_no_gaps_when_months_are_contiguous
+  test_unilever_sku_grain_missing_columns_raises
 """
 import pandas as pd
 import pytest
@@ -75,52 +73,37 @@ def test_delmonte_category_grain_accepts_matching_doc_type():
     assert abs(daily["net_amount"].sum() - 30000.0) < 0.01
 
 
-def test_unilever_sku_grain_requires_explicit_quantity_col():
-    """quantity_col has no default — which field is canonical
-    quantity_sold is unconfirmed against real data (see the module-level
-    TODO), so the function refuses to guess rather than defaulting."""
+def test_unilever_sku_grain_requires_real_transform_output_columns():
+    """DEC-12: this used to require {"sku_id", "date", "quantity_sold"} -
+    a mismatch against Transform's real unilever_sku output (sku_code,
+    calendar_month), never caught because no test constructed real input.
+    A realistically-shaped frame must now pass through validated."""
     df = pd.DataFrame({
-        "sku_code": ["123"], "calendar_month": ["2025-01"], "sale_quantity_cases": [10.0],
+        "sku_code": ["64997199", "64997199", "64997199"],
+        "calendar_month": ["2023-01", "2023-02", "2023-04"],   # gap: 2023-03 missing
+        "quantity_sold": [100.0, 120.0, 90.0],
     })
-    with pytest.raises(TypeError):
-        resolve_unilever_sku_grain(df)  # noqa - missing required positional arg
-
-
-def test_unilever_sku_grain_rejects_unconfirmed_quantity_col():
-    df = pd.DataFrame({
-        "sku_code": ["123"], "calendar_month": ["2025-01"], "gsv": [100.0],
-    })
-    with pytest.raises(ValueError):
-        resolve_unilever_sku_grain(df, quantity_col="gsv")  # gsv explicitly ruled out
-
-
-def test_unilever_sku_grain_detects_month_gap():
-    df = pd.DataFrame({
-        "sku_code": ["123", "123"],
-        "calendar_month": ["2025-01", "2025-03"],  # February missing
-        "sale_quantity_cases": [10.0, 12.0],
-    })
-    _, result = resolve_unilever_sku_grain(df, quantity_col="sale_quantity_cases")
+    out, result = resolve_unilever_sku_grain(df)
+    assert len(out) == 3
+    assert result.date_gaps == ["2023-03"]
     assert not result.ok
-    assert "2025-02" in result.date_gaps
 
 
-def test_unilever_sku_grain_no_gap_on_continuous_months():
+def test_unilever_sku_grain_no_gaps_when_months_are_contiguous():
     df = pd.DataFrame({
-        "sku_code": ["123", "123", "123"],
-        "calendar_month": ["2025-01", "2025-02", "2025-03"],
-        "sale_quantity_cases": [10.0, 11.0, 12.0],
+        "sku_code": ["64997199", "64997199"],
+        "calendar_month": ["2023-01", "2023-02"],
+        "quantity_sold": [100.0, 120.0],
     })
-    out, result = resolve_unilever_sku_grain(df, quantity_col="sale_quantity_cases")
+    _, result = resolve_unilever_sku_grain(df)
     assert result.ok
     assert result.date_gaps == []
-    assert len(out) == 3  # passthrough, never alters the data
 
 
-def test_resolve_granularity_requires_unilever_quantity_col():
-    monthly = pd.DataFrame({"_period": ["2024-02"], "net_amount": [1.0]})
-    sku_daily = pd.DataFrame({
-        "sku_code": ["123"], "calendar_month": ["2025-01"], "sale_quantity_cases": [10.0],
-    })
-    with pytest.raises(ValueError):
-        resolve_granularity(monthly, sku_daily, "unilever")
+def test_unilever_sku_grain_missing_columns_raises():
+    """quantity_sold is now a required real column (DEC-11 resolved which
+    raw field feeds it upstream in Transform) - a frame still shaped like
+    the old analytics-layer sku_id/date contract must raise, not guess."""
+    df = pd.DataFrame({"sku_id": ["SKU-1"], "date": ["2023-01-01"], "quantity_sold": [1.0]})
+    with pytest.raises(KeyError):
+        resolve_unilever_sku_grain(df)

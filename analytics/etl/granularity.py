@@ -10,12 +10,13 @@ Phase 3B (CLAUDE.md Step 7 - Checkpoint: no date gaps in output series; row coun
   Output: Reconstructed daily demand series per SKU, validated for continuity.
 
 Per ARCHITECTURE.md DEC-03 (locked): grain is per-principal, not uniform.
-  - Unilever: real per-SKU MONTHLY demand exists (Unilever La Union file -
-    one row per SKU per month, not daily) -> resolve_unilever_sku_grain()
+  - Unilever: real per-SKU monthly demand exists (Unilever La Union file,
+    confirmed monthly-only via its calendar_month column - no day-level
+    date exists anywhere in that source) -> resolve_unilever_sku_grain()
     passes it through and validates month-to-month continuity, it does
     not need disaggregation from an invoice total. Which quantity field
-    (sale_quantity_cases vs sale_quantity_pieces) is canonical is not yet
-    confirmed against real data - see that function's docstring.
+    is canonical (sale_quantity_cases vs sale_quantity_pieces) is
+    resolved by DEC-11 - pieces, see transform.normalize_quantities().
   - Del Monte: Sales Register is invoice-level only, no SKU column exists
     anywhere in that file family (confirmed - profiling/grain_map.md).
     Allocating a monthly invoice total down to SKU would be fabrication
@@ -122,57 +123,47 @@ def resolve_delmonte_category_grain(
     return out, result
 
 
-# config/column_maps/unilever_sku.yaml's own comment: "not yet confirmed
-# which canonical fact field... quantity_sold is populated from the
-# quantity columns above [sale_quantity_cases / sale_quantity_pieces],
-# not from GSV" - narrows the choice to these two, but does not decide
-# between them. TODO(needs a person + real data, not this code): confirm
-# empirically once the La Union file is available - check whether both
-# columns are populated or one is mostly null, whether pack_size
-# reconciles cases*pack_size to pieces on a real sample, and default to
-# CASES (not pieces) if pack_size is absent or that reconciliation fails,
-# since SSM orders/holds inventory in cases and the LP output becomes a
-# purchase order. Not decided here — see resolve_unilever_sku_grain()'s
-# required quantity_col argument below, which refuses to default.
-UNILEVER_QUANTITY_FIELD_CANDIDATES = ("sale_quantity_cases", "sale_quantity_pieces")
+# RESOLVED by DEC-11: quantity_sold is set from the reported
+# sale_quantity_pieces column directly by transform.normalize_quantities()
+# before this module ever sees the data - sale_quantity_cases x pack_size
+# is kept only as a QC cross-check (~84% agreement on real data), never
+# used to override the reported figure. This constant and the explicit
+# quantity_col argument that used to exist on resolve_unilever_sku_grain()
+# below are gone - Transform now guarantees a real "quantity_sold" column
+# exists by the time this function runs, so there is nothing left for a
+# caller to choose between.
 
 
-def resolve_unilever_sku_grain(sku_daily_df: pd.DataFrame, quantity_col: str) -> tuple[pd.DataFrame, GranularityValidationResult]:
+def resolve_unilever_sku_grain(sku_daily_df: pd.DataFrame) -> tuple[pd.DataFrame, GranularityValidationResult]:
     """Unilever already has real per-SKU demand (the La Union file) -
     nothing to disaggregate. This function validates continuity only
     and passes the data through unchanged, so downstream SARIMA input
     is never silently altered here.
 
-    quantity_col has no default on purpose: which of
-    UNILEVER_QUANTITY_FIELD_CANDIDATES is canonical "quantity_sold" is an
-    open question (see the module-level TODO above), unconfirmed against
-    real data. Callers must pass it explicitly, keeping that decision
-    visible at every call site instead of silently baked in here.
-
-    Grain is monthly (transform.reformat_calendar_month has already
-    normalized calendar_month to 'YYYY-MM' by the time this runs), not
-    daily — the source file itself reports one row per SKU per month, so
-    a day-grain continuity check would fabricate a granularity the data
-    doesn't have."""
-    if quantity_col not in UNILEVER_QUANTITY_FIELD_CANDIDATES:
-        raise ValueError(
-            f"quantity_col={quantity_col!r} is not one of the confirmed candidate "
-            f"fields {UNILEVER_QUANTITY_FIELD_CANDIDATES} — resolve_unilever_sku_grain "
-            f"will not guess at an unconfirmed column."
-        )
-    required = {"sku_code", "calendar_month", quantity_col}
+    DEC-12: required columns match Transform's real post-transform_fact()
+    output for unilever_sku (sku_code, calendar_month 'YYYY-MM' - see
+    transform.reformat_calendar_month() - and quantity_sold, set by
+    DEC-11's transform.normalize_quantities()), not the analytics layer's
+    later COALESCE(sku_code, category_path) "sku_id" convention
+    (backend/schemas/abc.py) or a day-level "date" that doesn't exist
+    anywhere in this source. Continuity is checked at MONTH grain
+    accordingly - a daily pd.date_range gap-check against monthly data
+    would flag nearly every day of every month as "missing", which is
+    meaningless here. This also matches sarima.py's own monthly
+    seasonality assumption (SARIMA_SEASONAL_PERIOD = 12)."""
+    required = {"sku_code", "calendar_month", "quantity_sold"}
     missing = required - set(sku_daily_df.columns)
     if missing:
         raise KeyError(f"resolve_unilever_sku_grain missing required columns: {missing}")
 
     date_gaps: list[str] = []
     for sku_code, group in sku_daily_df.groupby("sku_code"):
-        months = pd.PeriodIndex(group["calendar_month"], freq="M").sort_values()
-        if len(months) == 0:
+        periods = pd.PeriodIndex(group["calendar_month"], freq="M").sort_values()
+        if periods.empty:
             continue
-        full_range = pd.period_range(months.min(), months.max(), freq="M")
-        missing_months = full_range.difference(months)
-        date_gaps.extend(str(m) for m in missing_months)
+        full_range = pd.period_range(periods.min(), periods.max(), freq="M")
+        missing_periods = full_range.difference(periods)
+        date_gaps.extend(str(p) for p in missing_periods)
 
     result = GranularityValidationResult(ok=not date_gaps, date_gaps=date_gaps, total_mismatch=None)
     return sku_daily_df.copy(), result
@@ -180,7 +171,6 @@ def resolve_unilever_sku_grain(sku_daily_df: pd.DataFrame, quantity_col: str) ->
 
 def resolve_granularity(
     monthly_df: pd.DataFrame, sku_daily_df: pd.DataFrame | None, principal: str,
-    unilever_quantity_col: str | None = None,
 ) -> tuple[pd.DataFrame, GranularityValidationResult]:
     """Dispatch per DEC-03: Unilever -> SKU passthrough+validate,
     Del Monte -> even business-day distribution at category grain.
@@ -189,12 +179,7 @@ def resolve_granularity(
     if principal == "unilever":
         if sku_daily_df is None:
             raise ValueError("principal='unilever' requires sku_daily_df (the confirmed La Union SKU source).")
-        if unilever_quantity_col is None:
-            raise ValueError(
-                "principal='unilever' requires unilever_quantity_col explicitly - see "
-                "resolve_unilever_sku_grain()'s docstring, this is not yet confirmed against real data."
-            )
-        return resolve_unilever_sku_grain(sku_daily_df, unilever_quantity_col)
+        return resolve_unilever_sku_grain(sku_daily_df)
     elif principal == "delmonte":
         return resolve_delmonte_category_grain(monthly_df)
     else:

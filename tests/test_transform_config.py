@@ -91,6 +91,16 @@ def test_source_of_truth_doc_types_match_staged_doc_types_exactly():
     """
     staged = _staged_doc_types()
     referenced = _known_doc_types_in_source_of_truth()
+    # ssis_summary was previously exempted here too ("no Extract driver
+    # yet" / "unconfirmed staging"), same class of exemption as
+    # unilever_sku used to be above. Both are now resolved and removed
+    # for the same reason: re-verified 2026-08 with the real event log
+    # (analytics/etl/events.py, DSD_EVENTS=1) that ssis_summary stages
+    # 1,949,687 real rows / 0 rejects every run — an exemption that's
+    # silently a no-op is worse than no exemption at all, per DEC-07's
+    # whole point (don't let a config entry quietly stop meaning what it
+    # says). daily_sales_report is the only exemption left, and it's
+    # permanent, not stale - see the docstring above.
     permanent_exemptions = {"daily_sales_report"}
     unexpected = referenced - staged - permanent_exemptions
     assert not unexpected, (
