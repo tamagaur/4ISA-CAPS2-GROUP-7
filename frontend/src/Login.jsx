@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { login } from './auth';
 import './Login.css';
 
 const Login = () => {
@@ -7,17 +8,22 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     setIsSubmitting(true);
-    // Simulate login delay
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await login(email, password);
       navigate('/');
-    }, 1500);
+    } catch (err) {
+      setError(err.message || 'Login failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -28,31 +34,34 @@ const Login = () => {
           <p className="dashboard-title">Inventory Decision Support Dashboard</p>
         </div>
       </div>
-      
+
       <div className="login-right">
         <div className="login-card">
           <h2>Welcome back</h2>
           <p className="subtitle">Sign in with your assigned account</p>
-          
+
           <form onSubmit={handleSubmit} className="login-form">
+            {error && <div className="error-message" role="alert">{error}</div>}
             <div className="input-group">
-              <input 
-                type="text" 
-                placeholder="Email address" 
+              <input
+                type="email"
+                placeholder="Email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
               />
             </div>
-            
+
             <div className="input-group password-group">
-              <input 
-                type={showPassword ? "text" : "password"} 
-                placeholder="Password" 
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="toggle-password"
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label="Toggle password visibility"
@@ -70,15 +79,15 @@ const Login = () => {
                 )}
               </button>
             </div>
-            
+
             <button type="submit" className={`submit-btn ${isSubmitting ? 'submitting' : ''}`} disabled={isSubmitting}>
               {isSubmitting ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
-          
+
           <p className="auth-notice">For authorized SSM purchasing staff only.</p>
         </div>
-        
+
         <p className="help-text">Having trouble? Contact your system administrator.</p>
       </div>
     </div>

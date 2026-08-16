@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Login from './Login';
+import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './components/DashboardLayout';
 import Dashboard from './components/Dashboard';
 import SKUManagement from './components/SKUManagement';
@@ -40,7 +41,14 @@ function App() {
       <DynamicTitle />
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/" element={<DashboardLayout />}>
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Dashboard />} />
           <Route path="sku-management" element={<SKUManagement />} />
           <Route path="abc" element={<ABCClassification />} />

@@ -3,18 +3,17 @@ backend.deps — FastAPI dependency injection: DB session, auth, pagination.
 
 Phase 6 (CLAUDE.md Step 24):
   get_db()   → yields a SQLAlchemy session pointed at Supabase.
-  get_current_user() → validates Supabase JWT or API key; raises 401 if invalid.
-  No SSM client data is served without a valid auth token.
+  get_current_user() → validates a JWT from the Authorization: Bearer header;
+    raises 401 if missing, malformed, expired, or invalid. No SSM client
+    data is served without a valid token.
 
-Auth strategy chosen: static API key (X-API-Key header), not Supabase JWT.
-Flagged, not silently decided — the docstring above says "confirm with
-Yuan first". API key is the simpler of the two AND the only one directly
-supportable by requirements.txt as pinned today: JWT verification needs a
-JWT library (python-jose / PyJWT) to check the signature, and neither is
-in requirements.txt. Adding one means asking Yuan for the same override
-RULES.md already requires for new dependencies. If Supabase JWT auth is
-confirmed later, swap get_current_user()'s body only — every router
-already depends on get_current_user via Depends(), so no router changes.
+Story #89: replaces the previous static X-API-Key scheme (see git history)
+with real per-user JWT auth backed by the Users table (analytics/db/schema.sql
+Section 6) and bcrypt password hashes. get_current_user() keeps the same
+no-argument-from-caller shape (Depends(get_current_user)) so every router's
+Depends() call site is unaffected by the swap; only its body and return
+type changed (str API key -> auth_utils.TokenPayload with user_id/email/role,
+which routers can use for role-gating e.g. admin-only endpoints).
 
 get_db() uses a SYNC SQLAlchemy Session, not async — also flagged: async
 would need an async driver (asyncpg / psycopg[async]), and requirements.txt
@@ -33,6 +32,8 @@ from fastapi import Header, HTTPException, status
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from backend.auth_utils import JWTError, TokenPayload, decode_access_token
 
 _engine: Engine | None = None
 _SessionLocal: sessionmaker | None = None
@@ -68,25 +69,28 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def get_current_user(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> str:
-    """Validates the X-API-Key header against BACKEND_API_KEY. Raises 401
-    if missing or incorrect — no SSM client data is served without it.
+def get_current_user(
+    authorization: str | None = Header(default=None, alias="Authorization")
+) -> TokenPayload:
+    """Validates a JWT from the Authorization: Bearer <token> header. Raises
+    401 if the header is missing, malformed, or the token is invalid/expired
+    — no SSM client data is served without a valid token.
 
-    Raises a clear RuntimeError (not a silent pass-through) if the server
-    itself is misconfigured (BACKEND_API_KEY unset), so a bad deployment
-    fails loudly at request time rather than accidentally accepting any
-    key or none at all.
+    Returns the decoded TokenPayload (user_id, email, role) so callers that
+    need role-gating (e.g. POST /auth/register, admin-only) can inspect
+    `.role` via Depends(get_current_user) without a second lookup.
     """
-    load_dotenv(override=False)
-    expected = os.environ.get("BACKEND_API_KEY")
-    if not expected:
-        raise RuntimeError(
-            "BACKEND_API_KEY is not set on the server. Set it in .env before "
-            "starting the API — refusing to authenticate against an unset key."
-        )
-    if not x_api_key or x_api_key != expected:
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid API key. Provide it via the X-API-Key header.",
+            detail="Missing or invalid Authorization header. Provide it as "
+            "'Authorization: Bearer <token>'.",
         )
-    return x_api_key
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        return decode_access_token(token)
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+        ) from exc

@@ -419,3 +419,24 @@ LEFT JOIN bo_returns r
     ON r.principal = p.principal
    AND r.region = p.region
    AND r._period = p._period;
+
+-- ============================================================
+-- SECTION 6 — APPLICATION USERS (Story #89: login with hashed credentials)
+-- Not part of the analytics warehouse - this is dashboard application
+-- state (who may sign in), not ETL output. Kept in the same schema file
+-- since it lives in the same Supabase/Postgres instance.
+--
+-- password_hash stores a bcrypt digest (via passlib) - the plaintext
+-- password is never persisted or logged anywhere.
+-- No seed rows here: the first admin account is created by a one-time
+-- manual insert (see backend/scripts/seed_admin.py), not by this DDL,
+-- so no default/shared credential ships in source control.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS Users (
+    user_id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email           TEXT NOT NULL UNIQUE,
+    password_hash   TEXT NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
