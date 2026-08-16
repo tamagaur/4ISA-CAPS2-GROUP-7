@@ -150,6 +150,38 @@ def test_backfill_provenance_fields_does_not_overwrite_real_column():
     assert out["region"].iloc[0] == "pangasinan"
 
 
+def test_backfill_provenance_fields_fills_per_row_nulls_not_just_missing_column():
+    """Real Sales_Fact data: region is a real mapped column but blank on
+    ~38% of rows because the raw "Town Display"/"AREA" source cell itself
+    is blank. _region provenance is 0% null for the same rows and should
+    recover it row-by-row, without touching rows that already have a real
+    region."""
+    df = pd.DataFrame({
+        "_region": ["ilocos", "pangasinan"],
+        "region": [None, "pangasinan"],
+    })
+    out = backfill_provenance_fields(df)
+    assert out["region"].iloc[0] == "ilocos"
+    assert out["region"].iloc[1] == "pangasinan"
+
+
+def test_backfill_provenance_fields_never_copies_placeholder_sentinels():
+    """_region can literally be the string "unknown" (extract/_shared.py
+    infer_sheet_region's own fallback when neither sheet name nor file
+    path matches a region pattern) and _principal can be "ambiguous" -
+    these mean "Extract couldn't tell", not a real value, so they must
+    never be copied into the bare column (anti-fabrication)."""
+    df = pd.DataFrame({
+        "_principal": ["ambiguous"],
+        "_region": ["unknown"],
+        "principal": [None],
+        "region": [None],
+    })
+    out = backfill_provenance_fields(df)
+    assert pd.isna(out["principal"].iloc[0])
+    assert pd.isna(out["region"].iloc[0])
+
+
 def test_filter_source_of_truth_drops_cross_check_doc_type():
     """sales/delmonte's cross_check_doc_types: [daily_sales_report] must
     be dropped even though daily_sales_report shares _sheet_role="data"

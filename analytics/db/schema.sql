@@ -72,6 +72,11 @@
 -- Confirm with Yuan whether GET /bo-monitoring should be redefined at that
 -- grain, or whether BO monitoring is meant to run only for Unilever SKUs
 -- (which do have a real SKU key via Unilever_SKU_Demand_Fact) instead.
+--
+-- UPDATE 2026-08: the GRAIN question above is still open, but the METRIC
+-- was resolved separately - bo_rate in §5 below is now value-based
+-- (net_amount ratio), not unit-based, since bo_units has no source
+-- column anywhere in real RMR data and never will.
 
 -- ============================================================
 -- SECTION 1 — DIMENSION TABLES (no FK dependencies, DEC-06: SCD Type 1)
@@ -134,11 +139,26 @@ CREATE TABLE IF NOT EXISTS Supplier_Dimension (
 -- never be double-loaded alongside the system-of-record sheet.
 -- ============================================================
 
+-- Fixed 2026-08 (pre-Supabase-creation review): restricted to Del Monte
+-- only. Unilever's real Sales system-of-record (SSIS RAW_DATA) has NO
+-- invoice/reference column at all (confirmed against real staged headers
+-- - the real grain is closer to outlet+calendar_day than invoice), so
+-- this table could never honestly hold a Unilever row without
+-- fabricating invoice_num. Confirmed via exhaustive grep that nothing in
+-- analytics/ or backend/ reads this table expecting Unilever data -
+-- classify_abc() deliberately never reads it at all. Consequence: the
+-- ssis_summary doc family (1,949,687 real staged rows, the largest
+-- single source in the corpus) currently has NO fact-table destination
+-- - it was the only thing that would have fed Unilever rows here. Not
+-- fixed in this pass; if Unilever sales ever need to be a fact (not just
+-- SKU demand via Unilever_SKU_Demand_Fact), it needs its own table at
+-- outlet+calendar_day grain, matching ssis_summary's real columns
+-- (Salesman, CALENDAR DAY, REASON CODE, OUTLET, OUTLET NAME, GSV, ...).
 CREATE TABLE IF NOT EXISTS Sales_Fact (
     sales_key           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     invoice_num         TEXT NOT NULL,
     invoice_date        DATE REFERENCES Date_Dimension(date_key),
-    principal           TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
+    principal           TEXT NOT NULL CHECK (principal = 'delmonte'),
     region              TEXT,
     branch_code         TEXT,               -- TEXT: leading zeros are real (§6.3 type trap)
     customer_key        BIGINT REFERENCES Customer_Dimension(customer_key),
@@ -184,17 +204,24 @@ CREATE INDEX IF NOT EXISTS ix_purchase_fact_principal_period ON Purchase_Fact (p
 CREATE TABLE IF NOT EXISTS SalesReturn_Fact (
     return_key           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     return_slip_num       TEXT,              -- primary natural-key half
-    invoice_num            TEXT,             -- fallback natural-key half when slip # is blank
+    invoice_num            TEXT,             -- kept for schema-generality; see note below on why it's not in the key
     return_type             TEXT NOT NULL CHECK (return_type IN ('GS', 'BO')),
     return_date              DATE REFERENCES Date_Dimension(date_key),
     principal                 TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
     region                     TEXT,
     net_amount                  NUMERIC(14,2),
-    bo_units                     NUMERIC(14,2),  -- populated only when return_type = 'BO'
+    bo_units                     NUMERIC(14,2),  -- always NULL for real data - see BO_Monitoring_View note below, no source column exists
     _src_file                     TEXT NOT NULL,
     _src_sheet                     TEXT NOT NULL,
     _period                         TEXT NOT NULL,
-    UNIQUE (return_slip_num, invoice_num, principal, region, return_type)
+    -- Fixed 2026-08: invoice_num dropped from the key. Confirmed against
+    -- real rmr_gs_bo data (the sole source for this table) that
+    -- invoice_num never exists as a producible column at all (0/538 real
+    -- rows, not just mostly-null) - Postgres UNIQUE treats NULL <> NULL,
+    -- so including a column that's always NULL doesn't protect against
+    -- real duplicates; it was a silent no-op. Column kept on the table
+    -- itself in case a future source family actually has one.
+    UNIQUE (return_slip_num, principal, region, return_type)
 );
 
 CREATE INDEX IF NOT EXISTS ix_salesreturn_fact_principal_period ON SalesReturn_Fact (principal, _period);
@@ -255,7 +282,14 @@ CREATE TABLE IF NOT EXISTS Unilever_SKU_Demand_Fact (
     sku_code             TEXT NOT NULL,
     calendar_month         TEXT NOT NULL,    -- 'YYYY-MM', from the source's own 'Calendar Month' cell (per-row, not sheet-wide)
     region                   TEXT NOT NULL DEFAULT 'la_union',
-    quantity_sold             NUMERIC(14,2),
+    quantity_sold             NUMERIC(14,2), -- which raw field (cases vs pieces) feeds this is still an open, evidence-gathered decision - see ARCHITECTURE.md
+    -- Added 2026-08: classify_abc() requires total_revenue per SKU, and
+    -- this is the only Unilever SKU-grain fact table - without a revenue
+    -- column, Unilever cannot get an ABC tier at all. Source: the real
+    -- staged unilever_sku data already has net_amount_inc_tax/gsv fields
+    -- (config/column_maps/unilever_sku.yaml), coerced to numeric in the
+    -- prior Transform work - this column just gives them a home here.
+    net_amount                NUMERIC(14,2),
     _src_file                  TEXT NOT NULL,
     _src_sheet                   TEXT NOT NULL,
     UNIQUE (sku_code, calendar_month)
@@ -330,25 +364,58 @@ CREATE INDEX IF NOT EXISTS ix_lp_recommendation_status ON LP_Recommendation (sta
 -- Computed at the grain the source data honestly supports (principal /
 -- region / period), NOT per-SKU - a per-SKU number here would be
 -- fabricated for Del Monte (BO/RMR is invoice grain, no SKU column).
--- Drop/replace this view once the open question above is resolved.
+--
+-- Redefined 2026-08 (value-based, was unit-based): bo_units has no
+-- source column anywhere in real RMR GS/BO data (confirmed against real
+-- staged headers - only monetary fields exist in that file family,
+-- Untaxed/Discount/Tax/Net Amount/Balance) and never will unless SSM's
+-- reporting changes - so the old unit-based bo_rate was permanently
+-- unrecoverable, not a temporary gap. net_amount is real and populated
+-- on both sides, so bo_rate here is now (BO returns net_amount) /
+-- (purchases net_amount) - a peso-based rate instead of a unit-based
+-- one. Separately note: analytics/optimization/lp.py's w3 objective
+-- term is implemented as generic storage cost, not spoilage/BO-linked -
+-- no BO term exists anywhere in the LP objective at any grain.
+--
+-- Fixed 2026-08 (fan-out bug): a straight JOIN of Purchase_Fact and
+-- SalesReturn_Fact on (principal, region, _period) is many-to-many on
+-- both sides - real group sizes run up to 69 Purchase_Fact rows and 14
+-- SalesReturn_Fact rows per key. Joining before aggregating multiplies
+-- each side's SUM by the other side's row count, so bo_rate does not
+-- reduce to the true ratio (confirmed: currently 0 real-world impact
+-- because SalesReturn_Fact's real data only spans 2025-10/2025-11 while
+-- Purchase_Fact's real periods don't overlap those months - but this is
+-- dormant, not fixed, and the moment date coverage overlaps it will
+-- silently inflate). Fix: aggregate each fact independently to one row
+-- per (principal, region, _period) in its own CTE before joining -
+-- the join itself is then one-to-one and can't fan out either side.
 -- ============================================================
 
 CREATE OR REPLACE VIEW BO_Monitoring_View AS
+WITH purchases AS (
+    SELECT principal, region, _period, SUM(net_amount) AS purchase_net_amount
+    FROM Purchase_Fact
+    GROUP BY principal, region, _period
+),
+bo_returns AS (
+    SELECT principal, region, _period, SUM(net_amount) AS bo_net_amount
+    FROM SalesReturn_Fact
+    WHERE return_type = 'BO'
+    GROUP BY principal, region, _period
+)
 SELECT
     p.principal,
     p.region,
     p._period,
-    SUM(r.bo_units)                                   AS bo_units,
-    SUM(p.units_received)                              AS units_received,
+    r.bo_net_amount,
+    p.purchase_net_amount,
     CASE
-        WHEN SUM(p.units_received) > 0
-            THEN ROUND(SUM(r.bo_units) / SUM(p.units_received) * 100, 2)
+        WHEN p.purchase_net_amount > 0
+            THEN ROUND(r.bo_net_amount / p.purchase_net_amount * 100, 2)
         ELSE NULL  -- NULL, not 0: "no bad orders" and "we don't know" are different claims
-    END                                                  AS bo_rate
-FROM Purchase_Fact p
-LEFT JOIN SalesReturn_Fact r
+    END AS bo_rate
+FROM purchases p
+LEFT JOIN bo_returns r
     ON r.principal = p.principal
    AND r.region = p.region
-   AND r._period = p._period
-   AND r.return_type = 'BO'
-GROUP BY p.principal, p.region, p._period;
+   AND r._period = p._period;

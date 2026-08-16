@@ -180,29 +180,57 @@ def apply_column_map(
     return out, report
 
 
+# Extract's own "I couldn't infer this" placeholders per provenance field
+# (extract/_shared.py: infer_sheet_region returns "unknown" when neither
+# sheet name nor file path matches a region pattern; principal inference
+# returns "ambiguous" when path and content both fail to disambiguate —
+# confirmed present in real staged data via `_principal` value counts).
+# These are sentinels, not real values — copying one into the bare column
+# would fabricate a region/principal that was never actually determined.
+_PROVENANCE_PLACEHOLDER_VALUES = {
+    "region": {"unknown"},
+    "principal": {"ambiguous"},
+}
+
+
 def backfill_provenance_fields(df: pd.DataFrame, fields: tuple[str, ...] = ("principal", "region")) -> pd.DataFrame:
-    """For each canonical field in `fields` not already produced by a
-    raw-header column map (e.g. inventory_sign_off/sell_out have no raw
-    "region" header at all — see config/source_of_truth.yaml's comments),
-    copy it from the matching provenance column Extract always attaches
-    (_<field>). Generalizes the existing snapshot_date-from-_period
-    pattern in transform_fact() below instead of special-casing per
-    doc_type.
+    """For each canonical field in `fields`, fill any row where the real
+    mapped column is missing entirely or NULL on that row from the
+    matching provenance column Extract always attaches (_<field>) —
+    except where the provenance value is itself a "couldn't determine
+    this" placeholder (see _PROVENANCE_PLACEHOLDER_VALUES), which is left
+    NULL rather than copied. Generalizes the existing
+    snapshot_date-from-_period pattern in transform_fact() below instead
+    of special-casing per doc_type.
 
     Every fact table in analytics/db/schema.sql declares a bare
     `principal TEXT NOT NULL` — Extract only ever produces `_principal`
     (provenance), and load.py's upsert intentionally skips underscore-
     prefixed columns, so without this the NOT NULL constraint fails at
-    Load. Must run after apply_column_map (so a real mapped column is
-    never overwritten) and before dedup_facts (natural keys reference the
-    bare field names)."""
+    Load. A real mapped column's own non-null values are never
+    overwritten — only its per-row nulls are filled. Must run after
+    apply_column_map (so real values always win) and before dedup_facts
+    (natural keys reference the bare field names).
+
+    Per-row fallback (not just whole-column) matters in practice: real
+    Sales_Fact data has region blank in ~38% of rows because the raw
+    source cell itself ("Town Display"/"AREA") is blank, while Extract's
+    own `_region` provenance tag is 0% null for the same rows and
+    recovers most of the gap — see DATABASE_ARCHITECTURE.md's
+    natural-key null-rate note."""
     out = df.copy()
     for field_name in fields:
-        if field_name in out.columns:
-            continue
         prov_col = f"_{field_name}"
-        if prov_col in out.columns:
-            out[field_name] = out[prov_col]
+        if prov_col not in out.columns:
+            continue
+        prov_values = out[prov_col]
+        placeholders = _PROVENANCE_PLACEHOLDER_VALUES.get(field_name)
+        if placeholders:
+            prov_values = prov_values.where(~prov_values.isin(placeholders), None)
+        if field_name not in out.columns:
+            out[field_name] = prov_values
+        else:
+            out[field_name] = out[field_name].where(out[field_name].notna(), prov_values)
     return out
 
 

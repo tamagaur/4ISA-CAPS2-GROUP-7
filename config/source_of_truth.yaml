@@ -89,16 +89,24 @@ sales_return:
     doc_type: rmr_gs_bo
     system_of_record_role: [gs, bo]    # GS + BO split IS the system of record
     cross_check_roles: [one_pager]     # ONE PAGER == GS union BO, never loaded
-    # Fixed 2026-08 (Transform reconciliation, story #16): matches
-    # schema.sql's SalesReturn_Fact UNIQUE constraint literally - the
+    # Fixed 2026-08 (Transform reconciliation, story #16): matched
+    # schema.sql's SalesReturn_Fact UNIQUE constraint at the time - the
     # previous [return_slip_num] alone, plus a "falls back to invoice_num
-    # if blank" comment, described fallback semantics dedup_facts()never
+    # if blank" comment, described fallback semantics dedup_facts() never
     # actually implements (it groups on the literal key columns as-is, no
-    # null-coalescing). The 5-tuple below already disambiguates real rows
-    # without needing that logic; dedup_facts()'s existing conflict-
-    # flagging (same key, differing amount -> both kept, reported, never
-    # silently dropped) is the safety net if that assumption is ever wrong.
-    natural_key: [return_slip_num, invoice_num, principal, region, return_type]
+    # null-coalescing).
+    #
+    # Fixed AGAIN 2026-08 (pre-Supabase-creation review): invoice_num
+    # dropped. Confirmed against real rmr_gs_bo data that invoice_num
+    # never exists as a producible column at all for this doc_type
+    # (0/538 real rows) - schema.sql's SalesReturn_Fact.invoice_num was
+    # updated to match (dropped from its UNIQUE constraint too, same
+    # reasoning: Postgres UNIQUE treats NULL <> NULL, so a column that's
+    # always NULL was a silent no-op in the constraint, not real
+    # protection). Keep this file and schema.sql's natural key in sync -
+    # this exact class of drift (config says one key, DDL says another)
+    # is what DEC-07 was about.
+    natural_key: [return_slip_num, principal, region, return_type]
     # RESOLVED (was flagged BLOCKED against stale evidence — see below):
     # the ~500 __colN__ placeholders / header_confidence~0.001 / merged
     # title text repeated every 8 columns was a real Extract-stage bug

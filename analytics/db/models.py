@@ -1,26 +1,6 @@
 """
 analytics.db.models — SQLAlchemy ORM table definitions.
 
-Phase 3A (CLAUDE.md Step 2 — Checkpoint: DDL matches Section 3.3.1 and 3.3.2):
-  Dimension tables (no FK dependencies):
-    Product_Dimension, Date_Dimension, Supplier_Dimension,
-    Customer_Dimension, Salesman_Dimension
-  Fact tables (reference dimensions):
-    Sales_Fact, Inventory_Fact, Purchase_Fact, SellOut_Fact, SalesReturn_Fact
-  Derived/ML output:
-    ABC_Classification
-
-Yuan must review all table definitions against the Galaxy Schema ERD before
-any CREATE TABLE statement is executed.
-
-TODO: Define all Table/mapped_class objects using SQLAlchemy 2.0 DeclarativeBase.
-      Mirror schema.sql exactly — do not diverge.
-"""
-
-
-"""
-analytics.db.models — SQLAlchemy ORM table definitions.
-
 Mirrors analytics/db/schema.sql EXACTLY — table names, column names, types,
 nullability, CHECK constraints, UNIQUE constraints, and indexes. If you ever
 need to change a column, change it in schema.sql first, then update this
@@ -150,9 +130,14 @@ class SupplierDimension(Base):
 # ============================================================
 
 class SalesFact(Base):
+    """Fixed 2026-08: restricted to Del Monte only. Unilever's real Sales
+    system-of-record (SSIS RAW_DATA) has no invoice/reference column at
+    all - see schema.sql's comment on this table for the full rationale
+    and the ssis_summary orphaning consequence. Mirror that comment if
+    you change this again."""
     __tablename__ = "sales_fact"
     __table_args__ = (
-        CheckConstraint("principal IN ('unilever', 'delmonte')", name="ck_sales_fact_principal"),
+        CheckConstraint("principal = 'delmonte'", name="ck_sales_fact_principal"),
         UniqueConstraint("invoice_num", "principal", "region", name="uq_sales_fact_natural_key"),
         Index("ix_sales_fact_principal_period", "principal", "_period"),
         Index("ix_sales_fact_customer", "customer_key"),
@@ -207,13 +192,18 @@ class PurchaseFact(Base):
 
 class SalesReturnFact(Base):
     """return_type is GS/BO only — the RMR 'ONE PAGER' sheet (= GS union
-    BO) is a demoted cross-check per DEC-04 and must never be loaded here."""
+    BO) is a demoted cross-check per DEC-04 and must never be loaded here.
+
+    Fixed 2026-08: invoice_num dropped from the natural key — confirmed
+    against real rmr_gs_bo data that it never exists as a producible
+    column at all (0/538 real rows). See schema.sql's comment on this
+    table for the full rationale."""
     __tablename__ = "salesreturn_fact"
     __table_args__ = (
         CheckConstraint("return_type IN ('GS', 'BO')", name="ck_salesreturn_fact_return_type"),
         CheckConstraint("principal IN ('unilever', 'delmonte')", name="ck_salesreturn_fact_principal"),
         UniqueConstraint(
-            "return_slip_num", "invoice_num", "principal", "region", "return_type",
+            "return_slip_num", "principal", "region", "return_type",
             name="uq_salesreturn_fact_natural_key",
         ),
         Index("ix_salesreturn_fact_principal_period", "principal", "_period"),
@@ -221,7 +211,7 @@ class SalesReturnFact(Base):
 
     return_key: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     return_slip_num: Mapped[str | None] = mapped_column(Text)       # primary natural-key half
-    invoice_num: Mapped[str | None] = mapped_column(Text)           # fallback half when slip # is blank
+    invoice_num: Mapped[str | None] = mapped_column(Text)           # kept for schema-generality; not in the key, see class docstring
     return_type: Mapped[str] = mapped_column(Text, nullable=False)
     return_date: Mapped[datetime.date | None] = mapped_column(ForeignKey("date_dimension.date_key"))
     principal: Mapped[str] = mapped_column(Text, nullable=False)
@@ -300,7 +290,10 @@ class UnileverSkuDemandFact(Base):
     sku_code: Mapped[str] = mapped_column(Text, nullable=False)
     calendar_month: Mapped[str] = mapped_column(Text, nullable=False)  # 'YYYY-MM', from the row's own source cell
     region: Mapped[str] = mapped_column(Text, nullable=False, default="la_union")
-    quantity_sold: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
+    quantity_sold: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))  # which raw field feeds this is still open - see ARCHITECTURE.md
+    # Added 2026-08: classify_abc() needs total_revenue per SKU; this is
+    # the only Unilever SKU-grain fact table. See schema.sql's comment.
+    net_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
     _src_file: Mapped[str] = mapped_column(Text, nullable=False)
     _src_sheet: Mapped[str] = mapped_column(Text, nullable=False)
 

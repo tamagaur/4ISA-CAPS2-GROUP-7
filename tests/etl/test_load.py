@@ -4,11 +4,19 @@ tests/etl/test_load.py — Tests for analytics.etl.load.
 These cover the guard logic that doesn't require a live Postgres/Supabase
 connection. A real upsert against a live database is an integration test
 that belongs in a separate suite once Supabase credentials are available
-(see analytics/config.py, still a Phase 3A stub as of this writing).
+(see analytics/config.py — implemented, despite this file's older
+docstring elsewhere calling it a stub; SUPABASE_DB_URL/SUPABASE_KEY are
+what's still missing, not the loader).
 
   test_empty_dataframe_short_circuits
   test_missing_natural_key_column_raises
   test_upsert_sql_shape_is_insert_on_conflict_do_update
+  test_build_dimension_key_frame_maps_df_columns
+  test_build_dimension_key_frame_applies_static_values
+  test_build_dimension_key_frame_marks_null_parts_unresolvable
+  test_build_dimension_key_frame_raises_on_missing_source
+  test_resolve_dimension_fk_raises_before_touching_engine
+  test_dimension_insert_sql_shape_is_on_conflict_do_nothing
 """
 import pandas as pd
 import pytest
@@ -16,7 +24,12 @@ from sqlalchemy import Column, MetaData, Numeric, String, Table
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from analytics.etl.load import load_to_supabase
+from analytics.etl.load import (
+    DimensionFKSpec,
+    build_dimension_key_frame,
+    load_to_supabase,
+    resolve_dimension_fk,
+)
 
 
 def test_empty_dataframe_short_circuits():
@@ -47,3 +60,93 @@ def test_upsert_sql_shape_is_insert_on_conflict_do_update():
     compiled = str(stmt.compile(dialect=postgresql.dialect()))
     assert "ON CONFLICT (invoice_num) DO UPDATE" in compiled
     assert "INSERT INTO sales_fact" in compiled
+
+
+def _unilever_demand_spec() -> DimensionFKSpec:
+    """Product_Dimension's real natural key (principal, grain, sku_code,
+    category_path) - sku_code comes from df, grain is static (this call
+    site is entirely SKU-grain), category_path has no source for this
+    fact family (Unilever never has one) so it's also static (None)."""
+    return DimensionFKSpec(
+        fk_column="product_key",
+        dimension_table="product_dimension",
+        dimension_pk="product_key",
+        dimension_natural_key=["principal", "grain", "sku_code", "category_path"],
+        df_to_dimension_columns={"principal": "principal", "sku_code": "sku_code"},
+        static_values={"grain": "sku", "category_path": None},
+    )
+
+
+def test_build_dimension_key_frame_maps_df_columns():
+    df = pd.DataFrame({"principal": ["unilever", "unilever"], "sku_code": ["111", "222"]})
+    key_df, resolvable = build_dimension_key_frame(df, _unilever_demand_spec())
+    assert list(key_df["sku_code"]) == ["111", "222"]
+    assert list(key_df["principal"]) == ["unilever", "unilever"]
+    assert resolvable.all()
+
+
+def test_build_dimension_key_frame_applies_static_values():
+    df = pd.DataFrame({"principal": ["unilever"], "sku_code": ["111"]})
+    key_df, _ = build_dimension_key_frame(df, _unilever_demand_spec())
+    assert key_df["grain"].iloc[0] == "sku"
+    assert key_df["category_path"].iloc[0] is None
+
+
+def test_build_dimension_key_frame_marks_null_parts_unresolvable():
+    """Anti-fabrication: a row missing part of its natural key (e.g. a
+    blank sku_code) must never get a guessed/fabricated dimension row -
+    resolvable_mask flags it instead."""
+    df = pd.DataFrame({"principal": ["unilever", "unilever"], "sku_code": ["111", None]})
+    key_df, resolvable = build_dimension_key_frame(df, _unilever_demand_spec())
+    assert list(resolvable) == [True, False]
+
+
+def test_build_dimension_key_frame_raises_on_missing_source():
+    """Every dimension_natural_key column must come from either
+    df_to_dimension_columns or static_values - never left implicit."""
+    spec = DimensionFKSpec(
+        fk_column="product_key",
+        dimension_table="product_dimension",
+        dimension_pk="product_key",
+        dimension_natural_key=["principal", "grain", "sku_code", "category_path"],
+        df_to_dimension_columns={"principal": "principal", "sku_code": "sku_code"},
+        static_values={"grain": "sku"},   # category_path missing on purpose
+    )
+    df = pd.DataFrame({"principal": ["unilever"], "sku_code": ["111"]})
+    with pytest.raises(KeyError):
+        build_dimension_key_frame(df, spec)
+
+
+def test_resolve_dimension_fk_raises_before_touching_engine():
+    """The natural-key-source guard must fire before any DB access -
+    engine=None here would blow up immediately if the guard didn't run
+    first, which is exactly what this test confirms."""
+    spec = DimensionFKSpec(
+        fk_column="product_key",
+        dimension_table="product_dimension",
+        dimension_pk="product_key",
+        dimension_natural_key=["principal", "grain", "sku_code", "category_path"],
+        df_to_dimension_columns={"principal": "principal", "sku_code": "sku_code"},
+        static_values={"grain": "sku"},   # category_path missing on purpose
+    )
+    df = pd.DataFrame({"principal": ["unilever"], "sku_code": ["111"]})
+    with pytest.raises(KeyError):
+        resolve_dimension_fk(df, engine=None, spec=spec)
+
+
+def test_dimension_insert_sql_shape_is_on_conflict_do_nothing():
+    """Confirms the lookup-or-insert pattern (DEC-09) compiles to the
+    correct Postgres SQL without needing a live connection - existing
+    dimension rows are matched, never duplicated or overwritten."""
+    metadata = MetaData()
+    product_dimension = Table(
+        "product_dimension", metadata,
+        Column("product_key", Numeric, primary_key=True),
+        Column("principal", String),
+        Column("sku_code", String),
+    )
+    stmt = pg_insert(product_dimension).values([{"principal": "unilever", "sku_code": "111"}])
+    stmt = stmt.on_conflict_do_nothing(index_elements=["principal", "sku_code"])
+    compiled = str(stmt.compile(dialect=postgresql.dialect()))
+    assert "ON CONFLICT (principal, sku_code) DO NOTHING" in compiled
+    assert "INSERT INTO product_dimension" in compiled
