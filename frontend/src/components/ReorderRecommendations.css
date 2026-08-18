@@ -30,6 +30,59 @@
   letter-spacing: 0.02em;
 }
 
+/* Tabs */
+.reorder-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.2rem;
+  padding: 0.3rem;
+  background-color: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  width: fit-content;
+}
+
+.reorder-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.15rem;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #3b6fe0;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 7px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.reorder-tab-btn:hover:not(.active) {
+  color: #1d4ed8;
+  background-color: #e2e8f0;
+}
+
+.reorder-tab-btn.active {
+  background-color: #ffffff;
+  border-color: #e2e8f0;
+  color: #1e3a8a;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.reorder-tab-count {
+  background-color: #c53030;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 10px;
+  letter-spacing: normal;
+}
+
 /* Summary Cards */
 .reorder-summary-grid {
   display: grid;
@@ -168,6 +221,72 @@
   font-weight: 700;
   color: #1a202c;
   white-space: nowrap;
+}
+
+.reorder-qty-compare {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.reorder-qty-main {
+  font-size: 0.9rem;
+}
+
+.reorder-qty-baseline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #2E9E5B;
+  white-space: nowrap;
+}
+
+.reorder-qty-down-icon {
+  color: #2E9E5B;
+}
+
+.th-sub {
+  display: block;
+  font-size: 0.55rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: #cbd5e1;
+  margin-top: 0.15rem;
+}
+
+/* Decision Log */
+.reorder-log-table td {
+  text-align: center;
+}
+
+.reorder-log-when {
+  white-space: nowrap;
+  font-size: 0.72rem;
+  color: #718096;
+}
+
+.reorder-log-reason {
+  max-width: 260px;
+  text-align: left !important;
+  color: #4a5568;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.reorder-log-user {
+  font-size: 0.75rem;
+  color: #3182ce;
+  white-space: nowrap;
+}
+
+.reorder-log-empty {
+  padding: 2.5rem 1rem !important;
+  color: #a0aec0;
+  font-size: 0.85rem;
+  font-style: italic;
 }
 
 .reorder-cost-cell {

@@ -6,7 +6,6 @@ import {
   Layers, 
   TrendingUp, 
   RotateCcw, 
-  Box, 
   AlertTriangle, 
   Upload,
   LogOut,
@@ -21,7 +20,6 @@ const navItems = [
   { name: 'ABC Classification', icon: Layers, path: '/abc' },
   { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
   { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
-  { name: 'Warehouse Movement', icon: Box, path: '/warehouse' },
   { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders' },
   { name: 'Data Upload', icon: Upload, path: '/upload' },
 ];
@@ -77,13 +75,7 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
               <div className="nav-item-left">
                 <item.icon className="nav-icon" size={18} />
                 <span className="nav-item-text">
-                  {item.name === 'Warehouse Movement' ? (
-                    <>
-                      Warehouse<br />Movement
-                    </>
-                  ) : (
-                    item.name
-                  )}
+                  {item.name}
                 </span>
               </div>
             </NavLink>

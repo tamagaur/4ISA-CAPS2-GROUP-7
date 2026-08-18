@@ -12,6 +12,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { COLORS } from '../theme/colors';
+import { getSKUMape, getConfidenceTier } from '../utils/forecastAccuracy';
 import './SKUForecast.css';
 
 // Dynamic 6-month historical actuals + 90-day (3-month) forward forecast recalculating from today's system date
@@ -64,7 +65,7 @@ const generateDynamicForecastData = () => {
 
 const forecastData = generateDynamicForecastData();
 
-const mockSKUDatabase = [
+export const mockSKUDatabase = [
   { code: 'SKU-4721', name: 'Surf Powder Detergent 1kg', brand: 'Unilever', cat: 'A' },
   { code: 'SKU-1052', name: 'Knorr Seasoning 250ml', brand: 'Unilever', cat: 'A' },
   { code: 'SKU-6190', name: 'Great Taste Coffee 3-in-1 30g', brand: 'Universal Robina', cat: 'A' },
@@ -196,6 +197,10 @@ const SKUForecast = () => {
   );
 
   const isSelectedPinned = pinnedSKUs.includes(selectedSKU.code);
+
+  // Story #49/#52: forecast accuracy shown at the point of use, per SKU
+  const selectedMape = getSKUMape(selectedSKU.code);
+  const confidenceTier = getConfidenceTier(selectedMape);
 
   return (
     <div className="forecast-page">
@@ -462,6 +467,12 @@ const SKUForecast = () => {
           </div>
           <div className="sku-info-right">
             <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Category {selectedSKU.cat}</span>
+            <span
+              className={`forecast-accuracy-badge accuracy-${confidenceTier.level}`}
+              title="Mean Absolute Percentage Error on the SARIMA holdout period"
+            >
+              MAPE {selectedMape.toFixed(1)}% · {confidenceTier.label}
+            </span>
           </div>
         </div>
 

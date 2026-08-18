@@ -54,6 +54,17 @@ export function isAuthenticated() {
   return Boolean(token) && !isTokenExpired(token);
 }
 
+// Reads { email, role } off the current session's JWT for display purposes
+// (e.g. attributing a reorder override to the user who made it — Story #93).
+// Not for authorization decisions — the signature isn't verified client-side.
+export function getCurrentUser() {
+  const token = getToken();
+  if (!token) return null;
+  const payload = decodeTokenPayload(token);
+  if (!payload) return null;
+  return { email: payload.email, role: payload.role };
+}
+
 function redirectToLogin() {
   if (typeof window !== 'undefined') {
     window.location.href = '/login';

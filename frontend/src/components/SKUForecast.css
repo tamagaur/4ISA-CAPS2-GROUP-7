@@ -386,7 +386,9 @@
 
 .sku-info-right {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
 }
 
 .forecast-cat-badge {
@@ -413,6 +415,34 @@
   background-color: #f8fafc;
   color: #701a75;
   border-color: #e2e8f0;
+}
+
+/* Forecast Accuracy Badge — Story #49/#52 */
+.forecast-accuracy-badge {
+  padding: 0.3rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.accuracy-high {
+  background-color: #f0fff4;
+  color: #2E9E5B;
+  border-color: #c6f6d5;
+}
+
+.accuracy-moderate {
+  background-color: #fffbeb;
+  color: #b06000;
+  border-color: #fde68a;
+}
+
+.accuracy-low {
+  background-color: #fff5f5;
+  color: #e53e3e;
+  border-color: #fed7d7;
 }
 
 /* Chart Section */
@@ -520,5 +550,18 @@
   .chart-legend {
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+
+  .selected-sku-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .sku-info-right {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    width: 100%;
   }
 }
