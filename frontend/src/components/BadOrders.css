@@ -63,6 +63,7 @@
   gap: 0.5rem;
   transition: background-color 0.2s;
   box-shadow: 0 2px 5px rgba(197, 48, 48, 0.2);
+  flex-shrink: 0;
 }
 
 .bo-report-btn:hover {
@@ -194,79 +195,6 @@
   color: #2E9E5B;
 }
 
-/* Reasons List */
-.bo-reasons-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  justify-content: space-between;
-  flex: 1;
-}
-
-.bo-reason-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.9rem 0;
-  border-bottom: 1px solid #edf2f7;
-}
-
-.bo-reason-item:last-child {
-  border-bottom: none;
-}
-
-.bo-reason-name {
-  font-size: 0.9rem;
-  color: #4a5568;
-  font-weight: 500;
-}
-
-.bo-reason-count {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #1a202c;
-}
-
-/* Tabs */
-.bo-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 2px solid #edf2f7;
-  margin-top: 0.5rem;
-}
-
-.bo-tab {
-  padding: 0.7rem 1.4rem;
-  border: none;
-  background: transparent;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: #a0aec0;
-  cursor: pointer;
-  position: relative;
-  transition: color 0.2s;
-  white-space: nowrap;
-}
-
-.bo-tab:hover {
-  color: #4a5568;
-}
-
-.bo-tab.active {
-  color: #1a202c;
-}
-
-.bo-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background-color: #c53030;
-}
-
 /* Incident Table */
 .bo-table-wrapper {
   background-color: #ffffff;
@@ -353,35 +281,6 @@
 .bo-date-cell {
   color: #718096;
   font-size: 0.82rem;
-  white-space: nowrap;
-}
-
-.bo-status-badge {
-  display: inline-block;
-  padding: 0.35rem 0.8rem;
-  border-radius: 4px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-align: center;
-  white-space: nowrap;
-  box-sizing: border-box;
-}
-
-.bo-status-open {
-  background-color: #fff5f5;
-  color: #E5484D;
-}
-
-.bo-status-resolved {
-  background-color: #f0fff4;
-  color: #2E9E5B;
-}
-
-.bo-status-investigating {
-  background-color: #fffff0;
-  color: #F5A623;
   white-space: nowrap;
 }
 
@@ -574,5 +473,13 @@
 @media (max-width: 640px) {
   .bo-summary-grid {
     grid-template-columns: 1fr;
+  }
+  .bo-page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.8rem;
+  }
+  .bo-report-btn {
+    justify-content: center;
   }
 }

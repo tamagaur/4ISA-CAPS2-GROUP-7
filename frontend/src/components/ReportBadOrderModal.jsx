@@ -34,6 +34,13 @@ const availableSKUs = [
   'SKU-02891',
 ];
 
+// Story: BO data is ETL-extracted from SSM's RMR GS & BO reports (§3.4.1.3),
+// which don't carry a reason or SKU (see config/column_maps/rmr_gs_bo.yaml —
+// verified against real staged data, no such columns exist). This form
+// exists specifically to capture what ETL structurally cannot: a staff
+// member manually flagging an incident with detail the source files don't
+// have. It's a log entry, not a case someone triages afterward — no status
+// field here, on purpose.
 const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
   const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM' | 'SUCCESS'
   const [skuCode, setSkuCode] = useState('');
