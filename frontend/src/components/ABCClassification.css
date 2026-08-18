@@ -73,6 +73,121 @@
   margin-top: 0.2rem;
 }
 
+.abc-card-desc-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #b06000;
+  font-weight: 600;
+}
+
+/* Tier-boundary flag — Story #43 */
+.abc-boundary-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.abc-boundary-legend-icon {
+  color: #d69e2e;
+  flex-shrink: 0;
+}
+
+.abc-cat-cell-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.abc-boundary-icon {
+  color: #d69e2e;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+/* Pareto Chart */
+.abc-pareto-container {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 1.5rem 1.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e2e8f0;
+}
+
+.abc-pareto-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.abc-pareto-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0;
+}
+
+.abc-pareto-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+
+.abc-pareto-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: #718096;
+}
+
+.abc-pareto-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.abc-pareto-legend-line {
+  width: 16px;
+  height: 2px;
+  flex-shrink: 0;
+}
+
+.abc-pareto-legend-dashed {
+  background-image: linear-gradient(to right, currentColor 50%, transparent 50%);
+  background-size: 6px 2px;
+  background-color: transparent !important;
+}
+
+.abc-pareto-chart-wrapper {
+  width: 100%;
+}
+
+.abc-pareto-tooltip {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.abc-pareto-tooltip-title {
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0 0 0.3rem 0;
+  font-size: 0.78rem;
+}
+
+.abc-pareto-tooltip-line {
+  margin: 0.15rem 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 /* Filters */
 .abc-filters-row {
   display: flex;

@@ -18,6 +18,13 @@ export function getSKUMape(code) {
   return 4 + (seed % 201) / 10; // 4.0 - 24.0
 }
 
+// Returns a plausible RMSE (in units) for a given SKU code — manuscript
+// §3.5.5 specifies the Forecast module shows both MAPE and RMSE indicators.
+export function getSKURmse(code) {
+  const seed = hashSeed((code || '') + '_rmse');
+  return 20 + (seed % 161); // 20 - 180 units
+}
+
 export function getConfidenceTier(mape) {
   if (mape <= 10) return { label: 'High confidence', level: 'high' };
   if (mape <= 18) return { label: 'Moderate confidence', level: 'moderate' };

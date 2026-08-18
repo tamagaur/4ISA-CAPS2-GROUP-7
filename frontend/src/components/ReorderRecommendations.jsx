@@ -51,7 +51,9 @@ const ReorderRecommendations = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('RECOMMENDATIONS');
 
-  // Pending override awaiting a reason (Hold/Reject only — Approve logs immediately)
+  // Pending override awaiting a reason (Dismiss only — Accept logs immediately).
+  // Two states only, matching LP_Recommendation.status in schema.sql:
+  // CHECK (status IN ('pending', 'accepted', 'dismissed')) — no "hold" state exists.
   const [pendingOverride, setPendingOverride] = useState(null); // { item, action }
   const [decisionLog, setDecisionLog] = useState([]);
 
@@ -90,12 +92,12 @@ const ReorderRecommendations = () => {
   };
 
   const handleAction = (item, actionType) => {
-    if (actionType === 'APPROVED') {
+    if (actionType === 'ACCEPTED') {
       applyAction(item.id, actionType);
       logDecision(item, actionType, 'Accepted the LP-recommended order quantity as-is.');
       return;
     }
-    // Hold / Reject deviate from the recommendation — require a reason first
+    // Dismiss deviates from the recommendation — require a reason first
     setPendingOverride({ item, action: actionType });
   };
 
@@ -117,9 +119,8 @@ const ReorderRecommendations = () => {
 
   const getLogActionBadge = (action) => {
     switch (action) {
-      case 'APPROVED': return 'status-badge status-approved';
-      case 'HOLD': return 'status-badge status-hold';
-      case 'REJECTED': return 'status-badge status-rejected';
+      case 'ACCEPTED': return 'status-badge status-accepted';
+      case 'DISMISSED': return 'status-badge status-dismissed';
       default: return 'status-badge';
     }
   };
@@ -138,7 +139,7 @@ const ReorderRecommendations = () => {
       return (
         <div className="action-status-container">
           <span className={`status-badge status-${item.actionStatus.toLowerCase()}`}>
-            {item.actionStatus === 'HOLD' ? 'ON HOLD' : item.actionStatus}
+            {item.actionStatus}
           </span>
         </div>
       );
@@ -146,9 +147,8 @@ const ReorderRecommendations = () => {
 
     return (
       <div className="action-buttons">
-        <button className="action-btn approve-btn" onClick={() => handleAction(item, 'APPROVED')}>Approve</button>
-        <button className="action-btn hold-btn" onClick={() => handleAction(item, 'HOLD')}>Hold</button>
-        <button className="action-btn reject-btn" onClick={() => handleAction(item, 'REJECTED')}>Reject</button>
+        <button className="action-btn accept-btn" onClick={() => handleAction(item, 'ACCEPTED')}>Accept</button>
+        <button className="action-btn dismiss-btn" onClick={() => handleAction(item, 'DISMISSED')}>Dismiss</button>
       </div>
     );
   };
@@ -275,7 +275,7 @@ const ReorderRecommendations = () => {
           {decisionLog.length === 0 ? (
             <tr>
               <td colSpan="6" className="reorder-log-empty">
-                No decisions recorded yet this session. Approve, hold, or reject a recommendation to see it logged here.
+                No decisions recorded yet this session. Accept or dismiss a recommendation to see it logged here.
               </td>
             </tr>
           ) : (
@@ -286,7 +286,7 @@ const ReorderRecommendations = () => {
                 <td className="reorder-product-cell">{entry.product}</td>
                 <td>
                   <span className={getLogActionBadge(entry.action)}>
-                    {entry.action === 'HOLD' ? 'ON HOLD' : entry.action}
+                    {entry.action}
                   </span>
                 </td>
                 <td className="reorder-log-reason">{entry.reason}</td>
@@ -341,7 +341,6 @@ const ReorderRecommendations = () => {
 
       <OverrideReasonModal
         isOpen={Boolean(pendingOverride)}
-        action={pendingOverride?.action}
         item={pendingOverride?.item}
         onCancel={() => setPendingOverride(null)}
         onConfirm={handleConfirmOverride}

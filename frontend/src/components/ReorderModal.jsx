@@ -124,21 +124,29 @@ const ReorderModal = ({ isOpen, onClose, data }) => {
           <p className="reorder-why-intro">
             The LP model weighs three objectives when solving for this SKU's order quantity:
           </p>
-          <div className="reorder-weight-bars">
-            {OBJECTIVE_WEIGHTS.map((obj) => (
-              <div className="reorder-weight-row" key={obj.key}>
-                <div className="reorder-weight-label-row">
-                  <span className="reorder-weight-label">{obj.label}</span>
-                  <span className="reorder-weight-pct">{obj.weight}%</span>
+          {/* Single 100%-stacked bar — these three weights are shares of one
+              whole (they sum to 100%), so one composite bar is the correct
+              part-to-whole form, not three independent progress tracks. */}
+          <div className="reorder-weight-stack">
+            <div className="reorder-weight-stack-track">
+              {OBJECTIVE_WEIGHTS.map((obj) => (
+                <div
+                  key={obj.key}
+                  className="reorder-weight-segment"
+                  style={{ flex: `${obj.weight} 0 0%`, backgroundColor: obj.color }}
+                  title={`${obj.label}: ${obj.weight}%`}
+                />
+              ))}
+            </div>
+            <div className="reorder-weight-legend">
+              {OBJECTIVE_WEIGHTS.map((obj) => (
+                <div className="reorder-weight-legend-item" key={obj.key}>
+                  <span className="reorder-weight-swatch" style={{ backgroundColor: obj.color }} />
+                  <span className="reorder-weight-legend-label">{obj.label}</span>
+                  <span className="reorder-weight-legend-pct">{obj.weight}%</span>
                 </div>
-                <div className="reorder-weight-track">
-                  <div
-                    className="reorder-weight-fill"
-                    style={{ width: `${obj.weight}%`, backgroundColor: obj.color }}
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
           <p className="reorder-why-note">
             Constraints applied: service level ≥ 95%, supplier MOQ, and warehouse capacity headroom.

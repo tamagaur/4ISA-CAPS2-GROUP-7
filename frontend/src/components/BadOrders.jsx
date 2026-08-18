@@ -2,8 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import {
-  AreaChart,
-  Area,
+  LineChart,
+  Line,
+  ReferenceLine,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -11,7 +12,42 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import ReportBadOrderModal from './ReportBadOrderModal';
+import { COLORS } from '../theme/colors';
 import './BadOrders.css';
+
+const BO_RATE_TARGET = 3; // %, manuscript §3.4.1.3 target threshold
+
+// SKUs with recorded incidents — the only ones a per-SKU rate is honest to show
+const BO_TRACKED_SKUS = [
+  { code: 'SKU-07642', product: 'Dove Shampoo 340ml' },
+  { code: 'SKU-01523', product: 'Tomato Sauce 250g' },
+  { code: 'SKU-09234', product: 'Sweet Corn 425g' },
+  { code: 'SKU-04721', product: 'Surf Powder Detergent 1kg' },
+  { code: 'SKU-08934', product: 'Pineapple Juice 1L' },
+];
+
+function hashSeed(code) {
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) {
+    hash = (hash * 31 + code.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+// Manuscript §3.4.1.3: BO Rate (%) = Total Bad Order Units / Total Units
+// Received x 100, tracked as a time series per SKU. Deterministic per SKU
+// (not random) so the same SKU always shows the same shape.
+const generateBORateTrend = (skuCode) => {
+  const seed = hashSeed(skuCode);
+  const base = 3.5 + (seed % 40) / 10; // 3.5 - 7.5, starts above target
+  const monthNames = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
+  return monthNames.map((month, i) => {
+    const wobble = Math.sin((seed % 7) + i * 0.9) * 0.6;
+    const drift = i * -0.35; // gradual improvement toward target
+    const rate = Math.max(0.8, base + wobble + drift);
+    return { month, rate: Math.round(rate * 10) / 10 };
+  });
+};
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
@@ -37,16 +73,6 @@ const formatSKU = (sku) => {
   return sku;
 };
 
-// Chart Trend data: 6 months
-const incidentTrendData = [
-  { month: 'Nov', incidents: 18 },
-  { month: 'Dec', incidents: 22 },
-  { month: 'Jan', incidents: 28 },
-  { month: 'Feb', incidents: 25 },
-  { month: 'Mar', incidents: 31 },
-  { month: 'Apr', incidents: 28 },
-];
-
 // Initial incident log list matching the prototype
 const initialIncidents = [
   { id: 'INC-2024-135', sku: 'SKU-07642', brand: 'Unilever', product: 'Dove Shampoo 340ml', qty: 24, reason: 'Transport Damage', value: 12600, date: '2026-04-28', status: 'Open' },
@@ -58,6 +84,8 @@ const initialIncidents = [
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
+    const rate = payload[0].value;
+    const overTarget = rate > BO_RATE_TARGET;
     return (
       <div style={{
         backgroundColor: '#ffffff',
@@ -67,8 +95,8 @@ const CustomTooltip = ({ active, payload, label }) => {
         boxShadow: '0 4px 15px rgba(0, 0, 0, 0.05)',
       }}>
         <p style={{ fontWeight: 600, color: '#1a202c', margin: '0 0 0.2rem 0', fontSize: '0.8rem' }}>{label}</p>
-        <p style={{ color: '#e53e3e', margin: 0, fontSize: '0.8rem', fontWeight: 600 }}>
-          Incidents: {payload[0].value}
+        <p style={{ color: overTarget ? COLORS.critical : COLORS.success, margin: 0, fontSize: '0.8rem', fontWeight: 600 }}>
+          BO Rate: {rate}% {overTarget ? '(above target)' : '(within target)'}
         </p>
       </div>
     );
@@ -80,6 +108,10 @@ const BadOrders = () => {
   const [incidents, setIncidents] = useState(initialIncidents);
   const [activeTab, setActiveTab] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedBOSKU, setSelectedBOSKU] = useState(BO_TRACKED_SKUS[0].code);
+
+  const boRateTrend = useMemo(() => generateBORateTrend(selectedBOSKU), [selectedBOSKU]);
+  const latestBORate = boRateTrend[boRateTrend.length - 1]?.rate ?? 0;
 
   const { selectedMonth, selectedYear } = useOutletContext() || { selectedMonth: 'Apr', selectedYear: '2026' };
 
@@ -224,28 +256,59 @@ const BadOrders = () => {
 
         {/* Main Content Area: Widgets Grid */}
         <div className="bo-widgets-grid">
-          {/* Chart Widget */}
+          {/* Chart Widget — Manuscript §3.4.1.3/§3.5.5: BO Rate per SKU, time series, vs target */}
           <div className="bo-widget">
-            <h3 className="bo-widget-title">
-              Incident trend <span style={{ color: '#a0aec0', fontWeight: 400 }}>— 6 months</span>
-            </h3>
+            <div className="bo-widget-header-row">
+              <h3 className="bo-widget-title">
+                Bad Order rate <span style={{ color: '#a0aec0', fontWeight: 400 }}>— 6 months, per SKU</span>
+              </h3>
+              <select
+                className="bo-sku-select"
+                value={selectedBOSKU}
+                onChange={(e) => setSelectedBOSKU(e.target.value)}
+              >
+                {BO_TRACKED_SKUS.map(s => (
+                  <option key={s.code} value={s.code}>{s.code} — {s.product}</option>
+                ))}
+              </select>
+            </div>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={incidentTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="incidentGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#e53e3e" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#e53e3e" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
+                <LineChart data={boRateTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} domain={[0, 35]} ticks={[0, 8, 16, 24, 32]} />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#a0aec0', fontSize: 12 }}
+                    domain={[0, 8]}
+                    ticks={[0, 2, 4, 6, 8]}
+                    tickFormatter={(v) => `${v}%`}
+                  />
                   <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="incidents" stroke="#e53e3e" strokeWidth={2} fillOpacity={1} fill="url(#incidentGradient)" />
-                </AreaChart>
+                  <ReferenceLine
+                    y={BO_RATE_TARGET}
+                    stroke={COLORS.success}
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                    label={{ value: `Target < ${BO_RATE_TARGET}%`, position: 'insideTopRight', fill: COLORS.success, fontSize: 11, fontWeight: 600 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="rate"
+                    stroke={COLORS.critical}
+                    strokeWidth={2}
+                    dot={{ r: 4, fill: COLORS.critical, strokeWidth: 0 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
               </ResponsiveContainer>
             </div>
+            <p className="bo-chart-footnote">
+              Latest: <strong className={latestBORate > BO_RATE_TARGET ? 'bo-footnote-over' : 'bo-footnote-under'}>
+                {latestBORate}%
+              </strong> {latestBORate > BO_RATE_TARGET ? 'above' : 'within'} the {BO_RATE_TARGET}% target
+            </p>
           </div>
 
           {/* Top Reasons Widget */}

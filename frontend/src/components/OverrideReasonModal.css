@@ -51,12 +51,7 @@
   justify-content: center;
 }
 
-.override-icon-hold {
-  background-color: #fef7e0;
-  color: #b06000;
-}
-
-.override-icon-reject {
+.override-icon-dismiss {
   background-color: #fce8e6;
   color: #c5221f;
 }
@@ -182,24 +177,13 @@
   border-color: #94a3b8;
 }
 
-.override-btn-hold {
-  background-color: #d69e2e;
-  border-color: #d69e2e;
-  color: #ffffff;
-}
-
-.override-btn-hold:hover:not(:disabled) {
-  background-color: #b7791f;
-  border-color: #b7791f;
-}
-
-.override-btn-reject {
+.override-btn-dismiss {
   background-color: #e53e3e;
   border-color: #e53e3e;
   color: #ffffff;
 }
 
-.override-btn-reject:hover:not(:disabled) {
+.override-btn-dismiss:hover:not(:disabled) {
   background-color: #c53030;
   border-color: #c53030;
 }

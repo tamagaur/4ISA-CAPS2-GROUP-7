@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, PauseCircle, XOctagon } from 'lucide-react';
+import { X, XOctagon } from 'lucide-react';
 import './OverrideReasonModal.css';
 
-// Story #82/#93: capturing a reason whenever a user deviates from the LP
-// recommendation (Hold/Reject), so the override is auditable — who, when,
-// why — rather than a silent status flip.
-const OverrideReasonModal = ({ isOpen, action, item, onCancel, onConfirm }) => {
+// Story #82/#93: capturing a reason whenever a user dismisses the LP
+// recommendation, so the override is auditable — who, when, why — rather
+// than a silent status flip. Only two decision states exist end to end
+// (LP_Recommendation.status CHECK IN ('pending','accepted','dismissed') in
+// schema.sql) — Accept needs no reason, Dismiss always does.
+const OverrideReasonModal = ({ isOpen, item, onCancel, onConfirm }) => {
   const [reason, setReason] = useState('');
 
   useEffect(() => {
@@ -14,7 +16,6 @@ const OverrideReasonModal = ({ isOpen, action, item, onCancel, onConfirm }) => {
 
   if (!isOpen || !item) return null;
 
-  const isReject = action === 'REJECTED';
   const isValid = reason.trim().length >= 8;
 
   const handleOverlayClick = (e) => {
@@ -25,13 +26,11 @@ const OverrideReasonModal = ({ isOpen, action, item, onCancel, onConfirm }) => {
     <div className="override-modal-overlay" onClick={handleOverlayClick}>
       <div className="override-modal-card">
         <div className="override-modal-header">
-          <div className={`override-icon-wrap ${isReject ? 'override-icon-reject' : 'override-icon-hold'}`}>
-            {isReject ? <XOctagon size={18} /> : <PauseCircle size={18} />}
+          <div className="override-icon-wrap override-icon-dismiss">
+            <XOctagon size={18} />
           </div>
           <div>
-            <h3 className="override-modal-title">
-              {isReject ? 'Reject recommendation' : 'Hold recommendation'}
-            </h3>
+            <h3 className="override-modal-title">Dismiss recommendation</h3>
             <p className="override-modal-subtitle">{item.sku} — {item.product}</p>
           </div>
           <button className="override-modal-close" onClick={onCancel} aria-label="Close modal">
@@ -41,7 +40,7 @@ const OverrideReasonModal = ({ isOpen, action, item, onCancel, onConfirm }) => {
 
         <div className="override-modal-body">
           <p className="override-modal-copy">
-            You're overriding the LP-optimized order of <strong>{item.orderQty} units</strong>.
+            You're dismissing the LP-optimized order of <strong>{item.orderQty} units</strong>.
             This deviation is recorded in the decision log against your account so the reasoning is available for review.
           </p>
 
@@ -52,9 +51,7 @@ const OverrideReasonModal = ({ isOpen, action, item, onCancel, onConfirm }) => {
             id="override-reason"
             className="override-textarea"
             rows={3}
-            placeholder={isReject
-              ? 'e.g., Supplier out of stock this cycle, reordering next week instead.'
-              : 'e.g., Waiting on warehouse space confirmation before committing.'}
+            placeholder="e.g., Supplier out of stock this cycle, reordering next week instead."
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             autoFocus
@@ -69,11 +66,11 @@ const OverrideReasonModal = ({ isOpen, action, item, onCancel, onConfirm }) => {
             Cancel
           </button>
           <button
-            className={`override-btn ${isReject ? 'override-btn-reject' : 'override-btn-hold'}`}
+            className="override-btn override-btn-dismiss"
             disabled={!isValid}
             onClick={() => onConfirm(reason.trim())}
           >
-            Confirm {isReject ? 'reject' : 'hold'}
+            Confirm dismiss
           </button>
         </div>
       </div>

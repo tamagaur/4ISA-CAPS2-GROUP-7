@@ -3,8 +3,6 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import KPICard from './KPICard';
 import { LineChartWidget, DonutChartWidget } from './Charts';
 import AlertsList from './AlertsList';
-import { mockSKUDatabase } from './SKUForecast';
-import { getAverageMape, getConfidenceTier } from '../utils/forecastAccuracy';
 import { COLORS } from '../theme/colors';
 import './Dashboard.css';
 
@@ -41,19 +39,6 @@ const Dashboard = () => {
       incidents: 135 + diff * 6
     };
   }, [selectedMonth, selectedYear]);
-
-  // Story #49/#52: roll up per-SKU forecast accuracy so a decision-maker
-  // doesn't have to open every SKU individually to gauge overall trust.
-  const avgMape = useMemo(
-    () => getAverageMape(mockSKUDatabase.map(s => s.code)),
-    []
-  );
-  const avgConfidence = getConfidenceTier(avgMape);
-  const confidenceColor = avgConfidence.level === 'high'
-    ? COLORS.success
-    : avgConfidence.level === 'moderate'
-      ? COLORS.warning
-      : COLORS.critical;
 
   return (
     <div className="dashboard">
@@ -92,13 +77,6 @@ const Dashboard = () => {
             subtext="↓ from 4.8% baseline"
             subtextColor={COLORS.success}
             borderColor={COLORS.success}
-          />
-          <KPICard
-            title="FORECAST ACCURACY"
-            value={`${avgMape.toFixed(1)}% MAPE`}
-            subtext={`${avgConfidence.label} · avg across ${mockSKUDatabase.length} SKUs`}
-            subtextColor={confidenceColor}
-            borderColor={COLORS.forecast}
           />
         </div>
 

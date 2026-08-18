@@ -386,9 +386,7 @@
 
 .sku-info-right {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.5rem;
+  align-items: flex-start;
 }
 
 .forecast-cat-badge {
@@ -417,32 +415,67 @@
   border-color: #e2e8f0;
 }
 
-/* Forecast Accuracy Badge — Story #49/#52 */
-.forecast-accuracy-badge {
-  padding: 0.3rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.68rem;
+/* Forecast Accuracy Stat Row — Manuscript §3.5.5: MAPE and RMSE indicators.
+   Matches the LABEL/VALUE/DESC stat-block convention used across the app
+   (reorder-summary-card, abc-summary-card, wm-summary-card) instead of a
+   standalone badge, so these headline holdout-accuracy numbers carry the
+   same visual weight as every other module's key metrics. */
+.forecast-accuracy-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  background-color: #f7fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+}
+
+.forecast-stat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.forecast-stat-label {
+  font-size: 0.65rem;
   font-weight: 700;
-  border: 1px solid transparent;
-  white-space: nowrap;
+  letter-spacing: 0.08em;
+  color: #a0aec0;
+  text-transform: uppercase;
+}
+
+.forecast-stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.forecast-stat-value-neutral {
+  color: #1a202c;
+}
+
+.forecast-stat-desc {
+  font-size: 0.72rem;
+  color: #718096;
+}
+
+.forecast-stat-divider {
+  width: 1px;
+  height: 32px;
+  background-color: #e2e8f0;
 }
 
 .accuracy-high {
-  background-color: #f0fff4;
   color: #2E9E5B;
-  border-color: #c6f6d5;
 }
 
 .accuracy-moderate {
-  background-color: #fffbeb;
   color: #b06000;
-  border-color: #fde68a;
 }
 
 .accuracy-low {
-  background-color: #fff5f5;
   color: #e53e3e;
-  border-color: #fed7d7;
 }
 
 /* Chart Section */
@@ -558,10 +591,12 @@
     gap: 1rem;
   }
 
-  .sku-info-right {
-    flex-direction: row;
+  .forecast-accuracy-row {
     flex-wrap: wrap;
-    align-items: center;
-    width: 100%;
+    gap: 1rem 1.5rem;
+  }
+
+  .forecast-stat-divider {
+    display: none;
   }
 }

@@ -144,10 +144,54 @@
   font-weight: 400;
 }
 
+.bo-widget-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.bo-widget-header-row .bo-widget-title {
+  margin-bottom: 0;
+}
+
+.bo-sku-select {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #4a5568;
+  background-color: #f8fafc;
+  outline: none;
+  cursor: pointer;
+  max-width: 220px;
+}
+
+.bo-sku-select:focus {
+  border-color: #c53030;
+}
+
 .bo-chart-wrapper {
   width: 100%;
   flex: 1;
   min-height: 220px;
+}
+
+.bo-chart-footnote {
+  font-size: 0.75rem;
+  color: #718096;
+  margin: 0.75rem 0 0 0;
+  text-align: right;
+}
+
+.bo-footnote-over {
+  color: #e53e3e;
+}
+
+.bo-footnote-under {
+  color: #2E9E5B;
 }
 
 /* Reasons List */

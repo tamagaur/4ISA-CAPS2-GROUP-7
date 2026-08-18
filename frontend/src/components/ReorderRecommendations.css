@@ -34,6 +34,7 @@
 .reorder-tabs-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.4rem;
   margin-bottom: 0.2rem;
   padding: 0.3rem;
@@ -41,6 +42,7 @@
   border-radius: 10px;
   border: 1px solid #e2e8f0;
   width: fit-content;
+  max-width: 100%;
 }
 
 .reorder-tab-btn {
@@ -359,33 +361,23 @@
   white-space: nowrap;
 }
 
-.approve-btn {
+.accept-btn {
   background-color: #e6f4ea;
   border: 1px solid #ceead6;
   color: #137333;
 }
 
-.approve-btn:hover {
+.accept-btn:hover {
   background-color: #d2ecd5;
 }
 
-.hold-btn {
-  background-color: #fef7e0;
-  border: 1px solid #feefc3;
-  color: #b06000;
-}
-
-.hold-btn:hover {
-  background-color: #fde293;
-}
-
-.reject-btn {
+.dismiss-btn {
   background-color: #fce8e6;
   border: 1px solid #fad2cf;
   color: #c5221f;
 }
 
-.reject-btn:hover {
+.dismiss-btn:hover {
   background-color: #f9d2cd;
 }
 
@@ -425,15 +417,11 @@
   color: #ffffff;
 }
 
-.status-approved {
+.status-accepted {
   background-color: #38a169;
 }
 
-.status-hold {
-  background-color: #d69e2e;
-}
-
-.status-rejected {
+.status-dismissed {
   background-color: #e53e3e;
 }
 

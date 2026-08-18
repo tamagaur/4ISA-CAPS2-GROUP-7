@@ -12,60 +12,71 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { COLORS } from '../theme/colors';
-import { getSKUMape, getConfidenceTier } from '../utils/forecastAccuracy';
+import { getSKUMape, getSKURmse, getConfidenceTier } from '../utils/forecastAccuracy';
 import './SKUForecast.css';
 
-// Dynamic 6-month historical actuals + 90-day (3-month) forward forecast recalculating from today's system date
+// Manuscript §3.5.5: "SARIMA demand projections for Category A SKUs across
+// a 4-week horizon." 8 weeks of trailing historical actuals (for chart
+// context) + a 4-week forward forecast & confidence band, recalculated from
+// today's system date. Week labels are the Monday of each week.
 const generateDynamicForecastData = () => {
   const today = new Date();
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  
+
+  // Anchor to the Monday of the current week
+  const dayOfWeek = today.getDay(); // 0 = Sun
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() + diffToMonday);
+
+  const weekLabel = (d) => `${monthNames[d.getMonth()]} ${d.getDate()}`;
+
   const data = [];
-  
-  // 6 months of trailing historical actuals ending at current month
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    const mStr = `${monthNames[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
-    const baseActual = 1380 + Math.floor(Math.sin(i * 0.8) * 220) + (5 - i) * 35;
-    
+
+  // 8 weeks of trailing historical actuals ending at the current week
+  for (let i = 8; i >= 0; i--) {
+    const d = new Date(currentWeekStart);
+    d.setDate(currentWeekStart.getDate() - i * 7);
+    const baseActual = 340 + Math.floor(Math.sin(i * 0.7) * 55) + (8 - i) * 8;
+
     if (i === 0) {
-      // Current month bridge point connecting actual sales to 90-day forecast & confidence band
+      // Current week bridge point connecting actuals to the 4-week forecast & CI band
       data.push({
-        month: mStr,
+        month: weekLabel(d),
         actual: baseActual,
         forecast: baseActual,
         ci: [baseActual, baseActual]
       });
     } else {
       data.push({
-        month: mStr,
+        month: weekLabel(d),
         actual: baseActual
       });
     }
   }
-  
-  // 3 months (90 days) forward projection from current month
+
+  // 4-week forward projection from the current week
   const lastActual = data[data.length - 1].actual;
-  for (let i = 1; i <= 3; i++) {
-    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-    const mStr = `${monthNames[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
-    const fValue = Math.round(lastActual + i * 55 + Math.sin(i) * 25);
-    const lowerCi = Math.round(fValue - (75 + i * 35));
-    const upperCi = Math.round(fValue + (75 + i * 40));
-    
+  for (let i = 1; i <= 4; i++) {
+    const d = new Date(currentWeekStart);
+    d.setDate(currentWeekStart.getDate() + i * 7);
+    const fValue = Math.round(lastActual + i * 14 + Math.sin(i) * 10);
+    const lowerCi = Math.round(fValue - (18 + i * 8));
+    const upperCi = Math.round(fValue + (18 + i * 9));
+
     data.push({
-      month: mStr,
+      month: weekLabel(d),
       forecast: fValue,
       ci: [lowerCi, upperCi]
     });
   }
-  
+
   return data;
 };
 
 const forecastData = generateDynamicForecastData();
 
-export const mockSKUDatabase = [
+const mockSKUDatabase = [
   { code: 'SKU-4721', name: 'Surf Powder Detergent 1kg', brand: 'Unilever', cat: 'A' },
   { code: 'SKU-1052', name: 'Knorr Seasoning 250ml', brand: 'Unilever', cat: 'A' },
   { code: 'SKU-6190', name: 'Great Taste Coffee 3-in-1 30g', brand: 'Universal Robina', cat: 'A' },
@@ -198,8 +209,9 @@ const SKUForecast = () => {
 
   const isSelectedPinned = pinnedSKUs.includes(selectedSKU.code);
 
-  // Story #49/#52: forecast accuracy shown at the point of use, per SKU
+  // Story #49/#52 + Manuscript §3.5.5: MAPE and RMSE indicators, per SKU
   const selectedMape = getSKUMape(selectedSKU.code);
+  const selectedRmse = getSKURmse(selectedSKU.code);
   const confidenceTier = getConfidenceTier(selectedMape);
 
   return (
@@ -212,7 +224,7 @@ const SKUForecast = () => {
               Demand <span>forecasted</span>
             </h2>
             <p className="forecast-subtitle">
-              SARIMA projection for Category A SKUs - 90 day horizon
+              SARIMA projection for Category A SKUs - 4-week horizon
             </p>
             <p className="forecast-subtext-today">
               Always shows the latest data as of today — this forecast doesn't change based on a selected month or year.
@@ -467,17 +479,28 @@ const SKUForecast = () => {
           </div>
           <div className="sku-info-right">
             <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Category {selectedSKU.cat}</span>
-            <span
-              className={`forecast-accuracy-badge accuracy-${confidenceTier.level}`}
-              title="Mean Absolute Percentage Error on the SARIMA holdout period"
-            >
-              MAPE {selectedMape.toFixed(1)}% · {confidenceTier.label}
-            </span>
           </div>
         </div>
 
         {/* Chart Section */}
         <div className="forecast-chart-container">
+          {/* Model Accuracy Stat Row — Manuscript §3.5.5: MAPE and RMSE indicators */}
+          <div className="forecast-accuracy-row">
+            <div className="forecast-stat-block">
+              <span className="forecast-stat-label">MAPE</span>
+              <span className={`forecast-stat-value accuracy-${confidenceTier.level}`}>
+                {selectedMape.toFixed(1)}%
+              </span>
+              <span className="forecast-stat-desc">{confidenceTier.label}</span>
+            </div>
+            <div className="forecast-stat-divider" />
+            <div className="forecast-stat-block">
+              <span className="forecast-stat-label">RMSE</span>
+              <span className="forecast-stat-value forecast-stat-value-neutral">{selectedRmse}</span>
+              <span className="forecast-stat-desc">units, holdout period</span>
+            </div>
+          </div>
+
           {/* Chart Legend */}
           <div className="chart-legend">
             <div className="legend-item">
@@ -506,12 +529,12 @@ const SKUForecast = () => {
                   tick={{ fill: '#a0aec0', fontSize: 12 }} 
                   dy={10}
                 />
-                <YAxis 
-                  axisLine={true} 
-                  tickLine={true} 
-                  tick={{ fill: '#a0aec0', fontSize: 12 }} 
-                  domain={[0, 2200]}
-                  ticks={[0, 550, 1100, 1650, 2200]}
+                <YAxis
+                  axisLine={true}
+                  tickLine={true}
+                  tick={{ fill: '#a0aec0', fontSize: 12 }}
+                  domain={[0, 600]}
+                  ticks={[0, 150, 300, 450, 600]}
                   dx={-10}
                 />
                 <Tooltip content={<CustomTooltip />} />
