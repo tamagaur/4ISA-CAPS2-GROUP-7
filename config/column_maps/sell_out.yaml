@@ -29,9 +29,17 @@ net_amount:
 
 quantity:
   - "Product Quantity"
+  # OUT OF SCOPE for DEC-09 (units-of-measure normalization): no unit is
+  # confirmed for this column (never documented as pieces, cases, or
+  # anything else) and there's no pack_size anywhere in this file family
+  # to convert against - same evidence gap as inventory_sign_off's
+  # cases/packages. Left untouched rather than guessed; revisit only with
+  # real confirmation of what unit this column reports.
 
 quantity_cases:
   - "CASE"    # only present in newer (2025+) exports - optional column, not every period will have it
+                # Same DEC-09 scope note as quantity above - no pack_size to
+                # reconcile this against either.
 
 # No other columns exist in this file family. No date/period column either -
 # _period is expected to come from Extract's filename/sheet tagging

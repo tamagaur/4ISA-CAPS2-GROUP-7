@@ -18,6 +18,20 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# The "checksum_status" field is reused generically across stages as a
+# per-row status slot - each stage's driver populates it with its own
+# vocabulary (Extract: pass/mismatch/unverified; Transform:
+# promoted/demoted, see transform_driver.py) and this label/value config is
+# what makes the SAME viewer honestly render either one, instead of
+# silently mislabeling Transform's real status as "Checksum pass/mismatch"
+# (which would defeat the point of a human being able to understand what
+# they're looking at). Unrecognized stage names fall back to the staging
+# (Extract) config.
+STATUS_LABELS = {
+    "staging": {"label": "Checksum", "values": ["pass", "mismatch", "unverified"]},
+    "transform": {"label": "Transform status", "values": ["promoted", "demoted"]},
+}
+
 
 def render_review(stage: str, repo_root: Path = REPO_ROOT) -> Path:
     stage_dir = repo_root / stage
@@ -27,19 +41,24 @@ def render_review(stage: str, repo_root: Path = REPO_ROOT) -> Path:
     staged = manifest.get("staged", [])
     rejects = manifest.get("reject", [])
 
-    checksum_counts = {"pass": 0, "mismatch": 0, "unverified": 0}
+    status_config = STATUS_LABELS.get(stage, STATUS_LABELS["staging"])
+    status_values = status_config["values"]
+    status_counts: dict[str, int] = {v: 0 for v in status_values}
     for r in staged:
-        checksum_counts[r.get("checksum_status") or "unverified"] += 1
+        status = r.get("checksum_status") or "unverified"
+        status_counts[status] = status_counts.get(status, 0) + 1
 
     data = {
         "stage": stage,
         "staged": staged,
         "reject": rejects,
+        "statusLabel": status_config["label"],
+        "statusValues": status_values,
         "summary": {
             "files": len(set(r["src_file"] for r in staged)),
             "sheetsStaged": len(staged),
             "totalRows": sum(r.get("row_count", 0) for r in staged),
-            "checksum": checksum_counts,
+            "statusCounts": status_counts,
             "rejects": len(rejects),
         },
     }
@@ -77,6 +96,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .checksum.pass { background: #d7f0d7; }
   .checksum.mismatch { background: #ffe3b0; }
   .checksum.unverified { background: #e6e6e6; color: #777; }
+  .checksum.promoted { background: #d7f0d7; }
+  .checksum.demoted { background: #e6e6e6; color: #777; }
   .table-wrap { max-height: 65vh; overflow: auto; border: 1px solid #ddd; margin-bottom: 20px; }
   tr.detail-row td { background: #fafafa; font-size: 11px; color: #444; }
   .reject-reason { color: #a33; }
@@ -106,11 +127,9 @@ function renderHeaderStrip() {
     ["Files", s.files],
     ["Sheets staged", s.sheetsStaged],
     ["Total rows", s.totalRows],
-    ["Checksum pass", s.checksum.pass],
-    ["Checksum mismatch", s.checksum.mismatch],
-    ["Checksum unverified", s.checksum.unverified],
-    ["Rejects", s.rejects],
   ];
+  DATA.statusValues.forEach(v => stats.push([`${DATA.statusLabel} ${v}`, s.statusCounts[v] || 0]));
+  stats.push(["Rejects", s.rejects]);
   el.innerHTML = stats.map(([label, val]) => `<div class="stat"><b>${val}</b>${label}</div>`).join("");
 }
 
@@ -129,8 +148,8 @@ function renderFilters() {
       values.map(v => `<label><input type="checkbox" class="f-${field}" value="${v}" checked> ${v}</label>`).join("") +
       "</div>";
   });
-  html += `<div class="filter-group"><b>Checksum</b>` +
-    ["pass", "mismatch", "unverified"].map(v =>
+  html += `<div class="filter-group"><b>${DATA.statusLabel}</b>` +
+    DATA.statusValues.map(v =>
       `<label><input type="checkbox" class="f-checksum" value="${v}" checked> ${v}</label>`).join("") +
     "</div>";
   el.innerHTML = html;
@@ -162,7 +181,8 @@ function renderStagedTable() {
 
   const table = document.getElementById("stagedTable");
   let html = "<tr><th>src_file</th><th>src_sheet</th><th>principal</th><th>region</th>" +
-    "<th>period</th><th>doc_type</th><th>sheet_role</th><th>grain</th><th>rows</th><th>checksum</th></tr>";
+    "<th>period</th><th>doc_type</th><th>sheet_role</th><th>grain</th><th>rows</th><th>" +
+    DATA.statusLabel + "</th></tr>";
 
   rows.forEach((r, i) => {
     const status = r.checksum_status || "unverified";

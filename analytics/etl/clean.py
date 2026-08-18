@@ -16,7 +16,7 @@ present columns is left null with a reason, never estimated.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -52,6 +52,59 @@ def flag_iqr_outliers(df: pd.DataFrame, column: str, k: float = 1.5) -> pd.DataF
     lower, upper = q1 - k * iqr, q3 + k * iqr
     out["_outlier_flag"] = ~out[column].between(lower, upper)
     return out
+
+
+@dataclass
+class QuantityIssueReport:
+    """DEC-13: zero, negative, and IQR-outlier quantities are FLAGGED for
+    a human to review, never dropped or clamped - this project already
+    documents negatives as real (returns/adjustments) across several facts
+    (e.g. SellOut_Fact.quantity, SalesReturnFact.bo_units); the gap this
+    closes is making them VISIBLE, not changing how they're stored. A
+    value can land in more than one bucket (e.g. negative AND an IQR
+    outlier) - the buckets are independent, not mutually exclusive."""
+    column: str
+    total_rows: int
+    zero_count: int
+    negative_count: int
+    outlier_count: int
+    zero_rows: list[dict] = field(default_factory=list)
+    negative_rows: list[dict] = field(default_factory=list)
+    outlier_rows: list[dict] = field(default_factory=list)
+
+
+def flag_quantity_issues(df: pd.DataFrame, column: str, k: float = 1.5) -> QuantityIssueReport:
+    """Pure report - never mutates or returns a modified DataFrame, since
+    this is surfaced through Transform-stage QC tooling (transform_driver.py's
+    manifest + transform_signoff.py's sign-off checklist), not persisted as
+    a loaded column. Reuses flag_iqr_outliers() for the outlier half rather
+    than duplicating the IQR math; that function already returns a fresh
+    copy, so calling it here can't leak an _outlier_flag column back onto
+    the caller's DataFrame."""
+    if column not in df.columns:
+        return QuantityIssueReport(column=column, total_rows=len(df), zero_count=0, negative_count=0, outlier_count=0)
+
+    outlier_df = flag_iqr_outliers(df, column, k=k)
+    values = pd.to_numeric(df[column], errors="coerce")
+    zero_mask = values == 0
+    negative_mask = values < 0
+    outlier_mask = outlier_df["_outlier_flag"]
+
+    id_cols = [c for c in ("_src_file", "_src_sheet") if c in df.columns] + [column]
+
+    def _rows(mask: pd.Series) -> list[dict]:
+        return df.loc[mask.fillna(False), id_cols].to_dict(orient="records")
+
+    return QuantityIssueReport(
+        column=column,
+        total_rows=len(df),
+        zero_count=int(zero_mask.sum()),
+        negative_count=int(negative_mask.sum()),
+        outlier_count=int(outlier_mask.sum()),
+        zero_rows=_rows(zero_mask),
+        negative_rows=_rows(negative_mask),
+        outlier_rows=_rows(outlier_mask),
+    )
 
 
 def standardize_product_code(df: pd.DataFrame, column: str = "branch_code") -> pd.DataFrame:

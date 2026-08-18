@@ -10,9 +10,11 @@ Phase 3B (CLAUDE.md Step 7 - Checkpoint: no date gaps in output series; row coun
   Output: Reconstructed daily demand series per SKU, validated for continuity.
 
 Per ARCHITECTURE.md DEC-03 (locked): grain is per-principal, not uniform.
-  - Unilever: real per-SKU daily/monthly demand exists (Unilever La Union
-    file) -> resolve_unilever_sku_grain() passes it through, it does not
-    need disaggregation from an invoice total.
+  - Unilever: real per-SKU monthly demand exists (Unilever La Union file,
+    confirmed monthly-only via its calendar_month column - no day-level
+    date exists anywhere in that source) -> resolve_unilever_sku_grain()
+    passes it through, it does not need disaggregation from an invoice
+    total.
   - Del Monte: Sales Register is invoice-level only, no SKU column exists
     anywhere in that file family (confirmed - profiling/grain_map.md).
     Allocating a monthly invoice total down to SKU would be fabrication
@@ -103,20 +105,31 @@ def resolve_unilever_sku_grain(sku_daily_df: pd.DataFrame) -> tuple[pd.DataFrame
     """Unilever already has real per-SKU demand (the La Union file) -
     nothing to disaggregate. This function validates continuity only
     and passes the data through unchanged, so downstream SARIMA input
-    is never silently altered here."""
-    required = {"sku_id", "date", "quantity_sold"}
+    is never silently altered here.
+
+    DEC-10: required columns match Transform's real post-transform_fact()
+    output for unilever_sku (sku_code, calendar_month 'YYYY-MM' - see
+    transform.reformat_calendar_month() - and quantity_sold), not the
+    analytics layer's later COALESCE(sku_code, category_path) "sku_id"
+    convention (backend/schemas/abc.py) or a day-level "date" that
+    doesn't exist anywhere in this source. Continuity is checked at
+    MONTH grain accordingly - a daily pd.date_range gap-check against
+    monthly data would flag nearly every day of every month as "missing",
+    which is meaningless here. This also matches sarima.py's own monthly
+    seasonality assumption (SARIMA_SEASONAL_PERIOD = 12)."""
+    required = {"sku_code", "calendar_month", "quantity_sold"}
     missing = required - set(sku_daily_df.columns)
     if missing:
         raise KeyError(f"resolve_unilever_sku_grain missing required columns: {missing}")
 
     date_gaps: list[str] = []
-    for sku_id, group in sku_daily_df.groupby("sku_id"):
-        dates = pd.to_datetime(group["date"]).sort_values()
-        if dates.empty:
+    for sku_code, group in sku_daily_df.groupby("sku_code"):
+        periods = pd.PeriodIndex(group["calendar_month"], freq="M").sort_values()
+        if periods.empty:
             continue
-        full_range = pd.date_range(dates.min(), dates.max(), freq="D")
-        missing_dates = full_range.difference(dates)
-        date_gaps.extend(str(d.date()) for d in missing_dates)
+        full_range = pd.period_range(periods.min(), periods.max(), freq="M")
+        missing_periods = full_range.difference(periods)
+        date_gaps.extend(str(p) for p in missing_periods)
 
     result = GranularityValidationResult(ok=not date_gaps, date_gaps=date_gaps, total_mismatch=None)
     return sku_daily_df.copy(), result

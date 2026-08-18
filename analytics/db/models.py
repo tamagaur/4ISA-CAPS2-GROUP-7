@@ -1,26 +1,6 @@
 """
 analytics.db.models — SQLAlchemy ORM table definitions.
 
-Phase 3A (CLAUDE.md Step 2 — Checkpoint: DDL matches Section 3.3.1 and 3.3.2):
-  Dimension tables (no FK dependencies):
-    Product_Dimension, Date_Dimension, Supplier_Dimension,
-    Customer_Dimension, Salesman_Dimension
-  Fact tables (reference dimensions):
-    Sales_Fact, Inventory_Fact, Purchase_Fact, SellOut_Fact, SalesReturn_Fact
-  Derived/ML output:
-    ABC_Classification
-
-Yuan must review all table definitions against the Galaxy Schema ERD before
-any CREATE TABLE statement is executed.
-
-TODO: Define all Table/mapped_class objects using SQLAlchemy 2.0 DeclarativeBase.
-      Mirror schema.sql exactly — do not diverge.
-"""
-
-
-"""
-analytics.db.models — SQLAlchemy ORM table definitions.
-
 Mirrors analytics/db/schema.sql EXACTLY — table names, column names, types,
 nullability, CHECK constraints, UNIQUE constraints, and indexes. If you ever
 need to change a column, change it in schema.sql first, then update this
@@ -248,10 +228,18 @@ class InventoryFact(Base):
     inventory_key: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     product_key: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("product_dimension.product_key"))
     sku_code: Mapped[str] = mapped_column(Text, nullable=False)     # kept raw alongside the FK
+    # DEC-10: synthetic first-of-_period marker (these exports are
+    # monthly, no real day-of-month exists) — see schema.sql for the full
+    # note. _period below is the real join key.
     snapshot_date: Mapped[datetime.date] = mapped_column(ForeignKey("date_dimension.date_key"), nullable=False)
+    _period: Mapped[str | None] = mapped_column(Text)               # 'YYYY-MM', the real period key
     principal: Mapped[str] = mapped_column(Text, nullable=False)
     region: Mapped[str | None] = mapped_column(Text)
     quantity_on_hand: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
+    # DEC-09: comparable-unit quantity, Del Monte only for now — set
+    # directly from PCS (pieces); CAS/PKG deliberately NOT converted (no
+    # confirmed Del Monte pack_size). See schema.sql for the full note.
+    quantity_pieces: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
     _src_file: Mapped[str] = mapped_column(Text, nullable=False)
     _src_sheet: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -300,6 +288,10 @@ class UnileverSkuDemandFact(Base):
     sku_code: Mapped[str] = mapped_column(Text, nullable=False)
     calendar_month: Mapped[str] = mapped_column(Text, nullable=False)  # 'YYYY-MM', from the row's own source cell
     region: Mapped[str] = mapped_column(Text, nullable=False, default="la_union")
+    # DEC-09: in pieces — set from the source's reported
+    # sale_quantity_pieces column, not derived from sale_quantity_cases x
+    # pack_size (only ~84% consistent with reported pieces on real data;
+    # see schema.sql for the full note).
     quantity_sold: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
     _src_file: Mapped[str] = mapped_column(Text, nullable=False)
     _src_sheet: Mapped[str] = mapped_column(Text, nullable=False)
@@ -397,4 +389,12 @@ class LPRecommendation(Base):
 # `Table("bo_monitoring_view", ..., autoload_with=engine)` from the
 # router once that question is resolved — mapping it to a fake ORM
 # class now would lock in an unconfirmed contract.
+#
+# Same reasoning applies to Product_Demand_View (schema.sql §6, DEC-11) —
+# a plain SQL view unifying Unilever_SKU_Demand_Fact + SellOut_Fact into
+# one read shape for downstream models (ABC/SARIMA/LP), not itself a
+# table. No consumer reads from it yet (analytics/ hasn't run against a
+# live DB) - query it via `Table("product_demand_view", ...,
+# autoload_with=engine)` once one does, rather than locking in an ORM
+# class ahead of any real usage.
 # ============================================================

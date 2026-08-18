@@ -71,8 +71,12 @@ def test_source_of_truth_doc_types_match_staged_doc_types_exactly():
     fact, not at config-load time."""
     staged = _staged_doc_types()
     referenced = _known_doc_types_in_source_of_truth()
-    # ssis_summary is a known, intentionally-pending exception (T3, no
-    # Extract driver yet) — referenced in config but never staged.
+    # ssis_summary's Extract driver exists (T3 Option A, closed 2026-07)
+    # and is confirmed staging real data (~805 sheets/run, 2026-08) — see
+    # HANDOFF.md Story #18. This exclusion predates that confirmation; on
+    # a manifest where ssis_summary is actually staged it's a no-op, but
+    # if it's *not* staged here that's worth investigating rather than
+    # assuming, since the doc_type comments elsewhere no longer say PENDING.
     unexpected = referenced - staged - {"ssis_summary"}
     assert not unexpected, (
         f"source_of_truth.yaml references doc_type(s) {sorted(unexpected)} that Extract "

@@ -307,7 +307,7 @@ def test_parse_sales_register_against_real_files():
     assert mismatches, "expected at least one staged mismatch sheet in the real corpus"
 
 
-@pytest.mark.skipif(not RAW_DIR.exists(), reason="data/raw/ not available")
+@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
 def test_parse_unilever_sku_against_real_file():
     result = parse_unilever_sku()
     assert len(result.dfs) == 1, "the whole MHTML workbook is one staged sheet"
@@ -326,7 +326,7 @@ def test_parse_unilever_sku_against_real_file():
     assert ".." in outcome.period  # manifest-level range summary
 
 
-@pytest.mark.skipif(not RAW_DIR.exists(), reason="data/raw/ not available")
+@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
 def test_parse_inventory_signoff_against_real_files():
     result = parse_inventory_signoff()
     assert result.dfs, "expected at least one staged Inventory Sign-Off sheet"
@@ -339,7 +339,7 @@ def test_parse_inventory_signoff_against_real_files():
             assert df["__col0__"].dtype != "float64"
 
 
-@pytest.mark.skipif(not RAW_DIR.exists(), reason="data/raw/ not available")
+@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
 def test_parse_sell_out_against_real_files():
     result = parse_sell_out()
     assert result.dfs, "expected at least one staged Sell Out sheet"
@@ -348,7 +348,7 @@ def test_parse_sell_out_against_real_files():
         assert outcome.grain == "category"
 
 
-@pytest.mark.skipif(not RAW_DIR.exists(), reason="data/raw/ not available")
+@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
 def test_parse_purchase_order_against_real_files():
     result = parse_purchase_order()
     assert result.dfs, "expected at least one staged Purchase Order sheet"
@@ -357,7 +357,7 @@ def test_parse_purchase_order_against_real_files():
         assert outcome.grain == "invoice"
 
 
-@pytest.mark.skipif(not RAW_DIR.exists(), reason="data/raw/ not available")
+@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
 def test_parse_bo_rmr_gs_against_real_files():
     result = parse_bo_rmr_gs()
     assert result.dfs, "expected at least one staged RMR GS/BO sheet"
@@ -374,7 +374,7 @@ def test_all_six_families_produce_zero_unaccounted_when_combined():
     """Sheet accountability QC gate, exercised directly (not just via the
     driver script): every scanned sheet across all families is either
     staged or explicitly rejected — never silently missing."""
-    if not RAW_DIR.exists():
+    if not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")):
         pytest.skip("data/raw/ not available")
     all_outcomes = []
     for parse_fn in (
