@@ -45,17 +45,30 @@ def flag_iqr_outliers(df: pd.DataFrame, column: str, k: float = 1.5) -> pd.DataF
     """IQR-based outlier detection. Flags rows in `_outlier_flag`, never
     drops them - ARCHITECTURE.md principle #1 forbids silent data loss.
     A flagged row still ships downstream; forecasting/classification
-    decide separately whether to weight it down."""
+    decide separately whether to weight it down.
+
+    Coerces to numeric via pd.to_numeric() before computing quantiles -
+    real parquet-sourced money/quantity columns round-trip as
+    decimal.Decimal, and numpy's quantile interpolation can't multiply a
+    Decimal by the float `k` (confirmed: crashed transform_driver.py the
+    first time this function was wired into the real path, having
+    previously had zero real callers - see flag_quantity_issues() above,
+    which already does this same coercion for the same reason)."""
     out = df.copy()
     if column not in out.columns or out[column].dropna().empty:
         out["_outlier_flag"] = False
         return out
 
-    q1 = out[column].quantile(0.25)
-    q3 = out[column].quantile(0.75)
+    values = pd.to_numeric(out[column], errors="coerce")
+    if values.dropna().empty:
+        out["_outlier_flag"] = False
+        return out
+
+    q1 = values.quantile(0.25)
+    q3 = values.quantile(0.75)
     iqr = q3 - q1
     lower, upper = q1 - k * iqr, q3 + k * iqr
-    out["_outlier_flag"] = ~out[column].between(lower, upper)
+    out["_outlier_flag"] = ~values.between(lower, upper)
     return out
 
 

@@ -44,7 +44,7 @@ import pandas as pd
 import yaml
 
 from analytics.etl._review import render_review
-from analytics.etl.clean import flag_quantity_issues
+from analytics.etl.clean import clean_pipeline, flag_quantity_issues
 from analytics.etl.transform import (
     DEFAULT_CONFIG_DIR,
     REPO_ROOT,
@@ -172,7 +172,17 @@ def _classify_fact_principal(
 
     sot_sheets = set(zip(sot_df["_src_file"], sot_df["_src_sheet"])) if not sot_df.empty else set()
 
-    mapped_df = report["mapped_df"]
+    # clean.clean_pipeline() (2026-08): previously built, tested, and never
+    # called by anything real - wiring it here is what actually makes
+    # standardize_product_code()'s leading-zero preservation (branch_code
+    # "000096" staying TEXT, not becoming 96) take effect on real data,
+    # plus IQR outlier flagging and bo_rate. Run on the post-column-map
+    # frame (real business field names), same precondition clean_pipeline's
+    # own docstring documents. Doesn't touch natural-key columns or
+    # amount_col values, so conflict classification and quantity flagging
+    # below are unaffected by this - confirmed via a real re-run producing
+    # identical promoted/demoted/conflict/blocked counts before and after.
+    mapped_df, _ = clean_pipeline(report["mapped_df"], amount_col=AMOUNT_COL_BY_FACT.get(fact) or "net_amount")
     conflict_sheets: set[tuple] = set()
     conflicting_groups = report["dedup"].conflicting_groups
     if conflicting_groups and not mapped_df.empty:
