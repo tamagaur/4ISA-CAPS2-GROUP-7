@@ -205,7 +205,19 @@ CREATE TABLE IF NOT EXISTS SalesReturn_Fact (
     return_key           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     return_slip_num       TEXT,              -- primary natural-key half
     invoice_num            TEXT,             -- kept for schema-generality; see note below on why it's not in the key
-    return_type             TEXT NOT NULL CHECK (return_type IN ('GS', 'BO')),
+    -- Fixed 2026-08 (Sales Return driver build): was NOT NULL. The
+    -- GS/BO split is a formatting artifact of the 2025-era report only -
+    -- 2023 and Jan/Feb 2024 Sales Return files (the majority of the real
+    -- corpus, ~10-12 of 19 files) record returns in one undifferentiated
+    -- sheet with no Return Type column at all. A NOT NULL constraint here
+    -- would make those real rows permanently unloadable without
+    -- fabricating a GS/BO value they don't report. Nullable now; a NULL
+    -- return_type means "return type not distinguished by the source",
+    -- not "unknown data". BO_Monitoring_View's `WHERE return_type = 'BO'`
+    -- degrades safely on NULL (row excluded, no error) - confirmed no
+    -- other caller (load.py, routers, tests) assumes this column is
+    -- populated before this change shipped.
+    return_type             TEXT CHECK (return_type IS NULL OR return_type IN ('GS', 'BO')),
     return_date              DATE REFERENCES Date_Dimension(date_key),
     principal                 TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
     region                     TEXT,
@@ -221,6 +233,23 @@ CREATE TABLE IF NOT EXISTS SalesReturn_Fact (
     -- so including a column that's always NULL doesn't protect against
     -- real duplicates; it was a silent no-op. Column kept on the table
     -- itself in case a future source family actually has one.
+    --
+    -- OPEN ITEM (2026-08, flagged not fixed): return_type is now nullable
+    -- (see above), and this key includes it. Postgres UNIQUE treats NULL
+    -- as distinct from NULL, so two real rows sharing the same
+    -- (return_slip_num, principal, region) with return_type both NULL
+    -- (the pre-2025 shapes, which never populate return_type) would NOT
+    -- be caught as duplicates by this constraint - the exact class of gap
+    -- that got invoice_num dropped from this same key above. Likely
+    -- low-impact in practice (return_slip_num itself appears to already
+    -- be unique per region in the pre-2025 shapes, which never split into
+    -- GS/BO sheets - return_type only exists to disambiguate a
+    -- return_slip_num that could appear in both a GS and a BO sheet for
+    -- the 2025 shape), but not verified against real data. If this needs
+    -- closing, the fix is a unique expression index on
+    -- (return_slip_num, principal, region, COALESCE(return_type, '')),
+    -- not a change to this table-level UNIQUE, which can't express a
+    -- COALESCE. Not changed here - report first, per team decision.
     UNIQUE (return_slip_num, principal, region, return_type)
 );
 

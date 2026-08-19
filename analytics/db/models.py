@@ -191,16 +191,28 @@ class PurchaseFact(Base):
 
 
 class SalesReturnFact(Base):
-    """return_type is GS/BO only — the RMR 'ONE PAGER' sheet (= GS union
-    BO) is a demoted cross-check per DEC-04 and must never be loaded here.
+    """return_type is GS/BO when known — the RMR 'ONE PAGER' sheet (= GS
+    union BO) is a demoted cross-check per DEC-04 and must never be
+    loaded here. NULL means the source didn't distinguish GS/BO at all
+    (the pre-2025 Sales Return shapes), not unknown/bad data.
 
     Fixed 2026-08: invoice_num dropped from the natural key — confirmed
     against real rmr_gs_bo data that it never exists as a producible
     column at all (0/538 real rows). See schema.sql's comment on this
-    table for the full rationale."""
+    table for the full rationale.
+
+    Fixed 2026-08 (Sales Return driver build): return_type made nullable
+    — was NOT NULL, which made the ~10-12 of 19 real Sales Return files
+    predating the 2025 GS/BO-split report format permanently unloadable.
+    See schema.sql's comment on this column for the full rationale, and
+    its comment on the UNIQUE constraint below for the open NULL-vs-NULL
+    dedup gap this reintroduces (flagged, not fixed, this pass)."""
     __tablename__ = "salesreturn_fact"
     __table_args__ = (
-        CheckConstraint("return_type IN ('GS', 'BO')", name="ck_salesreturn_fact_return_type"),
+        CheckConstraint(
+            "return_type IS NULL OR return_type IN ('GS', 'BO')",
+            name="ck_salesreturn_fact_return_type",
+        ),
         CheckConstraint("principal IN ('unilever', 'delmonte')", name="ck_salesreturn_fact_principal"),
         UniqueConstraint(
             "return_slip_num", "principal", "region", "return_type",
@@ -212,7 +224,7 @@ class SalesReturnFact(Base):
     return_key: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     return_slip_num: Mapped[str | None] = mapped_column(Text)       # primary natural-key half
     invoice_num: Mapped[str | None] = mapped_column(Text)           # kept for schema-generality; not in the key, see class docstring
-    return_type: Mapped[str] = mapped_column(Text, nullable=False)
+    return_type: Mapped[str | None] = mapped_column(Text)
     return_date: Mapped[datetime.date | None] = mapped_column(ForeignKey("date_dimension.date_key"))
     principal: Mapped[str] = mapped_column(Text, nullable=False)
     region: Mapped[str | None] = mapped_column(Text)
