@@ -20,16 +20,24 @@ const DashboardLayout = () => {
   const realWorldPeriod = getCurrentRealWorldPeriod();
 
   // Persistent Applied State (stored in localStorage, defaulting to real-world current month/year: Aug 2026)
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    return localStorage.getItem('san2_selected_month') || realWorldPeriod.month;
+  const [startMonth, setStartMonth] = useState(() => {
+    return localStorage.getItem('san2_start_month') || realWorldPeriod.month;
   });
-  const [selectedYear, setSelectedYear] = useState(() => {
-    return localStorage.getItem('san2_selected_year') || realWorldPeriod.year;
+  const [startYear, setStartYear] = useState(() => {
+    return localStorage.getItem('san2_start_year') || realWorldPeriod.year;
+  });
+  const [endMonth, setEndMonth] = useState(() => {
+    return localStorage.getItem('san2_end_month') || realWorldPeriod.month;
+  });
+  const [endYear, setEndYear] = useState(() => {
+    return localStorage.getItem('san2_end_year') || realWorldPeriod.year;
   });
 
   // Pending Unsaved Selection State
-  const [pendingMonth, setPendingMonth] = useState(selectedMonth);
-  const [pendingYear, setPendingYear] = useState(selectedYear);
+  const [pendingStartMonth, setPendingStartMonth] = useState(startMonth);
+  const [pendingStartYear, setPendingStartYear] = useState(startYear);
+  const [pendingEndMonth, setPendingEndMonth] = useState(endMonth);
+  const [pendingEndYear, setPendingEndYear] = useState(endYear);
 
   // Navigation Interception State
   const [navTarget, setNavTarget] = useState(null);
@@ -38,28 +46,40 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
 
   // Evaluates to true only when pending selection differs from applied period
-  const isPending = pendingMonth !== selectedMonth || pendingYear !== selectedYear;
+  const isPending = 
+    pendingStartMonth !== startMonth || 
+    pendingStartYear !== startYear ||
+    pendingEndMonth !== endMonth ||
+    pendingEndYear !== endYear;
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
   const handleApplyPeriod = () => {
-    setSelectedMonth(pendingMonth);
-    setSelectedYear(pendingYear);
-    localStorage.setItem('san2_selected_month', pendingMonth);
-    localStorage.setItem('san2_selected_year', pendingYear);
+    setStartMonth(pendingStartMonth);
+    setStartYear(pendingStartYear);
+    setEndMonth(pendingEndMonth);
+    setEndYear(pendingEndYear);
+    localStorage.setItem('san2_start_month', pendingStartMonth);
+    localStorage.setItem('san2_start_year', pendingStartYear);
+    localStorage.setItem('san2_end_month', pendingEndMonth);
+    localStorage.setItem('san2_end_year', pendingEndYear);
   };
 
   const handleDiscardPeriod = () => {
-    setPendingMonth(selectedMonth);
-    setPendingYear(selectedYear);
+    setPendingStartMonth(startMonth);
+    setPendingStartYear(startYear);
+    setPendingEndMonth(endMonth);
+    setPendingEndYear(endYear);
   };
 
   const handleResetToToday = () => {
     const todayPeriod = getCurrentRealWorldPeriod();
-    setPendingMonth(todayPeriod.month);
-    setPendingYear(todayPeriod.year);
+    setPendingStartMonth(todayPeriod.month);
+    setPendingStartYear(todayPeriod.year);
+    setPendingEndMonth(todayPeriod.month);
+    setPendingEndYear(todayPeriod.year);
   };
 
   // Intercept Sidebar module clicks if period is pending
@@ -90,6 +110,21 @@ const DashboardLayout = () => {
     }
   };
 
+  const updatePeriodImmediately = (sm, sy, em, ey) => {
+    setStartMonth(sm);
+    setStartYear(sy);
+    setEndMonth(em);
+    setEndYear(ey);
+    setPendingStartMonth(sm);
+    setPendingStartYear(sy);
+    setPendingEndMonth(em);
+    setPendingEndYear(ey);
+    localStorage.setItem('san2_start_month', sm);
+    localStorage.setItem('san2_start_year', sy);
+    localStorage.setItem('san2_end_month', em);
+    localStorage.setItem('san2_end_year', ey);
+  };
+
   return (
     <div className={`dashboard-layout ${isSidebarOpen ? '' : 'sidebar-closed'}`}>
       <Sidebar 
@@ -100,19 +135,25 @@ const DashboardLayout = () => {
       <div className="main-content">
         <Topbar 
           toggleSidebar={toggleSidebar} 
-          selectedMonth={selectedMonth} 
-          selectedYear={selectedYear} 
-          pendingMonth={pendingMonth}
-          setPendingMonth={setPendingMonth}
-          pendingYear={pendingYear}
-          setPendingYear={setPendingYear}
+          startMonth={startMonth} 
+          startYear={startYear} 
+          endMonth={endMonth}
+          endYear={endYear}
+          pendingStartMonth={pendingStartMonth}
+          setPendingStartMonth={setPendingStartMonth}
+          pendingStartYear={pendingStartYear}
+          setPendingStartYear={setPendingStartYear}
+          pendingEndMonth={pendingEndMonth}
+          setPendingEndMonth={setPendingEndMonth}
+          pendingEndYear={pendingEndYear}
+          setPendingEndYear={setPendingEndYear}
           isPending={isPending}
           handleApplyPeriod={handleApplyPeriod}
           handleResetToToday={handleResetToToday}
           realWorldMonth={realWorldPeriod.month}
           realWorldYear={realWorldPeriod.year}
         />
-        <Outlet context={{ selectedMonth, selectedYear }} />
+        <Outlet context={{ startMonth, startYear, endMonth, endYear, updatePeriodImmediately, realWorldPeriod }} />
       </div>
 
       {/* Nav Interception Confirmation Dialog */}
@@ -124,8 +165,8 @@ const DashboardLayout = () => {
             </div>
             <div className="period-nav-body">
               <p>
-                You changed the selected period to <strong>{pendingMonth} {pendingYear}</strong> but haven't applied it. 
-                Save this change, or discard it and keep viewing <strong>{selectedMonth} {selectedYear}</strong>?
+                You changed the selected period to <strong>{pendingStartMonth} {pendingStartYear} - {pendingEndMonth} {pendingEndYear}</strong> but haven't applied it. 
+                Save this change, or discard it and keep viewing <strong>{startMonth} {startYear} - {endMonth} {endYear}</strong>?
               </p>
             </div>
             <div className="period-nav-footer">

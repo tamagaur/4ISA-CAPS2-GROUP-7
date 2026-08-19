@@ -1,349 +1,190 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { RotateCcw } from 'lucide-react';
+import React from 'react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, ReferenceLine, Legend, Label
 } from 'recharts';
 import { COLORS } from '../theme/colors';
 import './Charts.css';
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// Mock data for Sales vs Stock
+const generateSalesData = () => {
+  const data = [];
+  for (let i = 1; i <= 12; i++) {
+    data.push({
+      week: `Wk ${i}`,
+      sales: parseFloat((1.4 + Math.random() * 0.2).toFixed(2)),
+      soh: 57.2, // flat line based on the KPI
+    });
+  }
+  return data;
+};
+const salesVsStockData = generateSalesData();
 
-const abcData = [
-  { name: 'A', value: 187, color: COLORS.abcA },
-  { name: 'B', value: 423, color: COLORS.abcB },
-  { name: 'C', value: 637, color: COLORS.abcC },
-];
-
-export const LineChartWidget = () => {
-  // Persistent Range Selection State for Monthly Sales Trend Chart
-  const [presetRange, setPresetRange] = useState(() => {
-    try {
-      const saved = localStorage.getItem('san2_sales_chart_range');
-      return saved ? JSON.parse(saved).preset : '12M';
-    } catch {
-      return '12M';
-    }
-  });
-
-  const [customFromMonth, setCustomFromMonth] = useState(() => {
-    try {
-      const saved = localStorage.getItem('san2_sales_chart_range');
-      return saved ? JSON.parse(saved).fromMonth || 'Jan' : 'Jan';
-    } catch {
-      return 'Jan';
-    }
-  });
-
-  const [customFromYear, setCustomFromYear] = useState(() => {
-    try {
-      const saved = localStorage.getItem('san2_sales_chart_range');
-      return saved ? JSON.parse(saved).fromYear || '2025' : '2025';
-    } catch {
-      return '2025';
-    }
-  });
-
-  const [customToMonth, setCustomToMonth] = useState(() => {
-    try {
-      const saved = localStorage.getItem('san2_sales_chart_range');
-      return saved ? JSON.parse(saved).toMonth || 'Aug' : 'Aug';
-    } catch {
-      return 'Aug';
-    }
-  });
-
-  const [customToYear, setCustomToYear] = useState(() => {
-    try {
-      const saved = localStorage.getItem('san2_sales_chart_range');
-      return saved ? JSON.parse(saved).toYear || '2026' : '2026';
-    } catch {
-      return '2026';
-    }
-  });
-
-  // Save selection changes to localStorage for persistence
-  useEffect(() => {
-    localStorage.setItem('san2_sales_chart_range', JSON.stringify({
-      preset: presetRange,
-      fromMonth: customFromMonth,
-      fromYear: customFromYear,
-      toMonth: customToMonth,
-      toYear: customToYear,
-    }));
-  }, [presetRange, customFromMonth, customFromYear, customToMonth, customToYear]);
-
-  // Real-world actuals anchor date: Aug 2026
-  const realWorldAnchorYear = 2026;
-  const realWorldAnchorMonthIdx = 7; // Aug 2026
-  const realWorldAnchorTotalMonths = realWorldAnchorYear * 12 + realWorldAnchorMonthIdx;
-
-  const { chartData, subtitleText } = useMemo(() => {
-    let startTotalMonths;
-    let endTotalMonths;
-
-    const minBaselineMonths = 2021 * 12 + 0; // Jan 2021
-
-    if (presetRange === '6M') {
-      endTotalMonths = realWorldAnchorTotalMonths;
-      startTotalMonths = Math.max(minBaselineMonths, endTotalMonths - 5);
-    } else if (presetRange === '12M') {
-      endTotalMonths = realWorldAnchorTotalMonths;
-      startTotalMonths = Math.max(minBaselineMonths, endTotalMonths - 11);
-    } else if (presetRange === '24M') {
-      endTotalMonths = realWorldAnchorTotalMonths;
-      startTotalMonths = Math.max(minBaselineMonths, endTotalMonths - 23);
-    } else {
-      // CUSTOM RANGE
-      const fYear = parseInt(customFromYear) || 2025;
-      const fMonthIdx = Math.max(0, MONTH_NAMES.indexOf(customFromMonth));
-      startTotalMonths = Math.max(minBaselineMonths, fYear * 12 + fMonthIdx);
-
-      const tYear = parseInt(customToYear) || 2026;
-      const tMonthIdx = Math.max(0, MONTH_NAMES.indexOf(customToMonth));
-      endTotalMonths = Math.max(startTotalMonths, tYear * 12 + tMonthIdx);
-    }
-
-    const data = [];
-    let firstMonthLabel = '';
-    let lastActualMonthLabel = '';
-    let hasForecastData = false;
-
-    for (let m = startTotalMonths; m <= endTotalMonths; m++) {
-      const year = Math.floor(m / 12);
-      const mIdx = m % 12;
-      const monthShort = MONTH_NAMES[mIdx];
-      const yearShort = year.toString().slice(-2);
-      const label = `${monthShort} ${yearShort}`;
-
-      if (!firstMonthLabel) {
-        firstMonthLabel = `${monthShort} ${year}`;
-      }
-
-      const isActual = m <= realWorldAnchorTotalMonths;
-
-      if (isActual) {
-        lastActualMonthLabel = `${monthShort} ${year}`;
-      } else {
-        hasForecastData = true;
-      }
-
-      // Base sales calculation
-      const baseTrend = 4.0 + (year - 2021) * 0.45 + (mIdx * 0.12);
-      const seasonal = Math.sin((mIdx / 12) * Math.PI * 2) * 0.4;
-      const salesVal = parseFloat((baseTrend + seasonal).toFixed(1));
-
-      if (isActual) {
-        // If this is the last actual point and forecast follows, include forecastSales to connect line segments
-        const isLastActualBeforeForecast = (m === realWorldAnchorTotalMonths) && (endTotalMonths > realWorldAnchorTotalMonths);
-        data.push({
-          month: label,
-          sales: salesVal,
-          forecastSales: isLastActualBeforeForecast ? salesVal : null
-        });
-      } else {
-        data.push({
-          month: label,
-          sales: null,
-          forecastSales: salesVal
-        });
-      }
-    }
-
-    // Subtitle text construction
-    let subtitleText = '';
-    if (hasForecastData) {
-      subtitleText = `${firstMonthLabel} - ${lastActualMonthLabel} (forecast in dashed indigo)`;
-    } else {
-      subtitleText = `${firstMonthLabel} - ${lastActualMonthLabel}`;
-    }
-
-    return { chartData: data, subtitleText };
-  }, [presetRange, customFromMonth, customFromYear, customToMonth, customToYear]);
-
-  const handleResetToDefault = () => {
-    setPresetRange('6M');
-    setCustomFromMonth('Mar');
-    setCustomFromYear('2026');
-    setCustomToMonth('Aug');
-    setCustomToYear('2026');
-  };
-
+export const SalesVsStockWidget = ({ startMonth, startYear, endMonth, endYear }) => {
   return (
     <div className="chart-widget">
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Monthly Sales Trend</h4>
-          <p>{subtitleText}</p>
+          <h4>Week-on-Week Sales Velocity vs. Stock-on-Hand</h4>
+          <p>Weekly Replenishment View - Recent 12 Weeks</p>
         </div>
-
-        {/* Range Controls */}
-        <div className="chart-range-controls">
-          <div className="range-preset-group">
-            {[
-              { id: '6M', label: '6M' },
-              { id: '12M', label: '12M' },
-              { id: '24M', label: '24M' },
-              { id: 'CUSTOM', label: 'Custom' }
-            ].map(p => (
-              <button
-                key={p.id}
-                className={`range-preset-btn ${presetRange === p.id ? 'active' : ''}`}
-                onClick={() => setPresetRange(p.id)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          <button 
-            className={`chart-reset-btn ${presetRange === '6M' ? 'disabled' : ''}`}
-            onClick={handleResetToDefault}
-            title="Reset to default trend (Last 6 months)"
-            disabled={presetRange === '6M'}
-          >
-            <RotateCcw size={12} />
-            <span>Default</span>
-          </button>
-
-          {presetRange === 'CUSTOM' && (
-            <div className="custom-range-pickers">
-              <div className="custom-picker-group">
-                <span className="picker-label">From:</span>
-                <select 
-                  className="dropdown-select chart-picker-select"
-                  value={customFromMonth}
-                  onChange={(e) => setCustomFromMonth(e.target.value)}
-                >
-                  {MONTH_NAMES.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-                <select 
-                  className="dropdown-select chart-picker-select"
-                  value={customFromYear}
-                  onChange={(e) => setCustomFromYear(e.target.value)}
-                >
-                  {['2021', '2022', '2023', '2024', '2025', '2026'].map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="custom-picker-group">
-                <span className="picker-label">To:</span>
-                <select 
-                  className="dropdown-select chart-picker-select"
-                  value={customToMonth}
-                  onChange={(e) => setCustomToMonth(e.target.value)}
-                >
-                  {MONTH_NAMES.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-                <select 
-                  className="dropdown-select chart-picker-select"
-                  value={customToYear}
-                  onChange={(e) => setCustomToYear(e.target.value)}
-                >
-                  {['2021', '2022', '2023', '2024', '2025', '2026', '2027'].map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
+        <div className="chart-header-right" style={{ textAlign: 'right' }}>
+          <div style={{ color: COLORS.critical, fontSize: '0.8rem', fontWeight: 600 }}>Weekly Trapped Capital</div>
+          <div style={{ color: COLORS.critical, fontSize: '0.75rem' }}>P57.2M SOH vs P1.65M Weekly Demand</div>
         </div>
       </div>
 
       <div className="chart-container">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={COLORS.gridline} />
-            <XAxis dataKey="month" axisLine={true} tickLine={true} tick={{fontSize: 10, fill: '#a0aec0'}} />
-            <YAxis axisLine={true} tickLine={true} tick={{fontSize: 10, fill: '#a0aec0'}} tickFormatter={(val) => val + 'M'} />
+        <ResponsiveContainer width="99%" height="100%">
+          <ComposedChart data={salesVsStockData} margin={{ top: 20, right: 20, left: 0, bottom: 35 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+            <XAxis dataKey="week" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#a0aec0'}} dy={10} />
+            <YAxis 
+              yAxisId="left" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{fontSize: 10, fill: '#a0aec0'}} 
+              domain={[0, 3.5]}
+              tickCount={8}
+            />
+            <YAxis 
+              yAxisId="right" 
+              orientation="right" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{fontSize: 10, fill: '#a0aec0', dx: 10}} 
+              domain={[0, 70]}
+              tickCount={8}
+            />
             <Tooltip 
-              formatter={(value, name) => [
-                `${value}M`, 
-                name === 'sales' ? 'Actual Sales' : 'Forecast'
-              ]}
+              cursor={{fill: '#f4f4f4'}}
+              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
             />
-            
-            {/* Historical Actual Sales */}
-            <Line 
-              type="monotone" 
-              dataKey="sales" 
-              stroke={COLORS.salesTrend} 
-              strokeWidth={2} 
-              dot={{ r: 3, fill: COLORS.salesTrend }}
-              activeDot={{ r: 6 }}
-              name="sales"
-              connectNulls={true}
-              isAnimationActive={false}
+            <Legend 
+              verticalAlign="bottom" 
+              wrapperStyle={{ paddingTop: '10px', display: 'flex', justifyContent: 'center' }}
+              content={(props) => {
+                return (
+                  <ul className="custom-legend" style={{ justifyContent: 'center', gap: '2rem' }}>
+                    <li className="legend-item" style={{ color: '#7b61ff', fontWeight: 500 }}>
+                      <div style={{ width: '10px', height: '10px', backgroundColor: '#7b61ff', borderRadius: '2px' }}></div>
+                      <span>Weekly Sales Revenue</span>
+                    </li>
+                    <li className="legend-item" style={{ color: '#E5484D', fontWeight: 500 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', width: '20px' }}>
+                        <div style={{ width: '6px', height: '2px', backgroundColor: '#E5484D' }}></div>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', border: '2px solid #E5484D', backgroundColor: '#ffffff', margin: '0 1px' }}></div>
+                        <div style={{ width: '6px', height: '2px', backgroundColor: '#E5484D' }}></div>
+                      </div>
+                      <span>Stock-on-Hand / Inventory Value</span>
+                    </li>
+                  </ul>
+                );
+              }}
             />
-
-            {/* Forecast Segment */}
-            <Line 
-              type="monotone" 
-              dataKey="forecastSales" 
-              stroke={COLORS.salesTrend} 
-              strokeWidth={2} 
-              strokeDasharray="5 5"
-              dot={{ r: 3, fill: COLORS.salesTrend }}
-              activeDot={{ r: 6 }}
-              name="forecastSales"
-              connectNulls={true}
-              isAnimationActive={false}
-            />
-          </LineChart>
+            <Bar yAxisId="left" dataKey="sales" name="Weekly Sales Revenue" fill="#7b61ff" barSize={20} radius={[4, 4, 0, 0]} />
+            <Line yAxisId="right" type="stepAfter" dataKey="soh" name="Stock-on-Hand" stroke={COLORS.critical} strokeWidth={2} dot={false} activeDot={false} />
+          </ComposedChart>
         </ResponsiveContainer>
+      </div>
+      <div className="chart-footer-legend" style={{ display: 'flex', justifyContent: 'flex-start', gap: '2rem', padding: '0 20px', fontSize: '0.75rem', color: '#a0aec0', marginTop: '0px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{width: 12, height: 12, borderRadius: '50%', backgroundColor: '#7b61ff'}}></div> Left: PHP M sales</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{width: 20, height: 2, backgroundColor: '#E5484D'}}></div> Right: PHP M SOH</div>
       </div>
     </div>
   );
 };
 
-export const DonutChartWidget = () => {
+// Mock data for ABC Classification
+const generateABCData = () => {
+  const data = [];
+  // Exponential decay to mimic pareto
+  for (let i = 0; i <= 1200; i += 20) {
+    let val = 0;
+    if (i < 50) val = 500 - (i * 4);
+    else if (i < 200) val = 300 - ((i - 50) * 1.5);
+    else if (i < 600) val = 75 - ((i - 200) * 0.15);
+    else val = 15 - ((i - 600) * 0.02);
+    
+    data.push({
+      sku: i,
+      value: Math.max(0, val),
+    });
+  }
+  return data;
+};
+const abcData = generateABCData();
+
+export const ABCClassificationWidget = () => {
   return (
     <div className="chart-widget">
       <div className="chart-header">
-        <h4>ABC Breakdown</h4>
-        <p>Category distribution</p>
+        <div className="chart-title-area">
+          <h4>ABC Classification</h4>
+        </div>
+        <div className="chart-header-right">
+          <span style={{ fontSize: '0.75rem', color: '#a0aec0' }}>Pareto Analysis</span>
+        </div>
       </div>
-      <div className="chart-container donut-container">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={abcData}
-              cx="50%"
-              cy="45%"
-              innerRadius={70}
-              outerRadius={100}
-              paddingAngle={5}
-              dataKey="value"
+      
+      <div className="chart-container" style={{ position: 'relative' }}>
+        <ResponsiveContainer width="99%" height="100%">
+          <ComposedChart data={abcData} margin={{ top: 20, right: 20, left: 0, bottom: 35 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} stroke="#f0f0f0" />
+            <XAxis 
+              dataKey="sku" 
+              type="number" 
+              domain={[0, 1300]} 
+              tickCount={7} 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{fontSize: 10, fill: '#a0aec0'}} 
+              dy={10}
             >
-              {abcData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-            <Legend 
-              verticalAlign="bottom" 
-              height={36} 
-              content={(props) => {
-                const { payload } = props;
-                return (
-                  <ul className="custom-legend">
-                    {payload.map((entry, index) => (
-                      <li key={`item-${index}`} className="legend-item">
-                        <span className="legend-color" style={{ backgroundColor: entry.payload.color }}></span>
-                        <span className="legend-text">{entry.value}: {entry.payload.value}</span>
-                      </li>
-                    ))}
-                  </ul>
-                );
-              }}
+              <Label value="SKUs (Ranked by Revenue)" offset={0} position="bottom" style={{ fontSize: '10px', fill: '#a0aec0' }} />
+            </XAxis>
+            <YAxis 
+              yAxisId="left" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{fontSize: 10, fill: '#a0aec0'}} 
+              domain={[0, 500]}
+              tickCount={6}
             />
-          </PieChart>
+            <YAxis 
+              yAxisId="right" 
+              orientation="right" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{fontSize: 10, fill: COLORS.critical, dx: 10}} 
+              domain={[0, 100]}
+              tickCount={6}
+            />
+            <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+            
+            <Area yAxisId="left" type="monotone" dataKey="value" stroke="#a855f7" fill="#ebd4ff" strokeWidth={2} />
+            
+            <ReferenceLine yAxisId="left" x={187} stroke="#a855f7" strokeDasharray="3 3" />
+            <ReferenceLine yAxisId="left" x={610} stroke="#a855f7" strokeDasharray="3 3" />
+          </ComposedChart>
         </ResponsiveContainer>
+        
+        {/* Custom Overlay Labels for ABC */}
+        <div style={{ position: 'absolute', top: '15%', left: '22%', border: '1px solid #d8b4fe', backgroundColor: '#faf5ff', padding: '6px 12px', borderRadius: '4px', fontSize: '0.7rem', color: '#6b21a8' }}>
+          <strong>Class A</strong><br/>
+          187 SKUs (15%)<br/>
+          ~73.2% Rev
+        </div>
+        
+        <div style={{ position: 'absolute', top: '15%', left: '46%', border: '1px solid #d8b4fe', backgroundColor: '#faf5ff', padding: '6px 12px', borderRadius: '4px', fontSize: '0.7rem', color: '#6b21a8' }}>
+          <strong>Class B</strong><br/>
+          423 SKUs (34%)<br/>
+          ~23.4% Rev
+        </div>
+        
+        <div style={{ position: 'absolute', bottom: '0', right: '0', border: '1px solid #e9d5ff', backgroundColor: '#ffffff', padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem', color: '#a855f7' }}>
+          Class C - 637 SKUs (51%) - ~3.4% Rev
+        </div>
       </div>
     </div>
   );

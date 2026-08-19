@@ -1,16 +1,23 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { Check, Calendar } from 'lucide-react';
+import { getCurrentUser } from '../auth';
 import './Topbar.css';
 
 const Topbar = ({ 
   toggleSidebar, 
-  selectedMonth, 
-  selectedYear, 
-  pendingMonth,
-  setPendingMonth,
-  pendingYear,
-  setPendingYear,
+  startMonth, 
+  startYear, 
+  endMonth,
+  endYear,
+  pendingStartMonth,
+  setPendingStartMonth,
+  pendingStartYear,
+  setPendingStartYear,
+  pendingEndMonth,
+  setPendingEndMonth,
+  pendingEndYear,
+  setPendingEndYear,
   isPending,
   handleApplyPeriod,
   handleResetToToday,
@@ -18,8 +25,28 @@ const Topbar = ({
   realWorldYear = '2026'
 }) => {
   const location = useLocation();
-  const isToday = pendingMonth === realWorldMonth && pendingYear === realWorldYear;
+  const isToday = 
+    pendingStartMonth === realWorldMonth && 
+    pendingStartYear === realWorldYear && 
+    pendingEndMonth === realWorldMonth && 
+    pendingEndYear === realWorldYear;
   const isForecastPage = location.pathname === '/forecast';
+
+  const user = getCurrentUser();
+  const getInitials = (u) => {
+    if (!u) return 'JD'; // Fallback
+    if (u.fullName) {
+      const parts = u.fullName.split(' ').filter(Boolean);
+      if (parts.length === 0) return '??';
+      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    if (u.email) {
+      return u.email.substring(0, 2).toUpperCase();
+    }
+    return '??';
+  };
+  const initials = getInitials(user);
 
   return (
     <header className="topbar">
@@ -32,12 +59,12 @@ const Topbar = ({
           </svg>
         </button>
         
-        {!isForecastPage && (
+        {!isForecastPage && location.pathname !== '/' && (
           <div className="period-selector-wrapper">
             <select 
               className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
-              value={pendingMonth} 
-              onChange={(e) => setPendingMonth(e.target.value)}
+              value={pendingStartMonth} 
+              onChange={(e) => setPendingStartMonth(e.target.value)}
             >
               {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
                 <option key={m} value={m}>{m}</option>
@@ -46,8 +73,30 @@ const Topbar = ({
             
             <select 
               className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
-              value={pendingYear} 
-              onChange={(e) => setPendingYear(e.target.value)}
+              value={pendingStartYear} 
+              onChange={(e) => setPendingStartYear(e.target.value)}
+            >
+              {['2021', '2022', '2023', '2024', '2025', '2026'].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+
+            <span style={{ color: '#a0aec0', fontSize: '0.85rem' }}>to</span>
+
+            <select 
+              className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
+              value={pendingEndMonth} 
+              onChange={(e) => setPendingEndMonth(e.target.value)}
+            >
+              {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            
+            <select 
+              className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
+              value={pendingEndYear} 
+              onChange={(e) => setPendingEndYear(e.target.value)}
             >
               {['2021', '2022', '2023', '2024', '2025', '2026'].map(y => (
                 <option key={y} value={y}>{y}</option>
@@ -81,7 +130,7 @@ const Topbar = ({
       </div>
       
       <div className="topbar-right">
-        <div className="avatar blue-avatar">JD</div>
+        <div className="avatar blue-avatar" title={user?.fullName || user?.email || 'User'}>{initials}</div>
       </div>
     </header>
   );

@@ -54,27 +54,31 @@ def _get_expiry_hours() -> float:
     return float(os.environ.get("JWT_EXPIRY_HOURS", _DEFAULT_EXPIRY_HOURS))
 
 
-def create_access_token(*, user_id: int, email: str, role: str) -> str:
-    """Encodes a JWT carrying user_id (sub), email, and role, expiring after
-    JWT_EXPIRY_HOURS (default 8) — Story #91: sessions must expire so an
-    unattended machine isn't an open door."""
+def create_access_token(*, user_id: int, email: str, role: str, full_name: str) -> str:
+    """Encodes a JWT carrying user_id (sub), email, role, and full_name,
+    expiring after JWT_EXPIRY_HOURS (default 8) — Story #91: sessions must
+    expire so an unattended machine isn't an open door. full_name is display
+    data only (e.g. the Sidebar's signed-in-as line), never used for
+    authorization decisions."""
     expire = datetime.now(timezone.utc) + timedelta(hours=_get_expiry_hours())
     payload = {
         "sub": str(user_id),
         "email": email,
         "role": role,
+        "full_name": full_name,
         "exp": expire,
     }
     return jwt.encode(payload, _get_secret_key(), algorithm=_get_algorithm())
 
 
 class TokenPayload:
-    __slots__ = ("user_id", "email", "role")
+    __slots__ = ("user_id", "email", "role", "full_name")
 
-    def __init__(self, user_id: int, email: str, role: str) -> None:
+    def __init__(self, user_id: int, email: str, role: str, full_name: str) -> None:
         self.user_id = user_id
         self.email = email
         self.role = role
+        self.full_name = full_name
 
 
 def decode_access_token(token: str) -> TokenPayload:
@@ -85,6 +89,9 @@ def decode_access_token(token: str) -> TokenPayload:
         user_id=int(payload["sub"]),
         email=payload["email"],
         role=payload["role"],
+        # .get(), not [] — tokens issued before full_name existed shouldn't
+        # fail to decode; they just display a blank name until re-login.
+        full_name=payload.get("full_name", ""),
     )
 
 

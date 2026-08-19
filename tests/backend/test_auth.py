@@ -58,7 +58,7 @@ class FakeSession:
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
-        if "SELECT user_id, password_hash, role FROM Users" in sql:
+        if "SELECT user_id, password_hash, role, full_name FROM Users" in sql:
             row = next((u for u in self.users if u["email"] == params["email"]), None)
             return FakeResult(row)
         if "SELECT 1 FROM Users" in sql:
@@ -69,10 +69,15 @@ class FakeSession:
                 "user_id": len(self.users) + 1,
                 "email": params["email"],
                 "password_hash": params["password_hash"],
+                "full_name": params["full_name"],
                 "role": params["role"],
             }
             self.users.append(new_user)
-            return FakeResult({"user_id": new_user["user_id"], "role": new_user["role"]})
+            return FakeResult({
+                "user_id": new_user["user_id"],
+                "role": new_user["role"],
+                "full_name": new_user["full_name"],
+            })
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
     def commit(self):
@@ -89,6 +94,7 @@ def fake_users():
             "user_id": 1,
             "email": "admin@ssmcapstone.com",
             "password_hash": auth_utils.hash_password("correct-horse-battery-staple"),
+            "full_name": "Admin User",
             "role": "admin",
         }
     ]
@@ -104,11 +110,15 @@ def client(fake_users):
 
 
 def admin_token():
-    return auth_utils.create_access_token(user_id=1, email="admin@ssmcapstone.com", role="admin")
+    return auth_utils.create_access_token(
+        user_id=1, email="admin@ssmcapstone.com", role="admin", full_name="Admin User"
+    )
 
 
 def staff_token():
-    return auth_utils.create_access_token(user_id=2, email="staff@ssmcapstone.com", role="staff")
+    return auth_utils.create_access_token(
+        user_id=2, email="staff@ssmcapstone.com", role="staff", full_name="Staff User"
+    )
 
 
 # --- auth_utils -------------------------------------------------------
@@ -122,16 +132,21 @@ def test_hash_and_verify_password_roundtrip():
 
 
 def test_decode_access_token_roundtrip():
-    token = auth_utils.create_access_token(user_id=7, email="x@ssmcapstone.com", role="staff")
+    token = auth_utils.create_access_token(
+        user_id=7, email="x@ssmcapstone.com", role="staff", full_name="X User"
+    )
     payload = auth_utils.decode_access_token(token)
     assert payload.user_id == 7
     assert payload.email == "x@ssmcapstone.com"
     assert payload.role == "staff"
+    assert payload.full_name == "X User"
 
 
 def test_decode_expired_token_raises(monkeypatch):
     monkeypatch.setenv("JWT_EXPIRY_HOURS", "-1")
-    token = auth_utils.create_access_token(user_id=1, email="x@ssmcapstone.com", role="staff")
+    token = auth_utils.create_access_token(
+        user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
+    )
     with pytest.raises(auth_utils.JWTError):
         auth_utils.decode_access_token(token)
 
@@ -139,7 +154,9 @@ def test_decode_expired_token_raises(monkeypatch):
 def test_token_exp_defaults_to_eight_hours(monkeypatch):
     monkeypatch.delenv("JWT_EXPIRY_HOURS", raising=False)
     before = datetime.now(timezone.utc)
-    token = auth_utils.create_access_token(user_id=1, email="x@ssmcapstone.com", role="staff")
+    token = auth_utils.create_access_token(
+        user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
+    )
     exp = datetime.fromtimestamp(jwt.get_unverified_claims(token)["exp"], tz=timezone.utc)
     assert timedelta(hours=7, minutes=59) < (exp - before) < timedelta(hours=8, minutes=1)
 
@@ -147,13 +164,17 @@ def test_token_exp_defaults_to_eight_hours(monkeypatch):
 def test_token_exp_honors_custom_hours(monkeypatch):
     monkeypatch.setenv("JWT_EXPIRY_HOURS", "2")
     before = datetime.now(timezone.utc)
-    token = auth_utils.create_access_token(user_id=1, email="x@ssmcapstone.com", role="staff")
+    token = auth_utils.create_access_token(
+        user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
+    )
     exp = datetime.fromtimestamp(jwt.get_unverified_claims(token)["exp"], tz=timezone.utc)
     assert timedelta(hours=1, minutes=59) < (exp - before) < timedelta(hours=2, minutes=1)
 
 
 def test_decode_tampered_signature_raises(monkeypatch):
-    token = auth_utils.create_access_token(user_id=1, email="x@ssmcapstone.com", role="staff")
+    token = auth_utils.create_access_token(
+        user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
+    )
     monkeypatch.setenv("JWT_SECRET_KEY", "a-different-secret")
     with pytest.raises(auth_utils.JWTError):
         auth_utils.decode_access_token(token)
@@ -162,7 +183,9 @@ def test_decode_tampered_signature_raises(monkeypatch):
 def test_missing_secret_key_raises(monkeypatch):
     monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
     with pytest.raises(RuntimeError):
-        auth_utils.create_access_token(user_id=1, email="x@ssmcapstone.com", role="staff")
+        auth_utils.create_access_token(
+            user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
+        )
 
 
 # --- deps.get_current_user --------------------------------------------
@@ -199,8 +222,10 @@ def test_login_success(client):
     body = resp.json()
     assert body["token_type"] == "bearer"
     assert body["role"] == "admin"
+    assert body["full_name"] == "Admin User"
     decoded = auth_utils.decode_access_token(body["access_token"])
     assert decoded.email == "admin@ssmcapstone.com"
+    assert decoded.full_name == "Admin User"
 
 
 def test_login_wrong_password(client):
@@ -226,7 +251,8 @@ def test_login_unknown_email_same_error_as_wrong_password(client):
 
 def test_register_requires_auth(client):
     resp = client.post(
-        "/auth/register", json={"email": "new@ssmcapstone.com", "password": "supersecret1"}
+        "/auth/register",
+        json={"email": "new@ssmcapstone.com", "password": "supersecret1", "full_name": "New User"},
     )
     assert resp.status_code == 401
 
@@ -234,7 +260,7 @@ def test_register_requires_auth(client):
 def test_register_forbidden_for_non_admin(client):
     resp = client.post(
         "/auth/register",
-        json={"email": "new@ssmcapstone.com", "password": "supersecret1"},
+        json={"email": "new@ssmcapstone.com", "password": "supersecret1", "full_name": "New User"},
         headers={"Authorization": f"Bearer {staff_token()}"},
     )
     assert resp.status_code == 403
@@ -243,18 +269,25 @@ def test_register_forbidden_for_non_admin(client):
 def test_register_success_for_admin(client, fake_users):
     resp = client.post(
         "/auth/register",
-        json={"email": "new@ssmcapstone.com", "password": "supersecret1", "role": "staff"},
+        json={
+            "email": "new@ssmcapstone.com",
+            "password": "supersecret1",
+            "full_name": "New User",
+            "role": "staff",
+        },
         headers={"Authorization": f"Bearer {admin_token()}"},
     )
     assert resp.status_code == 201
-    assert resp.json()["role"] == "staff"
+    body = resp.json()
+    assert body["role"] == "staff"
+    assert body["full_name"] == "New User"
     assert any(u["email"] == "new@ssmcapstone.com" for u in fake_users)
 
 
 def test_register_conflict_on_existing_email(client):
     resp = client.post(
         "/auth/register",
-        json={"email": "admin@ssmcapstone.com", "password": "supersecret1"},
+        json={"email": "admin@ssmcapstone.com", "password": "supersecret1", "full_name": "Dupe"},
         headers={"Authorization": f"Bearer {admin_token()}"},
     )
     assert resp.status_code == 409
@@ -263,7 +296,12 @@ def test_register_conflict_on_existing_email(client):
 def test_register_rejects_invalid_role(client):
     resp = client.post(
         "/auth/register",
-        json={"email": "new@ssmcapstone.com", "password": "supersecret1", "role": "superuser"},
+        json={
+            "email": "new@ssmcapstone.com",
+            "password": "supersecret1",
+            "full_name": "New User",
+            "role": "superuser",
+        },
         headers={"Authorization": f"Bearer {admin_token()}"},
     )
     assert resp.status_code == 422
@@ -272,7 +310,16 @@ def test_register_rejects_invalid_role(client):
 def test_register_rejects_short_password(client):
     resp = client.post(
         "/auth/register",
-        json={"email": "new@ssmcapstone.com", "password": "short"},
+        json={"email": "new@ssmcapstone.com", "password": "short", "full_name": "New User"},
+        headers={"Authorization": f"Bearer {admin_token()}"},
+    )
+    assert resp.status_code == 422
+
+
+def test_register_rejects_blank_full_name(client):
+    resp = client.post(
+        "/auth/register",
+        json={"email": "new@ssmcapstone.com", "password": "supersecret1", "full_name": ""},
         headers={"Authorization": f"Bearer {admin_token()}"},
     )
     assert resp.status_code == 422

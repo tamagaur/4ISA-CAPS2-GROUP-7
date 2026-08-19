@@ -104,7 +104,7 @@ const WarehouseMovement = () => {
 
   const dropdownRef = useRef(null);
 
-  const { selectedMonth, selectedYear } = useOutletContext() || { selectedMonth: 'Apr', selectedYear: '2026' };
+  const { startMonth, startYear, endMonth, endYear } = useOutletContext() || { startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026' };
 
   // Persistent Recently Searched history (Max 5)
   const [recentSearches, setRecentSearches] = useState(() => {
@@ -130,11 +130,12 @@ const WarehouseMovement = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Calculate dynamic movement values based on selectedMonth/selectedYear
+  // Calculate dynamic movement values based on startMonth/endMonth
   const dynamicData = useMemo(() => {
-    const monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(selectedMonth) || 0;
-    const yearVal = parseInt(selectedYear) || 2026;
-    const seed = (monthIndex + yearVal) % 6;
+    const startMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(startMonth) || 0;
+    const endMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(endMonth) || 0;
+    const yearVal = parseInt(startYear) || 2026;
+    const seed = (startMonthIndex + endMonthIndex + yearVal) % 6;
     const diff = seed - 1; // 0 offset for Apr 2026
 
     return {
@@ -144,7 +145,7 @@ const WarehouseMovement = () => {
       turnover: (2.3 + diff * 0.1).toFixed(1),
       utilizationPct: 68 + diff * 3,
     };
-  }, [selectedMonth, selectedYear]);
+  }, [startMonth, startYear, endMonth, endYear]);
 
   const dynamicCapacity = useMemo(() => {
     const totalCapacity = 80000;
@@ -436,7 +437,7 @@ const WarehouseMovement = () => {
               onChange={(e) => setSelectedDateRange(e.target.value)}
               className="wm-select-input"
             >
-              <option value="CURRENT_PERIOD">Current Period ({selectedMonth} {selectedYear})</option>
+              <option value="CURRENT_PERIOD">Current Period ({startMonth} {startYear} - {endMonth} {endYear})</option>
               <option value="LAST_7_DAYS">Last 7 Days</option>
               <option value="LAST_30_DAYS">Last 30 Days</option>
               <option value="ALL">All Time</option>
@@ -675,7 +676,7 @@ const WarehouseMovement = () => {
             Warehouse <span>movement</span>
           </h2>
           <p className="wm-subtitle">
-            Stock movement log, SKU inventory status & warehouse capacity for {selectedMonth} {selectedYear}
+            Stock movement log, SKU inventory status & warehouse capacity for {startMonth} {startYear} - {endMonth} {endYear}
           </p>
         </div>
 

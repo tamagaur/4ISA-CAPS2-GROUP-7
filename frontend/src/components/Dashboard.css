@@ -13,21 +13,100 @@
 
 .dashboard-header {
   margin-bottom: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
-.dashboard-header h2 {
+.dashboard-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.dashboard-title-row h2 {
   font-size: 2rem;
   color: #1a202c;
-  margin: 0 0 0.2rem 0;
+  margin: 0;
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
 }
 
-.dashboard-header h2 span {
-  color: #c53030;
+.dashboard-title-row h2 span {
+  color: #e53e3e;
   font-weight: 600;
   font-size: 2rem;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4a5568;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background-color: #f7fafc;
+  border-color: #cbd5e0;
+}
+
+.dashboard-date-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.date-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.date-select-btn:hover {
+  background-color: #f7fafc;
+  border-color: #cbd5e0;
+}
+
+.date-select-btn svg {
+  color: #a0aec0;
+}
+
+.date-today-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: #e53e3e;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.date-today-btn:hover {
+  background-color: #c53030;
 }
 
 .dashboard-header p {
@@ -38,13 +117,13 @@
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 2rem;
 }
 
 .charts-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 3fr 2fr;
   gap: 2rem;
 }
 

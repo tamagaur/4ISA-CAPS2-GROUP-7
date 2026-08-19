@@ -2,10 +2,11 @@
   background-color: #ffffff;
   border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
-  height: 420px;
+  height: 480px;
 }
 
 .chart-header {
@@ -136,6 +137,8 @@
 .chart-container {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  position: relative;
 }
 
 .donut-container {
@@ -176,3 +179,4 @@
   height: 10px;
   border-radius: 50%;
 }
+

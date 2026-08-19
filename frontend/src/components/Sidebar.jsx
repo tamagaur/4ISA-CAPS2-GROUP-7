@@ -11,8 +11,17 @@ import {
   LogOut,
   X
 } from 'lucide-react';
-import { logout } from '../auth';
+import { logout, getCurrentUser } from '../auth';
 import './Sidebar.css';
+
+// Initials for the bottom-profile avatar, e.g. "Audrey Bugayong" -> "AB".
+const getInitials = (name) => {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] || '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (first + last).toUpperCase();
+};
 
 const navItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
@@ -27,6 +36,9 @@ const navItems = [
 const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const currentUser = getCurrentUser();
+  const displayName = currentUser?.fullName || currentUser?.email || 'Signed in';
+  const displayRole = currentUser?.role ? currentUser.role.toUpperCase() : '';
 
   const handleConfirmLogout = () => {
     setShowLogoutModal(false);
@@ -85,10 +97,10 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
         {/* Bottom Profile */}
         <div className="sidebar-bottom">
           <div className="sidebar-profile-bottom">
-            <div className="avatar blue-avatar">JD</div>
+            <div className="avatar blue-avatar">{getInitials(displayName)}</div>
             <div className="profile-info">
-              <span className="profile-name">Juan dela Cruz</span>
-              <span className="profile-role">ADMIN - URDANETA</span>
+              <span className="profile-name">{displayName}</span>
+              <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
             </div>
           </div>
           

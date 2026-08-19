@@ -120,14 +120,15 @@ const BadOrders = () => {
   const boRateTrend = useMemo(() => generateBORateTrend(selectedBOSKU), [selectedBOSKU]);
   const latestBORate = boRateTrend[boRateTrend.length - 1]?.rate ?? 0;
 
-  const { selectedMonth, selectedYear } = useOutletContext() || { selectedMonth: 'Apr', selectedYear: '2026' };
+  const { startMonth, startYear, endMonth, endYear } = useOutletContext() || { startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026' };
 
   const dateOffset = useMemo(() => {
-    const monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(selectedMonth) || 0;
-    const yearVal = parseInt(selectedYear) || 2026;
-    const seed = (monthIndex + yearVal) % 5;
-    return seed - 4;
-  }, [selectedMonth, selectedYear]);
+    const startMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(startMonth) || 0;
+    const endMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(endMonth) || 0;
+    const yearVal = parseInt(startYear) || 2026;
+    const seed = (startMonthIndex + endMonthIndex + yearVal) % 6;
+    return seed - 1;
+  }, [startMonth, startYear, endMonth, endYear]);
 
   // Manually-reported incidents (prepended to the front by handleAddReport)
   // on top of the ETL-extracted baseline, kept separate so the KPI/reason
@@ -202,8 +203,11 @@ const BadOrders = () => {
         <div className="bo-page-header">
           <div className="bo-header-left">
             <h2 className="bo-page-title">Bad order <span>monitoring</span></h2>
+            <p className="bad-subtitle">
+              Manage damage, expiry, and loss reports for {startMonth} {startYear} - {endMonth} {endYear}
+            </p>
             <p className="bo-page-subtitle">
-              Damaged, expired, or defective stock — extracted from SSM's RMR GS &amp; BO reports where possible, or flagged directly by staff where the source reports don't capture it (e.g. SKU, reason). Consistent BO data sharpens future SARIMA &amp; LP optimization.
+              RMR GS &amp; BO reports where possible, or flagged directly by staff where the source reports don't capture it (e.g. SKU, reason). Consistent BO data sharpens future SARIMA &amp; LP optimization.
             </p>
           </div>
           <button className="bo-report-btn" onClick={() => setIsModalOpen(true)}>
@@ -252,6 +256,7 @@ const BadOrders = () => {
                 {BO_TRACKED_SKUS.map(s => (
                   <option key={s.code} value={s.code}>{s.code} — {s.product}</option>
                 ))}
+                <option value="CURRENT_PERIOD">Current Period ({startMonth} {startYear} - {endMonth} {endYear})</option>
               </select>
             </div>
             <div className="bo-chart-wrapper">
