@@ -8,7 +8,6 @@ const initialFormState = {
   productName: '',
   sizeVal: '',
   sizeUnit: 'L',
-  category: '',
   unitPrice: '',
   reorderPoint: '',
   initialStock: '',
@@ -19,17 +18,11 @@ const initialFormState = {
 const DEFAULT_SUPPLIERS = [
   'Del Monte Philippines',
   'Unilever Philippines',
-  'Universal Robina Corp',
-  'Monde Nissin',
-  'Nestlé Philippines',
 ];
 
 const DEFAULT_BRANDS = [
   'Del Monte',
   'Unilever',
-  'Universal Robina',
-  'Monde Nissin',
-  'Nestlé',
 ];
 
 const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, suppliers = DEFAULT_SUPPLIERS }) => {
@@ -97,7 +90,6 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
 
     if (!form.brand.trim()) newErrors.brand = 'Brand is required';
     if (!form.productName.trim()) newErrors.productName = 'Product Name is required';
-    if (!form.category) newErrors.category = 'Category is required';
     if (!form.unitPrice || parseFloat(form.unitPrice) <= 0) newErrors.unitPrice = 'Valid unit price is required';
     if (!form.reorderPoint && form.reorderPoint !== '0') newErrors.reorderPoint = 'Reorder Point is required';
     if (!form.supplier.trim()) newErrors.supplier = 'Supplier is required';
@@ -123,6 +115,7 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
 
     onAdd({
       ...form,
+      category: 'PENDING',
       productName: fullProduct
     });
 
@@ -264,25 +257,8 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
                 </div>
               </div>
 
-              {/* Row 4: Category + Unit Price */}
-              <div className="form-row two-col">
-                <div className="form-group">
-                  <label className="form-label">
-                    CATEGORY <span className="required">*</span>
-                  </label>
-                  <select
-                    name="category"
-                    value={form.category}
-                    onChange={handleChange}
-                    className={`form-input form-select ${errors.category ? 'input-error' : ''}`}
-                  >
-                    <option value="">Select category</option>
-                    <option value="A">Category A</option>
-                    <option value="B">Category B</option>
-                    <option value="C">Category C</option>
-                  </select>
-                  {errors.category && <span className="error-text">{errors.category}</span>}
-                </div>
+              {/* Row 4: Unit Price */}
+              <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">
                     UNIT PRICE <span className="required">*</span>
@@ -407,7 +383,7 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
               </div>
               <div className="summary-field">
                 <span className="summary-field-label">CATEGORY</span>
-                <span className="summary-field-val">Category {form.category}</span>
+                <span className="summary-field-val pending-category">Pending Auto-Classification</span>
               </div>
               <div className="summary-field">
                 <span className="summary-field-label">UNIT PRICE</span>

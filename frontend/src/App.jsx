@@ -8,8 +8,8 @@ import SKUManagement from './components/SKUManagement';
 import ABCClassification from './components/ABCClassification';
 import SKUForecast from './components/SKUForecast';
 import ReorderRecommendations from './components/ReorderRecommendations';
-import WarehouseMovement from './components/WarehouseMovement';
 import BadOrders from './components/BadOrders';
+import AuditLog from './components/AuditLog';
 import DataUpload from './components/DataUpload';
 import './App.css';
 
@@ -20,8 +20,8 @@ const routeTitles = {
   '/abc': 'SAN2 | ABC Classification',
   '/forecast': 'SAN2 | SKU Forecast',
   '/reorder': 'SAN2 | Reorder Recommendations',
-  '/warehouse': 'SAN2 | Warehouse Movement',
   '/bad-orders': 'SAN2 | Bad Orders',
+  '/audit-log': 'SAN2 | Audit Log',
   '/upload': 'SAN2 | Data Upload',
 };
 
@@ -54,8 +54,8 @@ function App() {
           <Route path="abc" element={<ABCClassification />} />
           <Route path="forecast" element={<SKUForecast />} />
           <Route path="reorder" element={<ReorderRecommendations />} />
-          <Route path="warehouse" element={<WarehouseMovement />} />
           <Route path="bad-orders" element={<BadOrders />} />
+          <Route path="audit-log" element={<AuditLog />} />
           <Route path="upload" element={<DataUpload />} />
         </Route>
       </Routes>

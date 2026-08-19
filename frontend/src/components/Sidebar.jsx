@@ -6,14 +6,23 @@ import {
   Layers, 
   TrendingUp, 
   RotateCcw, 
-  Box, 
   AlertTriangle, 
   Upload,
   LogOut,
-  X
+  X,
+  ClipboardList
 } from 'lucide-react';
-import { logout } from '../auth';
+import { logout, getCurrentUser } from '../auth';
 import './Sidebar.css';
+
+// Initials for the bottom-profile avatar, e.g. "Audrey Bugayong" -> "AB".
+const getInitials = (name) => {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] || '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (first + last).toUpperCase();
+};
 
 const navItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
@@ -21,14 +30,17 @@ const navItems = [
   { name: 'ABC Classification', icon: Layers, path: '/abc' },
   { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
   { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
-  { name: 'Warehouse Movement', icon: Box, path: '/warehouse' },
   { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders' },
+  { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
   { name: 'Data Upload', icon: Upload, path: '/upload' },
 ];
 
 const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const currentUser = getCurrentUser();
+  const displayName = currentUser?.fullName || currentUser?.email || 'Signed in';
+  const displayRole = currentUser?.role ? currentUser.role.toUpperCase() : '';
 
   const handleConfirmLogout = () => {
     setShowLogoutModal(false);
@@ -77,13 +89,7 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
               <div className="nav-item-left">
                 <item.icon className="nav-icon" size={18} />
                 <span className="nav-item-text">
-                  {item.name === 'Warehouse Movement' ? (
-                    <>
-                      Warehouse<br />Movement
-                    </>
-                  ) : (
-                    item.name
-                  )}
+                  {item.name}
                 </span>
               </div>
             </NavLink>
@@ -93,10 +99,10 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
         {/* Bottom Profile */}
         <div className="sidebar-bottom">
           <div className="sidebar-profile-bottom">
-            <div className="avatar blue-avatar">JD</div>
+            <div className="avatar blue-avatar">{getInitials(displayName)}</div>
             <div className="profile-info">
-              <span className="profile-name">Juan dela Cruz</span>
-              <span className="profile-role">ADMIN - URDANETA</span>
+              <span className="profile-name">{displayName}</span>
+              <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
             </div>
           </div>
           
@@ -105,7 +111,14 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
               <span className="status-dot"></span>
               <span className="status-text">SYS ONLINE</span>
             </div>
-            <span className="status-date">{(currentMonth || 'AUG').toUpperCase()}-11</span>
+            <span className="status-date">
+              {(() => {
+                const today = new Date();
+                const day = today.getDate().toString().padStart(2, '0');
+                const month = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][today.getMonth()];
+                return `${month}-${day}`;
+              })()}
+            </span>
           </div>
 
           <button className="logout-btn" onClick={() => setShowLogoutModal(true)}>

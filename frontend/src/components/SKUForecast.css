@@ -415,6 +415,69 @@
   border-color: #e2e8f0;
 }
 
+/* Forecast Accuracy Stat Row — Manuscript §3.5.5: MAPE and RMSE indicators.
+   Matches the LABEL/VALUE/DESC stat-block convention used across the app
+   (reorder-summary-card, abc-summary-card, wm-summary-card) instead of a
+   standalone badge, so these headline holdout-accuracy numbers carry the
+   same visual weight as every other module's key metrics. */
+.forecast-accuracy-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  background-color: #f7fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+}
+
+.forecast-stat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.forecast-stat-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #a0aec0;
+  text-transform: uppercase;
+}
+
+.forecast-stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.forecast-stat-value-neutral {
+  color: #1a202c;
+}
+
+.forecast-stat-desc {
+  font-size: 0.72rem;
+  color: #718096;
+}
+
+.forecast-stat-divider {
+  width: 1px;
+  height: 32px;
+  background-color: #e2e8f0;
+}
+
+.accuracy-high {
+  color: #2E9E5B;
+}
+
+.accuracy-moderate {
+  color: #b06000;
+}
+
+.accuracy-low {
+  color: #e53e3e;
+}
+
 /* Chart Section */
 .forecast-chart-container {
   background-color: #ffffff;
@@ -520,5 +583,20 @@
   .chart-legend {
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+
+  .selected-sku-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .forecast-accuracy-row {
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+  }
+
+  .forecast-stat-divider {
+    display: none;
   }
 }

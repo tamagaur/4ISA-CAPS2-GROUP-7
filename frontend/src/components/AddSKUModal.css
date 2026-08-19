@@ -251,6 +251,12 @@
   font-family: monospace;
 }
 
+.summary-field-val.pending-category {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 500;
+}
+
 .summary-field-val.notes-val {
   font-size: 0.8rem;
   color: #4a5568;

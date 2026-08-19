@@ -27,7 +27,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
     row = db.execute(
-        text("SELECT user_id, password_hash, role FROM Users WHERE email = :email"),
+        text("SELECT user_id, password_hash, role, full_name FROM Users WHERE email = :email"),
         {"email": body.email},
     ).mappings().first()
 
@@ -42,8 +42,10 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
     if not verify_password(body.password, row["password_hash"]):
         raise invalid_credentials
 
-    token = create_access_token(user_id=row["user_id"], email=body.email, role=row["role"])
-    return LoginResponse(access_token=token, role=row["role"])
+    token = create_access_token(
+        user_id=row["user_id"], email=body.email, role=row["role"], full_name=row["full_name"]
+    )
+    return LoginResponse(access_token=token, role=row["role"], full_name=row["full_name"])
 
 
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
@@ -70,13 +72,15 @@ def register(
     password_hash = hash_password(body.password)
     row = db.execute(
         text(
-            "INSERT INTO Users (email, password_hash, role) "
-            "VALUES (:email, :password_hash, :role) "
-            "RETURNING user_id, role"
+            "INSERT INTO Users (email, password_hash, full_name, role) "
+            "VALUES (:email, :password_hash, :full_name, :role) "
+            "RETURNING user_id, role, full_name"
         ),
-        {"email": body.email, "password_hash": password_hash, "role": body.role},
+        {"email": body.email, "password_hash": password_hash, "full_name": body.full_name, "role": body.role},
     ).mappings().first()
     db.commit()
 
-    token = create_access_token(user_id=row["user_id"], email=body.email, role=row["role"])
-    return LoginResponse(access_token=token, role=row["role"])
+    token = create_access_token(
+        user_id=row["user_id"], email=body.email, role=row["role"], full_name=row["full_name"]
+    )
+    return LoginResponse(access_token=token, role=row["role"], full_name=row["full_name"])

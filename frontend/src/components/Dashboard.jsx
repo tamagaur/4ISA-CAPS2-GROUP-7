@@ -1,14 +1,20 @@
 import React, { useMemo } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import KPICard from './KPICard';
-import { LineChartWidget, DonutChartWidget } from './Charts';
+import { SalesVsStockWidget, ABCClassificationWidget } from './Charts';
 import AlertsList from './AlertsList';
+import DateFilter from './DateFilter';
 import { COLORS } from '../theme/colors';
+import { Wallet, FlaskConical, ShieldAlert, Timer, ShoppingCart } from 'lucide-react';
 import './Dashboard.css';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { selectedMonth, selectedYear } = useOutletContext() || { selectedMonth: 'Apr', selectedYear: '2026' };
+  const { startMonth, startYear, endMonth, endYear, updatePeriodImmediately, realWorldPeriod } = useOutletContext() || { 
+    startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026',
+    updatePeriodImmediately: () => {}, 
+    realWorldPeriod: { month: 'Aug', year: '2026' } 
+  };
 
   const reorderAlerts = [
     { title: 'Surf Powder Detergent 1kg', subtitle: 'SKU-4721 • Stock: 45 / ROP: 120', type: 'CRITICAL' },
@@ -23,29 +29,42 @@ const Dashboard = () => {
   ];
 
   const dynamicKPIs = useMemo(() => {
-    const monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(selectedMonth) || 0;
-    const yearVal = parseInt(selectedYear) || 2026;
-    const seed = (monthIndex + yearVal) % 6;
-    const diff = seed - 1; // 0 offset for Apr 2026
+    const startMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(startMonth) || 0;
+    const endMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(endMonth) || 0;
+    const yearVal = parseInt(startYear) || 2026;
+    const seed = (startMonthIndex + endMonthIndex + yearVal) % 6;
+    const diff = seed - 1; 
 
-    const trappedCapital = (52.4 + diff * 1.2).toFixed(1);
-    const spoilageCost = (186.5 + diff * 8.5).toFixed(1);
-    const stockoutRate = (3.1 + diff * 0.2).toFixed(1);
+    const trappedCapital = (57.2 + diff * 1.2).toFixed(1);
+    const spoilageCost = (220.5 + diff * 8.5).toFixed(1);
+    const stockoutRate = (3.9 + diff * 0.2).toFixed(1);
+    const dsi = (34.7 + diff * 0.8).toFixed(1);
+    const orderValue = (2.84 + diff * 0.1).toFixed(2);
 
     return {
       trappedCapital: `P${trappedCapital}M`,
       spoilageCost: `P${spoilageCost}k`,
       stockoutRate: `${stockoutRate}%`,
-      incidents: 135 + diff * 6
+      dsi: `${dsi} days`,
+      orderValue: `P${orderValue}M`,
+      incidents: 159 + diff * 6
     };
-  }, [selectedMonth, selectedYear]);
+  }, [startMonth, startYear, endMonth, endYear]);
+
+  const handleRefresh = () => {
+    window.location.reload();
+  };
 
   return (
     <div className="dashboard">
       <div className="dashboard-content">
         <div className="dashboard-header">
-          <h2>Inventory <span>pulse</span></h2>
-          <p>Real-time KPIs across SSM's Urdaneta warehouse. Last synced: {selectedMonth} 22, {selectedYear}</p>
+          <div className="dashboard-title-row">
+            <h2>Inventory <span>pulse</span></h2>
+            <DateFilter onRefresh={handleRefresh} />
+          </div>
+          
+          <p>Real-time KPIs across SSM's Urdaneta warehouse. Last synced: {startMonth} {startYear} - {endMonth} {endYear}</p>
         </div>
 
         {/* KPIs Section */}
@@ -53,40 +72,52 @@ const Dashboard = () => {
           <KPICard 
             title="TRAPPED CAPITAL" 
             value={dynamicKPIs.trappedCapital} 
-            subtext="↑ 8.2% vs. baseline" 
-            subtextColor={COLORS.critical} 
-            borderColor={COLORS.critical}
-          />
-          <KPICard 
-            title="ACTIVE SKUS" 
-            value="1,247" 
-            subtext="187 Category A" 
-            subtextColor="#718096" 
-            borderColor={COLORS.abcA}
+            subtext="+8.2% vs baseline" 
+            subtextColor="#E5484D" 
+            borderColor="#E5484D"
+            icon={<Wallet size={20} />}
           />
           <KPICard 
             title="SPOILAGE COST" 
             value={dynamicKPIs.spoilageCost} 
-            subtext={`this month · ${dynamicKPIs.incidents} incidents`} 
-            subtextColor={COLORS.critical} 
-            borderColor={COLORS.warning}
+            subtext={`This month · ${dynamicKPIs.incidents} incidents`} 
+            subtextColor="#F5A623" 
+            borderColor="#F5A623"
+            icon={<FlaskConical size={20} />}
           />
-          <KPICard 
-            title="STOCKOUT RATE" 
-            value={dynamicKPIs.stockoutRate} 
-            subtext="↓ from 4.8% baseline" 
-            subtextColor={COLORS.success} 
-            borderColor={COLORS.success}
+          <KPICard
+            title="CLASS A STOCKOUT RATE"
+            value={dynamicKPIs.stockoutRate}
+            subtext="↑ from 4.8% baseline"
+            subtextColor="#3b82f6"
+            borderColor="#3b82f6"
+            icon={<ShieldAlert size={20} />}
+          />
+          <KPICard
+            title="DAYS SALES OF INVENTORY"
+            value={dynamicKPIs.dsi}
+            subtext="SOH ÷ Avg daily sales"
+            subtextColor="#a855f7"
+            borderColor="#a855f7"
+            icon={<Timer size={20} />}
+          />
+          <KPICard
+            title="RECOMMENDED ORDER VALUE"
+            value={dynamicKPIs.orderValue}
+            subtext="Based on LP"
+            subtextColor="#22c55e"
+            borderColor="#22c55e"
+            icon={<ShoppingCart size={20} />}
           />
         </div>
 
         {/* Charts Section */}
         <div className="charts-grid">
           <div className="chart-large">
-            <LineChartWidget selectedMonth={selectedMonth} selectedYear={selectedYear} />
+            <SalesVsStockWidget startMonth={startMonth} startYear={startYear} endMonth={endMonth} endYear={endYear} />
           </div>
           <div className="chart-small">
-            <DonutChartWidget />
+            <ABCClassificationWidget />
           </div>
         </div>
 

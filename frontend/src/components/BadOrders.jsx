@@ -1,9 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Plus } from 'lucide-react';
+import { logAction } from '../utils/auditLogger';
 import {
-  AreaChart,
-  Area,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  LabelList,
+  ReferenceLine,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -11,7 +16,43 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import ReportBadOrderModal from './ReportBadOrderModal';
+import DateFilter from './DateFilter';
+import { COLORS } from '../theme/colors';
 import './BadOrders.css';
+
+const BO_RATE_TARGET = 3; // %, manuscript §3.4.1.3 target threshold
+
+// SKUs with recorded incidents — the only ones a per-SKU rate is honest to show
+const BO_TRACKED_SKUS = [
+  { code: 'SKU-07642', product: 'Dove Shampoo 340ml' },
+  { code: 'SKU-01523', product: 'Tomato Sauce 250g' },
+  { code: 'SKU-09234', product: 'Sweet Corn 425g' },
+  { code: 'SKU-04721', product: 'Surf Powder Detergent 1kg' },
+  { code: 'SKU-08934', product: 'Pineapple Juice 1L' },
+];
+
+function hashSeed(code) {
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) {
+    hash = (hash * 31 + code.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+// Manuscript §3.4.1.3: BO Rate (%) = Total Bad Order Units / Total Units
+// Received x 100, tracked as a time series per SKU. Deterministic per SKU
+// (not random) so the same SKU always shows the same shape.
+const generateBORateTrend = (skuCode) => {
+  const seed = hashSeed(skuCode);
+  const base = 3.5 + (seed % 40) / 10; // 3.5 - 7.5, starts above target
+  const monthNames = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
+  return monthNames.map((month, i) => {
+    const wobble = Math.sin((seed % 7) + i * 0.9) * 0.6;
+    const drift = i * -0.35; // gradual improvement toward target
+    const rate = Math.max(0.8, base + wobble + drift);
+    return { month, rate: Math.round(rate * 10) / 10 };
+  });
+};
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
@@ -37,27 +78,24 @@ const formatSKU = (sku) => {
   return sku;
 };
 
-// Chart Trend data: 6 months
-const incidentTrendData = [
-  { month: 'Nov', incidents: 18 },
-  { month: 'Dec', incidents: 22 },
-  { month: 'Jan', incidents: 28 },
-  { month: 'Feb', incidents: 25 },
-  { month: 'Mar', incidents: 31 },
-  { month: 'Apr', incidents: 28 },
-];
-
-// Initial incident log list matching the prototype
+// Story: Bad Order rows are primarily a monitoring log extracted from SSM's
+// RMR GS & BO reports via ETL (§3.4.1.3) — but that source data (see
+// config/column_maps/rmr_gs_bo.yaml) has no SKU or reason column, so staff
+// can also log an incident manually via the Report form to capture detail
+// ETL structurally can't. Either way, no status field: this is a log to
+// read, not a case-management workflow a user triages afterward.
 const initialIncidents = [
-  { id: 'INC-2024-135', sku: 'SKU-07642', brand: 'Unilever', product: 'Dove Shampoo 340ml', qty: 24, reason: 'Transport Damage', value: 12600, date: '2026-04-28', status: 'Open' },
-  { id: 'INC-2024-134', sku: 'SKU-01523', brand: 'Del Monte', product: 'Tomato Sauce 250g', qty: 18, reason: 'Expiry', value: 8500, date: '2026-04-27', status: 'Resolved' },
-  { id: 'INC-2024-133', sku: 'SKU-09234', brand: 'Del Monte', product: 'Sweet Corn 425g', qty: 32, reason: 'Storage Issue', value: 4200, date: '2026-04-26', status: 'Under Investigation' },
-  { id: 'INC-2024-132', sku: 'SKU-04721', brand: 'Unilever', product: 'Surf Powder Detergent 1kg', qty: 50, reason: 'Transport Damage', value: 6400, date: '2026-04-24', status: 'Resolved' },
-  { id: 'INC-2024-131', sku: 'SKU-08934', brand: 'Del Monte', product: 'Pineapple Juice 1L', qty: 15, reason: 'Expiry', value: 7500, date: '2026-04-22', status: 'Open' },
+  { id: 'INC-2024-135', sku: 'SKU-07642', brand: 'Unilever', product: 'Dove Shampoo 340ml', qty: 24, reason: 'Transport Damage', value: 12600, date: '2026-04-28' },
+  { id: 'INC-2024-134', sku: 'SKU-01523', brand: 'Del Monte', product: 'Tomato Sauce 250g', qty: 18, reason: 'Expiry', value: 8500, date: '2026-04-27' },
+  { id: 'INC-2024-133', sku: 'SKU-09234', brand: 'Del Monte', product: 'Sweet Corn 425g', qty: 32, reason: 'Storage Issue', value: 4200, date: '2026-04-26' },
+  { id: 'INC-2024-132', sku: 'SKU-04721', brand: 'Unilever', product: 'Surf Powder Detergent 1kg', qty: 50, reason: 'Transport Damage', value: 6400, date: '2026-04-24' },
+  { id: 'INC-2024-131', sku: 'SKU-08934', brand: 'Del Monte', product: 'Pineapple Juice 1L', qty: 15, reason: 'Expiry', value: 7500, date: '2026-04-22' },
 ];
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
+    const rate = payload[0].value;
+    const overTarget = rate > BO_RATE_TARGET;
     return (
       <div style={{
         backgroundColor: '#ffffff',
@@ -67,8 +105,8 @@ const CustomTooltip = ({ active, payload, label }) => {
         boxShadow: '0 4px 15px rgba(0, 0, 0, 0.05)',
       }}>
         <p style={{ fontWeight: 600, color: '#1a202c', margin: '0 0 0.2rem 0', fontSize: '0.8rem' }}>{label}</p>
-        <p style={{ color: '#e53e3e', margin: 0, fontSize: '0.8rem', fontWeight: 600 }}>
-          Incidents: {payload[0].value}
+        <p style={{ color: overTarget ? COLORS.critical : COLORS.success, margin: 0, fontSize: '0.8rem', fontWeight: 600 }}>
+          BO Rate: {rate}% {overTarget ? '(above target)' : '(within target)'}
         </p>
       </div>
     );
@@ -78,94 +116,74 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 const BadOrders = () => {
   const [incidents, setIncidents] = useState(initialIncidents);
-  const [activeTab, setActiveTab] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedBOSKU, setSelectedBOSKU] = useState(BO_TRACKED_SKUS[0].code);
 
-  const { selectedMonth, selectedYear } = useOutletContext() || { selectedMonth: 'Apr', selectedYear: '2026' };
+  const boRateTrend = useMemo(() => generateBORateTrend(selectedBOSKU), [selectedBOSKU]);
+  const latestBORate = boRateTrend[boRateTrend.length - 1]?.rate ?? 0;
+
+  const { startMonth, startYear, endMonth, endYear } = useOutletContext() || { startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026' };
 
   const dateOffset = useMemo(() => {
-    const monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(selectedMonth) || 0;
-    const yearVal = parseInt(selectedYear) || 2026;
-    const seed = (monthIndex + yearVal) % 5;
-    return seed - 4;
-  }, [selectedMonth, selectedYear]);
+    const startMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(startMonth) || 0;
+    const endMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(endMonth) || 0;
+    const yearVal = parseInt(startYear) || 2026;
+    const seed = (startMonthIndex + endMonthIndex + yearVal) % 6;
+    return seed - 1;
+  }, [startMonth, startYear, endMonth, endYear]);
 
-  // Dynamic KPIs calculation
+  // Manually-reported incidents (prepended to the front by handleAddReport)
+  // on top of the ETL-extracted baseline, kept separate so the KPI/reason
+  // totals below can fold them in exactly rather than guessing.
+  const addedIncidents = useMemo(
+    () => incidents.slice(0, incidents.length - initialIncidents.length),
+    [incidents]
+  );
+
+  // Dynamic KPIs — period-driven baseline (stands in for a real ETL
+  // aggregate) plus whatever the user has reported manually this session.
   const dynamicKPIs = useMemo(() => {
-    const addedIncidents = incidents.length - initialIncidents.length;
-    const addedUnits = incidents.reduce((sum, item, idx) => idx < addedIncidents ? sum + item.qty : sum, 0);
-    const addedValue = incidents.reduce((sum, item, idx) => idx < addedIncidents ? sum + item.value : sum, 0);
-
     const baseIncidents = 135 + dateOffset * 6;
     const baseUnitsLost = 1247 + dateOffset * 45;
     const baseValueLostValue = 186.5 + dateOffset * 8.5;
     const baseBadOrderRate = 4.2 + dateOffset * 0.1;
 
-    const totalIncidents = baseIncidents + addedIncidents;
-    const totalUnitsLost = baseUnitsLost + addedUnits;
-    const totalValueLostValue = baseValueLostValue + (addedValue / 1000);
-    const totalValueLost = `₱${totalValueLostValue.toFixed(1)}k`;
-    const badOrderRate = (baseBadOrderRate + (addedIncidents * 0.05)).toFixed(1) + '%';
+    const addedUnits = addedIncidents.reduce((sum, r) => sum + r.qty, 0);
+    const addedValue = addedIncidents.reduce((sum, r) => sum + r.value, 0);
 
     return {
-      incidents: totalIncidents,
-      unitsLost: totalUnitsLost.toLocaleString(),
-      valueLost: totalValueLost,
-      rate: badOrderRate,
+      incidents: baseIncidents + addedIncidents.length,
+      unitsLost: (baseUnitsLost + addedUnits).toLocaleString(),
+      valueLost: `₱${(baseValueLostValue + addedValue / 1000).toFixed(1)}k`,
+      rate: (baseBadOrderRate + addedIncidents.length * 0.05).toFixed(1) + '%',
     };
-  }, [incidents, dateOffset]);
+  }, [dateOffset, addedIncidents]);
 
-  // Dynamic Reason Counts
+  // Reason breakdown — fixed shares scaled against the same period-driven
+  // baseline the KPI card uses (so the two stay consistent when the
+  // month/year filter changes), plus an exact bump for manually-reported
+  // incidents' actual reasons.
   const reasonCounts = useMemo(() => {
-    const counts = {
-      'Transport Damage': 48,
-      'Expiry': 35,
-      'Storage Issue': 28,
-      'Supplier Defect': 24,
+    const shares = {
+      'Transport Damage': 0.356,
+      'Expiry': 0.259,
+      'Storage Issue': 0.207,
+      'Supplier Defect': 0.178,
     };
-
-    const addedIncidents = incidents.length - initialIncidents.length;
-    for (let i = 0; i < addedIncidents; i++) {
-      const reason = incidents[i].reason;
-      if (counts[reason] !== undefined) {
-        counts[reason] += 1;
-      }
-    }
-
+    const baseIncidents = 135 + dateOffset * 6;
+    const counts = {};
+    Object.entries(shares).forEach(([reason, share]) => {
+      counts[reason] = Math.round(baseIncidents * share);
+    });
+    addedIncidents.forEach((r) => {
+      counts[r.reason] = (counts[r.reason] ?? 0) + 1;
+    });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [incidents]);
-
-  // Filter incidents list based on active tab
-  const filteredIncidents = useMemo(() => {
-    if (activeTab === 'ALL') return incidents;
-    if (activeTab === 'OPEN') return incidents.filter(i => i.status.toUpperCase() === 'OPEN');
-    if (activeTab === 'RESOLVED') return incidents.filter(i => i.status.toUpperCase() === 'RESOLVED');
-    if (activeTab === 'UNDER INVESTIGATION') return incidents.filter(i => i.status.toUpperCase() === 'UNDER INVESTIGATION');
-    return incidents;
-  }, [incidents, activeTab]);
-
-  // Badge class helper
-  const getStatusBadgeClass = (status) => {
-    const cleanStatus = status.toUpperCase();
-    if (cleanStatus === 'OPEN') return 'bo-status-badge bo-status-open';
-    if (cleanStatus === 'RESOLVED') return 'bo-status-badge bo-status-resolved';
-    return 'bo-status-badge bo-status-investigating';
-  };
-
-  const renderStatusText = (status) => {
-    if (status.toUpperCase() === 'UNDER INVESTIGATION') {
-      return (
-        <>
-          Under<br />Investigation
-        </>
-      );
-    }
-    return status;
-  };
+  }, [dateOffset, addedIncidents]);
 
   // Submit new bad order handler from ReportBadOrderModal
   const handleAddReport = (reportData) => {
-    const nextIncNum = 135 + (incidents.length - initialIncidents.length) + 1;
+    const nextIncNum = 135 + addedIncidents.length + 1;
     const newIncident = {
       id: `INC-2024-${nextIncNum}`,
       sku: reportData.sku,
@@ -175,27 +193,38 @@ const BadOrders = () => {
       reason: reportData.reason,
       value: reportData.value,
       date: new Date().toISOString().split('T')[0],
-      status: 'Open',
     };
 
     setIncidents(prev => [newIncident, ...prev]);
+
+    logAction(
+      'Reported Bad Order',
+      `Logged ${newIncident.id} for ${newIncident.sku} (${newIncident.reason})`
+    );
   };
 
   return (
     <div className="bo-page">
       <div className="bo-content">
-        {/* Page Header */}
-        <div className="bo-page-header">
+        <div className="bo-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
           <div className="bo-header-left">
-            <h2 className="bo-page-title">Incident <span>log</span></h2>
-            <p className="bo-page-subtitle">
-              Damaged, expired, or defective stock. These reports sharpen forecast accuracy — consistent logging improves future SARIMA & LP optimization.
+            <h2 className="bo-page-title" style={{ fontSize: '2rem', fontWeight: 700, color: '#1a202c', margin: '0 0 0.3rem 0' }}>
+              Bad order <span style={{ color: '#e53e3e' }}>monitoring</span>
+            </h2>
+            <p className="bad-subtitle" style={{ color: '#a0aec0', fontSize: '0.85rem', margin: 0, lineHeight: 1.5 }}>
+              Manage damage, expiry, and loss reports for {startMonth} {startYear} - {endMonth} {endYear}
+            </p>
+            <p className="bo-page-subtitle" style={{ color: '#718096', fontSize: '0.8rem', margin: '0.4rem 0 0 0', maxWidth: '800px', lineHeight: 1.4 }}>
+              RMR GS &amp; BO reports where possible, or flagged directly by staff where the source reports don't capture it (e.g. SKU, reason). Consistent BO data sharpens future SARIMA &amp; LP optimization.
             </p>
           </div>
-          <button className="bo-report-btn" onClick={() => setIsModalOpen(true)}>
-            <Plus size={16} />
-            Report
-          </button>
+          <div className="bo-header-right" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', alignItems: 'flex-end' }}>
+            <button className="bo-report-btn" onClick={() => setIsModalOpen(true)}>
+              <Plus size={16} />
+              Report
+            </button>
+            <DateFilter onRefresh={() => window.location.reload()} />
+          </div>
         </div>
 
         {/* Summary KPI Cards */}
@@ -224,58 +253,95 @@ const BadOrders = () => {
 
         {/* Main Content Area: Widgets Grid */}
         <div className="bo-widgets-grid">
-          {/* Chart Widget */}
+          {/* Chart Widget — Manuscript §3.4.1.3/§3.5.5: BO Rate per SKU, time series, vs target */}
           <div className="bo-widget">
-            <h3 className="bo-widget-title">
-              Incident trend <span style={{ color: '#a0aec0', fontWeight: 400 }}>— 6 months</span>
-            </h3>
+            <div className="bo-widget-header-row">
+              <h3 className="bo-widget-title">
+                Bad Order rate <span style={{ color: '#a0aec0', fontWeight: 400 }}>— 6 months, per SKU</span>
+              </h3>
+              <select
+                className="bo-sku-select"
+                value={selectedBOSKU}
+                onChange={(e) => setSelectedBOSKU(e.target.value)}
+              >
+                {BO_TRACKED_SKUS.map(s => (
+                  <option key={s.code} value={s.code}>{s.code} — {s.product}</option>
+                ))}
+                <option value="CURRENT_PERIOD">Current Period ({startMonth} {startYear} - {endMonth} {endYear})</option>
+              </select>
+            </div>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={incidentTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="incidentGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#e53e3e" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#e53e3e" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
+                <LineChart data={boRateTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} domain={[0, 35]} ticks={[0, 8, 16, 24, 32]} />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#a0aec0', fontSize: 12 }}
+                    domain={[0, 8]}
+                    ticks={[0, 2, 4, 6, 8]}
+                    tickFormatter={(v) => `${v}%`}
+                  />
                   <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="incidents" stroke="#e53e3e" strokeWidth={2} fillOpacity={1} fill="url(#incidentGradient)" />
-                </AreaChart>
+                  <ReferenceLine
+                    y={BO_RATE_TARGET}
+                    stroke={COLORS.success}
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                    label={{ value: `Target < ${BO_RATE_TARGET}%`, position: 'insideTopRight', fill: COLORS.success, fontSize: 11, fontWeight: 600 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="rate"
+                    stroke={COLORS.critical}
+                    strokeWidth={2}
+                    dot={{ r: 4, fill: COLORS.critical, strokeWidth: 0 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="bo-chart-footnote">
+              Latest: <strong className={latestBORate > BO_RATE_TARGET ? 'bo-footnote-over' : 'bo-footnote-under'}>
+                {latestBORate}%
+              </strong> {latestBORate > BO_RATE_TARGET ? 'above' : 'within'} the {BO_RATE_TARGET}% target
+            </p>
+          </div>
+
+          {/* Top Reasons Widget — horizontal bar: the job here is comparing
+              magnitude across 4 named categories, which a bar shows at a
+              glance (Transport Damage is ~2x Supplier Defect) in a way a
+              plain number list doesn't. */}
+          <div className="bo-widget">
+            <h3 className="bo-widget-title">Top reasons</h3>
+            <div className="bo-chart-wrapper">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart
+                  data={reasonCounts.map(([reason, count]) => ({ reason, count }))}
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#edf2f7" />
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="reason"
+                    width={110}
+                    tick={{ fill: '#4a5568', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={22} isAnimationActive={false}>
+                    <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
-
-          {/* Top Reasons Widget */}
-          <div className="bo-widget">
-            <h3 className="bo-widget-title">Top reasons</h3>
-            <div className="bo-reasons-list">
-              {reasonCounts.map(([reasonName, count]) => (
-                <div key={reasonName} className="bo-reason-item">
-                  <span className="bo-reason-name">{reasonName}</span>
-                  <span className="bo-reason-count">{count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="bo-tabs">
-          {['ALL', 'OPEN', 'RESOLVED', 'UNDER INVESTIGATION'].map((tab) => (
-            <button
-              key={tab}
-              className={`bo-tab ${activeTab === tab ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Incident Table */}
+        {/* Incident Log Table — read-only, extracted via ETL */}
         <div className="bo-table-wrapper">
           <table className="bo-table">
             <thead>
@@ -288,11 +354,10 @@ const BadOrders = () => {
                 <th>REASON</th>
                 <th>VALUE</th>
                 <th>DATE</th>
-                <th>STATUS</th>
               </tr>
             </thead>
             <tbody>
-              {filteredIncidents.map((incident) => (
+              {incidents.map((incident) => (
                 <tr key={incident.id}>
                   <td className="bo-id-cell">{incident.id}</td>
                   <td className="bo-sku-cell">{formatSKU(incident.sku)}</td>
@@ -316,16 +381,11 @@ const BadOrders = () => {
                   <td>{incident.reason}</td>
                   <td className="bo-value-cell">₱{incident.value.toLocaleString()}</td>
                   <td className="bo-date-cell">{incident.date}</td>
-                  <td>
-                    <span className={getStatusBadgeClass(incident.status)}>
-                      {renderStatusText(incident.status)}
-                    </span>
-                  </td>
                 </tr>
               ))}
-              {filteredIncidents.length === 0 && (
+              {incidents.length === 0 && (
                 <tr>
-                  <td colSpan="9" className="bo-no-results">No incident reports found.</td>
+                  <td colSpan="8" className="bo-no-results">No Bad Order records for this period.</td>
                 </tr>
               )}
             </tbody>

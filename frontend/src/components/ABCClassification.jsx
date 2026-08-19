@@ -1,6 +1,25 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, Clock, X, RotateCcw, Tag, Filter } from 'lucide-react';
+import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle } from 'lucide-react';
+import {
+  ComposedChart,
+  Bar,
+  Line,
+  ReferenceLine,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import { COLORS } from '../theme/colors';
 import './ABCClassification.css';
+
+// Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
+// Tier cutoffs are 80% and 95% cumulative revenue (§3.4.1.2). A SKU sitting
+// within this many cumulative percentage points of a cutoff is flagged as
+// close to being reclassified into the tier above or below it.
+const BOUNDARY_TOLERANCE_PP = 3;
+const TIER_CUTOFFS = [80, 95];
 
 const mockABCData = [
   { id: 1, sku: 'SKU-4721', product: 'Surf Powder Detergent 1kg', brand: 'Unilever', cat: 'A', avgMo: 1243, revPct: 8.2, status: 'IN STOCK' },
@@ -53,6 +72,28 @@ const formatSKU = (sku) => {
   return sku;
 };
 
+// Manuscript §3.4.4.2.2/§3.4.4.2.3: Pareto/80-20 validation and Cumulative
+// Revenue Coverage Ratio. Both series are already percentages (revenue %
+// per SKU, cumulative %), so bars and the cumulative line share one 0-100
+// axis by construction — no dual-axis needed.
+const ParetoTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const point = payload[0].payload;
+    return (
+      <div className="abc-pareto-tooltip">
+        <p className="abc-pareto-tooltip-title">Rank #{label} — {formatSKU(point.sku)}</p>
+        <p className="abc-pareto-tooltip-line" style={{ color: COLORS.dispatched }}>
+          Revenue share: {point.revPct.toFixed(1)}%
+        </p>
+        <p className="abc-pareto-tooltip-line" style={{ color: COLORS.brandPrimary }}>
+          Cumulative: {point.cumulativePct.toFixed(1)}%
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
 const ABCClassification = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
@@ -89,8 +130,30 @@ const ABCClassification = () => {
 
   const brandsList = ['ALL', ...Array.from(new Set(mockABCData.map(d => d.brand)))];
 
+  // Cumulative revenue % and boundary-proximity flag, computed once over the
+  // full value-ranked list (not the filtered view) so flags stay correct
+  // regardless of what the user is currently searching/filtering for.
+  const dataWithCumulative = useMemo(() => {
+    const sorted = [...mockABCData].sort((a, b) => b.revPct - a.revPct);
+    let running = 0;
+    return sorted.map((item, index) => {
+      running += item.revPct;
+      const nearestCutoff = TIER_CUTOFFS.reduce((closest, cutoff) =>
+        Math.abs(cutoff - running) < Math.abs(closest - running) ? cutoff : closest
+      , TIER_CUTOFFS[0]);
+      const distance = Math.abs(nearestCutoff - running);
+      return {
+        ...item,
+        rank: index + 1,
+        cumulativePct: running,
+        nearBoundary: distance <= BOUNDARY_TOLERANCE_PP,
+        boundaryCutoff: nearestCutoff,
+      };
+    });
+  }, []);
+
   const filteredData = useMemo(() => {
-    return mockABCData.filter(item => {
+    return dataWithCumulative.filter(item => {
       const matchesSearch = searchQuery === '' ||
         item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -99,7 +162,12 @@ const ABCClassification = () => {
       const matchesBrand = brandFilter === 'ALL' || item.brand === brandFilter;
       return matchesSearch && matchesCat && matchesBrand;
     });
-  }, [searchQuery, categoryFilter, brandFilter]);
+  }, [dataWithCumulative, searchQuery, categoryFilter, brandFilter]);
+
+  const boundaryCount = useMemo(
+    () => dataWithCumulative.filter(item => item.nearBoundary).length,
+    [dataWithCumulative]
+  );
 
   const handleSelectSuggestion = (item) => {
     setSearchQuery(item.sku);
@@ -161,6 +229,7 @@ const ABCClassification = () => {
           <h2 className="abc-page-title">ABC Classification</h2>
           <p className="abc-page-subtitle">
             Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue. Click a code to open its forecast.
+            <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a SKU within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
           </p>
         </div>
 
@@ -184,6 +253,67 @@ const ABCClassification = () => {
           <div className="abc-summary-card abc-card-total">
             <span className="abc-card-label">TOTAL SKUS</span>
             <span className="abc-card-value">1,247</span>
+            {boundaryCount > 0 && (
+              <span className="abc-card-desc abc-card-desc-warning">
+                <AlertTriangle size={11} /> {boundaryCount} near a tier boundary
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Pareto Chart — Manuscript §3.4.4.2.2 (80/20 validation) / §3.4.4.2.3 (CRCR) */}
+        <div className="abc-pareto-container">
+          <div className="abc-pareto-header">
+            <h3 className="abc-pareto-title">Pareto analysis</h3>
+            <div className="abc-pareto-legend">
+              <div className="abc-pareto-legend-item">
+                <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.dispatched }} />
+                <span>Revenue share per SKU</span>
+              </div>
+              <div className="abc-pareto-legend-item">
+                <span className="abc-pareto-legend-line" style={{ backgroundColor: COLORS.brandPrimary }} />
+                <span>Cumulative revenue</span>
+              </div>
+              <div className="abc-pareto-legend-item">
+                <span className="abc-pareto-legend-line abc-pareto-legend-dashed" style={{ backgroundColor: COLORS.gridline }} />
+                <span>Tier cutoffs (80% / 95%)</span>
+              </div>
+            </div>
+          </div>
+          <div className="abc-pareto-chart-wrapper">
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={dataWithCumulative} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={COLORS.gridline} />
+                <XAxis
+                  dataKey="rank"
+                  axisLine={true}
+                  tickLine={true}
+                  tick={{ fill: '#a0aec0', fontSize: 11 }}
+                  label={{ value: 'SKU rank, by revenue', position: 'insideBottom', offset: -5, fill: '#a0aec0', fontSize: 11 }}
+                />
+                <YAxis
+                  domain={[0, 100]}
+                  ticks={[0, 20, 40, 60, 80, 100]}
+                  tickFormatter={(v) => `${v}%`}
+                  axisLine={true}
+                  tickLine={true}
+                  tick={{ fill: '#a0aec0', fontSize: 11 }}
+                />
+                <Tooltip content={<ParetoTooltip />} cursor={{ fill: '#f7fafc' }} />
+                <ReferenceLine y={80} stroke={COLORS.gridline} strokeDasharray="4 4" label={{ value: 'A/B — 80%', position: 'right', fill: '#a0aec0', fontSize: 10 }} />
+                <ReferenceLine y={95} stroke={COLORS.gridline} strokeDasharray="4 4" label={{ value: 'B/C — 95%', position: 'right', fill: '#a0aec0', fontSize: 10 }} />
+                <Bar dataKey="revPct" fill={COLORS.dispatched} radius={[2, 2, 0, 0]} barSize={16} isAnimationActive={false} />
+                <Line
+                  type="monotone"
+                  dataKey="cumulativePct"
+                  stroke={COLORS.brandPrimary}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 5 }}
+                  isAnimationActive={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
@@ -411,7 +541,18 @@ const ABCClassification = () => {
                     })()}
                   </td>
                   <td className="abc-brand-cell">{item.brand}</td>
-                  <td><span className={getCatBadgeClass(item.cat)}>{item.cat}</span></td>
+                  <td>
+                    <span className="abc-cat-cell-inner">
+                      <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
+                      {item.nearBoundary && (
+                        <AlertTriangle
+                          size={13}
+                          className="abc-boundary-icon"
+                          title={`Cumulative revenue ${item.cumulativePct.toFixed(1)}% — within ${BOUNDARY_TOLERANCE_PP}pp of the ${item.boundaryCutoff}% tier cutoff`}
+                        />
+                      )}
+                    </span>
+                  </td>
                   <td className="abc-avg-cell">{item.avgMo.toLocaleString()}</td>
                   <td className="abc-rev-cell">{item.revPct.toFixed(1)}%</td>
                   <td><span className={getStatusClass(item.status)}>{item.status}</span></td>

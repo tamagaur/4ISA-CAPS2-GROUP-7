@@ -34,6 +34,13 @@ const availableSKUs = [
   'SKU-02891',
 ];
 
+// Story: BO data is ETL-extracted from SSM's RMR GS & BO reports (§3.4.1.3),
+// which don't carry a reason or SKU (see config/column_maps/rmr_gs_bo.yaml —
+// verified against real staged data, no such columns exist). This form
+// exists specifically to capture what ETL structurally cannot: a staff
+// member manually flagging an incident with detail the source files don't
+// have. It's a log entry, not a case someone triages afterward — no status
+// field here, on purpose.
 const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
   const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM' | 'SUCCESS'
   const [skuCode, setSkuCode] = useState('');
@@ -168,7 +175,8 @@ const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
                   <input
                     id="report-sku"
                     type="text"
-                    placeholder="e.g., SKU-01847 or 1847"
+                    list="sku-list"
+                    placeholder="Search by product name or SKU..."
                     value={skuCode}
                     onChange={(e) => {
                       setSkuCode(e.target.value);
@@ -178,21 +186,11 @@ const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
                     className={`report-input ${formatError ? 'input-error' : ''}`}
                     required
                   />
-                  <select
-                    className="report-sku-quick-select"
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        setSkuCode(e.target.value);
-                        setFormatError('');
-                      }
-                    }}
-                    value=""
-                  >
-                    <option value="" disabled>Select from SKU list...</option>
+                  <datalist id="sku-list">
                     {availableSKUs.map(s => (
-                      <option key={s} value={s}>{s} - {skuDatabase[s]?.product}</option>
+                      <option key={s} value={s}>{skuDatabase[s]?.product}</option>
                     ))}
-                  </select>
+                  </datalist>
                 </div>
                 {formatError ? (
                   <span className="report-error-msg">{formatError}</span>

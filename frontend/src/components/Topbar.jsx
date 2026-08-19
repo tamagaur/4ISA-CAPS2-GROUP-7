@@ -1,16 +1,23 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { Check, Calendar } from 'lucide-react';
+import { getCurrentUser } from '../auth';
 import './Topbar.css';
 
 const Topbar = ({ 
   toggleSidebar, 
-  selectedMonth, 
-  selectedYear, 
-  pendingMonth,
-  setPendingMonth,
-  pendingYear,
-  setPendingYear,
+  startMonth, 
+  startYear, 
+  endMonth,
+  endYear,
+  pendingStartMonth,
+  setPendingStartMonth,
+  pendingStartYear,
+  setPendingStartYear,
+  pendingEndMonth,
+  setPendingEndMonth,
+  pendingEndYear,
+  setPendingEndYear,
   isPending,
   handleApplyPeriod,
   handleResetToToday,
@@ -18,8 +25,28 @@ const Topbar = ({
   realWorldYear = '2026'
 }) => {
   const location = useLocation();
-  const isToday = pendingMonth === realWorldMonth && pendingYear === realWorldYear;
+  const isToday = 
+    pendingStartMonth === realWorldMonth && 
+    pendingStartYear === realWorldYear && 
+    pendingEndMonth === realWorldMonth && 
+    pendingEndYear === realWorldYear;
   const isForecastPage = location.pathname === '/forecast';
+
+  const user = getCurrentUser();
+  const getInitials = (u) => {
+    if (!u) return 'JD'; // Fallback
+    if (u.fullName) {
+      const parts = u.fullName.split(' ').filter(Boolean);
+      if (parts.length === 0) return '??';
+      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    if (u.email) {
+      return u.email.substring(0, 2).toUpperCase();
+    }
+    return '??';
+  };
+  const initials = getInitials(user);
 
   return (
     <header className="topbar">
@@ -32,56 +59,11 @@ const Topbar = ({
           </svg>
         </button>
         
-        {!isForecastPage && (
-          <div className="period-selector-wrapper">
-            <select 
-              className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
-              value={pendingMonth} 
-              onChange={(e) => setPendingMonth(e.target.value)}
-            >
-              {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-            
-            <select 
-              className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
-              value={pendingYear} 
-              onChange={(e) => setPendingYear(e.target.value)}
-            >
-              {['2021', '2022', '2023', '2024', '2025', '2026'].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-
-            <button 
-              className={`period-today-btn ${isToday ? 'is-today' : ''}`}
-              onClick={handleResetToToday}
-              title={`Reset to current month & year (${realWorldMonth} ${realWorldYear})`}
-            >
-              <Calendar size={13} />
-              <span>Today</span>
-            </button>
-
-            {isPending && (
-              <div className="period-apply-group">
-                <span className="pending-indicator-dot" title="Unapplied period selection"></span>
-                <button 
-                  className="period-apply-btn" 
-                  onClick={handleApplyPeriod}
-                  title="Apply selected month & year"
-                >
-                  <Check size={14} />
-                  <span>Apply</span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Date Filter removed and placed in page headers */}
       </div>
       
       <div className="topbar-right">
-        <div className="avatar blue-avatar">JD</div>
+        <div className="avatar blue-avatar" title={user?.fullName || user?.email || 'User'}>{initials}</div>
       </div>
     </header>
   );

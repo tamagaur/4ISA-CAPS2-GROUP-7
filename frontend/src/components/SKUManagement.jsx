@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Search, Clock, X, RotateCcw, Building, Tag, Layers, Filter } from 'lucide-react';
+import { Plus, Search, Clock, X, RotateCcw, Building, Tag, Layers, Filter, CheckCircle, XCircle, Package } from 'lucide-react';
 import AddSKUModal from './AddSKUModal';
 import ViewSKUModal from './ViewSKUModal';
 import EditSKUModal from './EditSKUModal';
+import { logAction } from '../utils/auditLogger';
 import './SKUManagement.css';
 
 const mockSKUs = [
@@ -159,7 +160,7 @@ const mockSKUs = [
     cat: 'C', 
     leadTime: 'N/A', 
     reorderPt: 0, 
-    status: 'INACTIVE',
+    status: 'DISABLED',
     currentStock: 0,
     unitPrice: 32.00,
     avgSalesPerMonth: 0,
@@ -195,7 +196,8 @@ const SKUManagement = () => {
   const [supplierFilter, setSupplierFilter] = useState('All Suppliers');
   const [brandFilter, setBrandFilter] = useState('All Brands');
   const [categoryFilter, setCategoryFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  
+  const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'DISABLED'
 
   // Combobox & Highlight State
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
@@ -235,16 +237,14 @@ const SKUManagement = () => {
       const matchesSupplier = supplierFilter === 'All Suppliers' || sku.supplier === supplierFilter;
       const matchesBrand = brandFilter === 'All Brands' || sku.brand === brandFilter;
       const matchesCategory = categoryFilter === 'All' || sku.cat === categoryFilter;
-      const matchesStatus = statusFilter === 'ALL' ||
-        (statusFilter === 'ACTIVE' && sku.status === 'ACTIVE') ||
-        (statusFilter === 'INACTIVE' && sku.status === 'INACTIVE');
+      const matchesStatus = activeTab === 'ALL' || sku.status === activeTab;
       return matchesSearch && matchesSupplier && matchesBrand && matchesCategory && matchesStatus;
     });
-  }, [skus, searchQuery, supplierFilter, brandFilter, categoryFilter, statusFilter]);
+  }, [skus, searchQuery, supplierFilter, brandFilter, categoryFilter, activeTab]);
 
   const totalSKUs = skus.length;
   const activeSKUs = skus.filter(s => s.status === 'ACTIVE').length;
-  const inactiveSKUs = skus.filter(s => s.status === 'INACTIVE').length;
+  const inactiveSKUs = skus.filter(s => s.status === 'DISABLED').length;
 
   const handleAddSKU = (formData) => {
     const newId = String(skus.length + 1).padStart(3, '0');
@@ -265,6 +265,9 @@ const SKUManagement = () => {
       notes: formData.notes || ''
     };
     setSkus(prev => [...prev, newSKU]);
+    
+    // Log the addition
+    logAction('Add SKU', `Added new SKU: ${newSKU.code} (${newSKU.product})`);
   };
 
   const handleOpenViewModal = (sku) => {
@@ -291,8 +294,28 @@ const SKUManagement = () => {
   };
 
   const handleSaveSKU = (updatedSKU) => {
+    const previousSKU = skus.find(s => s.id === updatedSKU.id);
+    
+    // Determine what changed for the audit log
+    const changes = [];
+    if (previousSKU) {
+      if (previousSKU.product !== updatedSKU.product) changes.push(`Product Name: ${previousSKU.product} -> ${updatedSKU.product}`);
+      if (previousSKU.brand !== updatedSKU.brand) changes.push(`Brand: ${previousSKU.brand} -> ${updatedSKU.brand}`);
+      if (previousSKU.cat !== updatedSKU.cat) changes.push(`Category: ${previousSKU.cat} -> ${updatedSKU.cat}`);
+      if (previousSKU.reorderPt !== updatedSKU.reorderPt) changes.push(`Reorder Pt: ${previousSKU.reorderPt} -> ${updatedSKU.reorderPt}`);
+      if (previousSKU.unitPrice !== updatedSKU.unitPrice) changes.push(`Unit Price: ${previousSKU.unitPrice} -> ${updatedSKU.unitPrice}`);
+      if (previousSKU.status !== updatedSKU.status) changes.push(`Status: ${previousSKU.status} -> ${updatedSKU.status}`);
+    }
+
     setSkus(prev => prev.map(s => s.id === updatedSKU.id ? updatedSKU : s));
     setSelectedSKU(updatedSKU);
+    
+    // Log the edit
+    const details = changes.length > 0 
+      ? `Updated SKU ${updatedSKU.code}. Changes: ${changes.join(', ')}`
+      : `Updated SKU ${updatedSKU.code} (minor details)`;
+      
+    logAction('Edit SKU', details);
   };
 
   // Handle selecting a combobox suggestion row
@@ -319,15 +342,13 @@ const SKUManagement = () => {
     searchQuery !== '' ||
     supplierFilter !== 'All Suppliers' ||
     brandFilter !== 'All Brands' ||
-    categoryFilter !== 'All' ||
-    statusFilter !== 'ALL';
+    categoryFilter !== 'All';
 
   const handleClearFilters = () => {
     setSearchQuery('');
     setSupplierFilter('All Suppliers');
     setBrandFilter('All Brands');
     setCategoryFilter('All');
-    setStatusFilter('ALL');
   };
 
   const getCatClass = (cat) => {
@@ -356,6 +377,31 @@ const SKUManagement = () => {
           </button>
         </div>
 
+        {/* Tab Switcher */}
+        <div className="sku-top-tabs">
+          <button 
+            className={`sku-tab-btn ${activeTab === 'ALL' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ALL')}
+          >
+            <Package size={16} color="#3b82f6" className="sku-tab-icon" />
+            All SKUs
+          </button>
+          <button 
+            className={`sku-tab-btn ${activeTab === 'ACTIVE' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ACTIVE')}
+          >
+            <CheckCircle size={16} color="#38a169" className="sku-tab-icon" />
+            Active SKUs
+          </button>
+          <button 
+            className={`sku-tab-btn ${activeTab === 'DISABLED' ? 'active' : ''}`}
+            onClick={() => setActiveTab('DISABLED')}
+          >
+            <XCircle size={16} color="#e53e3e" className="sku-tab-icon" />
+            Disabled SKUs
+          </button>
+        </div>
+
         {/* Summary Cards */}
         <div className="sku-summary-grid">
           <div className="sku-summary-card summary-total">
@@ -367,7 +413,7 @@ const SKUManagement = () => {
             <span className="summary-value">{activeSKUs}</span>
           </div>
           <div className="sku-summary-card summary-inactive">
-            <span className="summary-label">INACTIVE</span>
+            <span className="summary-label">DISABLED</span>
             <span className="summary-value">{inactiveSKUs}</span>
           </div>
         </div>
@@ -528,18 +574,6 @@ const SKUManagement = () => {
                 <option value="C">Category C</option>
               </select>
             </div>
-
-            <div className="status-toggle-group">
-              {['ALL', 'ACTIVE', 'INACTIVE'].map(status => (
-                <button
-                  key={status}
-                  className={`status-toggle-btn ${statusFilter === status ? 'active' : ''}`}
-                  onClick={() => setStatusFilter(status)}
-                >
-                  {status}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -581,15 +615,6 @@ const SKUManagement = () => {
               <span className="sku-active-chip">
                 Category: Category {categoryFilter}
                 <button className="sku-chip-remove" onClick={() => setCategoryFilter('All')}>
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-
-            {statusFilter !== 'ALL' && (
-              <span className="sku-active-chip">
-                Status: {statusFilter}
-                <button className="sku-chip-remove" onClick={() => setStatusFilter('ALL')}>
                   <X size={12} />
                 </button>
               </span>
