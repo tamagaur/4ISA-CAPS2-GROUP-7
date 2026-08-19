@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import { logAction } from '../utils/auditLogger';
 import './DashboardLayout.css';
 
 // Helper to derive current real-world month & year from system date
@@ -19,19 +20,11 @@ const DashboardLayout = () => {
 
   const realWorldPeriod = getCurrentRealWorldPeriod();
 
-  // Persistent Applied State (stored in localStorage, defaulting to real-world current month/year: Aug 2026)
-  const [startMonth, setStartMonth] = useState(() => {
-    return localStorage.getItem('san2_start_month') || realWorldPeriod.month;
-  });
-  const [startYear, setStartYear] = useState(() => {
-    return localStorage.getItem('san2_start_year') || realWorldPeriod.year;
-  });
-  const [endMonth, setEndMonth] = useState(() => {
-    return localStorage.getItem('san2_end_month') || realWorldPeriod.month;
-  });
-  const [endYear, setEndYear] = useState(() => {
-    return localStorage.getItem('san2_end_year') || realWorldPeriod.year;
-  });
+  // Persistent Applied State (defaulting to real-world current month/year)
+  const [startMonth, setStartMonth] = useState(realWorldPeriod.month);
+  const [startYear, setStartYear] = useState(realWorldPeriod.year);
+  const [endMonth, setEndMonth] = useState(realWorldPeriod.month);
+  const [endYear, setEndYear] = useState(realWorldPeriod.year);
 
   // Pending Unsaved Selection State
   const [pendingStartMonth, setPendingStartMonth] = useState(startMonth);
@@ -65,6 +58,11 @@ const DashboardLayout = () => {
     localStorage.setItem('san2_start_year', pendingStartYear);
     localStorage.setItem('san2_end_month', pendingEndMonth);
     localStorage.setItem('san2_end_year', pendingEndYear);
+
+    logAction(
+      'Changed Date Range',
+      `Changed from ${startMonth} ${startYear} - ${endMonth} ${endYear} to ${pendingStartMonth} ${pendingStartYear} - ${pendingEndMonth} ${pendingEndYear}`
+    );
   };
 
   const handleDiscardPeriod = () => {
@@ -123,6 +121,11 @@ const DashboardLayout = () => {
     localStorage.setItem('san2_start_year', sy);
     localStorage.setItem('san2_end_month', em);
     localStorage.setItem('san2_end_year', ey);
+
+    logAction(
+      'Changed Date Range',
+      `Changed from ${startMonth} ${startYear} - ${endMonth} ${endYear} to ${sm} ${sy} - ${em} ${ey}`
+    );
   };
 
   return (

@@ -124,9 +124,6 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     if (form.brand.trim() !== (sku.brand || '').trim()) {
       changes.push({ label: 'Brand', from: sku.brand, to: form.brand });
     }
-    if (form.cat !== sku.cat) {
-      changes.push({ label: 'Category', from: `Category ${sku.cat}`, to: `Category ${form.cat}` });
-    }
     if (parseFloat(form.unitPrice) !== parseFloat(sku.unitPrice)) {
       changes.push({ label: 'Unit Price', from: `₱${parseFloat(sku.unitPrice || 0).toFixed(2)}`, to: `₱${parseFloat(form.unitPrice || 0).toFixed(2)}` });
     }
@@ -147,7 +144,6 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
       ...sku,
       product: constructFullProduct(),
       brand: form.brand,
-      cat: form.cat,
       unitPrice: parseFloat(form.unitPrice) || 0,
       currentStock: parseInt(form.currentStock) || 0,
       status: form.status.toUpperCase()
@@ -234,8 +230,8 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                   </div>
                 </div>
 
-                {/* Row 3: Brand + Category */}
-                <div className="edit-form-row two-col">
+                {/* Row 3: Brand */}
+                <div className="edit-form-row">
                   <div className="edit-form-group">
                     <label className="edit-form-label">
                       BRAND <span className="req-star">*</span>
@@ -248,22 +244,6 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                       required
                       className="edit-form-input"
                     />
-                  </div>
-
-                  <div className="edit-form-group">
-                    <label className="edit-form-label">
-                      CATEGORY <span className="req-star">*</span>
-                    </label>
-                    <select
-                      name="cat"
-                      value={form.cat}
-                      onChange={handleChange}
-                      className="edit-form-select"
-                    >
-                      <option value="A">A – High Value</option>
-                      <option value="B">B – Moderate Value</option>
-                      <option value="C">C – Low Value</option>
-                    </select>
                   </div>
                 </div>
 
@@ -312,7 +292,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                       className="edit-form-select"
                     >
                       <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
+                      <option value="DISABLED">Disabled</option>
                     </select>
                   </div>
                 </div>

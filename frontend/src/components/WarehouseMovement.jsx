@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import DateFilter from './DateFilter';
 import './WarehouseMovement.css';
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
@@ -671,13 +672,16 @@ const WarehouseMovement = () => {
     <div className="wm-page">
       <div className="wm-content">
         {/* Header */}
-        <div className="wm-header">
-          <h2 className="wm-title">
-            Warehouse <span>movement</span>
-          </h2>
-          <p className="wm-subtitle">
-            Stock movement log, SKU inventory status & warehouse capacity for {startMonth} {startYear} - {endMonth} {endYear}
-          </p>
+        <div className="wm-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+          <div>
+            <h2 className="wm-title" style={{ fontSize: '2rem', fontWeight: 700, color: '#1a202c', margin: '0 0 0.3rem 0' }}>
+              Warehouse <span style={{ color: '#3b82f6' }}>movement</span>
+            </h2>
+            <p className="wm-subtitle" style={{ color: '#a0aec0', fontSize: '0.85rem', margin: 0, lineHeight: 1.5 }}>
+              Stock movement log, SKU inventory status & warehouse capacity for {startMonth} {startYear} - {endMonth} {endYear}
+            </p>
+          </div>
+          <DateFilter onRefresh={() => window.location.reload()} />
         </div>
 
         {/* Tab Navigation */}

@@ -175,7 +175,8 @@ const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
                   <input
                     id="report-sku"
                     type="text"
-                    placeholder="e.g., SKU-01847 or 1847"
+                    list="sku-list"
+                    placeholder="Search by product name or SKU..."
                     value={skuCode}
                     onChange={(e) => {
                       setSkuCode(e.target.value);
@@ -185,21 +186,11 @@ const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
                     className={`report-input ${formatError ? 'input-error' : ''}`}
                     required
                   />
-                  <select
-                    className="report-sku-quick-select"
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        setSkuCode(e.target.value);
-                        setFormatError('');
-                      }
-                    }}
-                    value=""
-                  >
-                    <option value="" disabled>Select from SKU list...</option>
+                  <datalist id="sku-list">
                     {availableSKUs.map(s => (
-                      <option key={s} value={s}>{s} - {skuDatabase[s]?.product}</option>
+                      <option key={s} value={s}>{skuDatabase[s]?.product}</option>
                     ))}
-                  </select>
+                  </datalist>
                 </div>
                 {formatError ? (
                   <span className="report-error-msg">{formatError}</span>

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Upload, FileText, CheckCircle } from 'lucide-react';
+import { logAction } from '../utils/auditLogger';
 import './DataUpload.css';
 
 const DataUpload = () => {
@@ -25,6 +26,7 @@ const DataUpload = () => {
             if (item.id === uploadId) {
               if (progress >= 100) {
                 clearInterval(interval);
+                logAction('Data Upload', `Uploaded file: ${file.name}`);
                 return { ...item, progress: 100, status: 'Completed' };
               }
               progress += 10;

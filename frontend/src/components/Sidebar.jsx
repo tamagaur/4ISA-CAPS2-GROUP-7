@@ -9,7 +9,8 @@ import {
   AlertTriangle, 
   Upload,
   LogOut,
-  X
+  X,
+  ClipboardList
 } from 'lucide-react';
 import { logout, getCurrentUser } from '../auth';
 import './Sidebar.css';
@@ -30,6 +31,7 @@ const navItems = [
   { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
   { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
   { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders' },
+  { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
   { name: 'Data Upload', icon: Upload, path: '/upload' },
 ];
 
@@ -109,7 +111,14 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
               <span className="status-dot"></span>
               <span className="status-text">SYS ONLINE</span>
             </div>
-            <span className="status-date">{(currentMonth || 'AUG').toUpperCase()}-11</span>
+            <span className="status-date">
+              {(() => {
+                const today = new Date();
+                const day = today.getDate().toString().padStart(2, '0');
+                const month = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][today.getMonth()];
+                return `${month}-${day}`;
+              })()}
+            </span>
           </div>
 
           <button className="logout-btn" onClick={() => setShowLogoutModal(true)}>

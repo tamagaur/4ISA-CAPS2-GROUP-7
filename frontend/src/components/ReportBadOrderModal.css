@@ -122,17 +122,7 @@
   background-color: #fff5f5;
 }
 
-.report-sku-quick-select {
-  padding: 0.65rem 0.6rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 0.78rem;
-  color: #64748b;
-  background-color: #f8fafc;
-  outline: none;
-  cursor: pointer;
-  max-width: 140px;
-}
+
 
 .report-select {
   width: 100%;

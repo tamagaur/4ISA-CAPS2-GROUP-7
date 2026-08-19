@@ -3,6 +3,7 @@ import { Loader2, ArrowDown, ClipboardList, ListChecks } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
 import { getCurrentUser } from '../auth';
+import { logAction } from '../utils/auditLogger';
 import './ReorderRecommendations.css';
 
 // threeWeekRuleQty = what SSM's blanket "three weeks of stock" rule would
@@ -76,6 +77,9 @@ const ReorderRecommendations = () => {
       },
       ...prev,
     ]);
+    
+    // Also push to the global audit log
+    logAction(`Reorder Recommendation ${action === 'ACCEPTED' ? 'Accepted' : 'Dismissed'}`, `SKU ${item.sku}: ${reason}`);
   };
 
   const applyAction = (id, actionType) => {

@@ -59,74 +59,7 @@ const Topbar = ({
           </svg>
         </button>
         
-        {!isForecastPage && location.pathname !== '/' && (
-          <div className="period-selector-wrapper">
-            <select 
-              className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
-              value={pendingStartMonth} 
-              onChange={(e) => setPendingStartMonth(e.target.value)}
-            >
-              {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-            
-            <select 
-              className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
-              value={pendingStartYear} 
-              onChange={(e) => setPendingStartYear(e.target.value)}
-            >
-              {['2021', '2022', '2023', '2024', '2025', '2026'].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-
-            <span style={{ color: '#a0aec0', fontSize: '0.85rem' }}>to</span>
-
-            <select 
-              className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
-              value={pendingEndMonth} 
-              onChange={(e) => setPendingEndMonth(e.target.value)}
-            >
-              {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-            
-            <select 
-              className={`dropdown-select ${isPending ? 'dropdown-pending' : ''}`} 
-              value={pendingEndYear} 
-              onChange={(e) => setPendingEndYear(e.target.value)}
-            >
-              {['2021', '2022', '2023', '2024', '2025', '2026'].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-
-            <button 
-              className={`period-today-btn ${isToday ? 'is-today' : ''}`}
-              onClick={handleResetToToday}
-              title={`Reset to current month & year (${realWorldMonth} ${realWorldYear})`}
-            >
-              <Calendar size={13} />
-              <span>Today</span>
-            </button>
-
-            {isPending && (
-              <div className="period-apply-group">
-                <span className="pending-indicator-dot" title="Unapplied period selection"></span>
-                <button 
-                  className="period-apply-btn" 
-                  onClick={handleApplyPeriod}
-                  title="Apply selected month & year"
-                >
-                  <Check size={14} />
-                  <span>Apply</span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Date Filter removed and placed in page headers */}
       </div>
       
       <div className="topbar-right">

@@ -79,14 +79,14 @@ const forecastData = generateDynamicForecastData();
 const mockSKUDatabase = [
   { code: 'SKU-4721', name: 'Surf Powder Detergent 1kg', brand: 'Unilever', cat: 'A' },
   { code: 'SKU-1052', name: 'Knorr Seasoning 250ml', brand: 'Unilever', cat: 'A' },
-  { code: 'SKU-6190', name: 'Great Taste Coffee 3-in-1 30g', brand: 'Universal Robina', cat: 'A' },
-  { code: 'SKU-2981', name: 'Pantasene Shampoo 180ml', brand: 'P&G', cat: 'A' },
-  { code: 'SKU-9023', name: 'Nescafe Classic 200g', brand: 'Nestle', cat: 'A' },
+  { code: 'SKU-6190', name: 'Great Taste Coffee 3-in-1 30g', brand: 'Del Monte', cat: 'A' },
+  { code: 'SKU-2981', name: 'Pantasene Shampoo 180ml', brand: 'Unilever', cat: 'A' },
+  { code: 'SKU-9023', name: 'Nescafe Classic 200g', brand: 'Del Monte', cat: 'A' },
   { code: 'SKU-8934', name: 'Pineapple Juice 1L', brand: 'Del Monte', cat: 'B' },
-  { code: 'SKU-7743', name: 'Jack n Jill Piattos Cheese 85g', brand: 'Universal Robina', cat: 'B' },
-  { code: 'SKU-5412', name: 'Downy Sunrise Fresh 900ml', brand: 'P&G', cat: 'B' },
+  { code: 'SKU-7743', name: 'Jack n Jill Piattos Cheese 85g', brand: 'Unilever', cat: 'B' },
+  { code: 'SKU-5412', name: 'Downy Sunrise Fresh 900ml', brand: 'Unilever', cat: 'B' },
   { code: 'SKU-3421', name: 'Tomato Sauce 250g', brand: 'Del Monte', cat: 'C' },
-  { code: 'SKU-8104', name: 'Bear Brand Fortified Milk 330g', brand: 'Nestle', cat: 'C' }
+  { code: 'SKU-8104', name: 'Bear Brand Fortified Milk 330g', brand: 'Del Monte', cat: 'C' }
 ];
 
 const CustomTooltip = ({ active, payload, label }) => {

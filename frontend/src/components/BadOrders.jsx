@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Plus } from 'lucide-react';
+import { logAction } from '../utils/auditLogger';
 import {
   LineChart,
   Line,
@@ -15,6 +16,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import ReportBadOrderModal from './ReportBadOrderModal';
+import DateFilter from './DateFilter';
 import { COLORS } from '../theme/colors';
 import './BadOrders.css';
 
@@ -194,26 +196,35 @@ const BadOrders = () => {
     };
 
     setIncidents(prev => [newIncident, ...prev]);
+
+    logAction(
+      'Reported Bad Order',
+      `Logged ${newIncident.id} for ${newIncident.sku} (${newIncident.reason})`
+    );
   };
 
   return (
     <div className="bo-page">
       <div className="bo-content">
-        {/* Page Header */}
-        <div className="bo-page-header">
+        <div className="bo-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
           <div className="bo-header-left">
-            <h2 className="bo-page-title">Bad order <span>monitoring</span></h2>
-            <p className="bad-subtitle">
+            <h2 className="bo-page-title" style={{ fontSize: '2rem', fontWeight: 700, color: '#1a202c', margin: '0 0 0.3rem 0' }}>
+              Bad order <span style={{ color: '#e53e3e' }}>monitoring</span>
+            </h2>
+            <p className="bad-subtitle" style={{ color: '#a0aec0', fontSize: '0.85rem', margin: 0, lineHeight: 1.5 }}>
               Manage damage, expiry, and loss reports for {startMonth} {startYear} - {endMonth} {endYear}
             </p>
-            <p className="bo-page-subtitle">
+            <p className="bo-page-subtitle" style={{ color: '#718096', fontSize: '0.8rem', margin: '0.4rem 0 0 0', maxWidth: '800px', lineHeight: 1.4 }}>
               RMR GS &amp; BO reports where possible, or flagged directly by staff where the source reports don't capture it (e.g. SKU, reason). Consistent BO data sharpens future SARIMA &amp; LP optimization.
             </p>
           </div>
-          <button className="bo-report-btn" onClick={() => setIsModalOpen(true)}>
-            <Plus size={16} />
-            Report
-          </button>
+          <div className="bo-header-right" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', alignItems: 'flex-end' }}>
+            <button className="bo-report-btn" onClick={() => setIsModalOpen(true)}>
+              <Plus size={16} />
+              Report
+            </button>
+            <DateFilter onRefresh={() => window.location.reload()} />
+          </div>
         </div>
 
         {/* Summary KPI Cards */}
