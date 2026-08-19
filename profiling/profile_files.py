@@ -81,7 +81,20 @@ DOC_TYPE_PATTERNS = [
 ]
 
 REGION_PATTERNS = [
-    ("pangasinan", re.compile(r"pangasinan|pang\b|pang\.", re.I)),
+    # Fixed 2026-08: \b doesn't fire between "G" and "_" (regex treats
+    # "_" as a word character), so the 19 real sheets named "PANG_..."
+    # (e.g. "PANG_SALES REG", "PANG_SELL OUT") never matched "pang\b" and
+    # fell through to region "unknown" - confirmed these sheets' own file
+    # names carry no region text either, so the infer_sheet_region()
+    # path-fallback couldn't rescue them. `pang(?![a-z])` matches "PANG"
+    # followed by anything except a lowercase letter (case-insensitively,
+    # so also not an uppercase letter) - i.e. still requires a real word
+    # break, just one that also fires before "_", ")", "-", space, etc.
+    # Confirmed against the real corpus: no sheet name anywhere is
+    # "PANG" immediately followed by a letter other than via "pangasinan"
+    # itself (already matched by the first alternative) - no legitimate
+    # "PANGOLIN"-style over-match exists in this data.
+    ("pangasinan", re.compile(r"pangasinan|pang(?![a-z])|pang\.", re.I)),
     ("ilocos", re.compile(r"ilocos", re.I)),
     # Fixed 2026-08: same root cause as DOC_TYPE_PATTERNS's unilever_sku
     # entry above - the real filename has zero characters between "La"
