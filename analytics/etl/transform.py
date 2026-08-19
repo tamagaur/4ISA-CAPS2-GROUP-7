@@ -602,6 +602,40 @@ def dedup_facts(df: pd.DataFrame, natural_key: list[str], amount_col: str | None
     return out, report
 
 
+@dataclass
+class TotalRowExclusionReport:
+    input_rows: int
+    excluded: int
+
+
+def exclude_sell_out_total_rows(df: pd.DataFrame, column: str = "category_path") -> tuple[pd.DataFrame, TotalRowExclusionReport]:
+    """Drop Sell Out's per-file "Total" summary row before dedup. Every
+    real sell_out file has one (confirmed: 34/34 real sheets, 100%) - it's
+    a category_path value of "Total" (case/whitespace variants seen in
+    real data), not a real category, and if it reaches SellOut_Fact every
+    aggregate over category_path double-counts (the row's own amount is
+    the sum of every other row in the same file). Matched case-insensitive
+    and trimmed rather than an exact string, since real headers/values in
+    this corpus are inconsistently cased and padded elsewhere too (see
+    column_maps/sell_out.yaml's own note on __col0__ needing a strip).
+
+    Raises KeyError if `column` is absent rather than silently passing
+    the frame through: a missing category_path means Total rows can't be
+    identified at all, and letting that through unflagged is exactly the
+    failure mode this function exists to prevent - the caller must know
+    a Total row may have reached SellOut_Fact and doubled every
+    aggregate, not discover it later from a wrong dashboard number."""
+    if column not in df.columns:
+        raise KeyError(
+            f"exclude_sell_out_total_rows: '{column}' column not found - Total rows cannot be "
+            f"excluded, and if this frame reaches SellOut_Fact, every category_path aggregate "
+            f"will double-count (each file's Total row sums every other row in that file)."
+        )
+    is_total = df[column].astype(str).str.strip().str.upper() == "TOTAL"
+    out = df.loc[~is_total].copy()
+    return out, TotalRowExclusionReport(input_rows=len(df), excluded=int(is_total.sum()))
+
+
 def transform_fact(
     df: pd.DataFrame, fact: str, principal: str, config_dir: Path = DEFAULT_CONFIG_DIR,
     amount_col: str | None = None, discount_alias_table: str | None = "discount_rate_labels",
@@ -636,6 +670,10 @@ def transform_fact(
     if discount_alias_table and "discount_rate_label" in mapped_df.columns:
         mapped_df = apply_alias_table(mapped_df, "discount_rate_label", discount_alias_table, config_dir)
 
+    total_row_exclusion_report = None
+    if rule.doc_type == "sell_out":
+        mapped_df, total_row_exclusion_report = exclude_sell_out_total_rows(mapped_df)
+
     sku_split_report = None
     if rule.doc_type == "inventory_sign_off" and "sku_description_raw" in mapped_df.columns:
         mapped_df, sku_split_report = split_sku_description(mapped_df)
@@ -661,6 +699,7 @@ def transform_fact(
     return deduped_df, {
         "doc_type": rule.doc_type,
         "column_map": map_report,
+        "total_row_exclusion": total_row_exclusion_report,
         "sku_split": sku_split_report,
         "date_reformat": date_reformat_report,
         "quantity_reconciliation": quantity_report,

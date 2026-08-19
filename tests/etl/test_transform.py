@@ -34,6 +34,7 @@ from analytics.etl.transform import (
     backfill_provenance_fields,
     coerce_numeric_columns,
     dedup_facts,
+    exclude_sell_out_total_rows,
     filter_source_of_truth,
     load_source_of_truth,
     normalize_quantities,
@@ -232,6 +233,26 @@ def test_sell_out_natural_key_no_longer_collapses_cross_region_rows():
     out, report = dedup_facts(df, rule.natural_key)
     assert len(out) == 2
     assert report.duplicate_groups == 0
+
+
+def test_exclude_sell_out_total_rows_drops_total_case_and_whitespace_insensitive():
+    df = pd.DataFrame({
+        "category_path": ["FRUITS", "  total  ", "BEVERAGE", "Total"],
+        "net_amount": [100.0, 999.0, 200.0, 999.0],
+    })
+    out, report = exclude_sell_out_total_rows(df)
+    assert list(out["category_path"]) == ["FRUITS", "BEVERAGE"]
+    assert report.input_rows == 4
+    assert report.excluded == 2
+
+
+def test_exclude_sell_out_total_rows_missing_column_raises():
+    """A missing category_path must fail loudly, not silently pass rows
+    through unfiltered - a silent no-op here is the exact double-counting
+    failure mode this function exists to prevent."""
+    df = pd.DataFrame({"net_amount": [100.0]})
+    with pytest.raises(KeyError):
+        exclude_sell_out_total_rows(df)
 
 
 def test_purchase_natural_key_no_longer_collapses_cross_region_rows():
