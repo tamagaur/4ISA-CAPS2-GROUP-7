@@ -64,5 +64,14 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
+# Adviser meeting prep — personal speaking notes, not project documentation
+analytics/docs/ADVISER_WALKTHROUGH.md
+
+# Acceptance-criteria tracker — team's live status tracking, not project documentation
+SSM_ACCEPTANCE_CRITERIA.xlsx
+
 # Jupyter
 .ipynb_checkpoints/
+
+# Reference file exports for the team — regenerated from staging/, not committed
+REFERENCE_FILES/

@@ -404,6 +404,7 @@ CANONICAL_CHECKSUM_COLUMN: dict[str, str] = {
     "daily_sales_report": "Net Amount",
     "purchase_order": "Untaxed Amount",
     "rmr_gs_bo": "Net Amount",
+    "sales_return": "Net Amount",
 }
 
 
@@ -592,14 +593,29 @@ class ExtractRunResult:
     file_rejects: list[RejectRecord] = field(default_factory=list)
 
 
-def parse_doc_type_files(doc_type: str, raw_dir: Path | None = None, repo_root: Path = REPO_ROOT) -> ExtractRunResult:
+def parse_doc_type_files(
+    doc_type: str, raw_dir: Path | None = None, repo_root: Path = REPO_ROOT,
+    exclude_files: frozenset[str] | None = None,
+) -> ExtractRunResult:
     """Generic per-family driver body: select every raw file whose
     filename resolves to doc_type (profiling.profile_files.infer_doc_type,
     frozen discovery-pass classification), run each through process_file.
     Each family module (sales_register.py, etc.) is just this call plus
-    its own DOC_TYPE constant — no per-file logic here."""
+    its own DOC_TYPE constant — no per-file logic here.
+
+    exclude_files (2026-08, Sales Return): file names (not full paths, to
+    stay independent of where raw_dir points) to skip outright - for a
+    confirmed byte-identical duplicate on disk, never for a QC/reject
+    decision (those still belong in the manifest's reject list). Optional
+    and defaults to None so every other family's call site is unaffected;
+    this is not a general dedup mechanism, just an escape hatch for a
+    known real duplicate file."""
     raw_dir = raw_dir or (repo_root / "data" / "raw")
-    files = [f for f in select_source_files(raw_dir) if infer_doc_type(f) == doc_type]
+    exclude_files = exclude_files or frozenset()
+    files = [
+        f for f in select_source_files(raw_dir)
+        if infer_doc_type(f) == doc_type and f.name not in exclude_files
+    ]
 
     result = ExtractRunResult()
     for f in files:

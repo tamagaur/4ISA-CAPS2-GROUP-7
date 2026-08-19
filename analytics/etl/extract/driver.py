@@ -35,6 +35,7 @@ from analytics.etl.extract.bo_rmr_gs import parse_bo_rmr_gs
 from analytics.etl.extract.inventory_signoff import parse_inventory_signoff
 from analytics.etl.extract.purchase_order import parse_purchase_order
 from analytics.etl.extract.sales_register import parse_sales_register
+from analytics.etl.extract.sales_return import parse_sales_return
 from analytics.etl.extract.sell_out import parse_sell_out
 from analytics.etl.extract.ssis_summary import parse_ssis_summary
 from analytics.etl.extract.unilever_sku import parse_unilever_sku
@@ -47,6 +48,7 @@ FAMILY_PARSERS = [
     parse_purchase_order,
     parse_bo_rmr_gs,
     parse_ssis_summary,       # T3 Option A — 7th family (SSIS Sales Summary)
+    parse_sales_return,       # 2026-08 — 8th family, real data existed, no driver ever attempted it
 ]
 
 
