@@ -149,16 +149,30 @@ def apply_column_map(
     df: pd.DataFrame, doc_type: str, config_dir: Path = DEFAULT_CONFIG_DIR
 ) -> tuple[pd.DataFrame, ColumnMapReport]:
     """Rename raw headers to canonical fields for one doc_type. Provenance
-    columns (leading underscore) pass through untouched. A raw header not
-    found in the map is left as-is and reported — never dropped silently
-    (anti-fabrication: an unrecognized column might carry real data)."""
+    columns (the exact names in PROVENANCE_COLUMNS) pass through untouched.
+    A raw header not found in the map is left as-is and reported — never
+    dropped silently (anti-fabrication: an unrecognized column might carry
+    real data).
+
+    Skip is by exact membership in PROVENANCE_COLUMNS, not a leading-"_"
+    prefix check: Extract's own placeholder names for genuinely unlabeled
+    columns (e.g. "__col0__", "__col1__" - see extract/_shared.py's
+    header-recovery) also start with "_", but they carry real business
+    data, not provenance. A prefix check silently excluded them from
+    mapping entirely - config/column_maps/sell_out.yaml's category_path
+    (mapped from "__col0__") and inventory_sign_off.yaml's
+    sku_description_raw (mapped from "__col1__") could never actually be
+    renamed, which blocked SellOut_Fact and Inventory_Fact's sku_code key
+    completely. Confirmed via a real transform_driver run before this fix:
+    34/34 real sell_out sheets and 41/41 blocked inventory sheets, both
+    citing their natural key column as missing after this function ran."""
     cmap = load_column_map(doc_type, config_dir)
 
     rename = {}
     mapped = {}
     unmapped_raw = []
     for col in df.columns:
-        if col.startswith("_"):
+        if col in PROVENANCE_COLUMNS:
             continue
         key = _normalize_header(col)
         if key in cmap.raw_to_canonical:
@@ -350,7 +364,7 @@ def reformat_calendar_month(
 ) -> tuple[pd.DataFrame, DateReformatReport]:
     """Reformats unilever_sku's raw 'MM.YYYY' calendar_month cells (e.g.
     "01.2023") into the project's 'YYYY-MM' period-key convention
-    (DEC-10), matching Unilever_SKU_Demand_Fact.calendar_month's declared
+    (DEC-12), matching Unilever_SKU_Demand_Fact.calendar_month's declared
     format and natural key. Extract's own row_periods_from_calendar_month()
     (extract/_shared.py) already parses this same raw value into the
     internal _period provenance column per row — this reuses the identical
@@ -384,7 +398,7 @@ def reformat_calendar_month(
 
 
 def _snapshot_date_from_period(period):
-    """Inventory_Fact.snapshot_date (DEC-10): these exports are monthly —
+    """Inventory_Fact.snapshot_date (DEC-12): these exports are monthly —
     there is no real day-of-month anywhere in the source, so this returns
     a documented SYNTHETIC first-of-month marker, not a reported date.
     Extract's explicit "unknown" sentinel (unparseable _period) returns
@@ -429,7 +443,7 @@ def normalize_quantities(
     df: pd.DataFrame, doc_type: str, tolerance: float = 0.01,
 ) -> tuple[pd.DataFrame, QuantityReconciliationReport | None]:
     """Normalize quantity fields to a comparable unit (pieces) per
-    principal (units-of-measure story, ARCHITECTURE.md DEC-09).
+    principal (units-of-measure story, ARCHITECTURE.md DEC-11).
 
     unilever_sku: quantity_sold is set from the reported
     sale_quantity_pieces column directly — sale_quantity_cases x pack_size
