@@ -25,16 +25,31 @@ const getInitials = (name) => {
   return (first + last).toUpperCase();
 };
 
-const navItems = [
-  { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
-  { name: 'SKU Management', icon: List, path: '/sku-management' },
-  { name: 'ABC Classification', icon: Layers, path: '/abc' },
-  { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
-  { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
-  { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders' },
-  { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
-  { name: 'Data Upload', icon: Upload, path: '/upload' },
-  { name: 'User Management', icon: Users, path: '/users', adminOnly: true },
+const navSections = [
+  {
+    label: 'Analytics',
+    items: [
+      { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
+      { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
+    ],
+  },
+  {
+    label: 'Management',
+    items: [
+      { name: 'SKU Management', icon: List, path: '/sku-management' },
+      { name: 'ABC Classification', icon: Layers, path: '/abc' },
+      { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
+      { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders' },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
+      { name: 'Data Upload', icon: Upload, path: '/upload' },
+      { name: 'User Management', icon: Users, path: '/users', adminOnly: true },
+    ],
+  },
 ];
 
 const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
@@ -75,29 +90,37 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
           <span className="version-text">INVENTORY DSS - v2.0</span>
         </div>
 
-        <div className="sidebar-modules-header">
-          <span className="modules-title">MODULES</span>
-        </div>
-
         {/* Navigation */}
         <nav className="sidebar-nav">
-          {navItems
-            .filter((item) => !item.adminOnly || currentUser?.role === 'admin')
-            .map((item) => (
-            <NavLink 
-              key={item.name} 
-              to={item.path} 
-              onClick={(e) => handleNavClick(e, item.path)}
-              className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}
-            >
-              <div className="nav-item-left">
-                <item.icon className="nav-icon" size={18} />
-                <span className="nav-item-text">
-                  {item.name}
-                </span>
+          {navSections.map((section) => {
+            const visibleItems = section.items.filter(
+              (item) => !item.adminOnly || currentUser?.role === 'admin'
+            );
+            if (visibleItems.length === 0) return null;
+
+            return (
+              <div className="sidebar-nav-section" key={section.label}>
+                <div className="sidebar-modules-header">
+                  <span className="modules-title">{section.label.toUpperCase()}</span>
+                </div>
+                {visibleItems.map((item) => (
+                  <NavLink
+                    key={item.name}
+                    to={item.path}
+                    onClick={(e) => handleNavClick(e, item.path)}
+                    className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}
+                  >
+                    <div className="nav-item-left">
+                      <item.icon className="nav-icon" size={18} />
+                      <span className="nav-item-text">
+                        {item.name}
+                      </span>
+                    </div>
+                  </NavLink>
+                ))}
               </div>
-            </NavLink>
-          ))}
+            );
+          })}
         </nav>
 
         {/* Bottom Profile */}
