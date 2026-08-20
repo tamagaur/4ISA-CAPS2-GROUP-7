@@ -352,6 +352,106 @@ def split_sku_description(
     return out, report
 
 
+# Real inventory_sign_off data has FOUR shapes, not the two documented in
+# column_maps/inventory_sign_off.yaml's original comment (found 2026-08,
+# Phase 1b of the synthetic-staging-conversion audit - see
+# reports/SYNTHETIC_STAGING_CONVERSION.md for the full derivation against
+# all 41 real staged files):
+#   A (25/41 files) - __col0__ only, combined "CODE DESCRIPTION" string.
+#   B (13/41 files) - __col0__ is a redundant bare-numeric SKU suffix;
+#     __col1__ carries the real combined "CODE DESCRIPTION" string.
+#   C (2/41 files)  - real labeled "ITEM CODE"/"ITEM DESCRIPTION" headers,
+#     no split needed at all.
+#   D (1/41 files)  - one real file (August 2023, Pangasinan "ACTUAL"
+#     export) where __col1__ has real description text but the alpha SKU
+#     prefix is absent from the source entirely (confirmed 173/173 rows) -
+#     not a parsing failure, the code genuinely isn't in this file.
+# A single column-map YAML alias list can't route __col0__ vs __col1__ vs
+# "ITEM CODE" to sku_description_raw conditionally per sheet - adding
+# __col0__ as a second alias for sku_description_raw would make Shape B
+# rows (which have BOTH __col0__ and __col1__ non-null at once) hit
+# _coalesce_duplicate_columns()'s first-non-null-wins behavior and silently
+# take __col0__'s bare numeric fragment over __col1__'s real combined
+# string, while also flooding duplicate_column_conflicts with false
+# positives for every Shape B row. Dispatch happens here instead, in code,
+# per (src_file, src_sheet) sheet - not per file, since the real 2025-era
+# workbooks carry a third "Sheet1" (Shape A) alongside two region-named
+# sheets (Shape B) in the very same file.
+_INVENTORY_SKU_PREFIX_RE = re.compile(r"^\s*9D[A-Z]{2}\d{4,6}\s")
+
+
+def _classify_inventory_sku_shape(group: pd.DataFrame) -> str:
+    """Classify one (src_file, src_sheet) sheet's real inventory_sign_off
+    shape from its own data - never from filename/period, so this stays
+    correct if a future real file breaks the date-era pattern observed so
+    far. Called AFTER apply_column_map(), not on raw Extract output:
+    column_maps/inventory_sign_off.yaml already renames __col1__ to
+    sku_description_raw (that alias is Shape B/D's only working path
+    today), so by this point __col1__ no longer exists under that name -
+    checking for sku_description_raw's presence is what actually detects
+    B/D, not a raw "__col1__" column lookup. __col0__ is never renamed by
+    the YAML (deliberately, see the note above route_inventory_sku_shapes)
+    so it's still __col0__ here, unlike __col1__.
+
+    Shape C wins if present (self-describing, unambiguous). Shape B vs D
+    is distinguished by content: both have real sku_description_raw
+    values (from __col1__), but D's rows never carry the alpha SKU-code
+    prefix anywhere in that sheet."""
+    if "ITEM CODE" in group.columns and group["ITEM CODE"].notna().any():
+        return "C"
+    has_col1_mapped = "sku_description_raw" in group.columns and group["sku_description_raw"].notna().any()
+    if has_col1_mapped:
+        candidates = group["sku_description_raw"].dropna().astype(str)
+        candidates = candidates[~candidates.str.strip().str.upper().isin({"TOTAL", "DESCRIPTION"})]
+        if candidates.empty:
+            return "B"
+        match_rate = candidates.apply(lambda v: bool(_INVENTORY_SKU_PREFIX_RE.match(v))).mean()
+        return "B" if match_rate > 0.5 else "D"
+    if "__col0__" in group.columns and group["__col0__"].notna().any():
+        return "A"
+    return "UNKNOWN"
+
+
+@dataclass
+class InventoryShapeRoutingReport:
+    shape_counts: dict          # rows per detected shape, e.g. {"A": 612, "B": 1885, ...}
+    shape_a_routed: int         # rows where __col0__ was copied into sku_description_raw
+
+
+def route_inventory_sku_shapes(df: pd.DataFrame) -> tuple[pd.DataFrame, InventoryShapeRoutingReport]:
+    """Template-version-aware dispatch for inventory_sign_off's combined
+    SKU-code+description cell (the fix column_maps/inventory_sign_off.yaml's
+    own comment names but leaves undone: "branch on column count or
+    presence of __col1__"). Must run before split_sku_description() so
+    Shape A rows have a populated sku_description_raw to split at all -
+    previously only Shape B's __col1__ was ever routed there (via the
+    YAML), so Shape A (25/41 real files, 92/92 synthetic files) produced
+    sku_code=NULL for every row even though the regex that could split it
+    already existed and already worked."""
+    out = df.copy()
+    if not {"_src_file", "_src_sheet"}.issubset(out.columns):
+        out["_inventory_sku_shape"] = "UNKNOWN"
+        return out, InventoryShapeRoutingReport(shape_counts={}, shape_a_routed=0)
+
+    shape_by_row = pd.Series("UNKNOWN", index=out.index, dtype=object)
+    for _, idx in out.groupby(["_src_file", "_src_sheet"], dropna=False).groups.items():
+        shape_by_row.loc[idx] = _classify_inventory_sku_shape(out.loc[idx])
+    out["_inventory_sku_shape"] = shape_by_row
+
+    shape_a_routed = 0
+    mask_a = shape_by_row == "A"
+    if "__col0__" in out.columns and mask_a.any():
+        if "sku_description_raw" not in out.columns:
+            out["sku_description_raw"] = pd.NA
+        out.loc[mask_a, "sku_description_raw"] = out.loc[mask_a, "__col0__"]
+        shape_a_routed = int(mask_a.sum())
+
+    return out, InventoryShapeRoutingReport(
+        shape_counts=shape_by_row.value_counts().to_dict(),
+        shape_a_routed=shape_a_routed,
+    )
+
+
 @dataclass
 class DateReformatReport:
     input_rows: int
@@ -675,8 +775,41 @@ def transform_fact(
         mapped_df, total_row_exclusion_report = exclude_sell_out_total_rows(mapped_df)
 
     sku_split_report = None
-    if rule.doc_type == "inventory_sign_off" and "sku_description_raw" in mapped_df.columns:
-        mapped_df, sku_split_report = split_sku_description(mapped_df)
+    sku_shape_report = None
+    if rule.doc_type == "inventory_sign_off":
+        mapped_df, sku_shape_report = route_inventory_sku_shapes(mapped_df)
+        if "sku_description_raw" in mapped_df.columns:
+            mapped_df, sku_split_report = split_sku_description(mapped_df)
+
+        # Shape C (real "ITEM CODE"/"ITEM DESCRIPTION" headers): direct
+        # copy, no regex needed. Must run AFTER split_sku_description()
+        # above, since that function blanket-fills sku_code/product_name
+        # for every row from sku_description_raw - which Shape C rows
+        # never have (their code/name were never combined into one cell).
+        if "ITEM CODE" in mapped_df.columns:
+            mask_c = mapped_df["_inventory_sku_shape"] == "C"
+            if mask_c.any():
+                if "sku_code" not in mapped_df.columns:
+                    mapped_df["sku_code"] = pd.NA
+                if "product_name" not in mapped_df.columns:
+                    mapped_df["product_name"] = pd.NA
+                mapped_df.loc[mask_c, "sku_code"] = mapped_df.loc[mask_c, "ITEM CODE"]
+                if "ITEM DESCRIPTION" in mapped_df.columns:
+                    mapped_df.loc[mask_c, "product_name"] = mapped_df.loc[mask_c, "ITEM DESCRIPTION"]
+
+        # sku_code_status: makes a Shape D row (the source itself never
+        # carries the alpha SKU prefix - confirmed 173/173 real rows in
+        # the one real file this affects) distinguishable from an ordinary
+        # regex refusal (banner/corrupt rows like "Total"/"#REF!") or a
+        # Shape C direct match - all three otherwise collapse to the same
+        # "sku_code is null" signal, which would hide a real source-data
+        # gap behind the same label as an unremarkable banner-row skip.
+        if "sku_code" in mapped_df.columns:
+            status = pd.Series("unmatched", index=mapped_df.index, dtype=object)
+            status[mapped_df["sku_code"].notna()] = "matched"
+            status[mapped_df["_inventory_sku_shape"] == "C"] = "direct"
+            status[mapped_df["_inventory_sku_shape"] == "D"] = "source_gap"
+            mapped_df["sku_code_status"] = status
 
     date_reformat_report = None
     if rule.doc_type == "unilever_sku" and "calendar_month" in mapped_df.columns:
@@ -701,6 +834,7 @@ def transform_fact(
         "column_map": map_report,
         "total_row_exclusion": total_row_exclusion_report,
         "sku_split": sku_split_report,
+        "sku_shape_routing": sku_shape_report,
         "date_reformat": date_reformat_report,
         "quantity_reconciliation": quantity_report,
         "numeric_coercion": numeric_coercion_report,
