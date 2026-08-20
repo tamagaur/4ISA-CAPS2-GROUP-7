@@ -10,7 +10,8 @@ import {
   Upload,
   LogOut,
   X,
-  ClipboardList
+  ClipboardList,
+  Users
 } from 'lucide-react';
 import { logout, getCurrentUser } from '../auth';
 import './Sidebar.css';
@@ -33,6 +34,7 @@ const navItems = [
   { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders' },
   { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
   { name: 'Data Upload', icon: Upload, path: '/upload' },
+  { name: 'User Management', icon: Users, path: '/users', adminOnly: true },
 ];
 
 const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
@@ -79,7 +81,9 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
 
         {/* Navigation */}
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
+          {navItems
+            .filter((item) => !item.adminOnly || currentUser?.role === 'admin')
+            .map((item) => (
             <NavLink 
               key={item.name} 
               to={item.path} 

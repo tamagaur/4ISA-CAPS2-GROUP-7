@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Login from './Login';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './components/AdminRoute';
 import DashboardLayout from './components/DashboardLayout';
 import Dashboard from './components/Dashboard';
 import SKUManagement from './components/SKUManagement';
@@ -11,6 +12,7 @@ import ReorderRecommendations from './components/ReorderRecommendations';
 import BadOrders from './components/BadOrders';
 import AuditLog from './components/AuditLog';
 import DataUpload from './components/DataUpload';
+import UserManagement from './components/UserManagement';
 import './App.css';
 
 const routeTitles = {
@@ -23,6 +25,7 @@ const routeTitles = {
   '/bad-orders': 'SAN2 | Bad Orders',
   '/audit-log': 'SAN2 | Audit Log',
   '/upload': 'SAN2 | Data Upload',
+  '/users': 'SAN2 | User Management',
 };
 
 function DynamicTitle() {
@@ -57,6 +60,14 @@ function App() {
           <Route path="bad-orders" element={<BadOrders />} />
           <Route path="audit-log" element={<AuditLog />} />
           <Route path="upload" element={<DataUpload />} />
+          <Route
+            path="users"
+            element={
+              <AdminRoute>
+                <UserManagement />
+              </AdminRoute>
+            }
+          />
         </Route>
       </Routes>
     </div>

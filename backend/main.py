@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import abc, auth, bo_monitoring, forecast, inventory, recommendations
+from backend.routers import abc, auth, bo_monitoring, forecast, inventory, recommendations, users
 
 load_dotenv(override=False)
 
@@ -53,6 +53,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(inventory.router)
 app.include_router(forecast.router)
 app.include_router(recommendations.router)
