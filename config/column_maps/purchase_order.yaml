@@ -20,6 +20,20 @@
 # Inc., who Sansan buys FROM), not a customer. Do not merge this map with
 # sales_register.yaml's or alias supplier_name into customer_name.
 
+# Phase 4 (2026-08, is_demo load-bearing): only ever present on synthetic
+# demo rows (see data/raw/Synthetic Data/, reports/SYNTHETIC_DATA_AUDIT.md) -
+# no real Purchase Order file has this header. Real files simply won't
+# have this raw column, so apply_column_map() leaves the canonical
+# is_demo field absent for them entirely; it is NOT backfilled to False
+# here. schema.sql's is_demo BOOLEAN NOT NULL DEFAULT false column
+# handles that instead - load.py only inserts columns present in both
+# the DataFrame and the target table (see load.py's df_columns
+# construction), so a real row's INSERT simply omits is_demo and
+# Postgres applies its own DEFAULT false. Confirmed by code inspection,
+# not by running load.py (not run this session, per instruction).
+is_demo:
+  - "is_demo"
+
 invoice_date:
   - "Invoice Date"
 

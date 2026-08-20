@@ -14,6 +14,14 @@
 # exactly why Del Monte forecasting is category-grain, not SKU-grain - do
 # not try to force a sku_code mapping here, none exists in this file family.
 
+# Phase 4 (2026-08, is_demo load-bearing): only ever present on synthetic
+# demo rows - no real Sell Out file has this header. See
+# purchase_order.yaml's identical note for the full real-row-default
+# reasoning (schema.sql's DEFAULT false handles it at Load time, not
+# backfilled here).
+is_demo:
+  - "is_demo"
+
 category_path:
   - "__col0__"    # NOTE: the source file has NO header text in this column at all
                   # (confirmed via profiling - not a header-detection failure, the

@@ -37,6 +37,14 @@
 # dispatch for this doc_type (e.g. branch on column count or presence of
 # "__col1__") before relying on 2023-era inventory data downstream.
 
+# Phase 4 (2026-08, is_demo load-bearing): only ever present on synthetic
+# demo rows - no real Inventory Sign Off file has this header. See
+# purchase_order.yaml's identical note for the full real-row-default
+# reasoning (schema.sql's DEFAULT false handles it at Load time, not
+# backfilled here).
+is_demo:
+  - "is_demo"
+
 sku_description_raw:
   - "__col1__"          # 2025-era exports ONLY (see note above) - the combined
                          # "SKU code + product name" string, same format as

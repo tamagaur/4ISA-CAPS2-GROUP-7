@@ -170,6 +170,13 @@ CREATE TABLE IF NOT EXISTS Sales_Fact (
     net_amount          NUMERIC(14,2) NOT NULL,
     balance             NUMERIC(14,2),
     _outlier_flag       BOOLEAN NOT NULL DEFAULT FALSE,   -- from clean.flag_iqr_outliers; flagged, never dropped
+    -- Phase 4 (2026-08): true only for adviser-sanctioned synthetic demo
+    -- rows (see reports/SYNTHETIC_DATA_AUDIT.md) - DEFAULT false means a
+    -- real row's INSERT, which never specifies this column at all (Extract
+    -- never produces an is_demo raw column for real files - see
+    -- column_maps/sales_register.yaml's note), gets false from Postgres
+    -- itself, not from application code. See Sales_Fact_Real below.
+    is_demo             BOOLEAN NOT NULL DEFAULT false,
     _src_file           TEXT NOT NULL,
     _src_sheet          TEXT NOT NULL,
     _period             TEXT NOT NULL,      -- 'YYYY-MM'
@@ -189,6 +196,9 @@ CREATE TABLE IF NOT EXISTS Purchase_Fact (
     net_amount             NUMERIC(14,2) NOT NULL,
     tax_amount              NUMERIC(14,2),
     units_received           NUMERIC(14,2), -- feeds clean.compute_bo_rate; NULL (not 0) when absent from source
+    -- Phase 4 (2026-08): see Sales_Fact.is_demo's comment - identical
+    -- reasoning and real-row-default behavior for this table.
+    is_demo                   BOOLEAN NOT NULL DEFAULT false,
     _src_file                TEXT NOT NULL,
     _src_sheet                TEXT NOT NULL,
     _period                   TEXT NOT NULL,
@@ -223,6 +233,9 @@ CREATE TABLE IF NOT EXISTS SalesReturn_Fact (
     region                     TEXT,
     net_amount                  NUMERIC(14,2),
     bo_units                     NUMERIC(14,2),  -- always NULL for real data - see BO_Monitoring_View note below, no source column exists
+    -- Phase 4 (2026-08): see Sales_Fact.is_demo's comment - identical
+    -- reasoning and real-row-default behavior for this table.
+    is_demo                       BOOLEAN NOT NULL DEFAULT false,
     _src_file                     TEXT NOT NULL,
     _src_sheet                     TEXT NOT NULL,
     _period                         TEXT NOT NULL,
@@ -286,6 +299,9 @@ CREATE TABLE IF NOT EXISTS Inventory_Fact (
     -- exists anywhere in Del Monte's files, so a conversion would be
     -- fabricated, not derived. See config/column_maps/inventory_sign_off.yaml.
     quantity_pieces          NUMERIC(14,2),
+    -- Phase 4 (2026-08): see Sales_Fact.is_demo's comment - identical
+    -- reasoning and real-row-default behavior for this table.
+    is_demo                   BOOLEAN NOT NULL DEFAULT false,
     _src_file                TEXT NOT NULL,
     _src_sheet                TEXT NOT NULL,
     UNIQUE (sku_code, snapshot_date, region)  -- DEC-04 natural key (config/source_of_truth.yaml: inventory)
@@ -306,6 +322,9 @@ CREATE TABLE IF NOT EXISTS SellOut_Fact (
     _period                   TEXT NOT NULL,  -- 'YYYY-MM'
     quantity                   NUMERIC(14,2), -- negatives are real (returns/adjustments) - do not clamp to zero
     net_amount                  NUMERIC(14,2),
+    -- Phase 4 (2026-08): see Sales_Fact.is_demo's comment - identical
+    -- reasoning and real-row-default behavior for this table.
+    is_demo                      BOOLEAN NOT NULL DEFAULT false,
     _src_file                    TEXT NOT NULL,
     _src_sheet                    TEXT NOT NULL,
     UNIQUE (category_path, region, _period)   -- DEC-04 natural key (config/source_of_truth.yaml: sell_out)
@@ -341,6 +360,9 @@ CREATE TABLE IF NOT EXISTS Unilever_SKU_Demand_Fact (
     -- (config/column_maps/unilever_sku.yaml), coerced to numeric in the
     -- prior Transform work - this column just gives them a home here.
     net_amount                NUMERIC(14,2),
+    -- Phase 4 (2026-08): see Sales_Fact.is_demo's comment - identical
+    -- reasoning and real-row-default behavior for this table.
+    is_demo                    BOOLEAN NOT NULL DEFAULT false,
     _src_file                  TEXT NOT NULL,
     _src_sheet                   TEXT NOT NULL,
     UNIQUE (sku_code, calendar_month)
@@ -558,3 +580,36 @@ SELECT
     s.region, s._src_file, s._src_sheet
 FROM SellOut_Fact s
 LEFT JOIN Product_Dimension pd ON pd.product_key = s.product_key;
+
+-- ============================================================
+-- SECTION 8 — DEMO-DATA ISOLATION (Phase 4, 2026-08)
+-- analytics/docs/DEL_MONTE_DEMO_DATA_SPEC.md:314's proposal, implemented:
+-- "Recommend a documented, reusable view (e.g. Sales_Fact_Real) per fact
+-- table that bakes in the filter, so nobody has to remember it by hand
+-- each time." is_demo alone does not enforce anything - any query that
+-- forgets `WHERE is_demo = false` silently includes synthetic rows. One
+-- _Real view per fact table with an is_demo column removes that
+-- discipline burden for every downstream query, report, and analytics
+-- pipeline (ABC classification, SARIMA, LP) that must never see demo
+-- data. Every real-only query used for the manuscript, the panel demo,
+-- or any exported report should read from these views, not the base
+-- fact tables, per that same spec note.
+-- ============================================================
+
+CREATE OR REPLACE VIEW Sales_Fact_Real AS
+SELECT * FROM Sales_Fact WHERE is_demo = false;
+
+CREATE OR REPLACE VIEW Purchase_Fact_Real AS
+SELECT * FROM Purchase_Fact WHERE is_demo = false;
+
+CREATE OR REPLACE VIEW Inventory_Fact_Real AS
+SELECT * FROM Inventory_Fact WHERE is_demo = false;
+
+CREATE OR REPLACE VIEW SellOut_Fact_Real AS
+SELECT * FROM SellOut_Fact WHERE is_demo = false;
+
+CREATE OR REPLACE VIEW Unilever_SKU_Demand_Fact_Real AS
+SELECT * FROM Unilever_SKU_Demand_Fact WHERE is_demo = false;
+
+CREATE OR REPLACE VIEW SalesReturn_Fact_Real AS
+SELECT * FROM SalesReturn_Fact WHERE is_demo = false;

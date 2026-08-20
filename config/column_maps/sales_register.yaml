@@ -9,6 +9,18 @@
 #
 # Matching is case-insensitive and whitespace-normalized (see transform.py).
 
+# Phase 4 (2026-08, is_demo load-bearing): only ever present on synthetic
+# demo rows - no real Sales Register file has this header. Real rows
+# simply lack this raw column; the canonical is_demo field stays absent
+# for them (not backfilled to False here). schema.sql's
+# is_demo BOOLEAN NOT NULL DEFAULT false handles the real-row default at
+# Load time - see purchase_order.yaml's identical note for the full
+# reasoning (load.py only inserts columns present in both the DataFrame
+# and the table, so a missing is_demo means Postgres' own DEFAULT
+# applies, never an explicit NULL).
+is_demo:
+  - "is_demo"
+
 invoice_date:
   - "Invoice Date"
 
