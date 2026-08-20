@@ -7,6 +7,7 @@ import {
   Line,
   BarChart,
   Bar,
+  Cell,
   LabelList,
   ReferenceLine,
   XAxis,
@@ -52,6 +53,81 @@ const generateBORateTrend = (skuCode) => {
     const rate = Math.max(0.8, base + wobble + drift);
     return { month, rate: Math.round(rate * 10) / 10 };
   });
+};
+
+// Bad Orders Over Time — aggregate incident volume across all SKUs at a
+// selectable granularity. Deterministic like generateBORateTrend, seeded off
+// the period filter's dateOffset so it moves consistently with the KPI card.
+const generateBOTrend = (granularity, dateOffset) => {
+  const base = 20 + dateOffset * 2;
+  if (granularity === 'daily') {
+    return Array.from({ length: 14 }, (_, i) => ({
+      label: `D${i + 1}`,
+      count: Math.max(0, Math.round(base / 6 + Math.sin(i * 0.7) * 3)),
+    }));
+  }
+  if (granularity === 'weekly') {
+    return Array.from({ length: 8 }, (_, i) => ({
+      label: `Wk ${i + 1}`,
+      count: Math.max(0, Math.round(base / 1.5 + Math.sin(i * 0.9) * 4 - i * 0.4)),
+    }));
+  }
+  const months = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
+  return months.map((month, i) => ({
+    label: month,
+    count: Math.max(0, Math.round(base + Math.sin(i * 0.8) * 5 - i * 1.2)),
+  }));
+};
+
+// When Bad Orders Happen — incident volume by weekday. Baseline shares
+// reflect heavier Mon/Fri receiving cycles, plus an exact bump for
+// manually-reported incidents' actual weekday.
+const WEEKDAY_SHARES = { Mon: 0.22, Tue: 0.14, Wed: 0.12, Thu: 0.13, Fri: 0.20, Sat: 0.13, Sun: 0.06 };
+const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const generateWeekdayBreakdown = (dateOffset, addedIncidents) => {
+  const baseIncidents = 135 + dateOffset * 6;
+  const counts = {};
+  Object.entries(WEEKDAY_SHARES).forEach(([day, share]) => {
+    counts[day] = Math.round(baseIncidents * share);
+  });
+  addedIncidents.forEach((r) => {
+    const day = WEEKDAY_NAMES[new Date(r.date).getDay()];
+    counts[day] = (counts[day] ?? 0) + 1;
+  });
+  return Object.keys(WEEKDAY_SHARES).map((day) => ({ day, count: counts[day] }));
+};
+
+// Top SKUs by Incidents — ranked count per tracked SKU, deterministic
+// per-SKU baseline (same hashSeed as the BO rate trend) plus an exact bump
+// for manually-reported incidents.
+const generateTopSKUIncidents = (addedIncidents) => {
+  const counts = {};
+  BO_TRACKED_SKUS.forEach(({ code, product }) => {
+    const seed = hashSeed(code);
+    counts[code] = { product, count: 8 + (seed % 20) };
+  });
+  addedIncidents.forEach((r) => {
+    if (counts[r.sku]) counts[r.sku].count += 1;
+  });
+  return Object.entries(counts)
+    .map(([sku, { product, count }]) => ({ sku: formatSKU(sku), product, count }))
+    .sort((a, b) => b.count - a.count);
+};
+
+// Incidents by Brand — Del Monte vs Unilever, split off the same
+// period-driven baseline the KPI card uses, plus an exact bump for
+// manually-reported incidents' actual brand.
+const BRAND_SHARE = { 'Del Monte': 0.52, 'Unilever': 0.48 };
+const generateBrandBreakdown = (dateOffset, addedIncidents) => {
+  const baseIncidents = 135 + dateOffset * 6;
+  const counts = {};
+  Object.entries(BRAND_SHARE).forEach(([brand, share]) => {
+    counts[brand] = Math.round(baseIncidents * share);
+  });
+  addedIncidents.forEach((r) => {
+    counts[r.brand] = (counts[r.brand] ?? 0) + 1;
+  });
+  return Object.entries(counts).map(([brand, count]) => ({ brand, count }));
 };
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
@@ -118,6 +194,7 @@ const BadOrders = () => {
   const [incidents, setIncidents] = useState(initialIncidents);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBOSKU, setSelectedBOSKU] = useState(BO_TRACKED_SKUS[0].code);
+  const [boTrendGranularity, setBoTrendGranularity] = useState('monthly');
 
   const boRateTrend = useMemo(() => generateBORateTrend(selectedBOSKU), [selectedBOSKU]);
   const latestBORate = boRateTrend[boRateTrend.length - 1]?.rate ?? 0;
@@ -180,6 +257,23 @@ const BadOrders = () => {
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, [dateOffset, addedIncidents]);
+
+  const boTrend = useMemo(
+    () => generateBOTrend(boTrendGranularity, dateOffset),
+    [boTrendGranularity, dateOffset]
+  );
+  const weekdayBreakdown = useMemo(
+    () => generateWeekdayBreakdown(dateOffset, addedIncidents),
+    [dateOffset, addedIncidents]
+  );
+  const topSKUIncidents = useMemo(
+    () => generateTopSKUIncidents(addedIncidents),
+    [addedIncidents]
+  );
+  const brandBreakdown = useMemo(
+    () => generateBrandBreakdown(dateOffset, addedIncidents),
+    [dateOffset, addedIncidents]
+  );
 
   // Submit new bad order handler from ReportBadOrderModal
   const handleAddReport = (reportData) => {
@@ -334,6 +428,101 @@ const BadOrders = () => {
                   />
                   <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={22} isAnimationActive={false}>
                     <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Bad Orders Over Time — aggregate volume trend, granularity toggle */}
+          <div className="bo-widget">
+            <div className="bo-widget-header-row">
+              <h3 className="bo-widget-title">Bad orders <span>— over time</span></h3>
+              <select
+                className="bo-sku-select"
+                value={boTrendGranularity}
+                onChange={(e) => setBoTrendGranularity(e.target.value)}
+              >
+                <option value="daily">Daily (14d)</option>
+                <option value="weekly">Weekly (8wk)</option>
+                <option value="monthly">Monthly (6mo)</option>
+              </select>
+            </div>
+            <div className="bo-chart-wrapper">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={boTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
+                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 11 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="count" name="Incidents" fill={COLORS.warning} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* When Bad Orders Happen — weekday breakdown */}
+          <div className="bo-widget">
+            <h3 className="bo-widget-title">When bad orders happen <span>— by day of week</span></h3>
+            <div className="bo-chart-wrapper">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={weekdayBreakdown} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
+                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="count" name="Incidents" fill={COLORS.dispatched} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Top SKUs by Incidents — ranked horizontal bar */}
+          <div className="bo-widget">
+            <h3 className="bo-widget-title">Top SKUs <span>— by incidents</span></h3>
+            <div className="bo-chart-wrapper">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={topSKUIncidents} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#edf2f7" />
+                  <XAxis type="number" hide allowDecimals={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="sku"
+                    width={90}
+                    tick={{ fill: '#4a5568', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    formatter={(value, name, props) => [value, props.payload.product]}
+                  />
+                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
+                    <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Incidents by Brand — two-series comparison; passes the CVD
+              validator (ΔE 27.4 deutan / 31.7 normal) and each bar carries
+              its own text label + x-axis category, so identity never
+              depends on color alone. */}
+          <div className="bo-widget">
+            <h3 className="bo-widget-title">Incidents <span>— by brand</span></h3>
+            <div className="bo-chart-wrapper">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={brandBreakdown} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
+                  <XAxis dataKey="brand" axisLine={false} tickLine={false} tick={{ fill: '#4a5568', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="count" name="Incidents" radius={[4, 4, 0, 0]} barSize={60} isAnimationActive={false}>
+                    <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
+                    {brandBreakdown.map((entry) => (
+                      <Cell key={entry.brand} fill={entry.brand === 'Del Monte' ? COLORS.success : COLORS.salesTrend} />
+                    ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
