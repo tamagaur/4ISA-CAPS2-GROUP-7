@@ -22,6 +22,12 @@ staging/
 # Transform stage output — manifest/review/sign-off, same reasoning as staging/
 transform/
 
+# Synthetic demo-data conversion output — regenerable from data/raw/Synthetic
+# Data/ via scripts/convert_synthetic_to_staging.py + scripts/generate_synthetic_backfill.py.
+# Same "generated output, not committed" reasoning as staging/ above; the
+# generator scripts themselves stay tracked in scripts/.
+staging_synthetic/
+
 # Python
 __pycache__/
 *.py[cod]
