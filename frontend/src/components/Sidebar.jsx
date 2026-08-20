@@ -46,7 +46,7 @@ const navSections = [
     label: 'Admin',
     items: [
       { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
-      { name: 'Data Upload', icon: Upload, path: '/upload' },
+      { name: 'Data Management', icon: Upload, path: '/upload' },
       { name: 'User Management', icon: Users, path: '/users', adminOnly: true },
     ],
   },
