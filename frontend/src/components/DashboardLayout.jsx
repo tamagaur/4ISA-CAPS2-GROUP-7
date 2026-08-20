@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import { logAction } from '../utils/auditLogger';
 import './DashboardLayout.css';
 
 // Helper to derive current real-world month & year from system date
@@ -58,11 +57,6 @@ const DashboardLayout = () => {
     localStorage.setItem('san2_start_year', pendingStartYear);
     localStorage.setItem('san2_end_month', pendingEndMonth);
     localStorage.setItem('san2_end_year', pendingEndYear);
-
-    logAction(
-      'Changed Date Range',
-      `Changed from ${startMonth} ${startYear} - ${endMonth} ${endYear} to ${pendingStartMonth} ${pendingStartYear} - ${pendingEndMonth} ${pendingEndYear}`
-    );
   };
 
   const handleDiscardPeriod = () => {
@@ -121,11 +115,6 @@ const DashboardLayout = () => {
     localStorage.setItem('san2_start_year', sy);
     localStorage.setItem('san2_end_month', em);
     localStorage.setItem('san2_end_year', ey);
-
-    logAction(
-      'Changed Date Range',
-      `Changed from ${startMonth} ${startYear} - ${endMonth} ${endYear} to ${sm} ${sy} - ${em} ${ey}`
-    );
   };
 
   return (

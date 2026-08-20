@@ -8,6 +8,8 @@
 // safe as this app's exposure to XSS — acceptable for an internal staff
 // tool, worth revisiting if the dashboard ever embeds third-party scripts.
 
+import { logAction } from './utils/auditLogger';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'dsd_access_token';
 const ROLE_KEY = 'dsd_role';
@@ -111,10 +113,13 @@ export async function login(email, password) {
 
   const data = await res.json();
   setSession(data.access_token, data.role);
+  logAction('Login', `${email} signed in`);
   return data;
 }
 
 export function logout() {
+  const user = getCurrentUser();
+  logAction('Logout', `${user?.email || 'Unknown user'} signed out`);
   clearSession();
 }
 
