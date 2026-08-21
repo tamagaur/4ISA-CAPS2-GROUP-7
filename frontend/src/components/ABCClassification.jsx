@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle } from 'lucide-react';
 import {
   ComposedChart,
@@ -11,7 +12,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { COLORS } from '../theme/colors';
+import { COLORS, CHART_COLORS } from '../theme/colors';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
@@ -21,32 +22,40 @@ import './ABCClassification.css';
 const BOUNDARY_TOLERANCE_PP = 3;
 const TIER_CUTOFFS = [80, 95];
 
-const mockABCData = [
+// Unilever has true per-SKU data.
+const UNILEVER_ABC_DATA = [
   { id: 1, sku: 'SKU-4721', product: 'Surf Powder Detergent 1kg', brand: 'Unilever', cat: 'A', avgMo: 1243, revPct: 8.2, status: 'IN STOCK' },
-  { id: 2, sku: 'SKU-8934', product: 'Pineapple Juice 1L', brand: 'Del Monte', cat: 'A', avgMo: 1156, revPct: 7.8, status: 'LOW' },
   { id: 3, sku: 'SKU-2891', product: 'Knorr Cubes 8g', brand: 'Unilever', cat: 'A', avgMo: 1098, revPct: 7.3, status: 'IN STOCK' },
-  { id: 4, sku: 'SKU-5632', product: 'Sweet Corn Kernel 425g', brand: 'Del Monte', cat: 'A', avgMo: 1045, revPct: 6.9, status: 'CRITICAL' },
   { id: 5, sku: 'SKU-7821', product: 'Dove Shampoo 340ml', brand: 'Unilever', cat: 'A', avgMo: 987, revPct: 6.5, status: 'IN STOCK' },
-  { id: 6, sku: 'SKU-3421', product: 'Tomato Sauce 250g', brand: 'Del Monte', cat: 'A', avgMo: 923, revPct: 6.1, status: 'IN STOCK' },
   { id: 7, sku: 'SKU-9012', product: 'Lux Bar Soap 135g', brand: 'Unilever', cat: 'A', avgMo: 876, revPct: 5.8, status: 'IN STOCK' },
-  { id: 8, sku: 'SKU-1234', product: 'Fruit Cocktail 432g', brand: 'Del Monte', cat: 'A', avgMo: 834, revPct: 5.5, status: 'LOW' },
   { id: 9, sku: 'SKU-6543', product: 'Creamsilk Conditioner 180ml', brand: 'Unilever', cat: 'A', avgMo: 798, revPct: 5.3, status: 'IN STOCK' },
-  { id: 10, sku: 'SKU-4567', product: 'Spaghetti Sauce 500g', brand: 'Del Monte', cat: 'A', avgMo: 756, revPct: 5.0, status: 'IN STOCK' },
   { id: 11, sku: 'SKU-8901', product: 'Breeze Detergent Powder 500g', brand: 'Unilever', cat: 'A', avgMo: 721, revPct: 4.8, status: 'IN STOCK' },
-  { id: 12, sku: 'SKU-2345', product: 'Tomato Ketchup 320g', brand: 'Del Monte', cat: 'A', avgMo: 689, revPct: 4.6, status: 'IN STOCK' },
   { id: 13, sku: 'SKU-7890', product: 'Rexona Deodorant 40ml', brand: 'Unilever', cat: 'A', avgMo: 654, revPct: 4.3, status: 'IN STOCK' },
-  { id: 14, sku: 'SKU-3456', product: 'Peach Halves 420g', brand: 'Del Monte', cat: 'A', avgMo: 623, revPct: 4.1, status: 'IN STOCK' },
   { id: 15, sku: 'SKU-1122', product: 'Sunsilk Shampoo 180ml', brand: 'Unilever', cat: 'B', avgMo: 534, revPct: 3.2, status: 'IN STOCK' },
-  { id: 16, sku: 'SKU-3344', product: 'Pineapple Tidbits 432g', brand: 'Del Monte', cat: 'B', avgMo: 498, revPct: 2.9, status: 'IN STOCK' },
   { id: 17, sku: 'SKU-5566', product: 'Closeup Toothpaste 120ml', brand: 'Unilever', cat: 'B', avgMo: 467, revPct: 2.7, status: 'LOW' },
-  { id: 18, sku: 'SKU-7788', product: 'Mixed Vegetables 380g', brand: 'Del Monte', cat: 'B', avgMo: 423, revPct: 2.4, status: 'IN STOCK' },
-  { id: 19, sku: 'SKU-9900', product: 'Pond\'s Powder 50g', brand: 'Unilever', cat: 'B', avgMo: 398, revPct: 2.2, status: 'IN STOCK' },
-  { id: 20, sku: 'SKU-2211', product: 'Spaghetti Pasta 900g', brand: 'Del Monte', cat: 'B', avgMo: 356, revPct: 1.9, status: 'IN STOCK' },
+  { id: 19, sku: 'SKU-9900', product: "Pond's Powder 50g", brand: 'Unilever', cat: 'B', avgMo: 398, revPct: 2.2, status: 'IN STOCK' },
   { id: 21, sku: 'SKU-4422', product: 'Vaseline Lotion 200ml', brand: 'Unilever', cat: 'C', avgMo: 187, revPct: 0.8, status: 'IN STOCK' },
-  { id: 22, sku: 'SKU-6633', product: 'Fiesta Pasta 500g', brand: 'Del Monte', cat: 'C', avgMo: 145, revPct: 0.6, status: 'IN STOCK' },
   { id: 23, sku: 'SKU-8844', product: 'Signal Toothbrush', brand: 'Unilever', cat: 'C', avgMo: 112, revPct: 0.4, status: 'LOW' },
-  { id: 24, sku: 'SKU-1155', product: 'Prune Juice 240ml', brand: 'Del Monte', cat: 'C', avgMo: 89, revPct: 0.3, status: 'IN STOCK' },
 ];
+
+// Del Monte has no SKU-level data anywhere in this project — these rows are
+// the same underlying products as before, aggregated into categories
+// (CAT- codes) rather than presented as individual fabricated SKUs.
+const DELMONTE_ABC_DATA = [
+  { id: 101, sku: 'CAT-CANNED-PRODUCE', product: 'Canned Fruits & Vegetables', brand: 'Del Monte', cat: 'A', avgMo: 3423, revPct: 21.8, status: 'CRITICAL' },
+  { id: 102, sku: 'CAT-SAUCES', product: 'Sauces & Condiments', brand: 'Del Monte', cat: 'A', avgMo: 2368, revPct: 15.7, status: 'IN STOCK' },
+  { id: 103, sku: 'CAT-JUICES', product: 'Juices', brand: 'Del Monte', cat: 'A', avgMo: 1245, revPct: 8.1, status: 'LOW' },
+  { id: 104, sku: 'CAT-PASTA', product: 'Pasta', brand: 'Del Monte', cat: 'B', avgMo: 501, revPct: 2.5, status: 'IN STOCK' },
+];
+
+const ABC_BY_PRINCIPAL = {
+  unilever: UNILEVER_ABC_DATA,
+  delmonte: DELMONTE_ABC_DATA,
+  all: [...UNILEVER_ABC_DATA, ...DELMONTE_ABC_DATA],
+};
+
+// Components branch on this, never on the principal name.
+const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
@@ -85,7 +94,7 @@ const ParetoTooltip = ({ active, payload, label }) => {
         <p className="abc-pareto-tooltip-line" style={{ color: COLORS.dispatched }}>
           Revenue share: {point.revPct.toFixed(1)}%
         </p>
-        <p className="abc-pareto-tooltip-line" style={{ color: COLORS.brandPrimary }}>
+        <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.cumulativeCurve }}>
           Cumulative: {point.cumulativePct.toFixed(1)}%
         </p>
       </div>
@@ -95,6 +104,10 @@ const ParetoTooltip = ({ active, payload, label }) => {
 };
 
 const ABCClassification = () => {
+  const { principal } = useOutletContext() || { principal: 'all' };
+  const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  const sourceData = useMemo(() => ABC_BY_PRINCIPAL[principal] ?? ABC_BY_PRINCIPAL.all, [principal]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [brandFilter, setBrandFilter] = useState('ALL');
@@ -124,17 +137,18 @@ const ABCClassification = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const catACount = mockABCData.filter(d => d.cat === 'A').length;
-  const catBCount = mockABCData.filter(d => d.cat === 'B').length;
-  const catCCount = mockABCData.filter(d => d.cat === 'C').length;
+  const catACount = sourceData.filter(d => d.cat === 'A').length;
+  const catBCount = sourceData.filter(d => d.cat === 'B').length;
+  const catCCount = sourceData.filter(d => d.cat === 'C').length;
 
-  const brandsList = ['ALL', ...Array.from(new Set(mockABCData.map(d => d.brand)))];
+  const brandsList = ['ALL', ...Array.from(new Set(sourceData.map(d => d.brand)))];
 
   // Cumulative revenue % and boundary-proximity flag, computed once over the
   // full value-ranked list (not the filtered view) so flags stay correct
   // regardless of what the user is currently searching/filtering for.
+  // Re-runs when the principal changes since sourceData does.
   const dataWithCumulative = useMemo(() => {
-    const sorted = [...mockABCData].sort((a, b) => b.revPct - a.revPct);
+    const sorted = [...sourceData].sort((a, b) => b.revPct - a.revPct);
     let running = 0;
     return sorted.map((item, index) => {
       running += item.revPct;
@@ -150,7 +164,7 @@ const ABCClassification = () => {
         boundaryCutoff: nearestCutoff,
       };
     });
-  }, []);
+  }, [sourceData]);
 
   const filteredData = useMemo(() => {
     return dataWithCumulative.filter(item => {
@@ -251,8 +265,8 @@ const ABCClassification = () => {
             <span className="abc-card-desc">Long tail · 5% of revenue</span>
           </div>
           <div className="abc-summary-card abc-card-total">
-            <span className="abc-card-label">TOTAL SKUS</span>
-            <span className="abc-card-value">1,247</span>
+            <span className="abc-card-label">{grain === 'category' ? 'TOTAL CATEGORIES' : 'TOTAL SKUS'}</span>
+            <span className="abc-card-value">{sourceData.length}</span>
             {boundaryCount > 0 && (
               <span className="abc-card-desc abc-card-desc-warning">
                 <AlertTriangle size={11} /> {boundaryCount} near a tier boundary
@@ -260,6 +274,12 @@ const ABCClassification = () => {
             )}
           </div>
         </div>
+
+        {(grain === 'category' || grain === 'mixed') && (
+          <p className="abc-page-grain-note">
+            Del Monte is analysed at category level — no SKU-level data is available from this principal
+          </p>
+        )}
 
         {/* Pareto Chart — Manuscript §3.4.4.2.2 (80/20 validation) / §3.4.4.2.3 (CRCR) */}
         <div className="abc-pareto-container">
@@ -271,11 +291,11 @@ const ABCClassification = () => {
                 <span>Revenue share per SKU</span>
               </div>
               <div className="abc-pareto-legend-item">
-                <span className="abc-pareto-legend-line" style={{ backgroundColor: COLORS.brandPrimary }} />
+                <span className="abc-pareto-legend-line" style={{ backgroundColor: CHART_COLORS.cumulativeCurve }} />
                 <span>Cumulative revenue</span>
               </div>
               <div className="abc-pareto-legend-item">
-                <span className="abc-pareto-legend-line abc-pareto-legend-dashed" style={{ backgroundColor: COLORS.gridline }} />
+                <span className="abc-pareto-legend-line abc-pareto-legend-dashed" style={{ backgroundColor: CHART_COLORS.gridline }} />
                 <span>Tier cutoffs (80% / 95%)</span>
               </div>
             </div>
@@ -283,13 +303,13 @@ const ABCClassification = () => {
           <div className="abc-pareto-chart-wrapper">
             <ResponsiveContainer width="100%" height={280}>
               <ComposedChart data={dataWithCumulative} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={COLORS.gridline} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
                 <XAxis
                   dataKey="rank"
                   axisLine={true}
                   tickLine={true}
-                  tick={{ fill: '#a0aec0', fontSize: 11 }}
-                  label={{ value: 'SKU rank, by revenue', position: 'insideBottom', offset: -5, fill: '#a0aec0', fontSize: 11 }}
+                  tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                  label={{ value: `${grain === 'category' ? 'Category' : 'SKU'} rank, by revenue`, position: 'insideBottom', offset: -5, fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                 />
                 <YAxis
                   domain={[0, 100]}
@@ -297,16 +317,16 @@ const ABCClassification = () => {
                   tickFormatter={(v) => `${v}%`}
                   axisLine={true}
                   tickLine={true}
-                  tick={{ fill: '#a0aec0', fontSize: 11 }}
+                  tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                 />
                 <Tooltip content={<ParetoTooltip />} cursor={{ fill: '#f7fafc' }} />
-                <ReferenceLine y={80} stroke={COLORS.gridline} strokeDasharray="4 4" label={{ value: 'A/B — 80%', position: 'right', fill: '#a0aec0', fontSize: 10 }} />
-                <ReferenceLine y={95} stroke={COLORS.gridline} strokeDasharray="4 4" label={{ value: 'B/C — 95%', position: 'right', fill: '#a0aec0', fontSize: 10 }} />
+                <ReferenceLine y={80} stroke={CHART_COLORS.gridline} strokeDasharray="4 4" label={{ value: 'A/B — 80%', position: 'right', fill: CHART_COLORS.axisLabel, fontSize: 10 }} />
+                <ReferenceLine y={95} stroke={CHART_COLORS.gridline} strokeDasharray="4 4" label={{ value: 'B/C — 95%', position: 'right', fill: CHART_COLORS.axisLabel, fontSize: 10 }} />
                 <Bar dataKey="revPct" fill={COLORS.dispatched} radius={[2, 2, 0, 0]} barSize={16} isAnimationActive={false} />
                 <Line
                   type="monotone"
                   dataKey="cumulativePct"
-                  stroke={COLORS.brandPrimary}
+                  stroke={CHART_COLORS.cumulativeCurve}
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 5 }}
@@ -507,7 +527,7 @@ const ABCClassification = () => {
             <thead>
               <tr>
                 <th>#</th>
-                <th>SKU</th>
+                <th>{grain === 'category' ? 'CATEGORY' : 'SKU'}</th>
                 <th>PRODUCT</th>
                 <th>BRAND</th>
                 <th>CAT</th>
@@ -560,7 +580,7 @@ const ABCClassification = () => {
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan="8" className="abc-no-results">No products found matching your filters.</td>
+                  <td colSpan="8" className="abc-no-results">No data for this selection.</td>
                 </tr>
               )}
             </tbody>

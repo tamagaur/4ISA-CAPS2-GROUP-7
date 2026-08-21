@@ -105,6 +105,16 @@
   cursor: help;
 }
 
+.abc-page-grain-note {
+  margin: -0.5rem 0 0 0;
+  padding: 0.6rem 0.9rem;
+  background-color: #f7fafc;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: #718096;
+  line-height: 1.4;
+}
+
 /* Pareto Chart */
 .abc-pareto-container {
   background-color: #ffffff;

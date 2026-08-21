@@ -138,6 +138,16 @@
   margin-bottom: -2px;
 }
 
+.sku-grain-note {
+  margin: -0.5rem 0 0 0;
+  padding: 0.6rem 0.9rem;
+  background-color: #f7fafc;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: #718096;
+  line-height: 1.4;
+}
+
 /* Filters Row */
 .sku-filters-row {
   display: flex;

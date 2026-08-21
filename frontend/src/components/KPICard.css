@@ -37,6 +37,24 @@
   line-height: 1;
 }
 
+.kpi-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
 .kpi-subtext {
   font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kpi-trend-icon {
+  flex-shrink: 0;
+}
+
+.kpi-context {
+  font-size: 0.75rem;
+  color: #a0aec0;
 }

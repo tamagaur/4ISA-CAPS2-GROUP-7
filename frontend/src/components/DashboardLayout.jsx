@@ -25,6 +25,11 @@ const DashboardLayout = () => {
   const [endMonth, setEndMonth] = useState(realWorldPeriod.month);
   const [endYear, setEndYear] = useState(realWorldPeriod.year);
 
+  // Principal filter — 'all' | 'unilever' | 'delmonte'. Deliberately not
+  // persisted (no localStorage), unlike the period above: it applies
+  // instantly, no pending/confirm step needed.
+  const [principal, setPrincipal] = useState('all');
+
   // Pending Unsaved Selection State
   const [pendingStartMonth, setPendingStartMonth] = useState(startMonth);
   const [pendingStartYear, setPendingStartYear] = useState(startYear);
@@ -125,10 +130,10 @@ const DashboardLayout = () => {
         currentMonth={realWorldPeriod.month}
       />
       <div className="main-content">
-        <Topbar 
-          toggleSidebar={toggleSidebar} 
-          startMonth={startMonth} 
-          startYear={startYear} 
+        <Topbar
+          toggleSidebar={toggleSidebar}
+          startMonth={startMonth}
+          startYear={startYear}
           endMonth={endMonth}
           endYear={endYear}
           pendingStartMonth={pendingStartMonth}
@@ -144,8 +149,10 @@ const DashboardLayout = () => {
           handleResetToToday={handleResetToToday}
           realWorldMonth={realWorldPeriod.month}
           realWorldYear={realWorldPeriod.year}
+          principal={principal}
+          setPrincipal={setPrincipal}
         />
-        <Outlet context={{ startMonth, startYear, endMonth, endYear, updatePeriodImmediately, realWorldPeriod }} />
+        <Outlet context={{ startMonth, startYear, endMonth, endYear, updatePeriodImmediately, realWorldPeriod, principal }} />
       </div>
 
       {/* Nav Interception Confirmation Dialog */}

@@ -19,3 +19,27 @@ export const COLORS = {
   brandPrimary: '#c53030',   // SAN2 Corporate Red (UI Chrome / Nav)
   brandAccent: '#e53e3e',
 };
+
+// Status tiers — semantic meaning drives the color, never the reverse.
+// A card's color comes from its metric type + direction (see KPICard.jsx's
+// tierFor()), not a color chosen per instance, so "why is this card red"
+// always has one answer. Deliberately its own red, distinct from
+// brandPrimary/brandAccent above — coral stays for nav/CTAs, this is the
+// only red that means "alert."
+export const STATUS_TIERS = {
+  loss: '#DC2626',        // TYPE 1/2: worsening direction, or a gap over target
+  healthy: '#059669',     // TYPE 2: at or under target
+  diagnostic: '#64748B',  // no inherent good/bad direction
+  action: '#4F46E5',      // TYPE 3: a recommendation the system is outputting
+};
+
+// Chart series tokens — kept separate from STATUS_TIERS so red never means
+// both "alert" and "a data series" on the same screen.
+export const CHART_COLORS = {
+  salesSeries: '#0D9488',
+  stockSeries: '#D97706',
+  abcRamp: ['#4338CA', '#818CF8', '#C7D2FE'], // Class A, B, C — sequential
+  cumulativeCurve: '#475569',
+  gridline: '#E2E8F0',
+  axisLabel: '#64748B',
+};

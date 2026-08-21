@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Loader2, ArrowDown, ClipboardList, ListChecks } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
@@ -10,14 +11,36 @@ import './ReorderRecommendations.css';
 // have ordered, computed here as the same baseline used pre-LP (rop * 7/3,
 // rounded) so the dashboard can show the paper's headline comparison
 // (backlog #56) instead of just the LP output in isolation.
-const mockReorderData = [
+//
+// Unilever has true per-SKU data.
+const UNILEVER_REORDER_DATA = [
   { id: 1, sku: 'SKU-4721', brand: 'Unilever', product: 'Surf Powder Detergent 1kg', rop: 120, stock: 45, orderQty: 200, threeWeekRuleQty: 280, unitCost: 122.5, urgency: 'CRITICAL', estCost: '₱24,500', safetyStock: 34, leadTimeDays: 7, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
-  { id: 2, sku: 'SKU-8934', brand: 'Del Monte', product: 'Pineapple Juice 1L', rop: 80, stock: 12, orderQty: 180, threeWeekRuleQty: 210, unitCost: 180, urgency: 'CRITICAL', estCost: '₱32,400', safetyStock: 22, leadTimeDays: 10, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
   { id: 3, sku: 'SKU-2891', brand: 'Unilever', product: 'Knorr Cubes 8g', rop: 150, stock: 78, orderQty: 150, threeWeekRuleQty: 175, unitCost: 125, urgency: 'URGENT', estCost: '₱18,750', safetyStock: 40, leadTimeDays: 5, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
-  { id: 4, sku: 'SKU-1523', brand: 'Del Monte', product: 'Tomato Sauce 250g', rop: 100, stock: 89, orderQty: 140, threeWeekRuleQty: 165, unitCost: 107.1, urgency: 'URGENT', estCost: '₱15,000', safetyStock: 26, leadTimeDays: 10, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
   { id: 5, sku: 'SKU-7642', brand: 'Unilever', product: 'Dove Shampoo 340ml', rop: 90, stock: 56, orderQty: 120, threeWeekRuleQty: 130, unitCost: 118.3, urgency: 'PLANNED', estCost: '₱14,200', safetyStock: 24, leadTimeDays: 7, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
-  { id: 6, sku: 'SKU-9234', brand: 'Del Monte', product: 'Sweet Corn 425g', rop: 140, stock: 102, orderQty: 160, threeWeekRuleQty: 155, unitCost: 73.1, urgency: 'PLANNED', estCost: '₱11,700', safetyStock: 38, leadTimeDays: 10, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
 ];
+
+// Del Monte has no SKU-level data anywhere in this project — these rows
+// aggregate what used to be fabricated per-SKU Del Monte rows into
+// categories (CAT- codes).
+const DELMONTE_REORDER_DATA = [
+  { id: 101, sku: 'CAT-JUICES', brand: 'Del Monte', product: 'Juices', rop: 80, stock: 12, orderQty: 180, threeWeekRuleQty: 210, unitCost: 180, urgency: 'CRITICAL', estCost: '₱32,400', safetyStock: 22, leadTimeDays: 10, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
+  { id: 102, sku: 'CAT-SAUCES-VEG', brand: 'Del Monte', product: 'Sauces & Vegetables', rop: 240, stock: 191, orderQty: 300, threeWeekRuleQty: 320, unitCost: 89.0, urgency: 'URGENT', estCost: '₱26,700', safetyStock: 64, leadTimeDays: 10, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
+];
+
+const REORDER_DATA_BY_PRINCIPAL = {
+  unilever: UNILEVER_REORDER_DATA,
+  delmonte: DELMONTE_REORDER_DATA,
+  all: [...UNILEVER_REORDER_DATA, ...DELMONTE_REORDER_DATA],
+};
+
+// Components branch on this, never on the principal name.
+const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
+
+// Fixed reference capacity (units) the "warehouse utilization" summary card
+// is measured against — calibrated so the combined "all" view lands close
+// to the figure this card used to show hard-coded, back when it didn't
+// reflect the data at all.
+const WAREHOUSE_CAPACITY_UNITS = 560;
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
@@ -47,7 +70,11 @@ const formatTimestamp = (date) =>
   date.toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 const ReorderRecommendations = () => {
-  const [data, setData] = useState(mockReorderData);
+  const { principal } = useOutletContext() || { principal: 'all' };
+  const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  const sourceData = useMemo(() => REORDER_DATA_BY_PRINCIPAL[principal] ?? REORDER_DATA_BY_PRINCIPAL.all, [principal]);
+
+  const [data, setData] = useState(sourceData);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('RECOMMENDATIONS');
@@ -57,6 +84,22 @@ const ReorderRecommendations = () => {
   // CHECK (status IN ('pending', 'accepted', 'dismissed')) — no "hold" state exists.
   const [pendingOverride, setPendingOverride] = useState(null); // { item, action }
   const [decisionLog, setDecisionLog] = useState([]);
+
+  // Re-source recommendations when the principal filter changes. In-session
+  // accept/dismiss actions are tied to whichever principal's view they were
+  // made in and reset with it.
+  useEffect(() => {
+    setData(sourceData);
+  }, [sourceData]);
+
+  // Summary cards below are computed from this — previously hard-coded
+  // strings disconnected from `data` entirely (the exact bug class that let
+  // "4 products, 3 alerts" happen on the Dashboard).
+  const criticalCount = data.filter(item => item.urgency === 'CRITICAL').length;
+  const urgentCount = data.filter(item => item.urgency === 'URGENT').length;
+  const lpBudget = data.reduce((sum, item) => sum + item.unitCost * item.orderQty, 0);
+  const totalStock = data.reduce((sum, item) => sum + item.stock, 0);
+  const warehouseUtilPct = Math.round((totalStock / WAREHOUSE_CAPACITY_UNITS) * 100);
 
   const handleOpenDetails = (item) => {
     setSelectedItem(item);
@@ -163,39 +206,45 @@ const ReorderRecommendations = () => {
       <div className="reorder-summary-grid">
         <div className="reorder-summary-card card-red">
           <div className="card-content">
-            <span className="reorder-card-label">CRITICAL SKUS</span>
-            <span className="reorder-card-value">2</span>
+            <span className="reorder-card-label">{grain === 'category' ? 'CRITICAL CATEGORIES' : 'CRITICAL SKUS'}</span>
+            <span className="reorder-card-value">{criticalCount}</span>
           </div>
         </div>
         <div className="reorder-summary-card card-yellow">
           <div className="card-content">
-            <span className="reorder-card-label">URGENT SKUS</span>
-            <span className="reorder-card-value">2</span>
+            <span className="reorder-card-label">{grain === 'category' ? 'URGENT CATEGORIES' : 'URGENT SKUS'}</span>
+            <span className="reorder-card-value">{urgentCount}</span>
             <span className="reorder-card-desc">Within 3 days</span>
           </div>
         </div>
         <div className="reorder-summary-card card-blue">
           <div className="card-content">
             <span className="reorder-card-label">LP BUDGET</span>
-            <span className="reorder-card-value">₱930.4k</span>
+            <span className="reorder-card-value">₱{(lpBudget / 1000).toFixed(1)}k</span>
             <span className="reorder-card-desc">LP - optimized</span>
           </div>
         </div>
         <div className="reorder-summary-card card-green">
           <div className="card-content">
             <span className="reorder-card-label">WAREHOUSE UTIL.</span>
-            <span className="reorder-card-value">68%</span>
+            <span className="reorder-card-value">{warehouseUtilPct}%</span>
             <span className="reorder-card-desc">of capacity</span>
           </div>
         </div>
       </div>
+
+      {(grain === 'category' || grain === 'mixed') && (
+        <p className="reorder-grain-note">
+          Del Monte is analysed at category level — no SKU-level data is available from this principal
+        </p>
+      )}
 
       {/* Table */}
       <div className="reorder-table-wrapper">
         <table className="reorder-table">
           <thead>
             <tr>
-              <th>SKU</th>
+              <th>{grain === 'category' ? 'CATEGORY' : 'SKU'}</th>
               <th>BRAND</th>
               <th>PRODUCT</th>
               <th>ROP</th>
@@ -256,6 +305,11 @@ const ReorderRecommendations = () => {
                 </tr>
               );
             })}
+            {data.length === 0 && (
+              <tr>
+                <td colSpan="10" className="reorder-no-results">No data for this selection.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

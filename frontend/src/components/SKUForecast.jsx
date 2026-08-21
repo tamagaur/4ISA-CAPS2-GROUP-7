@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Search, Star, ArrowRight, Clock, Filter, X } from 'lucide-react';
 import {
   ComposedChart,
@@ -76,18 +76,30 @@ const generateDynamicForecastData = () => {
 
 const forecastData = generateDynamicForecastData();
 
-const mockSKUDatabase = [
+// Unilever has true per-SKU data.
+const UNILEVER_SKU_DATABASE = [
   { code: 'SKU-4721', name: 'Surf Powder Detergent 1kg', brand: 'Unilever', cat: 'A' },
   { code: 'SKU-1052', name: 'Knorr Seasoning 250ml', brand: 'Unilever', cat: 'A' },
-  { code: 'SKU-6190', name: 'Great Taste Coffee 3-in-1 30g', brand: 'Del Monte', cat: 'A' },
   { code: 'SKU-2981', name: 'Pantasene Shampoo 180ml', brand: 'Unilever', cat: 'A' },
-  { code: 'SKU-9023', name: 'Nescafe Classic 200g', brand: 'Del Monte', cat: 'A' },
-  { code: 'SKU-8934', name: 'Pineapple Juice 1L', brand: 'Del Monte', cat: 'B' },
   { code: 'SKU-7743', name: 'Jack n Jill Piattos Cheese 85g', brand: 'Unilever', cat: 'B' },
   { code: 'SKU-5412', name: 'Downy Sunrise Fresh 900ml', brand: 'Unilever', cat: 'B' },
-  { code: 'SKU-3421', name: 'Tomato Sauce 250g', brand: 'Del Monte', cat: 'C' },
-  { code: 'SKU-8104', name: 'Bear Brand Fortified Milk 330g', brand: 'Del Monte', cat: 'C' }
 ];
+
+// Del Monte has no per-SKU forecast anywhere in this project — these are
+// category-level forecast targets (CAT- codes), not fabricated SKU rows.
+const DELMONTE_CATEGORY_DATABASE = [
+  { code: 'CAT-COFFEE-BEV', name: 'Coffee & Beverages', brand: 'Del Monte', cat: 'A' },
+  { code: 'CAT-SAUCES-DAIRY', name: 'Sauces & Dairy', brand: 'Del Monte', cat: 'C' },
+];
+
+const SKUS_BY_PRINCIPAL = {
+  unilever: UNILEVER_SKU_DATABASE,
+  delmonte: DELMONTE_CATEGORY_DATABASE,
+  all: [...UNILEVER_SKU_DATABASE, ...DELMONTE_CATEGORY_DATABASE],
+};
+
+// Components branch on this, never on the principal name.
+const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -120,13 +132,24 @@ const SKUForecast = () => {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
+  const { principal } = useOutletContext() || { principal: 'all' };
+  const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  const sourceSKUs = useMemo(() => SKUS_BY_PRINCIPAL[principal] ?? SKUS_BY_PRINCIPAL.all, [principal]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedBrand, setSelectedBrand] = useState('ALL');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Selected SKU
-  const [selectedSKU, setSelectedSKU] = useState(mockSKUDatabase[0]);
+  // Selected SKU (or Del Monte category)
+  const [selectedSKU, setSelectedSKU] = useState(sourceSKUs[0]);
+
+  // Re-select when the principal filter changes — there is no per-SKU Del
+  // Monte forecast to fall back to, so this always lands on a real row for
+  // whichever principal is now active.
+  useEffect(() => {
+    setSelectedSKU(sourceSKUs[0]);
+  }, [sourceSKUs]);
 
   // Persistent Pinned SKUs
   const [pinnedSKUs, setPinnedSKUs] = useState(() => {
@@ -184,11 +207,11 @@ const SKUForecast = () => {
   };
 
   // Unique Brands list
-  const brandsList = ['ALL', ...Array.from(new Set(mockSKUDatabase.map(s => s.brand)))];
+  const brandsList = ['ALL', ...Array.from(new Set(sourceSKUs.map(s => s.brand)))];
 
   // Filtering Logic
   const filteredSKUs = useMemo(() => {
-    return mockSKUDatabase.filter(sku => {
+    return sourceSKUs.filter(sku => {
       const matchesSearch = searchQuery === '' || 
         sku.code.toLowerCase().includes(searchQuery.toLowerCase()) || 
         sku.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -197,13 +220,13 @@ const SKUForecast = () => {
       const matchesBrand = selectedBrand === 'ALL' || sku.brand === selectedBrand;
       return matchesSearch && matchesCat && matchesBrand;
     });
-  }, [searchQuery, selectedCategory, selectedBrand]);
+  }, [sourceSKUs, searchQuery, selectedCategory, selectedBrand]);
 
   const hasActiveFilterOrSearch = selectedCategory !== 'ALL' || selectedBrand !== 'ALL' || searchQuery.trim() !== '';
 
-  const pinnedSKUObjects = mockSKUDatabase.filter(sku => pinnedSKUs.includes(sku.code));
-  const recentSKUObjects = mockSKUDatabase.filter(sku => recentSKUs.includes(sku.code) && !pinnedSKUs.includes(sku.code));
-  const catASKUObjects = mockSKUDatabase.filter(
+  const pinnedSKUObjects = sourceSKUs.filter(sku => pinnedSKUs.includes(sku.code));
+  const recentSKUObjects = sourceSKUs.filter(sku => recentSKUs.includes(sku.code) && !pinnedSKUs.includes(sku.code));
+  const catASKUObjects = sourceSKUs.filter(
     sku => sku.cat === 'A' && !pinnedSKUs.includes(sku.code) && !recentSKUs.includes(sku.code)
   );
 
@@ -244,8 +267,14 @@ const SKUForecast = () => {
         {/* Selection Area with Filter Controls */}
         <div className="forecast-selection">
           <div className="selection-top-bar">
-            <label className="selection-label">SELECT SKU TO FORECAST</label>
+            <label className="selection-label">{grain === 'category' ? 'SELECT CATEGORY TO FORECAST' : 'SELECT SKU TO FORECAST'}</label>
           </div>
+
+          {(grain === 'category' || grain === 'mixed') && (
+            <p className="forecast-grain-note">
+              Del Monte is analysed at category level — no SKU-level data is available from this principal
+            </p>
+          )}
 
           {/* Controls Bar: Filters & Search Combobox */}
           <div className="combobox-controls-bar">
@@ -354,7 +383,7 @@ const SKUForecast = () => {
                           </div>
                         ))
                       ) : (
-                        <div className="no-results-msg">No SKUs match your search or filter criteria.</div>
+                        <div className="no-results-msg">No data for this selection.</div>
                       )}
                     </div>
                   ) : (
@@ -463,7 +492,7 @@ const SKUForecast = () => {
         <div className="selected-sku-card">
           <div className="sku-info-left">
             <div className="sku-code-header-row">
-              <span className="sku-code-label">SELECTED SKU CODE</span>
+              <span className="sku-code-label">{grain === 'category' ? 'SELECTED CATEGORY CODE' : 'SELECTED SKU CODE'}</span>
               <button 
                 className={`card-star-btn ${isSelectedPinned ? 'pinned' : ''}`}
                 onClick={(e) => togglePinSKU(selectedSKU.code, e)}
