@@ -28,17 +28,32 @@ here, per anti-fabrication principle #1: this module must not assume or
 fabricate a grain it wasn't given.
 
 Implements classify_abc(revenue_df) -> pd.DataFrame.
-  Output columns: sku_id, total_revenue, revenue_share, cumulative_share, tier.
+  Output columns: sku_id, total_revenue, revenue_share, cumulative_share,
+  tier, boundary_flag.
+
+Backlog #43 (2026-08): boundary_flag marks SKUs whose cumulative_share
+sits within BOUNDARY_MARGIN of a tier cutoff (0.80 or 0.95) — these are
+the ones a small revenue shift next period could flip into a different
+tier, so procurement should expect them to move rather than be
+surprised. NOTE: the backlog cites "Manuscript Sec.3.6" as already
+defining this concept, but the specific margin value (how close counts
+as "near") was not given to this implementation — 0.02 (2 percentage
+points) below is a placeholder default, not sourced from the
+manuscript. Confirm the real value against Sec.3.6 and update
+BOUNDARY_MARGIN accordingly; do not treat 0.02 as final without that
+check (anti-fabrication principle #1 — this module must not guess a
+number the manuscript already specifies).
 """
 from __future__ import annotations
 
 import pandas as pd
 
 REQUIRED_INPUT_COLUMNS = ("sku_id", "total_revenue")
-OUTPUT_COLUMNS = ["sku_id", "total_revenue", "revenue_share", "cumulative_share", "tier"]
+OUTPUT_COLUMNS = ["sku_id", "total_revenue", "revenue_share", "cumulative_share", "tier", "boundary_flag"]
 
 TIER_A_CUTOFF = 0.80
 TIER_B_CUTOFF = 0.95
+BOUNDARY_MARGIN = 0.02  # UNCONFIRMED against manuscript Sec.3.6 — see module docstring
 
 
 def classify_abc(revenue_df: pd.DataFrame) -> pd.DataFrame:
@@ -59,6 +74,10 @@ def classify_abc(revenue_df: pd.DataFrame) -> pd.DataFrame:
           - revenue_share: this SKU's share of total revenue (0-1)
           - cumulative_share: running cumulative share after this SKU
           - tier: 'A' (cumulative_share <= 0.80), 'B' (<= 0.95), else 'C'
+          - boundary_flag: True if cumulative_share is within
+            BOUNDARY_MARGIN of the 0.80 or 0.95 cutoff (see module
+            docstring re: margin value not yet confirmed against the
+            manuscript)
 
     Raises:
         ValueError: missing required columns, duplicate sku_id, or any
@@ -99,11 +118,13 @@ def classify_abc(revenue_df: pd.DataFrame) -> pd.DataFrame:
         out["revenue_share"] = pd.NA
         out["cumulative_share"] = pd.NA
         out["tier"] = "C"
+        out["boundary_flag"] = False  # undefined shares -> nothing to be "near" a cutoff of
         return out[OUTPUT_COLUMNS]
 
     out["revenue_share"] = out["total_revenue"] / grand_total
     out["cumulative_share"] = out["revenue_share"].cumsum()
     out["tier"] = out["cumulative_share"].apply(_assign_tier)
+    out["boundary_flag"] = out["cumulative_share"].apply(_is_near_boundary)
 
     return out[OUTPUT_COLUMNS]
 
@@ -114,3 +135,13 @@ def _assign_tier(cumulative_share: float) -> str:
     if cumulative_share <= TIER_B_CUTOFF:
         return "B"
     return "C"
+
+
+def _is_near_boundary(cumulative_share: float) -> bool:
+    """True if this row's cumulative_share sits within BOUNDARY_MARGIN of
+    either cutoff — see BOUNDARY_MARGIN's docstring note on confirming
+    the real margin against the manuscript."""
+    return (
+        abs(cumulative_share - TIER_A_CUTOFF) <= BOUNDARY_MARGIN
+        or abs(cumulative_share - TIER_B_CUTOFF) <= BOUNDARY_MARGIN
+    )

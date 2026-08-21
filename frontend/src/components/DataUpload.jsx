@@ -89,7 +89,7 @@ const DataUpload = () => {
       <div className="du-content">
         {/* Page Header */}
         <div className="du-page-header">
-          <h2 className="du-page-title">Data Upload</h2>
+          <h2 className="du-page-title">Data Management</h2>
           <p className="du-page-subtitle">
             Upload sales, inventory, and bad order files to feed the SSM engine. Supported formats: Excel (.xlsx, .xls) and CSV (.csv). Clean, consistent data improves forecast accuracy and optimization results.
           </p>
