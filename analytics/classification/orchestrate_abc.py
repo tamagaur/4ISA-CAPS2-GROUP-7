@@ -30,9 +30,20 @@ input and counted in AbcRunReport so a human can see exactly what was
 left out and why, same "flag, never drop" precedent as
 transform.dedup_facts()'s null_key_rows and DEC-13.
 
-Not yet run against a live database as of this writing — needs
-Extract → Transform → Load to have populated Unilever_SKU_Demand_Fact
+Needs Extract → Transform → Load to have populated Unilever_SKU_Demand_Fact
 and SellOut_Fact for the requested period first.
+
+Fixed 2026-08 (first live run against Supabase): the Unilever/Del Monte
+fetch functions below now cast their NUMERIC-sourced revenue column to
+float immediately after querying. Postgres NUMERIC comes back through
+psycopg2/SQLAlchemy as decimal.Decimal, not float, when read via a raw
+select() like this - abc.py's TIER_A_CUTOFF/BOUNDARY_MARGIN are plain
+float literals, and Decimal refuses mixed-type arithmetic (subtraction)
+with float even though it allows mixed-type comparison, so the very
+first live run crashed inside classify_abc()'s boundary_flag calculation
+before this fix. Cast at the fetch boundary, not by changing abc.py's
+constants to Decimal - every other consumer of this module already
+assumes float throughout.
 """
 from __future__ import annotations
 
@@ -57,6 +68,7 @@ class AbcRunReport:
     tier_counts: dict = field(default_factory=dict)   # {'A': n, 'B': n, 'C': n}
     near_boundary_count: int = 0    # backlog #43: SKUs flagged as close to a tier cutoff
     rows_upserted: int = 0
+    error: str | None = None        # set (input_rows/tier_counts/etc. left at defaults) if this principal's run raised
 
 
 def _fetch_unilever_sku_revenue(engine: Engine, period: str) -> tuple[pd.DataFrame, int]:
@@ -72,6 +84,16 @@ def _fetch_unilever_sku_revenue(engine: Engine, period: str) -> tuple[pd.DataFra
             .where(demand.c.calendar_month == period)
         ).fetchall()
     df = pd.DataFrame(rows, columns=["sku_id", "total_revenue"])
+    # net_amount is a Postgres NUMERIC column - psycopg2/SQLAlchemy return
+    # it as decimal.Decimal, not float, when read via a raw select() like
+    # this (no pd.read_sql-style dtype coercion happens anywhere in this
+    # fetch path). Cast here, at the fetch boundary, rather than changing
+    # abc.py's TIER_A_CUTOFF/BOUNDARY_MARGIN constants to Decimal - the
+    # rest of this module (and classify_abc()) already assumes float
+    # throughout. astype(float) on an object column of Decimal/None
+    # correctly turns None into NaN, so the null-count check below still
+    # works unchanged.
+    df["total_revenue"] = df["total_revenue"].astype(float)
     null_count = int(df["total_revenue"].isna().sum())
     df = df.dropna(subset=["total_revenue"])
     return df, null_count
@@ -91,6 +113,10 @@ def _fetch_delmonte_category_revenue(engine: Engine, period: str) -> tuple[pd.Da
             .where(sellout.c._period == period)
         ).fetchall()
     raw = pd.DataFrame(rows, columns=["sku_id", "total_revenue"])
+    # Same NUMERIC -> Decimal cast as _fetch_unilever_sku_revenue() above -
+    # see that function's comment for the full reasoning. Cast before the
+    # groupby/sum so the aggregation itself is float arithmetic too.
+    raw["total_revenue"] = raw["total_revenue"].astype(float)
     null_count = int(raw["total_revenue"].isna().sum())
     raw = raw.dropna(subset=["total_revenue"])
     df = raw.groupby("sku_id", as_index=False)["total_revenue"].sum()
@@ -182,17 +208,41 @@ def run_abc_for_principal(engine: Engine, principal: str, classification_period:
 
 def run_abc(classification_period: str) -> list[AbcRunReport]:
     """Runs ABC classification for both principals for one period.
-    Each principal's ranking is independent — see module docstring."""
+    Each principal's ranking is independent — see module docstring.
+
+    One principal's failure does not abort the other's: each run is
+    wrapped in its own try/except so, e.g., a Del Monte-specific data
+    issue can never prevent Unilever's classification (already computed
+    or about to be) from landing. The failure is logged (printed) and
+    recorded on the returned AbcRunReport via its `error` field rather
+    than raised, so a caller can see exactly which principal(s) succeeded
+    without having to catch anything itself."""
     settings = get_settings()
     engine = create_engine(settings.supabase_db_url, pool_pre_ping=True)
-    return [
-        run_abc_for_principal(engine, "unilever", classification_period),
-        run_abc_for_principal(engine, "delmonte", classification_period),
-    ]
+
+    reports = []
+    for principal in ("unilever", "delmonte"):
+        try:
+            reports.append(run_abc_for_principal(engine, principal, classification_period))
+        except Exception as exc:  # noqa: BLE001 - intentionally broad: any failure must not abort the other principal
+            print(f"ABC classification FAILED for principal={principal!r} period={classification_period!r}: "
+                  f"{type(exc).__name__}: {exc}")
+            reports.append(AbcRunReport(
+                principal=principal,
+                classification_period=classification_period,
+                input_rows=0,
+                excluded_null_revenue=0,
+                excluded_negative_revenue=[],
+                error=f"{type(exc).__name__}: {exc}",
+            ))
+    return reports
 
 
 def _print_report(report: AbcRunReport) -> None:
     print(f"\n=== ABC classification: {report.principal} / {report.classification_period} ===")
+    if report.error:
+        print(f"  FAILED: {report.error}")
+        return
     print(f"  Products classified: {report.input_rows}")
     print(f"  Tier breakdown:      {report.tier_counts or '(none)'}")
     print(f"  Near tier boundary:  {report.near_boundary_count} (backlog #43, margin unconfirmed vs manuscript Sec.3.6)")
