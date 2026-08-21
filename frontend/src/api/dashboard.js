@@ -1,20 +1,14 @@
-// frontend/src/api/dashboard.js
-//
-// Replace the mock resolve with:
-// return apiFetch(`/dashboard?principal=${principal}&from=${from}&to=${to}`).then((res) => res.json());
-//
-// mockDashboard.js is the only file that touches mock data — this file's
-// job is just the async contract (a real Promise, with artificial latency)
-// so loading states are real and testable today, and nothing above this
-// file has to change when the fetch above replaces the mock resolve.
-import { getMockDashboard } from './mockDashboard';
-
-const MOCK_LATENCY_MS = 400;
+import { apiFetch } from '../auth';
 
 export async function getDashboardData({ principal, from, to }) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(getMockDashboard({ principal, from, to }));
-    }, MOCK_LATENCY_MS);
-  });
+  const query = new URLSearchParams();
+  if (principal) query.append('principal', principal);
+  if (from) query.append('from', from);
+  if (to) query.append('to', to);
+  
+  const res = await apiFetch(`/dashboard?${query.toString()}`);
+  if (!res.ok) {
+    throw new Error('Failed to fetch dashboard data');
+  }
+  return res.json();
 }

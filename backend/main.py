@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import abc, auth, bo_monitoring, forecast, inventory, recommendations, users
+from backend.routers import abc, auth, bo_monitoring, dashboard, forecast, inventory, recommendations, users
 
 load_dotenv(override=False)
 
@@ -59,6 +59,7 @@ app.include_router(forecast.router)
 app.include_router(recommendations.router)
 app.include_router(abc.router)
 app.include_router(bo_monitoring.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health", tags=["health"])
