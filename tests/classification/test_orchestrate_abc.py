@@ -43,6 +43,7 @@ def sqlite_engine():
             "CREATE TABLE abc_classification ("
             "product_key INTEGER, principal TEXT, classification_period TEXT, "
             "tier TEXT, revenue_share REAL, cumulative_share REAL, "
+            "boundary_flag INTEGER DEFAULT 0, "
             "computed_at TEXT DEFAULT CURRENT_TIMESTAMP, "
             "PRIMARY KEY (product_key, classification_period))"
         ))
