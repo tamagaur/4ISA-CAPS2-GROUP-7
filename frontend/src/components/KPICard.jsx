@@ -45,7 +45,7 @@ const KPICard = ({
   const TrendIcon = trendDirection === 'up' ? ArrowUp : trendDirection === 'down' ? ArrowDown : null;
 
   return (
-    <div className="kpi-card" style={{ borderLeftColor: tierColor }}>
+    <div className="kpi-card" style={{ borderTopColor: tierColor }}>
       <div className="kpi-header">
         <h3 className="kpi-title">{title}</h3>
         {icon && <div className="kpi-icon" style={{ color: tierColor }}>{icon}</div>}

@@ -184,8 +184,7 @@ const Dashboard = () => {
             <h2>Inventory <span>pulse</span></h2>
             <DateFilter onRefresh={handleRefresh} />
           </div>
-
-          <p>Real-time KPIs across SSM's Urdaneta warehouse. Last synced: {startMonth} {startYear} - {endMonth} {endYear}</p>
+          <p>Real-time KPIs across SSM's Urdaneta warehouse. Last synced: {startMonth} {startYear} – {endMonth} {endYear}</p>
         </div>
 
         {error ? (
@@ -195,82 +194,84 @@ const Dashboard = () => {
           </div>
         ) : (
           <>
-            {/* Excess stock value is the hero (it's the problem); the other
-                three metrics are smaller context tiles beside it. Recommended
-                Order Value lives at the bottom now (next to the reorder list
-                it explains), so only 3 tiles remain here — a vertical stack
-                beside the hero rather than a literal 2x2. */}
+            {/* ── KPI STRIP — 4 equal tiles, reading order: largest-impact first ── */}
             <div className="dashboard-section">
-              <div className="kpi-hero-row">
-                <div className="kpi-hero-wrapper">
-                  {loading || !view ? (
+              <div className="kpi-grid">
+                {loading || !view ? (
+                  <>
                     <KPISkeleton />
-                  ) : (
+                    <KPISkeleton />
+                    <KPISkeleton />
+                    <KPISkeleton />
+                  </>
+                ) : (
+                  <>
                     <KPICard
                       title="Excess stock value"
                       value={view.excessValue}
                       metricType="gap"
                       isOverTarget={view.excessIsOverTarget}
                       contextLine={view.excessContext}
-                      icon={<Wallet size={28} />}
+                      icon={<Wallet size={20} />}
                     />
-                  )}
-                </div>
-                <div className="kpi-tile-stack">
-                  {loading || !view ? (
-                    <>
-                      <KPISkeleton />
-                      <KPISkeleton />
-                      <KPISkeleton />
-                    </>
-                  ) : (
-                    <>
-                      <KPICard
-                        title="Lost to damage & expiry"
-                        value={view.spoilageCostValue}
-                        metricType="loss"
-                        direction={view.spoilageCostRawDirection}
-                        trendDirection={view.spoilageCostArrow}
-                        deltaLine={view.spoilageCostDeltaLine}
-                        icon={<FlaskConical size={18} />}
-                      />
-                      <KPICard
-                        title="Top sellers out of stock"
-                        value={view.stockoutValue}
-                        metricType="loss"
-                        direction={view.stockoutRawDirection}
-                        trendDirection={view.stockoutArrow}
-                        deltaLine={view.stockoutDeltaLine}
-                        icon={<ShieldAlert size={18} />}
-                      />
-                      <KPICard
-                        title="Stock above policy"
-                        value={view.overstockValue}
-                        metricType="gap"
-                        isOverTarget={view.overstockIsOverTarget}
-                        contextLine={view.overstockContext}
-                        trendDirection={view.overstockArrow}
-                        deltaLine={view.overstockDeltaLine}
-                        icon={<Timer size={18} />}
-                      />
-                    </>
-                  )}
-                </div>
+                    <KPICard
+                      title="Lost to damage & expiry"
+                      value={view.spoilageCostValue}
+                      metricType="loss"
+                      direction={view.spoilageCostRawDirection}
+                      trendDirection={view.spoilageCostArrow}
+                      deltaLine={view.spoilageCostDeltaLine}
+                      icon={<FlaskConical size={20} />}
+                    />
+                    <KPICard
+                      title="Top sellers out of stock"
+                      value={view.stockoutValue}
+                      metricType="loss"
+                      direction={view.stockoutRawDirection}
+                      trendDirection={view.stockoutArrow}
+                      deltaLine={view.stockoutDeltaLine}
+                      icon={<ShieldAlert size={20} />}
+                    />
+                    <KPICard
+                      title="Stock above policy"
+                      value={view.overstockValue}
+                      metricType="gap"
+                      isOverTarget={view.overstockIsOverTarget}
+                      contextLine={view.overstockContext}
+                      trendDirection={view.overstockArrow}
+                      deltaLine={view.overstockDeltaLine}
+                      icon={<Timer size={20} />}
+                    />
+                  </>
+                )}
               </div>
             </div>
 
+            {/* ── PRIMARY CHART — Cover Trend (full width) ─────────────────────── */}
+            {/* Full width because time-series benefit from a wide horizontal axis;
+                this is the most critical diagnostic for the inventory DSS —
+                it shows how close stock is to the policy ceiling over time. */}
             <div className="dashboard-section">
-              <div className="charts-grid">
-                <div className="chart-large">
-                  {loading || !data ? (
-                    <ChartSkeleton />
-                  ) : data.cover_series.length === 0 ? (
-                    <div className="chart-widget"><EmptyNote>No data for this selection</EmptyNote></div>
-                  ) : (
-                    <CoverTrendWidget coverSeries={data.cover_series} policyTarget={data.kpis.weeks_of_cover.policy_target} />
-                  )}
-                </div>
-                <div className="chart-small">
+              <div className="chart-primary">
+                {loading || !data ? (
+                  <ChartSkeleton />
+                ) : data.cover_series.length === 0 ? (
+                  <div className="chart-widget"><EmptyNote>No data for this selection</EmptyNote></div>
+                ) : (
+                  <CoverTrendWidget
+                    coverSeries={data.cover_series}
+                    policyTarget={data.kpis.weeks_of_cover.policy_target}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* ── SECONDARY ROW — ABC | Reorder | Bad Orders ───────────────────── */}
+            <div className="dashboard-section">
+              <div className="secondary-grid">
+
+                {/* ABC Classification — revenue mix snapshot */}
+                <div className="secondary-col">
                   {loading || !data ? (
                     <ChartSkeleton />
                   ) : data.abc.tiers.length === 0 ? (
@@ -279,15 +280,11 @@ const Dashboard = () => {
                     <ABCClassificationWidget abc={data.abc} />
                   )}
                 </div>
-              </div>
-            </div>
 
-            {/* Reorder action sits last, where the eye finishes, and the
-                order-value figure is merged directly above the reorder list
-                it refers to. */}
-            <div className="dashboard-section">
-              <div className="alerts-grid">
-                <div className="reorder-merged-card">
+                {/* Reorder: order-value KPI merged above the reorder alert list
+                    so the recommendation and the products it refers to read
+                    as a single unit. */}
+                <div className="secondary-col reorder-merged-card">
                   {loading || !view ? (
                     <>
                       <KPISkeleton />
@@ -314,7 +311,9 @@ const Dashboard = () => {
                     </>
                   )}
                 </div>
-                <div className="bad-orders-card">
+
+                {/* Bad orders — recent incidents for quick triage */}
+                <div className="secondary-col bad-orders-card">
                   {loading || !view ? (
                     <AlertsSkeleton />
                   ) : view.badOrders.length === 0 ? (
@@ -332,6 +331,7 @@ const Dashboard = () => {
                     />
                   )}
                 </div>
+
               </div>
             </div>
           </>
