@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import {
-  ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ComposedChart, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
-import { CHART_COLORS, STATUS_TIERS } from '../theme/colors';
+import { CHART_COLORS, STATUS_TIERS, COLORS } from '../theme/colors';
 import './Charts.css';
 
 // coverSeries: [{ period, weeks_of_cover }] from getDashboardData(). Single
@@ -132,6 +133,78 @@ export const ABCClassificationWidget = ({ abc }) => {
           Del Monte is analysed at category level — no SKU-level data is available from this principal
         </p>
       )}
+    </div>
+  );
+};
+
+// Bad Order Trend — stacked bar chart by reason (Expiry / Transport Damage /
+// Storage Issue). Source: SalesReturn_Fact grouped by (week, return_type).
+// Colors are from the shared palette — deliberately not red, since red is
+// reserved for chart-layer alert markers (policy reference lines, etc.).
+// Expiry → amber (warning), Transport Damage → teal (dispatched),
+// Storage Issue → violet (forecast). All three avoid status-tier red.
+export const BadOrderTrendWidget = ({ badOrderSeries = [] }) => {
+  const reasonLabels = {
+    expiry:           'Expiry',
+    transport_damage: 'Transport Damage',
+    storage_issue:    'Storage Issue',
+  };
+  const reasonColors = {
+    expiry:           COLORS.warning,    // amber
+    transport_damage: COLORS.dispatched, // teal
+    storage_issue:    COLORS.forecast,   // violet
+  };
+
+  const renderLegend = () => (
+    <ul className="custom-legend" style={{ marginTop: '0.75rem' }}>
+      {Object.entries(reasonLabels).map(([key, label]) => (
+        <li key={key} className="legend-item">
+          <span className="legend-color" style={{ backgroundColor: reasonColors[key] }} />
+          {label}
+        </li>
+      ))}
+    </ul>
+  );
+
+  return (
+    <div className="chart-widget">
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>Bad Order Trend</h4>
+          <p>Weekly bad order value (₱k) by incident reason — from SalesReturn records</p>
+        </div>
+      </div>
+
+      <div className="chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1 }}>
+          <ResponsiveContainer width="99%" height="100%">
+            <BarChart data={badOrderSeries} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+              <XAxis
+                dataKey="period"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                dy={6}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                label={{ value: '₱k', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                formatter={(value, name) => [`₱${value}k`, reasonLabels[name] || name]}
+              />
+              <Bar dataKey="expiry"           name="expiry"           stackId="bo" fill={reasonColors.expiry}           isAnimationActive={false} />
+              <Bar dataKey="transport_damage" name="transport_damage" stackId="bo" fill={reasonColors.transport_damage} isAnimationActive={false} />
+              <Bar dataKey="storage_issue"    name="storage_issue"    stackId="bo" fill={reasonColors.storage_issue}    radius={[3, 3, 0, 0]} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        {renderLegend()}
+      </div>
     </div>
   );
 };

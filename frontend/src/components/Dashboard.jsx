@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import KPICard from './KPICard';
-import { CoverTrendWidget, ABCClassificationWidget } from './Charts';
+import { BadOrderTrendWidget, ABCClassificationWidget } from './Charts';
 import AlertsList from './AlertsList';
 import DateFilter from './DateFilter';
 import { getDashboardData } from '../api/dashboard';
-import { Wallet, FlaskConical, ShieldAlert, Timer, ShoppingCart } from 'lucide-react';
+import { FlaskConical, ShieldAlert, ShoppingCart, Wallet } from 'lucide-react';
 import './Dashboard.css';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -15,16 +15,14 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 // dates, so this is the one place that bridges the two.
 function toISODateRange(startMonth, startYear, endMonth, endYear) {
   const startIdx = Math.max(0, MONTH_NAMES.indexOf(startMonth));
-  const endIdx = Math.max(0, MONTH_NAMES.indexOf(endMonth));
+  const endIdx   = Math.max(0, MONTH_NAMES.indexOf(endMonth));
   const from = `${startYear}-${String(startIdx + 1).padStart(2, '0')}-01`;
   const lastDay = new Date(Number(endYear), endIdx + 1, 0).getDate();
-  const to = `${endYear}-${String(endIdx + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  const to   = `${endYear}-${String(endIdx + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   return { from, to };
 }
 
-// Arrow glyph is pure fact (which way the number moved) — kept separate
-// from the tier/colour decision, which now lives entirely in KPICard.jsx
-// keyed off metricType + direction/isOverTarget, never off a number's sign.
+// Arrow glyph is pure fact (which way the number moved).
 function arrowFromDelta(delta) {
   if (!delta) return null;
   return delta > 0 ? 'up' : 'down';
@@ -58,21 +56,24 @@ const EmptyNote = ({ children }) => <p className="dashboard-empty-note">{childre
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { startMonth, startYear, endMonth, endYear, updatePeriodImmediately, realWorldPeriod, principal } = useOutletContext() || {
+  const {
+    startMonth, startYear, endMonth, endYear,
+    updatePeriodImmediately, realWorldPeriod, principal,
+  } = useOutletContext() || {
     startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026',
     updatePeriodImmediately: () => {},
     realWorldPeriod: { month: 'Aug', year: '2026' },
     principal: 'all',
   };
 
-  const [data, setData] = useState(null);
+  const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError]     = useState(null);
   const [retryTick, setRetryTick] = useState(0);
 
   const { from, to } = useMemo(
     () => toISODateRange(startMonth, startYear, endMonth, endYear),
-    [startMonth, startYear, endMonth, endYear]
+    [startMonth, startYear, endMonth, endYear],
   );
 
   useEffect(() => {
@@ -92,89 +93,71 @@ const Dashboard = () => {
         setLoading(false);
       });
 
-    // Ignores whatever this request eventually resolves with if the filter
-    // changes again before it lands, so a slow stale response can never
-    // clobber a newer selection's data.
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [principal, from, to, retryTick]);
 
-  const handleRetry = () => setRetryTick((t) => t + 1);
+  const handleRetry   = () => setRetryTick((t) => t + 1);
+  const handleRefresh = () => window.location.reload();
 
   const view = useMemo(() => {
     if (!data) return null;
     const { kpis } = data;
+    const unitNoun = kpis.reorder_items.unit_noun;
 
-    // Del Monte has no SKU-level data anywhere in this project — this reads
-    // the grain the API already reports rather than checking the principal
-    // name, so it's correct for a future fourth/fifth principal too.
-    const unitNoun = data.abc.grain === 'category' ? 'categories' : 'products';
+    // ── KPI 1: Bad Order Value ──────────────────────────────────────────────
+    // Source: SalesReturn_Fact.net_amount aggregated by period.
+    // Value-based only — bo_units is always NULL in real source files.
+    const boValueArrow = arrowFromDelta(kpis.bad_order_value.delta_vs_prev);
+    const boValueDelta = kpis.bad_order_value.delta_vs_prev;
+    const br           = kpis.bad_order_value.by_reason;
 
-    const spoilageCostArrow = arrowFromDelta(kpis.spoilage_cost.delta_vs_prev);
-    const stockoutArrow = arrowFromDelta(kpis.stockout_rate.delta_vs_prev);
-    const overstockArrow = arrowFromDelta(kpis.weeks_of_cover.delta_vs_prev);
-
-    const overstockWeeks = Number((kpis.weeks_of_cover.value - kpis.weeks_of_cover.policy_target).toFixed(1));
-    const isOverstocked = overstockWeeks > 0;
+    // ── KPI 2: Active Incidents ─────────────────────────────────────────────
+    // Source: COUNT of OPEN + UNDER INVESTIGATION rows in SalesReturn_Fact.
+    const incArrow = arrowFromDelta(kpis.bad_order_incidents.delta_vs_prev);
 
     return {
       unitNoun,
 
-      // TYPE 2 (gap) — the excess over policy is the headline, not the raw
-      // held value; the raw held/justified figures are demoted to context.
-      excessValue: `₱${kpis.trapped_capital.excess.value}M`,
-      excessIsOverTarget: kpis.trapped_capital.excess.value > 0,
-      excessContext: `₱${kpis.trapped_capital.held.value}M held · ₱${kpis.trapped_capital.justified.value}M justified by demand`,
+      // KPI 1
+      boValue:      `₱${kpis.bad_order_value.value}k`,
+      boDirection:  kpis.bad_order_value.direction,
+      boArrow:      boValueArrow,
+      boDeltaLine:  boValueArrow
+        ? `₱${Math.abs(boValueDelta).toFixed(1)}k ${boValueArrow === 'up' ? 'more' : 'less'} than last period`
+        : 'Unchanged from last period',
+      boContext: `${kpis.bad_order_value.incident_count} incidents · ₱${br.expiry}k expiry · ₱${br.transport_damage}k transport`,
 
-      // TYPE 1 (loss) — colour comes from direction only; every card names
-      // its baseline explicitly rather than just saying "this month".
-      spoilageCostValue: `₱${kpis.spoilage_cost.value}k`,
-      spoilageCostRawDirection: kpis.spoilage_cost.direction,
-      spoilageCostArrow,
-      spoilageCostDeltaLine: spoilageCostArrow
-        ? `₱${Math.abs(kpis.spoilage_cost.delta_vs_prev).toFixed(1)}k ${spoilageCostArrow === 'up' ? 'more' : 'less'} than last month · ${kpis.spoilage_cost.incident_count} incidents`
-        : `Unchanged from last month · ${kpis.spoilage_cost.incident_count} incidents`,
+      // KPI 2
+      activeIncidents:    `${kpis.bad_order_incidents.value}`,
+      incDirection:       kpis.bad_order_incidents.direction,
+      incArrow,
+      incContext: `${kpis.bad_order_incidents.open_count} open · ${kpis.bad_order_incidents.under_investigation} under investigation`,
+      incDeltaLine: `${kpis.bad_order_incidents.total_count} total · ${kpis.bad_order_incidents.resolved_count} resolved this period`,
 
-      stockoutValue: `${kpis.stockout_rate.value}%`,
-      stockoutRawDirection: kpis.stockout_rate.direction,
-      stockoutArrow,
-      stockoutDeltaLine: stockoutArrow
-        ? `${Math.abs(kpis.stockout_rate.delta_vs_prev).toFixed(1)}pp ${stockoutArrow === 'up' ? 'higher' : 'lower'} than last month`
-        : 'Unchanged from last month',
+      // KPI 3: Items to Reorder
+      // Source: LP_Recommendation count for current planning cycle.
+      reorderItems:   `${kpis.reorder_items.value} ${unitNoun}`,
+      reorderItemsContext: `${kpis.reorder_items.critical_count} critical · ₱${kpis.reorder_items.total_value}M total order`,
 
-      // TYPE 2 (gap) — headline is the overstock amount (weeks_of_cover
-      // minus policy_target), computed here rather than hard-coded; zero or
-      // negative reads as "Within policy" and the card turns green.
-      overstockValue: isOverstocked ? `${overstockWeeks.toFixed(1)} weeks over` : 'Within policy',
-      overstockIsOverTarget: isOverstocked,
-      overstockContext: `${kpis.weeks_of_cover.value} weeks held · policy is ${kpis.weeks_of_cover.policy_target} weeks`,
-      overstockArrow,
-      overstockDeltaLine: overstockArrow
-        ? `${Math.abs(kpis.weeks_of_cover.delta_vs_prev).toFixed(1)} weeks ${overstockArrow === 'up' ? 'more' : 'less'} than last month`
-        : 'Unchanged from last month',
+      // KPI 4: Total Reorder Value
+      // Source: SUM of LP_Recommendation values for current planning cycle.
+      reorderValue:   `₱${kpis.reorder_value.value}M`,
+      reorderValueContext: `${kpis.reorder_value.item_count} ${unitNoun} need ordering · ${kpis.reorder_value.critical_count} critical`,
 
-      // TYPE 3 (recommendation) — always neutral, never coloured by data.
-      reorderValue: `₱${kpis.reorder_count.total_value}M`,
-      reorderContext: `${kpis.reorder_count.value} ${unitNoun} need ordering`,
-
+      // Alerts lists
       reorderAlerts: data.reorder_alerts.map((a) => ({
-        title: a.product_name,
+        title:    a.product_name,
         subtitle: `${a.sku_id} • Stock: ${a.current_stock} / ROP: ${a.rop}`,
-        type: a.urgency,
+        type:     a.urgency,
       })),
       badOrders: data.bad_orders.map((b) => ({
-        title: b.product_name,
-        subtitle: `${b.incident_id} • ${b.reason} • Qty: ${b.quantity}`,
-        type: b.status,
+        title:    b.product_name,
+        subtitle: `${b.incident_id} • ${b.reason}`,
+        type:     b.status,
       })),
-      badOrdersSummary: `${data.bad_orders.length} incidents this month · ${data.bad_orders.reduce((sum, b) => sum + b.quantity, 0)} units affected`,
+      badOrdersSummary: `${data.bad_orders.length} incidents · ${data.bad_orders.filter(b => b.status === 'OPEN').length} open`,
     };
   }, [data]);
-
-  const handleRefresh = () => {
-    window.location.reload();
-  };
 
   return (
     <div className="dashboard">
@@ -194,7 +177,9 @@ const Dashboard = () => {
           </div>
         ) : (
           <>
-            {/* ── KPI STRIP — 4 equal tiles, reading order: largest-impact first ── */}
+            {/* ── KPI STRIP — 4 tiles, all backed by real data sources ──────── */}
+            {/* KPI 1 & 2: Bad orders (SalesReturn_Fact / bo_monitoring_view)   */}
+            {/* KPI 3 & 4: Reorder action items (LP_Recommendation)             */}
             <div className="dashboard-section">
               <div className="kpi-grid">
                 {loading || !view ? (
@@ -207,83 +192,75 @@ const Dashboard = () => {
                 ) : (
                   <>
                     <KPICard
-                      title="Excess stock value"
-                      value={view.excessValue}
-                      metricType="gap"
-                      isOverTarget={view.excessIsOverTarget}
-                      contextLine={view.excessContext}
-                      icon={<Wallet size={20} />}
-                    />
-                    <KPICard
-                      title="Lost to damage & expiry"
-                      value={view.spoilageCostValue}
+                      title="Bad order value"
+                      value={view.boValue}
                       metricType="loss"
-                      direction={view.spoilageCostRawDirection}
-                      trendDirection={view.spoilageCostArrow}
-                      deltaLine={view.spoilageCostDeltaLine}
+                      direction={view.boDirection}
+                      trendDirection={view.boArrow}
+                      deltaLine={view.boDeltaLine}
+                      contextLine={view.boContext}
                       icon={<FlaskConical size={20} />}
                     />
                     <KPICard
-                      title="Top sellers out of stock"
-                      value={view.stockoutValue}
+                      title="Active incidents"
+                      value={view.activeIncidents}
                       metricType="loss"
-                      direction={view.stockoutRawDirection}
-                      trendDirection={view.stockoutArrow}
-                      deltaLine={view.stockoutDeltaLine}
+                      direction={view.incDirection}
+                      trendDirection={view.incArrow}
+                      contextLine={view.incContext}
+                      deltaLine={view.incDeltaLine}
                       icon={<ShieldAlert size={20} />}
                     />
                     <KPICard
-                      title="Stock above policy"
-                      value={view.overstockValue}
-                      metricType="gap"
-                      isOverTarget={view.overstockIsOverTarget}
-                      contextLine={view.overstockContext}
-                      trendDirection={view.overstockArrow}
-                      deltaLine={view.overstockDeltaLine}
-                      icon={<Timer size={20} />}
+                      title={view.unitNoun === 'categories' ? 'Categories to reorder' : 'Products to reorder'}
+                      value={view.reorderItems}
+                      metricType="recommendation"
+                      contextLine={view.reorderItemsContext}
+                      icon={<ShoppingCart size={20} />}
+                    />
+                    <KPICard
+                      title="Total reorder value"
+                      value={view.reorderValue}
+                      metricType="recommendation"
+                      contextLine={view.reorderValueContext}
+                      icon={<Wallet size={20} />}
                     />
                   </>
                 )}
               </div>
             </div>
 
-            {/* ── PRIMARY CHART — Cover Trend (full width) ─────────────────────── */}
-            {/* Full width because time-series benefit from a wide horizontal axis;
-                this is the most critical diagnostic for the inventory DSS —
-                it shows how close stock is to the policy ceiling over time. */}
+            {/* ── PRIMARY CHART — Bad Order Trend (full width) ─────────────── */}
+            {/* Stacked bar by reason (Expiry / Transport Damage / Storage).    */}
+            {/* Source: SalesReturn_Fact grouped by (week, return_type).         */}
             <div className="dashboard-section">
               <div className="chart-primary">
                 {loading || !data ? (
                   <ChartSkeleton />
-                ) : data.cover_series.length === 0 ? (
+                ) : !data.bad_order_series || data.bad_order_series.length === 0 ? (
                   <div className="chart-widget"><EmptyNote>No data for this selection</EmptyNote></div>
                 ) : (
-                  <CoverTrendWidget
-                    coverSeries={data.cover_series}
-                    policyTarget={data.kpis.weeks_of_cover.policy_target}
-                  />
+                  <BadOrderTrendWidget badOrderSeries={data.bad_order_series} />
                 )}
               </div>
             </div>
 
-            {/* ── SECONDARY ROW — ABC | Reorder | Bad Orders ───────────────────── */}
+            {/* ── SECONDARY ROW — ABC | Reorder | Bad Orders ───────────────── */}
             <div className="dashboard-section">
               <div className="secondary-grid">
 
-                {/* ABC Classification — revenue mix snapshot */}
+                {/* ABC Classification — from ABC_Classification analytics table */}
                 <div className="secondary-col">
                   {loading || !data ? (
                     <ChartSkeleton />
-                  ) : data.abc.tiers.length === 0 ? (
+                  ) : !data.abc || data.abc.tiers.length === 0 ? (
                     <div className="chart-widget"><EmptyNote>No data for this selection</EmptyNote></div>
                   ) : (
                     <ABCClassificationWidget abc={data.abc} />
                   )}
                 </div>
 
-                {/* Reorder: order-value KPI merged above the reorder alert list
-                    so the recommendation and the products it refers to read
-                    as a single unit. */}
+                {/* Reorder: LP_Recommendation count + alert list */}
                 <div className="secondary-col reorder-merged-card">
                   {loading || !view ? (
                     <>
@@ -294,9 +271,9 @@ const Dashboard = () => {
                     <>
                       <KPICard
                         title={view.unitNoun === 'categories' ? 'Categories to reorder' : 'Products to reorder'}
-                        value={view.reorderValue}
+                        value={view.reorderItems}
                         metricType="recommendation"
-                        contextLine={view.reorderContext}
+                        contextLine={view.reorderItemsContext}
                         icon={<ShoppingCart size={18} />}
                       />
                       {view.reorderAlerts.length === 0 ? (
