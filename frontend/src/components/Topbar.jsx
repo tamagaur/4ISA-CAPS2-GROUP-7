@@ -40,6 +40,12 @@ const Topbar = ({
     pendingEndYear === realWorldYear;
   const isForecastPage = location.pathname === '/forecast';
 
+  // Principal filter is only meaningful on analytics & management pages.
+  // Admin-only pages (audit log, data upload, user management) operate
+  // across all data and have no per-principal view, so the filter is hidden.
+  const ADMIN_PAGES = ['/audit-log', '/upload', '/users'];
+  const showPrincipalFilter = !ADMIN_PAGES.includes(location.pathname);
+
   const user = getCurrentUser();
   const getInitials = (u) => {
     if (!u) return 'JD'; // Fallback
@@ -69,32 +75,34 @@ const Topbar = ({
 
         {/* Date Filter removed and placed in page headers */}
 
-        <div className="principal-filter">
-          <div className="principal-segmented" role="tablist" aria-label="Principal filter">
-            {PRINCIPALS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                role="tab"
-                aria-selected={principal === p.key}
-                className={`principal-segment ${principal === p.key ? 'active' : ''}`}
-                onClick={() => setPrincipal(p.key)}
-              >
-                {p.label}
-              </button>
-            ))}
+        {showPrincipalFilter && (
+          <div className="principal-filter">
+            <div className="principal-segmented" role="tablist" aria-label="Principal filter">
+              {PRINCIPALS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={principal === p.key}
+                  className={`principal-segment ${principal === p.key ? 'active' : ''}`}
+                  onClick={() => setPrincipal(p.key)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <select
+              className="principal-dropdown dropdown-select"
+              value={principal}
+              onChange={(e) => setPrincipal(e.target.value)}
+              aria-label="Principal filter"
+            >
+              {PRINCIPALS.map((p) => (
+                <option key={p.key} value={p.key}>{p.label}</option>
+              ))}
+            </select>
           </div>
-          <select
-            className="principal-dropdown dropdown-select"
-            value={principal}
-            onChange={(e) => setPrincipal(e.target.value)}
-            aria-label="Principal filter"
-          >
-            {PRINCIPALS.map((p) => (
-              <option key={p.key} value={p.key}>{p.label}</option>
-            ))}
-          </select>
-        </div>
+        )}
       </div>
       
       <div className="topbar-right">
