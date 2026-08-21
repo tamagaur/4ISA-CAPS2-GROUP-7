@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Plus, Search, Clock, X, RotateCcw, Building, Tag, Layers, Filter, CheckCircle, XCircle, Package } from 'lucide-react';
 import AddSKUModal from './AddSKUModal';
 import ViewSKUModal from './ViewSKUModal';
@@ -6,32 +7,17 @@ import EditSKUModal from './EditSKUModal';
 import { logAction } from '../utils/auditLogger';
 import './SKUManagement.css';
 
-const mockSKUs = [
-  { 
-    id: '001', 
-    code: 'SKU-10234', 
-    brand: 'Del Monte', 
-    supplier: 'Del Monte Philippines', 
-    product: 'Pineapple Juice 1L', 
-    cat: 'A', 
-    leadTime: '7 days', 
-    reorderPt: 800, 
-    status: 'ACTIVE',
-    currentStock: 420,
-    unitPrice: 65.00,
-    avgSalesPerMonth: 9800,
-    lastOrderDate: '2026-04-15',
-    notes: 'High-velocity SKU. Monitor stock weekly.'
-  },
-  { 
-    id: '002', 
-    code: 'SKU-10198', 
-    brand: 'Unilever', 
-    supplier: 'Unilever Philippines', 
-    product: 'Knorr Cubes 8g', 
-    cat: 'A', 
-    leadTime: '5 days', 
-    reorderPt: 600, 
+// Unilever has true per-SKU data.
+const UNILEVER_SKUS = [
+  {
+    id: '002',
+    code: 'SKU-10198',
+    brand: 'Unilever',
+    supplier: 'Unilever Philippines',
+    product: 'Knorr Cubes 8g',
+    cat: 'A',
+    leadTime: '5 days',
+    reorderPt: 600,
     status: 'ACTIVE',
     currentStock: 980,
     unitPrice: 15.50,
@@ -39,31 +25,15 @@ const mockSKUs = [
     lastOrderDate: '2026-03-20',
     notes: 'Fast-moving culinary basic. Minimum reorder batch size is 20 master boxes.'
   },
-  { 
-    id: '003', 
-    code: 'SKU-10456', 
-    brand: 'Del Monte', 
-    supplier: 'Del Monte Philippines', 
-    product: 'Spaghetti Sauce 500g', 
-    cat: 'A', 
-    leadTime: '6 days', 
-    reorderPt: 500, 
-    status: 'ACTIVE',
-    currentStock: 620,
-    unitPrice: 48.00,
-    avgSalesPerMonth: 3900,
-    lastOrderDate: '2026-03-10',
-    notes: 'Q4 holiday volume driver.'
-  },
-  { 
-    id: '004', 
-    code: 'SKU-10789', 
-    brand: 'Unilever', 
-    supplier: 'Unilever Philippines', 
-    product: 'Surf Powder Detergent 1kg', 
-    cat: 'A', 
-    leadTime: '4 days', 
-    reorderPt: 1200, 
+  {
+    id: '004',
+    code: 'SKU-10789',
+    brand: 'Unilever',
+    supplier: 'Unilever Philippines',
+    product: 'Surf Powder Detergent 1kg',
+    cat: 'A',
+    leadTime: '4 days',
+    reorderPt: 1200,
     status: 'ACTIVE',
     currentStock: 1450,
     unitPrice: 110.00,
@@ -71,47 +41,15 @@ const mockSKUs = [
     lastOrderDate: '2026-03-25',
     notes: 'Top tier Category A revenue generator.'
   },
-  { 
-    id: '005', 
-    code: 'SKU-10112', 
-    brand: 'Del Monte', 
-    supplier: 'Del Monte Philippines', 
-    product: 'Sweet Corn Kernel 425g', 
-    cat: 'A', 
-    leadTime: '7 days', 
-    reorderPt: 400, 
-    status: 'ACTIVE',
-    currentStock: 530,
-    unitPrice: 38.50,
-    avgSalesPerMonth: 2800,
-    lastOrderDate: '2026-03-02',
-    notes: ''
-  },
-  { 
-    id: '006', 
-    code: 'SKU-20101', 
-    brand: 'Del Monte', 
-    supplier: 'Del Monte Philippines', 
-    product: 'Tomato Sauce 250g', 
-    cat: 'B', 
-    leadTime: '7 days', 
-    reorderPt: 800, 
-    status: 'ACTIVE',
-    currentStock: 740,
-    unitPrice: 24.00,
-    avgSalesPerMonth: 4100,
-    lastOrderDate: '2026-02-28',
-    notes: 'Steady steady-state sales velocity.'
-  },
-  { 
-    id: '007', 
-    code: 'SKU-20145', 
-    brand: 'Unilever', 
-    supplier: 'Unilever Philippines', 
-    product: 'Dove Shampoo 340ml', 
-    cat: 'B', 
-    leadTime: '5 days', 
-    reorderPt: 300, 
+  {
+    id: '007',
+    code: 'SKU-20145',
+    brand: 'Unilever',
+    supplier: 'Unilever Philippines',
+    product: 'Dove Shampoo 340ml',
+    cat: 'B',
+    leadTime: '5 days',
+    reorderPt: 300,
     status: 'ACTIVE',
     currentStock: 410,
     unitPrice: 195.00,
@@ -119,31 +57,15 @@ const mockSKUs = [
     lastOrderDate: '2026-03-12',
     notes: 'Premium personal care category.'
   },
-  { 
-    id: '008', 
-    code: 'SKU-20289', 
-    brand: 'Del Monte', 
-    supplier: 'Del Monte Philippines', 
-    product: 'Fruit Cocktail 432g', 
-    cat: 'B', 
-    leadTime: '6 days', 
-    reorderPt: 200, 
-    status: 'ACTIVE',
-    currentStock: 310,
-    unitPrice: 72.00,
-    avgSalesPerMonth: 1900,
-    lastOrderDate: '2026-03-18',
-    notes: ''
-  },
-  { 
-    id: '009', 
-    code: 'SKU-30856', 
-    brand: 'Unilever', 
-    supplier: 'Unilever Philippines', 
-    product: 'Ponds Face Cream 50g', 
-    cat: 'C', 
-    leadTime: '5 days', 
-    reorderPt: 150, 
+  {
+    id: '009',
+    code: 'SKU-30856',
+    brand: 'Unilever',
+    supplier: 'Unilever Philippines',
+    product: "Pond's Face Cream 50g",
+    cat: 'C',
+    leadTime: '5 days',
+    reorderPt: 150,
     status: 'ACTIVE',
     currentStock: 220,
     unitPrice: 145.00,
@@ -151,23 +73,86 @@ const mockSKUs = [
     lastOrderDate: '2026-02-14',
     notes: 'Category C low-velocity item.'
   },
-  { 
-    id: '010', 
-    code: 'SKU-99999', 
-    brand: 'Del Monte', 
-    supplier: 'Del Monte Philippines', 
-    product: 'Ketchup 320g (Discontinued)', 
-    cat: 'C', 
-    leadTime: 'N/A', 
-    reorderPt: 0, 
+];
+
+// Del Monte has no SKU-level data anywhere in this project — these rows are
+// categories (CAT- codes), not products, aggregating what used to be
+// fabricated per-SKU Del Monte rows.
+const DELMONTE_CATEGORIES = [
+  {
+    id: 'DM-01',
+    code: 'CAT-JUICES',
+    brand: 'Del Monte',
+    supplier: 'Del Monte Philippines',
+    product: 'Juices',
+    cat: 'A',
+    leadTime: '7 days',
+    reorderPt: 800,
+    status: 'ACTIVE',
+    currentStock: 420,
+    unitPrice: 65.00,
+    avgSalesPerMonth: 9800,
+    lastOrderDate: '2026-04-15',
+    notes: 'High-velocity category. Monitor stock weekly.'
+  },
+  {
+    id: 'DM-02',
+    code: 'CAT-SAUCES',
+    brand: 'Del Monte',
+    supplier: 'Del Monte Philippines',
+    product: 'Sauces & Ketchup',
+    cat: 'A',
+    leadTime: '6 days',
+    reorderPt: 500,
+    status: 'ACTIVE',
+    currentStock: 620,
+    unitPrice: 34.80,
+    avgSalesPerMonth: 3900,
+    lastOrderDate: '2026-03-10',
+    notes: 'Q4 holiday volume driver.'
+  },
+  {
+    id: 'DM-03',
+    code: 'CAT-CANNED-PRODUCE',
+    brand: 'Del Monte',
+    supplier: 'Del Monte Philippines',
+    product: 'Canned Fruits & Vegetables',
+    cat: 'B',
+    leadTime: '7 days',
+    reorderPt: 400,
+    status: 'ACTIVE',
+    currentStock: 530,
+    unitPrice: 46.00,
+    avgSalesPerMonth: 2800,
+    lastOrderDate: '2026-03-02',
+    notes: ''
+  },
+  {
+    id: 'DM-04',
+    code: 'CAT-DISCONTINUED',
+    brand: 'Del Monte',
+    supplier: 'Del Monte Philippines',
+    product: 'Discontinued Lines',
+    cat: 'C',
+    leadTime: 'N/A',
+    reorderPt: 0,
     status: 'DISABLED',
     currentStock: 0,
     unitPrice: 32.00,
     avgSalesPerMonth: 0,
     lastOrderDate: '2025-11-01',
-    notes: 'Discontinued product line. Depleted remaining stock.'
+    notes: 'Discontinued category. Depleted remaining stock.'
   },
 ];
+
+const SKUS_BY_PRINCIPAL = {
+  unilever: UNILEVER_SKUS,
+  delmonte: DELMONTE_CATEGORIES,
+  all: [...UNILEVER_SKUS, ...DELMONTE_CATEGORIES],
+};
+
+// Components branch on this, never on the principal name.
+const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
@@ -184,7 +169,11 @@ const parseProductAndWeight = (product) => {
 };
 
 const SKUManagement = () => {
-  const [skus, setSkus] = useState(mockSKUs);
+  const { principal } = useOutletContext() || { principal: 'all' };
+  const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  const sourceSKUs = useMemo(() => SKUS_BY_PRINCIPAL[principal] ?? SKUS_BY_PRINCIPAL.all, [principal]);
+
+  const [skus, setSkus] = useState(sourceSKUs);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -224,6 +213,14 @@ const SKUManagement = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Re-source the ledger when the principal filter changes. Any in-session
+  // adds/edits are tied to whichever principal's view they were made in and
+  // reset with it — no second state mechanism, this is the same context the
+  // Dashboard reads.
+  useEffect(() => {
+    setSkus(sourceSKUs);
+  }, [sourceSKUs]);
 
   const suppliers = ['All Suppliers', ...new Set(skus.map(s => s.supplier))];
   const brands = ['All Brands', ...new Set(skus.map(s => s.brand))];
@@ -417,6 +414,12 @@ const SKUManagement = () => {
             <span className="summary-value">{inactiveSKUs}</span>
           </div>
         </div>
+
+        {(grain === 'category' || grain === 'mixed') && (
+          <p className="sku-grain-note">
+            Del Monte is analysed at category level — no SKU-level data is available from this principal
+          </p>
+        )}
 
         {/* Filters Row */}
         <div className="sku-filters-row">
@@ -637,7 +640,7 @@ const SKUManagement = () => {
             <thead>
               <tr>
                 <th>#</th>
-                <th>SKU CODE</th>
+                <th>{grain === 'category' ? 'CATEGORY CODE' : 'SKU CODE'}</th>
                 <th>BRAND</th>
                 <th>SUPPLIER</th>
                 <th>PRODUCT</th>
@@ -701,7 +704,7 @@ const SKUManagement = () => {
               ))}
               {filteredSKUs.length === 0 && (
                 <tr>
-                  <td colSpan="10" className="no-results">No SKUs found matching your filters.</td>
+                  <td colSpan="10" className="no-results">No data for this selection.</td>
                 </tr>
               )}
             </tbody>

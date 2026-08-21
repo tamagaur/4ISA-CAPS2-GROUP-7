@@ -23,14 +23,31 @@ import './BadOrders.css';
 
 const BO_RATE_TARGET = 3; // %, manuscript §3.4.1.3 target threshold
 
-// SKUs with recorded incidents — the only ones a per-SKU rate is honest to show
-const BO_TRACKED_SKUS = [
+// SKUs/categories with recorded incidents — the only ones a per-row rate is
+// honest to show. Unilever has true per-SKU data; Del Monte has no SKU-level
+// data anywhere in this project, so its rows are categories (CAT- codes).
+const UNILEVER_TRACKED = [
   { code: 'SKU-07642', product: 'Dove Shampoo 340ml' },
-  { code: 'SKU-01523', product: 'Tomato Sauce 250g' },
-  { code: 'SKU-09234', product: 'Sweet Corn 425g' },
   { code: 'SKU-04721', product: 'Surf Powder Detergent 1kg' },
-  { code: 'SKU-08934', product: 'Pineapple Juice 1L' },
 ];
+const DELMONTE_TRACKED = [
+  { code: 'CAT-SAUCES-VEG', product: 'Sauces & Vegetables' },
+  { code: 'CAT-JUICES', product: 'Juices' },
+];
+const TRACKED_BY_PRINCIPAL = {
+  unilever: UNILEVER_TRACKED,
+  delmonte: DELMONTE_TRACKED,
+  all: [...UNILEVER_TRACKED, ...DELMONTE_TRACKED],
+};
+
+// Components branch on this, never on the principal name.
+const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
+const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
+// Same split BRAND_SHARE already used below, reused to scale the
+// principal-blind mock aggregates (KPIs, reason/weekday breakdowns) down to
+// whichever principal is selected, so they're not just the "all" totals
+// repeated under every filter value.
+const PRINCIPAL_SHARE = { unilever: 0.48, delmonte: 0.52, all: 1 };
 
 function hashSeed(code) {
   let hash = 0;

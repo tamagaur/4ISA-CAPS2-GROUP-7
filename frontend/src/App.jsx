@@ -24,7 +24,7 @@ const routeTitles = {
   '/reorder': 'SAN2 | Reorder Recommendations',
   '/bad-orders': 'SAN2 | Bad Orders',
   '/audit-log': 'SAN2 | Audit Log',
-  '/upload': 'SAN2 | Data Upload',
+  '/upload': 'SAN2 | Data Management',
   '/users': 'SAN2 | User Management',
 };
 

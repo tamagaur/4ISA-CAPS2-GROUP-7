@@ -76,6 +76,17 @@
   letter-spacing: 1px;
 }
 
+.sidebar-nav-section {
+  margin-bottom: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #edf2f7;
+}
+
+.sidebar-nav-section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
 .sidebar-modules-header {
   padding: 0 1.5rem;
   margin-bottom: 0.5rem;

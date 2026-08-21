@@ -291,6 +291,24 @@
   font-style: italic;
 }
 
+.reorder-no-results {
+  padding: 2.5rem 1rem !important;
+  color: #a0aec0;
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: center;
+}
+
+.reorder-grain-note {
+  margin: -0.5rem 0 0 0;
+  padding: 0.6rem 0.9rem;
+  background-color: #f7fafc;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: #718096;
+  line-height: 1.4;
+}
+
 .reorder-cost-cell {
   font-weight: 600;
   font-variant-numeric: tabular-nums;

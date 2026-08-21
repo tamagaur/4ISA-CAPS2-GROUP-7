@@ -4,10 +4,16 @@ import { Check, Calendar } from 'lucide-react';
 import { getCurrentUser } from '../auth';
 import './Topbar.css';
 
-const Topbar = ({ 
-  toggleSidebar, 
-  startMonth, 
-  startYear, 
+const PRINCIPALS = [
+  { key: 'all', label: 'All principals' },
+  { key: 'unilever', label: 'Unilever' },
+  { key: 'delmonte', label: 'Del Monte' },
+];
+
+const Topbar = ({
+  toggleSidebar,
+  startMonth,
+  startYear,
   endMonth,
   endYear,
   pendingStartMonth,
@@ -22,7 +28,9 @@ const Topbar = ({
   handleApplyPeriod,
   handleResetToToday,
   realWorldMonth = 'Aug',
-  realWorldYear = '2026'
+  realWorldYear = '2026',
+  principal = 'all',
+  setPrincipal = () => {},
 }) => {
   const location = useLocation();
   const isToday = 
@@ -58,8 +66,35 @@ const Topbar = ({
             <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
         </button>
-        
+
         {/* Date Filter removed and placed in page headers */}
+
+        <div className="principal-filter">
+          <div className="principal-segmented" role="tablist" aria-label="Principal filter">
+            {PRINCIPALS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                role="tab"
+                aria-selected={principal === p.key}
+                className={`principal-segment ${principal === p.key ? 'active' : ''}`}
+                onClick={() => setPrincipal(p.key)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <select
+            className="principal-dropdown dropdown-select"
+            value={principal}
+            onChange={(e) => setPrincipal(e.target.value)}
+            aria-label="Principal filter"
+          >
+            {PRINCIPALS.map((p) => (
+              <option key={p.key} value={p.key}>{p.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
       
       <div className="topbar-right">

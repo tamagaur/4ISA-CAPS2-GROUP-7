@@ -22,9 +22,20 @@ class ABCItem(BaseModel):
     tier: str  # 'A' | 'B' | 'C'
     revenue_share: float | None = None
     cumulative_share: float | None = None
+    boundary_flag: bool = False  # backlog #43 — near a tier cutoff, margin unconfirmed vs manuscript Sec.3.6
+
+
+class TierSummary(BaseModel):
+    """Backlog #44: procurement wants to see cumulative revenue
+    contribution PER TIER, not just per-SKU cumulative_share — this
+    rolls that up so the dashboard doesn't have to sum client-side."""
+    tier: str
+    sku_count: int
+    revenue_share_total: float  # sum of this tier's SKUs' individual revenue_share
 
 
 class ABCResponse(BaseModel):
     items: list[ABCItem]
     count: int
     classification_period: str | None = None  # 'YYYY-MM'
+    tier_summary: list[TierSummary] = []
