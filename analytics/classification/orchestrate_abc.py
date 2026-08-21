@@ -55,6 +55,7 @@ class AbcRunReport:
     excluded_null_revenue: int      # product_keys with NULL net_amount, excluded not zeroed
     excluded_negative_revenue: list  # product_keys with negative summed revenue — needs a human look, not auto-fixed
     tier_counts: dict = field(default_factory=dict)   # {'A': n, 'B': n, 'C': n}
+    near_boundary_count: int = 0    # backlog #43: SKUs flagged as close to a tier cutoff
     rows_upserted: int = 0
 
 
@@ -123,6 +124,7 @@ def _upsert_abc_classification(
             "tier": row.tier,
             "revenue_share": float(row.revenue_share),
             "cumulative_share": float(row.cumulative_share),
+            "boundary_flag": bool(row.boundary_flag),
         }
         for row in tiered_df.itertuples()
     ]
@@ -134,6 +136,7 @@ def _upsert_abc_classification(
                 "tier": stmt.excluded.tier,
                 "revenue_share": stmt.excluded.revenue_share,
                 "cumulative_share": stmt.excluded.cumulative_share,
+                "boundary_flag": stmt.excluded.boundary_flag,
                 "computed_at": stmt.excluded.computed_at,  # refreshed on re-run — EXCLUDED includes DEFAULT now() since computed_at isn't in `records`
             },
         )
@@ -164,6 +167,7 @@ def run_abc_for_principal(engine: Engine, principal: str, classification_period:
     rows_upserted = _upsert_abc_classification(engine, tiered, principal, classification_period)
 
     tier_counts = tiered["tier"].value_counts().to_dict()
+    near_boundary_count = int(tiered["boundary_flag"].sum())
     return AbcRunReport(
         principal=principal,
         classification_period=classification_period,
@@ -171,6 +175,7 @@ def run_abc_for_principal(engine: Engine, principal: str, classification_period:
         excluded_null_revenue=null_count,
         excluded_negative_revenue=negative_ids,
         tier_counts=tier_counts,
+        near_boundary_count=near_boundary_count,
         rows_upserted=rows_upserted,
     )
 
@@ -190,6 +195,7 @@ def _print_report(report: AbcRunReport) -> None:
     print(f"\n=== ABC classification: {report.principal} / {report.classification_period} ===")
     print(f"  Products classified: {report.input_rows}")
     print(f"  Tier breakdown:      {report.tier_counts or '(none)'}")
+    print(f"  Near tier boundary:  {report.near_boundary_count} (backlog #43, margin unconfirmed vs manuscript Sec.3.6)")
     print(f"  Rows upserted:       {report.rows_upserted}")
     if report.excluded_null_revenue:
         print(f"  Excluded (NULL revenue, not zeroed): {report.excluded_null_revenue}")
