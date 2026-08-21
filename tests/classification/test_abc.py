@@ -88,9 +88,38 @@ def test_empty_input_returns_empty_output():
     empty_df = pd.DataFrame({"sku_id": [], "total_revenue": []})
     result = classify_abc(empty_df)
     assert result.empty
-    assert list(result.columns) == ["sku_id", "total_revenue", "revenue_share", "cumulative_share", "tier"]
+    assert list(result.columns) == ["sku_id", "total_revenue", "revenue_share", "cumulative_share", "tier", "boundary_flag"]
 
 
 def test_revenue_share_sums_to_one(revenue_df):
     result = classify_abc(revenue_df)
     assert result["revenue_share"].sum() == pytest.approx(1.0)
+
+
+def test_boundary_flag_marks_skus_near_a_cutoff():
+    """Backlog #43: a SKU whose cumulative_share lands right at 80% (the
+    A/B cutoff) should be flagged, one that lands comfortably inside a
+    tier should not."""
+    # Revenue chosen so cumulative_share lands at exactly 0.80 after the
+    # 2nd SKU (400+400 = 800 of a 1000 total), and at 0.10 after the 3rd
+    # (comfortably inside B, far from either cutoff).
+    df = pd.DataFrame({
+        "sku_id": ["SKU-1", "SKU-2", "SKU-3"],
+        "total_revenue": [400, 400, 200],
+    })
+    result = classify_abc(df)
+    at_cutoff = result[result["sku_id"] == "SKU-2"].iloc[0]
+    assert at_cutoff["cumulative_share"] == pytest.approx(0.80)
+    assert bool(at_cutoff["boundary_flag"]) is True
+
+    first_row = result[result["sku_id"] == "SKU-1"].iloc[0]
+    assert first_row["cumulative_share"] == pytest.approx(0.40)
+    assert bool(first_row["boundary_flag"]) is False
+
+
+def test_boundary_flag_false_for_all_zero_revenue():
+    """No revenue means no meaningful cumulative_share to be 'near' a
+    cutoff — must not be fabricated as flagged or unflagged by chance."""
+    df = pd.DataFrame({"sku_id": ["SKU-1", "SKU-2"], "total_revenue": [0, 0]})
+    result = classify_abc(df)
+    assert (result["boundary_flag"] == False).all()  # noqa: E712 (explicit bool check, not truthiness)
