@@ -3,6 +3,8 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .dashboard-content {
@@ -66,23 +68,29 @@
   height: 300px;
 }
 
-/* ── Secondary Grid — 3 equal columns ─────────────────────────────────── */
+/* ── Secondary Grid — 3 equal columns, all same height ────────────────── */
+/* align-items: stretch makes every cell fill the tallest column's height.
+   Each .secondary-col is a flex container so its children can fill it
+   with flex: 1, keeping all three cards visually level at the bottom. */
 .secondary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1.5rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .secondary-col {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
-/* Override chart-widget height in secondary position so ABC bars have
-   breathing room without being as tall as the primary chart. */
+/* ABC chart: grow to fill its column instead of a fixed height,
+   so it always matches the tallest sibling (reorder or bad-orders). */
 .secondary-grid .chart-widget {
-  height: 360px;
+  height: auto;
+  flex: 1;
+  min-height: 300px;
 }
 
 /* Merged reorder card — KPICard + AlertsList stacked and visually joined
@@ -93,6 +101,7 @@
   box-shadow: none;
   border-bottom: none;
   padding-bottom: 1.25rem;
+  flex-shrink: 0;
 }
 
 .reorder-merged-card .kpi-card:hover {
@@ -101,12 +110,17 @@
 }
 
 .reorder-merged-card .alerts-widget {
+  flex: 1;                          /* fill remaining height after KPI tile */
   border-radius: 0 0 12px 12px;
   border-top: 1px solid #f1f5f9;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
 }
 
-/* Bad orders card — full-height alerts widget */
+/* Bad orders card — fill the full column height */
+.bad-orders-card .alerts-widget {
+  flex: 1;
+}
+
 .bad-orders-card .alerts-header {
   align-items: flex-start;
 }
@@ -220,10 +234,10 @@
 
 /* ── Responsive ────────────────────────────────────────────────────────── */
 
-/* Medium screens — KPIs wrap to 2×2, secondary collapses ABC to full row */
-@media (max-width: 1300px) {
+/* Large → medium: KPIs 2×2, secondary ABC spans full row */
+@media (max-width: 1280px) {
   .dashboard-content {
-    padding: 0 1.5rem 1.5rem 1.5rem;
+    padding: 0 1.5rem 2rem 1.5rem;
   }
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -231,15 +245,16 @@
   .secondary-grid {
     grid-template-columns: 1fr 1fr;
   }
+  /* ABC chart spans both columns on medium screens */
   .secondary-grid .secondary-col:first-child {
     grid-column: 1 / -1;
   }
   .secondary-grid .chart-widget {
-    height: 280px;
+    min-height: 240px;
   }
 }
 
-/* Tablets */
+/* Tablet: secondary stacks to single column */
 @media (max-width: 900px) {
   .secondary-grid {
     grid-template-columns: 1fr;
@@ -247,15 +262,32 @@
   .secondary-grid .secondary-col:first-child {
     grid-column: auto;
   }
-}
-
-/* Mobile */
-@media (max-width: 768px) {
-  .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
+  /* Restore auto height when stacked — no need to match siblings */
+  .secondary-grid .chart-widget {
+    height: 300px;
+    flex: none;
+  }
+  .reorder-merged-card .alerts-widget,
+  .bad-orders-card .alerts-widget {
+    flex: none;
   }
 }
 
+/* Mobile landscape: KPIs 2×2 */
+@media (max-width: 768px) {
+  .dashboard-content {
+    padding: 0 1rem 2rem 1rem;
+    gap: 1.25rem;
+  }
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .chart-primary .chart-widget {
+    height: 220px;
+  }
+}
+
+/* Mobile portrait: single column everything */
 @media (max-width: 480px) {
   .kpi-grid {
     grid-template-columns: 1fr;
