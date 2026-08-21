@@ -212,6 +212,7 @@ const BadOrders = () => {
   const principalShare = PRINCIPAL_SHARE[principal] ?? 1;
 
   const [incidents, setIncidents] = useState([]);
+  const [manualIncidents, setManualIncidents] = useState([]);
   const [dbKPIs, setDbKPIs] = useState({ incidents: 0, unitsLost: 0, valueLost: 0, rate: '0.0%' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBOSKU, setSelectedBOSKU] = useState(trackedList[0].code);
@@ -260,24 +261,19 @@ const BadOrders = () => {
     return seed - 1;
   }, [startMonth, startYear, endMonth, endYear]);
 
+  const allIncidents = useMemo(() => [...manualIncidents, ...incidents], [manualIncidents, incidents]);
+
   // Incidents scoped to the selected principal — read via the same Outlet
-  // context the Dashboard uses, no second state mechanism. The underlying
-  // `incidents` state stays a single list (so manually-reported incidents
-  // for any brand still land correctly); this is just the filtered view.
+  // context the Dashboard uses, no second state mechanism.
   const visibleIncidents = useMemo(
-    () => principal === 'all' ? incidents : incidents.filter(i => i.brand === PRINCIPAL_BRAND[principal]),
-    [incidents, principal]
+    () => principal === 'all' ? allIncidents : allIncidents.filter(i => i.brand === PRINCIPAL_BRAND[principal]),
+    [allIncidents, principal]
   );
 
-  // Manually-reported incidents (prepended to the front by handleAddReport)
-  // on top of the ETL-extracted baseline, kept separate so the KPI/reason
-  // totals below can fold them in exactly rather than guessing. Filtered to
-  // the selected principal like everything else on this page.
+  // Manually-reported incidents during this session
   const addedIncidents = useMemo(
-    () => visibleIncidents.slice(0, Math.max(0, visibleIncidents.length - initialIncidents.filter(
-      i => principal === 'all' || i.brand === PRINCIPAL_BRAND[principal]
-    ).length)),
-    [visibleIncidents, principal]
+    () => principal === 'all' ? manualIncidents : manualIncidents.filter(i => i.brand === PRINCIPAL_BRAND[principal]),
+    [manualIncidents, principal]
   );
 
   // Real DB KPIs combined with manual reports
@@ -338,7 +334,7 @@ const BadOrders = () => {
   );
 
   const handleAddReport = (reportData) => {
-    const nextIncNum = incidents.length + 1;
+    const nextIncNum = incidents.length + manualIncidents.length + 1;
     const newIncident = {
       id: `INC-2024-${nextIncNum}`,
       sku: reportData.sku,
@@ -350,7 +346,7 @@ const BadOrders = () => {
       date: new Date().toISOString().split('T')[0],
     };
 
-    setIncidents(prev => [newIncident, ...prev]);
+    setManualIncidents(prev => [newIncident, ...prev]);
 
     logAction(
       'Reported Bad Order',
