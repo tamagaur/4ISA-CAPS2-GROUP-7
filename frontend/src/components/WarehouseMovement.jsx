@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { getInventoryCurrent, getInventoryMovement } from '../api/inventory';
 import { useOutletContext } from 'react-router-dom';
 import { Search, Building, Calendar, Clock, X } from 'lucide-react';
 import {
@@ -47,29 +48,7 @@ const movementChartData = [
   { month: 'Apr', received: 42000, dispatched: 37000 },
 ];
 
-// Mock data: movement log table
-const mockMovementLog = [
-  { id: 1, date: '2026-04-22', sku: 'SKU-4721', product: 'Surf Powder Detergent 1kg', type: 'RECEIVED', qty: 500, ref: 'PO-2026-0412', supplier: 'Unilever Philippines' },
-  { id: 2, date: '2026-04-22', sku: 'SKU-8934', product: 'Pineapple Juice 1L', type: 'DISPATCHED', qty: 320, ref: 'SO-2026-0891', supplier: 'Del Monte Philippines' },
-  { id: 3, date: '2026-04-21', sku: 'SKU-2891', product: 'Knorr Cubes 8g', type: 'RECEIVED', qty: 1200, ref: 'PO-2026-0410', supplier: 'Unilever Philippines' },
-  { id: 4, date: '2026-04-21', sku: 'SKU-5632', product: 'Sweet Corn Kernel 425g', type: 'DISPATCHED', qty: 180, ref: 'SO-2026-0889', supplier: 'Del Monte Philippines' },
-  { id: 5, date: '2026-04-20', sku: 'SKU-7821', product: 'Dove Shampoo 340ml', type: 'RECEIVED', qty: 400, ref: 'PO-2026-0408', supplier: 'Unilever Philippines' },
-  { id: 6, date: '2026-04-20', sku: 'SKU-3421', product: 'Tomato Sauce 250g', type: 'DISPATCHED', qty: 650, ref: 'SO-2026-0887', supplier: 'Del Monte Philippines' },
-  { id: 7, date: '2026-04-19', sku: 'SKU-9012', product: 'Lux Bar Soap 135g', type: 'RECEIVED', qty: 800, ref: 'PO-2026-0405', supplier: 'Unilever Philippines' },
-  { id: 8, date: '2026-04-19', sku: 'SKU-1234', product: 'Fruit Cocktail 432g', type: 'DISPATCHED', qty: 275, ref: 'SO-2026-0885', supplier: 'Del Monte Philippines' },
-  { id: 9, date: '2026-04-18', sku: 'SKU-6543', product: 'Creamsilk Conditioner 180ml', type: 'RECEIVED', qty: 600, ref: 'PO-2026-0402', supplier: 'Unilever Philippines' },
-  { id: 10, date: '2026-04-18', sku: 'SKU-4567', product: 'Spaghetti Sauce 500g', type: 'DISPATCHED', qty: 420, ref: 'SO-2026-0883', supplier: 'Del Monte Philippines' },
-];
-
-// Mock data: SKU Inventory
-const mockInventory = [
-  { id: 1, sku: 'SKU-4721', brand: 'Unilever', product: 'Surf Powder Detergent 1kg', currentStock: 45, receivedMts: 1200, dispatchedMts: 1080, status: 'CRITICAL' },
-  { id: 2, sku: 'SKU-8934', brand: 'Del Monte', product: 'Pineapple Juice 1L', currentStock: 12, receivedMts: 950, dispatchedMts: 1100, status: 'CRITICAL' },
-  { id: 3, sku: 'SKU-2891', brand: 'Unilever', product: 'Knorr Cubes 8g', currentStock: 78, receivedMts: 2100, dispatchedMts: 2240, status: 'LOW' },
-  { id: 4, sku: 'SKU-1523', brand: 'Del Monte', product: 'Tomato Sauce 250g', currentStock: 89, receivedMts: 1300, dispatchedMts: 1420, status: 'LOW' },
-  { id: 5, sku: 'SKU-7642', brand: 'Unilever', product: 'Dove Shampoo 340ml', currentStock: 66, receivedMts: 880, dispatchedMts: 1010, status: 'LOW' },
-  { id: 6, sku: 'SKU-9234', brand: 'Del Monte', product: 'Sweet Corn 425g', currentStock: 102, receivedMts: 1450, dispatchedMts: 1380, status: 'IN STOCK' },
-];
+// Removed mockMovementLog and mockInventory. Using backend API instead.
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -105,7 +84,32 @@ const WarehouseMovement = () => {
 
   const dropdownRef = useRef(null);
 
-  const { startMonth, startYear, endMonth, endYear } = useOutletContext() || { startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026' };
+  const { startMonth, startYear, endMonth, endYear, principal } = useOutletContext() || { startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026', principal: 'all' };
+
+  const [dbMovementLog, setDbMovementLog] = useState([]);
+  const [dbInventory, setDbInventory] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        let from = '';
+        let to = '';
+        const m = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+        if (startYear && startMonth) from = `${startYear}-${m[startMonth]}-01`;
+        if (endYear && endMonth) to = `${endYear}-${m[endMonth]}-28`;
+
+        const [movements, current] = await Promise.all([
+          getInventoryMovement({ principal, from, to }),
+          getInventoryCurrent({ principal, from, to })
+        ]);
+        setDbMovementLog(movements || []);
+        setDbInventory(current || []);
+      } catch (err) {
+        console.error('Failed to load inventory data:', err);
+      }
+    }
+    loadData();
+  }, [principal, startMonth, startYear, endMonth, endYear]);
 
   // Persistent Recently Searched history (Max 5)
   const [recentSearches, setRecentSearches] = useState(() => {
@@ -186,23 +190,23 @@ const WarehouseMovement = () => {
   };
 
   // List of suppliers
-  const suppliersList = ['ALL', ...Array.from(new Set(mockMovementLog.map(i => i.supplier)))];
+  const suppliersList = ['ALL', ...Array.from(new Set(dbMovementLog.map(i => i.supplier)))];
 
   // Combobox Live Suggestions matching search query
   const searchSuggestions = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return mockMovementLog.filter(item => 
+    return dbMovementLog.filter(item => 
       item.sku.toLowerCase().includes(q) ||
       item.product.toLowerCase().includes(q) ||
       item.ref.toLowerCase().includes(q) ||
       item.supplier.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, dbMovementLog]);
 
   // Movement log filtering
   const filteredLog = useMemo(() => {
-    return mockMovementLog.filter(item => {
+    return dbMovementLog.filter(item => {
       // Search / Chip filter
       const matchesSearch = searchQuery.trim() === '' ||
         item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -225,7 +229,7 @@ const WarehouseMovement = () => {
 
       return matchesSearch && matchesType && matchesSupplier && matchesDate;
     });
-  }, [searchQuery, typeFilter, selectedSupplier, selectedDateRange]);
+  }, [searchQuery, typeFilter, selectedSupplier, selectedDateRange, dbMovementLog]);
 
   // Inventory status helpers
   const getInvStatusClass = (status) => {
@@ -390,7 +394,7 @@ const WarehouseMovement = () => {
                     <div className="wm-section-header">
                       <span>RECENT MOVEMENT LOG ENTRIES</span>
                     </div>
-                    {mockMovementLog.slice(0, 5).map((item) => (
+                    {dbMovementLog.slice(0, 5).map((item) => (
                       <div 
                         key={item.id} 
                         className="wm-suggestion-row"
@@ -544,10 +548,10 @@ const WarehouseMovement = () => {
   );
 
   const renderInventoryTab = () => {
-    const totalSKUs = mockInventory.length;
-    const inStockCount = mockInventory.filter(i => i.status === 'IN STOCK').length;
-    const lowStockCount = mockInventory.filter(i => i.status === 'LOW').length;
-    const criticalCount = mockInventory.filter(i => i.status === 'CRITICAL').length;
+    const totalSKUs = dbInventory.length;
+    const inStockCount = dbInventory.filter(i => i.status === 'IN STOCK').length;
+    const lowStockCount = dbInventory.filter(i => i.status === 'LOW').length;
+    const criticalCount = dbInventory.filter(i => i.status === 'CRITICAL').length;
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -588,7 +592,7 @@ const WarehouseMovement = () => {
               </tr>
             </thead>
             <tbody>
-              {mockInventory.map((item) => (
+              {dbInventory.map((item) => (
                 <tr key={item.id}>
                   <td className="wm-sku-cell">{formatSKU(item.sku)}</td>
                   <td className="wm-brand-cell">{item.brand}</td>

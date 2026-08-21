@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getBOMonitoringData } from '../api/bo_monitoring';
 import { useOutletContext } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { logAction } from '../utils/auditLogger';
@@ -178,19 +179,7 @@ const formatSKU = (sku) => {
   return sku;
 };
 
-// Story: Bad Order rows are primarily a monitoring log extracted from SSM's
-// RMR GS & BO reports via ETL (§3.4.1.3) — but that source data (see
-// config/column_maps/rmr_gs_bo.yaml) has no SKU or reason column, so staff
-// can also log an incident manually via the Report form to capture detail
-// ETL structurally can't. Either way, no status field: this is a log to
-// read, not a case-management workflow a user triages afterward.
-const initialIncidents = [
-  { id: 'INC-2024-135', sku: 'SKU-07642', brand: 'Unilever', product: 'Dove Shampoo 340ml', qty: 24, reason: 'Transport Damage', value: 12600, date: '2026-04-28' },
-  { id: 'INC-2024-134', sku: 'CAT-SAUCES-VEG', brand: 'Del Monte', product: 'Sauces & Vegetables (category)', qty: 18, reason: 'Expiry', value: 8500, date: '2026-04-27' },
-  { id: 'INC-2024-133', sku: 'CAT-SAUCES-VEG', brand: 'Del Monte', product: 'Sauces & Vegetables (category)', qty: 32, reason: 'Storage Issue', value: 4200, date: '2026-04-26' },
-  { id: 'INC-2024-132', sku: 'SKU-04721', brand: 'Unilever', product: 'Surf Powder Detergent 1kg', qty: 50, reason: 'Transport Damage', value: 6400, date: '2026-04-24' },
-  { id: 'INC-2024-131', sku: 'CAT-JUICES', brand: 'Del Monte', product: 'Juices (category)', qty: 15, reason: 'Expiry', value: 7500, date: '2026-04-22' },
-];
+// Bad Orders array is fetched from the backend now.
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -222,10 +211,37 @@ const BadOrders = () => {
   const trackedList = useMemo(() => TRACKED_BY_PRINCIPAL[principal] ?? TRACKED_BY_PRINCIPAL.all, [principal]);
   const principalShare = PRINCIPAL_SHARE[principal] ?? 1;
 
-  const [incidents, setIncidents] = useState(initialIncidents);
+  const [incidents, setIncidents] = useState([]);
+  const [dbKPIs, setDbKPIs] = useState({ incidents: 0, unitsLost: 0, valueLost: 0, rate: '0.0%' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBOSKU, setSelectedBOSKU] = useState(trackedList[0].code);
   const [boTrendGranularity, setBoTrendGranularity] = useState('monthly');
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        let from = '';
+        let to = '';
+        const m = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+        if (startYear && startMonth) from = `${startYear}-${m[startMonth]}-01`;
+        if (endYear && endMonth) to = `${endYear}-${m[endMonth]}-28`;
+
+        const data = await getBOMonitoringData({ principal, from, to });
+        setIncidents(data.incidents || []);
+        if (data.kpis) {
+          setDbKPIs({
+            incidents: data.kpis.incidents,
+            unitsLost: data.kpis.unitsLost,
+            valueLost: data.kpis.valueLost,
+            rate: data.kpis.rate
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load BO monitoring data:', err);
+      }
+    }
+    loadData();
+  }, [principal, startMonth, startYear, endMonth, endYear]);
 
   // Re-select when the principal filter changes — there is no per-SKU Del
   // Monte row to fall back to, so this always lands on a real tracked row.
@@ -264,26 +280,23 @@ const BadOrders = () => {
     [visibleIncidents, principal]
   );
 
-  // Dynamic KPIs — period-driven baseline (stands in for a real ETL
-  // aggregate) plus whatever the user has reported manually this session,
-  // scaled down to the selected principal's share so switching the filter
-  // actually changes these instead of always showing the combined total.
+  // Real DB KPIs combined with manual reports
   const dynamicKPIs = useMemo(() => {
-    const baseIncidents = (135 + dateOffset * 6) * principalShare;
-    const baseUnitsLost = (1247 + dateOffset * 45) * principalShare;
-    const baseValueLostValue = (186.5 + dateOffset * 8.5) * principalShare;
-    const baseBadOrderRate = 4.2 + dateOffset * 0.1;
+    const baseIncidents = dbKPIs.incidents;
+    const baseUnitsLost = dbKPIs.unitsLost;
+    const baseValueLostValue = dbKPIs.valueLost;
+    const baseBadOrderRate = parseFloat(dbKPIs.rate) || 0;
 
     const addedUnits = addedIncidents.reduce((sum, r) => sum + r.qty, 0);
     const addedValue = addedIncidents.reduce((sum, r) => sum + r.value, 0);
 
     return {
-      incidents: Math.round(baseIncidents + addedIncidents.length),
-      unitsLost: Math.round(baseUnitsLost + addedUnits).toLocaleString(),
-      valueLost: `₱${(baseValueLostValue + addedValue / 1000).toFixed(1)}k`,
+      incidents: baseIncidents + addedIncidents.length,
+      unitsLost: (baseUnitsLost + addedUnits).toLocaleString(),
+      valueLost: `₱${((baseValueLostValue + addedValue) / 1000).toFixed(1)}k`,
       rate: (baseBadOrderRate + addedIncidents.length * 0.05).toFixed(1) + '%',
     };
-  }, [dateOffset, addedIncidents, principalShare]);
+  }, [dbKPIs, addedIncidents]);
 
   // Reason breakdown — fixed shares scaled against the same period-driven,
   // principal-scaled baseline the KPI card uses (so the two stay consistent
@@ -324,12 +337,8 @@ const BadOrders = () => {
     [dateOffset, addedIncidents, principal]
   );
 
-  // Submit new bad order handler from ReportBadOrderModal. Numbered off the
-  // full incidents list, not the principal-filtered addedIncidents — using
-  // the filtered count would let two different principal views each start
-  // counting from 0 and hand out the same INC-2024-### id.
   const handleAddReport = (reportData) => {
-    const nextIncNum = 135 + (incidents.length - initialIncidents.length) + 1;
+    const nextIncNum = incidents.length + 1;
     const newIncident = {
       id: `INC-2024-${nextIncNum}`,
       sku: reportData.sku,
