@@ -358,6 +358,12 @@ CREATE INDEX IF NOT EXISTS ix_unilever_sku_demand_product ON Unilever_SKU_Demand
 -- all key. classification_period is the month this tier assignment covers;
 -- re-running for a later period does not overwrite history (DEC-06 applies
 -- to dimensions, not to this time-stamped derived table).
+-- 2026-08: added boundary_flag for backlog #43 ("SKUs sitting near a
+-- tier boundary flagged so reclassification is anticipated"). If this
+-- table was already created in your Supabase project before this
+-- change, CREATE TABLE IF NOT EXISTS will NOT retroactively add the
+-- column - run this once by hand first:
+--   ALTER TABLE ABC_Classification ADD COLUMN IF NOT EXISTS boundary_flag BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE TABLE IF NOT EXISTS ABC_Classification (
     classification_key      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     product_key                BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
@@ -366,6 +372,7 @@ CREATE TABLE IF NOT EXISTS ABC_Classification (
     tier                             TEXT NOT NULL CHECK (tier IN ('A', 'B', 'C')),
     revenue_share                     NUMERIC(7,4),  -- this item's share of period revenue
     cumulative_share                   NUMERIC(7,4), -- running total used for the 80/95 cut points
+    boundary_flag                       BOOLEAN NOT NULL DEFAULT FALSE,  -- backlog #43; margin (analytics/classification/abc.py BOUNDARY_MARGIN) unconfirmed vs manuscript Sec.3.6
     computed_at                          TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (product_key, classification_period)
 );
