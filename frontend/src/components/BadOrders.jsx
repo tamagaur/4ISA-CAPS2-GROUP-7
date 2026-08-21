@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { logAction } from '../utils/auditLogger';
@@ -75,8 +75,9 @@ const generateBORateTrend = (skuCode) => {
 // Bad Orders Over Time — aggregate incident volume across all SKUs at a
 // selectable granularity. Deterministic like generateBORateTrend, seeded off
 // the period filter's dateOffset so it moves consistently with the KPI card.
-const generateBOTrend = (granularity, dateOffset) => {
-  const base = 20 + dateOffset * 2;
+// share scales the whole series down to the selected principal.
+const generateBOTrend = (granularity, dateOffset, share) => {
+  const base = (20 + dateOffset * 2) * share;
   if (granularity === 'daily') {
     return Array.from({ length: 14 }, (_, i) => ({
       label: `D${i + 1}`,
@@ -101,8 +102,8 @@ const generateBOTrend = (granularity, dateOffset) => {
 // manually-reported incidents' actual weekday.
 const WEEKDAY_SHARES = { Mon: 0.22, Tue: 0.14, Wed: 0.12, Thu: 0.13, Fri: 0.20, Sat: 0.13, Sun: 0.06 };
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const generateWeekdayBreakdown = (dateOffset, addedIncidents) => {
-  const baseIncidents = 135 + dateOffset * 6;
+const generateWeekdayBreakdown = (dateOffset, addedIncidents, share) => {
+  const baseIncidents = (135 + dateOffset * 6) * share;
   const counts = {};
   Object.entries(WEEKDAY_SHARES).forEach(([day, share]) => {
     counts[day] = Math.round(baseIncidents * share);
@@ -114,12 +115,13 @@ const generateWeekdayBreakdown = (dateOffset, addedIncidents) => {
   return Object.keys(WEEKDAY_SHARES).map((day) => ({ day, count: counts[day] }));
 };
 
-// Top SKUs by Incidents — ranked count per tracked SKU, deterministic
-// per-SKU baseline (same hashSeed as the BO rate trend) plus an exact bump
-// for manually-reported incidents.
-const generateTopSKUIncidents = (addedIncidents) => {
+// Top SKUs/categories by Incidents — ranked count per tracked row,
+// deterministic per-row baseline (same hashSeed as the BO rate trend) plus
+// an exact bump for manually-reported incidents. trackedList is whichever
+// principal's rows are active — never the unfiltered full set.
+const generateTopSKUIncidents = (trackedList, addedIncidents) => {
   const counts = {};
-  BO_TRACKED_SKUS.forEach(({ code, product }) => {
+  trackedList.forEach(({ code, product }) => {
     const seed = hashSeed(code);
     counts[code] = { product, count: 8 + (seed % 20) };
   });
@@ -133,16 +135,21 @@ const generateTopSKUIncidents = (addedIncidents) => {
 
 // Incidents by Brand — Del Monte vs Unilever, split off the same
 // period-driven baseline the KPI card uses, plus an exact bump for
-// manually-reported incidents' actual brand.
+// manually-reported incidents' actual brand. When a single principal is
+// selected the page is already scoped to just that brand, so this only
+// shows the other brand's bar for 'all' — never a stale second bar.
 const BRAND_SHARE = { 'Del Monte': 0.52, 'Unilever': 0.48 };
-const generateBrandBreakdown = (dateOffset, addedIncidents) => {
+const generateBrandBreakdown = (dateOffset, addedIncidents, principal) => {
   const baseIncidents = 135 + dateOffset * 6;
+  const visibleBrands = principal === 'all'
+    ? Object.keys(BRAND_SHARE)
+    : [PRINCIPAL_BRAND[principal]];
   const counts = {};
-  Object.entries(BRAND_SHARE).forEach(([brand, share]) => {
-    counts[brand] = Math.round(baseIncidents * share);
+  visibleBrands.forEach((brand) => {
+    counts[brand] = Math.round(baseIncidents * BRAND_SHARE[brand]);
   });
   addedIncidents.forEach((r) => {
-    counts[r.brand] = (counts[r.brand] ?? 0) + 1;
+    if (counts[r.brand] !== undefined) counts[r.brand] += 1;
   });
   return Object.entries(counts).map(([brand, count]) => ({ brand, count }));
 };
@@ -179,10 +186,10 @@ const formatSKU = (sku) => {
 // read, not a case-management workflow a user triages afterward.
 const initialIncidents = [
   { id: 'INC-2024-135', sku: 'SKU-07642', brand: 'Unilever', product: 'Dove Shampoo 340ml', qty: 24, reason: 'Transport Damage', value: 12600, date: '2026-04-28' },
-  { id: 'INC-2024-134', sku: 'SKU-01523', brand: 'Del Monte', product: 'Tomato Sauce 250g', qty: 18, reason: 'Expiry', value: 8500, date: '2026-04-27' },
-  { id: 'INC-2024-133', sku: 'SKU-09234', brand: 'Del Monte', product: 'Sweet Corn 425g', qty: 32, reason: 'Storage Issue', value: 4200, date: '2026-04-26' },
+  { id: 'INC-2024-134', sku: 'CAT-SAUCES-VEG', brand: 'Del Monte', product: 'Sauces & Vegetables (category)', qty: 18, reason: 'Expiry', value: 8500, date: '2026-04-27' },
+  { id: 'INC-2024-133', sku: 'CAT-SAUCES-VEG', brand: 'Del Monte', product: 'Sauces & Vegetables (category)', qty: 32, reason: 'Storage Issue', value: 4200, date: '2026-04-26' },
   { id: 'INC-2024-132', sku: 'SKU-04721', brand: 'Unilever', product: 'Surf Powder Detergent 1kg', qty: 50, reason: 'Transport Damage', value: 6400, date: '2026-04-24' },
-  { id: 'INC-2024-131', sku: 'SKU-08934', brand: 'Del Monte', product: 'Pineapple Juice 1L', qty: 15, reason: 'Expiry', value: 7500, date: '2026-04-22' },
+  { id: 'INC-2024-131', sku: 'CAT-JUICES', brand: 'Del Monte', product: 'Juices (category)', qty: 15, reason: 'Expiry', value: 7500, date: '2026-04-22' },
 ];
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -208,15 +215,26 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 const BadOrders = () => {
+  const { startMonth, startYear, endMonth, endYear, principal } = useOutletContext() || {
+    startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026', principal: 'all',
+  };
+  const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  const trackedList = useMemo(() => TRACKED_BY_PRINCIPAL[principal] ?? TRACKED_BY_PRINCIPAL.all, [principal]);
+  const principalShare = PRINCIPAL_SHARE[principal] ?? 1;
+
   const [incidents, setIncidents] = useState(initialIncidents);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedBOSKU, setSelectedBOSKU] = useState(BO_TRACKED_SKUS[0].code);
+  const [selectedBOSKU, setSelectedBOSKU] = useState(trackedList[0].code);
   const [boTrendGranularity, setBoTrendGranularity] = useState('monthly');
+
+  // Re-select when the principal filter changes — there is no per-SKU Del
+  // Monte row to fall back to, so this always lands on a real tracked row.
+  useEffect(() => {
+    setSelectedBOSKU(trackedList[0].code);
+  }, [trackedList]);
 
   const boRateTrend = useMemo(() => generateBORateTrend(selectedBOSKU), [selectedBOSKU]);
   const latestBORate = boRateTrend[boRateTrend.length - 1]?.rate ?? 0;
-
-  const { startMonth, startYear, endMonth, endYear } = useOutletContext() || { startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026' };
 
   const dateOffset = useMemo(() => {
     const startMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(startMonth) || 0;
@@ -226,36 +244,50 @@ const BadOrders = () => {
     return seed - 1;
   }, [startMonth, startYear, endMonth, endYear]);
 
+  // Incidents scoped to the selected principal — read via the same Outlet
+  // context the Dashboard uses, no second state mechanism. The underlying
+  // `incidents` state stays a single list (so manually-reported incidents
+  // for any brand still land correctly); this is just the filtered view.
+  const visibleIncidents = useMemo(
+    () => principal === 'all' ? incidents : incidents.filter(i => i.brand === PRINCIPAL_BRAND[principal]),
+    [incidents, principal]
+  );
+
   // Manually-reported incidents (prepended to the front by handleAddReport)
   // on top of the ETL-extracted baseline, kept separate so the KPI/reason
-  // totals below can fold them in exactly rather than guessing.
+  // totals below can fold them in exactly rather than guessing. Filtered to
+  // the selected principal like everything else on this page.
   const addedIncidents = useMemo(
-    () => incidents.slice(0, incidents.length - initialIncidents.length),
-    [incidents]
+    () => visibleIncidents.slice(0, Math.max(0, visibleIncidents.length - initialIncidents.filter(
+      i => principal === 'all' || i.brand === PRINCIPAL_BRAND[principal]
+    ).length)),
+    [visibleIncidents, principal]
   );
 
   // Dynamic KPIs — period-driven baseline (stands in for a real ETL
-  // aggregate) plus whatever the user has reported manually this session.
+  // aggregate) plus whatever the user has reported manually this session,
+  // scaled down to the selected principal's share so switching the filter
+  // actually changes these instead of always showing the combined total.
   const dynamicKPIs = useMemo(() => {
-    const baseIncidents = 135 + dateOffset * 6;
-    const baseUnitsLost = 1247 + dateOffset * 45;
-    const baseValueLostValue = 186.5 + dateOffset * 8.5;
+    const baseIncidents = (135 + dateOffset * 6) * principalShare;
+    const baseUnitsLost = (1247 + dateOffset * 45) * principalShare;
+    const baseValueLostValue = (186.5 + dateOffset * 8.5) * principalShare;
     const baseBadOrderRate = 4.2 + dateOffset * 0.1;
 
     const addedUnits = addedIncidents.reduce((sum, r) => sum + r.qty, 0);
     const addedValue = addedIncidents.reduce((sum, r) => sum + r.value, 0);
 
     return {
-      incidents: baseIncidents + addedIncidents.length,
-      unitsLost: (baseUnitsLost + addedUnits).toLocaleString(),
+      incidents: Math.round(baseIncidents + addedIncidents.length),
+      unitsLost: Math.round(baseUnitsLost + addedUnits).toLocaleString(),
       valueLost: `₱${(baseValueLostValue + addedValue / 1000).toFixed(1)}k`,
       rate: (baseBadOrderRate + addedIncidents.length * 0.05).toFixed(1) + '%',
     };
-  }, [dateOffset, addedIncidents]);
+  }, [dateOffset, addedIncidents, principalShare]);
 
-  // Reason breakdown — fixed shares scaled against the same period-driven
-  // baseline the KPI card uses (so the two stay consistent when the
-  // month/year filter changes), plus an exact bump for manually-reported
+  // Reason breakdown — fixed shares scaled against the same period-driven,
+  // principal-scaled baseline the KPI card uses (so the two stay consistent
+  // when either filter changes), plus an exact bump for manually-reported
   // incidents' actual reasons.
   const reasonCounts = useMemo(() => {
     const shares = {
@@ -264,7 +296,7 @@ const BadOrders = () => {
       'Storage Issue': 0.207,
       'Supplier Defect': 0.178,
     };
-    const baseIncidents = 135 + dateOffset * 6;
+    const baseIncidents = (135 + dateOffset * 6) * principalShare;
     const counts = {};
     Object.entries(shares).forEach(([reason, share]) => {
       counts[reason] = Math.round(baseIncidents * share);
@@ -273,28 +305,31 @@ const BadOrders = () => {
       counts[r.reason] = (counts[r.reason] ?? 0) + 1;
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [dateOffset, addedIncidents]);
+  }, [dateOffset, addedIncidents, principalShare]);
 
   const boTrend = useMemo(
-    () => generateBOTrend(boTrendGranularity, dateOffset),
-    [boTrendGranularity, dateOffset]
+    () => generateBOTrend(boTrendGranularity, dateOffset, principalShare),
+    [boTrendGranularity, dateOffset, principalShare]
   );
   const weekdayBreakdown = useMemo(
-    () => generateWeekdayBreakdown(dateOffset, addedIncidents),
-    [dateOffset, addedIncidents]
+    () => generateWeekdayBreakdown(dateOffset, addedIncidents, principalShare),
+    [dateOffset, addedIncidents, principalShare]
   );
   const topSKUIncidents = useMemo(
-    () => generateTopSKUIncidents(addedIncidents),
-    [addedIncidents]
+    () => generateTopSKUIncidents(trackedList, addedIncidents),
+    [trackedList, addedIncidents]
   );
   const brandBreakdown = useMemo(
-    () => generateBrandBreakdown(dateOffset, addedIncidents),
-    [dateOffset, addedIncidents]
+    () => generateBrandBreakdown(dateOffset, addedIncidents, principal),
+    [dateOffset, addedIncidents, principal]
   );
 
-  // Submit new bad order handler from ReportBadOrderModal
+  // Submit new bad order handler from ReportBadOrderModal. Numbered off the
+  // full incidents list, not the principal-filtered addedIncidents — using
+  // the filtered count would let two different principal views each start
+  // counting from 0 and hand out the same INC-2024-### id.
   const handleAddReport = (reportData) => {
-    const nextIncNum = 135 + addedIncidents.length + 1;
+    const nextIncNum = 135 + (incidents.length - initialIncidents.length) + 1;
     const newIncident = {
       id: `INC-2024-${nextIncNum}`,
       sku: reportData.sku,
@@ -368,14 +403,14 @@ const BadOrders = () => {
           <div className="bo-widget">
             <div className="bo-widget-header-row">
               <h3 className="bo-widget-title">
-                Bad Order rate <span style={{ color: '#a0aec0', fontWeight: 400 }}>— 6 months, per SKU</span>
+                Bad Order rate <span style={{ color: '#a0aec0', fontWeight: 400 }}>— 6 months, per {grain === 'category' ? 'category' : 'SKU'}</span>
               </h3>
               <select
                 className="bo-sku-select"
                 value={selectedBOSKU}
                 onChange={(e) => setSelectedBOSKU(e.target.value)}
               >
-                {BO_TRACKED_SKUS.map(s => (
+                {trackedList.map(s => (
                   <option key={s.code} value={s.code}>{s.code} — {s.product}</option>
                 ))}
                 <option value="CURRENT_PERIOD">Current Period ({startMonth} {startYear} - {endMonth} {endYear})</option>
@@ -496,7 +531,7 @@ const BadOrders = () => {
 
           {/* Top SKUs by Incidents — ranked horizontal bar */}
           <div className="bo-widget">
-            <h3 className="bo-widget-title">Top SKUs <span>— by incidents</span></h3>
+            <h3 className="bo-widget-title">{grain === 'category' ? 'Top categories' : 'Top SKUs'} <span>— by incidents</span></h3>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={topSKUIncidents} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
@@ -547,13 +582,19 @@ const BadOrders = () => {
           </div>
         </div>
 
+        {(grain === 'category' || grain === 'mixed') && (
+          <p className="bo-grain-note">
+            Del Monte is analysed at category level — no SKU-level data is available from this principal
+          </p>
+        )}
+
         {/* Incident Log Table — read-only, extracted via ETL */}
         <div className="bo-table-wrapper">
           <table className="bo-table">
             <thead>
               <tr>
                 <th>ID</th>
-                <th>SKU</th>
+                <th>{grain === 'category' ? 'CATEGORY' : 'SKU'}</th>
                 <th>BRAND</th>
                 <th>PRODUCT</th>
                 <th>QTY</th>
@@ -563,7 +604,7 @@ const BadOrders = () => {
               </tr>
             </thead>
             <tbody>
-              {incidents.map((incident) => (
+              {visibleIncidents.map((incident) => (
                 <tr key={incident.id}>
                   <td className="bo-id-cell">{incident.id}</td>
                   <td className="bo-sku-cell">{formatSKU(incident.sku)}</td>
@@ -589,9 +630,9 @@ const BadOrders = () => {
                   <td className="bo-date-cell">{incident.date}</td>
                 </tr>
               ))}
-              {incidents.length === 0 && (
+              {visibleIncidents.length === 0 && (
                 <tr>
-                  <td colSpan="8" className="bo-no-results">No Bad Order records for this period.</td>
+                  <td colSpan="8" className="bo-no-results">No data for this selection.</td>
                 </tr>
               )}
             </tbody>

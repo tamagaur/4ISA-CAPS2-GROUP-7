@@ -70,6 +70,16 @@
   background-color: #9b2c2c;
 }
 
+.bo-grain-note {
+  margin: 0.5rem 0 0 0;
+  padding: 0.6rem 0.9rem;
+  background-color: #f7fafc;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: #718096;
+  line-height: 1.4;
+}
+
 /* Summary Cards */
 .bo-summary-grid {
   display: grid;
