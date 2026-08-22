@@ -27,6 +27,16 @@ GET /inventory already uses (backend/routers/inventory.py), extended to
 prefer each SKU's actual reorder point (from the latest pending
 LP_Recommendation — same source SKUManagement/ReorderRecommendations
 read) over the flat 100-unit fallback when one exists.
+
+Fixed 2026-08 (again): current_stock used to COALESCE a missing
+Inventory_Fact_Real row to 0, which _stock_status then read as
+CRITICAL — but "no inventory record for this product_key" and
+"confirmed zero stock" are different facts. Inventory_Fact_Real is a
+partial load as of 2025-12 (~509 of ~1,628 ABC-classified products have
+a row at all; more coverage expected, per Yuan), so most products
+legitimately have no match here yet. current_stock is now left NULL
+when there's no match, and stock_status reports "NO DATA" instead of
+silently fabricating CRITICAL.
 """
 from __future__ import annotations
 
@@ -40,14 +50,18 @@ from backend.schemas.abc import ABCItem, ABCResponse, TierSummary
 router = APIRouter(prefix="/abc", tags=["abc"])
 
 
-def _stock_status(current_stock: float, reorder_point: float | None) -> str:
-    """Real, deterministic stock status — no simulation. Mirrors
-    GET /inventory's rule (current_stock > 100 -> IN STOCK, > 0 -> LOW,
-    else CRITICAL), but uses the SKU's own reorder_point as the LOW/IN
-    STOCK cutoff instead of the flat 100-unit default whenever a pending
-    LP_Recommendation exists for it — that's a real per-SKU threshold,
-    not a guess.
+def _stock_status(current_stock: float | None, reorder_point: float | None) -> str:
+    """Real, deterministic stock status — no simulation, no fabricated
+    zero. Mirrors GET /inventory's rule (current_stock > 100 -> IN STOCK,
+    > 0 -> LOW, else CRITICAL), but uses the SKU's own reorder_point as
+    the LOW/IN STOCK cutoff instead of the flat 100-unit default whenever
+    a pending LP_Recommendation exists for it — a real per-SKU threshold,
+    not a guess. current_stock=None means Inventory_Fact_Real simply has
+    no row for this product yet (partial load) — reported as its own
+    "NO DATA" status, never coerced into CRITICAL.
     """
+    if current_stock is None:
+        return "NO DATA"
     if current_stock <= 0:
         return "CRITICAL"
     if reorder_point is not None:
@@ -78,7 +92,7 @@ def get_abc(
             ac.revenue_share,
             ac.cumulative_share,
             ac.boundary_flag,
-            COALESCE(inv.current_stock, 0) AS current_stock,
+            inv.current_stock AS current_stock,
             rop.rop_i AS reorder_point
         FROM abc_classification ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
@@ -112,9 +126,9 @@ def get_abc(
             revenue_share=r["revenue_share"],
             cumulative_share=r["cumulative_share"],
             boundary_flag=bool(r["boundary_flag"]),
-            current_stock=float(r["current_stock"] or 0),
+            current_stock=float(r["current_stock"]) if r["current_stock"] is not None else None,
             stock_status=_stock_status(
-                float(r["current_stock"] or 0),
+                float(r["current_stock"]) if r["current_stock"] is not None else None,
                 float(r["reorder_point"]) if r["reorder_point"] is not None else None,
             ),
         )
