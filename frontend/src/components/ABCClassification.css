@@ -115,7 +115,7 @@
   line-height: 1.4;
 }
 
-/* Pareto Chart */
+/*  Chart */
 .abc-pareto-container {
   background-color: #ffffff;
   border-radius: 12px;
@@ -198,6 +198,32 @@
   font-weight: 600;
 }
 
+.abc-class-summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+  text-align: center;
+}
+
+.abc-class-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.abc-class-summary-headline {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.abc-class-summary-archetype {
+  font-size: 0.72rem;
+  color: #718096;
+}
 /* Filters */
 .abc-filters-row {
   display: flex;
