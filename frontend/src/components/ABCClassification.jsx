@@ -50,16 +50,28 @@ const formatSKU = (sku) => {
 };
 
 // Class-level aggregation replaces the old per-SKU Pareto chart: with
-// 600+ SKUs a per-item bar chart is illegible and not actionable. This
-// rolls revenue share up to the 3 tiers instead — same underlying
-// revenue_share/cat fields, just grouped. No inventory $ value or risk
-// classification here: unit_price is unpopulated (Product_Dimension)
-// and there is no risk-tier logic in the codebase yet, so neither is
-// fabricated for the chart.
+// 600+ SKUs a per-item bar chart is illegible and not actionable.
+// Per class we show two things, both from real fields only (no $ value —
+// unit_price is unpopulated on Product_Dimension — and no fabricated
+// risk score):
+//   1. Revenue Share % (existing revPct, rolled up)
+//   2. Stock Status Mix — the % of that class's SKUs sitting in each of
+//      the 3 real stock_status buckets (IN STOCK / LOW / CRITICAL).
+// Comparing the two surfaces classes that look fine on revenue but are
+// stock-unhealthy (or vice versa).
 const CLASS_ARCHETYPE = {
   A: 'High-Value, Vital Few',
   B: 'Mid-Value, Secondary',
   C: 'Low-Value, Trivial Many',
+};
+
+// Mirrors the colors already used for stock_status badges elsewhere on
+// this page (.abc-in-stock / .abc-low / .abc-critical in the CSS) so the
+// same status always reads as the same color across the whole view.
+const STOCK_STATUS_COLORS = {
+  'IN STOCK': '#38a169',
+  LOW: '#e53e3e',
+  CRITICAL: '#dd6b20',
 };
 
 const ClassAggregateTooltip = ({ active, payload }) => {
@@ -69,7 +81,16 @@ const ClassAggregateTooltip = ({ active, payload }) => {
       <div className="abc-pareto-tooltip">
         <p className="abc-pareto-tooltip-title">{point.label}</p>
         <p className="abc-pareto-tooltip-line" style={{ color: COLORS[`abc${point.cat}`] }}>
-          Revenue: {point.revenueTotal.toFixed(1)}%
+          Revenue share: {point.revenueTotal.toFixed(1)}%
+        </p>
+        <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS['IN STOCK'] }}>
+          In stock: {point.inStockPct.toFixed(0)}%
+        </p>
+        <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS.LOW }}>
+          Low: {point.lowPct.toFixed(0)}%
+        </p>
+        <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS.CRITICAL }}>
+          Critical: {point.criticalPct.toFixed(0)}%
         </p>
         <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.axisLabel }}>
           {point.skuCount} {point.skuCount === 1 ? 'item' : 'items'} ({point.skuSharePct.toFixed(0)}% of total)
@@ -129,7 +150,7 @@ const ABCClassification = () => {
     };
   }, [principal]);
 
- // Map API shape -> the row shape the rest of this page renders.
+  // Map API shape -> the row shape the rest of this page renders.
   const sourceData = useMemo(
     () =>
       rawData.map((item) => ({
@@ -173,19 +194,41 @@ const ABCClassification = () => {
     return sorted.map((item, index) => ({ ...item, rank: index + 1 }));
   }, [sourceData]);
 
-// Roll per-item revenue share up to the 3 tiers for the class-level
-  // chart. revenueTotal sums the already-computed revPct values, so it
-  // stays consistent with the % shown per-row in the table below.
+  // Roll per-item revenue share + stock_status up to the 3 tiers for the
+  // class-level chart. revenueTotal sums the already-computed revPct
+  // values, so it stays consistent with the % shown per-row in the table
+  // below. Stock status % is the share of that class's own SKU count in
+  // each bucket (each class's three % values sum to ~100%).
   const classAggregates = useMemo(() => {
     const totalCount = dataWithCumulative.length;
     return ['A', 'B', 'C'].map((cat) => {
       const items = dataWithCumulative.filter((d) => d.cat === cat);
+      const n = items.length || 1; // guard divide-by-zero for an empty tier
+      const countOf = (status) => items.filter((d) => d.status === status).length;
       return {
         cat,
         label: `Class ${cat}`,
         skuCount: items.length,
         skuSharePct: totalCount > 0 ? (items.length / totalCount) * 100 : 0,
         revenueTotal: items.reduce((sum, d) => sum + (d.revPct || 0), 0),
+        inStockPct: (countOf('IN STOCK') / n) * 100,
+        lowPct: (countOf('LOW') / n) * 100,
+        criticalPct: (countOf('CRITICAL') / n) * 100,
+      };
+    });
+  }, [dataWithCumulative]);
+
+  // Class C drill-down: real stock_status counts only (no fabricated risk
+  // tiers/actions — that logic doesn't exist in the codebase yet).
+  const classCStockBreakdown = useMemo(() => {
+    const items = dataWithCumulative.filter((d) => d.cat === 'C');
+    const total = items.length || 1;
+    return ['CRITICAL', 'LOW', 'IN STOCK'].map((status) => {
+      const count = items.filter((d) => d.status === status).length;
+      return {
+        status,
+        count,
+        pct: (count / total) * 100,
       };
     });
   }, [dataWithCumulative]);
@@ -253,17 +296,17 @@ const ABCClassification = () => {
   const getCatBadgeClass = (cat) => {
     switch (cat) {
       case 'A': return 'abc-cat-badge abc-cat-a';
-      case 'B': return 'cat-badge cat-b';
-      case 'C': return 'cat-badge cat-c';
-      default: return 'cat-badge';
+      case 'B': return 'abc-cat-badge abc-cat-b';
+      case 'C': return 'abc-cat-badge abc-cat-c';
+      default: return 'abc-cat-badge';
     }
   };
 
   if (loading) {
     return (
-      <div className="page">
-        <div className="content">
-          <p className="page-subtitle">Loading ABC classification data…</p>
+      <div className="abc-page">
+        <div className="abc-content">
+          <p className="abc-page-subtitle">Loading ABC classification data…</p>
         </div>
       </div>
     );
@@ -326,63 +369,106 @@ const ABCClassification = () => {
           </p>
         )}
 
-        {/* Class Aggregation Chart — replaces the per-SKU Pareto chart, which
-            wasn't readable/actionable at 600+ SKUs. Rolls revenue share up
-            to the 3 tiers instead of plotting one bar per item. */}
-        <div className="abc-pareto-container">
-          <div className="abc-pareto-header">
-            <h3 className="abc-pareto-title">Revenue by Class</h3>
-            <div className="abc-pareto-legend">
-              <div className="abc-pareto-legend-item">
-                <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcA }} />
-                <span>Class A</span>
-              </div>
-              <div className="abc-pareto-legend-item">
-                <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcB }} />
-                <span>Class B</span>
-              </div>
-              <div className="abc-pareto-legend-item">
-                <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcC }} />
-                <span>Class C</span>
+        {/* Class Aggregation Chart + Class C drill-down — replaces the
+            per-SKU Pareto chart, which wasn't readable/actionable at 600+
+            SKUs. Left: revenue share vs. stock-status mix per class (both
+            real fields, no fabricated $ value or risk score). Right:
+            real stock_status counts for Class C only. */}
+        <div className="abc-analysis-row">
+          <div className="abc-pareto-container abc-analysis-chart">
+            <div className="abc-pareto-header">
+              <h3 className="abc-pareto-title">Revenue Share vs. Stock Status Mix, by Class</h3>
+              <div className="abc-pareto-legend">
+                <div className="abc-pareto-legend-item">
+                  <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcA }} />
+                  <span>Revenue share</span>
+                </div>
+                <div className="abc-pareto-legend-item">
+                  <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['IN STOCK'] }} />
+                  <span>In stock</span>
+                </div>
+                <div className="abc-pareto-legend-item">
+                  <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.LOW }} />
+                  <span>Low</span>
+                </div>
+                <div className="abc-pareto-legend-item">
+                  <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.CRITICAL }} />
+                  <span>Critical</span>
+                </div>
               </div>
             </div>
+            <div className="abc-pareto-chart-wrapper">
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={classAggregates} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                  <XAxis
+                    dataKey="label"
+                    axisLine={true}
+                    tickLine={false}
+                    tick={{ fill: CHART_COLORS.axisLabel, fontSize: 12, fontWeight: 600 }}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    ticks={[0, 20, 40, 60, 80, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                    axisLine={true}
+                    tickLine={true}
+                    tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                  />
+                  <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
+                  {/* Bar 1 of the pair: revenue share, one solid bar per class */}
+                  <Bar dataKey="revenueTotal" radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false}>
+                    {classAggregates.map((entry) => (
+                      <Cell key={entry.cat} fill={COLORS[`abc${entry.cat}`]} />
+                    ))}
+                  </Bar>
+                  {/* Bar 2 of the pair: stock-status mix, stacked to 100% */}
+                  <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} isAnimationActive={false} />
+                  <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} isAnimationActive={false} />
+                  <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="abc-class-summary-row">
+              {classAggregates.map((entry) => (
+                <div key={entry.cat} className="abc-class-summary-item">
+                  <span className="abc-class-summary-headline">
+                    ~{entry.skuSharePct.toFixed(0)}% {grain === 'category' ? 'Category' : 'SKU'} Count · ~{entry.revenueTotal.toFixed(0)}% Revenue
+                  </span>
+                  <span className="abc-class-summary-archetype">{CLASS_ARCHETYPE[entry.cat]}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="abc-pareto-chart-wrapper">
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={classAggregates} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="35%">
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                <XAxis
-                  dataKey="label"
-                  axisLine={true}
-                  tickLine={false}
-                  tick={{ fill: CHART_COLORS.axisLabel, fontSize: 12, fontWeight: 600 }}
-                />
-                <YAxis
-                  domain={[0, 100]}
-                  ticks={[0, 20, 40, 60, 80, 100]}
-                  tickFormatter={(v) => `${v}%`}
-                  axisLine={true}
-                  tickLine={true}
-                  tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
-                />
-                <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
-                <Bar dataKey="revenueTotal" radius={[6, 6, 0, 0]} barSize={100} isAnimationActive={false}>
-                  {classAggregates.map((entry) => (
-                    <Cell key={entry.cat} fill={COLORS[`abc${entry.cat}`]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="abc-class-summary-row">
-            {classAggregates.map((entry) => (
-              <div key={entry.cat} className="abc-class-summary-item">
-                <span className="abc-class-summary-headline">
-                  ~{entry.skuSharePct.toFixed(0)}% {grain === 'category' ? 'Category' : 'SKU'} Count · ~{entry.revenueTotal.toFixed(0)}% Revenue
-                </span>
-                <span className="abc-class-summary-archetype">{CLASS_ARCHETYPE[entry.cat]}</span>
-              </div>
-            ))}
+
+          <div className="abc-pareto-container abc-analysis-drilldown">
+            <div className="abc-pareto-header">
+              <h3 className="abc-pareto-title">Drill-down · Class C Stock Status</h3>
+            </div>
+            <table className="abc-drilldown-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>{grain === 'category' ? 'Category' : 'SKU'} Count</th>
+                  <th>% of Class C</th>
+                </tr>
+              </thead>
+              <tbody>
+                {classCStockBreakdown.map((row) => (
+                  <tr key={row.status}>
+                    <td>
+                      <span className="abc-drilldown-dot" style={{ backgroundColor: STOCK_STATUS_COLORS[row.status] }} />
+                      {row.status}
+                    </td>
+                    <td>{row.count}</td>
+                    <td>{row.pct.toFixed(0)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="abc-page-grain-note">
+              Long-tail SKUs sitting at LOW/CRITICAL stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don't go fully out of stock unnoticed.
+            </p>
           </div>
         </div>
 
