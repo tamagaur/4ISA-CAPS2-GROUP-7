@@ -19,9 +19,16 @@ product shares one global period).
 tier_summary (backlog #44) is computed here rather than trusted from
 individual rows, so it can never silently drift from what `items`
 actually contains.
+
+Fixed 2026-08: stock_status was previously `random.choices(...)` — a
+placeholder that re-rolled a fake status on every request instead of
+reading real inventory. Replaced with the same real, deterministic rule
+GET /inventory already uses (backend/routers/inventory.py), extended to
+prefer each SKU's actual reorder point (from the latest pending
+LP_Recommendation — same source SKUManagement/ReorderRecommendations
+read) over the flat 100-unit fallback when one exists.
 """
 from __future__ import annotations
-import random
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
@@ -31,6 +38,21 @@ from backend.deps import TokenPayload, get_current_user, get_db
 from backend.schemas.abc import ABCItem, ABCResponse, TierSummary
 
 router = APIRouter(prefix="/abc", tags=["abc"])
+
+
+def _stock_status(current_stock: float, reorder_point: float | None) -> str:
+    """Real, deterministic stock status — no simulation. Mirrors
+    GET /inventory's rule (current_stock > 100 -> IN STOCK, > 0 -> LOW,
+    else CRITICAL), but uses the SKU's own reorder_point as the LOW/IN
+    STOCK cutoff instead of the flat 100-unit default whenever a pending
+    LP_Recommendation exists for it — that's a real per-SKU threshold,
+    not a guess.
+    """
+    if current_stock <= 0:
+        return "CRITICAL"
+    if reorder_point is not None:
+        return "IN STOCK" if current_stock > reorder_point else "LOW"
+    return "IN STOCK" if current_stock > 100 else "LOW"
 
 
 @router.get("", response_model=ABCResponse)
@@ -56,7 +78,8 @@ def get_abc(
             ac.revenue_share,
             ac.cumulative_share,
             ac.boundary_flag,
-            COALESCE(inv.current_stock, 0) AS current_stock
+            COALESCE(inv.current_stock, 0) AS current_stock,
+            rop.rop_i AS reorder_point
         FROM abc_classification ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN (
@@ -65,6 +88,12 @@ def get_abc(
             WHERE _period = (SELECT MAX(_period) FROM inventory_fact_real)
             GROUP BY product_key
         ) inv ON inv.product_key = ac.product_key
+        LEFT JOIN (
+            SELECT DISTINCT ON (product_key) product_key, rop_i
+            FROM lp_recommendation
+            WHERE status = 'pending'
+            ORDER BY product_key, planning_cycle_date DESC
+        ) rop ON rop.product_key = ac.product_key
         WHERE ac.classification_period = :period
     """
     params: dict = {"period": period}
@@ -84,10 +113,10 @@ def get_abc(
             cumulative_share=r["cumulative_share"],
             boundary_flag=bool(r["boundary_flag"]),
             current_stock=float(r["current_stock"] or 0),
-            stock_status=random.choices(
-                ["IN STOCK", "LOW", "CRITICAL"],
-                weights=[0.6, 0.3, 0.1] if r["tier"] == "A" else ([0.4, 0.4, 0.2] if r["tier"] == "B" else [0.2, 0.3, 0.5])
-            )[0],
+            stock_status=_stock_status(
+                float(r["current_stock"] or 0),
+                float(r["reorder_point"]) if r["reorder_point"] is not None else None,
+            ),
         )
         for r in rows
     ]
