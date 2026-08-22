@@ -158,6 +158,7 @@ const ABCClassification = () => {
         sku: item.sku_id,
         product: item.product_name || 'Unknown Product',
         brand: PRINCIPAL_BRAND[item.principal] || item.principal,
+        principal: item.principal,
         cat: item.tier,
         // revenue_share / cumulative_share come from the API as 0-1 fractions
         // (see analytics/classification/abc.py); everything downstream here
@@ -194,44 +195,96 @@ const ABCClassification = () => {
     return sorted.map((item, index) => ({ ...item, rank: index + 1 }));
   }, [sourceData]);
 
-  // Roll per-item revenue share + stock_status up to the 3 tiers for the
-  // class-level chart. revenueTotal sums the already-computed revPct
-  // values, so it stays consistent with the % shown per-row in the table
-  // below. Stock status % is the share of that class's own SKU count in
-  // each bucket (each class's three % values sum to ~100%).
-  const classAggregates = useMemo(() => {
-    const totalCount = dataWithCumulative.length;
+  // Roll per-item revenue share + stock_status up to the 3 tiers. Pulled
+  // out as a plain function (not a hook) because it needs to run once for
+  // "all items" (single-principal view) and once per principal (mixed
+  // "All" view) — see isMixedPrincipal below for why revenue_share can't
+  // just be summed across principals directly.
+  const buildClassAggregates = (items) => {
+    const totalCount = items.length;
     return ['A', 'B', 'C'].map((cat) => {
-      const items = dataWithCumulative.filter((d) => d.cat === cat);
-      const n = items.length || 1; // guard divide-by-zero for an empty tier
-      const countOf = (status) => items.filter((d) => d.status === status).length;
+      const catItems = items.filter((d) => d.cat === cat);
+      const n = catItems.length || 1; // guard divide-by-zero for an empty tier
+      const countOf = (status) => catItems.filter((d) => d.status === status).length;
       return {
         cat,
         label: `Class ${cat}`,
-        skuCount: items.length,
-        skuSharePct: totalCount > 0 ? (items.length / totalCount) * 100 : 0,
-        revenueTotal: items.reduce((sum, d) => sum + (d.revPct || 0), 0),
+        skuCount: catItems.length,
+        skuSharePct: totalCount > 0 ? (catItems.length / totalCount) * 100 : 0,
+        revenueTotal: catItems.reduce((sum, d) => sum + (d.revPct || 0), 0),
         inStockPct: (countOf('IN STOCK') / n) * 100,
         lowPct: (countOf('LOW') / n) * 100,
         criticalPct: (countOf('CRITICAL') / n) * 100,
       };
     });
-  }, [dataWithCumulative]);
+  };
 
-  // Class C drill-down: real stock_status counts only (no fabricated risk
-  // tiers/actions — that logic doesn't exist in the codebase yet).
-  const classCStockBreakdown = useMemo(() => {
-    const items = dataWithCumulative.filter((d) => d.cat === 'C');
+  const buildStockBreakdown = (items) => {
     const total = items.length || 1;
     return ['CRITICAL', 'LOW', 'IN STOCK'].map((status) => {
       const count = items.filter((d) => d.status === status).length;
+      return { status, count, pct: (count / total) * 100 };
+    });
+  };
+
+  // orchestrate_abc.py runs ABC classification ONCE PER PRINCIPAL — each
+  // principal's revenue_share sums to 100% within itself only (Unilever
+  // SKU revenue and Del Monte category revenue are different, non-
+  // comparable magnitudes). Loading "All" principals returns both sets
+  // of rows together with no filter, so simply summing revenue_share
+  // across all of them adds two different 100% baselines together
+  // (Class A could read ~160%, not a bug in the math — just an invalid
+  // combination). isMixedPrincipal detects that case so the revenue
+  // chart is never built by summing across principals.
+  const presentPrincipals = useMemo(
+    () => Array.from(new Set(dataWithCumulative.map((d) => d.principal).filter(Boolean))),
+    [dataWithCumulative]
+  );
+  const isMixedPrincipal = presentPrincipals.length > 1;
+
+  // Single-principal view (or the whole dataset when only one principal
+  // is present/selected): one set of aggregates, same as before.
+  const classAggregates = useMemo(
+    () => buildClassAggregates(dataWithCumulative),
+    [dataWithCumulative]
+  );
+  const classCStockBreakdown = useMemo(
+    () => buildStockBreakdown(dataWithCumulative.filter((d) => d.cat === 'C')),
+    [dataWithCumulative]
+  );
+
+  // Mixed view: one full aggregate set PER principal, each computed only
+  // from that principal's own rows — revenue and stock mix both stay
+  // within one classification run's own 100% baseline.
+  const perPrincipalPanels = useMemo(() => {
+    if (!isMixedPrincipal) return [];
+    return presentPrincipals.map((p) => {
+      const items = dataWithCumulative.filter((d) => d.principal === p);
       return {
-        status,
-        count,
-        pct: (count / total) * 100,
+        principal: p,
+        label: PRINCIPAL_BRAND[p] || p,
+        classAggregates: buildClassAggregates(items),
+        classCStockBreakdown: buildStockBreakdown(items.filter((d) => d.cat === 'C')),
       };
     });
-  }, [dataWithCumulative]);
+  }, [isMixedPrincipal, presentPrincipals, dataWithCumulative]);
+
+  // Cross-principal comparison chart: one bar per principal per tier,
+  // never summed — each principal's own revenue % stays on its own
+  // 0-100 scale, just placed side by side for comparison.
+  const tierComparisonData = useMemo(() => {
+    if (!isMixedPrincipal) return [];
+    return ['A', 'B', 'C'].map((cat) => {
+      const row = { cat, label: `Class ${cat}` };
+      presentPrincipals.forEach((p) => {
+        const items = dataWithCumulative.filter((d) => d.principal === p && d.cat === cat);
+        row[p] = items.reduce((sum, d) => sum + (d.revPct || 0), 0);
+      });
+      return row;
+    });
+  }, [isMixedPrincipal, presentPrincipals, dataWithCumulative]);
+
+  const PRINCIPAL_CHART_COLOR = { unilever: COLORS.abcA, delmonte: COLORS.dispatched };
 
   const filteredData = useMemo(() => {
     return dataWithCumulative.filter(item => {
@@ -369,37 +422,27 @@ const ABCClassification = () => {
           </p>
         )}
 
-        {/* Class Aggregation Chart + Class C drill-down — replaces the
-            per-SKU Pareto chart, which wasn't readable/actionable at 600+
-            SKUs. Left: revenue share vs. stock-status mix per class (both
-            real fields, no fabricated $ value or risk score). Right:
-            real stock_status counts for Class C only. */}
-        <div className="abc-analysis-row">
-          <div className="abc-pareto-container abc-analysis-chart">
+        {/* Revenue Concentration by Tier, by Principal — cross-principal
+            comparison chart, shown only when "All" is selected. Never
+            sums revenue_share across principals (see isMixedPrincipal
+            above for why that's invalid) — one bar per principal per
+            tier, each on its own 0-100% scale, placed side by side. */}
+        {isMixedPrincipal && (
+          <div className="abc-pareto-container">
             <div className="abc-pareto-header">
-              <h3 className="abc-pareto-title">Revenue Share vs. Stock Status Mix, by Class</h3>
+              <h3 className="abc-pareto-title">Revenue Concentration by Tier, by Principal</h3>
               <div className="abc-pareto-legend">
-                <div className="abc-pareto-legend-item">
-                  <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcA }} />
-                  <span>Revenue share</span>
-                </div>
-                <div className="abc-pareto-legend-item">
-                  <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['IN STOCK'] }} />
-                  <span>In stock</span>
-                </div>
-                <div className="abc-pareto-legend-item">
-                  <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.LOW }} />
-                  <span>Low</span>
-                </div>
-                <div className="abc-pareto-legend-item">
-                  <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.CRITICAL }} />
-                  <span>Critical</span>
-                </div>
+                {presentPrincipals.map((p) => (
+                  <div className="abc-pareto-legend-item" key={p}>
+                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: PRINCIPAL_CHART_COLOR[p] || CHART_COLORS.axisLabel }} />
+                    <span>{PRINCIPAL_BRAND[p] || p}</span>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="abc-pareto-chart-wrapper">
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={classAggregates} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={tierComparisonData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
                   <XAxis
                     dataKey="label"
@@ -415,62 +458,138 @@ const ABCClassification = () => {
                     tickLine={true}
                     tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                   />
-                  <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
-                  {/* Bar 1 of the pair: revenue share, one solid bar per class */}
-                  <Bar dataKey="revenueTotal" radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false}>
-                    {classAggregates.map((entry) => (
-                      <Cell key={entry.cat} fill={COLORS[`abc${entry.cat}`]} />
-                    ))}
-                  </Bar>
-                  {/* Bar 2 of the pair: stock-status mix, stacked to 100% */}
-                  <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} isAnimationActive={false} />
-                  <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} isAnimationActive={false} />
-                  <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false} />
+                  <Tooltip
+                    formatter={(value, name) => [`${value.toFixed(1)}%`, PRINCIPAL_BRAND[name] || name]}
+                    cursor={{ fill: '#f7fafc' }}
+                  />
+                  {presentPrincipals.map((p) => (
+                    <Bar
+                      key={p}
+                      dataKey={p}
+                      name={p}
+                      fill={PRINCIPAL_CHART_COLOR[p] || CHART_COLORS.axisLabel}
+                      radius={[6, 6, 0, 0]}
+                      barSize={44}
+                      isAnimationActive={false}
+                    />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="abc-class-summary-row">
-              {classAggregates.map((entry) => (
-                <div key={entry.cat} className="abc-class-summary-item">
-                  <span className="abc-class-summary-headline">
-                    ~{entry.skuSharePct.toFixed(0)}% {grain === 'category' ? 'Category' : 'SKU'} Count · ~{entry.revenueTotal.toFixed(0)}% Revenue
-                  </span>
-                  <span className="abc-class-summary-archetype">{CLASS_ARCHETYPE[entry.cat]}</span>
-                </div>
-              ))}
-            </div>
           </div>
+        )}
 
-          <div className="abc-pareto-container abc-analysis-drilldown">
-            <div className="abc-pareto-header">
-              <h3 className="abc-pareto-title">Drill-down · Class C Stock Status</h3>
-            </div>
-            <table className="abc-drilldown-table">
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>{grain === 'category' ? 'Category' : 'SKU'} Count</th>
-                  <th>% of Class C</th>
-                </tr>
-              </thead>
-              <tbody>
-                {classCStockBreakdown.map((row) => (
-                  <tr key={row.status}>
-                    <td>
-                      <span className="abc-drilldown-dot" style={{ backgroundColor: STOCK_STATUS_COLORS[row.status] }} />
-                      {row.status}
-                    </td>
-                    <td>{row.count}</td>
-                    <td>{row.pct.toFixed(0)}%</td>
-                  </tr>
+        {/* Class Aggregation Chart(s) + Class C drill-down — replaces the
+            per-SKU Pareto chart, which wasn't readable/actionable at 600+
+            SKUs. Each panel: revenue share vs. stock-status mix per class
+            (both real fields, no fabricated $ value or risk score), plus
+            real stock_status counts for Class C only. In mixed mode this
+            renders once per principal (see perPrincipalPanels above) so
+            revenue/stock numbers never cross a classification-run
+            boundary; otherwise it renders once for the whole dataset. */}
+        {(isMixedPrincipal ? perPrincipalPanels : [{ principal: null, label: null, classAggregates, classCStockBreakdown }]).map((panel) => (
+          <div className="abc-analysis-row" key={panel.principal || 'single'}>
+            <div className="abc-pareto-container abc-analysis-chart">
+              <div className="abc-pareto-header">
+                <h3 className="abc-pareto-title">
+                  {panel.label ? `${panel.label} — Revenue Share vs. Stock Status Mix, by Class` : 'Revenue Share vs. Stock Status Mix, by Class'}
+                </h3>
+                <div className="abc-pareto-legend">
+                  <div className="abc-pareto-legend-item">
+                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcA }} />
+                    <span>Revenue share</span>
+                  </div>
+                  <div className="abc-pareto-legend-item">
+                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['IN STOCK'] }} />
+                    <span>In stock</span>
+                  </div>
+                  <div className="abc-pareto-legend-item">
+                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.LOW }} />
+                    <span>Low</span>
+                  </div>
+                  <div className="abc-pareto-legend-item">
+                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.CRITICAL }} />
+                    <span>Critical</span>
+                  </div>
+                </div>
+              </div>
+              <div className="abc-pareto-chart-wrapper">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={panel.classAggregates} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                    <XAxis
+                      dataKey="label"
+                      axisLine={true}
+                      tickLine={false}
+                      tick={{ fill: CHART_COLORS.axisLabel, fontSize: 12, fontWeight: 600 }}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      ticks={[0, 20, 40, 60, 80, 100]}
+                      tickFormatter={(v) => `${v}%`}
+                      axisLine={true}
+                      tickLine={true}
+                      tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                    />
+                    <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
+                    {/* Bar 1 of the pair: revenue share, one solid bar per class */}
+                    <Bar dataKey="revenueTotal" radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false}>
+                      {panel.classAggregates.map((entry) => (
+                        <Cell key={entry.cat} fill={COLORS[`abc${entry.cat}`]} />
+                      ))}
+                    </Bar>
+                    {/* Bar 2 of the pair: stock-status mix, stacked to 100% */}
+                    <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} isAnimationActive={false} />
+                    <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} isAnimationActive={false} />
+                    <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="abc-class-summary-row">
+                {panel.classAggregates.map((entry) => (
+                  <div key={entry.cat} className="abc-class-summary-item">
+                    <span className="abc-class-summary-headline">
+                      ~{entry.skuSharePct.toFixed(0)}% {grain === 'category' ? 'Category' : 'SKU'} Count · ~{entry.revenueTotal.toFixed(0)}% Revenue
+                    </span>
+                    <span className="abc-class-summary-archetype">{CLASS_ARCHETYPE[entry.cat]}</span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-            <p className="abc-page-grain-note">
-              Long-tail SKUs sitting at LOW/CRITICAL stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don't go fully out of stock unnoticed.
-            </p>
+              </div>
+            </div>
+
+            <div className="abc-pareto-container abc-analysis-drilldown">
+              <div className="abc-pareto-header">
+                <h3 className="abc-pareto-title">
+                  {panel.label ? `${panel.label} — Drill-down · Class C Stock Status` : 'Drill-down · Class C Stock Status'}
+                </h3>
+              </div>
+              <table className="abc-drilldown-table">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>{grain === 'category' ? 'Category' : 'SKU'} Count</th>
+                    <th>% of Class C</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {panel.classCStockBreakdown.map((row) => (
+                    <tr key={row.status}>
+                      <td>
+                        <span className="abc-drilldown-dot" style={{ backgroundColor: STOCK_STATUS_COLORS[row.status] }} />
+                        {row.status}
+                      </td>
+                      <td>{row.count}</td>
+                      <td>{row.pct.toFixed(0)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="abc-page-grain-note">
+                Long-tail SKUs sitting at LOW/CRITICAL stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don't go fully out of stock unnoticed.
+              </p>
+            </div>
           </div>
-        </div>
+        ))}
 
         {/* Searchable Combobox & Filters Bar */}
         <div className="abc-filters-row">
