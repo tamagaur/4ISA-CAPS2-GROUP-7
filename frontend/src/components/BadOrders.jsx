@@ -89,17 +89,25 @@ const BadOrders = () => {
   const [weekdayBreakdown, setWeekdayBreakdown] = useState([]);
   const [brandBreakdown, setBrandBreakdown] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [queriedRange, setQueriedRange] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadData() {
+      setLoading(true);
+      setLoadError(null);
       try {
         let from = '';
         let to = '';
         const m = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
         if (startYear && startMonth) from = `${startYear}-${m[startMonth]}-01`;
         if (endYear && endMonth) to = `${endYear}-${m[endMonth]}-28`;
+        if (!cancelled) setQueriedRange({ from, to });
 
         const data = await getBOMonitoringData({ principal, from, to });
+        if (cancelled) return;
         setIncidents(data.incidents || []);
         if (data.kpis) {
           setDbKPIs({
@@ -113,10 +121,15 @@ const BadOrders = () => {
         setWeekdayBreakdown(data.weekday_breakdown || []);
         setBrandBreakdown(data.brand_breakdown || []);
       } catch (err) {
+        if (cancelled) return;
         console.error('Failed to load BO monitoring data:', err);
+        setLoadError(err.message || 'Failed to load Bad Order monitoring data');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
     loadData();
+    return () => { cancelled = true; };
   }, [principal, startMonth, startYear, endMonth, endYear]);
 
   const latestBORate = trend.length > 0 ? (trend[trend.length - 1].bo_rate ?? 0) : 0;
@@ -219,6 +232,23 @@ const BadOrders = () => {
             <DateFilter onRefresh={() => window.location.reload()} />
           </div>
         </div>
+
+        {loading && <p className="bo-page-subtitle">Loading Bad Order data…</p>}
+
+        {loadError && (
+          <div className="dashboard-error-state">
+            <p>{loadError}</p>
+          </div>
+        )}
+
+        {!loading && !loadError && incidents.length === 0 && manualIncidents.length === 0 && (
+          <p className="bo-page-subtitle">
+            No incidents returned for {queriedRange?.from} to {queriedRange?.to}
+            {principal !== 'all' ? ` (principal: ${principal})` : ''}.
+            If you expect data here, check that SalesReturn_Fact_Real has rows with return_type='BO'
+            in that period, and that the _period column format matches 'YYYY-MM'.
+          </p>
+        )}
 
         {/* Summary KPI Cards */}
         <div className="bo-summary-grid">
