@@ -68,10 +68,15 @@ const CLASS_ARCHETYPE = {
 // Mirrors the colors already used for stock_status badges elsewhere on
 // this page (.abc-in-stock / .abc-low / .abc-critical in the CSS) so the
 // same status always reads as the same color across the whole view.
+// NO DATA (gray) is its own status, not folded into CRITICAL — as of
+// 2025-12 Inventory_Fact_Real only covers a subset of classified
+// products (partial ETL load, more coverage expected), so "no record
+// yet" and "confirmed zero stock" are kept visibly distinct.
 const STOCK_STATUS_COLORS = {
   'IN STOCK': '#38a169',
   LOW: '#e53e3e',
   CRITICAL: '#dd6b20',
+  'NO DATA': '#a0aec0',
 };
 
 const ClassAggregateTooltip = ({ active, payload }) => {
@@ -91,6 +96,9 @@ const ClassAggregateTooltip = ({ active, payload }) => {
         </p>
         <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS.CRITICAL }}>
           Critical: {point.criticalPct.toFixed(0)}%
+        </p>
+        <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS['NO DATA'] }}>
+          No data: {point.noDataPct.toFixed(0)}%
         </p>
         <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.axisLabel }}>
           {point.skuCount} {point.skuCount === 1 ? 'item' : 'items'} ({point.skuSharePct.toFixed(0)}% of total)
@@ -215,13 +223,18 @@ const ABCClassification = () => {
         inStockPct: (countOf('IN STOCK') / n) * 100,
         lowPct: (countOf('LOW') / n) * 100,
         criticalPct: (countOf('CRITICAL') / n) * 100,
+        // Inventory_Fact_Real is a partial load (backend/routers/abc.py) —
+        // most products currently have no stock record at all yet. Kept
+        // as its own bucket rather than folded into CRITICAL, so the
+        // chart doesn't misreport "no data" as "confirmed out of stock".
+        noDataPct: (countOf('NO DATA') / n) * 100,
       };
     });
   };
 
   const buildStockBreakdown = (items) => {
     const total = items.length || 1;
-    return ['CRITICAL', 'LOW', 'IN STOCK'].map((status) => {
+    return ['CRITICAL', 'LOW', 'IN STOCK', 'NO DATA'].map((status) => {
       const count = items.filter((d) => d.status === status).length;
       return { status, count, pct: (count / total) * 100 };
     });
@@ -342,6 +355,7 @@ const ABCClassification = () => {
       case 'IN STOCK': return 'abc-status abc-in-stock';
       case 'LOW': return 'abc-status abc-low';
       case 'CRITICAL': return 'abc-status abc-critical';
+      case 'NO DATA': return 'abc-status abc-no-data';
       default: return 'abc-status';
     }
   };
@@ -511,6 +525,10 @@ const ABCClassification = () => {
                     <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.CRITICAL }} />
                     <span>Critical</span>
                   </div>
+                  <div className="abc-pareto-legend-item">
+                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['NO DATA'] }} />
+                    <span>No data</span>
+                  </div>
                 </div>
               </div>
               <div className="abc-pareto-chart-wrapper">
@@ -538,7 +556,12 @@ const ABCClassification = () => {
                         <Cell key={entry.cat} fill={COLORS[`abc${entry.cat}`]} />
                       ))}
                     </Bar>
-                    {/* Bar 2 of the pair: stock-status mix, stacked to 100% */}
+                    {/* Bar 2 of the pair: stock-status mix, stacked to 100%.
+                        NO DATA sits at the base since it's usually the
+                        largest segment right now (partial inventory load)
+                        — putting it first keeps the rounded top corner on
+                        whichever real status segment is on top. */}
+                    <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={54} isAnimationActive={false} />
                     <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} isAnimationActive={false} />
                     <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} isAnimationActive={false} />
                     <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false} />
