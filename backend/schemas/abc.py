@@ -24,8 +24,13 @@ class ABCItem(BaseModel):
     revenue_share: float | None = None
     cumulative_share: float | None = None
     boundary_flag: bool = False  # backlog #43 — near a tier cutoff, margin unconfirmed vs manuscript Sec.3.6
-    current_stock: float = 0
-    stock_status: str  # 'IN STOCK' | 'LOW' | 'CRITICAL' — same thresholds as GET /inventory/current
+    # None (not 0) when Inventory_Fact_Real has no row for this product_key
+    # in the latest _period — as of 2025-12 inventory only covers ~509 of
+    # the ~1,628 products present in ABC_Classification (partial ETL load,
+    # more coverage expected), so "no record" and "confirmed zero stock"
+    # are different facts and must not be coalesced into the same 0.
+    current_stock: float | None = None
+    stock_status: str  # 'IN STOCK' | 'LOW' | 'CRITICAL' | 'NO DATA'
 
 
 class TierSummary(BaseModel):
