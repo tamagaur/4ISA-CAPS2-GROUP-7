@@ -36,12 +36,12 @@ _SELECT_ONE = """
         lr.ss_i,
         lr.status,
         COALESCE(inv.current_stock, 0) AS current_stock
-    FROM LP_Recommendation lr
-    JOIN Product_Dimension pd ON pd.product_key = lr.product_key
+    FROM lp_recommendation lr
+    JOIN product_dimension pd ON pd.product_key = lr.product_key
     LEFT JOIN (
         SELECT product_key, SUM(quantity_on_hand) AS current_stock
-        FROM Inventory_Fact_Real
-        WHERE _period = (SELECT MAX(_period) FROM Inventory_Fact_Real)
+        FROM inventory_fact_real
+        WHERE _period = (SELECT MAX(_period) FROM inventory_fact_real)
         GROUP BY product_key
     ) inv ON inv.product_key = lr.product_key
 """
@@ -100,7 +100,7 @@ def update_recommendation(
 
     result = db.execute(
         text("""
-            UPDATE LP_Recommendation
+            UPDATE lp_recommendation
             SET status = :status, decided_at = :decided_at, decided_by = :decided_by
             WHERE recommendation_key = :key
         """),

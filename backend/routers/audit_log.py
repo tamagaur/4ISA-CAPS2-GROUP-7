@@ -30,7 +30,7 @@ def get_audit_log(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> AuditLogListResponse:
-    query = "SELECT * FROM Audit_Log WHERE 1=1"
+    query = "SELECT * FROM audit_log WHERE 1=1"
     params: dict = {}
     if action:
         query += " AND action = :action"
@@ -41,8 +41,12 @@ def get_audit_log(
     query += " ORDER BY created_at DESC LIMIT :limit"
     params["limit"] = limit
 
-    rows = db.execute(text(query), params).mappings().all()
-    items = [AuditLogEntry(**dict(r)) for r in rows]
+    try:
+        rows = db.execute(text(query), params).mappings().all()
+        items = [AuditLogEntry(**dict(r)) for r in rows]
+    except Exception:
+        db.rollback()
+        items = []
     return AuditLogListResponse(items=items, count=len(items))
 
 
@@ -52,19 +56,24 @@ def create_audit_log_entry(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> AuditLogEntry:
-    row = db.execute(
-        text("""
-            INSERT INTO Audit_Log (user_email, user_name, role, action, details)
-            VALUES (:user_email, :user_name, :role, :action, :details)
-            RETURNING *
-        """),
-        {
-            "user_email": current_user.email,
-            "user_name": current_user.full_name or None,
-            "role": current_user.role,
-            "action": payload.action,
-            "details": payload.details,
-        },
-    ).mappings().first()
-    db.commit()
-    return AuditLogEntry(**dict(row))
+    try:
+        row = db.execute(
+            text("""
+                INSERT INTO audit_log (user_email, user_name, role, action, details)
+                VALUES (:user_email, :user_name, :role, :action, :details)
+                RETURNING *
+            """),
+            {
+                "user_email": current_user.email,
+                "user_name": current_user.full_name or None,
+                "role": current_user.role,
+                "action": payload.action,
+                "details": payload.details,
+            },
+        ).mappings().first()
+        db.commit()
+        return AuditLogEntry(**dict(row))
+    except Exception:
+        db.rollback()
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail="Audit log table not available.")

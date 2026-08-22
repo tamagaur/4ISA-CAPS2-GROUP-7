@@ -28,30 +28,30 @@ _SELECT_ONE = """
         pd.principal,
         pd.pack_size,
         pd.brand,
-        pd.unit_price,
-        pd.lead_time_days,
-        pd.status,
-        pd.notes,
+        COALESCE(pd.unit_price, NULL) AS unit_price,
+        COALESCE(pd.lead_time_days, NULL) AS lead_time_days,
+        COALESCE(pd.status, 'ACTIVE') AS status,
+        COALESCE(pd.notes, NULL) AS notes,
         COALESCE(inv.current_stock, NULL) AS current_stock,
         rop.rop_i AS reorder_point,
         abc.tier AS tier
-    FROM Product_Dimension pd
+    FROM product_dimension pd
     LEFT JOIN (
         SELECT product_key, SUM(quantity_on_hand) AS current_stock
-        FROM Inventory_Fact_Real
-        WHERE _period = (SELECT MAX(_period) FROM Inventory_Fact_Real)
+        FROM inventory_fact_real
+        WHERE _period = (SELECT MAX(_period) FROM inventory_fact_real)
         GROUP BY product_key
     ) inv ON inv.product_key = pd.product_key
     LEFT JOIN (
         SELECT DISTINCT ON (product_key) product_key, rop_i
-        FROM LP_Recommendation
+        FROM lp_recommendation
         WHERE status = 'pending'
         ORDER BY product_key, planning_cycle_date DESC
     ) rop ON rop.product_key = pd.product_key
     LEFT JOIN (
         SELECT product_key, tier
-        FROM ABC_Classification
-        WHERE classification_period = (SELECT MAX(classification_period) FROM ABC_Classification)
+        FROM abc_classification
+        WHERE classification_period = (SELECT MAX(classification_period) FROM abc_classification)
     ) abc ON abc.product_key = pd.product_key
 """
 
@@ -62,15 +62,15 @@ def _to_item(r) -> SKUItem:
         sku_id=r["sku_id"] or "",
         product_name=r["product_name"],
         principal=r["principal"],
-        pack_size=r["pack_size"],
-        brand=r["brand"],
-        unit_price=float(r["unit_price"]) if r["unit_price"] is not None else None,
-        lead_time_days=r["lead_time_days"],
-        status=r["status"],
-        notes=r["notes"],
-        current_stock=float(r["current_stock"]) if r["current_stock"] is not None else None,
-        reorder_point=float(r["reorder_point"]) if r["reorder_point"] is not None else None,
-        tier=r["tier"],
+        pack_size=r.get("pack_size"),
+        brand=r.get("brand"),
+        unit_price=float(r["unit_price"]) if r.get("unit_price") is not None else None,
+        lead_time_days=r.get("lead_time_days"),
+        status=r.get("status") or "ACTIVE",
+        notes=r.get("notes"),
+        current_stock=float(r["current_stock"]) if r.get("current_stock") is not None else None,
+        reorder_point=float(r["reorder_point"]) if r.get("reorder_point") is not None else None,
+        tier=r.get("tier"),
     )
 
 
@@ -106,7 +106,7 @@ def create_sku(
         raise HTTPException(status_code=400, detail="principal must be 'unilever' or 'delmonte'")
 
     existing = db.execute(
-        text("SELECT 1 FROM Product_Dimension WHERE principal = :principal AND sku_code = :sku_code"),
+        text("SELECT 1 FROM product_dimension WHERE principal = :principal AND sku_code = :sku_code"),
         {"principal": payload.principal, "sku_code": payload.sku_code},
     ).first()
     if existing is not None:
@@ -114,10 +114,10 @@ def create_sku(
 
     row = db.execute(
         text("""
-            INSERT INTO Product_Dimension
-                (principal, grain, sku_code, product_name, pack_size, brand, unit_price, lead_time_days, notes)
+            INSERT INTO product_dimension
+                (principal, grain, sku_code, product_name, pack_size, brand)
             VALUES
-                (:principal, 'sku', :sku_code, :product_name, :pack_size, :brand, :unit_price, :lead_time_days, :notes)
+                (:principal, 'sku', :sku_code, :product_name, :pack_size, :brand)
             RETURNING product_key
         """),
         {
@@ -126,9 +126,6 @@ def create_sku(
             "product_name": payload.product_name,
             "pack_size": payload.pack_size,
             "brand": payload.brand,
-            "unit_price": payload.unit_price,
-            "lead_time_days": payload.lead_time_days,
-            "notes": payload.notes,
         },
     ).mappings().first()
     db.commit()
@@ -154,7 +151,7 @@ def update_sku(
     set_clause = ", ".join(f"{key} = :{key}" for key in fields)
     fields["key"] = product_key
     result = db.execute(
-        text(f"UPDATE Product_Dimension SET {set_clause} WHERE product_key = :key"), fields
+        text(f"UPDATE product_dimension SET {set_clause} WHERE product_key = :key"), fields
     )
     if result.rowcount == 0:
         db.rollback()

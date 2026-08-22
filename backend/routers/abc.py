@@ -42,7 +42,7 @@ def get_abc(
 ) -> ABCResponse:
     period = classification_period
     if period is None:
-        row = db.execute(text("SELECT MAX(classification_period) AS p FROM ABC_Classification")).mappings().first()
+        row = db.execute(text("SELECT MAX(classification_period) AS p FROM abc_classification")).mappings().first()
         period = row["p"] if row else None
         if period is None:
             return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[])
@@ -57,12 +57,12 @@ def get_abc(
             ac.cumulative_share,
             ac.boundary_flag,
             COALESCE(inv.current_stock, 0) AS current_stock
-        FROM ABC_Classification ac
-        JOIN Product_Dimension pd ON pd.product_key = ac.product_key
+        FROM abc_classification ac
+        JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN (
             SELECT product_key, SUM(quantity_on_hand) AS current_stock
-            FROM Inventory_Fact_Real
-            WHERE _period = (SELECT MAX(_period) FROM Inventory_Fact_Real)
+            FROM inventory_fact_real
+            WHERE _period = (SELECT MAX(_period) FROM inventory_fact_real)
             GROUP BY product_key
         ) inv ON inv.product_key = ac.product_key
         WHERE ac.classification_period = :period

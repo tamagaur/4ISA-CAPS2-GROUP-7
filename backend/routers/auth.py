@@ -27,7 +27,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
     row = db.execute(
-        text("SELECT user_id, password_hash, role, full_name FROM Users WHERE email = :email"),
+        text("SELECT user_id, password_hash, role, full_name FROM users WHERE email = :email"),
         {"email": body.email},
     ).mappings().first()
 
@@ -61,7 +61,7 @@ def register(
         )
 
     existing = db.execute(
-        text("SELECT 1 FROM Users WHERE email = :email"), {"email": body.email}
+        text("SELECT 1 FROM users WHERE email = :email"), {"email": body.email}
     ).first()
     if existing is not None:
         raise HTTPException(
@@ -72,7 +72,7 @@ def register(
     password_hash = hash_password(body.password)
     row = db.execute(
         text(
-            "INSERT INTO Users (email, password_hash, full_name, role) "
+            "INSERT INTO users (email, password_hash, full_name, role) "
             "VALUES (:email, :password_hash, :full_name, :role) "
             "RETURNING user_id, role, full_name"
         ),

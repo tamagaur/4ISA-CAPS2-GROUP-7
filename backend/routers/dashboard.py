@@ -34,7 +34,7 @@ def get_dashboard(
         SELECT 
             COALESCE(SUM(net_amount), 0) as total_value,
             COUNT(*) as incident_count
-        FROM SalesReturn_Fact_Real
+        FROM salesreturn_fact_real
         WHERE return_type = 'BO' {principal_filter} {period_filter}
     """)
     bo_row = db.execute(bo_query, params).mappings().first()
@@ -48,8 +48,8 @@ def get_dashboard(
             COUNT(*) as total_items,
             SUM(q_i) as total_qty,
             COUNT(CASE WHEN (q_i - rop_i) > 0 THEN 1 END) as critical_items
-        FROM LP_Recommendation lr
-        JOIN Product_Dimension pd ON lr.product_key = pd.product_key
+        FROM lp_recommendation lr
+        JOIN product_dimension pd ON lr.product_key = pd.product_key
         WHERE status = 'pending'
         {principal_filter.replace("principal", "pd.principal")}
     """)
@@ -62,7 +62,7 @@ def get_dashboard(
     # Group by _period and return_type='BO'
     bo_trend_query = text(f"""
         SELECT _period as period, COALESCE(SUM(net_amount), 0) as val
-        FROM SalesReturn_Fact_Real
+        FROM salesreturn_fact_real
         WHERE return_type = 'BO' {principal_filter} {period_filter}
         GROUP BY _period
         ORDER BY _period
@@ -78,7 +78,7 @@ def get_dashboard(
     # 4. ABC Classification
     abc_query = text(f"""
         SELECT tier, COUNT(*) as sku_count, SUM(revenue_share) as revenue_share
-        FROM ABC_Classification ac
+        FROM abc_classification ac
         WHERE 1=1 {principal_filter}
         GROUP BY tier
         ORDER BY tier
@@ -94,8 +94,8 @@ def get_dashboard(
         SELECT 
             pd.sku_code, pd.category_path, pd.product_name, 
             lr.q_i, lr.rop_i
-        FROM LP_Recommendation lr
-        JOIN Product_Dimension pd ON lr.product_key = pd.product_key
+        FROM lp_recommendation lr
+        JOIN product_dimension pd ON lr.product_key = pd.product_key
         WHERE status = 'pending'
         {principal_filter.replace("principal", "pd.principal")}
         LIMIT 5
@@ -115,7 +115,7 @@ def get_dashboard(
     # 6. Bad Orders List
     bo_list_query = text(f"""
         SELECT return_slip_num as incident_id, 'Unknown Product' as product_name, net_amount
-        FROM SalesReturn_Fact_Real
+        FROM salesreturn_fact_real
         WHERE return_type = 'BO' {principal_filter} {period_filter}
         LIMIT 5
     """)

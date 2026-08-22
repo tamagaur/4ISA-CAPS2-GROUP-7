@@ -36,7 +36,7 @@ def get_forecast(
     product_row = db.execute(
         text(f"""
             SELECT product_key, product_name
-            FROM Product_Dimension
+            FROM product_dimension
             WHERE principal = :principal AND {id_column} = :sku_id
         """),
         {"principal": principal, "sku_id": sku_id},
@@ -49,7 +49,7 @@ def get_forecast(
     forecast_rows = db.execute(
         text("""
             SELECT forecast_date, forecast_value, confidence_lower, confidence_upper, mape, model_params
-            FROM Forecast_Result
+            FROM forecast_result
             WHERE product_key = :product_key
             ORDER BY forecast_date
         """),
@@ -72,7 +72,7 @@ def get_forecast(
         actual_rows = db.execute(
             text("""
                 SELECT calendar_month, quantity_sold
-                FROM Unilever_SKU_Demand_Fact
+                FROM unilever_sku_demand_fact_real
                 WHERE product_key = :product_key
                 ORDER BY calendar_month DESC
                 LIMIT 12
