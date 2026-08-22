@@ -82,7 +82,6 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
 
     if (!form.brand.trim()) newErrors.brand = 'Brand is required';
     if (!form.productName.trim()) newErrors.productName = 'Product Name is required';
-    if (!form.unitPrice || parseFloat(form.unitPrice) <= 0) newErrors.unitPrice = 'Valid unit price is required';
     return newErrors;
   };
 

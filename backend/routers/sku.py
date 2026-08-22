@@ -28,10 +28,10 @@ _SELECT_ONE = """
         pd.principal,
         pd.pack_size,
         pd.brand,
-        COALESCE(pd.unit_price, NULL) AS unit_price,
-        COALESCE(pd.lead_time_days, NULL) AS lead_time_days,
-        COALESCE(pd.status, 'ACTIVE') AS status,
-        COALESCE(pd.notes, NULL) AS notes,
+        NULL::numeric AS unit_price,
+        NULL::int AS lead_time_days,
+        'ACTIVE' AS status,
+        NULL::text AS notes,
         COALESCE(inv.current_stock, NULL) AS current_stock,
         rop.rop_i AS reorder_point,
         abc.tier AS tier
@@ -144,9 +144,19 @@ def update_sku(
     if payload.status is not None and payload.status not in ("ACTIVE", "DISABLED"):
         raise HTTPException(status_code=400, detail="status must be 'ACTIVE' or 'DISABLED'")
 
-    fields = payload.model_dump(exclude_unset=True)
+    # Only update columns that actually exist in the current schema.
+    # status/unit_price/lead_time_days/notes are not yet in product_dimension.
+    _UPDATABLE_COLUMNS = {"product_name", "pack_size", "brand"}
+    fields = {
+        k: v for k, v in payload.model_dump(exclude_unset=True).items()
+        if k in _UPDATABLE_COLUMNS and v is not None
+    }
     if not fields:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        # Nothing to update in DB — just return current state
+        row = db.execute(text(_SELECT_ONE + " WHERE pd.product_key = :key"), {"key": product_key}).mappings().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="SKU not found")
+        return _to_item(row)
 
     set_clause = ", ".join(f"{key} = :{key}" for key in fields)
     fields["key"] = product_key
