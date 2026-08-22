@@ -1,0 +1,188 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 02.2025/2024 FEBRUARY PURCHASES.xlsx",
+  "sheet": "ILOCOS PURCHASE",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 3,
+    "Salesman": 1,
+    "Town Display": 1,
+    "Branch Code": 1,
+    "Customer Name": 1,
+    "Invoice Num": 8,
+    "REFNBR": 8,
+    "Untaxed Amount": 8,
+    "Discount Rate": 1,
+    "Discount Amount": 1,
+    "Tax": 8,
+    "Net Amount": 8,
+    "Balance": 8,
+    "Posted": 1,
+    "Return Slip #": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2024-02-19",
+      "2024-02-20",
+      "2024-02-24"
+    ],
+    "Salesman": [
+      "ILOCOS SITE"
+    ],
+    "Town Display": [
+      "False"
+    ],
+    "Branch Code": [
+      "000013"
+    ],
+    "Customer Name": [
+      "DMPI"
+    ],
+    "Invoice Num": [
+      "BILL/2024/0016",
+      "BILL/2024/0012",
+      "BILL/2024/0017",
+      "BILL/2024/0018",
+      "BILL/2024/0013"
+    ],
+    "REFNBR": [
+      "PO00840",
+      "PO00836",
+      "PO00834",
+      "PO00845",
+      "PO00842"
+    ],
+    "Untaxed Amount": [
+      "1240.2",
+      "1358.79",
+      "724524.88",
+      "2760.48",
+      "293567.41"
+    ],
+    "Discount Rate": [
+      "Public Pricelist"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax": [
+      "27482.03",
+      "86942.99",
+      "35228.09",
+      "163.05",
+      "97835.79"
+    ],
+    "Net Amount": [
+      "1389.02",
+      "256498.93",
+      "1521.84",
+      "328795.5",
+      "3091.74"
+    ],
+    "Balance": [
+      "1389.02",
+      "256498.93",
+      "1521.84",
+      "328795.5",
+      "3091.74"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 8,
+  "header_signature": "086575e3a93a",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'PO00845' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00842' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00841' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00840' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00837' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00836' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00835' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO00834' matches prefix 'PO' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

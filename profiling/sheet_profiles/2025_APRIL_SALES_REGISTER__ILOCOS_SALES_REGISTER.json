@@ -1,0 +1,226 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 04.2025/2025 APRIL SALES REGISTER.xlsx",
+  "sheet": "ILOCOS SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Dscount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Dscount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Dscount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 19,
+    "Salesman": 3,
+    "Town Display": 30,
+    "Branch Code": 243,
+    "Customer Name": 243,
+    "Invoice Num": 362,
+    "REFNBR": 362,
+    "Untaxed Amount": 312,
+    "Discount Rate": 4,
+    "Dscount Amount": 47,
+    "Tax": 309,
+    "Net Amount": 312,
+    "Balance": 218,
+    "Posted": 2
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-04-11",
+      "2025-04-22",
+      "2025-04-29",
+      "2025-04-28",
+      "2025-04-10"
+    ],
+    "Salesman": [
+      "ADMIN SALES",
+      "BARBI LABRADOR",
+      "CARLON DAHILIG"
+    ],
+    "Town Display": [
+      "LAOAG CITY (Capital)",
+      "CABUGAO",
+      "BADOC",
+      "SAN ESTEBAN",
+      "SANTIAGO"
+    ],
+    "Branch Code": [
+      "L12E-001214",
+      "L12E-000789",
+      "L12E-001105",
+      "L12E-001156",
+      "L12E-001032"
+    ],
+    "Customer Name": [
+      "AQUARIAN GASOLINE STATION",
+      "*NYAH CARYLLE CATERING",
+      "ROADSTAR CVS ",
+      "TABILAS CVS (SAN ESTEBAN)",
+      "*EDNA STORE & REFRESHMENT"
+    ],
+    "Invoice Num": [
+      "INV/2025/1529",
+      "INV/2025/1547",
+      "INV/2025/1257",
+      "INV/2025/1643",
+      "INV/2025/1313"
+    ],
+    "REFNBR": [
+      "DMIS0064316",
+      "DMIS0064230",
+      "DMIS0064327",
+      "DMIS0064379",
+      "DMIS0064143"
+    ],
+    "Untaxed Amount": [
+      "4429.72",
+      "6418.72",
+      "153.77",
+      "138878.6",
+      "13720.19"
+    ],
+    "Discount Rate": [
+      "LESS 3%",
+      "LESS 2%",
+      "Public Pricelist",
+      "LESS 4%"
+    ],
+    "Dscount Amount": [
+      "37.47",
+      "9.78",
+      "565.75",
+      "1057.59",
+      "104.22"
+    ],
+    "Tax": [
+      "2426.33",
+      "87.3",
+      "283.69",
+      "342.63",
+      "855.35"
+    ],
+    "Net Amount": [
+      "15143.92",
+      "1091.04",
+      "3210.68",
+      "5760.93",
+      "3057.84"
+    ],
+    "Balance": [
+      "1840.12",
+      "1842.81",
+      "148.77",
+      "1715.92",
+      "15143.92"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 362,
+  "header_signature": "76cab885107e",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount rate",
+    "dscount amount",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'ODM0028805' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'DMIS0064406' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064405' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064404' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'FG0064422' matches prefix 'FG' -> delmonte",
+    "REFNBR 'DMIS0064423' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064422' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064421' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064420' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064419' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064416' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064418' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064417' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064415' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064414' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064413' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064412' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064411' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064410' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064408' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064409' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064407' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064403' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064402' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064401' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064400' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064399' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064398' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064397' matches prefix 'DMIS' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

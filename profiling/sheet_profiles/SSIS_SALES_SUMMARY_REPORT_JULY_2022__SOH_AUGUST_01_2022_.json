@@ -1,0 +1,191 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT JULY 2022.xlsx",
+  "sheet": "SOH(AUGUST 01, 2022)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "MOVING AVERAGE PRICE(CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route",
+    "Batch",
+    "Hierarchy Node"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "MOVING AVERAGE PRICE(CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty",
+    "Batch": "text",
+    "Hierarchy Node": "text"
+  },
+  "null_pct": {
+    "Storage Location": 0.12,
+    "Article No": 0.12,
+    "Article Description": 0.12,
+    "PACK SIZE": 0.12,
+    "Stock Quantity (CS/PC)": 0.12,
+    "Stock Value": 0.0,
+    "PO Qty": 77.9,
+    "Open SO Quantity": 79.81,
+    "Balance Quantity": 0.12,
+    "MOVING AVERAGE PRICE(CS)": 0.12,
+    "Status": 0.12,
+    "CATEGORY DESC": 0.12,
+    "Sales Route": 100.0,
+    "Batch": 0.12,
+    "Hierarchy Node": 0.12
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 836,
+    "Article Description": 836,
+    "PACK SIZE": 22,
+    "Stock Quantity (CS/PC)": 520,
+    "Stock Value": 833,
+    "PO Qty": 33,
+    "Open SO Quantity": 70,
+    "Balance Quantity": 538,
+    "MOVING AVERAGE PRICE(CS)": 748,
+    "Status": 1,
+    "CATEGORY DESC": 13,
+    "Sales Route": 0,
+    "Batch": 1,
+    "Hierarchy Node": 13
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "67834806",
+      "67958848",
+      "67794809",
+      "68177397",
+      "68797929"
+    ],
+    "Article Description": [
+      "KNORR CBS CHCKN+GTW TWNPCK 48(12+1)10G",
+      "SURF HS STD PWDR BLOSSOMFRESH 6X2200G",
+      "PONDS TONE UP MILK POWDER 6X6X40G",
+      "CREAMSILK TKR STRAIGHT PRCE OFF 24X170ML",
+      "SURF LIQ DET CHERRY BLOSSOM POU 12X900ML"
+    ],
+    "PACK SIZE": [
+      "24",
+      "288",
+      "144",
+      "50",
+      "12"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "11/192",
+      "60/115",
+      "5/1",
+      "54/12",
+      "60/1"
+    ],
+    "Stock Value": [
+      "2080.27",
+      "3088.58",
+      "474.79",
+      "2285.49",
+      "2454.19"
+    ],
+    "PO Qty": [
+      "17/0",
+      "10/0",
+      "15/0",
+      "5/0",
+      "35/0"
+    ],
+    "Open SO Quantity": [
+      "6/216",
+      "4/84",
+      "0/6",
+      "0/17",
+      "2/24"
+    ],
+    "Balance Quantity": [
+      "40/71",
+      "159/12",
+      "14/43",
+      "161/19",
+      "5/1"
+    ],
+    "MOVING AVERAGE PRICE(CS)": [
+      "3088.58",
+      "2050.86",
+      "1498.53",
+      "1690.32",
+      "1687.5"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "SKIN CARE",
+      "DEODORANTS & FRAGRANCES",
+      "HOME & HYGIENE",
+      "SCRATCH COOKING AIDS",
+      "HAIR CARE"
+    ],
+    "Sales Route": [],
+    "Batch": [
+      "VALUATED"
+    ],
+    "Hierarchy Node": [
+      "7H17",
+      "4418",
+      "3152",
+      "4435",
+      "6A40"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 837,
+  "header_signature": "e8939eea483b",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "category desc",
+    "hierarchy node",
+    "moving average price(cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

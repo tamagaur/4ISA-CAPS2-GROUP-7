@@ -1,0 +1,217 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 08.2023/DELMONTE_INVENTORY SIGN OFF_PANGASINAN & ILOCOS _AUGUST 2023.xlsx",
+  "sheet": "ILOCOS-ACTUAL ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.306,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "__col1__",
+    "__col2__",
+    "in PCS",
+    "in Cases",
+    "__col5__",
+    "__col6__",
+    "__col7__",
+    "__col8__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "in PCS",
+    "in Cases"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "__col1__": "text",
+    "__col2__": "text",
+    "in PCS": "numeric",
+    "in Cases": "numeric",
+    "__col5__": "empty",
+    "__col6__": "text",
+    "__col7__": "numeric",
+    "__col8__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 7.74,
+    "__col1__": 7.74,
+    "__col2__": 7.74,
+    "in PCS": 0.0,
+    "in Cases": 0.0,
+    "__col5__": 100.0,
+    "__col6__": 0.0,
+    "__col7__": 0.65,
+    "__col8__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.65
+  },
+  "distinct_count": {
+    "__col0__": 143,
+    "__col1__": 143,
+    "__col2__": 15,
+    "in PCS": 122,
+    "in Cases": 122,
+    "__col5__": 0,
+    "__col6__": 155,
+    "__col7__": 142,
+    "__col8__": 155,
+    "Quantity": 122,
+    "Cost": 153,
+    "Valuation": 153,
+    "Valuation with VAT": 153,
+    "CAS": 44,
+    "PCS": 34,
+    "PKG": 14
+  },
+  "samples": {
+    "__col0__": [
+      "12990",
+      "56971",
+      "1347",
+      "57892",
+      "58385"
+    ],
+    "__col1__": [
+      "     DKK34618 KIKKOMAN TERIYAKI MAR and SAUCE 12/1L",
+      "     9DMT03854 TODAY'S FRUIT COCKTAIL 3033g in ELS",
+      "     9DMR55689 DM TOMATO PASTE 150G SUP - ROYCE DESIGN",
+      "     9DMR57539 DM TOMATO SCE FIL STYLE 90G SACHET ROYCE",
+      "     9TOS55826 TODAYS FRUIT COCKTAIL 836g in ELS"
+    ],
+    "__col2__": [
+      "6",
+      "16",
+      "PKG",
+      "250",
+      "200"
+    ],
+    "in PCS": [
+      "332",
+      "224",
+      "268",
+      "44",
+      "103"
+    ],
+    "in Cases": [
+      "3.7222222222222223",
+      "3",
+      "14.75",
+      "20.6875",
+      "4"
+    ],
+    "__col5__": [],
+    "__col6__": [
+      "9DMS03748",
+      "9DMR01615",
+      "DKY58450",
+      "9DMS00364",
+      "9FSE56102"
+    ],
+    "__col7__": [
+      "12990",
+      "56971",
+      "1347",
+      "57892",
+      "58385"
+    ],
+    "__col8__": [
+      "     DKK34618 KIKKOMAN TERIYAKI MAR and SAUCE 12/1L",
+      "     9DMT03854 TODAY'S FRUIT COCKTAIL 3033g in ELS",
+      "     9DMR55689 DM TOMATO PASTE 150G SUP - ROYCE DESIGN",
+      "     9DMR57539 DM TOMATO SCE FIL STYLE 90G SACHET ROYCE",
+      "     9TOS55826 TODAYS FRUIT COCKTAIL 836g in ELS"
+    ],
+    "Quantity": [
+      "155.833333333333",
+      "36.7",
+      "3",
+      "139.041666666667",
+      "14.75"
+    ],
+    "Cost": [
+      "3438.44",
+      "3681.93666666667",
+      "681.7",
+      "835.211666666667",
+      "3696.63666666667"
+    ],
+    "Valuation": [
+      "3438.44",
+      "3681.93666666667",
+      "681.7",
+      "835.211666666667",
+      "3696.63666666667"
+    ],
+    "Valuation with VAT": [
+      "85390.1734",
+      "10349.7044",
+      "4573.1252",
+      "16806.1264",
+      "245.399466666667"
+    ],
+    "CAS": [
+      "3",
+      "290",
+      "155",
+      "70",
+      "22"
+    ],
+    "PCS": [
+      "3",
+      "22",
+      "44",
+      "4",
+      "12"
+    ],
+    "PKG": [
+      "6",
+      "16",
+      "250",
+      "200",
+      "4"
+    ]
+  },
+  "grain": "inventory",
+  "usable_row_count": 155,
+  "header_signature": "4e99975f475b",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "in cases",
+    "in cases",
+    "in pcs",
+    "in pcs",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

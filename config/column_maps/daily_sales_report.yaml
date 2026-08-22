@@ -1,0 +1,84 @@
+# config/column_maps/daily_sales_report.yaml
+#
+# Del Monte daily sales reports — a DIFFERENT _doc_type from sales_register
+# (Extract's refine_doc_type splits filenames matching "DAILY SALES REPORT"
+# / "DAILY REPORT" out of sales_register specifically so Transform can tell
+# them apart; see ARCHITECTURE.md DEC-07). Per DEC-04 these are demoted to
+# a cross-check of the monthly Sales Register — this map exists so
+# Transform can tag/report on them without crashing (load_column_map()
+# would otherwise raise FileNotFoundError), NOT so they get promoted to
+# load. See config/source_of_truth.yaml's sales.delmonte.cross_check_doc_types.
+#
+# Verified directly against staging/_manifest.json (real Extract output,
+# not re-derived from raw files) — this doc_type actually contains TWO
+# distinct sheet shapes in the same workbook, confirmed by inspecting real
+# staged rows:
+#
+#   (1) Per-day transactional sheets (_sheet_role="data", one sheet per
+#       calendar day, e.g. sheet name "07.08.2025") — 87/92 staged sheets.
+#       Columns: Invoice Date, Salesman, Customer Name, Town Display,
+#       REFNBR, Untaxed Amount, Discount Amount, Tax, Net Amount.
+#       NOTE: this is a LEANER column set than sales_register.yaml's vocab
+#       A — no Balance, Branch Code, Discount Rate, Return Slip #, Return
+#       Type, or Posted columns exist in this family. Do not assume they're
+#       present; they simply aren't in these files.
+#
+#   (2) One rollup sheet per workbook (_sheet_role="schedule", literal
+#       sheet name "SCHEDULE") — 5/92 staged sheets. Columns: DATE,
+#       CUSTOMERS, NET OF VAT, VAT, AMOUNT W/VAT. Real sample row (Copy of
+#       DAILY SALES REPORT 07.31.2025.xlsx, DATE=07.08.2025):
+#       CUSTOMERS=58, NET OF VAT=62085.18, VAT=7450.19, AMOUNT W/VAT=69535.37
+#       — CUSTOMERS is an INTEGER COUNT for that day, confirmed from real
+#       values, NOT a customer name or ID. Do not map it as one.
+#
+# Matching is case-insensitive and whitespace-normalized (see transform.py).
+# Canonical names reuse sales_register.yaml's where the underlying concept
+# is the same (so any daily-vs-monthly QC diff lines up on shared fields);
+# the SCHEDULE rollup gets its own schedule_-prefixed names since it's a
+# different grain entirely (daily aggregate, not an invoice line).
+
+# --- Per-day transactional sheets ---
+
+invoice_date:
+  - "Invoice Date"
+
+salesman:
+  - "Salesman"
+
+customer_name:
+  - "Customer Name"
+
+region:
+  - "Town Display"
+
+invoice_num:
+  - "REFNBR"
+
+untaxed_amount:
+  - "Untaxed Amount"
+
+discount_amount:
+  - "Discount Amount"
+
+tax_amount:
+  - "Tax"
+
+net_amount:
+  - "Net Amount"
+
+# --- SCHEDULE rollup sheet (one per workbook, _sheet_role="schedule") ---
+
+schedule_date:
+  - "DATE"
+
+schedule_customer_count:
+  - "CUSTOMERS"   # confirmed integer count from real sample values, not a name/ID
+
+schedule_net_of_vat:
+  - "NET OF VAT"
+
+schedule_vat:
+  - "VAT"
+
+schedule_amount_with_vat:
+  - "AMOUNT W/VAT"

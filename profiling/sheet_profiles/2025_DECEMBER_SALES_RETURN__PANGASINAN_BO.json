@@ -1,0 +1,251 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 12.2025/2025 DECEMBER SALES RETURN.xlsx",
+  "sheet": "PANGASINAN BO",
+  "real_format": "xlsx",
+  "header_row_index": 4,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      3
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Total CAS",
+    "Total PCS",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Total CAS": "numeric",
+    "Total PCS": "numeric",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Total CAS": 0.0,
+    "Total PCS": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 7.69,
+    "Return Type": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 7,
+    "Salesman": 6,
+    "Town Display": 11,
+    "Branch Code": 13,
+    "Customer Name": 13,
+    "Invoice Num": 13,
+    "REFNBR": 13,
+    "Total CAS": 2,
+    "Total PCS": 11,
+    "Untaxed Amount": 13,
+    "Discount Rate": 3,
+    "Discount Amount": 7,
+    "Tax": 13,
+    "Net Amount": 13,
+    "Balance": 4,
+    "Posted": 2,
+    "Return Slip #": 12,
+    "Return Type": 1
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-12-27",
+      "2025-12-13",
+      "2025-12-18",
+      "2025-12-06",
+      "2025-12-23"
+    ],
+    "Salesman": [
+      "GEORGE CHAN",
+      "ADMIN SALES",
+      "JOEL WACANGAN",
+      "VOLTAIRE FINOGUAR",
+      "GERRY LACANARIA"
+    ],
+    "Town Display": [
+      "ALCALA",
+      "CITY OF URDANETA",
+      "BAGUIO CITY",
+      "DAGUPAN CITY",
+      "CITY OF SAN FERNANDO (Capital)"
+    ],
+    "Branch Code": [
+      "L12F-002521",
+      "L12F-001971",
+      "L12F-001896",
+      "L12F-002449",
+      "L12F-001902"
+    ],
+    "Customer Name": [
+      "HIGHLAND BAKERY QMART CONVENIENCE STORE",
+      "MUNICIPALITY OF SAN NICOLAS PANGASINAN",
+      "LUMPC -PUGO*",
+      "SEVEN G ",
+      "BIKOY'S STORE & CANTEEN"
+    ],
+    "Invoice Num": [
+      "INV/2025/9005",
+      "INV/2025/8780",
+      "INV/2025/9007",
+      "INV/2025/8523",
+      "INV/2025/8862"
+    ],
+    "REFNBR": [
+      "RMR24043",
+      "DMP025364*",
+      "RMR46874",
+      "RMR47070",
+      "RMR47066"
+    ],
+    "Total CAS": [
+      "0",
+      "1"
+    ],
+    "Total PCS": [
+      "12",
+      "33",
+      "2",
+      "5",
+      "1"
+    ],
+    "Untaxed Amount": [
+      "1202.16",
+      "191.66",
+      "64.5",
+      "232.05",
+      "380.48"
+    ],
+    "Discount Rate": [
+      "LESS 4%",
+      "Public Pricelist",
+      "Less 2%"
+    ],
+    "Discount Amount": [
+      "24.53",
+      "96.01",
+      "7.99",
+      "0",
+      "15.52"
+    ],
+    "Tax": [
+      "7.74",
+      "91.23",
+      "45.66",
+      "27.85",
+      "77.1"
+    ],
+    "Net Amount": [
+      "426.14",
+      "72.24",
+      "511.9",
+      "214.66",
+      "1102.88"
+    ],
+    "Balance": [
+      "0",
+      "137.86",
+      "719.62",
+      "72.24"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": [
+      "RMR22850",
+      "RMR46874",
+      "RMR47070",
+      "RMR47453",
+      "RMR47066"
+    ],
+    "Return Type": [
+      "BO"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 13,
+  "header_signature": "e74d7688a7c1",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "total cas",
+    "total pcs",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "header contains 'return slip #'",
+    "REFNBR 'RMR24043' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR47070' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'TDM002194' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'RMR24027' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'DMP025845' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP025364*' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'RMR46874' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR47066' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR24023' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR18711' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR21094' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'DMP025347-2' matches prefix 'DMP' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

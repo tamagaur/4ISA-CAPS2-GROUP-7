@@ -1,0 +1,137 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte/MONTHLY SALES REGISTER 06.30.2025.xlsx",
+  "sheet": "06.12.2025",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Customers",
+    "Area",
+    "Reference #",
+    "Net Value",
+    "Discount Amount",
+    "Tax amount",
+    "Amount"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Customers": "text",
+    "Area": "text",
+    "Reference #": "text",
+    "Net Value": "numeric",
+    "Discount Amount": "numeric",
+    "Tax amount": "text",
+    "Amount": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 6.61,
+    "Salesman": 9.09,
+    "Customers": 8.26,
+    "Area": 6.61,
+    "Reference #": 9.09,
+    "Net Value": 8.26,
+    "Discount Amount": 28.1,
+    "Tax amount": 5.79,
+    "Amount": 8.26
+  },
+  "distinct_count": {
+    "Invoice Date": 4,
+    "Salesman": 6,
+    "Customers": 111,
+    "Area": 13,
+    "Reference #": 110,
+    "Net Value": 101,
+    "Discount Amount": 1,
+    "Tax amount": 104,
+    "Amount": 101
+  },
+  "samples": {
+    "Invoice Date": [
+      "ENCODER",
+      "TOTAL",
+      "2025-06-12",
+      "ASHLY M. APOLONIO"
+    ],
+    "Salesman": [
+      "TTS-EAST",
+      "SSS1",
+      "SSS3",
+      "TTS-CENTRAL",
+      "TTS-WEST"
+    ],
+    "Customers": [
+      "LUCKY 5",
+      "EUNICE(ASINGAN)",
+      "JOMAR STORE",
+      "APPILOS SARI SARI STORE",
+      "RAMOS(MANGATAREM)"
+    ],
+    "Area": [
+      "RECEIVABLE",
+      "BAUKO",
+      "ROSARIO",
+      "MANGATAREM",
+      "         JERWIN B. ORDONIO"
+    ],
+    "Reference #": [
+      "SSGT4406",
+      "SSGT4489",
+      "SSGT4533",
+      "SSGT4400",
+      "SSGT4451"
+    ],
+    "Net Value": [
+      "113.27",
+      "1791.56",
+      "1130.54",
+      "1354.58",
+      "6982.95"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax amount": [
+      "214.99",
+      "35.82",
+      "477.86",
+      "212.84",
+      "ABRAHAM TABIAN"
+    ],
+    "Amount": [
+      "1041.61",
+      "768.82",
+      "499.04",
+      "4012.27",
+      "790.59"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 114,
+  "header_signature": "885ac878ed5c",
+  "header_tokens": [
+    "amount",
+    "area",
+    "customers",
+    "discount amount",
+    "invoice date",
+    "net value",
+    "reference #",
+    "salesman",
+    "tax amount"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

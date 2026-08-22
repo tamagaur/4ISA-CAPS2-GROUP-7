@@ -1,0 +1,74 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT AUGUST 2024.xlsx",
+  "sheet": "INVENTORY",
+  "real_format": "xlsx",
+  "header_row_index": 5,
+  "header_confidence": 0.48,
+  "junk_ranges": [
+    [
+      0,
+      4
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Schedules of Ending Invty AUGUST 2024",
+    "INVTY",
+    "INVTY",
+    "AT COST"
+  ],
+  "dtypes": {
+    "__col0__": "empty",
+    "Schedules of Ending Invty AUGUST 2024": "text",
+    "INVTY": "text",
+    "AT COST": "text"
+  },
+  "null_pct": {
+    "__col0__": 100.0,
+    "Schedules of Ending Invty AUGUST 2024": 20.0,
+    "INVTY": 20.0,
+    "AT COST": 20.0
+  },
+  "distinct_count": {
+    "__col0__": 0,
+    "Schedules of Ending Invty AUGUST 2024": 4,
+    "INVTY": 4,
+    "AT COST": 4
+  },
+  "samples": {
+    "__col0__": [],
+    "Schedules of Ending Invty AUGUST 2024": [
+      "Whse Inventory  - Retail",
+      "Extruck Invty - ",
+      "BO Invty - AUGUST.2024",
+      "TOTAL:"
+    ],
+    "INVTY": [
+      "WITHOUT VAT",
+      "16141878.120000001",
+      "255429.88",
+      "15886448.24"
+    ],
+    "AT COST": [
+      "WITHOUT VAT",
+      "14815015.738536002",
+      "14580582.194672002",
+      "234433.543864"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 5,
+  "header_signature": "835280bc9b2b",
+  "header_tokens": [
+    "at cost",
+    "invty",
+    "invty",
+    "schedules of ending invty august 2024"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

@@ -1,0 +1,235 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 06.2025/2025 JUNE PURCHASES.xlsx",
+  "sheet": "PANGASINAN PURCHASE",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Returns",
+    "Net Amount ( Actual Invoice)"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty",
+    "Returns": "text",
+    "Net Amount ( Actual Invoice)": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0,
+    "Returns": 88.57,
+    "Net Amount ( Actual Invoice)": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 7,
+    "Salesman": 1,
+    "Town Display": 1,
+    "Branch Code": 1,
+    "Customer Name": 1,
+    "Invoice Num": 35,
+    "REFNBR": 35,
+    "Untaxed Amount": 34,
+    "Discount Rate": 1,
+    "Discount Amount": 1,
+    "Tax": 34,
+    "Net Amount": 34,
+    "Balance": 34,
+    "Posted": 1,
+    "Return Slip #": 0,
+    "Returns": 4,
+    "Net Amount ( Actual Invoice)": 34
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-06-28",
+      "2025-06-02",
+      "2025-06-10",
+      "2025-06-21",
+      "2025-06-16"
+    ],
+    "Salesman": [
+      "PANGASINAN SITE"
+    ],
+    "Town Display": [
+      "False"
+    ],
+    "Branch Code": [
+      "000096"
+    ],
+    "Customer Name": [
+      "DMPI"
+    ],
+    "Invoice Num": [
+      "BILL/2025/0149",
+      "BILL/2025/0160",
+      "BILL/2025/0174",
+      "BILL/2025/0172",
+      "BILL/2025/0170"
+    ],
+    "REFNBR": [
+      "PO02557",
+      "PO02536",
+      "PO02539",
+      "PO02556",
+      "PO02540"
+    ],
+    "Untaxed Amount": [
+      "286213.6",
+      "321430",
+      "31628.5",
+      "145521.52",
+      "119731.8"
+    ],
+    "Discount Rate": [
+      "Public Pricelist"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax": [
+      "29388.3",
+      "21296.48",
+      "94904.39",
+      "59165.28",
+      "2170.32"
+    ],
+    "Net Amount": [
+      "4977.62",
+      "320559.23",
+      "198767.18",
+      "885774.33",
+      "2127.6"
+    ],
+    "Balance": [
+      "4977.62",
+      "320559.23",
+      "198767.18",
+      "885774.33",
+      "2127.6"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": [],
+    "Returns": [
+      "DRF#620183",
+      "DRF#630524",
+      "DRF#630518",
+      "DRF#620823"
+    ],
+    "Net Amount ( Actual Invoice)": [
+      "1162.67",
+      "130969.371",
+      "2110.64",
+      "3999.87",
+      "7692.12"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 35,
+  "header_signature": "135de81f272f",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "net amount ( actual invoice)",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "returns",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'return slip #'",
+    "header contains 'refnbr'",
+    "REFNBR 'PO02575' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02574' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02573' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02572' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02569' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02568' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02567' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02565' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02564' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02563' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02562' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02561' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02560' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02559' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02558' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02557' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02556' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02555' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02554' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02553' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02552' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02549' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02548' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02545' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02544' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02543' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02542' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02541' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02540' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO02539' matches prefix 'PO' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

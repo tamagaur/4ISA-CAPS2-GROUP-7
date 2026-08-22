@@ -1,0 +1,180 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT JULY 2025.xlsx",
+  "sheet": "SOH(AUGUST 01, 2025)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "Last Purchase Price(GSV/CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Blocked Stock(CS/PC)",
+    "Batch"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "Last Purchase Price(GSV/CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Batch": "text"
+  },
+  "null_pct": {
+    "Storage Location": 0.15,
+    "Article No": 0.15,
+    "Article Description": 0.15,
+    "PACK SIZE": 0.15,
+    "Stock Quantity (CS/PC)": 0.15,
+    "Stock Value": 0.0,
+    "PO Qty": 43.07,
+    "Open SO Quantity": 84.2,
+    "Balance Quantity": 0.15,
+    "Last Purchase Price(GSV/CS)": 0.15,
+    "Status": 0.15,
+    "CATEGORY DESC": 0.15,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Batch": 0.15
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 670,
+    "Article Description": 670,
+    "PACK SIZE": 23,
+    "Stock Quantity (CS/PC)": 439,
+    "Stock Value": 666,
+    "PO Qty": 109,
+    "Open SO Quantity": 43,
+    "Balance Quantity": 489,
+    "Last Purchase Price(GSV/CS)": 341,
+    "Status": 1,
+    "CATEGORY DESC": 12,
+    "Blocked Stock(CS/PC)": 0,
+    "Batch": 1
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "67033815",
+      "67578192",
+      "64996518",
+      "20292813",
+      "64383421"
+    ],
+    "Article Description": [
+      "LADY'S CHOICE SS PLAIN DOY 12X470ML",
+      "VASELINE HB GLU SER BUR UV LOT 8X3X70ML",
+      "LADY'S CHOICE SS HAM JAR 24X220ML",
+      "BREEZE POWDER ANTIBACTERIAL B 144X60G",
+      "SURF BAR SUN FRESH SXFL 96X120G"
+    ],
+    "PACK SIZE": [
+      "108",
+      "6",
+      "120",
+      "57",
+      "16"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "143/6",
+      "65/3",
+      "46/4",
+      "18/22",
+      "93/33"
+    ],
+    "Stock Value": [
+      "20878.1",
+      "9930.29",
+      "1051.38",
+      "27025.24",
+      "61.07"
+    ],
+    "PO Qty": [
+      "31/0",
+      "16/0",
+      "103/0",
+      "108/0",
+      "17/0"
+    ],
+    "Open SO Quantity": [
+      "0/405",
+      "0/20",
+      "0/60",
+      "0/84",
+      "3/2"
+    ],
+    "Balance Quantity": [
+      "89/2",
+      "11/54",
+      "8/8",
+      "18/22",
+      "76/8"
+    ],
+    "Last Purchase Price(GSV/CS)": [
+      "1831.61",
+      "990",
+      "1928.58",
+      "814.55",
+      "1594.38"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "CONDIMENTS",
+      "FABRIC ENHANCERS",
+      "HAIR CARE",
+      "OTHER FOODS",
+      "DEODORANTS & FRAGRANCES"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Batch": [
+      "VALUATED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 671,
+  "header_signature": "749a9f1e57d4",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "last purchase price(gsv/cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

@@ -1,0 +1,216 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 04.2025/2025 APRIL PURCHASES.xlsx",
+  "sheet": "ILOCOS PURCHASE",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Returns",
+    "Net Amount ( Actual Invoice)"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty",
+    "Returns": "text",
+    "Net Amount ( Actual Invoice)": "numeric"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0,
+    "Returns": 92.86,
+    "Net Amount ( Actual Invoice)": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 5,
+    "Salesman": 1,
+    "Town Display": 1,
+    "Branch Code": 1,
+    "Customer Name": 1,
+    "Invoice Num": 14,
+    "REFNBR": 14,
+    "Untaxed Amount": 14,
+    "Discount Rate": 1,
+    "Discount Amount": 1,
+    "Tax": 14,
+    "Net Amount": 14,
+    "Balance": 14,
+    "Posted": 1,
+    "Return Slip #": 0,
+    "Returns": 1,
+    "Net Amount ( Actual Invoice)": 14
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-04-29",
+      "2025-04-14",
+      "2025-04-16",
+      "2025-04-12",
+      "2025-04-25"
+    ],
+    "Salesman": [
+      "ILOCOS SITE"
+    ],
+    "Town Display": [
+      "False"
+    ],
+    "Branch Code": [
+      "000013"
+    ],
+    "Customer Name": [
+      "DMPI"
+    ],
+    "Invoice Num": [
+      "BILL/2025/0057",
+      "BILL/2025/0046",
+      "BILL/2025/0055",
+      "BILL/2025/0053",
+      "BILL/2025/0051"
+    ],
+    "REFNBR": [
+      "PO01276",
+      "PO01280",
+      "PO01287",
+      "PO01283",
+      "PO01278"
+    ],
+    "Untaxed Amount": [
+      "309181.5",
+      "460033.1",
+      "39445.6",
+      "15205.8",
+      "13564.53"
+    ],
+    "Discount Rate": [
+      "Public Pricelist"
+    ],
+    "Discount Amount": [
+      "0"
+    ],
+    "Tax": [
+      "116.33",
+      "11381.16",
+      "37017.96",
+      "55203.97",
+      "4733.47"
+    ],
+    "Net Amount": [
+      "346283.28",
+      "441976.42",
+      "17711.96",
+      "515237.07",
+      "29857.13"
+    ],
+    "Balance": [
+      "346283.28",
+      "441976.42",
+      "17711.96",
+      "515237.07",
+      "29857.13"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": [],
+    "Returns": [
+      "DRF#623246"
+    ],
+    "Net Amount ( Actual Invoice)": [
+      "53341.2",
+      "689455.64",
+      "12208.08",
+      "35501.04",
+      "85358.7"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 14,
+  "header_signature": "135de81f272f",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "net amount ( actual invoice)",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "returns",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "header contains 'return slip #'",
+    "REFNBR 'PO01289' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01288' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01287' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01285' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01284' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01283' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01282' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01281' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01280' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01279' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01278' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01277' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01276' matches prefix 'PO' -> delmonte",
+    "REFNBR 'PO01275' matches prefix 'PO' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

@@ -1,0 +1,176 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS DAILY SALES SUMMARY REPORT (OCTOBER 1-30, 2021).xlsx",
+  "sheet": "SALES PER CUSTOMER ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.12,
+    "REASON CODE": 0.12,
+    "OUTLET": 0.12,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.04,
+    "Sale After TPR & UW": 0.04,
+    "NIV": 0.04,
+    "VAT": 0.04,
+    "Total Sales Amt Inc. Tax": 0.04,
+    "REMARKS": 0.12
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 22,
+    "REASON CODE": 8,
+    "OUTLET": 2011,
+    "OUTLET NAME": 1911,
+    "GSV": 3491,
+    "TPR + UW/DT Discount": 573,
+    "Sale After TPR & UW": 3510,
+    "NIV": 3510,
+    "VAT": 3328,
+    "Total Sales Amt Inc. Tax": 3510,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2021-10-14 00:00:00",
+      "2021-10-11 00:00:00",
+      "2021-10-18 00:00:00",
+      "2021-10-21 00:00:00",
+      "2021-10-29 00:00:00"
+    ],
+    "REASON CODE": [
+      "Stock not available",
+      "Good - Full Return",
+      "Stock Recall",
+      "Order cancelled by customer",
+      "Overlanded/Shortlanded"
+    ],
+    "OUTLET": [
+      "664579",
+      "3151602",
+      "3514872",
+      "3832213",
+      "3838346"
+    ],
+    "OUTLET NAME": [
+      "MELARDO STORE",
+      "TRINING - STO. DOMINGO",
+      "DESIREE GULAYAN",
+      "ELIZA GULAYAN",
+      "MILWAY STORE"
+    ],
+    "GSV": [
+      "4577.16",
+      "151.88",
+      "342.87",
+      "450.01",
+      "5476.08"
+    ],
+    "TPR + UW/DT Discount": [
+      "-53.34",
+      "-181",
+      "-779.03",
+      "-1092.19",
+      "-1853.74"
+    ],
+    "Sale After TPR & UW": [
+      "4577.16",
+      "151.88",
+      "342.87",
+      "450.01",
+      "19321.56"
+    ],
+    "NIV": [
+      "4577.16",
+      "151.88",
+      "342.87",
+      "450.01",
+      "19321.56"
+    ],
+    "VAT": [
+      "363.81",
+      "54.45",
+      "538.56",
+      "64.49",
+      "42.94"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "1364.23",
+      "559.32",
+      "962.39",
+      "-305.1",
+      "257341.35"
+    ],
+    "REMARKS": [
+      "INVOICE",
+      "RETURNS"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 5001,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'tpr'",
+    "header contains 'gsv'",
+    "header contains 'niv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

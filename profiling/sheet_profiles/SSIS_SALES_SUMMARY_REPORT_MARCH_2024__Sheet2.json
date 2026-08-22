@@ -1,0 +1,50 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT MARCH 2024.xlsx",
+  "sheet": "Sheet2",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Packaging Defect (Torn/Deformed/Broken)",
+    "RETURN"
+  ],
+  "dtypes": {
+    "Packaging Defect (Torn/Deformed/Broken)": "text",
+    "RETURN": "text"
+  },
+  "null_pct": {
+    "Packaging Defect (Torn/Deformed/Broken)": 0.0,
+    "RETURN": 0.0
+  },
+  "distinct_count": {
+    "Packaging Defect (Torn/Deformed/Broken)": 12,
+    "RETURN": 2
+  },
+  "samples": {
+    "Packaging Defect (Torn/Deformed/Broken)": [
+      "Overlanded/Shortlanded",
+      "Damaged Products",
+      "Product Off specs (color/odor/consistenc",
+      "GOOD - Slow moving",
+      "BAD - Damaged stocks"
+    ],
+    "RETURN": [
+      "INVOICE",
+      "RETURN"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 12,
+  "header_signature": "f34b1e3b4aa0",
+  "header_tokens": [
+    "packaging defect (torn/deformed/broken)",
+    "return"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

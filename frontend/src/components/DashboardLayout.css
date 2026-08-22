@@ -13,3 +13,92 @@
   overflow-y: auto;
   overflow-x: hidden;
 }
+
+/* Navigation Interception Confirmation Dialog */
+.period-nav-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.period-nav-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  animation: slideUp 0.2s ease-out;
+}
+
+.period-nav-header {
+  padding: 1.25rem 1.5rem 0.5rem 1.5rem;
+}
+
+.period-nav-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+}
+
+.period-nav-body {
+  padding: 0.5rem 1.5rem 1.25rem 1.5rem;
+}
+
+.period-nav-body p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+.period-nav-footer {
+  display: flex;
+  gap: 0.8rem;
+  padding: 1rem 1.5rem 1.25rem 1.5rem;
+  background-color: #f8fafc;
+  border-top: 1px solid #edf2f7;
+}
+
+.period-discard-btn {
+  flex: 1;
+  padding: 0.6rem;
+  border: 1px solid #cbd5e0;
+  background-color: #ffffff;
+  color: #4a5568;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.period-discard-btn:hover {
+  background-color: #edf2f7;
+}
+
+.period-save-btn {
+  flex: 1;
+  padding: 0.6rem;
+  border: none;
+  background-color: #c53030;
+  color: #ffffff;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.period-save-btn:hover {
+  background-color: #9b2c2c;
+}

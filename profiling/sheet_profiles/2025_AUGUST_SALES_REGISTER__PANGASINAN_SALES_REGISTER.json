@@ -1,0 +1,242 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 08.2025/2025 AUGUST SALES REGISTER.xlsx",
+  "sheet": "PANGASINAN SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty",
+    "Return Type": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0,
+    "Return Type": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 22,
+    "Salesman": 6,
+    "Town Display": 52,
+    "Branch Code": 391,
+    "Customer Name": 391,
+    "Invoice Num": 600,
+    "REFNBR": 599,
+    "Untaxed Amount": 511,
+    "Discount Rate": 5,
+    "Discount Amount": 158,
+    "Tax": 506,
+    "Net Amount": 511,
+    "Balance": 401,
+    "Posted": 2,
+    "Return Slip #": 0,
+    "Return Type": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-08-29",
+      "2025-08-13",
+      "2025-08-20",
+      "2025-08-14",
+      "2025-08-05"
+    ],
+    "Salesman": [
+      "ADMIN SALES",
+      "CORFEL PARAS",
+      "DSP7-LATRINIDAD",
+      "EDUARDO AGAS",
+      "VOLTAIRE FINOGUAR"
+    ],
+    "Town Display": [
+      "BACNOTAN",
+      "ROSALES",
+      "ARINGAY",
+      "LABRADOR",
+      "LUNA"
+    ],
+    "Branch Code": [
+      "L12F-001850",
+      "L12F-B000566",
+      "L12F-002594",
+      "L12F-002710",
+      "L12F-002768"
+    ],
+    "Customer Name": [
+      "RAY-ANN  CONVENIENCE STORE",
+      "JSN CONVENIENCE STORE ",
+      "IZ BARINOS (URDANETA ) SHELL GAS STATION",
+      "BLACK & BROWN FOOD & REFRESHMENT HUB",
+      "JUMONG'S BURGER*"
+    ],
+    "Invoice Num": [
+      "INV/2025/6124",
+      "INV/2025/6127",
+      "INV/2025/5529",
+      "INV/2025/5866",
+      "INV/2025/6037"
+    ],
+    "REFNBR": [
+      "DMP024036-2",
+      "DMP024036-3",
+      "DMP023859",
+      "DMP023887",
+      "DMP023792-2"
+    ],
+    "Untaxed Amount": [
+      "8448.42",
+      "9180.69",
+      "13384.34",
+      "6202.26",
+      "746.95"
+    ],
+    "Discount Rate": [
+      "LESS 3%",
+      "Less 2%",
+      "LESS 4%",
+      "Less 3% (PHP) ",
+      "Public Pricelist"
+    ],
+    "Discount Amount": [
+      "16.53",
+      "7.47",
+      "418.01",
+      "3918.44",
+      "2571.43"
+    ],
+    "Tax": [
+      "761.57",
+      "2099.65",
+      "185.09",
+      "1417.38",
+      "153.27"
+    ],
+    "Net Amount": [
+      "9541.32",
+      "14647.13",
+      "7083.34",
+      "6940.46",
+      "1702.05"
+    ],
+    "Balance": [
+      "9541.32",
+      "14647.13",
+      "1702.05",
+      "21940.97",
+      "2749.22"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": [],
+    "Return Type": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 600,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'",
+    "header contains 'return slip #'",
+    "REFNBR 'DMP024067' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024065' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024066' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024062' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024061' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023962-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024060' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024063' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024064' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024059' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024058' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023770-3' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024057' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023928-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024056' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023903-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024055' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024053' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024052' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024051' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024050' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024035-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024049' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023906-1' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024054' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023394-3' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'SDM145562-2' matches prefix 'SDM' -> delmonte",
+    "REFNBR 'DMP023714-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'TDM002099' matches prefix 'TDM' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

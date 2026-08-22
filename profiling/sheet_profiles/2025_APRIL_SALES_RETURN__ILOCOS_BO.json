@@ -1,0 +1,214 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 04.2025/2025 APRIL SALES RETURN.xlsx",
+  "sheet": "ILOCOS BO",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "text",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 14.29,
+    "Salesman": 28.57,
+    "Town Display": 28.57,
+    "Branch Code": 28.57,
+    "Customer Name": 28.57,
+    "Invoice Num": 28.57,
+    "REFNBR": 28.57,
+    "Untaxed Amount": 28.57,
+    "Discount Rate": 28.57,
+    "Discount Amount": 28.57,
+    "Tax": 28.57,
+    "Net Amount": 28.57,
+    "Balance": 28.57,
+    "Posted": 28.57,
+    "Return Slip #": 28.57,
+    "Return Type": 28.57
+  },
+  "distinct_count": {
+    "Invoice Date": 3,
+    "Salesman": 3,
+    "Town Display": 3,
+    "Branch Code": 5,
+    "Customer Name": 5,
+    "Invoice Num": 5,
+    "REFNBR": 5,
+    "Untaxed Amount": 5,
+    "Discount Rate": 2,
+    "Discount Amount": 3,
+    "Tax": 5,
+    "Net Amount": 5,
+    "Balance": 5,
+    "Posted": 1,
+    "Return Slip #": 5,
+    "Return Type": 1
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-04-14",
+      "Bad Stock",
+      "2025-04-25"
+    ],
+    "Salesman": [
+      "CARLON DAHILIG",
+      "ADMIN SALES",
+      "BARBI LABRADOR"
+    ],
+    "Town Display": [
+      "SAN VICENTE",
+      "LAOAG CITY (Capital)",
+      "CITY OF CANDON"
+    ],
+    "Branch Code": [
+      "L12E-001042",
+      "L12E-001135",
+      "L12E-000626",
+      "000053",
+      "L12E-000624"
+    ],
+    "Customer Name": [
+      "CHARLIES PHARMACY & CONVENIENCE STORE",
+      "CZYRAH'S PIZZA",
+      "HALOVER CVS",
+      "BUNSO CONSUMER GOODS WHOLESALING ",
+      "A.C. CHINESE RESTAURANT"
+    ],
+    "Invoice Num": [
+      "INV/2025/1564",
+      "INV/2025/1563",
+      "INV/2025/1477",
+      "INV/2025/1565",
+      "INV/2025/1562"
+    ],
+    "REFNBR": [
+      "ODM002801-2",
+      "DMIS0064103",
+      "DMIS64318",
+      "DMIS0060760",
+      "DMIS0063730"
+    ],
+    "Untaxed Amount": [
+      "146.61",
+      "105.45",
+      "948.35",
+      "428.57",
+      "87.96"
+    ],
+    "Discount Rate": [
+      "Public Pricelist",
+      "LESS 4%"
+    ],
+    "Discount Amount": [
+      "39.51",
+      "17.86",
+      "0"
+    ],
+    "Tax": [
+      "51.43",
+      "10.56",
+      "113.8",
+      "17.59",
+      "12.65"
+    ],
+    "Net Amount": [
+      "98.52",
+      "164.2",
+      "1062.15",
+      "118.1",
+      "480"
+    ],
+    "Balance": [
+      "98.52",
+      "164.2",
+      "1062.15",
+      "118.1",
+      "480"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": [
+      "RMR 38834",
+      "RMR 39209",
+      "RMR39202",
+      "39206",
+      "39208"
+    ],
+    "Return Type": [
+      "BO"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 6,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'",
+    "header contains 'return slip #'",
+    "REFNBR 'DMIS64318' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0064103' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060760' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0063730' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'ODM002801-2' matches prefix 'ODM' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

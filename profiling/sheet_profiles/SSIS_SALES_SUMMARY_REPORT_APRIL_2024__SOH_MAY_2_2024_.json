@@ -1,0 +1,205 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT APRIL 2024.xlsx",
+  "sheet": "SOH(MAY 2, 2024)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "Last Purchase Price(GSV/CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route",
+    "Batch",
+    "Hierarchy Node",
+    "Blocked Stock(CS/PC)",
+    "Sales Route Description"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "Last Purchase Price(GSV/CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty",
+    "Batch": "text",
+    "Hierarchy Node": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Sales Route Description": "empty"
+  },
+  "null_pct": {
+    "Storage Location": 0.15,
+    "Article No": 0.15,
+    "Article Description": 0.15,
+    "PACK SIZE": 0.15,
+    "Stock Quantity (CS/PC)": 0.15,
+    "Stock Value": 0.0,
+    "PO Qty": 67.28,
+    "Open SO Quantity": 60.96,
+    "Balance Quantity": 0.15,
+    "Last Purchase Price(GSV/CS)": 0.15,
+    "Status": 0.15,
+    "CATEGORY DESC": 0.15,
+    "Sales Route": 100.0,
+    "Batch": 0.15,
+    "Hierarchy Node": 0.15,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Sales Route Description": 100.0
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 647,
+    "Article Description": 647,
+    "PACK SIZE": 23,
+    "Stock Quantity (CS/PC)": 359,
+    "Stock Value": 635,
+    "PO Qty": 59,
+    "Open SO Quantity": 115,
+    "Balance Quantity": 403,
+    "Last Purchase Price(GSV/CS)": 317,
+    "Status": 2,
+    "CATEGORY DESC": 12,
+    "Sales Route": 0,
+    "Batch": 1,
+    "Hierarchy Node": 12,
+    "Blocked Stock(CS/PC)": 0,
+    "Sales Route Description": 0
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "68705320",
+      "67031784",
+      "68191055",
+      "69771585",
+      "65004338"
+    ],
+    "Article Description": [
+      "REXONA MEN RO NAT FRSH CHRCL 72H 24X45ML",
+      "AXE DEO AP RLN DARKTEMP 24X25ML",
+      "BREEZE ROSE GOLD POWMAC LIQUID 12X980ML",
+      "SURF POWDER CHERRY BLOSSOM L 288X65G",
+      "CLOSE UP RED HOT BEYONCE PROMO 48X2X120G"
+    ],
+    "PACK SIZE": [
+      "2",
+      "72",
+      "18",
+      "36",
+      "576"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "2/3",
+      "0/11",
+      "88/111",
+      "7/16",
+      "0/117"
+    ],
+    "Stock Value": [
+      "14230.34",
+      "12374.99",
+      "3085.89",
+      "3044.67",
+      "2965.18"
+    ],
+    "PO Qty": [
+      "714/0",
+      "216/0",
+      "350/0",
+      "15/0",
+      "11/0"
+    ],
+    "Open SO Quantity": [
+      "3/120",
+      "2/3",
+      "18/20",
+      "2/0",
+      "38/9"
+    ],
+    "Balance Quantity": [
+      "2/3",
+      "11/4",
+      "0/11",
+      "54/299",
+      "9/1"
+    ],
+    "Last Purchase Price(GSV/CS)": [
+      "4885.71",
+      "2081.79",
+      "3101.25",
+      "3481.07",
+      "2529.64"
+    ],
+    "Status": [
+      "Active",
+      "Inactive"
+    ],
+    "CATEGORY DESC": [
+      "DRESSINGS",
+      "HOME & HYGIENE",
+      "DEODORANTS & FRAGRANCES",
+      "HAIR CARE",
+      "ORAL CARE"
+    ],
+    "Sales Route": [],
+    "Batch": [
+      "VALUATED"
+    ],
+    "Hierarchy Node": [
+      "6A42",
+      "3102",
+      "7H34",
+      "6A40",
+      "4419"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Sales Route Description": []
+  },
+  "grain": "summary",
+  "usable_row_count": 648,
+  "header_signature": "ada2faee5d3a",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "hierarchy node",
+    "last purchase price(gsv/cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "sales route description",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

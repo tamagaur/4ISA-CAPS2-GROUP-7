@@ -1,0 +1,182 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT JANUARY 2023.xlsx",
+  "sheet": "RAW DATA",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "text",
+    "__col1__": "text",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 86.28,
+    "__col1__": 86.28,
+    "CALENDAR DAY": 0.0,
+    "REASON CODE": 0.0,
+    "OUTLET": 0.0,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.0,
+    "Sale After TPR & UW": 0.0,
+    "NIV": 0.0,
+    "VAT": 0.0,
+    "Total Sales Amt Inc. Tax": 0.0,
+    "REMARKS": 0.0
+  },
+  "distinct_count": {
+    "Salesman": 2,
+    "__col1__": 2,
+    "CALENDAR DAY": 24,
+    "REASON CODE": 12,
+    "OUTLET": 2198,
+    "OUTLET NAME": 2080,
+    "GSV": 3019,
+    "TPR + UW/DT Discount": 693,
+    "Sale After TPR & UW": 3075,
+    "NIV": 3075,
+    "VAT": 2943,
+    "Total Sales Amt Inc. Tax": 3075,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [
+      "29809",
+      "29808"
+    ],
+    "__col1__": [
+      "ADONIS PIAMONTE",
+      "MARIA ELENA CASTILLO"
+    ],
+    "CALENDAR DAY": [
+      "2023-01-20 00:00:00",
+      "2023-01-24 00:00:00",
+      "2023-01-30 00:00:00",
+      "2023-01-19 00:00:00",
+      "2023-01-28 00:00:00"
+    ],
+    "REASON CODE": [
+      "GOOD - Slow moving",
+      "Stock Recall",
+      "Damaged Products",
+      "Order cancelled by customer",
+      "Expired stock/Near expiry"
+    ],
+    "OUTLET": [
+      "2052052",
+      "3832136",
+      "3754511",
+      "665248",
+      "664580"
+    ],
+    "OUTLET NAME": [
+      "KIAN STORE",
+      "EDITH GULAYAN",
+      "BLESS STORE",
+      "ER RABARA",
+      "EEJ STORE"
+    ],
+    "GSV": [
+      "333.61",
+      "21367.66",
+      "3137.62",
+      "193.16",
+      "154.1"
+    ],
+    "TPR + UW/DT Discount": [
+      "-2518.27",
+      "-42",
+      "-1304.18",
+      "-164.02",
+      "13.93"
+    ],
+    "Sale After TPR & UW": [
+      "16704.38",
+      "333.61",
+      "21367.66",
+      "-693.03",
+      "193.16"
+    ],
+    "NIV": [
+      "16704.38",
+      "333.61",
+      "21367.66",
+      "-693.03",
+      "193.16"
+    ],
+    "VAT": [
+      "7.31",
+      "112.61",
+      "430.36",
+      "23.2",
+      "1497.22"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "7506.83",
+      "50563.06",
+      "1659.75",
+      "-296.99",
+      "5972.64"
+    ],
+    "REMARKS": [
+      "INVOICE",
+      "RETURN"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 4307,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'gsv'",
+    "header contains 'tpr'",
+    "header contains 'niv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

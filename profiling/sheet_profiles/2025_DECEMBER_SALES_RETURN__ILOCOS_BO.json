@@ -1,0 +1,244 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 12.2025/2025 DECEMBER SALES RETURN.xlsx",
+  "sheet": "ILOCOS BO",
+  "real_format": "xlsx",
+  "header_row_index": 4,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      3
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Total CAS",
+    "Total PCS",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Total CAS": "numeric",
+    "Total PCS": "numeric",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Total CAS": 0.0,
+    "Total PCS": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 0.0,
+    "Return Type": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 6,
+    "Salesman": 2,
+    "Town Display": 9,
+    "Branch Code": 11,
+    "Customer Name": 11,
+    "Invoice Num": 11,
+    "REFNBR": 11,
+    "Total CAS": 2,
+    "Total PCS": 4,
+    "Untaxed Amount": 11,
+    "Discount Rate": 2,
+    "Discount Amount": 3,
+    "Tax": 11,
+    "Net Amount": 11,
+    "Balance": 9,
+    "Posted": 2,
+    "Return Slip #": 11,
+    "Return Type": 1
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-12-19",
+      "2025-12-12",
+      "2025-12-11",
+      "2025-12-06",
+      "2025-12-16"
+    ],
+    "Salesman": [
+      "BARBI LABRADOR",
+      "CARLON DAHILIG"
+    ],
+    "Town Display": [
+      "SAN JUAN (LAPOG)",
+      "CITY OF VIGAN (Capital)",
+      "SANTA",
+      "SANTA CATALINA",
+      "SANTA CRUZ"
+    ],
+    "Branch Code": [
+      "L12E-001099",
+      "L12E-001248",
+      "L12E-001062",
+      "L12E-001238",
+      "L12E-000657"
+    ],
+    "Customer Name": [
+      "NEW RUD'S",
+      "TRIPLE C CVS ",
+      "A.K FORMOSO CONSUMER GODS TRADING",
+      "SAN JOAQUIN MPC",
+      "CEEKAY "
+    ],
+    "Invoice Num": [
+      "INV/2025/4852",
+      "INV/2025/4953",
+      "INV/2025/4778",
+      "INV/2025/4952",
+      "INV/2025/4771"
+    ],
+    "REFNBR": [
+      "DMIS0066641",
+      "DMIS0065111",
+      "DMIS0066935",
+      "DMIS0066812",
+      "DMIS0066745"
+    ],
+    "Total CAS": [
+      "0",
+      "1"
+    ],
+    "Total PCS": [
+      "0",
+      "2",
+      "6",
+      "1"
+    ],
+    "Untaxed Amount": [
+      "46.25",
+      "160.72",
+      "80.57",
+      "95.94",
+      "164.11"
+    ],
+    "Discount Rate": [
+      "LESS 2%",
+      "Public Pricelist"
+    ],
+    "Discount Amount": [
+      "0",
+      "0.94",
+      "1.08"
+    ],
+    "Tax": [
+      "28.39",
+      "1.97",
+      "19.38",
+      "38.41",
+      "19.29"
+    ],
+    "Net Amount": [
+      "264.99",
+      "90.24",
+      "358.51",
+      "107.45",
+      "180.86"
+    ],
+    "Balance": [
+      "358.51",
+      "49.09",
+      "107.45",
+      "180.86",
+      "51.8"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": [
+      "RMR23020",
+      "RMR39361",
+      "RMR23025",
+      "RMR23051",
+      "RMR39373"
+    ],
+    "Return Type": [
+      "BO"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 11,
+  "header_signature": "e74d7688a7c1",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "total cas",
+    "total pcs",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "header contains 'return slip #'",
+    "REFNBR 'DMIS0065111' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066438' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066957' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066935' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066890' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066888' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066812' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066745' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066780' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066641' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0066147' matches prefix 'DMIS' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

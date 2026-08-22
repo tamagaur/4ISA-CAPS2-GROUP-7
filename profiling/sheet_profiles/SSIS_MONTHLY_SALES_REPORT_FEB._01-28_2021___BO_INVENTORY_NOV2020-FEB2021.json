@@ -1,0 +1,133 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS MONTHLY SALES REPORT (FEB. 01-28, 2021).xlsx",
+  "sheet": "BO INVENTORY (NOV2020-FEB2021",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Sales Man Code",
+    "Salesman Name",
+    "Product Code",
+    "Product Description",
+    "Return Qty",
+    "Return Value",
+    "Item category",
+    "Storage Location",
+    "Stock Type",
+    "Unit of Measurement"
+  ],
+  "dtypes": {
+    "Sales Man Code": "text",
+    "Salesman Name": "text",
+    "Product Code": "text",
+    "Product Description": "text",
+    "Return Qty": "numeric",
+    "Return Value": "numeric",
+    "Item category": "text",
+    "Storage Location": "text",
+    "Stock Type": "text",
+    "Unit of Measurement": "text"
+  },
+  "null_pct": {
+    "Sales Man Code": 0.1,
+    "Salesman Name": 0.1,
+    "Product Code": 0.1,
+    "Product Description": 0.1,
+    "Return Qty": 0.1,
+    "Return Value": 0.0,
+    "Item category": 0.1,
+    "Storage Location": 0.1,
+    "Stock Type": 0.05,
+    "Unit of Measurement": 0.1
+  },
+  "distinct_count": {
+    "Sales Man Code": 14,
+    "Salesman Name": 14,
+    "Product Code": 610,
+    "Product Description": 610,
+    "Return Qty": 244,
+    "Return Value": 1569,
+    "Item category": 1,
+    "Storage Location": 1,
+    "Stock Type": 1,
+    "Unit of Measurement": 1
+  },
+  "samples": {
+    "Sales Man Code": [
+      "14364",
+      "21607",
+      "21614",
+      "23534",
+      "11825"
+    ],
+    "Salesman Name": [
+      "KRISTIAN P  DEL PINADO",
+      "RODERICK CHRISTIAN BARNACHEA",
+      "WARREN AFROILAN",
+      "FLORENCIO A  TACULOG JR",
+      "MARK  GALLARDO"
+    ],
+    "Product Code": [
+      "67948987",
+      "67727065",
+      "67481269",
+      "65004594",
+      "67131808"
+    ],
+    "Product Description": [
+      "LADY'S CHOICE SNDWCH SPRD DOY 24X220ML",
+      "CLEAR SH COMPLETE SOFT CARE 288X13ML",
+      "ESKINOL CLSR OILCONTROL LEM 72X225ML",
+      "LADY'S CHOICE SNDWCH SPRD 72X80ML",
+      "PEPSODENT PLUS WHITENING PH 48X190G"
+    ],
+    "Return Qty": [
+      "371",
+      "2462",
+      "112",
+      "40",
+      "207"
+    ],
+    "Return Value": [
+      "2403.29",
+      "41.64",
+      "85.95",
+      "13.93",
+      "37.95"
+    ],
+    "Item category": [
+      "ZREN"
+    ],
+    "Storage Location": [
+      "DAMG"
+    ],
+    "Stock Type": [
+      "BAD RETURN"
+    ],
+    "Unit of Measurement": [
+      "PC"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 1914,
+  "header_signature": "11870e1c4d71",
+  "header_tokens": [
+    "item category",
+    "product code",
+    "product description",
+    "return qty",
+    "return value",
+    "sales man code",
+    "salesman name",
+    "stock type",
+    "storage location",
+    "unit of measurement"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

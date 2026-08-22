@@ -1,0 +1,237 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 08.2023/DELMONTE_INVENTORY SIGN OFF_PANGASINAN & ILOCOS _AUGUST 2023.xlsx",
+  "sheet": "PANGASINAN-ACTUAL",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.306,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "__col1__",
+    "__col2__",
+    "In Pcs",
+    "In Cases",
+    "__col5__",
+    "__col6__",
+    "__col7__",
+    "__col8__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "in PCS",
+    "in Cases"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "__col1__": "text",
+    "__col2__": "text",
+    "In Pcs": "numeric",
+    "In Cases": "numeric",
+    "__col5__": "empty",
+    "__col6__": "text",
+    "__col7__": "numeric",
+    "__col8__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric",
+    "in PCS": "numeric",
+    "in Cases": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 9.83,
+    "__col1__": 9.83,
+    "__col2__": 9.83,
+    "In Pcs": 9.83,
+    "In Cases": 9.83,
+    "__col5__": 100.0,
+    "__col6__": 0.0,
+    "__col7__": 0.58,
+    "__col8__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.58,
+    "in PCS": 0.0,
+    "in Cases": 0.58
+  },
+  "distinct_count": {
+    "__col0__": 156,
+    "__col1__": 156,
+    "__col2__": 18,
+    "In Pcs": 130,
+    "In Cases": 138,
+    "__col5__": 0,
+    "__col6__": 173,
+    "__col7__": 155,
+    "__col8__": 173,
+    "Quantity": 152,
+    "Cost": 173,
+    "Valuation": 173,
+    "Valuation with VAT": 173,
+    "CAS": 69,
+    "PCS": 41,
+    "PKG": 17,
+    "in PCS": 141,
+    "in Cases": 141
+  },
+  "samples": {
+    "__col0__": [
+      "55528",
+      "56971",
+      "1347",
+      "57892",
+      "58385"
+    ],
+    "__col1__": [
+      "DM PINE ORANGE 24-202 100% STEVIA",
+      "DM 100% PINE JUICE 24-202 W/ VIT ACE",
+      "DM PINE TIDBITS ELS 24-2 1/2",
+      "DM QUICK N EASY KARE KARE MIX SACHET 36 x 50g",
+      "TODAYS FRUIT COCKTAIL 432G IN ELS"
+    ],
+    "__col2__": [
+      "6",
+      "16",
+      "PKG",
+      "250",
+      "200"
+    ],
+    "In Pcs": [
+      "481",
+      "332",
+      "792",
+      "3",
+      "290"
+    ],
+    "In Cases": [
+      "5.958333333333333",
+      "290.5",
+      "3",
+      "34.916666666666664",
+      "17.5"
+    ],
+    "__col5__": [],
+    "__col6__": [
+      "DKY58450",
+      "9DMR01615",
+      "9DMS00364",
+      "9FSE56102",
+      "DMU58316"
+    ],
+    "__col7__": [
+      "55528",
+      "56971",
+      "1347",
+      "57892",
+      "58385"
+    ],
+    "__col8__": [
+      "     9DMT03854 TODAY'S FRUIT COCKTAIL 3033g in ELS",
+      "     9DMR55689 DM TOMATO PASTE 150G SUP - ROYCE DESIGN",
+      "     9DMR57539 DM TOMATO SCE FIL STYLE 90G SACHET ROYCE",
+      "     9TOS55826 TODAYS FRUIT COCKTAIL 836g in ELS",
+      "     IQS58448 DMV-IQS Strawberry 48/180ml"
+    ],
+    "Quantity": [
+      "3",
+      "3.33333333333333",
+      "10.2083333333333",
+      "8.04166666666667",
+      "-0.5"
+    ],
+    "Cost": [
+      "78401.25",
+      "6653.37083333333",
+      "797721.685",
+      "7938.88",
+      "628.39"
+    ],
+    "Valuation": [
+      "78401.25",
+      "6653.37083333333",
+      "797721.685",
+      "7938.88",
+      "628.39"
+    ],
+    "Valuation with VAT": [
+      "12514.446",
+      "11223.5088",
+      "12193.3728",
+      "4314.016",
+      "641.842133333333"
+    ],
+    "CAS": [
+      "121",
+      "349",
+      "3",
+      "43",
+      "4"
+    ],
+    "PCS": [
+      "-4",
+      "31",
+      "3",
+      "1387",
+      "22"
+    ],
+    "PKG": [
+      "6",
+      "16",
+      "250",
+      "200",
+      "4"
+    ],
+    "in PCS": [
+      "4159",
+      "332",
+      "3",
+      "290",
+      "4188"
+    ],
+    "in Cases": [
+      "5.958333333333333",
+      "3",
+      "163.58333333333334",
+      "17.5",
+      "15.645833333333334"
+    ]
+  },
+  "grain": "inventory",
+  "usable_row_count": 173,
+  "header_signature": "4e99975f475b",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "in cases",
+    "in cases",
+    "in pcs",
+    "in pcs",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

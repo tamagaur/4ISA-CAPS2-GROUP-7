@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Upload, FileText, CheckCircle } from 'lucide-react';
+import { logAction } from '../utils/auditLogger';
 import './DataUpload.css';
 
 const DataUpload = () => {
@@ -25,6 +26,7 @@ const DataUpload = () => {
             if (item.id === uploadId) {
               if (progress >= 100) {
                 clearInterval(interval);
+                logAction('Data Upload', `Uploaded file: ${file.name}`);
                 return { ...item, progress: 100, status: 'Completed' };
               }
               progress += 10;
@@ -87,7 +89,7 @@ const DataUpload = () => {
       <div className="du-content">
         {/* Page Header */}
         <div className="du-page-header">
-          <h2 className="du-page-title">Data in</h2>
+          <h2 className="du-page-title">Data Management</h2>
           <p className="du-page-subtitle">
             Upload sales, inventory, and bad order files to feed the SSM engine. Supported formats: Excel (.xlsx, .xls) and CSV (.csv). Clean, consistent data improves forecast accuracy and optimization results.
           </p>

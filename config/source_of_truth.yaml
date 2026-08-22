@@ -1,0 +1,191 @@
+# config/source_of_truth.yaml
+#
+# Encodes ARCHITECTURE.md DEC-04 (§5.2): one system-of-record sheet_role
+# per (fact, principal); everything else is a cross-check, never loaded.
+# Transform filters staged tables against this map before dedup/grain work.
+#
+# doc_type here refers to the *refined* _doc_type tag Extract attaches
+# (see ARCHITECTURE.md §6.5), not the file-selection family. Per DEC-07,
+# these must be Extract's actual staged _doc_type values, verified
+# directly against staging/_manifest.json — not a hand-picked label. The
+# canonical 8: sales_register, daily_sales_report, purchase_order,
+# inventory_sign_off, sell_out, rmr_gs_bo, unilever_sku, ssis_summary
+# (extractor added T3 Option A, 2026-07 — see ARCHITECTURE.md §7).
+
+# NOTE on doc_type <-> column_maps/*.yaml naming: doc_type here must equal
+# the filename (minus .yaml) of the map transform.py loads via
+# load_column_map(), AND must equal Extract's real staged _doc_type value
+# (see DEC-07 above) — those two constraints are the same constraint, not
+# two. Previously "purchases" and "inventory" were guessed labels here
+# that matched neither the column_map filenames nor Extract's actual
+# output; an earlier fix attempt renamed the *files* to match the guessed
+# labels instead (purchase_order.yaml -> purchases.yaml, etc.) — that
+# direction breaks load_column_map() the moment real staged data
+# (_doc_type="purchase_order") hits it, since staging/_manifest.json
+# (gitignored, so easy to miss) confirms Extract never produces
+# "purchases" or "inventory". Fixed by renaming the *labels* here instead,
+# 2026-07 — see the per-entry DEC-07 fix comments below. transform_fact()
+# derives doc_type from this rule automatically instead of taking it as a
+# separate caller-supplied argument, so this file is the single source of
+# truth for the pairing.
+
+sales:
+  unilever:
+    doc_type: ssis_summary   # T3 Option A CLOSED (2026-07) — Extract driver
+                              # (analytics/etl/extract/ssis_summary.py) exists and
+                              # is wired into driver.py's FAMILY_PARSERS. Confirmed
+                              # running against real data (2026-08): stages ~805
+                              # real sheets every run. See ARCHITECTURE.md §7.
+    system_of_record_role: raw_data
+    cross_check_roles: [invoice_reg, per_customer_summary]
+    # BLOCKED, do not "fix" this without new evidence: every profiled
+    # SSIS RAW_DATA sheet (checked ~10 months, Jan-Nov 2022 confirmed
+    # identical schema) has NO invoice/reference column of any kind.
+    # Columns are: Salesman, CALENDAR DAY, REASON CODE, OUTLET,
+    # OUTLET NAME, GSV, TPR + UW/DT Discount, Sale After TPR & UW, NIV,
+    # VAT, Total Sales Amt Inc. Tax, REMARKS. The grain looks like
+    # outlet + calendar_day (+ reason_code?), not invoice. Filling in
+    # "invoice_num" here would be inventing a key the source doesn't
+    # have - per ARCHITECTURE.md principle #1, this must be confirmed
+    # against a real file (or with Yuan) before transform_fact() can run
+    # for this fact/principal at all. Column map for this doc_type
+    # (config/column_maps/ssis_summary.yaml) only has the confirmed
+    # renames for this reason - do not extend it with a guessed key.
+    natural_key: null   # UNCONFIRMED - see note above. transform_fact()
+                         # raises loudly if this is used, rather than
+                         # silently deduping on a fabricated key.
+  delmonte:
+    doc_type: sales_register
+    system_of_record_role: data
+    cross_check_roles: [scratch]
+    # daily_sales_report is a DIFFERENT _doc_type (not a _sheet_role), so
+    # cross_check_roles above can't catch it — both it and sales_register's
+    # per-day sheets carry _sheet_role="data". Listing it here explicitly
+    # so Transform's fact driver excludes it by _doc_type before any
+    # _sheet_role filtering, preventing a daily-vs-monthly double count.
+    # Its own column map exists (config/column_maps/daily_sales_report.yaml)
+    # so Transform can tag/report on it — it is never promoted to load.
+    cross_check_doc_types: [daily_sales_report]
+    # "principal" is not a raw header anywhere - it only exists as the
+    # provenance column Extract attaches (_principal). transform.py's
+    # backfill_provenance_fields() (2026-08) copies _principal -> principal
+    # right after apply_column_map, before dedup_facts runs, so the natural
+    # key references the same bare "principal" schema.sql's Sales_Fact
+    # UNIQUE constraint uses - not the underscore-prefixed provenance name.
+    natural_key: [invoice_num, principal, region]
+
+sales_unilever_sku_demand:
+  unilever:
+    doc_type: unilever_sku
+    # Sole source for this fact (ARCHITECTURE.md §5.1, DEC-03) — no other
+    # sheet/doc_type competes for it, so there is nothing to cross-check.
+    system_of_record_role: data
+    cross_check_roles: []
+    natural_key: [sku_code, calendar_month]   # matches schema.sql's
+                                                # Unilever_SKU_Demand_Fact
+                                                # UNIQUE(sku_code, calendar_month)
+
+sales_return:
+  both:
+    doc_type: rmr_gs_bo
+    system_of_record_role: [gs, bo]    # GS + BO split IS the system of record
+    cross_check_roles: [one_pager]     # ONE PAGER == GS union BO, never loaded
+    # Fixed 2026-08 (Transform reconciliation, story #16): matched
+    # schema.sql's SalesReturn_Fact UNIQUE constraint at the time - the
+    # previous [return_slip_num] alone, plus a "falls back to invoice_num
+    # if blank" comment, described fallback semantics dedup_facts() never
+    # actually implements (it groups on the literal key columns as-is, no
+    # null-coalescing).
+    #
+    # Fixed AGAIN 2026-08 (pre-Supabase-creation review): invoice_num
+    # dropped. Confirmed against real rmr_gs_bo data that invoice_num
+    # never exists as a producible column at all for this doc_type
+    # (0/538 real rows) - schema.sql's SalesReturn_Fact.invoice_num was
+    # updated to match (dropped from its UNIQUE constraint too, same
+    # reasoning: Postgres UNIQUE treats NULL <> NULL, so a column that's
+    # always NULL was a silent no-op in the constraint, not real
+    # protection). Keep this file and schema.sql's natural key in sync -
+    # this exact class of drift (config says one key, DDL says another)
+    # is what DEC-07 was about.
+    natural_key: [return_slip_num, principal, region, return_type]
+    # RESOLVED (was flagged BLOCKED against stale evidence — see below):
+    # the ~500 __colN__ placeholders / header_confidence~0.001 / merged
+    # title text repeated every 8 columns was a real Extract-stage bug
+    # (profiling/detect.py::trim_grid couldn't tell a genuine trailing
+    # data column from a print-layout artifact repeating the workbook's
+    # title banner), but it's fixed — trim_grid now distinguishes them by
+    # scanning for a real gap before treating a column as phantom. Every
+    # RMR_GS_BO sheet (GS, BO, ONE_PAGER alike) now stages its real
+    # 11-column header (header_row_index=1, confidence=1.0) — verified
+    # directly against staging/_manifest.json. config/column_maps/rmr_gs_bo.yaml
+    # exists and is built from that real staged output, not a guess.
+    # NOTE for whoever reads this next: profiling/sheet_profiles/*.json
+    # (the discovery-pass artifacts, committed to git) were never
+    # regenerated after this fix, so they still show the old broken
+    # numbers — don't use them as evidence for this doc_type; use
+    # staging/_manifest.json (gitignored, run Extract locally to get it)
+    # or the fixed trim_grid/rmr_gs_bo.yaml themselves instead.
+
+purchase:
+  both:
+    doc_type: purchase_order   # DEC-07 fix: was "purchases", didn't match
+                                 # Extract's real _doc_type tag
+    system_of_record_role: data
+    cross_check_roles: []
+    # Fixed 2026-08 (Transform reconciliation, story #16): matches
+    # schema.sql's Purchase_Fact UNIQUE(invoice_num, principal, region) -
+    # invoice_num alone would collide same-invoice-number purchases across
+    # different regions/principals. principal/region come from
+    # transform.backfill_provenance_fields() where no raw header maps them.
+    natural_key: [invoice_num, principal, region]  # BILL/... prefix or PO ref
+
+inventory:
+  both:
+    doc_type: inventory_sign_off   # DEC-07 fix: was "inventory", didn't match
+                                     # Extract's real _doc_type tag
+    system_of_record_role: data
+    cross_check_roles: []
+    # ssis_summary is a different _doc_type, not a _sheet_role within this
+    # one — same class of bug DEC-07 fixed for daily_sales_report above;
+    # cross_check_roles can't express it, cross_check_doc_types can.
+    # T3 Option A CLOSED (2026-07) — ssis_summary Extract driver exists.
+    cross_check_doc_types: [ssis_summary]
+    # sku_code and snapshot_date are NOT raw headers - neither exists as
+    # a literal column anywhere in the source (confirmed via profiling).
+    # Both are computed by transform.py, not renamed by
+    # column_maps/inventory_sign_off.yaml:
+    #   - sku_code: parsed out of sku_description_raw by
+    #     transform.split_sku_description() (leading alphanumeric token,
+    #     e.g. "9DMR56831" from "9DMR56831 DM QUICK N EASY..."). Rows
+    #     that don't match the pattern get sku_code=null and are flagged,
+    #     never guessed.
+    #   - snapshot_date: filled from the _period provenance column
+    #     (these exports are monthly, so _period is the honest proxy -
+    #     there's no finer-grained date in the sheet itself).
+    # Fixed 2026-08 (Transform reconciliation, story #16): matches
+    # schema.sql's Inventory_Fact UNIQUE(sku_code, snapshot_date, region) -
+    # without region, two real rows (same SKU/month, Pangasinan vs Ilocos)
+    # would collapse into one key and dedup_facts() would silently keep
+    # only one region's inventory count. inventory_sign_off has no raw
+    # "region" header (confirmed via column_maps/inventory_sign_off.yaml),
+    # so this comes from transform.backfill_provenance_fields() (_region).
+    natural_key: [sku_code, snapshot_date, region]
+
+sell_out:
+  delmonte:
+    doc_type: sell_out
+    system_of_record_role: data
+    cross_check_roles: []
+    # Same as inventory above — SALES PER CUSTOMER lives in the
+    # ssis_summary doc_type, not as a sheet_role inside sell_out itself.
+    # T3 Option A CLOSED (2026-07) — ssis_summary Extract driver exists.
+    cross_check_doc_types: [ssis_summary]
+    # column_maps/sell_out.yaml's canonical field is "category_path", not
+    # "category" - and there is no period cell in the sheet (see that
+    # file's comment), only the _period provenance tag. Key must
+    # reference the real post-mapping / provenance names.
+    # Fixed 2026-08 (Transform reconciliation, story #16): matches
+    # schema.sql's SellOut_Fact UNIQUE(category_path, region, _period) -
+    # sell_out has no raw "region" header either (same gap as inventory
+    # above), so region comes from backfill_provenance_fields() (_region).
+    natural_key: [category_path, region, _period]

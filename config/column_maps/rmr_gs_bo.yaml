@@ -1,0 +1,57 @@
+# config/column_maps/rmr_gs_bo.yaml
+#
+# Maps the RMR Good Stock / Bad Order file column vocabulary onto one
+# canonical schema. Verified directly against staging/_manifest.json (real
+# Extract output) — all 12 staged sheets across both files (2025 October,
+# 2025 November) share exactly one column shape:
+#   Invoice Date, Salesman, Town Display, Customer Name, Untaxed Amount,
+#   Discount Amount, Tax, Net Amount, Balance, Return Slip #, Return Type
+#
+# NOTE: this is a narrower vocabulary than sales_register.yaml's vocab A —
+# no Branch Code, Invoice Num, REFNBR, Discount Rate, or Posted columns
+# exist in this file family. Do not assume they're present; confirmed
+# absent from every staged sheet in this doc_type.
+#
+# Extract leaves raw column names untouched; Transform applies this map.
+# Matching is case-insensitive and whitespace-normalized (see transform.py).
+#
+# GRAIN / SOURCE-OF-TRUTH NOTE (DEC-04, §5.2): each workbook has 6 sheets —
+# PANG/ILOCOS × {ONE PAGER, GS, BO}. ONE PAGER = GS ∪ BO (Extract tags
+# _sheet_role distinctly as one_pager / gs / bo — see
+# config/source_of_truth.yaml's sales_return.both entry: system_of_record
+# is [gs, bo], one_pager is a cross-check, never loaded). This column map
+# applies identically regardless of _sheet_role — all three sheet types
+# share the same raw column vocabulary; only their _sheet_role differs.
+
+invoice_date:
+  - "Invoice Date"
+
+salesman:
+  - "Salesman"
+
+region:
+  - "Town Display"
+
+customer_name:
+  - "Customer Name"
+
+untaxed_amount:
+  - "Untaxed Amount"
+
+discount_amount:
+  - "Discount Amount"
+
+tax_amount:
+  - "Tax"
+
+net_amount:
+  - "Net Amount"
+
+balance:
+  - "Balance"
+
+return_slip_num:
+  - "Return Slip #"
+
+return_type:
+  - "Return Type"   # values confirmed: "GS" / "BO"

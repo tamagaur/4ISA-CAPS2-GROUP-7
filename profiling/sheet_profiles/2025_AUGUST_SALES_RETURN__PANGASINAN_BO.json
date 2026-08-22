@@ -1,0 +1,230 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 08.2025/2025 AUGUST SALES RETURN.xlsx",
+  "sheet": "PANGASINAN BO",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "text",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "text",
+    "Discount Rate": "text",
+    "Discount Amount": "text",
+    "Tax": "text",
+    "Net Amount": "text",
+    "Balance": "text",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 4.35,
+    "Town Display": 4.35,
+    "Branch Code": 4.35,
+    "Customer Name": 4.35,
+    "Invoice Num": 4.35,
+    "REFNBR": 4.35,
+    "Untaxed Amount": 4.35,
+    "Discount Rate": 4.35,
+    "Discount Amount": 4.35,
+    "Tax": 4.35,
+    "Net Amount": 4.35,
+    "Balance": 4.35,
+    "Posted": 4.35,
+    "Return Slip #": 4.35,
+    "Return Type": 4.35
+  },
+  "distinct_count": {
+    "Invoice Date": 11,
+    "Salesman": 7,
+    "Town Display": 13,
+    "Branch Code": 21,
+    "Customer Name": 21,
+    "Invoice Num": 22,
+    "REFNBR": 10,
+    "Untaxed Amount": 20,
+    "Discount Rate": 4,
+    "Discount Amount": 9,
+    "Tax": 20,
+    "Net Amount": 20,
+    "Balance": 15,
+    "Posted": 3,
+    "Return Slip #": 22,
+    "Return Type": 2
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-08-30",
+      "2025-08-11",
+      "2025-08-18",
+      "2025-08-12",
+      "2025-08-06"
+    ],
+    "Salesman": [
+      "ADMIN SALES",
+      "BENJAMIN AQUINO",
+      "Salesman",
+      "VOLTAIRE FINOGUAR",
+      "EDUARDO AGAS"
+    ],
+    "Town Display": [
+      "CALASIAO",
+      "SANTO TOMAS",
+      "PUGO",
+      "Town Display",
+      "CITY OF SAN FERNANDO (Capital)"
+    ],
+    "Branch Code": [
+      "L12F-B003426",
+      "L12F-002870",
+      "L12F-001832",
+      "L12F-002878",
+      "L12F-002857"
+    ],
+    "Customer Name": [
+      "CALAJO",
+      "SUNNYSIDE REFRESHMENT",
+      "LOS PEDRITOS",
+      "MT. PULAG ENTERPRISE",
+      "WIN-J / ALOHA GENERAL MERCHANDISE"
+    ],
+    "Invoice Num": [
+      "INV/2025/5506",
+      "INV/2025/6042",
+      "INV/2025/5676",
+      "INV/2025/5632",
+      "INV/2025/5795"
+    ],
+    "REFNBR": [
+      "False",
+      "DMP019107",
+      "DMP021369-2",
+      "DMP021929",
+      "DMP023674"
+    ],
+    "Untaxed Amount": [
+      "1103.54",
+      "Untaxed Amount",
+      "1020.04",
+      "43.62",
+      "260.85"
+    ],
+    "Discount Rate": [
+      "Public Pricelist",
+      "Discount Rate",
+      "Less 2%",
+      "LESS 3%"
+    ],
+    "Discount Amount": [
+      "25.03",
+      "Discount Amount",
+      "24.69",
+      "50.06",
+      "2.54"
+    ],
+    "Tax": [
+      "Tax",
+      "10.46",
+      "122.4",
+      "16.07",
+      "7.83"
+    ],
+    "Net Amount": [
+      "1355.28",
+      "Net Amount",
+      "150",
+      "196.69",
+      "349.54"
+    ],
+    "Balance": [
+      "1355.28",
+      "335.6",
+      "349.54",
+      "292.15",
+      "2747.38"
+    ],
+    "Posted": [
+      "Yes",
+      "Posted",
+      "No"
+    ],
+    "Return Slip #": [
+      "RMR17092",
+      "Return Slip #",
+      "RMR46983",
+      "RMR19812",
+      "46980"
+    ],
+    "Return Type": [
+      "BO",
+      "Return Type"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 23,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'",
+    "REFNBR 'DMP020524*' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021929' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023704' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023674' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023611' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022132*' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP019107' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021369-2' matches prefix 'DMP' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

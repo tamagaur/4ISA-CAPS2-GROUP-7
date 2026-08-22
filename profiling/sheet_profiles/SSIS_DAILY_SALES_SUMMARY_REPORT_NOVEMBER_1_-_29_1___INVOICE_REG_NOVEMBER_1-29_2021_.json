@@ -1,0 +1,190 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS DAILY SALES SUMMARY REPORT NOVEMBER 1 - 29 (1).xlsx",
+  "sheet": "INVOICE REG(NOVEMBER 1-29 2021)",
+  "real_format": "xlsx",
+  "header_row_index": 8,
+  "header_confidence": 0.716,
+  "junk_ranges": [
+    [
+      0,
+      7
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "Calendar Day",
+    "Reason Code",
+    "Invoice No",
+    "Outlet",
+    "__col6__",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax"
+  ],
+  "dtypes": {
+    "Salesman": "text",
+    "__col1__": "text",
+    "Calendar Day": "datetime",
+    "Reason Code": "text",
+    "Invoice No": "text",
+    "Outlet": "text",
+    "__col6__": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric"
+  },
+  "null_pct": {
+    "Salesman": 0.0,
+    "__col1__": 0.0,
+    "Calendar Day": 0.0,
+    "Reason Code": 0.0,
+    "Invoice No": 0.0,
+    "Outlet": 0.0,
+    "__col6__": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.0,
+    "Sale After TPR & UW": 0.0,
+    "NIV": 0.0,
+    "VAT": 0.0,
+    "Total Sales Amt Inc. Tax": 0.0
+  },
+  "distinct_count": {
+    "Salesman": 12,
+    "__col1__": 12,
+    "Calendar Day": 22,
+    "Reason Code": 8,
+    "Invoice No": 5121,
+    "Outlet": 2035,
+    "__col6__": 1927,
+    "GSV": 3968,
+    "TPR + UW/DT Discount": 574,
+    "Sale After TPR & UW": 4016,
+    "NIV": 4016,
+    "VAT": 3742,
+    "Total Sales Amt Inc. Tax": 4016
+  },
+  "samples": {
+    "Salesman": [
+      "3684",
+      "10706",
+      "14365",
+      "21614",
+      "14364"
+    ],
+    "__col1__": [
+      "WARREN AFROILAN",
+      "JESSIE MIRADIOS",
+      "JAYNARD ESPEJO",
+      "NARDITO ANDALLO",
+      "ADONIS T. PIAMONTE"
+    ],
+    "Calendar Day": [
+      "2021-11-03 00:00:00",
+      "2021-11-25 00:00:00",
+      "2021-11-10 00:00:00",
+      "2021-11-08 00:00:00",
+      "2021-11-20 00:00:00"
+    ],
+    "Reason Code": [
+      "Stock Recall",
+      "GOOD - Slow moving",
+      "Not assigned",
+      "Stock not available",
+      "Good - Full Return"
+    ],
+    "Invoice No": [
+      "CZ30832414",
+      "CZ30840925",
+      "CZ30832548",
+      "CZ30832727",
+      "CZ30837111"
+    ],
+    "Outlet": [
+      "664451",
+      "3702403",
+      "3773896",
+      "1705545",
+      "847120"
+    ],
+    "__col6__": [
+      "EMY GILINGAN",
+      "PRIMADEL GROCERY",
+      "NABORGE",
+      "LORIENE STORE",
+      "VELMA STORE"
+    ],
+    "GSV": [
+      "-2442.86",
+      "14622.88",
+      "159.38",
+      "562.49",
+      "-1054.29"
+    ],
+    "TPR + UW/DT Discount": [
+      "15.34",
+      "-3273.92",
+      "-11150.88",
+      "-2241.78",
+      "-1079.15"
+    ],
+    "Sale After TPR & UW": [
+      "-2442.86",
+      "14622.88",
+      "159.38",
+      "562.49",
+      "-1054.29"
+    ],
+    "NIV": [
+      "-2442.86",
+      "14622.88",
+      "159.38",
+      "562.49",
+      "-1054.29"
+    ],
+    "VAT": [
+      "480.58",
+      "374.37",
+      "43.1",
+      "71.36",
+      "16.64"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "85085.77",
+      "3633.96",
+      "331.51",
+      "265.35",
+      "-692.34"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 5121,
+  "header_signature": "6dd2f346224a",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "invoice no",
+    "niv",
+    "outlet",
+    "reason code",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'tpr'",
+    "header contains 'niv'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

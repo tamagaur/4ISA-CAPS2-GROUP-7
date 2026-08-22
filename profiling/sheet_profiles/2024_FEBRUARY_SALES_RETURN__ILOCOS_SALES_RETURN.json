@@ -1,0 +1,229 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 02.2025/2024 FEBRUARY SALES RETURN.xlsx",
+  "sheet": "ILOCOS SALES RETURN",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 4.76
+  },
+  "distinct_count": {
+    "Invoice Date": 8,
+    "Salesman": 2,
+    "Town Display": 12,
+    "Branch Code": 17,
+    "Customer Name": 17,
+    "Invoice Num": 21,
+    "REFNBR": 21,
+    "Untaxed Amount": 21,
+    "Discount Rate": 3,
+    "Discount Amount": 8,
+    "Tax": 21,
+    "Net Amount": 21,
+    "Balance": 6,
+    "Posted": 2,
+    "Return Slip #": 20
+  },
+  "samples": {
+    "Invoice Date": [
+      "2024-02-06",
+      "2024-02-17",
+      "2024-02-29",
+      "2024-02-26",
+      "2024-02-13"
+    ],
+    "Salesman": [
+      "CARLON DAHILIG",
+      "JOENATHAN ARIZABAL"
+    ],
+    "Town Display": [
+      "NARVACAN",
+      "SINAIT",
+      "LAOAG CITY (Capital)",
+      "PASUQUIN",
+      "CITY OF VIGAN (Capital)"
+    ],
+    "Branch Code": [
+      "L12E-000899",
+      "L12E-000734",
+      "L12E-0000457",
+      "L12E-000624",
+      "L12E-000868"
+    ],
+    "Customer Name": [
+      "JEX'Z PIZZA",
+      "F&F CVS",
+      "RANTES ICE CREAM",
+      "MILANAS CONVENIENCE STORE",
+      "LUBONG MPC"
+    ],
+    "Invoice Num": [
+      "INV/2024/0558",
+      "INV/2024/0618",
+      "INV/2024/0385",
+      "INV/2024/0599",
+      "INV/2024/0380"
+    ],
+    "REFNBR": [
+      "DMIS0060708",
+      "DMIS0060728",
+      "ODM002733-2",
+      "ODM002739",
+      "DMIS0060759"
+    ],
+    "Untaxed Amount": [
+      "1075.58",
+      "155.91",
+      "564",
+      "167.52",
+      "1870.9"
+    ],
+    "Discount Rate": [
+      "LESS 4%",
+      "Public Pricelist",
+      "LESS 2%"
+    ],
+    "Discount Amount": [
+      "156.29",
+      "0",
+      "2.35",
+      "38.18",
+      "1.02"
+    ],
+    "Tax": [
+      "450.1",
+      "129.07",
+      "49.39",
+      "6",
+      "73.47"
+    ],
+    "Net Amount": [
+      "7314.33",
+      "56",
+      "460.97",
+      "302.87",
+      "2052.65"
+    ],
+    "Balance": [
+      "7314.33",
+      "32.33",
+      "187.62",
+      "0",
+      "2160.01"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": [
+      "RMR38851",
+      "RMR38744",
+      "RMR38747",
+      "RMR38748",
+      "RMR38746"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 21,
+  "header_signature": "086575e3a93a",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'ODM002739' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'DMIS0060761' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060703-2' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060728' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060736' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060759' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060703' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060708' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060509-2' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060509' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060623' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060636' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'RMR13431' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR38802' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR38742' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR38741' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'ODM002733-2' matches prefix 'ODM' -> delmonte",
+    "REFNBR 'RMR13430' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR38801' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR13429' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR13331' matches prefix 'RMR' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

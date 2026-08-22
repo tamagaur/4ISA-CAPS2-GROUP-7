@@ -1,0 +1,148 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT AUGUST 2022.xlsx",
+  "sheet": "B.O  SUMMARY",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "ACCOUNT NAME",
+    "RMR #",
+    "TYPE",
+    "CATEGORY",
+    "RMR COVERAGE",
+    "RMR QTY",
+    "RMR AMOUNT",
+    "DATE APPROVED",
+    "DATE PULL OUT",
+    "RMR ACTIVITY",
+    "STATUS",
+    "REMARKS",
+    "__col12__"
+  ],
+  "dtypes": {
+    "ACCOUNT NAME": "text",
+    "RMR #": "text",
+    "TYPE": "text",
+    "CATEGORY": "text",
+    "RMR COVERAGE": "text",
+    "RMR QTY": "text",
+    "RMR AMOUNT": "numeric",
+    "DATE APPROVED": "empty",
+    "DATE PULL OUT": "empty",
+    "RMR ACTIVITY": "text",
+    "STATUS": "empty",
+    "REMARKS": "empty",
+    "__col12__": "text"
+  },
+  "null_pct": {
+    "ACCOUNT NAME": 22.22,
+    "RMR #": 22.22,
+    "TYPE": 22.22,
+    "CATEGORY": 22.22,
+    "RMR COVERAGE": 11.11,
+    "RMR QTY": 22.22,
+    "RMR AMOUNT": 11.11,
+    "DATE APPROVED": 100.0,
+    "DATE PULL OUT": 100.0,
+    "RMR ACTIVITY": 22.22,
+    "STATUS": 100.0,
+    "REMARKS": 100.0,
+    "__col12__": 33.33
+  },
+  "distinct_count": {
+    "ACCOUNT NAME": 1,
+    "RMR #": 7,
+    "TYPE": 2,
+    "CATEGORY": 2,
+    "RMR COVERAGE": 4,
+    "RMR QTY": 7,
+    "RMR AMOUNT": 8,
+    "DATE APPROVED": 0,
+    "DATE PULL OUT": 0,
+    "RMR ACTIVITY": 1,
+    "STATUS": 0,
+    "REMARKS": 0,
+    "__col12__": 3
+  },
+  "samples": {
+    "ACCOUNT NAME": [
+      "SANSAN ILOCOS SUR"
+    ],
+    "RMR #": [
+      "SSIS-40190000-0059",
+      "SSIS-40190000-0057",
+      "SSIS-40190000-0053",
+      "SSIS-40190000-0058",
+      "SSIS-40190000-0054"
+    ],
+    "TYPE": [
+      "GS",
+      "BS"
+    ],
+    "CATEGORY": [
+      "FOODS",
+      "HPC"
+    ],
+    "RMR COVERAGE": [
+      "Special Pull Out_KNORR",
+      "AUGUST.2022",
+      "TOTAL:",
+      "JULY.2022"
+    ],
+    "RMR QTY": [
+      "/ 12,495 ",
+      "67/12654",
+      "/ 3,357 ",
+      "11/129",
+      "/14541"
+    ],
+    "RMR AMOUNT": [
+      "149835.4",
+      "208110.25000000006",
+      "237887.80229166665",
+      "31958.699999999997",
+      "1573370.1781249999"
+    ],
+    "DATE APPROVED": [],
+    "DATE PULL OUT": [],
+    "RMR ACTIVITY": [
+      "REGULAR RMR"
+    ],
+    "STATUS": [],
+    "REMARKS": [],
+    "__col12__": [
+      "TENTATIVE",
+      "WH BO",
+      "TRADE"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 8,
+  "header_signature": "6b94964ad18f",
+  "header_tokens": [
+    "account name",
+    "category",
+    "date approved",
+    "date pull out",
+    "remarks",
+    "rmr #",
+    "rmr activity",
+    "rmr amount",
+    "rmr coverage",
+    "rmr qty",
+    "status",
+    "type"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

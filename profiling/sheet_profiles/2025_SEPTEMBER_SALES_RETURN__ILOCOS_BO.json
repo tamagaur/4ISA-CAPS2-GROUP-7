@@ -1,0 +1,236 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 09.2025/2025 SEPTEMBER SALES RETURN.xlsx",
+  "sheet": "ILOCOS BO",
+  "real_format": "xlsx",
+  "header_row_index": 4,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      3
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Total CAS",
+    "Total PCS",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Total CAS": "numeric",
+    "Total PCS": "numeric",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Total CAS": 0.0,
+    "Total PCS": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 0.0,
+    "Return Type": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 4,
+    "Salesman": 2,
+    "Town Display": 5,
+    "Branch Code": 10,
+    "Customer Name": 10,
+    "Invoice Num": 10,
+    "REFNBR": 5,
+    "Total CAS": 1,
+    "Total PCS": 5,
+    "Untaxed Amount": 8,
+    "Discount Rate": 2,
+    "Discount Amount": 3,
+    "Tax": 8,
+    "Net Amount": 8,
+    "Balance": 6,
+    "Posted": 2,
+    "Return Slip #": 10,
+    "Return Type": 1
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-09-30",
+      "2025-09-18",
+      "2025-09-20",
+      "2025-09-06"
+    ],
+    "Salesman": [
+      "BARBI LABRADOR",
+      "CARLON DAHILIG"
+    ],
+    "Town Display": [
+      "PINILI",
+      "CABUGAO",
+      "SARRAT",
+      "CITY OF BATAC",
+      "BADOC"
+    ],
+    "Branch Code": [
+      "L12E-001189",
+      "L12E-001046",
+      "L12E-001006",
+      "L12E-001153",
+      "L12E-000664"
+    ],
+    "Customer Name": [
+      "BATAC MPCI",
+      "CJRB  STORE & FOODCORNER",
+      "LVJ CONVENIENCE STORE",
+      "LUCKY SANSU ONE GENERAL MERCHANDISE",
+      "BLESSIE JUDIEL GENERA L MERCHANDISE"
+    ],
+    "Invoice Num": [
+      "INV/2025/3639",
+      "INV/2025/3419",
+      "INV/2025/3638",
+      "INV/2025/3418",
+      "INV/2025/3619"
+    ],
+    "REFNBR": [
+      "DMIS0062543",
+      "False",
+      "DMIS0065715",
+      "DMIS0065350",
+      "DMIS0065032"
+    ],
+    "Total CAS": [
+      "0"
+    ],
+    "Total PCS": [
+      "3",
+      "6",
+      "5",
+      "1",
+      "7"
+    ],
+    "Untaxed Amount": [
+      "236.87",
+      "305.48",
+      "161.48",
+      "123.09",
+      "23.6"
+    ],
+    "Discount Rate": [
+      "Public Pricelist",
+      "LESS 2%"
+    ],
+    "Discount Amount": [
+      "9.49",
+      "3.8",
+      "0"
+    ],
+    "Tax": [
+      "2.83",
+      "28.42",
+      "55.77",
+      "44.31",
+      "14.77"
+    ],
+    "Net Amount": [
+      "26.43",
+      "180.86",
+      "265.29",
+      "520.54",
+      "137.86"
+    ],
+    "Balance": [
+      "180.86",
+      "0",
+      "137.86",
+      "208.63",
+      "413.58"
+    ],
+    "Posted": [
+      "Yes",
+      "No"
+    ],
+    "Return Slip #": [
+      "RMR39295",
+      "RMR39296",
+      "RMR39352",
+      "RMR39076",
+      "RMR39354"
+    ],
+    "Return Type": [
+      "BO"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 10,
+  "header_signature": "e74d7688a7c1",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "total cas",
+    "total pcs",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'return slip #'",
+    "header contains 'refnbr'",
+    "REFNBR 'DMIS0062543' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0065715' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0065032' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0065350' matches prefix 'DMIS' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

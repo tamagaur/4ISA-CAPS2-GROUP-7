@@ -17,9 +17,7 @@
 }
 
 .du-page-title {
-  font-family: 'Georgia', 'Times New Roman', serif;
-  font-style: italic;
-  font-size: 2.2rem;
+  font-size: 2rem;
   font-weight: 700;
   color: #1a202c;
   margin: 0 0 0.3rem 0;
@@ -97,7 +95,7 @@
 .du-blue-dot {
   width: 7px;
   height: 7px;
-  background-color: #2b6cb0;
+  background-color: #c53030;
   border-radius: 50%;
   display: inline-block;
 }
@@ -175,7 +173,7 @@
 }
 
 .du-select-btn {
-  background-color: #1a56db;
+  background-color: #c53030;
   color: #ffffff;
   border: none;
   border-radius: 6px;
@@ -187,7 +185,7 @@
 }
 
 .du-select-btn:hover {
-  background-color: #1e429f;
+  background-color: #9b2c2c;
 }
 
 /* Uploading Progress list */
@@ -269,6 +267,12 @@
 }
 
 /* Responsive styles */
+@media (max-width: 1300px) {
+  .du-content {
+    padding: 0 1.5rem 1.5rem 1.5rem;
+  }
+}
+
 @media (max-width: 900px) {
   .du-cards-grid {
     grid-template-columns: 1fr;
@@ -277,10 +281,6 @@
 }
 
 @media (max-width: 768px) {
-  .du-content {
-    padding: 0 1.5rem 1.5rem 1.5rem;
-  }
-
   .du-page-title {
     font-size: 1.8rem;
   }

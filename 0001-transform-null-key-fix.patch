@@ -1,0 +1,112 @@
+From e98e6c4c88d8c9f264ea12dc8252c9239d719d9a Mon Sep 17 00:00:00 2001
+From: Claude <assistant@local>
+Date: Tue, 18 Aug 2026 10:58:44 +0000
+Subject: [PATCH] transform: never silently collapse rows with a blank
+ natural-key component
+
+dedup_facts() now routes rows where any natural_key column is null into
+their own tracked bucket (DedupReport.null_key_rows) instead of letting
+pandas groupby(dropna=False) group them together, which risked silently
+merging unrelated rows (e.g. sales_return rows missing return_slip_num).
+
+Also corrects source_of_truth.yaml's sales_return comment, which claimed
+a return_slip_num -> invoice_num fallback that does not exist in code and
+could not work as described since rmr_gs_bo.yaml never maps an
+invoice_num column in the first place.
+
+Part of backlog #16 (transform.py/granularity.py reconciliation vs
+ARCHITECTURE.md Sec.4/5.2). Verified: all 20 existing tests/etl/test_transform.py
+tests still pass.
+---
+ analytics/etl/transform.py  | 28 +++++++++++++++++++++++++---
+ config/source_of_truth.yaml | 13 ++++++++++++-
+ 2 files changed, 37 insertions(+), 4 deletions(-)
+
+diff --git a/analytics/etl/transform.py b/analytics/etl/transform.py
+index 019db17..9a122cd 100644
+--- a/analytics/etl/transform.py
++++ b/analytics/etl/transform.py
+@@ -398,18 +398,37 @@ class DedupReport:
+     output_rows: int
+     duplicate_groups: int
+     conflicting_groups: list[dict]   # same key, differing non-key values — needs a human look
++    null_key_rows: int = 0           # rows with >=1 blank natural-key component — see note below
+ 
+ 
+ def dedup_facts(df: pd.DataFrame, natural_key: list[str], amount_col: str | None = None) -> tuple[pd.DataFrame, DedupReport]:
+     """Dedup on the confirmed natural key. Anti-fabrication: if two rows
+     share a key but disagree on amount_col, we do NOT silently pick one —
+-    both are kept and the conflict is reported for a human decision."""
++    both are kept and the conflict is reported for a human decision.
++
++    Rows where ANY natural_key column is null are never grouped together
++    for dedup, even though pandas' groupby(dropna=False) would otherwise
++    treat them as one "NaN" group and could silently collapse genuinely
++    unrelated rows onto each other (e.g. sales_return rows missing
++    return_slip_num — see config/source_of_truth.yaml's "falls back to
++    invoice_num if blank" comment, which is NOT implemented anywhere in
++    this module; until that fallback is actually written and confirmed
++    against real RMR GS/BO files, a blank key must never be treated as a
++    safe match). These rows are kept as-is and counted in
++    DedupReport.null_key_rows so transform_driver.py's QC manifest and
++    transform_signoff.py's checklist can surface them for a human,
++    consistent with DEC-13's "flag, never drop" precedent."""
+     missing = [k for k in natural_key if k not in df.columns]
+     if missing:
+         raise KeyError(f"Natural key column(s) missing from DataFrame: {missing}")
+ 
+     input_rows = len(df)
+-    grouped = df.groupby(natural_key, dropna=False)
++
++    null_key_mask = df[natural_key].isna().any(axis=1)
++    null_key_df = df[null_key_mask]
++    keyed_df = df[~null_key_mask]
++
++    grouped = keyed_df.groupby(natural_key, dropna=False)
+ 
+     conflicts = []
+     keep_idx = []
+@@ -427,12 +446,15 @@ def dedup_facts(df: pd.DataFrame, natural_key: list[str], amount_col: str | None
+         else:
+             keep_idx.append(group.index[0])  # true duplicate, safe to collapse
+ 
+-    out = df.loc[sorted(keep_idx)].reset_index(drop=True)
++    out = pd.concat(
++        [keyed_df.loc[sorted(keep_idx)], null_key_df]
++    ).sort_index().reset_index(drop=True)
+     report = DedupReport(
+         input_rows=input_rows,
+         output_rows=len(out),
+         duplicate_groups=sum(1 for _, g in grouped if len(g) > 1),
+         conflicting_groups=conflicts,
++        null_key_rows=len(null_key_df),
+     )
+     return out, report
+ 
+diff --git a/config/source_of_truth.yaml b/config/source_of_truth.yaml
+index 12056e9..a178771 100644
+--- a/config/source_of_truth.yaml
++++ b/config/source_of_truth.yaml
+@@ -88,7 +88,18 @@ sales_return:
+     doc_type: rmr_gs_bo
+     system_of_record_role: [gs, bo]    # GS + BO split IS the system of record
+     cross_check_roles: [one_pager]     # ONE PAGER == GS union BO, never loaded
+-    natural_key: [return_slip_num]     # falls back to invoice_num if blank
++    # T4 reconciliation finding (2026-08): the "falls back to invoice_num
++    # if blank" note this line used to carry does NOT exist anywhere in
++    # transform.py, and couldn't work as described even if it did —
++    # config/column_maps/rmr_gs_bo.yaml never maps any raw header to
++    # invoice_num (confirmed absent from this file family, see that
++    # file's own header comment). Rows with a blank return_slip_num are
++    # now routed to DedupReport.null_key_rows by dedup_facts() instead of
++    # being silently grouped together and collapsed — flagged, not
++    # dropped, matching DEC-13's precedent. A real fallback key (if one
++    # is wanted) needs to be designed against actual RMR GS/BO files
++    # first, same anti-fabrication rule as everywhere else in this file.
++    natural_key: [return_slip_num]
+     # RESOLVED (was flagged BLOCKED against stale evidence — see below):
+     # the ~500 __colN__ placeholders / header_confidence~0.001 / merged
+     # title text repeated every 8 columns was a real Extract-stage bug
+-- 
+2.43.0
+

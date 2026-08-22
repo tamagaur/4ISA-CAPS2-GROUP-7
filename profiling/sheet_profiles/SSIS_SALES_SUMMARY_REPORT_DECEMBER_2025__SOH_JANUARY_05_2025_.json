@@ -1,0 +1,181 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT DECEMBER 2025.xlsx",
+  "sheet": "SOH(JANUARY 05, 2025)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "Last Purchase Price(GSV/CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Blocked Stock(CS/PC)",
+    "Batch"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "Last Purchase Price(GSV/CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Batch": "text"
+  },
+  "null_pct": {
+    "Storage Location": 0.13,
+    "Article No": 0.13,
+    "Article Description": 0.13,
+    "PACK SIZE": 0.13,
+    "Stock Quantity (CS/PC)": 0.13,
+    "Stock Value": 0.0,
+    "PO Qty": 61.08,
+    "Open SO Quantity": 57.99,
+    "Balance Quantity": 0.13,
+    "Last Purchase Price(GSV/CS)": 0.13,
+    "Status": 0.13,
+    "CATEGORY DESC": 0.13,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Batch": 0.13
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 775,
+    "Article Description": 770,
+    "PACK SIZE": 25,
+    "Stock Quantity (CS/PC)": 433,
+    "Stock Value": 761,
+    "PO Qty": 98,
+    "Open SO Quantity": 108,
+    "Balance Quantity": 540,
+    "Last Purchase Price(GSV/CS)": 357,
+    "Status": 2,
+    "CATEGORY DESC": 12,
+    "Blocked Stock(CS/PC)": 0,
+    "Batch": 1
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "68864121",
+      "65080973",
+      "68764009",
+      "69642632",
+      "62685523"
+    ],
+    "Article Description": [
+      "REXONA WMN RO VTBRT SAKURA GLS 8X3X45ML",
+      "CREAM SILK HC ULTREBORN HFALL 12X350ML",
+      "REXONA MEN APA ICE COOL 2X6X135ML",
+      "BREEZE PWD ROSEGOLD ATL 24(6+1)(64G+64G)",
+      "LADY'S CHOICE SS TUNA JAR 24X220ML"
+    ],
+    "PACK SIZE": [
+      "15",
+      "72",
+      "4",
+      "144",
+      "12"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "70/1",
+      "2/21",
+      "23/2",
+      "23/6",
+      "88/5"
+    ],
+    "Stock Value": [
+      "18533.06",
+      "2661.44",
+      "14411.25",
+      "52631.86",
+      "5467.49"
+    ],
+    "PO Qty": [
+      "35/0",
+      "22/0",
+      "17/0",
+      "495/0",
+      "43/0"
+    ],
+    "Open SO Quantity": [
+      "20/6",
+      "2/21",
+      "0/10",
+      "0/17",
+      "2/5"
+    ],
+    "Balance Quantity": [
+      "2/21",
+      "2/58",
+      "103/23",
+      "23/270",
+      "6/9"
+    ],
+    "Last Purchase Price(GSV/CS)": [
+      "2476.07",
+      "977.14",
+      "2898.21",
+      "1909.29",
+      "2027.14"
+    ],
+    "Status": [
+      "Inactive",
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "MINI MEALS",
+      "DEODORANTS & FRAGRANCES",
+      "FABRIC ENHANCERS",
+      "SKIN CARE",
+      "COOKING AIDS"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Batch": [
+      "VALUATED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 776,
+  "header_signature": "749a9f1e57d4",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "last purchase price(gsv/cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'gsv'",
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

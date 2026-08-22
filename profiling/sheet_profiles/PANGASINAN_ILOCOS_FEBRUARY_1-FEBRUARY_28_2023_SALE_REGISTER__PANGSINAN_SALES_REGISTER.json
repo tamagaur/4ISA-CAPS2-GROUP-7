@@ -1,0 +1,211 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 02.2023/PANGASINAN&ILOCOS FEBRUARY 1-FEBRUARY 28 2023 SALE REGISTER.xlsx",
+  "sheet": "PANGSINAN SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Invoice Num",
+    "REFNBR",
+    "Customer Name",
+    "Salesman",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Customer Name": "text",
+    "Salesman": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Customer Name": 0.0,
+    "Salesman": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 22,
+    "Invoice Num": 620,
+    "REFNBR": 620,
+    "Customer Name": 343,
+    "Salesman": 3,
+    "Untaxed Amount": 445,
+    "Discount Rate": 5,
+    "Discount Amount": 93,
+    "Tax": 439,
+    "Net Amount": 445,
+    "Balance": 360,
+    "Posted": 2,
+    "Return Slip #": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2023-02-02",
+      "2023-02-04",
+      "2023-02-28",
+      "2023-02-10",
+      "2023-02-21"
+    ],
+    "Invoice Num": [
+      "INV/2023/0808",
+      "INV/2023/1000",
+      "INV/2023/1192",
+      "INV/2023/0950",
+      "INV/2023/0702"
+    ],
+    "REFNBR": [
+      "DMP008565",
+      "DMP008475",
+      "DMP008640",
+      "DMP008636",
+      "DMP008603"
+    ],
+    "Customer Name": [
+      "CP FRESH MEATSHOP STO. TOMAS*",
+      "KAFE GIPAS",
+      "BAGUIO COUNTRY CLUB",
+      "Aras Mami House & Restaurant ",
+      "LEEZA RESTAURANT "
+    ],
+    "Salesman": [
+      "BENJAMIN AQUINO",
+      "RAYMON ESTRADA",
+      "CORFEL PARAS"
+    ],
+    "Untaxed Amount": [
+      "1318.3",
+      "252.16",
+      "2039.44",
+      "10398.8",
+      "6607.25"
+    ],
+    "Discount Rate": [
+      "LESS 4%",
+      "LESS 3%",
+      "Public Pricelist",
+      "Less 2%",
+      "LESS 4% LESS 1%"
+    ],
+    "Discount Amount": [
+      "167.57",
+      "8175.85",
+      "210.23",
+      "11.93",
+      "26.37"
+    ],
+    "Tax": [
+      "514",
+      "173.03",
+      "3939.46",
+      "173.44",
+      "75.48"
+    ],
+    "Net Amount": [
+      "9610.17",
+      "1409.04",
+      "145266.23",
+      "3933.44",
+      "31251.09"
+    ],
+    "Balance": [
+      "9610.17",
+      "1409.04",
+      "145266.23",
+      "3933.44",
+      "31251.09"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 620,
+  "header_signature": "822a0d127970",
+  "header_tokens": [
+    "balance",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'refnbr'",
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "REFNBR 'DMP008453' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008478' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008477' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008426' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008492' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008491' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008495' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008498' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008476' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008481' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008480' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008479' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008485' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008483' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008487' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008515' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008514' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008513' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008503' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'FG008500' matches prefix 'FG' -> delmonte",
+    "REFNBR 'FG008414' matches prefix 'FG' -> delmonte",
+    "REFNBR 'DMP008461-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008470' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008473' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008472' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP0008471' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008467' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008465' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008475' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP008474' matches prefix 'DMP' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

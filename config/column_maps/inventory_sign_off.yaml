@@ -1,0 +1,122 @@
+# config/column_maps/inventory_sign_off.yaml
+# (renamed from inventory_signoff.yaml — DEC-07, must match Extract's real
+# _doc_type tag "inventory_sign_off" exactly for load_column_map() to
+# resolve. An earlier fix attempt renamed this file to inventory.yaml
+# instead, matching source_of_truth.yaml's old, since-corrected "inventory"
+# label — that direction is reverted here; see source_of_truth.yaml's
+# top-of-file note for the full story.)
+#
+# Maps confirmed Del Monte Inventory Sign-Off file column vocabulary onto
+# one canonical schema. Checked profiling/sheet_profiles across both
+# regions and 2023 vs 2025 exports - the template changed shape over time
+# (see notes below), so read the confidence notes before trusting the
+# trailing columns.
+#
+# Extract leaves raw column names untouched; Transform applies this map.
+# Matching is case-insensitive and whitespace-normalized (see transform.py).
+
+# IMPORTANT - "__col0__" is NOT mapped in this file, on purpose, and this
+# needed a real decision, not a default: the template changed shape
+# between eras, so the position/label "__col0__" means two DIFFERENT
+# things depending on which export produced it -
+#   - 2023-era exports (9 columns): "__col0__" IS the combined
+#     "SKU code + product name" string (e.g. "9DMR56831 DM QUICK N EASY
+#     MECHADO SAUCE (Royce)").
+#   - 2025-era exports (11 columns): the file gained a new leading numeric
+#     ID column at that position instead (e.g. "11980"), and the combined
+#     "code + name" string moved to "__col1__".
+# A column map can only give one raw header one meaning per doc_type - if
+# "__col0__" were mapped to sku_description_raw here, a 2025-era file
+# would ALSO have "__col1__" mapping to the same canonical field, and
+# apply_column_map would try to rename two real columns to one name in the
+# same dataframe, silently merging/corrupting them. So "__col0__" is left
+# unmapped here; apply_column_map guarantees unmapped columns are kept
+# as-is (never dropped, see transform.py), so no data is lost - it just
+# means 2023-era files' sku_description_raw won't get renamed by this map
+# yet. Fix properly by giving transform.py a template-version-aware
+# dispatch for this doc_type (e.g. branch on column count or presence of
+# "__col1__") before relying on 2023-era inventory data downstream.
+
+# Phase 4 (2026-08, is_demo load-bearing): only ever present on synthetic
+# demo rows - no real Inventory Sign Off file has this header. See
+# purchase_order.yaml's identical note for the full real-row-default
+# reasoning (schema.sql's DEFAULT false handles it at Load time, not
+# backfilled here).
+is_demo:
+  - "is_demo"
+
+sku_description_raw:
+  - "__col1__"          # 2025-era exports ONLY (see note above) - the combined
+                         # "SKU code + product name" string, same format as
+                         # 2023's __col0__, just shifted one column over.
+
+# TRANSFORM TODO: sku_description_raw bundles the SKU code and the product
+# name in one cell (e.g. "9DMR56831 DM QUICK N EASY..."). This column map
+# only renames headers - it does NOT split cell contents. Whoever builds
+# transform.py's Product_Dimension population step for this doc_type still
+# needs to write a parser that splits the leading alphanumeric token
+# (SKU code) from the trailing product name text. Do not guess a regex
+# here without testing it against a real sample of these strings - some
+# SKU code prefixes look like "9DMR56831", others like "DMP57589" or
+# "9FSE57572" (inconsistent code lengths/prefixes), so a naive
+# first-space split may not always land in the right place.
+
+# In 2025-era exports, the new leading numeric column (e.g. 11980, 56261)
+# stays under its raw placeholder name "__col0__", unmapped, for the same
+# reason described above. Its purpose is not confirmed - could be an
+# internal ERP row/line ID, not necessarily a SKU key. Do not treat it as
+# sku_code without confirming with Yuan what it actually is.
+
+quantity_on_hand:
+  - "Quantity"
+
+cost:
+  - "Cost"
+
+valuation:
+  - "Valuation"
+
+valuation_with_vat:
+  - "Valuation with VAT"
+
+# DEC-09 (units-of-measure story): pieces feeds Inventory_Fact.quantity_pieces
+# directly via transform.normalize_quantities() - it's already the target
+# comparable unit. cases/packages below are deliberately NOT converted into
+# quantity_pieces: unlike Unilever, no pack_size column exists anywhere in
+# Del Monte's files (checked this map and the source samples), so a
+# cases/packages -> pieces conversion here would be fabricated, not derived.
+# Revisit if a real Del Monte pack_size source is ever confirmed.
+cases:
+  - "CAS"
+
+pieces:
+  - "PCS"
+
+# --- The following three are INFERRED BY COLUMN POSITION, not by a
+# literal header match in the same file. In 2025 exports these three
+# trailing columns have NO header text at all (confirmed blank, same
+# situation as sku_description_raw above). But in 2023 exports, the same
+# trailing positions in the same template carry these labels: PKG,
+# in PCS / PCS, in Cases. Position held steady across ~2 years of monthly
+# exports, which is reasonable evidence, but this is inference across
+# files, not a confirmed match within one file - spot-check a sample of
+# real 2025 rows against a 2023 file's same rows before fully trusting
+# this in production, and flag to Yuan for confirmation.
+packages:
+  - "PKG"           # confirmed header, 2023 exports only
+
+pieces_breakdown:
+  - "in PCS"        # confirmed header, most 2023 exports
+                     # NOTE: April 2023's export reused the literal header "PCS"
+                     # for BOTH this field and `pieces` above - a genuine
+                     # duplicate-header ambiguity in that one file. "PCS" is
+                     # deliberately NOT listed here (it's already claimed by
+                     # `pieces`, and column_maps forbid one raw header mapping to
+                     # two canonical fields - see transform.py's ColumnMap
+                     # ambiguity check, which will hard-error otherwise). For
+                     # that specific file, this column will fall through as
+                     # unmapped_raw rather than silently guessing which "PCS" is
+                     # which - flag to Yuan for a positional rule if it matters.
+
+cases_breakdown:
+  - "in Cases"      # confirmed header, 2023 exports only

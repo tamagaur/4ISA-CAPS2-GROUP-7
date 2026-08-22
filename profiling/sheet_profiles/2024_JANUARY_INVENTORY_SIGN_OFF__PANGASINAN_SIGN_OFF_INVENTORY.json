@@ -1,0 +1,153 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 01.2024/2024 JANUARY INVENTORY SIGN OFF.xlsx",
+  "sheet": "PANGASINAN SIGN OFF INVENTORY",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.81,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "in PCS",
+    "in Cases"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric",
+    "in PCS": "numeric",
+    "in Cases": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.65,
+    "in PCS": 0.0,
+    "in Cases": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 155,
+    "Quantity": 144,
+    "Cost": 155,
+    "Valuation": 155,
+    "Valuation with VAT": 155,
+    "CAS": 67,
+    "PCS": 39,
+    "PKG": 17,
+    "in PCS": 137,
+    "in Cases": 144
+  },
+  "samples": {
+    "__col0__": [
+      "     9DBL58403 DM 100% PA Juice w/ Vit ACE 202 6-Pack",
+      "     9DMU55616 DM Tomato Sauce Original Style 900g",
+      "     9DML57688 100% PINEAPPLE JUICE BONESMART",
+      "     9DMT56269 DM 100% PINE JUICE 24-202 W/ VIT ACE",
+      "     IQS58464 DMV-IQS Choco 48/110ml"
+    ],
+    "Quantity": [
+      "87.5",
+      "328.3333",
+      "4.833333",
+      "2",
+      "1.3125"
+    ],
+    "Cost": [
+      "26789",
+      "39701.65",
+      "15719.4",
+      "71388.24",
+      "640687.2"
+    ],
+    "Valuation": [
+      "26789",
+      "39701.65",
+      "15719.4",
+      "71388.24",
+      "640687.2"
+    ],
+    "Valuation with VAT": [
+      "5357.503",
+      "5956.058",
+      "14200.2",
+      "30003.68",
+      "82950.14"
+    ],
+    "CAS": [
+      "27",
+      "11",
+      "328",
+      "183",
+      "19"
+    ],
+    "PCS": [
+      "27",
+      "11",
+      "19",
+      "17",
+      "23"
+    ],
+    "PKG": [
+      "96",
+      "4",
+      "6",
+      "18",
+      "35"
+    ],
+    "in PCS": [
+      "11",
+      "260",
+      "17",
+      "2",
+      "164"
+    ],
+    "in Cases": [
+      "354.8333333333333",
+      "322.8333333333333",
+      "17",
+      "1.1666666666666667",
+      "2"
+    ]
+  },
+  "grain": "sku",
+  "usable_row_count": 155,
+  "header_signature": "4c962a7c0436",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "in cases",
+    "in pcs",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

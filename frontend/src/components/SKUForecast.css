@@ -14,6 +14,9 @@
 /* Header */
 .forecast-header {
   margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .forecast-title {
@@ -26,10 +29,9 @@
 }
 
 .forecast-title span {
-  font-family: 'Brush Script MT', 'Dancing Script', cursive;
-  color: #e53e3e;
-  font-weight: normal;
-  font-size: 2.6rem;
+  color: #c53030;
+  font-weight: 600;
+  font-size: 2rem;
 }
 
 .forecast-subtitle {
@@ -37,6 +39,35 @@
   font-size: 0.85rem;
   margin: 0;
   letter-spacing: 0.02em;
+}
+
+.forecast-subtext-today {
+  color: #a0aec0;
+  font-size: 0.78rem;
+  margin: 0.25rem 0 0 0;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.browse-all-skus-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  border: 1px solid #cbd5e0;
+  border-radius: 20px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.browse-all-skus-btn:hover {
+  background-color: #f7fafc;
+  color: #c53030;
+  border-color: #c53030;
 }
 
 /* Selection Area */
@@ -54,38 +85,268 @@
   text-transform: uppercase;
 }
 
-.search-wrapper {
+.forecast-grain-note {
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  background-color: #f7fafc;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: #718096;
+  line-height: 1.4;
+}
+
+/* Combobox Controls Bar & Filter Chips */
+.combobox-controls-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.forecast-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.filter-dropdown-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  color: #4a5568;
+}
+
+.filter-icon-label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+  color: #718096;
+  font-size: 0.75rem;
+}
+
+.filter-select {
+  border: none;
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1a202c;
+  outline: none;
+  cursor: pointer;
+}
+
+.clear-filters-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: #fee2e2;
+  color: #c53030;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Search Combobox Container */
+.search-combobox-wrapper {
   position: relative;
   width: 100%;
 }
 
-.search-icon {
+.search-input-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.search-input-inner .search-icon {
   position: absolute;
   left: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
   color: #a0aec0;
 }
 
-.search-input {
+.search-input-inner .search-input {
   width: 100%;
-  padding: 0.8rem 1rem 0.8rem 2.8rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.9rem;
+  padding: 0.8rem 2.5rem 0.8rem 2.8rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.88rem;
   color: #1a202c;
   background-color: #ffffff;
   outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.2s ease;
   box-sizing: border-box;
 }
 
-.search-input::placeholder {
-  color: #a0aec0;
+.search-input-inner .search-input:focus {
+  border-color: #c53030;
+  box-shadow: 0 0 0 3px rgba(197, 48, 48, 0.12);
 }
 
-.search-input:focus {
-  border-color: #3182ce;
+.input-clear-btn {
+  position: absolute;
+  right: 0.8rem;
+  background: none;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0.2rem;
+}
+
+.input-clear-btn:hover {
+  color: #4a5568;
+}
+
+/* Dropdown Panel */
+.combobox-results-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  max-height: 380px;
+  overflow-y: auto;
+  z-index: 500;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.combobox-section {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.combobox-section:last-child {
+  border-bottom: none;
+}
+
+.section-header-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 1rem 0.3rem 1rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+/* Result Row */
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.result-row:hover {
+  background-color: #f8fafc;
+}
+
+.result-row.selected {
+  background-color: #fef2f2;
+}
+
+.star-pin-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.2rem;
+  color: #cbd5e0;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s ease;
+}
+
+.star-pin-btn:hover {
+  color: #F5A623;
+}
+
+.star-pin-btn.pinned {
+  color: #F5A623;
+}
+
+.result-code-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 90px;
+}
+
+.result-sku-code {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.result-brand {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.result-product-name {
+  flex: 1;
+  font-size: 0.82rem;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.no-results-msg {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: 0.82rem;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* Card Pin Button */
+.sku-code-header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.2rem;
+}
+
+.card-star-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.card-star-btn:hover {
+  background-color: #fffbe6;
+  border-color: #fef08a;
+  color: #d97706;
+}
+
+.card-star-btn.pinned {
+  background-color: #fffbe6;
+  border-color: #fcd34d;
+  color: #d97706;
 }
 
 /* Selected SKU Card */
@@ -95,7 +356,7 @@
   padding: 1.5rem 2rem;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
   border: 1px solid #e2e8f0;
-  border-left: 4px solid #e53e3e;
+  border-left: 4px solid #6B2C5F;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -104,67 +365,127 @@
 .sku-info-left {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
 }
 
 .sku-code-label {
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
   color: #a0aec0;
-  text-transform: uppercase;
-  margin-bottom: 0.2rem;
+  letter-spacing: 0.05em;
 }
 
 .sku-code-value {
-  font-size: 1.2rem;
+  font-size: 1.6rem;
   font-weight: 700;
   color: #1a202c;
-  margin-bottom: 0.1rem;
+  line-height: 1.2;
+  margin-bottom: 0.2rem;
 }
 
 .sku-product-name {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #2d3748;
+  font-size: 0.95rem;
+  color: #4a5568;
+  font-weight: 500;
+  margin-bottom: 0.1rem;
 }
 
 .sku-brand-name {
   font-size: 0.8rem;
+  color: #a0aec0;
+}
+
+.sku-info-right {
+  display: flex;
+  align-items: flex-start;
+}
+
+.forecast-cat-badge {
+  padding: 0.35rem 0.9rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.forecast-cat-badge.cat-A, .cat-A {
+  background-color: #fdf2f8;
+  color: #6B2C5F;
+  border-color: #ebc9e1;
+}
+
+.forecast-cat-badge.cat-B, .cat-B {
+  background-color: #fdf4ff;
+  color: #B565A0;
+  border-color: #ebc9e1;
+}
+
+.forecast-cat-badge.cat-C, .cat-C {
+  background-color: #f8fafc;
+  color: #701a75;
+  border-color: #e2e8f0;
+}
+
+/* Forecast Accuracy Stat Row — Manuscript §3.5.5: MAPE and RMSE indicators.
+   Matches the LABEL/VALUE/DESC stat-block convention used across the app
+   (reorder-summary-card, abc-summary-card, wm-summary-card) instead of a
+   standalone badge, so these headline holdout-accuracy numbers carry the
+   same visual weight as every other module's key metrics. */
+.forecast-accuracy-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  background-color: #f7fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+}
+
+.forecast-stat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.forecast-stat-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #a0aec0;
+  text-transform: uppercase;
+}
+
+.forecast-stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.forecast-stat-value-neutral {
+  color: #1a202c;
+}
+
+.forecast-stat-desc {
+  font-size: 0.72rem;
   color: #718096;
 }
 
-.sku-info-right .forecast-cat-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1.2rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border: 1px solid transparent;
-  white-space: nowrap;
-  line-height: 1;
-  width: auto;
-  height: auto;
+.forecast-stat-divider {
+  width: 1px;
+  height: 32px;
+  background-color: #e2e8f0;
 }
 
-.sku-info-right .forecast-cat-badge.cat-A {
-  background-color: #fff5f5;
+.accuracy-high {
+  color: #2E9E5B;
+}
+
+.accuracy-moderate {
+  color: #b06000;
+}
+
+.accuracy-low {
   color: #e53e3e;
-  border-color: #fed7d7;
-}
-
-.sku-info-right .forecast-cat-badge.cat-B {
-  background-color: #ebf8ff;
-  color: #3182ce;
-  border-color: #bee3f8;
-}
-
-.sku-info-right .forecast-cat-badge.cat-C {
-  background-color: #fffff0;
-  color: #d69e2e;
-  border-color: #fef08a;
 }
 
 /* Chart Section */
@@ -178,29 +499,29 @@
 
 .chart-legend {
   display: flex;
-  gap: 2rem;
-  margin-bottom: 2rem;
-  padding-left: 0.5rem;
+  justify-content: flex-end;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 
 .legend-line {
-  width: 24px;
   height: 2px;
+  width: 24px;
   display: inline-block;
 }
 
 .line-actual {
-  background-color: #e53e3e;
+  background-color: #5B5FEF;
 }
 
 .line-forecast {
-  background-image: linear-gradient(to right, #3182ce 50%, transparent 50%);
+  background-image: linear-gradient(to right, #A855F7 50%, transparent 50%);
   background-size: 8px 100%;
   background-repeat: repeat-x;
   height: 2px;
@@ -215,26 +536,24 @@
 }
 
 .area-ci {
-  background-color: #ebf8ff;
+  background-color: #F3E8FF;
+  border: 1px solid #EBC9E1;
 }
 
 .legend-label {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: #4a5568;
-  font-family: monospace;
-  font-weight: 500;
 }
 
 .chart-wrapper {
-  margin-top: 1rem;
   width: 100%;
+  height: 400px;
 }
 
-/* Tooltip Customization */
 .forecast-tooltip {
   background-color: #ffffff;
   border: 1px solid #e2e8f0;
-  padding: 1rem;
+  padding: 0.6rem 0.8rem;
   border-radius: 8px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
 }
@@ -242,19 +561,16 @@
 .tooltip-label {
   font-weight: 600;
   color: #1a202c;
-  margin: 0 0 0.5rem 0;
-  font-size: 0.85rem;
-  border-bottom: 1px solid #edf2f7;
-  padding-bottom: 0.4rem;
+  margin: 0 0 0.4rem 0;
+  font-size: 0.8rem;
 }
 
 .tooltip-item {
-  font-size: 0.8rem;
-  margin: 0.3rem 0;
+  margin: 0.2rem 0;
+  font-size: 0.75rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  color: #4a5568;
+  gap: 0.4rem;
 }
 
 .tooltip-dot {
@@ -264,18 +580,33 @@
   display: inline-block;
 }
 
-/* Recharts Overrides */
-.recharts-cartesian-axis-tick-value {
-  font-family: monospace;
-}
+@media (max-width: 1024px) {
+  .forecast-header {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
 
-@media (max-width: 768px) {
-  .forecast-content {
-    padding: 0 1.5rem 1.5rem 1.5rem;
+  .forecast-filter-group {
+    width: 100%;
   }
 
   .chart-legend {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .selected-sku-card {
     flex-direction: column;
+    align-items: flex-start;
     gap: 1rem;
+  }
+
+  .forecast-accuracy-row {
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+  }
+
+  .forecast-stat-divider {
+    display: none;
   }
 }

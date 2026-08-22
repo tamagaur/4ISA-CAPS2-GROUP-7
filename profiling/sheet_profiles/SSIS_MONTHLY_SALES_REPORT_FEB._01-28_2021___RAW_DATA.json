@@ -1,0 +1,176 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS MONTHLY SALES REPORT (FEB. 01-28, 2021).xlsx",
+  "sheet": "RAW DATA",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.0,
+    "REASON CODE": 0.0,
+    "OUTLET": 0.0,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.0,
+    "Sale After TPR & UW": 0.0,
+    "NIV": 0.0,
+    "VAT": 0.0,
+    "Total Sales Amt Inc. Tax": 0.0,
+    "REMARKS": 0.0
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 21,
+    "REASON CODE": 9,
+    "OUTLET": 1569,
+    "OUTLET NAME": 1510,
+    "GSV": 3275,
+    "TPR + UW/DT Discount": 547,
+    "Sale After TPR & UW": 3312,
+    "NIV": 3312,
+    "VAT": 3168,
+    "Total Sales Amt Inc. Tax": 3312,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2021-02-26 00:00:00",
+      "2021-02-22 00:00:00",
+      "2021-02-05 00:00:00",
+      "2021-02-03 00:00:00",
+      "2021-02-13 00:00:00"
+    ],
+    "REASON CODE": [
+      "Stock Recall",
+      "Stock not available",
+      "GOOD - Store Cancellation",
+      "Overlanded/Shortlanded",
+      "Packaging Defect (Torn/Deformed/Broken)"
+    ],
+    "OUTLET": [
+      "664690",
+      "3350147",
+      "3247775",
+      "2855073",
+      "664924"
+    ],
+    "OUTLET NAME": [
+      "NANG DITA'S STORE",
+      "JSC PHARMACY",
+      "MINERVA STORE",
+      "TJ MINIMART",
+      "ANA AMOR SARI SARI STORE"
+    ],
+    "GSV": [
+      "10363.43",
+      "2397.86",
+      "206.7",
+      "-1137.5",
+      "-7384.84"
+    ],
+    "TPR + UW/DT Discount": [
+      "57.7",
+      "112",
+      "38.57",
+      "32.54",
+      "-434.22"
+    ],
+    "Sale After TPR & UW": [
+      "10363.43",
+      "25412.6",
+      "2397.86",
+      "206.7",
+      "-1137.5"
+    ],
+    "NIV": [
+      "10363.43",
+      "25412.6",
+      "2397.86",
+      "206.7",
+      "-1137.5"
+    ],
+    "VAT": [
+      "218.36",
+      "372.35",
+      "570.86",
+      "11415.45",
+      "167.79"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "-567.86",
+      "-355.5",
+      "-273",
+      "2648.42",
+      "-300.71"
+    ],
+    "REMARKS": [
+      "INVOICED",
+      "RETURNS"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 4179,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'niv'",
+    "header contains 'gsv'",
+    "header contains 'tpr'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

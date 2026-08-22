@@ -1,0 +1,249 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 06.2025/2025 JUNE SALES RETURN.xlsx",
+  "sheet": "PANGASINAN GS",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "text",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "text",
+    "Discount Rate": "text",
+    "Discount Amount": "text",
+    "Tax": "text",
+    "Net Amount": "text",
+    "Balance": "text",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 1.45,
+    "Town Display": 1.45,
+    "Branch Code": 1.45,
+    "Customer Name": 1.45,
+    "Invoice Num": 1.45,
+    "REFNBR": 1.45,
+    "Untaxed Amount": 1.45,
+    "Discount Rate": 1.45,
+    "Discount Amount": 1.45,
+    "Tax": 1.45,
+    "Net Amount": 1.45,
+    "Balance": 1.45,
+    "Posted": 1.45,
+    "Return Slip #": 2.9,
+    "Return Type": 1.45
+  },
+  "distinct_count": {
+    "Invoice Date": 16,
+    "Salesman": 7,
+    "Town Display": 28,
+    "Branch Code": 60,
+    "Customer Name": 60,
+    "Invoice Num": 67,
+    "REFNBR": 67,
+    "Untaxed Amount": 58,
+    "Discount Rate": 5,
+    "Discount Amount": 17,
+    "Tax": 58,
+    "Net Amount": 58,
+    "Balance": 12,
+    "Posted": 3,
+    "Return Slip #": 66,
+    "Return Type": 2
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-06-27",
+      "2025-06-20",
+      "2025-06-09",
+      "2025-06-17",
+      "2025-06-30"
+    ],
+    "Salesman": [
+      "VOLTAIRE FINOGUAR",
+      "ADMIN SALES",
+      "Salesman",
+      "BENJAMIN AQUINO",
+      "GEORGE CHAN"
+    ],
+    "Town Display": [
+      "ANDA",
+      "BAGUIO CITY",
+      "CITY OF SAN FERNANDO (Capital)",
+      "ROSARIO",
+      "CALASIAO"
+    ],
+    "Branch Code": [
+      "L12F-002481",
+      "L12F-002516",
+      "L12F-002477",
+      "L12F-002814",
+      "L12F-002406"
+    ],
+    "Customer Name": [
+      "DAPOG RESTAURANT ",
+      "MAMA RAQUEL EATERY",
+      "J's  LOFT (La Trinidad)",
+      "MAMITAS BULALUHAN - BOTANICAL",
+      "JKKG'S SNACK HOUSE CCDC CANTEEN"
+    ],
+    "Invoice Num": [
+      "INV/2025/4148",
+      "INV/2025/4778",
+      "INV/2025/4150",
+      "INV/2025/4146",
+      "INV/2025/3983"
+    ],
+    "REFNBR": [
+      "DMP022607",
+      "DMP022461",
+      "DMP022632",
+      "DMP022747",
+      "DMP022897"
+    ],
+    "Untaxed Amount": [
+      "450.03",
+      "1201",
+      "Untaxed Amount",
+      "5006.16",
+      "8187.46"
+    ],
+    "Discount Rate": [
+      "Public Pricelist",
+      "LESS 3%",
+      "Less 2%",
+      "LESS 4%",
+      "Discount Rate"
+    ],
+    "Discount Amount": [
+      "1291.86",
+      "23.72",
+      "0",
+      "17.59",
+      "9.18"
+    ],
+    "Tax": [
+      "159.73",
+      "3720.56",
+      "224.79",
+      "188.57",
+      "982.49"
+    ],
+    "Net Amount": [
+      "11840.19",
+      "1482.24",
+      "4748.13",
+      "4632.07",
+      "5606.9"
+    ],
+    "Balance": [
+      "636.94",
+      "0",
+      "1482.24",
+      "9169.95",
+      "762.24"
+    ],
+    "Posted": [
+      "No",
+      "Yes",
+      "Posted"
+    ],
+    "Return Slip #": [
+      "RMR31297",
+      "RMR 30276",
+      "RMR 8593",
+      "RMR46081",
+      "RMR15341"
+    ],
+    "Return Type": [
+      "Return Type",
+      "GS"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 69,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'DMP022916' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'TDM002033**' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'DMP022864-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022784*' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023021' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022058' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP019224' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022955' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022999-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021765' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022074' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022632' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023037' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP023029' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021785' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022999' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022933' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022460-3' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022381-3' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'TDM002033*' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'DMP022987' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022093' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022993' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021260' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022747' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP022607' matches prefix 'DMP' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

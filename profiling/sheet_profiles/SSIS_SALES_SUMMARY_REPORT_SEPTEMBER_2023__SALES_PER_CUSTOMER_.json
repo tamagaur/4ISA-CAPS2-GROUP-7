@@ -1,0 +1,212 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT SEPTEMBER 2023.xlsx",
+  "sheet": "SALES PER CUSTOMER ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.871,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "UL GSV",
+    "Mark-up/Mark-down Value in %",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "text",
+    "__col1__": "text",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "UL GSV": "numeric",
+    "Mark-up/Mark-down Value in %": "text",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 83.72,
+    "__col1__": 83.72,
+    "CALENDAR DAY": 0.11,
+    "REASON CODE": 0.11,
+    "OUTLET": 0.11,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.04,
+    "Sale After TPR & UW": 0.04,
+    "NIV": 0.04,
+    "VAT": 0.04,
+    "Total Sales Amt Inc. Tax": 0.04,
+    "UL GSV": 0.04,
+    "Mark-up/Mark-down Value in %": 0.04,
+    "REMARKS": 0.11
+  },
+  "distinct_count": {
+    "Salesman": 10,
+    "__col1__": 10,
+    "CALENDAR DAY": 26,
+    "REASON CODE": 15,
+    "OUTLET": 2278,
+    "OUTLET NAME": 2157,
+    "GSV": 3051,
+    "TPR + UW/DT Discount": 799,
+    "Sale After TPR & UW": 3109,
+    "NIV": 3109,
+    "VAT": 3042,
+    "Total Sales Amt Inc. Tax": 3109,
+    "UL GSV": 3034,
+    "Mark-up/Mark-down Value in %": 2928,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [
+      "14364",
+      "29809",
+      "3684",
+      "10706",
+      "29807"
+    ],
+    "__col1__": [
+      "JESSIE MIRADIOS",
+      "JOHN RANIEL SAJONIA",
+      "JOEVIC L. BABAY JR.",
+      "BONIFACIO UDANI JR.",
+      "JAMES TAGAYUNA"
+    ],
+    "CALENDAR DAY": [
+      "2023-09-01 00:00:00",
+      "2023-09-05 00:00:00",
+      "2023-09-11 00:00:00",
+      "2023-09-12 00:00:00",
+      "2023-09-19 00:00:00"
+    ],
+    "REASON CODE": [
+      "BAD - Damaged stocks",
+      "Expired stock/Near expiry",
+      "Overlanded/Shortlanded",
+      "Stock not available",
+      "Underweight / Underfill"
+    ],
+    "OUTLET": [
+      "3448145",
+      "3917851",
+      "4432662",
+      "4508862",
+      "1121046"
+    ],
+    "OUTLET NAME": [
+      "ROSEMARIE FE VEG",
+      "BING STORE",
+      "AHMER STORE",
+      "BABIDA STORE",
+      "ANGIE"
+    ],
+    "GSV": [
+      "-305.45",
+      "436.05",
+      "7505.12",
+      "17057.32",
+      "16392.83"
+    ],
+    "TPR + UW/DT Discount": [
+      "-328.12",
+      "68267.33999999998",
+      "-409.82",
+      "31.36",
+      "0.51"
+    ],
+    "Sale After TPR & UW": [
+      "-305.45",
+      "436.05",
+      "7505.12",
+      "1091.18",
+      "27539.8"
+    ],
+    "NIV": [
+      "-305.45",
+      "436.05",
+      "7505.12",
+      "1091.18",
+      "27539.8"
+    ],
+    "VAT": [
+      "4802.98",
+      "-16.63",
+      "64.06",
+      "35623.03",
+      "63.61"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "6467.81",
+      "6940.53",
+      "1105.27",
+      "334.9",
+      "-2157.2"
+    ],
+    "UL GSV": [
+      "5451.16",
+      "334.8",
+      "2210.62",
+      "-28.39",
+      "862.63"
+    ],
+    "Mark-up/Mark-down Value in %": [
+      "100.02745862196197",
+      "44.00066341802643",
+      "9.98720581181873",
+      "-1.9230558987197848",
+      "32.00034670352249"
+    ],
+    "REMARKS": [
+      "RETURN",
+      "INVOICE"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 5664,
+  "header_signature": "686327ad1a64",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "mark-up/mark-down value in %",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "ul gsv",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'tpr'",
+    "header contains 'niv'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

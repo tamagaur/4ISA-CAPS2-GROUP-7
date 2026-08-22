@@ -1,0 +1,191 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT JUNE 2022.xlsx",
+  "sheet": "SOH(JULY 1,2022)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "MOVING AVERAGE PRICE(CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route",
+    "Batch",
+    "Hierarchy Node"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "MOVING AVERAGE PRICE(CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty",
+    "Batch": "text",
+    "Hierarchy Node": "text"
+  },
+  "null_pct": {
+    "Storage Location": 0.12,
+    "Article No": 0.12,
+    "Article Description": 0.12,
+    "PACK SIZE": 0.12,
+    "Stock Quantity (CS/PC)": 0.12,
+    "Stock Value": 0.0,
+    "PO Qty": 61.99,
+    "Open SO Quantity": 74.66,
+    "Balance Quantity": 0.12,
+    "MOVING AVERAGE PRICE(CS)": 0.12,
+    "Status": 0.12,
+    "CATEGORY DESC": 0.12,
+    "Sales Route": 100.0,
+    "Batch": 0.12,
+    "Hierarchy Node": 0.12
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 804,
+    "Article Description": 803,
+    "PACK SIZE": 22,
+    "Stock Quantity (CS/PC)": 483,
+    "Stock Value": 803,
+    "PO Qty": 60,
+    "Open SO Quantity": 77,
+    "Balance Quantity": 520,
+    "MOVING AVERAGE PRICE(CS)": 715,
+    "Status": 1,
+    "CATEGORY DESC": 13,
+    "Sales Route": 0,
+    "Batch": 1,
+    "Hierarchy Node": 13
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "68160829",
+      "68559029",
+      "68363443",
+      "67785997",
+      "68535776"
+    ],
+    "Article Description": [
+      "COMFORT HS NM LIQ GLAMOUR CARE 12X600ML",
+      "DOMEX LMON EXPLOSION GKILL 24X500ML",
+      "REXONA TBE NTRL WHTNG FRSH SKRA 8X3X50ML",
+      "KNORR LIQUID SEASONING CHILI 24X250ML",
+      "ESKINOL MICELLARWTR LEMON 4X6X200ML"
+    ],
+    "PACK SIZE": [
+      "72",
+      "3",
+      "288",
+      "12",
+      "108"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "3/212",
+      "61/8",
+      "3/12",
+      "61/509",
+      "393/1"
+    ],
+    "Stock Value": [
+      "10509.42",
+      "4735.56",
+      "2092.24",
+      "10594.05",
+      "33996.59"
+    ],
+    "PO Qty": [
+      "12/0",
+      "162/0",
+      "508/0",
+      "105/0",
+      "10/0"
+    ],
+    "Open SO Quantity": [
+      "6/0",
+      "3/12",
+      "1/3",
+      "4/6",
+      "1/144"
+    ],
+    "Balance Quantity": [
+      "3/212",
+      "26/4",
+      "864/6",
+      "2/9",
+      "87/1"
+    ],
+    "MOVING AVERAGE PRICE(CS)": [
+      "1425.84",
+      "895.39",
+      "1566.2",
+      "4137.12",
+      "809.59"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "TEA",
+      "SKIN CARE",
+      "DEODORANTS & FRAGRANCES",
+      "FABRIC CLEANING",
+      "DRESSINGS"
+    ],
+    "Sales Route": [],
+    "Batch": [
+      "VALUATED"
+    ],
+    "Hierarchy Node": [
+      "3G06",
+      "3103",
+      "4419",
+      "6A42",
+      "4435"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 805,
+  "header_signature": "e8939eea483b",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "category desc",
+    "hierarchy node",
+    "moving average price(cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

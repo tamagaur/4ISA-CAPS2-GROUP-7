@@ -1,0 +1,190 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT MARCH 2023.xlsx",
+  "sheet": "INVOICE REG(MARCH 2023)",
+  "real_format": "xlsx",
+  "header_row_index": 8,
+  "header_confidence": 0.716,
+  "junk_ranges": [
+    [
+      0,
+      7
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "Calendar Day",
+    "Invoice No",
+    "Reason Code",
+    "Outlet",
+    "__col6__",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax"
+  ],
+  "dtypes": {
+    "Salesman": "text",
+    "__col1__": "text",
+    "Calendar Day": "datetime",
+    "Invoice No": "text",
+    "Reason Code": "text",
+    "Outlet": "text",
+    "__col6__": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric"
+  },
+  "null_pct": {
+    "Salesman": 0.0,
+    "__col1__": 0.0,
+    "Calendar Day": 0.0,
+    "Invoice No": 0.0,
+    "Reason Code": 0.0,
+    "Outlet": 0.0,
+    "__col6__": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.0,
+    "Sale After TPR & UW": 0.0,
+    "NIV": 0.0,
+    "VAT": 0.0,
+    "Total Sales Amt Inc. Tax": 0.0
+  },
+  "distinct_count": {
+    "Salesman": 12,
+    "__col1__": 12,
+    "Calendar Day": 27,
+    "Invoice No": 6626,
+    "Reason Code": 14,
+    "Outlet": 2275,
+    "__col6__": 2152,
+    "GSV": 3471,
+    "TPR + UW/DT Discount": 688,
+    "Sale After TPR & UW": 3527,
+    "NIV": 3527,
+    "VAT": 3403,
+    "Total Sales Amt Inc. Tax": 3527
+  },
+  "samples": {
+    "Salesman": [
+      "32394",
+      "3684",
+      "31936",
+      "32389",
+      "29808"
+    ],
+    "__col1__": [
+      "BONIFACIO UDANI JR.",
+      "FELIPE A. ALCAUSIN",
+      "MARIA ELENA CASTILLO",
+      "JOHN RANDOLL REYES",
+      "JAMES TAGAYUNA"
+    ],
+    "Calendar Day": [
+      "2023-03-30 00:00:00",
+      "2023-03-18 00:00:00",
+      "2023-03-04 00:00:00",
+      "2023-03-13 00:00:00",
+      "2023-03-07 00:00:00"
+    ],
+    "Invoice No": [
+      "CZ40169853",
+      "CZ30975873",
+      "CZ30970133",
+      "CZ30977609",
+      "CZ30970278"
+    ],
+    "Reason Code": [
+      "Order cancelled by customer",
+      "Order cancelled by salesmen",
+      "Stock not available",
+      "BAD - Damaged stocks",
+      "Not assigned"
+    ],
+    "Outlet": [
+      "665569",
+      "3004412",
+      "664997",
+      "3843571",
+      "3248275"
+    ],
+    "__col6__": [
+      "CREMJELS SARI SARI STORE",
+      "JACKI STORE",
+      "JONALYN STORE",
+      "CONCHING STORE",
+      "VELASCO- STA. MARIA 811"
+    ],
+    "GSV": [
+      "1622.21",
+      "934.41",
+      "738.11",
+      "7978.81",
+      "730.43"
+    ],
+    "TPR + UW/DT Discount": [
+      "-9849.72",
+      "-42.79",
+      "-460.22",
+      "-9222.4",
+      "-780.36"
+    ],
+    "Sale After TPR & UW": [
+      "-5830.4",
+      "1622.21",
+      "-91.43",
+      "934.41",
+      "7978.81"
+    ],
+    "NIV": [
+      "-5830.4",
+      "1622.21",
+      "-91.43",
+      "934.41",
+      "7978.81"
+    ],
+    "VAT": [
+      "135.88",
+      "267.85",
+      "68.45",
+      "-323.87",
+      "181.89"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "135.88",
+      "-2571.79",
+      "10230.96",
+      "1576.25",
+      "2445.65"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 6626,
+  "header_signature": "6dd2f346224a",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "invoice no",
+    "niv",
+    "outlet",
+    "reason code",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'gsv'",
+    "header contains 'tpr'",
+    "header contains 'niv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

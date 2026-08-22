@@ -1,0 +1,54 @@
+# config/column_maps/sell_out.yaml
+#
+# Maps confirmed Del Monte Sell Out file column vocabulary onto one
+# canonical schema. Checked against profiling/sheet_profiles across both
+# regions and 2023/2025 exports - this template is small and completely
+# stable, no vocab drift found.
+#
+# Extract leaves raw column names untouched; Transform applies this map.
+# Matching is case-insensitive and whitespace-normalized (see transform.py).
+#
+# GRAIN NOTE (DEC-03): this file has no SKU column anywhere - the leading
+# column is a category/brand label (e.g. "BEVERAGE", "FRUITS",
+# "INNOVATION"), confirmed by direct inspection of source samples. This is
+# exactly why Del Monte forecasting is category-grain, not SKU-grain - do
+# not try to force a sku_code mapping here, none exists in this file family.
+
+# Phase 4 (2026-08, is_demo load-bearing): only ever present on synthetic
+# demo rows - no real Sell Out file has this header. See
+# purchase_order.yaml's identical note for the full real-row-default
+# reasoning (schema.sql's DEFAULT false handles it at Load time, not
+# backfilled here).
+is_demo:
+  - "is_demo"
+
+category_path:
+  - "__col0__"    # NOTE: the source file has NO header text in this column at all
+                  # (confirmed via profiling - not a header-detection failure, the
+                  # cell is genuinely blank). "__col0__" is the placeholder name
+                  # Extract's header-recovery assigns to an unlabeled leading
+                  # column - map from that placeholder, not from real header text,
+                  # because there isn't any. Values look like '/ACE/BASE'-style
+                  # category/brand labels with leading whitespace (needs a strip,
+                  # already handled by clean.standardize_product_code-style logic).
+
+net_amount:
+  - "Total Without Tax"
+
+quantity:
+  - "Product Quantity"
+  # OUT OF SCOPE for DEC-09 (units-of-measure normalization): no unit is
+  # confirmed for this column (never documented as pieces, cases, or
+  # anything else) and there's no pack_size anywhere in this file family
+  # to convert against - same evidence gap as inventory_sign_off's
+  # cases/packages. Left untouched rather than guessed; revisit only with
+  # real confirmation of what unit this column reports.
+
+quantity_cases:
+  - "CASE"    # only present in newer (2025+) exports - optional column, not every period will have it
+                # Same DEC-09 scope note as quantity above - no pack_size to
+                # reconcile this against either.
+
+# No other columns exist in this file family. No date/period column either -
+# _period is expected to come from Extract's filename/sheet tagging
+# (e.g. "2025 AUGUST SELL OUT.xlsx"), not from a cell in the sheet itself.

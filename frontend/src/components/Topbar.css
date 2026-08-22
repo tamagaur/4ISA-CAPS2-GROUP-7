@@ -37,6 +37,55 @@
   font-size: 0.9rem;
 }
 
+.principal-filter {
+  display: flex;
+  align-items: center;
+}
+
+.principal-segmented {
+  display: flex;
+  background-color: #f1f5f9;
+  border-radius: 20px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.principal-segment {
+  border: none;
+  background: none;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4a5568;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.principal-segment:hover {
+  color: #1a202c;
+}
+
+.principal-segment.active {
+  background-color: #ffffff;
+  color: #c53030;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.principal-dropdown {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .principal-segmented {
+    display: none;
+  }
+  .principal-dropdown {
+    display: block;
+  }
+}
+
 .dropdown-select {
   appearance: none;
   -webkit-appearance: none;
@@ -58,4 +107,79 @@
 
 .dropdown-select:hover {
   background-color: #e2e8f0;
+}
+
+.period-selector-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dropdown-select.dropdown-pending {
+  border: 1.5px solid #c53030;
+  background-color: #fff5f5;
+  box-shadow: 0 0 0 2px rgba(197, 48, 48, 0.12);
+}
+
+.period-today-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: #f1f5f9;
+  color: #4a5568;
+  border: 1px solid #cbd5e0;
+  border-radius: 16px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.period-today-btn:hover:not(.is-today) {
+  background-color: #e2e8f0;
+  color: #1a202c;
+  border-color: #a0aec0;
+}
+
+.period-today-btn.is-today {
+  opacity: 0.6;
+  cursor: default;
+  border-color: #e2e8f0;
+}
+
+.period-apply-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.pending-indicator-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #F5A623;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.period-apply-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background-color: #c53030;
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(197, 48, 48, 0.25);
+  transition: all 0.2s ease;
+}
+
+.period-apply-btn:hover {
+  background-color: #9b2c2c;
+  transform: translateY(-1px);
 }

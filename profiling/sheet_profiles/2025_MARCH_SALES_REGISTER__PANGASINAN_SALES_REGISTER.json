@@ -1,0 +1,228 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 03.2025/2025 MARCH SALES REGISTER.xlsx",
+  "sheet": "PANGASINAN SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 0.862,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Dscount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "__col13__"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Dscount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "__col13__": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Dscount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "__col13__": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 24,
+    "Salesman": 6,
+    "Town Display": 50,
+    "Branch Code": 439,
+    "Customer Name": 439,
+    "Invoice Num": 765,
+    "REFNBR": 765,
+    "Untaxed Amount": 600,
+    "Discount Rate": 4,
+    "Dscount Amount": 160,
+    "Tax": 596,
+    "Net Amount": 600,
+    "Balance": 552,
+    "__col13__": 2
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-03-20",
+      "2025-03-08",
+      "2025-03-25",
+      "2025-03-29",
+      "2025-03-22"
+    ],
+    "Salesman": [
+      "DSP7-LATRINIDAD",
+      "CORFEL PARAS",
+      "ADMIN SALES",
+      "JOSE JUDE MAMURI",
+      "BENJAMIN AQUINO"
+    ],
+    "Town Display": [
+      "CALASIAO",
+      "SUAL",
+      "TUBLAY",
+      "BACNOTAN",
+      "SAN JACINTO"
+    ],
+    "Branch Code": [
+      "L12F-002477",
+      "L12F-002690",
+      "L12F-B000055",
+      "L12F-002201",
+      "L12F-002710"
+    ],
+    "Customer Name": [
+      "NACKS PIZZA",
+      "BSU MARKETING",
+      "KAYU BAR AND RESTAURANT",
+      "CF ESGUERRA GROUP VENTURES",
+      "RAN-MAR ENTERPRISES"
+    ],
+    "Invoice Num": [
+      "INV/2025/2258",
+      "INV/2025/2047",
+      "INV/2025/1769",
+      "INV/2025/1776",
+      "INV/2025/1873"
+    ],
+    "REFNBR": [
+      "DMP021553-4",
+      "DMP021522",
+      "DMP021553-2",
+      "DMP021347",
+      "DMP021449"
+    ],
+    "Untaxed Amount": [
+      "2628.86",
+      "1314.63",
+      "4657.8",
+      "313.82",
+      "1572.9"
+    ],
+    "Discount Rate": [
+      "LESS 3%",
+      "Public Pricelist",
+      "Less 2%",
+      "LESS 4%"
+    ],
+    "Dscount Amount": [
+      "692.62",
+      "170.05",
+      "256.34",
+      "1015.28",
+      "383.68"
+    ],
+    "Tax": [
+      "3029.81",
+      "11046.88",
+      "1.96",
+      "190.18",
+      "15914.56"
+    ],
+    "Net Amount": [
+      "1360.99",
+      "708.08",
+      "5106.57",
+      "1454.92",
+      "31592.99"
+    ],
+    "Balance": [
+      "1360.99",
+      "5106.57",
+      "1454.92",
+      "31592.99",
+      "1465.2"
+    ],
+    "__col13__": [
+      "Yes",
+      "No"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 765,
+  "header_signature": "4909b94094c2",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount rate",
+    "dscount amount",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "refnbr",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'DMP021606-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021604' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021603-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021478-4' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021599-3' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021596-3' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021594-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021588-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021584-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021583-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021582-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021577-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021575-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021569-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021568-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021567-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021563-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021562-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021561-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021560-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021558-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021554-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'TDM002043' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'DMP021747-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021747' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021728' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021746' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021744' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021743' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP021742' matches prefix 'DMP' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

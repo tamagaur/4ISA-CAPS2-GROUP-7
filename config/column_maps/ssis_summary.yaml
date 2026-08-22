@@ -1,0 +1,67 @@
+# config/column_maps/ssis_summary.yaml
+#
+# Maps the Unilever SSIS "RAW DATA" sheet-role column vocabulary onto
+# canonical fields. Checked against profiling/sheet_profiles for the
+# SSIS_DAILY_SALES_SUMMARY_REPORT_* family (Jan-Nov 2022 confirmed
+# identical schema, no drift found).
+#
+# Extract leaves raw column names untouched; Transform applies this map.
+# Matching is case-insensitive and whitespace-normalized (see transform.py).
+#
+# OPEN BLOCKER (see config/source_of_truth.yaml -> sales.unilever): this
+# sheet has NO invoice/reference/transaction-ID column of any kind - only
+# outlet + calendar day + reason code. natural_key is set to null there
+# on purpose; transform_fact() will raise rather than guess one. Do not
+# add an invented "invoice_num" mapping here to make that go away - if a
+# real key surfaces (e.g. confirmed with Yuan, or found in a column this
+# profiling pass missed), fix source_of_truth.yaml's natural_key first,
+# then this file only needs a mapping if that key is a renamed column.
+
+salesman:
+  - "Salesman"
+
+calendar_day:
+  - "CALENDAR DAY"
+
+reason_code:
+  - "REASON CODE"
+
+outlet_code:
+  - "OUTLET"        # numeric, e.g. "3192815" - TEXT per ARCHITECTURE.md
+                     # §6.3 type-trap rule (codes are never numeric),
+                     # confirm no leading-zero loss before trusting this.
+
+outlet_name:
+  - "OUTLET NAME"
+
+gsv:
+  - "GSV"
+
+discount_amount:
+  - "TPR + UW/DT Discount"
+
+net_amount:
+  - "Sale After TPR & UW"
+  # NOTE: NOT "NIV" - profiling shows "Sale After TPR & UW" and "NIV" are
+  # identical in every sampled row (both equal GSV minus discount). Only
+  # one is mapped to net_amount to avoid a duplicate-source ambiguity;
+  # "NIV" is left unmapped below rather than aliased to the same field,
+  # since two raw headers mapping to one canonical column is exactly the
+  # ambiguity transform.py's ColumnMap check forbids. If NIV and
+  # "Sale After TPR & UW" ever diverge in a real file, that needs a human
+  # decision (a cross-check discrepancy), not a silent pick here.
+
+vat:
+  - "VAT"
+
+net_amount_inc_tax:
+  - "Total Sales Amt Inc. Tax"
+
+remarks:
+  - "REMARKS"
+
+# --- Deliberately NOT mapped ---
+# "NIV" - see net_amount note above; falls through as unmapped_raw.
+# "__col1__" - unlabeled column, purpose not confirmed in profiling
+#   (always empty/null in every sampled sheet so far). Left unmapped
+#   rather than guessed; flag if a non-null sample ever turns up.

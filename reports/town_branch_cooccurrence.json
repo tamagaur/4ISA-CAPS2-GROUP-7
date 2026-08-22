@@ -1,0 +1,6769 @@
+{
+  "ilocos": {
+    "real_row_count": 2562,
+    "distinct_pairs": 480,
+    "pairs": [
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-000773",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-000774",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-000802",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-000816",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-000822",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-000830",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-000838",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-000891",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-000892",
+        "real_weight": 11
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-001091",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-001158",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BACARRA",
+        "branch_code": "L12E-001240",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-000664",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-000781",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-001263",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-001307",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-001308",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-001309",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-001310",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-001319",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-001320",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BADOC",
+        "branch_code": "L12E-001321",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BANAYOYO",
+        "branch_code": "L12E-001067",
+        "real_weight": 10
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-000653",
+        "real_weight": 5
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-000654",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-000701",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-000933",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-000950",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-000956",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-000996",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001021",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001031",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001033",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001047",
+        "real_weight": 5
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001060",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001079",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001093",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001117",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001118",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001139",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001146",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001177",
+        "real_weight": 10
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001205",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001233",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001234",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001239",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001269",
+        "real_weight": 5
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001270",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001298",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-001324",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BANTAY",
+        "branch_code": "L12E-B000021",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12B-9000085",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-000707",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-000863",
+        "real_weight": 14
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-000934",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-000957",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-000976",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001002",
+        "real_weight": 11
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001046",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001122",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001153",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001162",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001163",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001189",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001190",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001229",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001230",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001274",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001289",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001316",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-001334",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-B002067",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CABUGAO",
+        "branch_code": "L12E-B002548",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "000042",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "000069",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12B-9000141",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-000689",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-000813",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-000899",
+        "real_weight": 14
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001006",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001051",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001053",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001068",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001085",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001104",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001255",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001295",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001304",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001305",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001315",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001326",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-001348",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-B000053",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF BATAC",
+        "branch_code": "L12E-B000075",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-000721",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-000754",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-000881",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-000914",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-000915",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-000919",
+        "real_weight": 11
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001026",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001090",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001113",
+        "real_weight": 11
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001126",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001134",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001135",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001136",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001142",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001200",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001217",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001223",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001224",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001253",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001266",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001276",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-001312",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF CANDON",
+        "branch_code": "L12E-B000072",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "000043",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000621",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000696",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000748",
+        "real_weight": 14
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000789",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000843",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000947",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000956",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000975",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000997",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-000998",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001107",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001128",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001147",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001148",
+        "real_weight": 15
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001155",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001178",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001179",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001181",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001182",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001202",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001206",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001207",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001208",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001218",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001222",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001227",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-001336",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF VIGAN (Capital)",
+        "branch_code": "L12E-DP00007",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-000962",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-000987",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-000988",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-001096",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-001282",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-001286",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-001288",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-001330",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-001340",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-B000029",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-B000058",
+        "real_weight": 11
+      },
+      {
+        "town_display": "CURRIMAO",
+        "branch_code": "L12E-B002079",
+        "real_weight": 6
+      },
+      {
+        "town_display": "DINGRAS",
+        "branch_code": "L12E-000786",
+        "real_weight": 5
+      },
+      {
+        "town_display": "DINGRAS",
+        "branch_code": "L12E-000913",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "000036",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "000053",
+        "real_weight": 19
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "000058",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "000061",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "000066",
+        "real_weight": 9
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12B-9000006",
+        "real_weight": 10
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12B-9000021",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12B-9000025",
+        "real_weight": 7
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12B-9000031",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12B-9000100",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12B-9000130",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12B-9000261",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12B-9000363",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-0000440",
+        "real_weight": 6
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-0000457",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-0000500",
+        "real_weight": 22
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000611",
+        "real_weight": 13
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000624",
+        "real_weight": 20
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000626",
+        "real_weight": 14
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000642",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000740",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000765",
+        "real_weight": 7
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000766",
+        "real_weight": 6
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000834",
+        "real_weight": 12
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000835",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000841",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000860",
+        "real_weight": 16
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000870",
+        "real_weight": 17
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000875",
+        "real_weight": 10
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000885",
+        "real_weight": 18
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000908",
+        "real_weight": 13
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000936",
+        "real_weight": 11
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000953",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000958",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000967",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000980",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000985",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000993",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-000994",
+        "real_weight": 11
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001000",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001018",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001040",
+        "real_weight": 13
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001044",
+        "real_weight": 15
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001045",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001052",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001056",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001080",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001086",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001088",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001103",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001120",
+        "real_weight": 9
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001132",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001160",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001164",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001180",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001185",
+        "real_weight": 7
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001196",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001198",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001236",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001250",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001251",
+        "real_weight": 11
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001254",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001267",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001277",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001290",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001291",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001292",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001293",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001294",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001300",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001301",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001302",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001327",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001328",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001335",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001341",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-001349",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-B000026",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-B000081",
+        "real_weight": 12
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-B000086",
+        "real_weight": 15
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-B000095",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LAOAG CITY (Capital)",
+        "branch_code": "L12E-B001788",
+        "real_weight": 19
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-000693",
+        "real_weight": 12
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-000824",
+        "real_weight": 6
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-000833",
+        "real_weight": 7
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-000850",
+        "real_weight": 8
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-000852",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-000943",
+        "real_weight": 5
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-000960",
+        "real_weight": 9
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-001003",
+        "real_weight": 4
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-001010",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-001011",
+        "real_weight": 2
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-001012",
+        "real_weight": 2
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-001110",
+        "real_weight": 8
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-001183",
+        "real_weight": 7
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-001213",
+        "real_weight": 6
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-001221",
+        "real_weight": 5
+      },
+      {
+        "town_display": "MAGSINGAL",
+        "branch_code": "L12E-001228",
+        "real_weight": 2
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-000683",
+        "real_weight": 6
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-000763",
+        "real_weight": 4
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-000787",
+        "real_weight": 1
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-000922",
+        "real_weight": 6
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001014",
+        "real_weight": 10
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001041",
+        "real_weight": 2
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001069",
+        "real_weight": 1
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001115",
+        "real_weight": 12
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001129",
+        "real_weight": 5
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001130",
+        "real_weight": 2
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001237",
+        "real_weight": 5
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001247",
+        "real_weight": 2
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001261",
+        "real_weight": 1
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001313",
+        "real_weight": 3
+      },
+      {
+        "town_display": "NARVACAN",
+        "branch_code": "L12E-001325",
+        "real_weight": 2
+      },
+      {
+        "town_display": "PAOAY",
+        "branch_code": "000014",
+        "real_weight": 7
+      },
+      {
+        "town_display": "PAOAY",
+        "branch_code": "L12E-000645",
+        "real_weight": 5
+      },
+      {
+        "town_display": "PAOAY",
+        "branch_code": "L12E-000877",
+        "real_weight": 13
+      },
+      {
+        "town_display": "PAOAY",
+        "branch_code": "L12E-000983",
+        "real_weight": 2
+      },
+      {
+        "town_display": "PAOAY",
+        "branch_code": "L12E-000991",
+        "real_weight": 6
+      },
+      {
+        "town_display": "PAOAY",
+        "branch_code": "L12E-001063",
+        "real_weight": 1
+      },
+      {
+        "town_display": "PAOAY",
+        "branch_code": "L12E-001296",
+        "real_weight": 7
+      },
+      {
+        "town_display": "PAOAY",
+        "branch_code": "L12E-001297",
+        "real_weight": 1
+      },
+      {
+        "town_display": "PASUQUIN",
+        "branch_code": "L12E-000716",
+        "real_weight": 11
+      },
+      {
+        "town_display": "PASUQUIN",
+        "branch_code": "L12E-000790",
+        "real_weight": 8
+      },
+      {
+        "town_display": "PASUQUIN",
+        "branch_code": "L12E-000918",
+        "real_weight": 1
+      },
+      {
+        "town_display": "PASUQUIN",
+        "branch_code": "L12E-000924",
+        "real_weight": 5
+      },
+      {
+        "town_display": "PASUQUIN",
+        "branch_code": "L12E-001050",
+        "real_weight": 1
+      },
+      {
+        "town_display": "PASUQUIN",
+        "branch_code": "L12E-B000129",
+        "real_weight": 4
+      },
+      {
+        "town_display": "PIDDIG",
+        "branch_code": "L12E-000819",
+        "real_weight": 2
+      },
+      {
+        "town_display": "PIDDIG",
+        "branch_code": "L12E-000897",
+        "real_weight": 6
+      },
+      {
+        "town_display": "PIDDIG",
+        "branch_code": "L12E-000970",
+        "real_weight": 5
+      },
+      {
+        "town_display": "PIDDIG",
+        "branch_code": "L12E-001280",
+        "real_weight": 2
+      },
+      {
+        "town_display": "PIDDIG",
+        "branch_code": "L12E-001303",
+        "real_weight": 5
+      },
+      {
+        "town_display": "PIDDIG",
+        "branch_code": "L12E-001322",
+        "real_weight": 1
+      },
+      {
+        "town_display": "PINILI",
+        "branch_code": "L12E-001049",
+        "real_weight": 2
+      },
+      {
+        "town_display": "PINILI",
+        "branch_code": "L12E-001102",
+        "real_weight": 4
+      },
+      {
+        "town_display": "PINILI",
+        "branch_code": "L12E-001172",
+        "real_weight": 10
+      },
+      {
+        "town_display": "PINILI",
+        "branch_code": "L12E-001197",
+        "real_weight": 9
+      },
+      {
+        "town_display": "PINILI",
+        "branch_code": "L12E-001306",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN ESTEBAN",
+        "branch_code": "L12E-000857",
+        "real_weight": 13
+      },
+      {
+        "town_display": "SAN ESTEBAN",
+        "branch_code": "L12E-001030",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SAN ESTEBAN",
+        "branch_code": "L12E-001114",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SAN ESTEBAN",
+        "branch_code": "L12E-001242",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001007",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001017",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001055",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001066",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001075",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001095",
+        "real_weight": 13
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001109",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001152",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001256",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN ILDEFONSO",
+        "branch_code": "L12E-001299",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "000029",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-000655",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-001008",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-001029",
+        "real_weight": 12
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-001048",
+        "real_weight": 13
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-001184",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-001186",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-001187",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-001220",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-001258",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SAN JUAN (LAPOG)",
+        "branch_code": "L12E-001314",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "000068",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-000397",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-000639",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-000657",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-000679",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-000747",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-000793",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-000871",
+        "real_weight": 11
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-000977",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-001084",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-001087",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-001150",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-001212",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-001219",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-001226",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-001350",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-B000032",
+        "real_weight": 96
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-B000059",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-B000087",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12E-B000892",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN VICENTE",
+        "branch_code": "L12E-000929",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SAN VICENTE",
+        "branch_code": "L12E-001042",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SAN VICENTE",
+        "branch_code": "L12E-001054",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SAN VICENTE",
+        "branch_code": "L12E-001083",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN VICENTE",
+        "branch_code": "L12E-001203",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SAN VICENTE",
+        "branch_code": "L12E-001234",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN VICENTE",
+        "branch_code": "L12E-001235",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN VICENTE",
+        "branch_code": "L12E-001259",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTA",
+        "branch_code": "L12E-000687",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTA",
+        "branch_code": "L12E-000928",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTA",
+        "branch_code": "L12E-001013",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA",
+        "branch_code": "L12E-001106",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SANTA",
+        "branch_code": "L12E-001204",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SANTA",
+        "branch_code": "L12E-001248",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-000625",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-000731",
+        "real_weight": 11
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-000846",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001028",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001061",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001064",
+        "real_weight": 11
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001065",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001076",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001141",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001145",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001168",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001169",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001191",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001192",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001193",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001194",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001195",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001238",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001265",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA CATALINA",
+        "branch_code": "L12E-001311",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-000719",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-000720",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-000751",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-000818",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-001013",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-001024",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-001062",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-001123",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-001175",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTA CRUZ",
+        "branch_code": "L12E-001199",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-000668",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-000669",
+        "real_weight": 14
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-000670",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-000880",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-000972",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001023",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001037",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001112",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001133",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001176",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001216",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001257",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001262",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001317",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001318",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA LUCIA",
+        "branch_code": "L12E-001323",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-000681",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-000861",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-001025",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-001027",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-001159",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-001201",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-001245",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-001249",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-001268",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12E-B000034",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-000673",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-000909",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001015",
+        "real_weight": 11
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001032",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001038",
+        "real_weight": 14
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001137",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001144",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001171",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001173",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001174",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001215",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001225",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001243",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-001260",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTIAGO",
+        "branch_code": "L12E-B000070",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-000859",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-000955",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-000959",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-000968",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001004",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001022",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001043",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001100",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001108",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001156",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001209",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001210",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001211",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001279",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTO DOMINGO",
+        "branch_code": "L12E-001337",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SARRAT",
+        "branch_code": "000030",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SARRAT",
+        "branch_code": "L12E-000734",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SARRAT",
+        "branch_code": "L12E-000735",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SARRAT",
+        "branch_code": "L12E-000794",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SARRAT",
+        "branch_code": "L12E-001099",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SARRAT",
+        "branch_code": "L12E-001281",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SARRAT",
+        "branch_code": "L12E-B000083",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SARRAT",
+        "branch_code": "L12E-B000088",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-000705",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-000782",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-000867",
+        "real_weight": 11
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-000868",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-000946",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-000954",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-000999",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001009",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001020",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001059",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001111",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001165",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001167",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001188",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001252",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001264",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001272",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SINAIT",
+        "branch_code": "L12E-001273",
+        "real_weight": 5
+      },
+      {
+        "town_display": "TAGUDIN",
+        "branch_code": "L12E-0000447",
+        "real_weight": 7
+      },
+      {
+        "town_display": "TAGUDIN",
+        "branch_code": "L12E-001036",
+        "real_weight": 5
+      },
+      {
+        "town_display": "TAGUDIN",
+        "branch_code": "L12E-001105",
+        "real_weight": 3
+      },
+      {
+        "town_display": "TAGUDIN",
+        "branch_code": "L12E-001124",
+        "real_weight": 5
+      },
+      {
+        "town_display": "TAGUDIN",
+        "branch_code": "L12E-001151",
+        "real_weight": 4
+      },
+      {
+        "town_display": "TAGUDIN",
+        "branch_code": "L12E-001170",
+        "real_weight": 5
+      },
+      {
+        "town_display": "TAGUDIN",
+        "branch_code": "L12E-001214",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TAGUDIN",
+        "branch_code": "L12E-001231",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TAGUDIN",
+        "branch_code": "L12E-001232",
+        "real_weight": 2
+      },
+      {
+        "town_display": "VINTAR",
+        "branch_code": "L12E-001057",
+        "real_weight": 1
+      },
+      {
+        "town_display": "VINTAR",
+        "branch_code": "L12E-001058",
+        "real_weight": 1
+      }
+    ]
+  },
+  "pangasinan": {
+    "real_row_count": 8629,
+    "distinct_pairs": 871,
+    "pairs": [
+      {
+        "town_display": "AGOO",
+        "branch_code": "000152",
+        "real_weight": 10
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "000181",
+        "real_weight": 6
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "000191",
+        "real_weight": 5
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002064",
+        "real_weight": 4
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002065",
+        "real_weight": 10
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002074",
+        "real_weight": 7
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002075",
+        "real_weight": 13
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002336",
+        "real_weight": 14
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002545",
+        "real_weight": 27
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002689",
+        "real_weight": 13
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002739",
+        "real_weight": 4
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002782",
+        "real_weight": 5
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002800",
+        "real_weight": 2
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002836",
+        "real_weight": 2
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-002897",
+        "real_weight": 3
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-B000095",
+        "real_weight": 14
+      },
+      {
+        "town_display": "AGOO",
+        "branch_code": "L12F-B000466",
+        "real_weight": 4
+      },
+      {
+        "town_display": "AGUILAR",
+        "branch_code": "L12C-9000472",
+        "real_weight": 27
+      },
+      {
+        "town_display": "AGUILAR",
+        "branch_code": "L12F-001809",
+        "real_weight": 2
+      },
+      {
+        "town_display": "AGUILAR",
+        "branch_code": "L12F-001909",
+        "real_weight": 13
+      },
+      {
+        "town_display": "AGUILAR",
+        "branch_code": "L12F-002376",
+        "real_weight": 13
+      },
+      {
+        "town_display": "AGUILAR",
+        "branch_code": "L12F-002432",
+        "real_weight": 10
+      },
+      {
+        "town_display": "AGUILAR",
+        "branch_code": "L12F-002465",
+        "real_weight": 2
+      },
+      {
+        "town_display": "AGUILAR",
+        "branch_code": "L12F-002618",
+        "real_weight": 4
+      },
+      {
+        "town_display": "ALCALA",
+        "branch_code": "L12F-002449",
+        "real_weight": 15
+      },
+      {
+        "town_display": "ALCALA",
+        "branch_code": "L12F-002635",
+        "real_weight": 9
+      },
+      {
+        "town_display": "ALCALA",
+        "branch_code": "L12F-002636",
+        "real_weight": 191
+      },
+      {
+        "town_display": "ALCALA",
+        "branch_code": "L12F-002656",
+        "real_weight": 19
+      },
+      {
+        "town_display": "ALCALA",
+        "branch_code": "L12F-002789",
+        "real_weight": 1
+      },
+      {
+        "town_display": "ALCALA",
+        "branch_code": "L12F-002790",
+        "real_weight": 2
+      },
+      {
+        "town_display": "ANDA",
+        "branch_code": "L12F-002144",
+        "real_weight": 7
+      },
+      {
+        "town_display": "ANDA",
+        "branch_code": "L12F-002146",
+        "real_weight": 13
+      },
+      {
+        "town_display": "ARINGAY",
+        "branch_code": "L12F-002160",
+        "real_weight": 1
+      },
+      {
+        "town_display": "ARINGAY",
+        "branch_code": "L12F-002201",
+        "real_weight": 19
+      },
+      {
+        "town_display": "ARINGAY",
+        "branch_code": "L12F-002342",
+        "real_weight": 6
+      },
+      {
+        "town_display": "ARINGAY",
+        "branch_code": "L12F-002725",
+        "real_weight": 7
+      },
+      {
+        "town_display": "ARINGAY",
+        "branch_code": "L12F-002899",
+        "real_weight": 1
+      },
+      {
+        "town_display": "ARINGAY",
+        "branch_code": "L12F-002946",
+        "real_weight": 2
+      },
+      {
+        "town_display": "ASINGAN",
+        "branch_code": "L12F-001861",
+        "real_weight": 6
+      },
+      {
+        "town_display": "ASINGAN",
+        "branch_code": "L12F-001953",
+        "real_weight": 24
+      },
+      {
+        "town_display": "ASINGAN",
+        "branch_code": "L12F-002337",
+        "real_weight": 7
+      },
+      {
+        "town_display": "ASINGAN",
+        "branch_code": "L12F-002382",
+        "real_weight": 3
+      },
+      {
+        "town_display": "ASINGAN",
+        "branch_code": "L12F-002585",
+        "real_weight": 9
+      },
+      {
+        "town_display": "ASINGAN",
+        "branch_code": "L12F-002672",
+        "real_weight": 24
+      },
+      {
+        "town_display": "ASINGAN",
+        "branch_code": "L12F-002835",
+        "real_weight": 2
+      },
+      {
+        "town_display": "ASINGAN",
+        "branch_code": "L12F-002873",
+        "real_weight": 2
+      },
+      {
+        "town_display": "ASINGAN",
+        "branch_code": "L12F-002915",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BACNOTAN",
+        "branch_code": "L12F-0001292",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BACNOTAN",
+        "branch_code": "L12F-0001717",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BACNOTAN",
+        "branch_code": "L12F-001841",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BACNOTAN",
+        "branch_code": "L12F-002169",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BACNOTAN",
+        "branch_code": "L12F-002402",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BACNOTAN",
+        "branch_code": "L12F-002486",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BACNOTAN",
+        "branch_code": "L12F-002796",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BACNOTAN",
+        "branch_code": "L12F-002861",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BACNOTAN",
+        "branch_code": "L12F-002918",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000698",
+        "real_weight": 21
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000717",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000776",
+        "real_weight": 22
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000803",
+        "real_weight": 13
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000807",
+        "real_weight": 22
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000821",
+        "real_weight": 18
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000851",
+        "real_weight": 40
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000872",
+        "real_weight": 19
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000881",
+        "real_weight": 22
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000935",
+        "real_weight": 22
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000944",
+        "real_weight": 28
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000959",
+        "real_weight": 26
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000968",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000976",
+        "real_weight": 24
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9000983",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9001003",
+        "real_weight": 27
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12C-9001022",
+        "real_weight": 32
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-0001076",
+        "real_weight": 18
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-0001480",
+        "real_weight": 11
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-0001575",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-0001738",
+        "real_weight": 17
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-0001932",
+        "real_weight": 108
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-0001933",
+        "real_weight": 25
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-0002022",
+        "real_weight": 10
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-0002047",
+        "real_weight": 25
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001802",
+        "real_weight": 19
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001818",
+        "real_weight": 25
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001823",
+        "real_weight": 19
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001824",
+        "real_weight": 69
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001826",
+        "real_weight": 17
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001828",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001850",
+        "real_weight": 30
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001862",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001879",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001882",
+        "real_weight": 22
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001883",
+        "real_weight": 20
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001884",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001888",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001890",
+        "real_weight": 13
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001893",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001900",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001902",
+        "real_weight": 30
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001918",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001929",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-001943",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002119",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002120",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002121",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002150",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002178",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002203",
+        "real_weight": 41
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002220",
+        "real_weight": 15
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002227",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002234",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002249",
+        "real_weight": 21
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002252",
+        "real_weight": 34
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002257",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002258",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002267",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002270",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002278",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002280",
+        "real_weight": 16
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002282",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002291",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002292",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002297",
+        "real_weight": 31
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002301",
+        "real_weight": 40
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002304",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002305",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002308",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002318",
+        "real_weight": 27
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002325",
+        "real_weight": 20
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002333",
+        "real_weight": 15
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002334",
+        "real_weight": 10
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002353",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002354",
+        "real_weight": 13
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002365",
+        "real_weight": 18
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002368",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002369",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002388",
+        "real_weight": 5
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002396",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002400",
+        "real_weight": 23
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002405",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002407",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002409",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002411",
+        "real_weight": 16
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002412",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002415",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002416",
+        "real_weight": 34
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002421",
+        "real_weight": 26
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002467",
+        "real_weight": 13
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002483",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002484",
+        "real_weight": 10
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002487",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002495",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002505",
+        "real_weight": 16
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002517",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002521",
+        "real_weight": 16
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002533",
+        "real_weight": 16
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002534",
+        "real_weight": 10
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002540",
+        "real_weight": 16
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002541",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002556",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002569",
+        "real_weight": 17
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002602",
+        "real_weight": 24
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002608",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002660",
+        "real_weight": 11
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002697",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002698",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002699",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002704",
+        "real_weight": 11
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002707",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002709",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002750",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002774",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002795",
+        "real_weight": 5
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002827",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002837",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002839",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002840",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002841",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002845",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002846",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002847",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002849",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002850",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002867",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002872",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002878",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002879",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002880",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002884",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002885",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002887",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002888",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002892",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002893",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002896",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002898",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002901",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002907",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002908",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002923",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002925",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002933",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002937",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002967",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002980",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002985",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-002986",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000110",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000141",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000194",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000210",
+        "real_weight": 30
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000365",
+        "real_weight": 36
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000384",
+        "real_weight": 11
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000403",
+        "real_weight": 11
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000407",
+        "real_weight": 19
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000430",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000439",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000448",
+        "real_weight": 23
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000452",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000481",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000500",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000521",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000551",
+        "real_weight": 41
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B000566",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B001120",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B001200",
+        "real_weight": 16
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B001479",
+        "real_weight": 17
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B002908",
+        "real_weight": 33
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B003389",
+        "real_weight": 13
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B003426",
+        "real_weight": 22
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B003504",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAGUIO CITY",
+        "branch_code": "L12F-B003561",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BALAOAN",
+        "branch_code": "L12F-001998",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BALAOAN",
+        "branch_code": "L12F-002658",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BANI",
+        "branch_code": "L12F-002020",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BANI",
+        "branch_code": "L12F-002029",
+        "real_weight": 22
+      },
+      {
+        "town_display": "BANI",
+        "branch_code": "L12F-002212",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BANI",
+        "branch_code": "L12F-002214",
+        "real_weight": 10
+      },
+      {
+        "town_display": "BANI",
+        "branch_code": "L12F-002474",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BANI",
+        "branch_code": "L12F-002519",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BANI",
+        "branch_code": "L12F-002590",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "000106",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "000116",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-0001716",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002087",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002102",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002398",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002603",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002692",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002694",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002865",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002903",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002904",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002905",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-002920",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAUANG",
+        "branch_code": "L12F-B000131",
+        "real_weight": 7
+      },
+      {
+        "town_display": "BAUTISTA",
+        "branch_code": "000047",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BAUTISTA",
+        "branch_code": "L12F-002797",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BAUTISTA",
+        "branch_code": "L12F-002798",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "000047",
+        "real_weight": 10
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12C-9000004",
+        "real_weight": 13
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12F-001897",
+        "real_weight": 16
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12F-002091",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12F-002314",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12F-002443",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12F-002444",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12F-002749",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12F-002975",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12F-B000285",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BAYAMBANG",
+        "branch_code": "L12F-B003210",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BINALONAN",
+        "branch_code": "000095",
+        "real_weight": 17
+      },
+      {
+        "town_display": "BINALONAN",
+        "branch_code": "L12F-002104",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BINALONAN",
+        "branch_code": "L12F-002191",
+        "real_weight": 12
+      },
+      {
+        "town_display": "BINALONAN",
+        "branch_code": "L12F-002643",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BINALONAN",
+        "branch_code": "L12F-002705",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BINALONAN",
+        "branch_code": "L12F-002830",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BINALONAN",
+        "branch_code": "L12F-002982",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BINALONAN",
+        "branch_code": "L12F-B002994",
+        "real_weight": 13
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12C-9000385",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-001889",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-001992",
+        "real_weight": 13
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-001993",
+        "real_weight": 11
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-002079",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-002179",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-002180",
+        "real_weight": 15
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-002183",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-002207",
+        "real_weight": 14
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-B000513",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BINMALEY",
+        "branch_code": "L12F-B002676",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002021",
+        "real_weight": 21
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002030",
+        "real_weight": 18
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002148",
+        "real_weight": 4
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002152",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002211",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002321",
+        "real_weight": 5
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002360",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002471",
+        "real_weight": 13
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002472",
+        "real_weight": 8
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002480",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002589",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002754",
+        "real_weight": 9
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002805",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002806",
+        "real_weight": 6
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002851",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002916",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BOLINAO",
+        "branch_code": "L12F-002930",
+        "real_weight": 2
+      },
+      {
+        "town_display": "BUGALLON",
+        "branch_code": "000142",
+        "real_weight": 11
+      },
+      {
+        "town_display": "BUGALLON",
+        "branch_code": "L12F-002598",
+        "real_weight": 1
+      },
+      {
+        "town_display": "BUGALLON",
+        "branch_code": "L12F-002600",
+        "real_weight": 5
+      },
+      {
+        "town_display": "BUGALLON",
+        "branch_code": "L12F-002818",
+        "real_weight": 3
+      },
+      {
+        "town_display": "BUGUIAS",
+        "branch_code": "L12F-002719",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CABA",
+        "branch_code": "L12F-002195",
+        "real_weight": 19
+      },
+      {
+        "town_display": "CABA",
+        "branch_code": "L12F-002347",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CABA",
+        "branch_code": "L12F-002690",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CABA",
+        "branch_code": "L12F-002738",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "000098",
+        "real_weight": 16
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "000102",
+        "real_weight": 36
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12C-9000038",
+        "real_weight": 17
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12C-9000126",
+        "real_weight": 17
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002015",
+        "real_weight": 16
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002043",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002116",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002196",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002206",
+        "real_weight": 25
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002276",
+        "real_weight": 24
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002439",
+        "real_weight": 12
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002448",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002454",
+        "real_weight": 12
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002546",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002583",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002599",
+        "real_weight": 17
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002601",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002619",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002621",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002809",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-002820",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-B000557",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CALASIAO",
+        "branch_code": "L12F-B003368",
+        "real_weight": 27
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002014",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002016",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002017",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002032",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002040",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002041",
+        "real_weight": 17
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002153",
+        "real_weight": 21
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002155",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002213",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002216",
+        "real_weight": 17
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002218",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002236",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002322",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002335",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002362",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002452",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002453",
+        "real_weight": 11
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002458",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002591",
+        "real_weight": 23
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002614",
+        "real_weight": 14
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002661",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002680",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002784",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002794",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF ALAMINOS",
+        "branch_code": "L12F-002886",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12C-9000775",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-0002186",
+        "real_weight": 16
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-001856",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-001906",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-001930",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002090",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002108",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002109",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002170",
+        "real_weight": 12
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002229",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002235",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002243",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002307",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002722",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002735",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002740",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002787",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002788",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002822",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002906",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002917",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002921",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002956",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-002988",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-B000055",
+        "real_weight": 12
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-B000100",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-B000193",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF SAN FERNANDO (Capital)",
+        "branch_code": "L12F-B000260",
+        "real_weight": 55
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "000085",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "000088",
+        "real_weight": 18
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12C-9000037",
+        "real_weight": 12
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12C-9000068",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-0001238",
+        "real_weight": 16
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-0001409",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-001819",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-001847",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-001908",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-001977",
+        "real_weight": 39
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-001988",
+        "real_weight": 14
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-001994",
+        "real_weight": 30
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-001997",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002072",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002105",
+        "real_weight": 12
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002192",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002288",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002323",
+        "real_weight": 22
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002338",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002374",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002378",
+        "real_weight": 11
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002379",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002386",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002394",
+        "real_weight": 21
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002440",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002561",
+        "real_weight": 27
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002565",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002573",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002592",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002594",
+        "real_weight": 37
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002597",
+        "real_weight": 21
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002633",
+        "real_weight": 14
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002634",
+        "real_weight": 23
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002637",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002644",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002645",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002646",
+        "real_weight": 22
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002649",
+        "real_weight": 9
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002654",
+        "real_weight": 19
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002655",
+        "real_weight": 14
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002657",
+        "real_weight": 12
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002659",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002664",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002676",
+        "real_weight": 14
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002686",
+        "real_weight": 6
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002701",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002721",
+        "real_weight": 7
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002727",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002730",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002731",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002733",
+        "real_weight": 11
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002734",
+        "real_weight": 10
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002737",
+        "real_weight": 5
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002751",
+        "real_weight": 13
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002753",
+        "real_weight": 11
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002761",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002762",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002771",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002785",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002786",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002799",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002801",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002807",
+        "real_weight": 8
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002808",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002828",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002838",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002848",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002858",
+        "real_weight": 4
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002869",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002875",
+        "real_weight": 2
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002876",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002877",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002882",
+        "real_weight": 3
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002894",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002895",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002909",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002926",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002927",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002929",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002951",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-002990",
+        "real_weight": 1
+      },
+      {
+        "town_display": "CITY OF URDANETA",
+        "branch_code": "L12F-B000005",
+        "real_weight": 420
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "000050",
+        "real_weight": 23
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "000167",
+        "real_weight": 8
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12C-9000050",
+        "real_weight": 50
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12C-9000235",
+        "real_weight": 36
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12C-9000249",
+        "real_weight": 19
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12C-9000362",
+        "real_weight": 11
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12C-9000646",
+        "real_weight": 25
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-0001421",
+        "real_weight": 21
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-0001907",
+        "real_weight": 28
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-001880",
+        "real_weight": 3
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-001896",
+        "real_weight": 19
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-001979",
+        "real_weight": 12
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-001985",
+        "real_weight": 22
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002057",
+        "real_weight": 19
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002095",
+        "real_weight": 9
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002181",
+        "real_weight": 32
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002205",
+        "real_weight": 4
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002237",
+        "real_weight": 2
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002253",
+        "real_weight": 12
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002256",
+        "real_weight": 11
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002317",
+        "real_weight": 2
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002328",
+        "real_weight": 18
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002352",
+        "real_weight": 1
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002363",
+        "real_weight": 37
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002391",
+        "real_weight": 3
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002392",
+        "real_weight": 5
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002401",
+        "real_weight": 16
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002408",
+        "real_weight": 16
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002429",
+        "real_weight": 25
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002438",
+        "real_weight": 9
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002468",
+        "real_weight": 28
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002476",
+        "real_weight": 3
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002477",
+        "real_weight": 71
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002482",
+        "real_weight": 2
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002548",
+        "real_weight": 5
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002624",
+        "real_weight": 9
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002625",
+        "real_weight": 7
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002626",
+        "real_weight": 18
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002648",
+        "real_weight": 24
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002683",
+        "real_weight": 2
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002703",
+        "real_weight": 6
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002710",
+        "real_weight": 3
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002712",
+        "real_weight": 5
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002713",
+        "real_weight": 6
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002715",
+        "real_weight": 17
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002717",
+        "real_weight": 2
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002763",
+        "real_weight": 2
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002803",
+        "real_weight": 2
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002825",
+        "real_weight": 5
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002831",
+        "real_weight": 3
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002832",
+        "real_weight": 2
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002844",
+        "real_weight": 1
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-002972",
+        "real_weight": 1
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-B000022",
+        "real_weight": 14
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-B000081",
+        "real_weight": 19
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-B000151",
+        "real_weight": 3
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-B000175",
+        "real_weight": 15
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-B000263",
+        "real_weight": 18
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-B000294",
+        "real_weight": 16
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-B000576",
+        "real_weight": 17
+      },
+      {
+        "town_display": "DAGUPAN CITY",
+        "branch_code": "L12F-B000800",
+        "real_weight": 2
+      },
+      {
+        "town_display": "ITOGON",
+        "branch_code": "L12F-002911",
+        "real_weight": 3
+      },
+      {
+        "town_display": "ITOGON",
+        "branch_code": "L12F-002912",
+        "real_weight": 2
+      },
+      {
+        "town_display": "ITOGON",
+        "branch_code": "L12F-B000578",
+        "real_weight": 13
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12C-9000703",
+        "real_weight": 6
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12C-9000706",
+        "real_weight": 37
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12C-9000737",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12C-9000915",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-0001249",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-0001825",
+        "real_weight": 42
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001804",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001814",
+        "real_weight": 15
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001830",
+        "real_weight": 10
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001832",
+        "real_weight": 28
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001864",
+        "real_weight": 10
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001872",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001895",
+        "real_weight": 20
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001926",
+        "real_weight": 22
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001940",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-001967",
+        "real_weight": 10
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002228",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002250",
+        "real_weight": 21
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002273",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002275",
+        "real_weight": 10
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002294",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002302",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002306",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002311",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002343",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002357",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002399",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002406",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002418",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002428",
+        "real_weight": 6
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002481",
+        "real_weight": 6
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002490",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002491",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002496",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002498",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002501",
+        "real_weight": 14
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002502",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002507",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002508",
+        "real_weight": 7
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002509",
+        "real_weight": 6
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002529",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002535",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002542",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002556",
+        "real_weight": 13
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002766",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002769",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002775",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002776",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002778",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002780",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002856",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002862",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002863",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002864",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002870",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002874",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002891",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002902",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-002922",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-B000092",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-B000357",
+        "real_weight": 16
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-B000418",
+        "real_weight": 13
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-B000421",
+        "real_weight": 16
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-B000458",
+        "real_weight": 11
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-B000536-4",
+        "real_weight": 18
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-B000546",
+        "real_weight": 12
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-DP00019",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LA TRINIDAD (Capital)",
+        "branch_code": "L12F-DP00028",
+        "real_weight": 11
+      },
+      {
+        "town_display": "LABRADOR",
+        "branch_code": "L12F-002009",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LABRADOR",
+        "branch_code": "L12F-002136",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LABRADOR",
+        "branch_code": "L12F-002137",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LABRADOR",
+        "branch_code": "L12F-002268",
+        "real_weight": 4
+      },
+      {
+        "town_display": "LABRADOR",
+        "branch_code": "L12F-002436",
+        "real_weight": 12
+      },
+      {
+        "town_display": "LABRADOR",
+        "branch_code": "L12F-002829",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LABRADOR",
+        "branch_code": "L12F-002989",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LAOAC",
+        "branch_code": "L12F-002579",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "000135",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "000136",
+        "real_weight": 9
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "000189",
+        "real_weight": 9
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "000197",
+        "real_weight": 12
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "000199",
+        "real_weight": 11
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-0002156",
+        "real_weight": 9
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-0002216",
+        "real_weight": 11
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-001924",
+        "real_weight": 37
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-001933",
+        "real_weight": 16
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-001966",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002007",
+        "real_weight": 24
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002125",
+        "real_weight": 11
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002221",
+        "real_weight": 6
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002264",
+        "real_weight": 7
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002265",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002295",
+        "real_weight": 21
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002299",
+        "real_weight": 18
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002326",
+        "real_weight": 8
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002431",
+        "real_weight": 33
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002688",
+        "real_weight": 10
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002866",
+        "real_weight": 3
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002955",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002964",
+        "real_weight": 2
+      },
+      {
+        "town_display": "LINGAYEN (Capital)",
+        "branch_code": "L12F-002981",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LUNA",
+        "branch_code": "L12F-001999",
+        "real_weight": 17
+      },
+      {
+        "town_display": "LUNA",
+        "branch_code": "L12F-002042",
+        "real_weight": 18
+      },
+      {
+        "town_display": "LUNA",
+        "branch_code": "L12F-002055",
+        "real_weight": 9
+      },
+      {
+        "town_display": "LUNA",
+        "branch_code": "L12F-002442",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LUNA",
+        "branch_code": "L12F-002524",
+        "real_weight": 5
+      },
+      {
+        "town_display": "LUNA",
+        "branch_code": "L12F-002744",
+        "real_weight": 1
+      },
+      {
+        "town_display": "LUNA",
+        "branch_code": "L12F-002826",
+        "real_weight": 3
+      },
+      {
+        "town_display": "MALASIQUI",
+        "branch_code": "L12F-002167",
+        "real_weight": 10
+      },
+      {
+        "town_display": "MALASIQUI",
+        "branch_code": "L12F-002743",
+        "real_weight": 2
+      },
+      {
+        "town_display": "MALASIQUI",
+        "branch_code": "L12F-002781",
+        "real_weight": 10
+      },
+      {
+        "town_display": "MALASIQUI",
+        "branch_code": "L12F-002816",
+        "real_weight": 3
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "000074",
+        "real_weight": 9
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "000174",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "000179",
+        "real_weight": 5
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-001898",
+        "real_weight": 12
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-001905",
+        "real_weight": 4
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-001980",
+        "real_weight": 48
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-002327",
+        "real_weight": 4
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-002700",
+        "real_weight": 6
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-002711",
+        "real_weight": 2
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-002755",
+        "real_weight": 3
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-002760",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-002779",
+        "real_weight": 3
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-002791",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-002919",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-B000024",
+        "real_weight": 23
+      },
+      {
+        "town_display": "MANAOAG",
+        "branch_code": "L12F-B000349",
+        "real_weight": 2
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12C-9000056",
+        "real_weight": 8
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12C-9000089",
+        "real_weight": 5
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-001816",
+        "real_weight": 6
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-002099",
+        "real_weight": 7
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-002166",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-002340",
+        "real_weight": 3
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-002706",
+        "real_weight": 8
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-002726",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-002890",
+        "real_weight": 2
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-002900",
+        "real_weight": 2
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-B000487",
+        "real_weight": 8
+      },
+      {
+        "town_display": "MANGALDAN",
+        "branch_code": "L12F-B002218",
+        "real_weight": 11
+      },
+      {
+        "town_display": "MANGATAREM",
+        "branch_code": "L12F-0002045",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MANGATAREM",
+        "branch_code": "L12F-002051",
+        "real_weight": 7
+      },
+      {
+        "town_display": "MANGATAREM",
+        "branch_code": "L12F-002231",
+        "real_weight": 15
+      },
+      {
+        "town_display": "MANGATAREM",
+        "branch_code": "L12F-002356",
+        "real_weight": 6
+      },
+      {
+        "town_display": "MANGATAREM",
+        "branch_code": "L12F-002390",
+        "real_weight": 7
+      },
+      {
+        "town_display": "MANGATAREM",
+        "branch_code": "L12F-002576",
+        "real_weight": 12
+      },
+      {
+        "town_display": "MANGATAREM",
+        "branch_code": "L12F-002821",
+        "real_weight": 6
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "000185",
+        "real_weight": 12
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-001934",
+        "real_weight": 3
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002113",
+        "real_weight": 7
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002114",
+        "real_weight": 9
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002117",
+        "real_weight": 13
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002118",
+        "real_weight": 7
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002441",
+        "real_weight": 30
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002595",
+        "real_weight": 18
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002596",
+        "real_weight": 1
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002675",
+        "real_weight": 6
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002853",
+        "real_weight": 4
+      },
+      {
+        "town_display": "MAPANDAN",
+        "branch_code": "L12F-002889",
+        "real_weight": 2
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "000129",
+        "real_weight": 9
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-001915",
+        "real_weight": 11
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-002018",
+        "real_weight": 9
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-002019",
+        "real_weight": 1
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-002128",
+        "real_weight": 8
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-002134",
+        "real_weight": 2
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-002226",
+        "real_weight": 6
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-002348",
+        "real_weight": 1
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-002384",
+        "real_weight": 12
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-002536",
+        "real_weight": 2
+      },
+      {
+        "town_display": "NAGUILIAN",
+        "branch_code": "L12F-B000553",
+        "real_weight": 1
+      },
+      {
+        "town_display": "POZORRUBIO",
+        "branch_code": "L12F-002584",
+        "real_weight": 1
+      },
+      {
+        "town_display": "POZORRUBIO",
+        "branch_code": "L12F-002772",
+        "real_weight": 11
+      },
+      {
+        "town_display": "PUGO",
+        "branch_code": "L12F-002162",
+        "real_weight": 7
+      },
+      {
+        "town_display": "PUGO",
+        "branch_code": "L12F-002163",
+        "real_weight": 14
+      },
+      {
+        "town_display": "PUGO",
+        "branch_code": "L12F-002168",
+        "real_weight": 16
+      },
+      {
+        "town_display": "PUGO",
+        "branch_code": "L12F-002262",
+        "real_weight": 12
+      },
+      {
+        "town_display": "PUGO",
+        "branch_code": "L12F-002331",
+        "real_weight": 1
+      },
+      {
+        "town_display": "PUGO",
+        "branch_code": "L12F-002366",
+        "real_weight": 1
+      },
+      {
+        "town_display": "PUGO",
+        "branch_code": "L12F-002371",
+        "real_weight": 8
+      },
+      {
+        "town_display": "PUGO",
+        "branch_code": "L12F-002910",
+        "real_weight": 2
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "000077",
+        "real_weight": 13
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "000083",
+        "real_weight": 17
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-0001051",
+        "real_weight": 13
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-0001206",
+        "real_weight": 4
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-001938",
+        "real_weight": 6
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-002000",
+        "real_weight": 9
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-002106",
+        "real_weight": 22
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-002346",
+        "real_weight": 10
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-002563",
+        "real_weight": 6
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-002577",
+        "real_weight": 10
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-002578",
+        "real_weight": 13
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-002665",
+        "real_weight": 13
+      },
+      {
+        "town_display": "ROSALES",
+        "branch_code": "L12F-002696",
+        "real_weight": 4
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "000046",
+        "real_weight": 22
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "000124",
+        "real_weight": 6
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "L12F-002005",
+        "real_weight": 6
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "L12F-002006",
+        "real_weight": 1
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "L12F-002103",
+        "real_weight": 2
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "L12F-002174",
+        "real_weight": 12
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "L12F-002685",
+        "real_weight": 7
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "L12F-002777",
+        "real_weight": 1
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "L12F-002823",
+        "real_weight": 6
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "L12F-002983",
+        "real_weight": 1
+      },
+      {
+        "town_display": "ROSARIO",
+        "branch_code": "L12F-B000441",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "000056",
+        "real_weight": 20
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-0002048",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-0002104",
+        "real_weight": 44
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002046",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002052",
+        "real_weight": 15
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002096",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002198",
+        "real_weight": 22
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002259",
+        "real_weight": 12
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002286",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002478",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002604",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002616",
+        "real_weight": 8
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002627",
+        "real_weight": 23
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002793",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002817",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002859",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002860",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-002924",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-B000360",
+        "real_weight": 32
+      },
+      {
+        "town_display": "SAN CARLOS CITY",
+        "branch_code": "L12F-B000463",
+        "real_weight": 31
+      },
+      {
+        "town_display": "SAN FABIAN",
+        "branch_code": "L12C-9000675",
+        "real_weight": 18
+      },
+      {
+        "town_display": "SAN FABIAN",
+        "branch_code": "L12F-002003",
+        "real_weight": 16
+      },
+      {
+        "town_display": "SAN FABIAN",
+        "branch_code": "L12F-002132",
+        "real_weight": 20
+      },
+      {
+        "town_display": "SAN FABIAN",
+        "branch_code": "L12F-002678",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN FABIAN",
+        "branch_code": "L12F-002679",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SAN FABIAN",
+        "branch_code": "L12F-B001128",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SAN JACINTO",
+        "branch_code": "L12F-001974",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SAN JACINTO",
+        "branch_code": "L12F-002580",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN JACINTO",
+        "branch_code": "L12F-002593",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SAN JACINTO",
+        "branch_code": "L12F-002607",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SAN JACINTO",
+        "branch_code": "L12F-002640",
+        "real_weight": 15
+      },
+      {
+        "town_display": "SAN JACINTO",
+        "branch_code": "L12F-002768",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12C-9000775",
+        "real_weight": 13
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-001964",
+        "real_weight": 20
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-001965",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-002157",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-002158",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-002244",
+        "real_weight": 12
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-002511",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-002520",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-002530",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-002741",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-002824",
+        "real_weight": 14
+      },
+      {
+        "town_display": "SAN JUAN",
+        "branch_code": "L12F-002941",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SAN NICOLAS",
+        "branch_code": "L12F-001971",
+        "real_weight": 13
+      },
+      {
+        "town_display": "SANTA BARBARA",
+        "branch_code": "L12F-0002091",
+        "real_weight": 19
+      },
+      {
+        "town_display": "SANTA BARBARA",
+        "branch_code": "L12F-001937",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SANTA BARBARA",
+        "branch_code": "L12F-001986",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SANTA BARBARA",
+        "branch_code": "L12F-002310",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTA BARBARA",
+        "branch_code": "L12F-002718",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTA BARBARA",
+        "branch_code": "L12F-002745",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SANTA BARBARA",
+        "branch_code": "L12F-002881",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTA BARBARA",
+        "branch_code": "L12F-B000413",
+        "real_weight": 34
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12F-001948",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12F-001957",
+        "real_weight": 29
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12F-001973",
+        "real_weight": 15
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12F-002383",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTA MARIA",
+        "branch_code": "L12F-002914",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTO TOMAS",
+        "branch_code": "L12F-001963",
+        "real_weight": 19
+      },
+      {
+        "town_display": "SANTO TOMAS",
+        "branch_code": "L12F-002187",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTO TOMAS",
+        "branch_code": "L12F-002450",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTO TOMAS",
+        "branch_code": "L12F-002802",
+        "real_weight": 5
+      },
+      {
+        "town_display": "SANTO TOMAS",
+        "branch_code": "L12F-002833",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SANTO TOMAS",
+        "branch_code": "L12F-002883",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SANTO TOMAS",
+        "branch_code": "L12F-002913",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SANTO TOMAS",
+        "branch_code": "L12F-002984",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "000123",
+        "real_weight": 20
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002122",
+        "real_weight": 16
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002123",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002193",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002199",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002372",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002430",
+        "real_weight": 15
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002537",
+        "real_weight": 14
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002581",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002582",
+        "real_weight": 15
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002587",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002702",
+        "real_weight": 15
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002723",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002752",
+        "real_weight": 10
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-002773",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SISON",
+        "branch_code": "L12F-B000358",
+        "real_weight": 31
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002010",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002012",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002013",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002140",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002142",
+        "real_weight": 3
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002208",
+        "real_weight": 23
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002319",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002320",
+        "real_weight": 6
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002358",
+        "real_weight": 2
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002359",
+        "real_weight": 9
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002435",
+        "real_weight": 18
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002479",
+        "real_weight": 7
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002497",
+        "real_weight": 22
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002708",
+        "real_weight": 11
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002834",
+        "real_weight": 4
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002958",
+        "real_weight": 1
+      },
+      {
+        "town_display": "SUAL",
+        "branch_code": "L12F-002960",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-001950",
+        "real_weight": 17
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-001990",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-002277",
+        "real_weight": 6
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-002329",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-002377",
+        "real_weight": 8
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-002395",
+        "real_weight": 20
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-002417",
+        "real_weight": 14
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-002463",
+        "real_weight": 19
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-002568",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-002586",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TAYUG",
+        "branch_code": "L12F-002632",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TUBA",
+        "branch_code": "L12F-002494",
+        "real_weight": 3
+      },
+      {
+        "town_display": "TUBA",
+        "branch_code": "L12F-002516",
+        "real_weight": 5
+      },
+      {
+        "town_display": "TUBA",
+        "branch_code": "L12F-002526",
+        "real_weight": 3
+      },
+      {
+        "town_display": "TUBA",
+        "branch_code": "L12F-002792",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TUBA",
+        "branch_code": "L12F-002868",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TUBAO",
+        "branch_code": "L12F-002161",
+        "real_weight": 6
+      },
+      {
+        "town_display": "TUBAO",
+        "branch_code": "L12F-002324",
+        "real_weight": 1
+      },
+      {
+        "town_display": "TUBAO",
+        "branch_code": "L12F-002677",
+        "real_weight": 4
+      },
+      {
+        "town_display": "TUBLAY",
+        "branch_code": "L12F-002506",
+        "real_weight": 7
+      },
+      {
+        "town_display": "TUBLAY",
+        "branch_code": "L12F-002531",
+        "real_weight": 2
+      },
+      {
+        "town_display": "TUBLAY",
+        "branch_code": "L12F-002871",
+        "real_weight": 1
+      },
+      {
+        "town_display": "URBIZTONDO",
+        "branch_code": "L12F-002049",
+        "real_weight": 17
+      },
+      {
+        "town_display": "URBIZTONDO",
+        "branch_code": "L12F-002053",
+        "real_weight": 3
+      },
+      {
+        "town_display": "URBIZTONDO",
+        "branch_code": "L12F-002190",
+        "real_weight": 8
+      },
+      {
+        "town_display": "URBIZTONDO",
+        "branch_code": "L12F-002684",
+        "real_weight": 3
+      },
+      {
+        "town_display": "URBIZTONDO",
+        "branch_code": "L12F-002814",
+        "real_weight": 5
+      },
+      {
+        "town_display": "VILLASIS",
+        "branch_code": "L12F-001978",
+        "real_weight": 2
+      },
+      {
+        "town_display": "VILLASIS",
+        "branch_code": "L12F-002503",
+        "real_weight": 5
+      },
+      {
+        "town_display": "VILLASIS",
+        "branch_code": "L12F-002783",
+        "real_weight": 2
+      },
+      {
+        "town_display": "VILLASIS",
+        "branch_code": "L12F-002928",
+        "real_weight": 1
+      },
+      {
+        "town_display": "VILLASIS",
+        "branch_code": "L12F-B000068",
+        "real_weight": 1
+      },
+      {
+        "town_display": "VILLASIS",
+        "branch_code": "L12F-B000262",
+        "real_weight": 18
+      }
+    ]
+  }
+}

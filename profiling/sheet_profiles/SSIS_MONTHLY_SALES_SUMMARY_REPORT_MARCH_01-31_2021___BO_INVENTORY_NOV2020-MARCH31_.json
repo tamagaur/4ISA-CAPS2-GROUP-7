@@ -1,0 +1,133 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS MONTHLY SALES SUMMARY REPORT (MARCH 01-31,2021).xlsx",
+  "sheet": "BO INVENTORY (NOV2020-MARCH31)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Sales Man Code",
+    "Salesman Name",
+    "Product Code",
+    "Product Description",
+    "Return Qty",
+    "Return Value",
+    "Item category",
+    "Storage Location",
+    "Stock Type",
+    "Unit of Measurement"
+  ],
+  "dtypes": {
+    "Sales Man Code": "text",
+    "Salesman Name": "text",
+    "Product Code": "text",
+    "Product Description": "text",
+    "Return Qty": "numeric",
+    "Return Value": "numeric",
+    "Item category": "text",
+    "Storage Location": "text",
+    "Stock Type": "text",
+    "Unit of Measurement": "text"
+  },
+  "null_pct": {
+    "Sales Man Code": 0.09,
+    "Salesman Name": 0.09,
+    "Product Code": 0.09,
+    "Product Description": 0.09,
+    "Return Qty": 0.09,
+    "Return Value": 0.0,
+    "Item category": 0.09,
+    "Storage Location": 0.09,
+    "Stock Type": 0.05,
+    "Unit of Measurement": 0.09
+  },
+  "distinct_count": {
+    "Sales Man Code": 14,
+    "Salesman Name": 14,
+    "Product Code": 667,
+    "Product Description": 667,
+    "Return Qty": 279,
+    "Return Value": 1767,
+    "Item category": 1,
+    "Storage Location": 1,
+    "Stock Type": 1,
+    "Unit of Measurement": 1
+  },
+  "samples": {
+    "Sales Man Code": [
+      "10705",
+      "24182",
+      "14365",
+      "3684",
+      "17555"
+    ],
+    "Salesman Name": [
+      "RODERICK BARNACHEA",
+      "FLORENCIO A  TACULOG JR",
+      "ADONIS T  PIAMONTE",
+      "GERARD PAOLO TABIOS SUMABAT",
+      "JAYNARD ESPEJO"
+    ],
+    "Product Code": [
+      "67595916",
+      "67128824",
+      "67784536",
+      "65004321",
+      "65004685"
+    ],
+    "Product Description": [
+      "REXONA MEN DL ICE COOL IN 360X3ML",
+      "AXE DEO SPRAY YOU 36X50ML",
+      "ESKINOL GLUTA-MILK TNR 24X100ML",
+      "KNORR SINIGANG SAM ORIG 24X12X11G",
+      "MASTER FW WHITENING PLUS 288X4G"
+    ],
+    "Return Qty": [
+      "620",
+      "242",
+      "197",
+      "135",
+      "205"
+    ],
+    "Return Value": [
+      "2350.8",
+      "312.83",
+      "160.74",
+      "302.95",
+      "314.6"
+    ],
+    "Item category": [
+      "ZREN"
+    ],
+    "Storage Location": [
+      "DAMG"
+    ],
+    "Stock Type": [
+      "BAD RETURN"
+    ],
+    "Unit of Measurement": [
+      "PC"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 2150,
+  "header_signature": "11870e1c4d71",
+  "header_tokens": [
+    "item category",
+    "product code",
+    "product description",
+    "return qty",
+    "return value",
+    "sales man code",
+    "salesman name",
+    "stock type",
+    "storage location",
+    "unit of measurement"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

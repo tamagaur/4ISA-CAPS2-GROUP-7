@@ -1,0 +1,180 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT MAY 2025.xlsx",
+  "sheet": "SOH(JUNE 1, 2025)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "Last Purchase Price(GSV/CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Blocked Stock(CS/PC)",
+    "Batch"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "Last Purchase Price(GSV/CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Batch": "text"
+  },
+  "null_pct": {
+    "Storage Location": 0.25,
+    "Article No": 0.25,
+    "Article Description": 0.25,
+    "PACK SIZE": 0.25,
+    "Stock Quantity (CS/PC)": 0.25,
+    "Stock Value": 0.0,
+    "PO Qty": 48.4,
+    "Open SO Quantity": 91.11,
+    "Balance Quantity": 0.25,
+    "Last Purchase Price(GSV/CS)": 0.25,
+    "Status": 0.25,
+    "CATEGORY DESC": 0.25,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Batch": 0.25
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 404,
+    "Article Description": 404,
+    "PACK SIZE": 22,
+    "Stock Quantity (CS/PC)": 214,
+    "Stock Value": 400,
+    "PO Qty": 78,
+    "Open SO Quantity": 19,
+    "Balance Quantity": 272,
+    "Last Purchase Price(GSV/CS)": 251,
+    "Status": 1,
+    "CATEGORY DESC": 11,
+    "Blocked Stock(CS/PC)": 0,
+    "Batch": 1
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "64325966",
+      "68618731",
+      "68395713",
+      "64865070",
+      "68830455"
+    ],
+    "Article Description": [
+      "SURF HS STD PWDR BLOSSOM FRESH 144X74G",
+      "CREAM SILK TMT DAMAGE REPAIR 6X650ML",
+      "KNORR BN CUBES BEEF SAVERS 36X120G",
+      "SURF BAR CB 16(5+1)120G",
+      "DOVE GENTLE EXFOLIATE BW ST 12X1L"
+    ],
+    "PACK SIZE": [
+      "360",
+      "6",
+      "16",
+      "18",
+      "15"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "0/4",
+      "0/90",
+      "7/21",
+      "36/14",
+      "26/1"
+    ],
+    "Stock Value": [
+      "1525.63",
+      "874641.14",
+      "164.2",
+      "43214.36",
+      "146.65"
+    ],
+    "PO Qty": [
+      "480/0",
+      "42/0",
+      "1/0",
+      "8/0",
+      "65/0"
+    ],
+    "Open SO Quantity": [
+      "0/5",
+      "0/3",
+      "0/53",
+      "0/1",
+      "0/7"
+    ],
+    "Balance Quantity": [
+      "0/4",
+      "0/90",
+      "5/6",
+      "14/15",
+      "7/21"
+    ],
+    "Last Purchase Price(GSV/CS)": [
+      "3035.36",
+      "1832.14",
+      "3167.14",
+      "855.8",
+      "1716.43"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "MINI MEALS",
+      "SKIN CLEANSING",
+      "FABRIC ENHANCERS",
+      "ORAL CARE",
+      "CONDIMENTS"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Batch": [
+      "VALUATED"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 405,
+  "header_signature": "749a9f1e57d4",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "last purchase price(gsv/cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

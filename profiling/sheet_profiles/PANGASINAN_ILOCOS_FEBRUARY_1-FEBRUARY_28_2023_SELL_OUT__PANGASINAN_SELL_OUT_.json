@@ -1,0 +1,69 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 02.2023/PANGASINAN&ILOCOS FEBRUARY 1-FEBRUARY 28 2023 SELL OUT.xlsx",
+  "sheet": "PANGASINAN SELL OUT ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.444,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Total Without Tax",
+    "Product Quantity"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Total Without Tax": "numeric",
+    "Product Quantity": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Total Without Tax": 0.0,
+    "Product Quantity": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 68,
+    "Total Without Tax": 68,
+    "Product Quantity": 63
+  },
+  "samples": {
+    "__col0__": [
+      "     /CHUNKS/BASE",
+      "     False  (8)",
+      "     /DISPENSER JUICE/BASE",
+      "     False  (5)",
+      "     /FILIPINO SPAG SAUCE/BASE"
+    ],
+    "Total Without Tax": [
+      "1485.46",
+      "79525.13",
+      "22758.13",
+      "256427.5",
+      "60839.37"
+    ],
+    "Product Quantity": [
+      "247.8333",
+      "30",
+      "16.5",
+      "82.66667",
+      "23.33333"
+    ]
+  },
+  "grain": "category",
+  "usable_row_count": 68,
+  "header_signature": "a16033f08d57",
+  "header_tokens": [
+    "product quantity",
+    "total without tax"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

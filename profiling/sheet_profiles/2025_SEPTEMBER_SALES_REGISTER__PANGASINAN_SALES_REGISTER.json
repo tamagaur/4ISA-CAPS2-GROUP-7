@@ -1,0 +1,265 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 09.2025/2025 SEPTEMBER SALES REGISTER.xlsx",
+  "sheet": "PANGASINAN SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Total CAS",
+    "Total PCS",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Total CAS": "numeric",
+    "Total PCS": "numeric",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty",
+    "Return Type": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Total CAS": 0.0,
+    "Total PCS": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0,
+    "Return Type": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 23,
+    "Salesman": 6,
+    "Town Display": 51,
+    "Branch Code": 420,
+    "Customer Name": 420,
+    "Invoice Num": 586,
+    "REFNBR": 586,
+    "Total CAS": 64,
+    "Total PCS": 64,
+    "Untaxed Amount": 504,
+    "Discount Rate": 7,
+    "Discount Amount": 137,
+    "Tax": 500,
+    "Net Amount": 504,
+    "Balance": 361,
+    "Posted": 2,
+    "Return Slip #": 0,
+    "Return Type": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2025-09-24",
+      "2025-09-08",
+      "2025-09-12",
+      "2025-09-25",
+      "2025-09-16"
+    ],
+    "Salesman": [
+      "ADMIN SALES",
+      "EDUARDO AGAS",
+      "CORFEL PARAS",
+      "VOLTAIRE FINOGUAR",
+      "BENJAMIN AQUINO"
+    ],
+    "Town Display": [
+      "BALAOAN",
+      "SAN JUAN",
+      "ANDA",
+      "LABRADOR",
+      "NAGUILIAN"
+    ],
+    "Branch Code": [
+      "L12C-9000717",
+      "L12F-002882",
+      "L12C-9000915",
+      "L12F-002411",
+      "L12F-002181"
+    ],
+    "Customer Name": [
+      "BOOZE WINES CONVENIENCE STORE",
+      "PAPS RESTO&CAFE",
+      "KOREAN  PALACE (KUNGJEON RESTAURANT)",
+      "VIRGIES CANTEEN AND STORE",
+      "CM FOOD HUB"
+    ],
+    "Invoice Num": [
+      "INV/2025/6270",
+      "INV/2025/6686",
+      "INV/2025/6521",
+      "INV/2025/6268",
+      "INV/2025/6731"
+    ],
+    "REFNBR": [
+      "DMP024345",
+      "DMP024538",
+      "DMP024424",
+      "TDM002105",
+      "DMP024484"
+    ],
+    "Total CAS": [
+      "62",
+      "132",
+      "224",
+      "100",
+      "24"
+    ],
+    "Total PCS": [
+      "46",
+      "42",
+      "45",
+      "24",
+      "41"
+    ],
+    "Untaxed Amount": [
+      "1066.87",
+      "9796.1",
+      "3582.75",
+      "5474.99",
+      "7922.41"
+    ],
+    "Discount Rate": [
+      "LESS 4%",
+      "False",
+      "Less 2%",
+      "LESS 3%",
+      "Less 3% (PHP) "
+    ],
+    "Discount Amount": [
+      "242.54",
+      "51.43",
+      "825.71",
+      "2393.93",
+      "1290.7"
+    ],
+    "Tax": [
+      "3273.05",
+      "146.55",
+      "131.73",
+      "518.96",
+      "867.78"
+    ],
+    "Net Amount": [
+      "7731.14",
+      "9909.1",
+      "2345.65",
+      "3700.8",
+      "3670.89"
+    ],
+    "Balance": [
+      "9909.1",
+      "20602.81",
+      "3700.8",
+      "3670.89",
+      "20228.54"
+    ],
+    "Posted": [
+      "Yes",
+      "No"
+    ],
+    "Return Slip #": [],
+    "Return Type": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 586,
+  "header_signature": "e74d7688a7c1",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "total cas",
+    "total pcs",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'",
+    "header contains 'return slip #'",
+    "REFNBR 'TDM002101' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'TDM002122' matches prefix 'TDM' -> delmonte",
+    "REFNBR 'DMP024519-3' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024530' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024542' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024541' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024540' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024539' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024531' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024538' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024523' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024515' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024537' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024519-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024536' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024535' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024534' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024533' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024205-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024532' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024529' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024495-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024527' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024526' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024525' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024524' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024466-2' matches prefix 'DMP' -> delmonte",
+    "REFNBR 'DMP024522' matches prefix 'DMP' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

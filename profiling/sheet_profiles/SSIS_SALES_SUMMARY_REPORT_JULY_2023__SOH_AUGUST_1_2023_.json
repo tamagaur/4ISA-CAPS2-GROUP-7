@@ -1,0 +1,205 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT JULY 2023.xlsx",
+  "sheet": "SOH(AUGUST 1, 2023)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "Last Purchase Price(GSV/CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route",
+    "Batch",
+    "Hierarchy Node",
+    "Blocked Stock(CS/PC)",
+    "Sales Route Description"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "Last Purchase Price(GSV/CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty",
+    "Batch": "text",
+    "Hierarchy Node": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Sales Route Description": "empty"
+  },
+  "null_pct": {
+    "Storage Location": 0.13,
+    "Article No": 0.13,
+    "Article Description": 0.13,
+    "PACK SIZE": 0.13,
+    "Stock Quantity (CS/PC)": 0.13,
+    "Stock Value": 0.0,
+    "PO Qty": 64.25,
+    "Open SO Quantity": 76.21,
+    "Balance Quantity": 0.13,
+    "Last Purchase Price(GSV/CS)": 0.13,
+    "Status": 0.13,
+    "CATEGORY DESC": 0.13,
+    "Sales Route": 100.0,
+    "Batch": 0.13,
+    "Hierarchy Node": 0.13,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Sales Route Description": 100.0
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 785,
+    "Article Description": 785,
+    "PACK SIZE": 24,
+    "Stock Quantity (CS/PC)": 486,
+    "Stock Value": 775,
+    "PO Qty": 68,
+    "Open SO Quantity": 67,
+    "Balance Quantity": 522,
+    "Last Purchase Price(GSV/CS)": 373,
+    "Status": 2,
+    "CATEGORY DESC": 12,
+    "Sales Route": 0,
+    "Batch": 1,
+    "Hierarchy Node": 12,
+    "Blocked Stock(CS/PC)": 0,
+    "Sales Route Description": 0
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "68532828",
+      "67102815",
+      "68736100",
+      "69668144",
+      "68299286"
+    ],
+    "Article Description": [
+      "MASTER CLEANSER OIL CONTROL 72X135ML",
+      "SURF POWDER TAWAS S 288X57G",
+      "DOVE RO DV ULT REPAIR LILY 24X40ML",
+      "DOVE S-COND KERATIN REPAIR (1+1) 6X300ML",
+      "BESTFOODS PEANUT BUTTER 12X340G"
+    ],
+    "PACK SIZE": [
+      "18",
+      "20",
+      "288",
+      "6",
+      "32"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "39/0",
+      "43/36",
+      "56/84",
+      "7/7",
+      "0/17"
+    ],
+    "Stock Value": [
+      "46849.11",
+      "77441.01",
+      "15120",
+      "3764.06",
+      "1412.15"
+    ],
+    "PO Qty": [
+      "14/0",
+      "3/0",
+      "60/0",
+      "39/0",
+      "24/0"
+    ],
+    "Open SO Quantity": [
+      "1/24",
+      "1/72",
+      "5/15",
+      "0/5",
+      "0/22"
+    ],
+    "Balance Quantity": [
+      "39/0",
+      "43/36",
+      "7/7",
+      "18/11",
+      "0/17"
+    ],
+    "Last Purchase Price(GSV/CS)": [
+      "2729.46",
+      "2078.04",
+      "2183.57",
+      "1028.04",
+      "1700"
+    ],
+    "Status": [
+      "Inactive",
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "DEODORANTS & FRAGRANCES",
+      "ORAL CARE",
+      "HOME & HYGIENE",
+      "SKIN CLEANSING",
+      "HAIR CARE"
+    ],
+    "Sales Route": [],
+    "Batch": [
+      "VALUATED"
+    ],
+    "Hierarchy Node": [
+      "4419",
+      "7H17",
+      "6A42",
+      "3109",
+      "3102"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Sales Route Description": []
+  },
+  "grain": "summary",
+  "usable_row_count": 786,
+  "header_signature": "ada2faee5d3a",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "hierarchy node",
+    "last purchase price(gsv/cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "sales route description",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'",
+    "header contains 'gsv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

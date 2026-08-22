@@ -1,27 +1,66 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
+import { Check, Calendar } from 'lucide-react';
+import { getCurrentUser } from '../auth';
 import './Topbar.css';
 
-const Topbar = ({ 
-  toggleSidebar, 
-  selectedMonth, 
-  setSelectedMonth, 
-  selectedYear, 
-  setSelectedYear 
+const PRINCIPALS = [
+  { key: 'all', label: 'All principals' },
+  { key: 'unilever', label: 'Unilever' },
+  { key: 'delmonte', label: 'Del Monte' },
+];
+
+const Topbar = ({
+  toggleSidebar,
+  startMonth,
+  startYear,
+  endMonth,
+  endYear,
+  pendingStartMonth,
+  setPendingStartMonth,
+  pendingStartYear,
+  setPendingStartYear,
+  pendingEndMonth,
+  setPendingEndMonth,
+  pendingEndYear,
+  setPendingEndYear,
+  isPending,
+  handleApplyPeriod,
+  handleResetToToday,
+  realWorldMonth = 'Aug',
+  realWorldYear = '2026',
+  principal = 'all',
+  setPrincipal = () => {},
 }) => {
   const location = useLocation();
+  const isToday = 
+    pendingStartMonth === realWorldMonth && 
+    pendingStartYear === realWorldYear && 
+    pendingEndMonth === realWorldMonth && 
+    pendingEndYear === realWorldYear;
+  const isForecastPage = location.pathname === '/forecast';
 
-  const getPathBadge = () => {
-    const path = location.pathname;
-    if (path === '/sku-management') return '01';
-    if (path === '/abc') return '02';
-    if (path === '/forecast') return '03';
-    if (path === '/reorder') return '04';
-    if (path === '/warehouse') return '05';
-    if (path === '/bad-orders') return '06';
-    if (path === '/upload') return '07';
-    return '00';
+  // Principal filter is only meaningful on analytics & management pages.
+  // Admin-only pages (audit log, data upload, user management) operate
+  // across all data and have no per-principal view, so the filter is hidden.
+  const ADMIN_PAGES = ['/audit-log', '/upload', '/users'];
+  const showPrincipalFilter = !ADMIN_PAGES.includes(location.pathname);
+
+  const user = getCurrentUser();
+  const getInitials = (u) => {
+    if (!u) return 'JD'; // Fallback
+    if (u.fullName) {
+      const parts = u.fullName.split(' ').filter(Boolean);
+      if (parts.length === 0) return '??';
+      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    if (u.email) {
+      return u.email.substring(0, 2).toUpperCase();
+    }
+    return '??';
   };
+  const initials = getInitials(user);
 
   return (
     <header className="topbar">
@@ -33,31 +72,41 @@ const Topbar = ({
             <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
         </button>
-        <span className="breadcrumb-path">§ {getPathBadge()} / 07</span>
-        
-        <select 
-          className="dropdown-select" 
-          value={selectedMonth} 
-          onChange={(e) => setSelectedMonth(e.target.value)}
-        >
-          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
-        
-        <select 
-          className="dropdown-select" 
-          value={selectedYear} 
-          onChange={(e) => setSelectedYear(e.target.value)}
-        >
-          {['2021', '2022', '2023', '2024', '2025', '2026'].map(y => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
+
+        {/* Date Filter removed and placed in page headers */}
+
+        {showPrincipalFilter && (
+          <div className="principal-filter">
+            <div className="principal-segmented" role="tablist" aria-label="Principal filter">
+              {PRINCIPALS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={principal === p.key}
+                  className={`principal-segment ${principal === p.key ? 'active' : ''}`}
+                  onClick={() => setPrincipal(p.key)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <select
+              className="principal-dropdown dropdown-select"
+              value={principal}
+              onChange={(e) => setPrincipal(e.target.value)}
+              aria-label="Principal filter"
+            >
+              {PRINCIPALS.map((p) => (
+                <option key={p.key} value={p.key}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       
       <div className="topbar-right">
-        <div className="avatar blue-avatar">JD</div>
+        <div className="avatar blue-avatar" title={user?.fullName || user?.email || 'User'}>{initials}</div>
       </div>
     </header>
   );

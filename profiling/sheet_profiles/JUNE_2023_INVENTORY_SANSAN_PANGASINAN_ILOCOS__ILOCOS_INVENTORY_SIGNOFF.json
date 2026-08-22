@@ -1,0 +1,143 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 06.2023/JUNE_2023_INVENTORY_SANSAN_PANGASINAN&ILOCOS.xlsx",
+  "sheet": "ILOCOS INVENTORY SIGNOFF",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.72,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "PCS",
+    "in Cases"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric",
+    "in Cases": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.68,
+    "in Cases": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 148,
+    "Quantity": 123,
+    "Cost": 148,
+    "Valuation": 148,
+    "Valuation with VAT": 148,
+    "CAS": 35,
+    "PCS": 103,
+    "PKG": 15,
+    "in Cases": 117
+  },
+  "samples": {
+    "__col0__": [
+      "          DKY58450 DMV-DKY Strawberry 48/180ml",
+      "          9DMR57999 DM SWEET STYLE SPAGHETTI SAUCE 500G",
+      "          9DMP12286 DM EXTRA RICH BANANA KETCHUP 24 x 320g",
+      "          9DMR57542 DM TOMATO SAUCE FIL STYLE 200G SUP ROYCE",
+      "          DKK11961 KIKKOMAN STD GRADE SOY SAUCE 24/150ML"
+    ],
+    "Quantity": [
+      "1.6666666666666667",
+      "19.166666666666668",
+      "0.25",
+      "0.2916666666666667",
+      "29.833333333333332"
+    ],
+    "Cost": [
+      "11228.595",
+      "720.78",
+      "424.242083333333",
+      "8210.33875",
+      "214.9025"
+    ],
+    "Valuation": [
+      "11228.595",
+      "720.78",
+      "424.242083333333",
+      "8210.33875",
+      "214.9025"
+    ],
+    "Valuation with VAT": [
+      "18552.17",
+      "14960.3916",
+      "2531.0208",
+      "3657.15",
+      "14512.9425"
+    ],
+    "CAS": [
+      "8",
+      "152",
+      "14",
+      "35",
+      "34"
+    ],
+    "PCS": [
+      "156",
+      "343",
+      "113",
+      "139",
+      "171"
+    ],
+    "PKG": [
+      "8",
+      "4",
+      "36",
+      "12",
+      "20"
+    ],
+    "in Cases": [
+      "1.6666666666666667",
+      "31.875",
+      "0.25",
+      "29.833333333333332",
+      "3.861111111111111"
+    ]
+  },
+  "grain": "sku",
+  "usable_row_count": 148,
+  "header_signature": "5d7ed8f9427e",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "in cases",
+    "pcs",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

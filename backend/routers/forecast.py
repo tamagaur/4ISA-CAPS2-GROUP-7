@@ -1,11 +1,93 @@
 """
 backend.routers.forecast — GET /forecast/{sku_id}
 
-Phase 6 (CLAUDE.md Step 23):
-  Returns SARIMA forecast for a given SKU (Category A only).
-  Reads pre-computed forecast values from Supabase. Requires auth.
-  Returns 404 if sku_id does not exist or is not Category A.
+Returns SARIMA forecast output for a SKU (Unilever) or category (Del Monte)
+from Forecast_Result, plus trailing actuals for Unilever SKUs from
+Unilever_SKU_Demand_Fact (Del Monte has no SKU-level demand fact — DEC-03).
 
-TODO: Define APIRouter, implement endpoint.
-      Schema: see backend/schemas/forecast.py.
+404 if sku_id/principal doesn't resolve to a Product_Dimension row.
+Forecast_Result may legitimately be empty for a resolved product (the
+analytics/ SARIMA pipeline hasn't been run against every SKU, or at all,
+yet) — that is NOT a 404, it's a 200 with forecast: [].
 """
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from backend.deps import TokenPayload, get_current_user, get_db
+from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
+
+router = APIRouter(prefix="/forecast", tags=["forecast"])
+
+
+@router.get("/{sku_id}", response_model=ForecastResponse)
+def get_forecast(
+    sku_id: str,
+    principal: str = Query(..., description="'unilever' or 'delmonte' — required to disambiguate sku_id vs category_path"),
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+) -> ForecastResponse:
+    if principal not in ("unilever", "delmonte"):
+        raise HTTPException(status_code=400, detail="principal must be 'unilever' or 'delmonte'")
+
+    id_column = "sku_code" if principal == "unilever" else "category_path"
+    product_row = db.execute(
+        text(f"""
+            SELECT product_key, product_name
+            FROM Product_Dimension
+            WHERE principal = :principal AND {id_column} = :sku_id
+        """),
+        {"principal": principal, "sku_id": sku_id},
+    ).mappings().first()
+    if product_row is None:
+        raise HTTPException(status_code=404, detail=f"No {principal} product found for '{sku_id}'")
+
+    product_key = product_row["product_key"]
+
+    forecast_rows = db.execute(
+        text("""
+            SELECT forecast_date, forecast_value, confidence_lower, confidence_upper, mape, model_params
+            FROM Forecast_Result
+            WHERE product_key = :product_key
+            ORDER BY forecast_date
+        """),
+        {"product_key": product_key},
+    ).mappings().all()
+    forecast = [
+        ForecastPoint(
+            forecast_date=r["forecast_date"],
+            forecast_value=float(r["forecast_value"]),
+            confidence_lower=float(r["confidence_lower"]) if r["confidence_lower"] is not None else None,
+            confidence_upper=float(r["confidence_upper"]) if r["confidence_upper"] is not None else None,
+            mape=float(r["mape"]) if r["mape"] is not None else None,
+            model_params=r["model_params"],
+        )
+        for r in forecast_rows
+    ]
+
+    actuals: list[ActualPoint] = []
+    if principal == "unilever":
+        actual_rows = db.execute(
+            text("""
+                SELECT calendar_month, quantity_sold
+                FROM Unilever_SKU_Demand_Fact
+                WHERE product_key = :product_key
+                ORDER BY calendar_month DESC
+                LIMIT 12
+            """),
+            {"product_key": product_key},
+        ).mappings().all()
+        actuals = [
+            ActualPoint(period=r["calendar_month"], quantity=float(r["quantity_sold"] or 0))
+            for r in reversed(actual_rows)
+        ]
+
+    return ForecastResponse(
+        sku_id=sku_id,
+        product_name=product_row["product_name"],
+        principal=principal,
+        actuals=actuals,
+        forecast=forecast,
+    )

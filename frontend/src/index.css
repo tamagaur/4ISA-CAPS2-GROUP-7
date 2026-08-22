@@ -1,5 +1,24 @@
 :root {
   --font-inter: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  /* Data Visualization Color Tokens */
+  --color-critical: #E5484D;
+  --color-warning: #F5A623;
+  --color-success: #2E9E5B;
+  --color-sales-trend: #5B5FEF;
+  --color-dispatched: #14919B;
+  --color-forecast: #A855F7;
+  --color-forecast-bg: #F3E8FF;
+  --color-gridline: #B4BCC7;
+
+  /* ABC Single-Hue Plum Ramp */
+  --color-abc-a: #6B2C5F;
+  --color-abc-b: #B565A0;
+  --color-abc-c: #EBC9E1;
+
+  /* Brand Chrome */
+  --color-brand-primary: #c53030;
+  --color-brand-accent: #e53e3e;
 }
 
 html, body, #root, .App {
@@ -8,7 +27,7 @@ html, body, #root, .App {
   width: 100vw;
   height: 100vh;
   font-family: var(--font-inter);
-  font-size: 20.7px; /* Scaled up by ~15% from 18px */
+  font-size: 14px; /* Standard dashboard density */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #f7fafc;

@@ -1,0 +1,151 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 12.2025/2025 DECEMBER INVENTORY.xlsx",
+  "sheet": "Sheet1",
+  "real_format": "xlsx",
+  "header_row_index": 4,
+  "header_confidence": 0.826,
+  "junk_ranges": [
+    [
+      0,
+      3
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "CATEGORY",
+    "PRODUCT/ SKU CODE",
+    "DESCRIPTION",
+    "BASE UNIT",
+    "CASE PACK",
+    "SKU BARCODE",
+    "SHIP ID CODE",
+    "CUR",
+    "PRODUCT LIST PRICE (VAT-EX) CASE",
+    "PRODUCT LIST PRICE (VAT-INC) CASE"
+  ],
+  "dtypes": {
+    "__col0__": "empty",
+    "CATEGORY": "text",
+    "PRODUCT/ SKU CODE": "text",
+    "DESCRIPTION": "text",
+    "BASE UNIT": "text",
+    "CASE PACK": "numeric",
+    "SKU BARCODE": "text",
+    "SHIP ID CODE": "text",
+    "CUR": "text",
+    "PRODUCT LIST PRICE (VAT-EX) CASE": "numeric",
+    "PRODUCT LIST PRICE (VAT-INC) CASE": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 100.0,
+    "CATEGORY": 0.0,
+    "PRODUCT/ SKU CODE": 0.0,
+    "DESCRIPTION": 0.0,
+    "BASE UNIT": 0.0,
+    "CASE PACK": 0.0,
+    "SKU BARCODE": 1.26,
+    "SHIP ID CODE": 0.84,
+    "CUR": 0.0,
+    "PRODUCT LIST PRICE (VAT-EX) CASE": 0.0,
+    "PRODUCT LIST PRICE (VAT-INC) CASE": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 0,
+    "CATEGORY": 6,
+    "PRODUCT/ SKU CODE": 238,
+    "DESCRIPTION": 238,
+    "BASE UNIT": 1,
+    "CASE PACK": 20,
+    "SKU BARCODE": 235,
+    "SHIP ID CODE": 236,
+    "CUR": 1,
+    "PRODUCT LIST PRICE (VAT-EX) CASE": 153,
+    "PRODUCT LIST PRICE (VAT-INC) CASE": 153
+  },
+  "samples": {
+    "__col0__": [],
+    "CATEGORY": [
+      "Beverages",
+      "Fruits & Snacks",
+      "Dairy",
+      "Culinary",
+      "Others"
+    ],
+    "PRODUCT/ SKU CODE": [
+      "57074",
+      "56117",
+      "1339",
+      "11861",
+      "57112"
+    ],
+    "DESCRIPTION": [
+      "DMSS WEEKEND MERIENDA COMBO - FIL 500G",
+      "DM Twin Pack Four Seasons",
+      "100% PINEAPPLE JUICE BONESMART",
+      "DM QUICK N EASY BREADING 36X75G",
+      "DM PINE CRUSH JUICE DRINK 24 - 202"
+    ],
+    "BASE UNIT": [
+      "CAS"
+    ],
+    "CASE PACK": [
+      "36",
+      "8",
+      "50",
+      "16",
+      "6"
+    ],
+    "SKU BARCODE": [
+      "4800024577740",
+      "4800024555069",
+      "4800024570727",
+      "4800024562692",
+      "4800024570024"
+    ],
+    "SHIP ID CODE": [
+      "14800024579413",
+      "14800024016154",
+      "14800024570007",
+      "78851013768491",
+      "4800024551009"
+    ],
+    "CUR": [
+      "PHP"
+    ],
+    "PRODUCT LIST PRICE (VAT-EX) CASE": [
+      "847.29",
+      "900.96",
+      "846.43",
+      "657.32",
+      "1038.21"
+    ],
+    "PRODUCT LIST PRICE (VAT-INC) CASE": [
+      "1637.28",
+      "1760.75",
+      "3086.76",
+      "1569.84",
+      "153.62"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 238,
+  "header_signature": "137a341be992",
+  "header_tokens": [
+    "base unit",
+    "case pack",
+    "category",
+    "cur",
+    "description",
+    "product list price (vat-ex) case",
+    "product list price (vat-inc) case",
+    "product/ sku code",
+    "ship id code",
+    "sku barcode"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

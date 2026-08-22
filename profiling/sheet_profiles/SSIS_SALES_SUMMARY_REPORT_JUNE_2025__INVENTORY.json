@@ -1,0 +1,74 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT JUNE 2025.xlsx",
+  "sheet": "INVENTORY",
+  "real_format": "xlsx",
+  "header_row_index": 5,
+  "header_confidence": 0.48,
+  "junk_ranges": [
+    [
+      0,
+      4
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Schedules of Ending Invty June 2025",
+    "INVTY",
+    "INVTY",
+    "AT COST"
+  ],
+  "dtypes": {
+    "__col0__": "empty",
+    "Schedules of Ending Invty June 2025": "text",
+    "INVTY": "text",
+    "AT COST": "text"
+  },
+  "null_pct": {
+    "__col0__": 100.0,
+    "Schedules of Ending Invty June 2025": 20.0,
+    "INVTY": 20.0,
+    "AT COST": 20.0
+  },
+  "distinct_count": {
+    "__col0__": 0,
+    "Schedules of Ending Invty June 2025": 4,
+    "INVTY": 4,
+    "AT COST": 4
+  },
+  "samples": {
+    "__col0__": [],
+    "Schedules of Ending Invty June 2025": [
+      "Whse Inventory  - Retail",
+      "Extruck Invty - ",
+      "TOTAL:",
+      "BO Invty 6.2025"
+    ],
+    "INVTY": [
+      "WITHOUT VAT",
+      "30229304.79",
+      "29876122.95",
+      "353181.83999999997"
+    ],
+    "AT COST": [
+      "WITHOUT VAT",
+      "324150.292752",
+      "27420305.643510003",
+      "27744455.936262004"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 5,
+  "header_signature": "2b4335fdca6d",
+  "header_tokens": [
+    "at cost",
+    "invty",
+    "invty",
+    "schedules of ending invty june 2025"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

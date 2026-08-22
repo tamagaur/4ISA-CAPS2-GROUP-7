@@ -1,0 +1,190 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS DAILY SALES SUMMARY REPORT (OCTOBER 1-30, 2021).xlsx",
+  "sheet": "INVOICE REG( October 1-30 2021)",
+  "real_format": "xlsx",
+  "header_row_index": 8,
+  "header_confidence": 0.716,
+  "junk_ranges": [
+    [
+      0,
+      7
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "Calendar Day",
+    "Invoice No",
+    "Reason Code",
+    "Outlet",
+    "__col6__",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax"
+  ],
+  "dtypes": {
+    "Salesman": "text",
+    "__col1__": "text",
+    "Calendar Day": "datetime",
+    "Invoice No": "text",
+    "Reason Code": "text",
+    "Outlet": "text",
+    "__col6__": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric"
+  },
+  "null_pct": {
+    "Salesman": 0.0,
+    "__col1__": 0.0,
+    "Calendar Day": 0.0,
+    "Invoice No": 0.0,
+    "Reason Code": 0.0,
+    "Outlet": 0.0,
+    "__col6__": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.0,
+    "Sale After TPR & UW": 0.0,
+    "NIV": 0.0,
+    "VAT": 0.0,
+    "Total Sales Amt Inc. Tax": 0.0
+  },
+  "distinct_count": {
+    "Salesman": 12,
+    "__col1__": 12,
+    "Calendar Day": 22,
+    "Invoice No": 4995,
+    "Reason Code": 8,
+    "Outlet": 2011,
+    "__col6__": 1906,
+    "GSV": 3486,
+    "TPR + UW/DT Discount": 570,
+    "Sale After TPR & UW": 3507,
+    "NIV": 3507,
+    "VAT": 3325,
+    "Total Sales Amt Inc. Tax": 3507
+  },
+  "samples": {
+    "Salesman": [
+      "3684",
+      "14365",
+      "21607",
+      "10699",
+      "14364"
+    ],
+    "__col1__": [
+      "LEO NIÑO PABLICO JR",
+      "RODERICK CHRISTIAN BARNACHEA",
+      "JESSIE MIRADIOS",
+      "GERARD PAOLO TABIOS SUMABAT",
+      "WARREN AFROILAN"
+    ],
+    "Calendar Day": [
+      "2021-10-14 00:00:00",
+      "2021-10-11 00:00:00",
+      "2021-10-18 00:00:00",
+      "2021-10-21 00:00:00",
+      "2021-10-29 00:00:00"
+    ],
+    "Invoice No": [
+      "CZ30826657",
+      "CZ40147931",
+      "CZ40149009",
+      "CZ30830081",
+      "CZ30830851"
+    ],
+    "Reason Code": [
+      "Stock not available",
+      "Good - Full Return",
+      "Stock Recall",
+      "Order cancelled by customer",
+      "Overlanded/Shortlanded"
+    ],
+    "Outlet": [
+      "664579",
+      "3151602",
+      "3514872",
+      "3832213",
+      "3838346"
+    ],
+    "__col6__": [
+      "MELARDO STORE",
+      "TRINING - STO. DOMINGO",
+      "DESIREE GULAYAN",
+      "STHEPEN STORE",
+      "ELIZA GULAYAN"
+    ],
+    "GSV": [
+      "4577.16",
+      "151.88",
+      "342.87",
+      "450.01",
+      "5476.08"
+    ],
+    "TPR + UW/DT Discount": [
+      "-181",
+      "-53.34",
+      "-779.03",
+      "-1092.19",
+      "-1853.74"
+    ],
+    "Sale After TPR & UW": [
+      "4577.16",
+      "151.88",
+      "342.87",
+      "450.01",
+      "19321.56"
+    ],
+    "NIV": [
+      "4577.16",
+      "151.88",
+      "342.87",
+      "450.01",
+      "19321.56"
+    ],
+    "VAT": [
+      "363.81",
+      "54.45",
+      "538.56",
+      "64.49",
+      "42.94"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "1364.23",
+      "-305.1",
+      "962.39",
+      "559.32",
+      "257341.35"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 4995,
+  "header_signature": "6dd2f346224a",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "invoice no",
+    "niv",
+    "outlet",
+    "reason code",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'tpr'",
+    "header contains 'gsv'",
+    "header contains 'niv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

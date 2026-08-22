@@ -1,0 +1,171 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS DAILY SALES SUMMARY REPORT MARCH.2022.xlsx",
+  "sheet": "SOH(MARCH31,2022)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "MOVING AVERAGE PRICE(CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "MOVING AVERAGE PRICE(CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty"
+  },
+  "null_pct": {
+    "Storage Location": 0.12,
+    "Article No": 0.12,
+    "Article Description": 0.12,
+    "PACK SIZE": 0.12,
+    "Stock Quantity (CS/PC)": 0.12,
+    "Stock Value": 0.0,
+    "PO Qty": 76.12,
+    "Open SO Quantity": 56.69,
+    "Balance Quantity": 0.12,
+    "MOVING AVERAGE PRICE(CS)": 0.12,
+    "Status": 0.12,
+    "CATEGORY DESC": 0.12,
+    "Sales Route": 100.0
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 828,
+    "Article Description": 827,
+    "PACK SIZE": 23,
+    "Stock Quantity (CS/PC)": 512,
+    "Stock Value": 825,
+    "PO Qty": 34,
+    "Open SO Quantity": 159,
+    "Balance Quantity": 523,
+    "MOVING AVERAGE PRICE(CS)": 740,
+    "Status": 1,
+    "CATEGORY DESC": 13,
+    "Sales Route": 0
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "67784542",
+      "67975951",
+      "68191110",
+      "67762749",
+      "68778415"
+    ],
+    "Article Description": [
+      "LIFEBUOY HW MILDCARE ST 12X200ML",
+      "SURF FABCON BF 6(1+1)X(720ML+720ML)",
+      "TRESEMME TRT MASK KERATIN SMTH 12X180ML",
+      "DOVE S-CON AMINO RESTORE 48(6+1)X10ML",
+      "KNORR BN CUBES CHICKEN SAVERS 36X120G"
+    ],
+    "PACK SIZE": [
+      "32",
+      "6",
+      "108",
+      "60",
+      "20"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "2/56",
+      "179/194",
+      "4/1",
+      "17/204",
+      "10/4"
+    ],
+    "Stock Value": [
+      "6475.65",
+      "2241.02",
+      "16359.14",
+      "426.99",
+      "15819.1"
+    ],
+    "PO Qty": [
+      "16/0",
+      "4/0",
+      "39/0",
+      "46/0",
+      "12/0"
+    ],
+    "Open SO Quantity": [
+      "27/192",
+      "0/65",
+      "0/71",
+      "2/23",
+      "1/51"
+    ],
+    "Balance Quantity": [
+      "4/119",
+      "10/4",
+      "17/15",
+      "11/41",
+      "37/7"
+    ],
+    "MOVING AVERAGE PRICE(CS)": [
+      "738.6",
+      "1691.79",
+      "1279.66",
+      "1741.79",
+      "1223.42"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "HAIR CARE",
+      "TEA",
+      "HOME & HYGIENE",
+      "SKIN CLEANSING",
+      "SCRATCH COOKING AIDS"
+    ],
+    "Sales Route": []
+  },
+  "grain": "summary",
+  "usable_row_count": 829,
+  "header_signature": "944e3e2e61b9",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "category desc",
+    "moving average price(cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

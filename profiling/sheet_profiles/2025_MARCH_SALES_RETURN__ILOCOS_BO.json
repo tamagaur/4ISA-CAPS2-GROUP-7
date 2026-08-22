@@ -1,0 +1,217 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 03.2025/2025 MARCH SALES RETURN.xlsx",
+  "sheet": "ILOCOS BO",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #",
+    "Return Type"
+  ],
+  "dtypes": {
+    "Invoice Date": "text",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text",
+    "Return Type": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 11.11,
+    "Salesman": 22.22,
+    "Town Display": 22.22,
+    "Branch Code": 22.22,
+    "Customer Name": 22.22,
+    "Invoice Num": 22.22,
+    "REFNBR": 22.22,
+    "Untaxed Amount": 22.22,
+    "Discount Rate": 22.22,
+    "Discount Amount": 22.22,
+    "Tax": 22.22,
+    "Net Amount": 22.22,
+    "Balance": 22.22,
+    "Posted": 22.22,
+    "Return Slip #": 22.22,
+    "Return Type": 22.22
+  },
+  "distinct_count": {
+    "Invoice Date": 5,
+    "Salesman": 2,
+    "Town Display": 4,
+    "Branch Code": 4,
+    "Customer Name": 4,
+    "Invoice Num": 7,
+    "REFNBR": 7,
+    "Untaxed Amount": 7,
+    "Discount Rate": 2,
+    "Discount Amount": 3,
+    "Tax": 7,
+    "Net Amount": 7,
+    "Balance": 5,
+    "Posted": 2,
+    "Return Slip #": 7,
+    "Return Type": 1
+  },
+  "samples": {
+    "Invoice Date": [
+      "Bad Stock",
+      "2025-03-10",
+      "2025-03-21",
+      "2025-03-29",
+      "2025-03-15"
+    ],
+    "Salesman": [
+      "BARBI LABRADOR",
+      "CARLON DAHILIG"
+    ],
+    "Town Display": [
+      "SAN VICENTE",
+      "SAN ILDEFONSO",
+      "SANTA CATALINA",
+      "LAOAG CITY (Capital)"
+    ],
+    "Branch Code": [
+      "L12E-001195",
+      "L12E-B001788",
+      "L12E-001042",
+      "L12E-001152"
+    ],
+    "Customer Name": [
+      "JHAY & JHEN",
+      "HALOVER CVS",
+      "STLM CORPORATION",
+      "IMAZEN RESTAURANT & CAFE"
+    ],
+    "Invoice Num": [
+      "INV/2025/0926",
+      "INV/2025/1103",
+      "INV/2025/1040",
+      "INV/2025/1041",
+      "INV/2025/0929"
+    ],
+    "REFNBR": [
+      "DMIS0064029",
+      "RMR39131",
+      "RMR39132",
+      "RMR38829",
+      "RMR39133"
+    ],
+    "Untaxed Amount": [
+      "52.04",
+      "78.46",
+      "107.36",
+      "439.9",
+      "49.89"
+    ],
+    "Discount Rate": [
+      "LESS 2%",
+      "Public Pricelist"
+    ],
+    "Discount Amount": [
+      "3.68",
+      "8.98",
+      "0"
+    ],
+    "Tax": [
+      "9.41",
+      "3.12",
+      "6.24",
+      "5.99",
+      "21.63"
+    ],
+    "Net Amount": [
+      "55.88",
+      "58.28",
+      "87.87",
+      "29.14",
+      "120.24"
+    ],
+    "Balance": [
+      "58.28",
+      "87.87",
+      "29.14",
+      "0",
+      "120.24"
+    ],
+    "Posted": [
+      "No",
+      "Yes"
+    ],
+    "Return Slip #": [
+      "RMR39131",
+      "RMR39132",
+      "RMR38829",
+      "RMR39133",
+      "RMR39128"
+    ],
+    "Return Type": [
+      "BO"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 8,
+  "header_signature": "8bc1c46974fc",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "return type",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'DMIS0064029' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'RMR39133' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR39131' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR39132' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR39128' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR38873' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR38829' matches prefix 'RMR' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

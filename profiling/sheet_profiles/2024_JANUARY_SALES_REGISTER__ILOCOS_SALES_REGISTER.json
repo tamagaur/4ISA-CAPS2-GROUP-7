@@ -1,0 +1,230 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 01.2024/2024 JANUARY SALES REGISTER.xlsx",
+  "sheet": "ILOCOS SALES REGISTER",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Dscount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Dscount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "empty"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Dscount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 100.0
+  },
+  "distinct_count": {
+    "Invoice Date": 22,
+    "Salesman": 2,
+    "Town Display": 29,
+    "Branch Code": 120,
+    "Customer Name": 120,
+    "Invoice Num": 163,
+    "REFNBR": 163,
+    "Untaxed Amount": 157,
+    "Discount Rate": 3,
+    "Dscount Amount": 23,
+    "Tax": 157,
+    "Net Amount": 157,
+    "Balance": 157,
+    "Posted": 1,
+    "Return Slip #": 0
+  },
+  "samples": {
+    "Invoice Date": [
+      "2024-01-24",
+      "2024-01-26",
+      "2024-01-22",
+      "2024-01-23",
+      "2024-01-12"
+    ],
+    "Salesman": [
+      "JOENATHAN ARIZABAL",
+      "CARLON DAHILIG"
+    ],
+    "Town Display": [
+      "SANTA CATALINA",
+      "SANTA LUCIA",
+      "SAN JUAN (LAPOG)",
+      "SANTA MARIA",
+      "PINILI"
+    ],
+    "Branch Code": [
+      "L12E-B000095",
+      "L12E-001031",
+      "L12E-001053",
+      "L12E-000625",
+      "L12E-000967"
+    ],
+    "Customer Name": [
+      "KAMALIG RESTAURANT",
+      "INEC MAIN CANTEEN",
+      "NICOLE'S WINE CONVENIENCE STORE",
+      "COSES CONVENIENCE STORE",
+      "KATRINA'S CARENDERIA "
+    ],
+    "Invoice Num": [
+      "INV/2024/0324",
+      "INV/2024/0278",
+      "INV/2024/0284",
+      "INV/2024/0336",
+      "INV/2024/0240"
+    ],
+    "REFNBR": [
+      "DMIS0060592",
+      "DMIS0060492",
+      "DMIS0060550",
+      "DMIS0060482",
+      "DMIS0060545"
+    ],
+    "Untaxed Amount": [
+      "73.47",
+      "608.84",
+      "18044.24",
+      "3011.88",
+      "6189.27"
+    ],
+    "Discount Rate": [
+      "Public Pricelist",
+      "LESS 2%",
+      "LESS 4%"
+    ],
+    "Dscount Amount": [
+      "19.46",
+      "39.18",
+      "1879.66",
+      "973.85",
+      "3.18"
+    ],
+    "Tax": [
+      "193.68",
+      "379.59",
+      "48.79",
+      "271.39",
+      "73.47"
+    ],
+    "Net Amount": [
+      "3607",
+      "1102.74",
+      "3613.95",
+      "2194.32",
+      "4656.1"
+    ],
+    "Balance": [
+      "3607",
+      "1102.74",
+      "3613.95",
+      "2194.32",
+      "4656.1"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": []
+  },
+  "grain": "invoice",
+  "usable_row_count": 163,
+  "header_signature": "421b6a85bd1a",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount rate",
+    "dscount amount",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'DMIS0060629' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060628' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060627' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060626' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060625' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060624' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060623' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060621' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060620' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060622' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060617' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060614' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060615' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060619' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060616' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060618' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060613' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060612' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060611' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060610' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060609' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060604' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060603' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060602' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060605' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060601' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060606' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060600' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'DMIS0060608' matches prefix 'DMIS' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

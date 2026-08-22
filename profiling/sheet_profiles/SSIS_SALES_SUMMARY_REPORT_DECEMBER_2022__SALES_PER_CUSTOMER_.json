@@ -1,0 +1,176 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT DECEMBER 2022.xlsx",
+  "sheet": "SALES PER CUSTOMER ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.852,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.18,
+    "REASON CODE": 0.18,
+    "OUTLET": 0.18,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.06,
+    "Sale After TPR & UW": 0.06,
+    "NIV": 0.06,
+    "VAT": 0.06,
+    "Total Sales Amt Inc. Tax": 0.06,
+    "REMARKS": 0.18
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 19,
+    "REASON CODE": 13,
+    "OUTLET": 2178,
+    "OUTLET NAME": 2060,
+    "GSV": 1813,
+    "TPR + UW/DT Discount": 436,
+    "Sale After TPR & UW": 1846,
+    "NIV": 1846,
+    "VAT": 1790,
+    "Total Sales Amt Inc. Tax": 1846,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2022-12-15 00:00:00",
+      "2022-12-05 00:00:00",
+      "2022-12-06 00:00:00",
+      "2022-12-03 00:00:00",
+      "2022-12-08 00:00:00"
+    ],
+    "REASON CODE": [
+      "Order cancelled by salesmen",
+      "Overlanded/Shortlanded",
+      "Not assigned",
+      "Order cancelled by customer",
+      "Good - Full Return"
+    ],
+    "OUTLET": [
+      "665597",
+      "3842496",
+      "846253",
+      "664876",
+      "665022"
+    ],
+    "OUTLET NAME": [
+      "GAURAN STORE",
+      "BELARDE PHARMACY",
+      "CASTILLO STORE",
+      "KRING KRING",
+      "SALLY CASTRO SPICES"
+    ],
+    "GSV": [
+      "4079.9",
+      "27225.87",
+      "-968.9",
+      "-2491.09",
+      "-6027.39"
+    ],
+    "TPR + UW/DT Discount": [
+      "-2763.33",
+      "-377.27",
+      "-7742.38",
+      "-6560.2",
+      "18.9"
+    ],
+    "Sale After TPR & UW": [
+      "-65.59",
+      "26309.01",
+      "-2491.09",
+      "-968.9",
+      "-6027.39"
+    ],
+    "NIV": [
+      "-65.59",
+      "26309.01",
+      "-2491.09",
+      "-968.9",
+      "-6027.39"
+    ],
+    "VAT": [
+      "-580.07",
+      "7419.07",
+      "1134.42",
+      "53.44",
+      "172.69"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "299.89",
+      "156.67",
+      "471.24",
+      "8071.57",
+      "4098.02"
+    ],
+    "REMARKS": [
+      "RETURN",
+      "INVOICE"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 3391,
+  "header_signature": "afa3624ca839",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'niv'",
+    "header contains 'gsv'",
+    "header contains 'tpr'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

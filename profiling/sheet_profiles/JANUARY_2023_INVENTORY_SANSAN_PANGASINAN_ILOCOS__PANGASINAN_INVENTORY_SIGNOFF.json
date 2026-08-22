@@ -1,0 +1,143 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 01.2023/JANUARY_2023_INVENTORY_SANSAN_PANGASINAN&ILOCOS.xlsx",
+  "sheet": "PANGASINAN INVENTORY SIGNOFF",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.72,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "PCS",
+    "in Cases"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric",
+    "in Cases": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.83,
+    "in Cases": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 121,
+    "Quantity": 101,
+    "Cost": 119,
+    "Valuation": 119,
+    "Valuation with VAT": 119,
+    "CAS": 47,
+    "PCS": 100,
+    "PKG": 15,
+    "in Cases": 101
+  },
+  "samples": {
+    "__col0__": [
+      "     DMM55928 DM SPAGHETTI  400G X 35",
+      "     9DMR56599 DM TOMATO SAUCE ORIGSTYLE 250G SUP ROYCE",
+      "     9DMR57548 DM FIL STYLE SPAG SAUCE 250G SUP ROYCE",
+      "     9FSE58154 HOT SAUCE 7g x 250",
+      "     9DMS57606 DM Sweetnd Pineapple JDrink 12x1L Tetra"
+    ],
+    "Quantity": [
+      "1011.79166666667",
+      "0.833333333333333",
+      "97.0208333333333",
+      "1.22222222222222",
+      "1.25"
+    ],
+    "Cost": [
+      "27469.4677083333",
+      "13812.9541666667",
+      "4945.32",
+      "22245.4033333333",
+      "1442.28"
+    ],
+    "Valuation": [
+      "27469.4677083333",
+      "13812.9541666667",
+      "4945.32",
+      "22245.4033333333",
+      "1442.28"
+    ],
+    "Valuation with VAT": [
+      "72829.1872",
+      "6183.44393333333",
+      "3295.28966666667",
+      "65641.8046666667",
+      "3340.99733333333"
+    ],
+    "CAS": [
+      "77",
+      "8",
+      "19",
+      "4695",
+      "103"
+    ],
+    "PCS": [
+      "128",
+      "1398",
+      "193",
+      "108",
+      "103"
+    ],
+    "PKG": [
+      "48",
+      "6",
+      "8",
+      "12",
+      "36"
+    ],
+    "in Cases": [
+      "1.1666666666666667",
+      "1.25",
+      "0.16666666666666666",
+      "8.916666666666666",
+      "1011.7916666666666"
+    ]
+  },
+  "grain": "sku",
+  "usable_row_count": 121,
+  "header_signature": "5d7ed8f9427e",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "in cases",
+    "pcs",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

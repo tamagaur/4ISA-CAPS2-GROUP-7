@@ -1,0 +1,151 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 06.2025/2025 JUNE INVENTORY.xlsx",
+  "sheet": "Sheet1",
+  "real_format": "xlsx",
+  "header_row_index": 4,
+  "header_confidence": 0.826,
+  "junk_ranges": [
+    [
+      0,
+      3
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "CATEGORY",
+    "PRODUCT/ SKU CODE",
+    "DESCRIPTION",
+    "BASE UNIT",
+    "CASE PACK",
+    "SKU BARCODE",
+    "SHIP ID CODE",
+    "CUR",
+    "PRODUCT LIST PRICE (VAT-EX) CASE",
+    "PRODUCT LIST PRICE (VAT-INC) CASE"
+  ],
+  "dtypes": {
+    "__col0__": "empty",
+    "CATEGORY": "text",
+    "PRODUCT/ SKU CODE": "text",
+    "DESCRIPTION": "text",
+    "BASE UNIT": "text",
+    "CASE PACK": "numeric",
+    "SKU BARCODE": "text",
+    "SHIP ID CODE": "text",
+    "CUR": "text",
+    "PRODUCT LIST PRICE (VAT-EX) CASE": "numeric",
+    "PRODUCT LIST PRICE (VAT-INC) CASE": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 100.0,
+    "CATEGORY": 0.0,
+    "PRODUCT/ SKU CODE": 0.0,
+    "DESCRIPTION": 0.0,
+    "BASE UNIT": 0.0,
+    "CASE PACK": 0.0,
+    "SKU BARCODE": 1.26,
+    "SHIP ID CODE": 0.84,
+    "CUR": 0.0,
+    "PRODUCT LIST PRICE (VAT-EX) CASE": 0.0,
+    "PRODUCT LIST PRICE (VAT-INC) CASE": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 0,
+    "CATEGORY": 6,
+    "PRODUCT/ SKU CODE": 238,
+    "DESCRIPTION": 238,
+    "BASE UNIT": 1,
+    "CASE PACK": 20,
+    "SKU BARCODE": 235,
+    "SHIP ID CODE": 236,
+    "CUR": 1,
+    "PRODUCT LIST PRICE (VAT-EX) CASE": 153,
+    "PRODUCT LIST PRICE (VAT-INC) CASE": 153
+  },
+  "samples": {
+    "__col0__": [],
+    "CATEGORY": [
+      "Culinary",
+      "Beverages",
+      "Snacks",
+      "Fruits & Snacks",
+      "Others"
+    ],
+    "PRODUCT/ SKU CODE": [
+      "58447",
+      "57354",
+      "56102",
+      "5204",
+      "57075"
+    ],
+    "DESCRIPTION": [
+      "KIKKOMAN STD GRADE SOY SAUCE 24/100ML",
+      "DM Potato Crisp Cheese 14g X 144",
+      "DM Four Seasons JD 12x1L in Tetra",
+      "DM SPAGHETTI SAUCE FILIPINO STYLE 500G",
+      "PINEAPPLE BLUEBERRY 12 X 1L TETRA"
+    ],
+    "BASE UNIT": [
+      "CAS"
+    ],
+    "CASE PACK": [
+      "24",
+      "16",
+      "25",
+      "35",
+      "1"
+    ],
+    "SKU BARCODE": [
+      "4800024558305",
+      "4800024586353",
+      "4901515119804",
+      "4800024585370",
+      "4800024550958"
+    ],
+    "SHIP ID CODE": [
+      "14901515119887",
+      "14800024577747",
+      "14800024568332",
+      "14901515004879",
+      "14800024585957"
+    ],
+    "CUR": [
+      "PHP"
+    ],
+    "PRODUCT LIST PRICE (VAT-EX) CASE": [
+      "1057.16",
+      "1069.5",
+      "1358.79",
+      "2010.21",
+      "859.61"
+    ],
+    "PRODUCT LIST PRICE (VAT-INC) CASE": [
+      "581.52",
+      "1370.4",
+      "802.32",
+      "647.6",
+      "686.56"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 238,
+  "header_signature": "137a341be992",
+  "header_tokens": [
+    "base unit",
+    "case pack",
+    "category",
+    "cur",
+    "description",
+    "product list price (vat-ex) case",
+    "product list price (vat-inc) case",
+    "product/ sku code",
+    "ship id code",
+    "sku barcode"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

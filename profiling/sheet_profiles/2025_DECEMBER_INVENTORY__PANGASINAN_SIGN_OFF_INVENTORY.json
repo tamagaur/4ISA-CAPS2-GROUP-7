@@ -1,0 +1,161 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 12.2025/2025 DECEMBER INVENTORY.xlsx",
+  "sheet": "PANGASINAN SIGN OFF INVENTORY",
+  "real_format": "xlsx",
+  "header_row_index": 4,
+  "header_confidence": 0.298,
+  "junk_ranges": [
+    [
+      0,
+      3
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "__col1__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "__col8__",
+    "__col9__",
+    "__col10__"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "__col1__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "numeric",
+    "Valuation with VAT": "numeric",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "__col8__": "numeric",
+    "__col9__": "numeric",
+    "__col10__": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.45,
+    "__col1__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "__col8__": 0.45,
+    "__col9__": 0.45,
+    "__col10__": 0.45
+  },
+  "distinct_count": {
+    "__col0__": 154,
+    "__col1__": 224,
+    "Quantity": 176,
+    "Cost": 218,
+    "Valuation": 218,
+    "Valuation with VAT": 218,
+    "CAS": 54,
+    "PCS": 36,
+    "__col8__": 18,
+    "__col9__": 158,
+    "__col10__": 175
+  },
+  "samples": {
+    "__col0__": [
+      "58740",
+      "57074",
+      "56117",
+      "1339",
+      "11861"
+    ],
+    "__col1__": [
+      "     DKK34984 KIKKOMAN TERIYAKI BASTE and GLAZE 12/290ML",
+      "     DKK11961 KIKKOMAN STD GRADE SOY SAUCE 24/150ML",
+      "     9DMR57073 DM QUICK N EASY GATA MIX SACHET 36 x 40g",
+      "     9DCN58086 DMSS CREAMY & CHEESY 900G PARTY PACK",
+      "     9DMQ57352 DM Italian Style Spag Sauce 900g SUP"
+    ],
+    "Quantity": [
+      "0.166666666666667",
+      "2.45833333333333",
+      "1.4375",
+      "40.4166666666667",
+      "16"
+    ],
+    "Cost": [
+      "2936.651875",
+      "124.1425",
+      "16509.6",
+      "922.073333333333",
+      "4708.5"
+    ],
+    "Valuation": [
+      "2936.651875",
+      "124.1425",
+      "16509.6",
+      "922.073333333333",
+      "4708.5"
+    ],
+    "Valuation with VAT": [
+      "22176.9034666667",
+      "1208.5248",
+      "7518.42",
+      "343.5264",
+      "69470.0608"
+    ],
+    "CAS": [
+      "34",
+      "8",
+      "69",
+      "16",
+      "3"
+    ],
+    "PCS": [
+      "8",
+      "39",
+      "16",
+      "3",
+      "6"
+    ],
+    "__col8__": [
+      "35",
+      "24",
+      "96",
+      "36",
+      "1"
+    ],
+    "__col9__": [
+      "310",
+      "49",
+      "34",
+      "79",
+      "36"
+    ],
+    "__col10__": [
+      "1.4375",
+      "16",
+      "37.75",
+      "3.1944444444444446",
+      "56.25"
+    ]
+  },
+  "grain": "inventory",
+  "usable_row_count": 224,
+  "header_signature": "20c0847d5ce2",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "pcs",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

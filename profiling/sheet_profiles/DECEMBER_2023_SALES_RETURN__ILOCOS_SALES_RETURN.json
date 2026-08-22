@@ -1,0 +1,187 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 12.2023/DECEMBER 2023 SALES RETURN.xlsx",
+  "sheet": "ILOCOS_SALES RETURN",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Invoice Num",
+    "REFNBR",
+    "Customer Name",
+    "Salesman",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "datetime",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Customer Name": "text",
+    "Salesman": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Customer Name": 0.0,
+    "Salesman": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 0.0
+  },
+  "distinct_count": {
+    "Invoice Date": 5,
+    "Invoice Num": 49,
+    "REFNBR": 49,
+    "Customer Name": 33,
+    "Salesman": 3,
+    "Untaxed Amount": 39,
+    "Discount Rate": 4,
+    "Discount Amount": 22,
+    "Tax": 38,
+    "Net Amount": 39,
+    "Balance": 39,
+    "Posted": 1,
+    "Return Slip #": 47
+  },
+  "samples": {
+    "Invoice Date": [
+      "2023-12-16 00:00:00",
+      "2023-12-18 00:00:00",
+      "2023-12-28 00:00:00",
+      "2023-12-07 00:00:00",
+      "2023-12-29 00:00:00"
+    ],
+    "Invoice Num": [
+      "INV/2023/2552",
+      "INV/2023/2543",
+      "INV/2023/2538",
+      "INV/2023/2546",
+      "INV/2023/2530"
+    ],
+    "REFNBR": [
+      "38686",
+      "11279",
+      "11277",
+      "DMIS0060180",
+      "38687-2"
+    ],
+    "Customer Name": [
+      "BUNSO CONSUMER GOOD ",
+      "LOUIE CONVENIENCE STORE",
+      "BERRY WHOLESALER",
+      "DBB BAKERY INC./BAKER'S PERCENT",
+      "TWO M'S EATERY"
+    ],
+    "Salesman": [
+      "JOENATHAN ARIZABAL",
+      "CARLON DAHILIG",
+      "GHIMBOY TAAN"
+    ],
+    "Untaxed Amount": [
+      "78.19",
+      "30.9",
+      "23.5",
+      "84.19",
+      "558.36"
+    ],
+    "Discount Rate": [
+      "LESS 3%",
+      "LESS 4%",
+      "Public Pricelist",
+      "LESS 2%"
+    ],
+    "Discount Amount": [
+      "12.12",
+      "13.56",
+      "0.27",
+      "11.63",
+      "0.63"
+    ],
+    "Tax": [
+      "9.39",
+      "39.06",
+      "67",
+      "2.44",
+      "429.82"
+    ],
+    "Net Amount": [
+      "62.87",
+      "14.71",
+      "202.87",
+      "638.39",
+      "136.63"
+    ],
+    "Balance": [
+      "62.87",
+      "14.71",
+      "202.87",
+      "638.39",
+      "136.63"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": [
+      "RMR11267",
+      "11279",
+      "11277",
+      "11275",
+      "11282"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 49,
+  "header_signature": "822a0d127970",
+  "header_tokens": [
+    "balance",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'return slip #'",
+    "header contains 'untaxed amount'",
+    "header contains 'refnbr'",
+    "REFNBR 'RMR38698' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'ODM002729-2*' matches prefix 'ODM' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

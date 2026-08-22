@@ -1,0 +1,211 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 01.2024/2024 JANUARY SALES RETURN.xlsx",
+  "sheet": "ILOCOS SALES RETURN",
+  "real_format": "xlsx",
+  "header_row_index": 1,
+  "header_confidence": 1.0,
+  "junk_ranges": [
+    [
+      0,
+      0
+    ]
+  ],
+  "raw_columns": [
+    "Invoice Date",
+    "Salesman",
+    "Town Display",
+    "Branch Code",
+    "Customer Name",
+    "Invoice Num",
+    "REFNBR",
+    "Untaxed Amount",
+    "Discount Rate",
+    "Discount Amount",
+    "Tax",
+    "Net Amount",
+    "Balance",
+    "Posted",
+    "Return Slip #"
+  ],
+  "dtypes": {
+    "Invoice Date": "date-string",
+    "Salesman": "text",
+    "Town Display": "text",
+    "Branch Code": "text",
+    "Customer Name": "text",
+    "Invoice Num": "text",
+    "REFNBR": "text",
+    "Untaxed Amount": "numeric",
+    "Discount Rate": "text",
+    "Discount Amount": "numeric",
+    "Tax": "numeric",
+    "Net Amount": "numeric",
+    "Balance": "numeric",
+    "Posted": "text",
+    "Return Slip #": "text"
+  },
+  "null_pct": {
+    "Invoice Date": 0.0,
+    "Salesman": 0.0,
+    "Town Display": 0.0,
+    "Branch Code": 0.0,
+    "Customer Name": 0.0,
+    "Invoice Num": 0.0,
+    "REFNBR": 0.0,
+    "Untaxed Amount": 0.0,
+    "Discount Rate": 0.0,
+    "Discount Amount": 0.0,
+    "Tax": 0.0,
+    "Net Amount": 0.0,
+    "Balance": 0.0,
+    "Posted": 0.0,
+    "Return Slip #": 1.67
+  },
+  "distinct_count": {
+    "Invoice Date": 7,
+    "Salesman": 3,
+    "Town Display": 17,
+    "Branch Code": 52,
+    "Customer Name": 52,
+    "Invoice Num": 60,
+    "REFNBR": 60,
+    "Untaxed Amount": 46,
+    "Discount Rate": 3,
+    "Discount Amount": 16,
+    "Tax": 46,
+    "Net Amount": 46,
+    "Balance": 46,
+    "Posted": 1,
+    "Return Slip #": 58
+  },
+  "samples": {
+    "Invoice Date": [
+      "2024-01-24",
+      "2024-01-20",
+      "2024-01-13",
+      "2024-01-26",
+      "2024-01-19"
+    ],
+    "Salesman": [
+      "CARLON DAHILIG",
+      "JOENATHAN ARIZABAL",
+      "GHIMBOY TAAN"
+    ],
+    "Town Display": [
+      "BADOC",
+      "CITY OF BATAC",
+      "SARRAT",
+      "SINAIT",
+      "CURRIMAO"
+    ],
+    "Branch Code": [
+      "L12E-000891",
+      "L12E-B001788",
+      "L12E-000970",
+      "L12E-000637",
+      "L12E-000654"
+    ],
+    "Customer Name": [
+      "*436 CONVENIENCE STORE",
+      "GLEDCO ENTERPRICES ",
+      "C&A CVS",
+      "BERRY WHOLESALER",
+      "WHOLEDAY MART CONSUMER GOODS WHOLESALING"
+    ],
+    "Invoice Num": [
+      "INV/2024/0186",
+      "INV/2024/0253",
+      "INV/2024/0252",
+      "INV/2024/0260",
+      "INV/2024/0249"
+    ],
+    "REFNBR": [
+      "38754",
+      "11294",
+      "11289",
+      "DMIS0060497",
+      "38762"
+    ],
+    "Untaxed Amount": [
+      "21.02",
+      "1445.14",
+      "516.28",
+      "79.55",
+      "3815.8"
+    ],
+    "Discount Rate": [
+      "LESS 4%",
+      "LESS 2%",
+      "Public Pricelist"
+    ],
+    "Discount Amount": [
+      "10.76",
+      "3.59",
+      "3.13",
+      "21.51",
+      "2.52"
+    ],
+    "Tax": [
+      "15",
+      "10.39",
+      "457.9",
+      "18.61",
+      "21.08"
+    ],
+    "Net Amount": [
+      "11.77",
+      "1371.35",
+      "280.51",
+      "95.45",
+      "151.2"
+    ],
+    "Balance": [
+      "11.77",
+      "1371.35",
+      "280.51",
+      "95.45",
+      "151.2"
+    ],
+    "Posted": [
+      "No"
+    ],
+    "Return Slip #": [
+      "38754",
+      "11294",
+      "11289",
+      "38710",
+      "38762"
+    ]
+  },
+  "grain": "invoice",
+  "usable_row_count": 60,
+  "header_signature": "086575e3a93a",
+  "header_tokens": [
+    "balance",
+    "branch code",
+    "customer name",
+    "discount amount",
+    "discount rate",
+    "invoice date",
+    "invoice num",
+    "net amount",
+    "posted",
+    "refnbr",
+    "return slip #",
+    "salesman",
+    "tax",
+    "town display",
+    "untaxed amount"
+  ],
+  "principal_guess": "delmonte",
+  "principal_evidence": [
+    "header contains 'refnbr'",
+    "header contains 'untaxed amount'",
+    "header contains 'return slip #'",
+    "REFNBR 'DMIS0060497' matches prefix 'DMIS' -> delmonte",
+    "REFNBR 'RMR38739' matches prefix 'RMR' -> delmonte",
+    "REFNBR 'RMR13428' matches prefix 'RMR' -> delmonte"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

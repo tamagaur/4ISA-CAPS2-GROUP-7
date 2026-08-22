@@ -1,0 +1,212 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 08.2023/DELMONTE_INVENTORY SIGN OFF_PANGASINAN & ILOCOS _AUGUST 2023.xlsx",
+  "sheet": "ACTUAL 090423",
+  "real_format": "xlsx",
+  "header_row_index": 7,
+  "header_confidence": 0.623,
+  "junk_ranges": [
+    [
+      0,
+      6
+    ]
+  ],
+  "raw_columns": [
+    "ITEM CODE",
+    "__col1__",
+    "ITEM DESCRIPTION",
+    "PRICE/PCS",
+    "PRICE/CS",
+    "PKG",
+    "case",
+    "pcs",
+    "TOTAL PCS",
+    "CASE",
+    "PCS",
+    "NEAR EXPIRY/ EXPIRED",
+    "DAMAGED",
+    "TOTAL PCS",
+    "VARIANCE",
+    "__col15__",
+    "AMOUNT"
+  ],
+  "dtypes": {
+    "ITEM CODE": "text",
+    "__col1__": "text",
+    "ITEM DESCRIPTION": "text",
+    "PRICE/PCS": "numeric",
+    "PRICE/CS": "numeric",
+    "PKG": "numeric",
+    "case": "numeric",
+    "pcs": "numeric",
+    "TOTAL PCS": "numeric",
+    "CASE": "numeric",
+    "PCS": "numeric",
+    "NEAR EXPIRY/ EXPIRED": "empty",
+    "DAMAGED": "empty",
+    "VARIANCE": "numeric",
+    "__col15__": "text",
+    "AMOUNT": "numeric"
+  },
+  "null_pct": {
+    "ITEM CODE": 0.0,
+    "__col1__": 5.37,
+    "ITEM DESCRIPTION": 3.41,
+    "PRICE/PCS": 5.85,
+    "PRICE/CS": 5.85,
+    "PKG": 3.41,
+    "case": 0.0,
+    "pcs": 0.0,
+    "TOTAL PCS": 0.0,
+    "CASE": 32.2,
+    "PCS": 43.9,
+    "NEAR EXPIRY/ EXPIRED": 100.0,
+    "DAMAGED": 100.0,
+    "VARIANCE": 0.0,
+    "__col15__": 0.0,
+    "AMOUNT": 0.0
+  },
+  "distinct_count": {
+    "ITEM CODE": 204,
+    "__col1__": 193,
+    "ITEM DESCRIPTION": 197,
+    "PRICE/PCS": 131,
+    "PRICE/CS": 131,
+    "PKG": 17,
+    "case": 58,
+    "pcs": 38,
+    "TOTAL PCS": 129,
+    "CASE": 54,
+    "PCS": 34,
+    "NEAR EXPIRY/ EXPIRED": 0,
+    "DAMAGED": 0,
+    "VARIANCE": 17,
+    "__col15__": 3,
+    "AMOUNT": 22
+  },
+  "samples": {
+    "ITEM CODE": [
+      "57281",
+      "55528",
+      "56971",
+      "1347",
+      "58385"
+    ],
+    "__col1__": [
+      "9DMS03748",
+      "9DMR01615",
+      "DKY58450",
+      "9DMS00364",
+      "9FSE56102"
+    ],
+    "ITEM DESCRIPTION": [
+      "DM 100% PINE JUICE 24-202 W/ VIT ACE",
+      "100% PINEAPPLE JUICE BONESMART 202",
+      "FIT N' RIGHT PINE ORANGE JCE DRNK 330ML",
+      "DM QUICK N EASY KARE-KARE MIX 36X50G",
+      "DMP58387 Green Apple Yoghurt- Flavored Milk Drink"
+    ],
+    "PRICE/PCS": [
+      "27.19",
+      "240.43",
+      "106.36",
+      "51.86",
+      "36.19"
+    ],
+    "PRICE/CS": [
+      "2034.6",
+      "1312.08",
+      "829.92",
+      "1206.96",
+      "671.04"
+    ],
+    "PKG": [
+      "6",
+      "16",
+      "250",
+      "200",
+      "4"
+    ],
+    "case": [
+      "127",
+      "121",
+      "349",
+      "3",
+      "4"
+    ],
+    "pcs": [
+      "-4",
+      "31",
+      "3",
+      "22",
+      "4"
+    ],
+    "TOTAL PCS": [
+      "481",
+      "332",
+      "792",
+      "3",
+      "290"
+    ],
+    "CASE": [
+      "121",
+      "349",
+      "3",
+      "290",
+      "44"
+    ],
+    "PCS": [
+      "3",
+      "22",
+      "4",
+      "12",
+      "33"
+    ],
+    "NEAR EXPIRY/ EXPIRED": [],
+    "DAMAGED": [],
+    "VARIANCE": [
+      "6",
+      "168",
+      "30",
+      "16",
+      "84"
+    ],
+    "__col15__": [
+      "BALANCE",
+      "SHORT",
+      "OVER"
+    ],
+    "AMOUNT": [
+      "-33.57",
+      "1061.76",
+      "102190.74",
+      "2074.32",
+      "1202.15"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 205,
+  "header_signature": "090f94213b02",
+  "header_tokens": [
+    "amount",
+    "case",
+    "case",
+    "damaged",
+    "item code",
+    "item description",
+    "near expiry/ expired",
+    "pcs",
+    "pcs",
+    "pkg",
+    "price/cs",
+    "price/pcs",
+    "total pcs",
+    "total pcs",
+    "variance"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

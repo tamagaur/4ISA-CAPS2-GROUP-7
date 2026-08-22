@@ -1,0 +1,203 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT DECEMBER 2021. (1).xlsx",
+  "sheet": "SOH(DEC 27, 2021)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "MOVING AVERAGE PRICE(CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route",
+    "Batch",
+    "Hierarchy Node",
+    "Blocked Stock(CS/PC)",
+    "Sales Route Description"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "MOVING AVERAGE PRICE(CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty",
+    "Batch": "text",
+    "Hierarchy Node": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Sales Route Description": "empty"
+  },
+  "null_pct": {
+    "Storage Location": 0.12,
+    "Article No": 0.12,
+    "Article Description": 0.12,
+    "PACK SIZE": 0.12,
+    "Stock Quantity (CS/PC)": 0.12,
+    "Stock Value": 0.0,
+    "PO Qty": 64.29,
+    "Open SO Quantity": 68.38,
+    "Balance Quantity": 0.12,
+    "MOVING AVERAGE PRICE(CS)": 0.12,
+    "Status": 0.12,
+    "CATEGORY DESC": 0.12,
+    "Sales Route": 100.0,
+    "Batch": 0.12,
+    "Hierarchy Node": 0.12,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Sales Route Description": 100.0
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 856,
+    "Article Description": 855,
+    "PACK SIZE": 24,
+    "Stock Quantity (CS/PC)": 482,
+    "Stock Value": 852,
+    "PO Qty": 55,
+    "Open SO Quantity": 115,
+    "Balance Quantity": 519,
+    "MOVING AVERAGE PRICE(CS)": 657,
+    "Status": 1,
+    "CATEGORY DESC": 13,
+    "Sales Route": 0,
+    "Batch": 1,
+    "Hierarchy Node": 13,
+    "Blocked Stock(CS/PC)": 0,
+    "Sales Route Description": 0
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "68179722",
+      "68746303",
+      "68532830",
+      "68168959",
+      "65004562"
+    ],
+    "Article Description": [
+      "VITAKERATIN HC BRZLN STRT 24(10+2)20ML",
+      "CLOSEUP RED HOT ULP RL1 36X145ML",
+      "CREAM SILK HC ULTREBORN STRT 12X350ML",
+      "DOMEX SPRAY MULTIPURPOSE BLEACH 12X500ML",
+      "CREAM SILK TKR STRAIGHT 24X170ML"
+    ],
+    "PACK SIZE": [
+      "20",
+      "60",
+      "24",
+      "32",
+      "360"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "228/172",
+      "29/264",
+      "5/10",
+      "0/24",
+      "19/1"
+    ],
+    "Stock Value": [
+      "9304.9",
+      "1559424.74",
+      "2700.68",
+      "5252.68",
+      "2628.17"
+    ],
+    "PO Qty": [
+      "4/0",
+      "16/0",
+      "17/0",
+      "12/0",
+      "144/0"
+    ],
+    "Open SO Quantity": [
+      "4/0",
+      "0/92",
+      "0/24",
+      "5/204",
+      "3/36"
+    ],
+    "Balance Quantity": [
+      "29/264",
+      "5/10",
+      "78/153",
+      "0/24",
+      "10/45"
+    ],
+    "MOVING AVERAGE PRICE(CS)": [
+      "1634.17",
+      "3880.07",
+      "1917.53",
+      "1550.81",
+      "2202.32"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "SCRATCH COOKING AIDS",
+      "DRESSINGS",
+      "OTHER FOODS",
+      "TEA",
+      "HAIR CARE"
+    ],
+    "Sales Route": [],
+    "Batch": [
+      "VALUATED"
+    ],
+    "Hierarchy Node": [
+      "4419",
+      "3G06",
+      "4417",
+      "4435",
+      "4434"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Sales Route Description": []
+  },
+  "grain": "summary",
+  "usable_row_count": 857,
+  "header_signature": "3c47de2ac84a",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "hierarchy node",
+    "moving average price(cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "sales route description",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

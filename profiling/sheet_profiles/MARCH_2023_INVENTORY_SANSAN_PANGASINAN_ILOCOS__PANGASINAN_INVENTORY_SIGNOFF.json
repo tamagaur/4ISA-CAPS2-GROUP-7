@@ -1,0 +1,143 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Del Monte (From Email)/MONTHLY REPORT - 03.2023/MARCH_2023_INVENTORY_SANSAN_PANGASINAN&ILOCOS.xlsx",
+  "sheet": "PANGASINAN INVENTORY SIGNOFF",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.72,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "__col0__",
+    "Quantity",
+    "Cost",
+    "Valuation",
+    "Valuation with VAT",
+    "CAS",
+    "PCS",
+    "PKG",
+    "PCS",
+    "in Cases"
+  ],
+  "dtypes": {
+    "__col0__": "text",
+    "Quantity": "numeric",
+    "Cost": "numeric",
+    "Valuation": "text",
+    "Valuation with VAT": "text",
+    "CAS": "numeric",
+    "PCS": "numeric",
+    "PKG": "numeric",
+    "in Cases": "numeric"
+  },
+  "null_pct": {
+    "__col0__": 0.0,
+    "Quantity": 0.0,
+    "Cost": 0.0,
+    "Valuation": 0.0,
+    "Valuation with VAT": 0.0,
+    "CAS": 0.0,
+    "PCS": 0.0,
+    "PKG": 0.72,
+    "in Cases": 0.0
+  },
+  "distinct_count": {
+    "__col0__": 138,
+    "Quantity": 118,
+    "Cost": 136,
+    "Valuation": 128,
+    "Valuation with VAT": 128,
+    "CAS": 59,
+    "PCS": 114,
+    "PKG": 15,
+    "in Cases": 115
+  },
+  "samples": {
+    "__col0__": [
+      "     DMP57586 Del Monte Tipco Orange Medley (12 x 1L)",
+      "     9DMS56225 DM PINE TIDBITS ELS 24 x Flat",
+      "     9DMS01186 DM PINE TIDBITS ELS 24-2 1/2",
+      "     9DMR12809 DM HOT N SPICY KETCHUP 335G BOTTLE ROYCE",
+      "     DKK11888 KIKKOMAN LESS 43% SALT SOY SCE 12/600ML"
+    ],
+    "Quantity": [
+      "6.166667",
+      "0.666667",
+      "0.6875",
+      "5.083333",
+      "16.625"
+    ],
+    "Cost": [
+      "2470.586",
+      "28861.14",
+      "6454.253",
+      "9280.241",
+      "11011.49"
+    ],
+    "Valuation": [
+      "2470.586",
+      "28861.14",
+      "6454.253",
+      "9280.241",
+      "11011.49"
+    ],
+    "Valuation with VAT": [
+      "10393.87",
+      "2569.078",
+      "7736.044",
+      "3202.249",
+      "14764.68"
+    ],
+    "CAS": [
+      "5",
+      "6",
+      "9",
+      "29",
+      "282"
+    ],
+    "PCS": [
+      "1107",
+      "198894",
+      "110",
+      "4426",
+      "42"
+    ],
+    "PKG": [
+      "6",
+      "1",
+      "250",
+      "18",
+      "20"
+    ],
+    "in Cases": [
+      "184.41666666666666",
+      "0.6875",
+      "16.625",
+      "29.083333333333332",
+      "4"
+    ]
+  },
+  "grain": "sku",
+  "usable_row_count": 138,
+  "header_signature": "5d7ed8f9427e",
+  "header_tokens": [
+    "cas",
+    "cost",
+    "in cases",
+    "pcs",
+    "pcs",
+    "pkg",
+    "quantity",
+    "valuation",
+    "valuation with vat"
+  ],
+  "principal_guess": "ambiguous",
+  "principal_evidence": [
+    "no principal vocabulary or REFNBR prefix matched"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

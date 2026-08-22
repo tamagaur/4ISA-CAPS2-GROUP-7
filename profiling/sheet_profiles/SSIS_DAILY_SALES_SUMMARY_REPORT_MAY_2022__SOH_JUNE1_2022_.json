@@ -1,0 +1,203 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS DAILY SALES SUMMARY REPORT MAY 2022.xlsx",
+  "sheet": "SOH(JUNE1,2022)",
+  "real_format": "xlsx",
+  "header_row_index": 0,
+  "header_confidence": 1.0,
+  "junk_ranges": [],
+  "raw_columns": [
+    "Storage Location",
+    "Article No",
+    "Article Description",
+    "PACK SIZE",
+    "Stock Quantity (CS/PC)",
+    "Stock Value",
+    "PO Qty",
+    "Open SO Quantity",
+    "Balance Quantity",
+    "MOVING AVERAGE PRICE(CS)",
+    "Status",
+    "CATEGORY DESC",
+    "Sales Route",
+    "Batch",
+    "Hierarchy Node",
+    "Blocked Stock(CS/PC)",
+    "Sales Route Description"
+  ],
+  "dtypes": {
+    "Storage Location": "text",
+    "Article No": "text",
+    "Article Description": "text",
+    "PACK SIZE": "numeric",
+    "Stock Quantity (CS/PC)": "text",
+    "Stock Value": "numeric",
+    "PO Qty": "text",
+    "Open SO Quantity": "text",
+    "Balance Quantity": "text",
+    "MOVING AVERAGE PRICE(CS)": "numeric",
+    "Status": "text",
+    "CATEGORY DESC": "text",
+    "Sales Route": "empty",
+    "Batch": "text",
+    "Hierarchy Node": "text",
+    "Blocked Stock(CS/PC)": "empty",
+    "Sales Route Description": "empty"
+  },
+  "null_pct": {
+    "Storage Location": 0.12,
+    "Article No": 0.12,
+    "Article Description": 0.12,
+    "PACK SIZE": 0.12,
+    "Stock Quantity (CS/PC)": 0.12,
+    "Stock Value": 0.0,
+    "PO Qty": 77.08,
+    "Open SO Quantity": 71.32,
+    "Balance Quantity": 0.12,
+    "MOVING AVERAGE PRICE(CS)": 0.12,
+    "Status": 0.12,
+    "CATEGORY DESC": 0.12,
+    "Sales Route": 100.0,
+    "Batch": 0.12,
+    "Hierarchy Node": 0.12,
+    "Blocked Stock(CS/PC)": 100.0,
+    "Sales Route Description": 100.0
+  },
+  "distinct_count": {
+    "Storage Location": 1,
+    "Article No": 815,
+    "Article Description": 813,
+    "PACK SIZE": 23,
+    "Stock Quantity (CS/PC)": 511,
+    "Stock Value": 811,
+    "PO Qty": 33,
+    "Open SO Quantity": 91,
+    "Balance Quantity": 513,
+    "MOVING AVERAGE PRICE(CS)": 722,
+    "Status": 1,
+    "CATEGORY DESC": 13,
+    "Sales Route": 0,
+    "Batch": 1,
+    "Hierarchy Node": 13,
+    "Blocked Stock(CS/PC)": 0,
+    "Sales Route Description": 0
+  },
+  "samples": {
+    "Storage Location": [
+      "SALE"
+    ],
+    "Article No": [
+      "68348998",
+      "68565205",
+      "67633590",
+      "68306486",
+      "67521056"
+    ],
+    "Article Description": [
+      "PONDS MEN FW ENERGY CHARGE EXP 24X100G",
+      "SUNSILK SH STRNG&LONG SR (1+1) 12X180ML",
+      "AXE RO APOLLO 24X25ML",
+      "REXONA DEOLOTION PASSION PH MP 60X6X3ML",
+      "DOVE MEN+CARE SH FRT REFRSH CLN 24X170ML"
+    ],
+    "PACK SIZE": [
+      "360",
+      "48",
+      "16",
+      "4",
+      "120"
+    ],
+    "Stock Quantity (CS/PC)": [
+      "37/19",
+      "8/19",
+      "10/24",
+      "5/41",
+      "2/116"
+    ],
+    "Stock Value": [
+      "8728.22",
+      "596.8",
+      "17292.57",
+      "1645.18",
+      "1502.67"
+    ],
+    "PO Qty": [
+      "489/0",
+      "46/0",
+      "9/0",
+      "101/0",
+      "152/0"
+    ],
+    "Open SO Quantity": [
+      "0/48",
+      "20/12",
+      "5/0",
+      "2/84",
+      "2/12"
+    ],
+    "Balance Quantity": [
+      "28/63",
+      "37/19",
+      "25/5",
+      "48/20",
+      "5/41"
+    ],
+    "MOVING AVERAGE PRICE(CS)": [
+      "3452.11",
+      "2576.42",
+      "1702.13",
+      "1176.61",
+      "3237.77"
+    ],
+    "Status": [
+      "Active"
+    ],
+    "CATEGORY DESC": [
+      "FABRIC CLEANING",
+      "TEA",
+      "DEODORANTS & FRAGRANCES",
+      "OTHER FOODS",
+      "SCRATCH COOKING AIDS"
+    ],
+    "Sales Route": [],
+    "Batch": [
+      "VALUATED"
+    ],
+    "Hierarchy Node": [
+      "3102",
+      "4418",
+      "6A40",
+      "4434",
+      "3109"
+    ],
+    "Blocked Stock(CS/PC)": [],
+    "Sales Route Description": []
+  },
+  "grain": "summary",
+  "usable_row_count": 816,
+  "header_signature": "3c47de2ac84a",
+  "header_tokens": [
+    "article description",
+    "article no",
+    "balance quantity",
+    "batch",
+    "blocked stock(cs/pc)",
+    "category desc",
+    "hierarchy node",
+    "moving average price(cs)",
+    "open so quantity",
+    "pack size",
+    "po qty",
+    "sales route",
+    "sales route description",
+    "status",
+    "stock quantity (cs/pc)",
+    "stock value",
+    "storage location"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'pack size'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}

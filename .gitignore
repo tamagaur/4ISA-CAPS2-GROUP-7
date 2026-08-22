@@ -12,6 +12,22 @@ agent/
 data/raw/*
 !data/raw/.gitkeep
 
+# The as-delivered client data drop, before it's copied into data/raw/ —
+# same SSM-client-data policy as data/raw/*, sitting at repo root instead
+SAN SAN Marketing/
+
+# Extract stage output — generated from raw SSM client data, never committed
+staging/
+
+# Transform stage output — manifest/review/sign-off, same reasoning as staging/
+transform/
+
+# Synthetic demo-data conversion output — regenerable from data/raw/Synthetic
+# Data/ via scripts/convert_synthetic_to_staging.py + scripts/generate_synthetic_backfill.py.
+# Same "generated output, not committed" reasoning as staging/ above; the
+# generator scripts themselves stay tracked in scripts/.
+staging_synthetic/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -54,5 +70,14 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
+# Adviser meeting prep — personal speaking notes, not project documentation
+analytics/docs/ADVISER_WALKTHROUGH.md
+
+# Acceptance-criteria tracker — team's live status tracking, not project documentation
+SSM_ACCEPTANCE_CRITERIA.xlsx
+
 # Jupyter
 .ipynb_checkpoints/
+
+# Reference file exports for the team — regenerated from staging/, not committed
+REFERENCE_FILES/

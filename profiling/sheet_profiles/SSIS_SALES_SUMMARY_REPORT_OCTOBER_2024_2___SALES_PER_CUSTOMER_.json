@@ -1,0 +1,200 @@
+{
+  "file": "data/raw/SANSAN MARKETING_Unilever/SSIS SALES SUMMARY REPORT OCTOBER 2024 (2).xlsx",
+  "sheet": "SALES PER CUSTOMER ",
+  "real_format": "xlsx",
+  "header_row_index": 2,
+  "header_confidence": 0.871,
+  "junk_ranges": [
+    [
+      0,
+      1
+    ]
+  ],
+  "raw_columns": [
+    "Salesman",
+    "__col1__",
+    "CALENDAR DAY",
+    "REASON CODE",
+    "OUTLET",
+    "OUTLET NAME",
+    "GSV",
+    "TPR + UW/DT Discount",
+    "Sale After TPR & UW",
+    "NIV",
+    "VAT",
+    "Total Sales Amt Inc. Tax",
+    "UL GSV",
+    "Mark-up/Mark-down Value in %",
+    "REMARKS"
+  ],
+  "dtypes": {
+    "Salesman": "empty",
+    "__col1__": "empty",
+    "CALENDAR DAY": "datetime",
+    "REASON CODE": "text",
+    "OUTLET": "text",
+    "OUTLET NAME": "text",
+    "GSV": "numeric",
+    "TPR + UW/DT Discount": "numeric",
+    "Sale After TPR & UW": "numeric",
+    "NIV": "numeric",
+    "VAT": "numeric",
+    "Total Sales Amt Inc. Tax": "numeric",
+    "UL GSV": "numeric",
+    "Mark-up/Mark-down Value in %": "text",
+    "REMARKS": "text"
+  },
+  "null_pct": {
+    "Salesman": 100.0,
+    "__col1__": 100.0,
+    "CALENDAR DAY": 0.11,
+    "REASON CODE": 0.11,
+    "OUTLET": 0.11,
+    "OUTLET NAME": 0.0,
+    "GSV": 0.0,
+    "TPR + UW/DT Discount": 0.04,
+    "Sale After TPR & UW": 0.04,
+    "NIV": 0.04,
+    "VAT": 0.04,
+    "Total Sales Amt Inc. Tax": 0.04,
+    "UL GSV": 0.04,
+    "Mark-up/Mark-down Value in %": 0.04,
+    "REMARKS": 0.11
+  },
+  "distinct_count": {
+    "Salesman": 0,
+    "__col1__": 0,
+    "CALENDAR DAY": 26,
+    "REASON CODE": 13,
+    "OUTLET": 1910,
+    "OUTLET NAME": 1862,
+    "GSV": 3966,
+    "TPR + UW/DT Discount": 911,
+    "Sale After TPR & UW": 4005,
+    "NIV": 4005,
+    "VAT": 3877,
+    "Total Sales Amt Inc. Tax": 4005,
+    "UL GSV": 3944,
+    "Mark-up/Mark-down Value in %": 3922,
+    "REMARKS": 2
+  },
+  "samples": {
+    "Salesman": [],
+    "__col1__": [],
+    "CALENDAR DAY": [
+      "2024-10-02 00:00:00",
+      "2024-10-22 00:00:00",
+      "2024-10-12 00:00:00",
+      "2024-10-25 00:00:00",
+      "2024-10-30 00:00:00"
+    ],
+    "REASON CODE": [
+      "Not assigned",
+      "Good - Full Return",
+      "GOOD - Store Cancellation",
+      "Overlanded/Shortlanded",
+      "Poor/Weak Sealing/Leakers"
+    ],
+    "OUTLET": [
+      "4779766",
+      "664704",
+      "664392",
+      "3004202",
+      "4776519"
+    ],
+    "OUTLET NAME": [
+      "MARY DANNYS VEG",
+      "SABALO (NARVACAN)",
+      "KURT",
+      "RESEL STORE",
+      "LORIMAR SARI SARI STORE"
+    ],
+    "GSV": [
+      "4529.72",
+      "-167.13",
+      "371.44",
+      "1660.45",
+      "17077.37"
+    ],
+    "TPR + UW/DT Discount": [
+      "-59.01",
+      "-1587.86",
+      "35.57",
+      "8.96",
+      "581.86"
+    ],
+    "Sale After TPR & UW": [
+      "-471.24",
+      "7266.54",
+      "-6187.9",
+      "4529.72",
+      "-7215"
+    ],
+    "NIV": [
+      "-471.24",
+      "7266.54",
+      "-6187.9",
+      "4529.72",
+      "-7215"
+    ],
+    "VAT": [
+      "74.75",
+      "2045.44",
+      "138.54",
+      "755.87",
+      "272.35"
+    ],
+    "Total Sales Amt Inc. Tax": [
+      "2092.5",
+      "3237.2",
+      "118526.63",
+      "185713.9",
+      "660.93"
+    ],
+    "UL GSV": [
+      "8209.29",
+      "859.81",
+      "28073.03",
+      "5087.95",
+      "764.73"
+    ],
+    "Mark-up/Mark-down Value in %": [
+      "13.994776751327077",
+      "9.998080227549469",
+      "14.00736939661285",
+      "20.001335227445832",
+      "21.992767261458788"
+    ],
+    "REMARKS": [
+      "RETURN",
+      "INVOICE"
+    ]
+  },
+  "grain": "summary",
+  "usable_row_count": 5638,
+  "header_signature": "686327ad1a64",
+  "header_tokens": [
+    "calendar day",
+    "gsv",
+    "mark-up/mark-down value in %",
+    "niv",
+    "outlet",
+    "outlet name",
+    "reason code",
+    "remarks",
+    "sale after tpr & uw",
+    "salesman",
+    "total sales amt inc. tax",
+    "tpr + uw/dt discount",
+    "ul gsv",
+    "vat"
+  ],
+  "principal_guess": "unilever",
+  "principal_evidence": [
+    "header contains 'gsv'",
+    "header contains 'tpr'",
+    "header contains 'niv'"
+  ],
+  "magnolia_flag": false,
+  "read_truncated": false
+}
