@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowLeft, CheckCircle2, XCircle } from 'lucide-react';
+import { BAD_ORDER_REASONS } from '../data/mockData';
 import './ReportBadOrderModal.css';
 
 // Helper to format SKU Code (e.g. SKU-07642)
@@ -229,10 +230,9 @@ const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
                   required
                 >
                   <option value="" disabled>Select a reason</option>
-                  <option value="Transport Damage">Transport Damage</option>
-                  <option value="Expiry">Expiry</option>
-                  <option value="Storage Issue">Storage Issue</option>
-                  <option value="Supplier Defect">Supplier Defect</option>
+                  {BAD_ORDER_REASONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
                 </select>
               </div>
 

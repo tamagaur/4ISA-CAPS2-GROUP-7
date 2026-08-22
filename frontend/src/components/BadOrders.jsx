@@ -20,13 +20,153 @@ import {
 import ReportBadOrderModal from './ReportBadOrderModal';
 import DateFilter from './DateFilter';
 import { COLORS } from '../theme/colors';
+import { BAD_ORDER_REASONS } from '../data/mockData';
 import './BadOrders.css';
 
 const BO_RATE_TARGET = 3; // %, manuscript §3.4.1.3 target threshold
 
+// Mock share of incidents per BAD_ORDER_REASONS entry, same index order,
+// summing to 1.0 — Packaging Defect is the largest single cause, matching
+// the dashboard footer strip's "top cause: packaging defect".
+const REASON_WEIGHTS = [0.32, 0.14, 0.24, 0.08, 0.18, 0.04];
+
+// Short axis-tick aliases for the two BAD_ORDER_REASONS entries too long to
+// fit a chart's y-axis — the full wording still appears in the tooltip.
+const SHORT_REASON_LABEL = {
+  'Packaging Defect (Torn/Deformed/Broken)': 'Packaging Defect',
+  'Order cancelled by customer': 'Order Cancelled',
+};
+
+// SKUs/categories with recorded incidents — the only ones a per-row rate is
+// honest to show. Unilever has true per-SKU data; Del Monte has no SKU-level
+// data anywhere in this project, so its rows are categories (CAT- codes).
+const UNILEVER_TRACKED = [
+  { code: 'SKU-07642', product: 'Dove Shampoo 340ml' },
+  { code: 'SKU-04721', product: 'Surf Powder Detergent 1kg' },
+];
+const DELMONTE_TRACKED = [
+  { code: 'CAT-SAUCES-VEG', product: 'Sauces & Vegetables' },
+  { code: 'CAT-JUICES', product: 'Juices' },
+];
+const TRACKED_BY_PRINCIPAL = {
+  unilever: UNILEVER_TRACKED,
+  delmonte: DELMONTE_TRACKED,
+  all: [...UNILEVER_TRACKED, ...DELMONTE_TRACKED],
+};
+
 // Components branch on this, never on the principal name.
 const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
 const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
+// Same split BRAND_SHARE already used below, reused to scale the
+// principal-blind mock aggregates (KPIs, reason/weekday breakdowns) down to
+// whichever principal is selected, so they're not just the "all" totals
+// repeated under every filter value.
+const PRINCIPAL_SHARE = { unilever: 0.48, delmonte: 0.52, all: 1 };
+
+function hashSeed(code) {
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) {
+    hash = (hash * 31 + code.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+// Manuscript §3.4.1.3: BO Rate (%) = Total Bad Order Units / Total Units
+// Received x 100, tracked as a time series per SKU. Deterministic per SKU
+// (not random) so the same SKU always shows the same shape.
+const generateBORateTrend = (skuCode) => {
+  const seed = hashSeed(skuCode);
+  const base = 3.5 + (seed % 40) / 10; // 3.5 - 7.5, starts above target
+  const monthNames = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
+  return monthNames.map((month, i) => {
+    const wobble = Math.sin((seed % 7) + i * 0.9) * 0.6;
+    const drift = i * -0.35; // gradual improvement toward target
+    const rate = Math.max(0.8, base + wobble + drift);
+    return { month, rate: Math.round(rate * 10) / 10 };
+  });
+};
+
+// Bad Orders Over Time — aggregate incident volume across all SKUs at a
+// selectable granularity. Deterministic like generateBORateTrend, seeded off
+// the period filter's dateOffset so it moves consistently with the KPI card.
+// share scales the whole series down to the selected principal.
+const generateBOTrend = (granularity, dateOffset, share) => {
+  const base = (20 + dateOffset * 2) * share;
+  if (granularity === 'daily') {
+    return Array.from({ length: 14 }, (_, i) => ({
+      label: `D${i + 1}`,
+      count: Math.max(0, Math.round(base / 6 + Math.sin(i * 0.7) * 3)),
+    }));
+  }
+  if (granularity === 'weekly') {
+    return Array.from({ length: 8 }, (_, i) => ({
+      label: `Wk ${i + 1}`,
+      count: Math.max(0, Math.round(base / 1.5 + Math.sin(i * 0.9) * 4 - i * 0.4)),
+    }));
+  }
+  const months = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
+  return months.map((month, i) => ({
+    label: month,
+    count: Math.max(0, Math.round(base + Math.sin(i * 0.8) * 5 - i * 1.2)),
+  }));
+};
+
+// When Bad Orders Happen — incident volume by weekday. Baseline shares
+// reflect heavier Mon/Fri receiving cycles, plus an exact bump for
+// manually-reported incidents' actual weekday.
+const WEEKDAY_SHARES = { Mon: 0.22, Tue: 0.14, Wed: 0.12, Thu: 0.13, Fri: 0.20, Sat: 0.13, Sun: 0.06 };
+const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const generateWeekdayBreakdown = (dateOffset, addedIncidents, share) => {
+  const baseIncidents = (135 + dateOffset * 6) * share;
+  const counts = {};
+  Object.entries(WEEKDAY_SHARES).forEach(([day, share]) => {
+    counts[day] = Math.round(baseIncidents * share);
+  });
+  addedIncidents.forEach((r) => {
+    const day = WEEKDAY_NAMES[new Date(r.date).getDay()];
+    counts[day] = (counts[day] ?? 0) + 1;
+  });
+  return Object.keys(WEEKDAY_SHARES).map((day) => ({ day, count: counts[day] }));
+};
+
+// Top SKUs/categories by Incidents — ranked count per tracked row,
+// deterministic per-row baseline (same hashSeed as the BO rate trend) plus
+// an exact bump for manually-reported incidents. trackedList is whichever
+// principal's rows are active — never the unfiltered full set.
+const generateTopSKUIncidents = (trackedList, addedIncidents) => {
+  const counts = {};
+  trackedList.forEach(({ code, product }) => {
+    const seed = hashSeed(code);
+    counts[code] = { product, count: 8 + (seed % 20) };
+  });
+  addedIncidents.forEach((r) => {
+    if (counts[r.sku]) counts[r.sku].count += 1;
+  });
+  return Object.entries(counts)
+    .map(([sku, { product, count }]) => ({ sku: formatSKU(sku), product, count }))
+    .sort((a, b) => b.count - a.count);
+};
+
+// Incidents by Brand — Del Monte vs Unilever, split off the same
+// period-driven baseline the KPI card uses, plus an exact bump for
+// manually-reported incidents' actual brand. When a single principal is
+// selected the page is already scoped to just that brand, so this only
+// shows the other brand's bar for 'all' — never a stale second bar.
+const BRAND_SHARE = { 'Del Monte': 0.52, 'Unilever': 0.48 };
+const generateBrandBreakdown = (dateOffset, addedIncidents, principal) => {
+  const baseIncidents = 135 + dateOffset * 6;
+  const visibleBrands = principal === 'all'
+    ? Object.keys(BRAND_SHARE)
+    : [PRINCIPAL_BRAND[principal]];
+  const counts = {};
+  visibleBrands.forEach((brand) => {
+    counts[brand] = Math.round(baseIncidents * BRAND_SHARE[brand]);
+  });
+  addedIncidents.forEach((r) => {
+    if (counts[r.brand] !== undefined) counts[r.brand] += 1;
+  });
+  return Object.entries(counts).map(([brand, count]) => ({ brand, count }));
+};
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
@@ -81,33 +221,26 @@ const BadOrders = () => {
     startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026', principal: 'all',
   };
   const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  const trackedList = useMemo(() => TRACKED_BY_PRINCIPAL[principal] ?? TRACKED_BY_PRINCIPAL.all, [principal]);
+  const principalShare = PRINCIPAL_SHARE[principal] ?? 1;
 
   const [incidents, setIncidents] = useState([]);
   const [manualIncidents, setManualIncidents] = useState([]);
   const [dbKPIs, setDbKPIs] = useState({ incidents: 0, unitsLost: 0, valueLost: 0, rate: '0.0%' });
-  const [trend, setTrend] = useState([]);
-  const [weekdayBreakdown, setWeekdayBreakdown] = useState([]);
-  const [brandBreakdown, setBrandBreakdown] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(null);
-  const [queriedRange, setQueriedRange] = useState(null);
+  const [selectedBOSKU, setSelectedBOSKU] = useState(trackedList[0].code);
+  const [boTrendGranularity, setBoTrendGranularity] = useState('monthly');
 
   useEffect(() => {
-    let cancelled = false;
     async function loadData() {
-      setLoading(true);
-      setLoadError(null);
       try {
         let from = '';
         let to = '';
         const m = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
         if (startYear && startMonth) from = `${startYear}-${m[startMonth]}-01`;
         if (endYear && endMonth) to = `${endYear}-${m[endMonth]}-28`;
-        if (!cancelled) setQueriedRange({ from, to });
 
         const data = await getBOMonitoringData({ principal, from, to });
-        if (cancelled) return;
         setIncidents(data.incidents || []);
         if (data.kpis) {
           setDbKPIs({
@@ -117,22 +250,29 @@ const BadOrders = () => {
             rate: data.kpis.rate
           });
         }
-        setTrend(data.trend || []);
-        setWeekdayBreakdown(data.weekday_breakdown || []);
-        setBrandBreakdown(data.brand_breakdown || []);
       } catch (err) {
-        if (cancelled) return;
         console.error('Failed to load BO monitoring data:', err);
-        setLoadError(err.message || 'Failed to load Bad Order monitoring data');
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     }
     loadData();
-    return () => { cancelled = true; };
   }, [principal, startMonth, startYear, endMonth, endYear]);
 
-  const latestBORate = trend.length > 0 ? (trend[trend.length - 1].bo_rate ?? 0) : 0;
+  // Re-select when the principal filter changes — there is no per-SKU Del
+  // Monte row to fall back to, so this always lands on a real tracked row.
+  useEffect(() => {
+    setSelectedBOSKU(trackedList[0].code);
+  }, [trackedList]);
+
+  const boRateTrend = useMemo(() => generateBORateTrend(selectedBOSKU), [selectedBOSKU]);
+  const latestBORate = boRateTrend[boRateTrend.length - 1]?.rate ?? 0;
+
+  const dateOffset = useMemo(() => {
+    const startMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(startMonth) || 0;
+    const endMonthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(endMonth) || 0;
+    const yearVal = parseInt(startYear) || 2026;
+    const seed = (startMonthIndex + endMonthIndex + yearVal) % 6;
+    return seed - 1;
+  }, [startMonth, startYear, endMonth, endYear]);
 
   const allIncidents = useMemo(() => [...manualIncidents, ...incidents], [manualIncidents, incidents]);
 
@@ -149,11 +289,12 @@ const BadOrders = () => {
     [manualIncidents, principal]
   );
 
-  // Real DB KPIs combined with manual reports made this session
+  // Real DB KPIs combined with manual reports
   const dynamicKPIs = useMemo(() => {
     const baseIncidents = dbKPIs.incidents;
     const baseUnitsLost = dbKPIs.unitsLost;
     const baseValueLostValue = dbKPIs.valueLost;
+    const baseBadOrderRate = parseFloat(dbKPIs.rate) || 0;
 
     const addedUnits = addedIncidents.reduce((sum, r) => sum + r.qty, 0);
     const addedValue = addedIncidents.reduce((sum, r) => sum + r.value, 0);
@@ -162,31 +303,48 @@ const BadOrders = () => {
       incidents: baseIncidents + addedIncidents.length,
       unitsLost: (baseUnitsLost + addedUnits).toLocaleString(),
       valueLost: `₱${((baseValueLostValue + addedValue) / 1000).toFixed(1)}k`,
-      rate: dbKPIs.rate,
+      rate: (baseBadOrderRate + addedIncidents.length * 0.05).toFixed(1) + '%',
     };
   }, [dbKPIs, addedIncidents]);
 
-  // Manually-reported incidents (real staff input, not fabricated) bump the
-  // weekday/brand breakdowns the backend already computed from real data.
-  const weekdayBreakdownWithManual = useMemo(() => {
+  // Reason breakdown — fixed shares scaled against the same period-driven,
+  // principal-scaled baseline the KPI card uses (so the two stay consistent
+  // when either filter changes), plus an exact bump for manually-reported
+  // incidents' actual reasons. Reasons come from BAD_ORDER_REASONS (SSM's
+  // real return-reason codes), not the earlier invented Expiry/Transport
+  // Damage/Storage Issue/Supplier Defect labels.
+  const reasonCounts = useMemo(() => {
+    const shares = BAD_ORDER_REASONS.reduce((acc, reason, i) => {
+      acc[reason] = REASON_WEIGHTS[i];
+      return acc;
+    }, {});
+    const baseIncidents = (135 + dateOffset * 6) * principalShare;
     const counts = {};
-    weekdayBreakdown.forEach((row) => { counts[row.day] = row.count; });
-    addedIncidents.forEach((r) => {
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const day = dayNames[new Date(r.date).getDay()];
-      counts[day] = (counts[day] ?? 0) + 1;
+    Object.entries(shares).forEach(([reason, share]) => {
+      counts[reason] = Math.round(baseIncidents * share);
     });
-    return weekdayBreakdown.map((row) => ({ day: row.day, count: counts[row.day] ?? row.count }));
-  }, [weekdayBreakdown, addedIncidents]);
+    addedIncidents.forEach((r) => {
+      counts[r.reason] = (counts[r.reason] ?? 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [dateOffset, addedIncidents, principalShare]);
 
-  const brandBreakdownWithManual = useMemo(() => {
-    const counts = {};
-    brandBreakdown.forEach((row) => { counts[row.brand] = row.count; });
-    addedIncidents.forEach((r) => {
-      counts[r.brand] = (counts[r.brand] ?? 0) + 1;
-    });
-    return brandBreakdown.map((row) => ({ brand: row.brand, count: counts[row.brand] ?? row.count }));
-  }, [brandBreakdown, addedIncidents]);
+  const boTrend = useMemo(
+    () => generateBOTrend(boTrendGranularity, dateOffset, principalShare),
+    [boTrendGranularity, dateOffset, principalShare]
+  );
+  const weekdayBreakdown = useMemo(
+    () => generateWeekdayBreakdown(dateOffset, addedIncidents, principalShare),
+    [dateOffset, addedIncidents, principalShare]
+  );
+  const topSKUIncidents = useMemo(
+    () => generateTopSKUIncidents(trackedList, addedIncidents),
+    [trackedList, addedIncidents]
+  );
+  const brandBreakdown = useMemo(
+    () => generateBrandBreakdown(dateOffset, addedIncidents, principal),
+    [dateOffset, addedIncidents, principal]
+  );
 
   const handleAddReport = (reportData) => {
     const nextIncNum = incidents.length + manualIncidents.length + 1;
@@ -233,23 +391,6 @@ const BadOrders = () => {
           </div>
         </div>
 
-        {loading && <p className="bo-page-subtitle">Loading Bad Order data…</p>}
-
-        {loadError && (
-          <div className="dashboard-error-state">
-            <p>{loadError}</p>
-          </div>
-        )}
-
-        {!loading && !loadError && incidents.length === 0 && manualIncidents.length === 0 && (
-          <p className="bo-page-subtitle">
-            No incidents returned for {queriedRange?.from} to {queriedRange?.to}
-            {principal !== 'all' ? ` (principal: ${principal})` : ''}.
-            If you expect data here, check that SalesReturn_Fact_Real has rows with return_type='BO'
-            in that period, and that the _period column format matches 'YYYY-MM'.
-          </p>
-        )}
-
         {/* Summary KPI Cards */}
         <div className="bo-summary-grid">
           <div className="bo-summary-card bo-card-incidents">
@@ -280,18 +421,30 @@ const BadOrders = () => {
           <div className="bo-widget">
             <div className="bo-widget-header-row">
               <h3 className="bo-widget-title">
-                Bad Order rate <span style={{ color: '#a0aec0', fontWeight: 400 }}>— by period (BO returns ÷ purchases, peso-based)</span>
+                Bad Order rate <span style={{ color: '#a0aec0', fontWeight: 400 }}>— 6 months, per {grain === 'category' ? 'category' : 'SKU'}</span>
               </h3>
+              <select
+                className="bo-sku-select"
+                value={selectedBOSKU}
+                onChange={(e) => setSelectedBOSKU(e.target.value)}
+              >
+                {trackedList.map(s => (
+                  <option key={s.code} value={s.code}>{s.code} — {s.product}</option>
+                ))}
+                <option value="CURRENT_PERIOD">Current Period ({startMonth} {startYear} - {endMonth} {endYear})</option>
+              </select>
             </div>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <LineChart data={boRateTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
-                  <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} />
                   <YAxis
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: '#a0aec0', fontSize: 12 }}
+                    domain={[0, 8]}
+                    ticks={[0, 2, 4, 6, 8]}
                     tickFormatter={(v) => `${v}%`}
                   />
                   <Tooltip content={<CustomTooltip />} />
@@ -304,12 +457,11 @@ const BadOrders = () => {
                   />
                   <Line
                     type="monotone"
-                    dataKey="bo_rate"
+                    dataKey="rate"
                     stroke={COLORS.critical}
                     strokeWidth={2}
                     dot={{ r: 4, fill: COLORS.critical, strokeWidth: 0 }}
                     activeDot={{ r: 6 }}
-                    connectNulls
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -321,39 +473,108 @@ const BadOrders = () => {
             </p>
           </div>
 
-          {/* Bad Orders Over Time — incident count per period. Reason-code and
-              per-SKU breakdowns aren't shown here: RMR GS/BO source data has
-              no reason or SKU column at all (only Untaxed/Discount/Tax/Net
-              Amount/Balance — see analytics/db/schema.sql SalesReturn_Fact),
-              so those series would have to be fabricated to exist. */}
+          {/* Top Reasons Widget — horizontal bar: the job here is comparing
+              magnitude across BAD_ORDER_REASONS' 6 named categories, which a
+              bar shows at a glance (Packaging Defect is ~2x Overlanded/
+              Shortlanded) in a way a plain number list doesn't. */}
           <div className="bo-widget">
-            <div className="bo-widget-header-row">
-              <h3 className="bo-widget-title">Bad orders <span>— over time</span></h3>
-            </div>
+            <h3 className="bo-widget-title">Top reasons</h3>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
-                  <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 11 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                  <Bar dataKey="incident_count" name="Incidents" fill={COLORS.warning} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <BarChart
+                  data={reasonCounts.map(([reason, count]) => ({ reason, count }))}
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#edf2f7" />
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="reason"
+                    width={140}
+                    tick={{ fill: '#4a5568', fontSize: 11 }}
+                    tickFormatter={(reason) => SHORT_REASON_LABEL[reason] || reason}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    formatter={(value, name, props) => [value, props.payload.reason]}
+                  />
+                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={22} isAnimationActive={false}>
+                    <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* When Bad Orders Happen — weekday breakdown, from return_date */}
+          {/* Bad Orders Over Time — aggregate volume trend, granularity toggle */}
+          <div className="bo-widget">
+            <div className="bo-widget-header-row">
+              <h3 className="bo-widget-title">Bad orders <span>— over time</span></h3>
+              <select
+                className="bo-sku-select"
+                value={boTrendGranularity}
+                onChange={(e) => setBoTrendGranularity(e.target.value)}
+              >
+                <option value="daily">Daily (14d)</option>
+                <option value="weekly">Weekly (8wk)</option>
+                <option value="monthly">Monthly (6mo)</option>
+              </select>
+            </div>
+            <div className="bo-chart-wrapper">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={boTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
+                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 11 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="count" name="Incidents" fill={COLORS.warning} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* When Bad Orders Happen — weekday breakdown */}
           <div className="bo-widget">
             <h3 className="bo-widget-title">When bad orders happen <span>— by day of week</span></h3>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={weekdayBreakdownWithManual} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={weekdayBreakdown} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                   <Bar dataKey="count" name="Incidents" fill={COLORS.dispatched} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Top SKUs by Incidents — ranked horizontal bar */}
+          <div className="bo-widget">
+            <h3 className="bo-widget-title">{grain === 'category' ? 'Top categories' : 'Top SKUs'} <span>— by incidents</span></h3>
+            <div className="bo-chart-wrapper">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={topSKUIncidents} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#edf2f7" />
+                  <XAxis type="number" hide allowDecimals={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="sku"
+                    width={90}
+                    tick={{ fill: '#4a5568', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    formatter={(value, name, props) => [value, props.payload.product]}
+                  />
+                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
+                    <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -367,14 +588,14 @@ const BadOrders = () => {
             <h3 className="bo-widget-title">Incidents <span>— by brand</span></h3>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={brandBreakdownWithManual} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={brandBreakdown} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
                   <XAxis dataKey="brand" axisLine={false} tickLine={false} tick={{ fill: '#4a5568', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                   <Bar dataKey="count" name="Incidents" radius={[4, 4, 0, 0]} barSize={60} isAnimationActive={false}>
                     <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
-                    {brandBreakdownWithManual.map((entry) => (
+                    {brandBreakdown.map((entry) => (
                       <Cell key={entry.brand} fill={entry.brand === 'Del Monte' ? COLORS.success : COLORS.salesTrend} />
                     ))}
                   </Bar>

@@ -1,16 +1,15 @@
 .chart-widget {
   background-color: #ffffff;
   border-radius: 12px;
-  padding: 2rem;
+  padding: 20px;
   border: 1px solid #e2e8f0;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
-  height: 480px;
 }
 
 .chart-header {
-  margin-bottom: 1.25rem;
+  margin-bottom: 12px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -28,6 +27,13 @@
   font-size: 0.95rem;
   color: #1a202c;
   font-weight: 600;
+}
+
+/* Hero chart's own heading — a touch larger than the bottom panels' since
+   it leads the page, scoped via .chart-primary so it doesn't bump the
+   other three chart-widget headings too. */
+.chart-primary .chart-header h4 {
+  font-size: 1.15rem;
 }
 
 .chart-header p {
@@ -180,71 +186,9 @@
   border-radius: 50%;
 }
 
-.abc-bars {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1.5rem;
-}
-
-.abc-bar-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.abc-bar-header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-.abc-bar-label {
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-
-.abc-bar-count {
-  font-size: 0.75rem;
-  color: #64748b;
-  flex: 1;
-  text-align: right;
-}
-
-.abc-bar-share {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #1a202c;
-  min-width: 3.5rem;
-  text-align: right;
-}
-
-.abc-bar-track {
-  width: 100%;
-  height: 10px;
-  border-radius: 6px;
-  background-color: #f1f5f9;
-  overflow: hidden;
-}
-
-.abc-bar-fill {
-  height: 100%;
-  border-radius: 6px;
-}
-
-.abc-bar-instruction {
-  margin: 0;
-  font-size: 0.72rem;
-  color: #718096;
-}
-
-.abc-grain-note {
-  margin: 0.75rem 0 0 0;
-  padding: 0.6rem 0.9rem;
-  background-color: #f7fafc;
-  border-radius: 8px;
-  font-size: 0.72rem;
-  color: #718096;
-  line-height: 1.4;
+.allocation-subset-caption {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: #a0aec0;
 }
 
