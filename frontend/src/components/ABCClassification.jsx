@@ -2,10 +2,9 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle } from 'lucide-react';
 import {
-  ComposedChart,
+  BarChart,
   Bar,
-  Line,
-  ReferenceLine,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -50,21 +49,30 @@ const formatSKU = (sku) => {
   return sku;
 };
 
-// Manuscript §3.4.4.2.2/§3.4.4.2.3: Pareto/80-20 validation and Cumulative
-// Revenue Coverage Ratio. Both series are already percentages (revenue %
-// per SKU, cumulative %), so bars and the cumulative line share one 0-100
-// axis by construction — no dual-axis needed.
-const ParetoTooltip = ({ active, payload, label }) => {
+// Class-level aggregation replaces the old per-SKU Pareto chart: with
+// 600+ SKUs a per-item bar chart is illegible and not actionable. This
+// rolls revenue share up to the 3 tiers instead — same underlying
+// revenue_share/cat fields, just grouped. No inventory $ value or risk
+// classification here: unit_price is unpopulated (Product_Dimension)
+// and there is no risk-tier logic in the codebase yet, so neither is
+// fabricated for the chart.
+const CLASS_ARCHETYPE = {
+  A: 'High-Value, Vital Few',
+  B: 'Mid-Value, Secondary',
+  C: 'Low-Value, Trivial Many',
+};
+
+const ClassAggregateTooltip = ({ active, payload }) => {
   if (active && payload && payload.length) {
     const point = payload[0].payload;
     return (
       <div className="abc-pareto-tooltip">
-        <p className="abc-pareto-tooltip-title">Rank #{label} — {formatSKU(point.sku)}</p>
-        <p className="abc-pareto-tooltip-line" style={{ color: COLORS.dispatched }}>
-          Revenue share: {point.revPct.toFixed(1)}%
+        <p className="abc-pareto-tooltip-title">{point.label}</p>
+        <p className="abc-pareto-tooltip-line" style={{ color: COLORS[`abc${point.cat}`] }}>
+          Revenue: {point.revenueTotal.toFixed(1)}%
         </p>
-        <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.cumulativeCurve }}>
-          Cumulative: {point.cumulativePct.toFixed(1)}%
+        <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.axisLabel }}>
+          {point.skuCount} {point.skuCount === 1 ? 'item' : 'items'} ({point.skuSharePct.toFixed(0)}% of total)
         </p>
       </div>
     );
@@ -165,6 +173,23 @@ const ABCClassification = () => {
     return sorted.map((item, index) => ({ ...item, rank: index + 1 }));
   }, [sourceData]);
 
+// Roll per-item revenue share up to the 3 tiers for the class-level
+  // chart. revenueTotal sums the already-computed revPct values, so it
+  // stays consistent with the % shown per-row in the table below.
+  const classAggregates = useMemo(() => {
+    const totalCount = dataWithCumulative.length;
+    return ['A', 'B', 'C'].map((cat) => {
+      const items = dataWithCumulative.filter((d) => d.cat === cat);
+      return {
+        cat,
+        label: `Class ${cat}`,
+        skuCount: items.length,
+        skuSharePct: totalCount > 0 ? (items.length / totalCount) * 100 : 0,
+        revenueTotal: items.reduce((sum, d) => sum + (d.revPct || 0), 0),
+      };
+    });
+  }, [dataWithCumulative]);
+
   const filteredData = useMemo(() => {
     return dataWithCumulative.filter(item => {
       const matchesSearch = searchQuery === '' ||
@@ -228,17 +253,17 @@ const ABCClassification = () => {
   const getCatBadgeClass = (cat) => {
     switch (cat) {
       case 'A': return 'abc-cat-badge abc-cat-a';
-      case 'B': return 'abc-cat-badge abc-cat-b';
-      case 'C': return 'abc-cat-badge abc-cat-c';
-      default: return 'abc-cat-badge';
+      case 'B': return 'cat-badge cat-b';
+      case 'C': return 'cat-badge cat-c';
+      default: return 'cat-badge';
     }
   };
 
   if (loading) {
     return (
-      <div className="abc-page">
-        <div className="abc-content">
-          <p className="abc-page-subtitle">Loading ABC classification data…</p>
+      <div className="page">
+        <div className="content">
+          <p className="page-subtitle">Loading ABC classification data…</p>
         </div>
       </div>
     );
@@ -301,35 +326,36 @@ const ABCClassification = () => {
           </p>
         )}
 
-        {/* Pareto Chart — Manuscript §3.4.4.2.2 (80/20 validation) / §3.4.4.2.3 (CRCR) */}
+        {/* Class Aggregation Chart — replaces the per-SKU Pareto chart, which
+            wasn't readable/actionable at 600+ SKUs. Rolls revenue share up
+            to the 3 tiers instead of plotting one bar per item. */}
         <div className="abc-pareto-container">
           <div className="abc-pareto-header">
-            <h3 className="abc-pareto-title">Pareto analysis</h3>
+            <h3 className="abc-pareto-title">Revenue by Class</h3>
             <div className="abc-pareto-legend">
               <div className="abc-pareto-legend-item">
-                <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.dispatched }} />
-                <span>Revenue share per SKU</span>
+                <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcA }} />
+                <span>Class A</span>
               </div>
               <div className="abc-pareto-legend-item">
-                <span className="abc-pareto-legend-line" style={{ backgroundColor: CHART_COLORS.cumulativeCurve }} />
-                <span>Cumulative revenue</span>
+                <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcB }} />
+                <span>Class B</span>
               </div>
               <div className="abc-pareto-legend-item">
-                <span className="abc-pareto-legend-line abc-pareto-legend-dashed" style={{ backgroundColor: CHART_COLORS.gridline }} />
-                <span>Tier cutoffs (80% / 95%)</span>
+                <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcC }} />
+                <span>Class C</span>
               </div>
             </div>
           </div>
           <div className="abc-pareto-chart-wrapper">
-            <ResponsiveContainer width="100%" height={280}>
-              <ComposedChart data={dataWithCumulative} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={classAggregates} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="35%">
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
                 <XAxis
-                  dataKey="rank"
+                  dataKey="label"
                   axisLine={true}
-                  tickLine={true}
-                  tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
-                  label={{ value: `${grain === 'category' ? 'Category' : 'SKU'} rank, by revenue`, position: 'insideBottom', offset: -5, fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                  tickLine={false}
+                  tick={{ fill: CHART_COLORS.axisLabel, fontSize: 12, fontWeight: 600 }}
                 />
                 <YAxis
                   domain={[0, 100]}
@@ -339,21 +365,24 @@ const ABCClassification = () => {
                   tickLine={true}
                   tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                 />
-                <Tooltip content={<ParetoTooltip />} cursor={{ fill: '#f7fafc' }} />
-                <ReferenceLine y={80} stroke={CHART_COLORS.gridline} strokeDasharray="4 4" label={{ value: 'A/B — 80%', position: 'right', fill: CHART_COLORS.axisLabel, fontSize: 10 }} />
-                <ReferenceLine y={95} stroke={CHART_COLORS.gridline} strokeDasharray="4 4" label={{ value: 'B/C — 95%', position: 'right', fill: CHART_COLORS.axisLabel, fontSize: 10 }} />
-                <Bar dataKey="revPct" fill={COLORS.dispatched} radius={[2, 2, 0, 0]} barSize={16} isAnimationActive={false} />
-                <Line
-                  type="monotone"
-                  dataKey="cumulativePct"
-                  stroke={CHART_COLORS.cumulativeCurve}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                  isAnimationActive={false}
-                />
-              </ComposedChart>
+                <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
+                <Bar dataKey="revenueTotal" radius={[6, 6, 0, 0]} barSize={100} isAnimationActive={false}>
+                  {classAggregates.map((entry) => (
+                    <Cell key={entry.cat} fill={COLORS[`abc${entry.cat}`]} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
+          </div>
+          <div className="abc-class-summary-row">
+            {classAggregates.map((entry) => (
+              <div key={entry.cat} className="abc-class-summary-item">
+                <span className="abc-class-summary-headline">
+                  ~{entry.skuSharePct.toFixed(0)}% {grain === 'category' ? 'Category' : 'SKU'} Count · ~{entry.revenueTotal.toFixed(0)}% Revenue
+                </span>
+                <span className="abc-class-summary-archetype">{CLASS_ARCHETYPE[entry.cat]}</span>
+              </div>
+            ))}
           </div>
         </div>
 
