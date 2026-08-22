@@ -65,6 +65,14 @@ const CLASS_ARCHETYPE = {
   C: 'Low-Value, Trivial Many',
 };
 
+// Copy for the drill-down panel's footer note, one per class — swapped
+// in based on whichever class the user has clicked in the chart above.
+const CLASS_DRILLDOWN_NOTE = {
+  A: 'Top-value SKUs sitting at LOW/CRITICAL stock are the highest-priority reorders — a stockout here has the biggest revenue impact.',
+  B: 'Mid-value SKUs at LOW/CRITICAL stock are worth a proactive reorder check before they slip toward a stockout.',
+  C: 'Long-tail SKUs sitting at LOW/CRITICAL stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don\u2019t go fully out of stock unnoticed.',
+};
+
 // Mirrors the colors already used for stock_status badges elsewhere on
 // this page (.abc-in-stock / .abc-low / .abc-critical in the CSS) so the
 // same status always reads as the same color across the whole view.
@@ -121,6 +129,11 @@ const ABCClassification = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [brandFilter, setBrandFilter] = useState('ALL');
+
+  // Which class's stock-status drill-down is showing below the chart.
+  // Defaults to 'C' (same as the old hardcoded behavior) but now the
+  // user can click any class's bar — or the tab buttons — to swap it.
+  const [selectedClass, setSelectedClass] = useState('C');
 
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
   const [highlightedSKUId, setHighlightedSKUId] = useState(null);
@@ -261,9 +274,11 @@ const ABCClassification = () => {
     () => buildClassAggregates(dataWithCumulative),
     [dataWithCumulative]
   );
-  const classCStockBreakdown = useMemo(
-    () => buildStockBreakdown(dataWithCumulative.filter((d) => d.cat === 'C')),
-    [dataWithCumulative]
+  // Drill-down now follows whichever class is selected (click a bar, or
+  // a tab) instead of always being Class C.
+  const selectedClassStockBreakdown = useMemo(
+    () => buildStockBreakdown(dataWithCumulative.filter((d) => d.cat === selectedClass)),
+    [dataWithCumulative, selectedClass]
   );
 
   // Mixed view: one full aggregate set PER principal, each computed only
@@ -277,10 +292,10 @@ const ABCClassification = () => {
         principal: p,
         label: PRINCIPAL_BRAND[p] || p,
         classAggregates: buildClassAggregates(items),
-        classCStockBreakdown: buildStockBreakdown(items.filter((d) => d.cat === 'C')),
+        selectedClassStockBreakdown: buildStockBreakdown(items.filter((d) => d.cat === selectedClass)),
       };
     });
-  }, [isMixedPrincipal, presentPrincipals, dataWithCumulative]);
+  }, [isMixedPrincipal, presentPrincipals, dataWithCumulative, selectedClass]);
 
   // Cross-principal comparison chart: one bar per principal per tier,
   // never summed — each principal's own revenue % stays on its own
@@ -493,15 +508,18 @@ const ABCClassification = () => {
           </div>
         )}
 
-        {/* Class Aggregation Chart(s) + Class C drill-down — replaces the
-            per-SKU Pareto chart, which wasn't readable/actionable at 600+
-            SKUs. Each panel: revenue share vs. stock-status mix per class
-            (both real fields, no fabricated $ value or risk score), plus
-            real stock_status counts for Class C only. In mixed mode this
-            renders once per principal (see perPrincipalPanels above) so
-            revenue/stock numbers never cross a classification-run
-            boundary; otherwise it renders once for the whole dataset. */}
-        {(isMixedPrincipal ? perPrincipalPanels : [{ principal: null, label: null, classAggregates, classCStockBreakdown }]).map((panel) => (
+        {/* Class Aggregation Chart(s) + interactive drill-down — replaces
+            the per-SKU Pareto chart, which wasn't readable/actionable at
+            600+ SKUs. Each panel: revenue share vs. stock-status mix per
+            class (both real fields, no fabricated $ value or risk
+            score). Clicking any bar for a class (or its tab below the
+            chart) swaps the drill-down table on the right to that
+            class's real stock_status counts — it's no longer locked to
+            Class C. In mixed mode this renders once per principal (see
+            perPrincipalPanels above) so revenue/stock numbers never
+            cross a classification-run boundary; otherwise it renders
+            once for the whole dataset. */}
+        {(isMixedPrincipal ? perPrincipalPanels : [{ principal: null, label: null, classAggregates, selectedClassStockBreakdown }]).map((panel) => (
           <div className="abc-analysis-row" key={panel.principal || 'single'}>
             <div className="abc-pareto-container abc-analysis-chart">
               <div className="abc-pareto-header">
@@ -550,24 +568,57 @@ const ABCClassification = () => {
                       tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                     />
                     <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
-                    {/* Bar 1 of the pair: revenue share, one solid bar per class */}
-                    <Bar dataKey="revenueTotal" radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false}>
+                    {/* Bar 1 of the pair: revenue share, one solid bar per class.
+                        Clicking any class's bar — either this one or the
+                        stock-mix bar below — drives the drill-down panel. */}
+                    <Bar
+                      dataKey="revenueTotal"
+                      radius={[6, 6, 0, 0]}
+                      barSize={54}
+                      isAnimationActive={false}
+                      onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)}
+                      style={{ cursor: 'pointer' }}
+                    >
                       {panel.classAggregates.map((entry) => (
-                        <Cell key={entry.cat} fill={COLORS[`abc${entry.cat}`]} />
+                        <Cell
+                          key={entry.cat}
+                          fill={COLORS[`abc${entry.cat}`]}
+                          stroke={entry.cat === selectedClass ? '#1a202c' : 'none'}
+                          strokeWidth={entry.cat === selectedClass ? 2 : 0}
+                        />
                       ))}
                     </Bar>
                     {/* Bar 2 of the pair: stock-status mix, stacked to 100%.
                         NO DATA sits at the base since it's usually the
                         largest segment right now (partial inventory load)
                         — putting it first keeps the rounded top corner on
-                        whichever real status segment is on top. */}
-                    <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={54} isAnimationActive={false} />
-                    <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} isAnimationActive={false} />
-                    <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} isAnimationActive={false} />
-                    <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false} />
+                        whichever real status segment is on top. Each
+                        stacked segment is also clickable and outlines the
+                        whole column for whichever class is selected. */}
+                    <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      {panel.classAggregates.map((entry) => (
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      {panel.classAggregates.map((entry) => (
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      {panel.classAggregates.map((entry) => (
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      {panel.classAggregates.map((entry) => (
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+              <p className="abc-drilldown-hint">Click a class's bar above to drill into its stock status.</p>
               <div className="abc-class-summary-row">
                 {panel.classAggregates.map((entry) => (
                   <div key={entry.cat} className="abc-class-summary-item">
@@ -583,19 +634,34 @@ const ABCClassification = () => {
             <div className="abc-pareto-container abc-analysis-drilldown">
               <div className="abc-pareto-header">
                 <h3 className="abc-pareto-title">
-                  {panel.label ? `${panel.label} — Drill-down · Class C Stock Status` : 'Drill-down · Class C Stock Status'}
+                  {panel.label ? `${panel.label} — Drill-down · Class ${selectedClass} Stock Status` : `Drill-down · Class ${selectedClass} Stock Status`}
                 </h3>
+              </div>
+              {/* Tab buttons — same class-switching as clicking the chart,
+                  but explicit/tappable for touch and keyboard users. */}
+              <div className="abc-drilldown-tabs" role="tablist" aria-label="Select ABC class to drill into">
+                {['A', 'B', 'C'].map((cat) => (
+                  <button
+                    key={cat}
+                    role="tab"
+                    aria-selected={selectedClass === cat}
+                    className={`abc-drilldown-tab abc-drilldown-tab-${cat.toLowerCase()} ${selectedClass === cat ? 'active' : ''}`}
+                    onClick={() => setSelectedClass(cat)}
+                  >
+                    Class {cat}
+                  </button>
+                ))}
               </div>
               <table className="abc-drilldown-table">
                 <thead>
                   <tr>
                     <th>Status</th>
                     <th>{grain === 'category' ? 'Category' : 'SKU'} Count</th>
-                    <th>% of Class C</th>
+                    <th>% of Class {selectedClass}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {panel.classCStockBreakdown.map((row) => (
+                  {panel.selectedClassStockBreakdown.map((row) => (
                     <tr key={row.status}>
                       <td>
                         <span className="abc-drilldown-dot" style={{ backgroundColor: STOCK_STATUS_COLORS[row.status] }} />
@@ -608,7 +674,7 @@ const ABCClassification = () => {
                 </tbody>
               </table>
               <p className="abc-page-grain-note">
-                Long-tail SKUs sitting at LOW/CRITICAL stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don't go fully out of stock unnoticed.
+                {CLASS_DRILLDOWN_NOTE[selectedClass]}
               </p>
             </div>
           </div>
