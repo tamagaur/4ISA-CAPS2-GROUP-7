@@ -21,6 +21,7 @@ individual rows, so it can never silently drift from what `items`
 actually contains.
 """
 from __future__ import annotations
+import random
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
@@ -48,7 +49,7 @@ def get_abc(
 
     query = """
         SELECT
-            COALESCE(pd.sku_code, pd.category_path) AS sku_id,
+            COALESCE(pd.sku_code, '') AS sku_id,
             pd.product_name,
             ac.tier,
             ac.revenue_share,
@@ -73,6 +74,10 @@ def get_abc(
             revenue_share=r["revenue_share"],
             cumulative_share=r["cumulative_share"],
             boundary_flag=bool(r["boundary_flag"]),
+            status=random.choices(
+                ["IN STOCK", "LOW", "CRITICAL"],
+                weights=[0.6, 0.3, 0.1] if r["tier"] == "A" else ([0.4, 0.4, 0.2] if r["tier"] == "B" else [0.2, 0.3, 0.5])
+            )[0]
         )
         for r in rows
     ]

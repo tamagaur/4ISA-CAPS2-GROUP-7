@@ -23,6 +23,7 @@ class ABCItem(BaseModel):
     revenue_share: float | None = None
     cumulative_share: float | None = None
     boundary_flag: bool = False  # backlog #43 — near a tier cutoff, margin unconfirmed vs manuscript Sec.3.6
+    status: str | None = None  # Synthetic placeholder for inventory status
 
 
 class TierSummary(BaseModel):
