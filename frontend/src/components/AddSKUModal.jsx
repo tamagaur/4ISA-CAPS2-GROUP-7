@@ -22,6 +22,7 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
   const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM' | 'SUCCESS'
   const [form, setForm] = useState({ ...initialFormState });
   const [errors, setErrors] = useState({});
+  const [saveError, setSaveError] = useState('');
 
   if (!isOpen) return null;
 
@@ -94,7 +95,6 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
   };
 
   // Step 2: Confirm & Save New SKU
-  const [saveError, setSaveError] = useState('');
   const handleConfirmSave = async () => {
     const fullProduct = (form.sizeVal || '').trim()
       ? `${(form.productName || '').trim()} ${(form.sizeVal || '').trim()}${form.sizeUnit || ''}`
