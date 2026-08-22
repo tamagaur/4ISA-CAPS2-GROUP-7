@@ -19,10 +19,13 @@ from pydantic import BaseModel
 class ABCItem(BaseModel):
     sku_id: str
     product_name: str | None = None
+    principal: str
     tier: str  # 'A' | 'B' | 'C'
     revenue_share: float | None = None
     cumulative_share: float | None = None
     boundary_flag: bool = False  # backlog #43 — near a tier cutoff, margin unconfirmed vs manuscript Sec.3.6
+    current_stock: float = 0
+    stock_status: str  # 'IN STOCK' | 'LOW' | 'CRITICAL' — same thresholds as GET /inventory/current
 
 
 class TierSummary(BaseModel):

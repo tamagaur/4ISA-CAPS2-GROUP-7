@@ -9,23 +9,16 @@ const initialFormState = {
   sizeVal: '',
   sizeUnit: 'L',
   unitPrice: '',
-  reorderPoint: '',
-  initialStock: '',
-  supplier: '',
+  leadTimeDays: '',
   notes: '',
 };
-
-const DEFAULT_SUPPLIERS = [
-  'Del Monte Philippines',
-  'Unilever Philippines',
-];
 
 const DEFAULT_BRANDS = [
   'Del Monte',
   'Unilever',
 ];
 
-const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, suppliers = DEFAULT_SUPPLIERS }) => {
+const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
   const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM' | 'SUCCESS'
   const [form, setForm] = useState({ ...initialFormState });
   const [errors, setErrors] = useState({});
@@ -33,7 +26,6 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
   if (!isOpen) return null;
 
   const availableBrands = Array.from(new Set([...DEFAULT_BRANDS, ...(brands || [])]));
-  const availableSuppliers = Array.from(new Set([...DEFAULT_SUPPLIERS, ...(suppliers || [])]));
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -91,8 +83,6 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
     if (!form.brand.trim()) newErrors.brand = 'Brand is required';
     if (!form.productName.trim()) newErrors.productName = 'Product Name is required';
     if (!form.unitPrice || parseFloat(form.unitPrice) <= 0) newErrors.unitPrice = 'Valid unit price is required';
-    if (!form.reorderPoint && form.reorderPoint !== '0') newErrors.reorderPoint = 'Reorder Point is required';
-    if (!form.supplier.trim()) newErrors.supplier = 'Supplier is required';
     return newErrors;
   };
 
@@ -108,16 +98,22 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
   };
 
   // Step 2: Confirm & Save New SKU
-  const handleConfirmSave = () => {
+  const [saveError, setSaveError] = useState('');
+  const handleConfirmSave = async () => {
     const fullProduct = form.sizeVal.trim()
       ? `${form.productName.trim()} ${form.sizeVal.trim()}${form.sizeUnit}`
       : form.productName.trim();
 
-    onAdd({
-      ...form,
-      category: 'PENDING',
-      productName: fullProduct
-    });
+    setSaveError('');
+    try {
+      await onAdd({
+        ...form,
+        productName: fullProduct
+      });
+    } catch (err) {
+      setSaveError(err.message || 'Failed to add SKU');
+      return;
+    }
 
     setStep('SUCCESS');
 
@@ -278,59 +274,23 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
                 </div>
               </div>
 
-              {/* Row 5: Reorder Point + Initial Stock */}
-              <div className="form-row two-col">
+              {/* Row 5: Lead Time */}
+              <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">
-                    REORDER POINT <span className="required">*</span>
-                  </label>
+                  <label className="form-label">LEAD TIME (DAYS)</label>
                   <input
                     type="number"
-                    name="reorderPoint"
-                    value={form.reorderPoint}
+                    name="leadTimeDays"
+                    value={form.leadTimeDays}
                     onChange={handleChange}
-                    placeholder="0"
-                    min="0"
-                    className={`form-input ${errors.reorderPoint ? 'input-error' : ''}`}
-                  />
-                  {errors.reorderPoint && <span className="error-text">{errors.reorderPoint}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">INITIAL STOCK</label>
-                  <input
-                    type="number"
-                    name="initialStock"
-                    value={form.initialStock}
-                    onChange={handleChange}
-                    placeholder="0"
+                    placeholder="e.g. 7"
                     min="0"
                     className="form-input"
                   />
                 </div>
               </div>
 
-              {/* Row 6: Supplier (Dropdown Selection) */}
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">
-                    SUPPLIER <span className="required">*</span>
-                  </label>
-                  <select
-                    name="supplier"
-                    value={form.supplier}
-                    onChange={handleChange}
-                    className={`form-input form-select ${errors.supplier ? 'input-error' : ''}`}
-                  >
-                    <option value="">Select supplier</option>
-                    {availableSuppliers.map(sup => (
-                      <option key={sup} value={sup}>{sup}</option>
-                    ))}
-                  </select>
-                  {errors.supplier && <span className="error-text">{errors.supplier}</span>}
-                </div>
-              </div>
-
-              {/* Row 7: Notes */}
+              {/* Row 6: Notes */}
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">NOTES</label>
@@ -389,18 +349,12 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
                 <span className="summary-field-label">UNIT PRICE</span>
                 <span className="summary-field-val">₱{parseFloat(form.unitPrice || 0).toFixed(2)}</span>
               </div>
-              <div className="summary-field">
-                <span className="summary-field-label">REORDER POINT</span>
-                <span className="summary-field-val">{form.reorderPoint || 0} units</span>
-              </div>
-              <div className="summary-field">
-                <span className="summary-field-label">INITIAL STOCK</span>
-                <span className="summary-field-val">{form.initialStock || 0} units</span>
-              </div>
-              <div className="summary-field full">
-                <span className="summary-field-label">SUPPLIER</span>
-                <span className="summary-field-val">{form.supplier}</span>
-              </div>
+              {form.leadTimeDays && (
+                <div className="summary-field">
+                  <span className="summary-field-label">LEAD TIME</span>
+                  <span className="summary-field-val">{form.leadTimeDays} days</span>
+                </div>
+              )}
               {form.notes && (
                 <div className="summary-field full">
                   <span className="summary-field-label">NOTES</span>
@@ -408,6 +362,8 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS, supplier
                 </div>
               )}
             </div>
+
+            {saveError && <p className="error-text" style={{ textAlign: 'center', marginTop: '0.5rem' }}>{saveError}</p>}
 
             <div className="modal-actions">
               <button type="button" className="btn-cancel back-btn" onClick={handleBackToForm}>

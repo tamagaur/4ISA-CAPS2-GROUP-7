@@ -108,6 +108,13 @@ CREATE TABLE IF NOT EXISTS Product_Dimension (
     product_name    TEXT,
     pack_size       TEXT,
     brand           TEXT,
+    -- Added for the SKU Management module (GET/POST/PATCH /sku) — see
+    -- analytics/db/migrations/0002_add_sku_management_fields.sql for the
+    -- incremental ALTER path on a database that already exists.
+    unit_price      NUMERIC(14,2),
+    lead_time_days  INTEGER,
+    status          TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DISABLED')),
+    notes           TEXT,
     UNIQUE (principal, grain, sku_code, category_path)
 );
 
@@ -521,6 +528,22 @@ CREATE TABLE IF NOT EXISTS Users (
     role            TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Application audit trail (who did what, when) — dashboard application
+-- state, not ETL output, same reasoning as Users above. Replaces the
+-- earlier localStorage-only audit log (frontend/src/utils/auditLogger.js),
+-- which never left the reporting browser and reset on cache clear.
+CREATE TABLE IF NOT EXISTS Audit_Log (
+    audit_log_key   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_email      TEXT NOT NULL,
+    user_name       TEXT,
+    role            TEXT,
+    action          TEXT NOT NULL,
+    details         TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_audit_log_created_at ON Audit_Log (created_at DESC);
 
 -- ============================================================
 -- SECTION 7 — Unified product-demand read shape (DEC-13)

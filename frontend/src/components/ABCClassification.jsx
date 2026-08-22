@@ -13,47 +13,16 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
+import { getABCClassification } from '../api/abc';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
-// Tier cutoffs are 80% and 95% cumulative revenue (§3.4.1.2). A SKU sitting
-// within this many cumulative percentage points of a cutoff is flagged as
-// close to being reclassified into the tier above or below it.
+// Tier cutoffs are 80% and 95% cumulative revenue (§3.4.1.2). The backend
+// (backend/routers/abc.py) already computes boundary_flag server-side, so
+// this constant is display-only (used in the legend copy).
 const BOUNDARY_TOLERANCE_PP = 3;
-const TIER_CUTOFFS = [80, 95];
 
-// Unilever has true per-SKU data.
-const UNILEVER_ABC_DATA = [
-  { id: 1, sku: 'SKU-4721', product: 'Surf Powder Detergent 1kg', brand: 'Unilever', cat: 'A', avgMo: 1243, revPct: 8.2, status: 'IN STOCK' },
-  { id: 3, sku: 'SKU-2891', product: 'Knorr Cubes 8g', brand: 'Unilever', cat: 'A', avgMo: 1098, revPct: 7.3, status: 'IN STOCK' },
-  { id: 5, sku: 'SKU-7821', product: 'Dove Shampoo 340ml', brand: 'Unilever', cat: 'A', avgMo: 987, revPct: 6.5, status: 'IN STOCK' },
-  { id: 7, sku: 'SKU-9012', product: 'Lux Bar Soap 135g', brand: 'Unilever', cat: 'A', avgMo: 876, revPct: 5.8, status: 'IN STOCK' },
-  { id: 9, sku: 'SKU-6543', product: 'Creamsilk Conditioner 180ml', brand: 'Unilever', cat: 'A', avgMo: 798, revPct: 5.3, status: 'IN STOCK' },
-  { id: 11, sku: 'SKU-8901', product: 'Breeze Detergent Powder 500g', brand: 'Unilever', cat: 'A', avgMo: 721, revPct: 4.8, status: 'IN STOCK' },
-  { id: 13, sku: 'SKU-7890', product: 'Rexona Deodorant 40ml', brand: 'Unilever', cat: 'A', avgMo: 654, revPct: 4.3, status: 'IN STOCK' },
-  { id: 15, sku: 'SKU-1122', product: 'Sunsilk Shampoo 180ml', brand: 'Unilever', cat: 'B', avgMo: 534, revPct: 3.2, status: 'IN STOCK' },
-  { id: 17, sku: 'SKU-5566', product: 'Closeup Toothpaste 120ml', brand: 'Unilever', cat: 'B', avgMo: 467, revPct: 2.7, status: 'LOW' },
-  { id: 19, sku: 'SKU-9900', product: "Pond's Powder 50g", brand: 'Unilever', cat: 'B', avgMo: 398, revPct: 2.2, status: 'IN STOCK' },
-  { id: 21, sku: 'SKU-4422', product: 'Vaseline Lotion 200ml', brand: 'Unilever', cat: 'C', avgMo: 187, revPct: 0.8, status: 'IN STOCK' },
-  { id: 23, sku: 'SKU-8844', product: 'Signal Toothbrush', brand: 'Unilever', cat: 'C', avgMo: 112, revPct: 0.4, status: 'LOW' },
-];
-
-// Del Monte has no SKU-level data anywhere in this project — these rows are
-// the same underlying products as before, aggregated into categories
-// (CAT- codes) rather than presented as individual fabricated SKUs.
-const DELMONTE_ABC_DATA = [
-  { id: 101, sku: 'CAT-CANNED-PRODUCE', product: 'Canned Fruits & Vegetables', brand: 'Del Monte', cat: 'A', avgMo: 3423, revPct: 21.8, status: 'CRITICAL' },
-  { id: 102, sku: 'CAT-SAUCES', product: 'Sauces & Condiments', brand: 'Del Monte', cat: 'A', avgMo: 2368, revPct: 15.7, status: 'IN STOCK' },
-  { id: 103, sku: 'CAT-JUICES', product: 'Juices', brand: 'Del Monte', cat: 'A', avgMo: 1245, revPct: 8.1, status: 'LOW' },
-  { id: 104, sku: 'CAT-PASTA', product: 'Pasta', brand: 'Del Monte', cat: 'B', avgMo: 501, revPct: 2.5, status: 'IN STOCK' },
-];
-
-const ABC_BY_PRINCIPAL = {
-  unilever: UNILEVER_ABC_DATA,
-  delmonte: DELMONTE_ABC_DATA,
-  all: [...UNILEVER_ABC_DATA, ...DELMONTE_ABC_DATA],
-};
-
+const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
 // Components branch on this, never on the principal name.
 const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
 
@@ -106,7 +75,11 @@ const ParetoTooltip = ({ active, payload, label }) => {
 const ABCClassification = () => {
   const { principal } = useOutletContext() || { principal: 'all' };
   const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
-  const sourceData = useMemo(() => ABC_BY_PRINCIPAL[principal] ?? ABC_BY_PRINCIPAL.all, [principal]);
+
+  const [rawData, setRawData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [classificationPeriod, setClassificationPeriod] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
@@ -126,6 +99,45 @@ const ABCClassification = () => {
     }
   });
 
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getABCClassification({ principal })
+      .then((res) => {
+        if (cancelled) return;
+        setRawData(res.items || []);
+        setClassificationPeriod(res.classification_period || null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.message || 'Failed to load ABC classification data');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [principal]);
+
+  // Map API shape -> the row shape the rest of this page renders.
+  const sourceData = useMemo(
+    () =>
+      rawData.map((item) => ({
+        id: item.sku_id,
+        sku: item.sku_id,
+        product: item.product_name || 'Unknown Product',
+        brand: PRINCIPAL_BRAND[item.principal] || item.principal,
+        cat: item.tier,
+        revPct: item.revenue_share ?? 0,
+        cumulativePct: item.cumulative_share ?? 0,
+        nearBoundary: !!item.boundary_flag,
+        status: item.stock_status,
+      })),
+    [rawData]
+  );
+
   // Handle click outside combobox to close dropdown
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -143,27 +155,11 @@ const ABCClassification = () => {
 
   const brandsList = ['ALL', ...Array.from(new Set(sourceData.map(d => d.brand)))];
 
-  // Cumulative revenue % and boundary-proximity flag, computed once over the
-  // full value-ranked list (not the filtered view) so flags stay correct
-  // regardless of what the user is currently searching/filtering for.
-  // Re-runs when the principal changes since sourceData does.
+  // Rank by revenue share for the Pareto chart's x-axis; cumulative_share
+  // and boundary_flag already come straight from the backend.
   const dataWithCumulative = useMemo(() => {
     const sorted = [...sourceData].sort((a, b) => b.revPct - a.revPct);
-    let running = 0;
-    return sorted.map((item, index) => {
-      running += item.revPct;
-      const nearestCutoff = TIER_CUTOFFS.reduce((closest, cutoff) =>
-        Math.abs(cutoff - running) < Math.abs(closest - running) ? cutoff : closest
-      , TIER_CUTOFFS[0]);
-      const distance = Math.abs(nearestCutoff - running);
-      return {
-        ...item,
-        rank: index + 1,
-        cumulativePct: running,
-        nearBoundary: distance <= BOUNDARY_TOLERANCE_PP,
-        boundaryCutoff: nearestCutoff,
-      };
-    });
+    return sorted.map((item, index) => ({ ...item, rank: index + 1 }));
   }, [sourceData]);
 
   const filteredData = useMemo(() => {
@@ -235,6 +231,26 @@ const ABCClassification = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="abc-page">
+        <div className="abc-content">
+          <p className="abc-page-subtitle">Loading ABC classification data…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="abc-page">
+        <div className="abc-content">
+          <p className="abc-page-subtitle">Failed to load ABC classification data: {error}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="abc-page">
       <div className="abc-content">
@@ -242,7 +258,8 @@ const ABCClassification = () => {
         <div className="abc-page-header">
           <h2 className="abc-page-title">ABC Classification</h2>
           <p className="abc-page-subtitle">
-            Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue. Click a code to open its forecast.
+            Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
+            {classificationPeriod && <> Period: {classificationPeriod}.</>}
             <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a SKU within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
           </p>
         </div>
@@ -531,7 +548,6 @@ const ABCClassification = () => {
                 <th>PRODUCT</th>
                 <th>BRAND</th>
                 <th>CAT</th>
-                <th>AVG/MO</th>
                 <th>REV %</th>
                 <th>STATUS</th>
               </tr>
@@ -568,19 +584,18 @@ const ABCClassification = () => {
                         <AlertTriangle
                           size={13}
                           className="abc-boundary-icon"
-                          title={`Cumulative revenue ${item.cumulativePct.toFixed(1)}% — within ${BOUNDARY_TOLERANCE_PP}pp of the ${item.boundaryCutoff}% tier cutoff`}
+                          title={`Cumulative revenue ${item.cumulativePct.toFixed(1)}% — within ${BOUNDARY_TOLERANCE_PP}pp of a tier cutoff`}
                         />
                       )}
                     </span>
                   </td>
-                  <td className="abc-avg-cell">{item.avgMo.toLocaleString()}</td>
                   <td className="abc-rev-cell">{item.revPct.toFixed(1)}%</td>
                   <td><span className={getStatusClass(item.status)}>{item.status}</span></td>
                 </tr>
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan="8" className="abc-no-results">No data for this selection.</td>
+                  <td colSpan="7" className="abc-no-results">No data for this selection.</td>
                 </tr>
               )}
             </tbody>

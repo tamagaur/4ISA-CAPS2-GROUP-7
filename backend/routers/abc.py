@@ -50,12 +50,20 @@ def get_abc(
         SELECT
             COALESCE(pd.sku_code, pd.category_path) AS sku_id,
             pd.product_name,
+            ac.principal,
             ac.tier,
             ac.revenue_share,
             ac.cumulative_share,
-            ac.boundary_flag
+            ac.boundary_flag,
+            COALESCE(inv.current_stock, 0) AS current_stock
         FROM ABC_Classification ac
         JOIN Product_Dimension pd ON pd.product_key = ac.product_key
+        LEFT JOIN (
+            SELECT product_key, SUM(quantity_on_hand) AS current_stock
+            FROM Inventory_Fact_Real
+            WHERE _period = (SELECT MAX(_period) FROM Inventory_Fact_Real)
+            GROUP BY product_key
+        ) inv ON inv.product_key = ac.product_key
         WHERE ac.classification_period = :period
     """
     params: dict = {"period": period}
@@ -69,10 +77,16 @@ def get_abc(
         ABCItem(
             sku_id=r["sku_id"] or "",
             product_name=r["product_name"],
+            principal=r["principal"],
             tier=r["tier"],
             revenue_share=r["revenue_share"],
             cumulative_share=r["cumulative_share"],
             boundary_flag=bool(r["boundary_flag"]),
+            current_stock=float(r["current_stock"] or 0),
+            stock_status=(
+                "IN STOCK" if float(r["current_stock"] or 0) > 100
+                else ("LOW" if float(r["current_stock"] or 0) > 0 else "CRITICAL")
+            ),
         )
         for r in rows
     ]

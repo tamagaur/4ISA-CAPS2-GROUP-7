@@ -1,40 +1,12 @@
-import { getCurrentUser } from '../auth';
+import { postAuditLogEntry } from '../api/auditLog';
 
-const AUDIT_LOG_KEY = 'san2_audit_log';
-
-const INITIAL_LOGS = [];
-
-export const getAuditLogs = () => {
-  const stored = localStorage.getItem(AUDIT_LOG_KEY);
-  if (!stored) {
-    localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(INITIAL_LOGS));
-    return INITIAL_LOGS;
-  }
-  try {
-    return JSON.parse(stored);
-  } catch (err) {
-    return INITIAL_LOGS;
-  }
-};
+// Fire-and-forget: callers don't await this (e.g. auth.js's login/logout,
+// action handlers throughout the app), so a failed write here must never
+// throw into the caller's flow — it's best-effort logging, not a user-
+// facing operation. user identity is attached server-side from the JWT,
+// not sent from here (see backend/routers/audit_log.py).
 export const logAction = (action, details) => {
-  const currentUser = getCurrentUser();
-  const userName = currentUser?.fullName || currentUser?.email || 'System';
-  const role = currentUser?.role ? currentUser.role.toUpperCase() : 'USER';
-  const email = currentUser?.email || (userName.toLowerCase().replace(/\s+/g, '.') + '@san2.local');
-  
-  const newLog = {
-    id: Date.now().toString(),
-    timestamp: new Date().toISOString(),
-    user: userName,
-    email: email,
-    role: role,
-    action,
-    details
-  };
-
-  const currentLogs = getAuditLogs();
-  const updatedLogs = [newLog, ...currentLogs]; // prepend
-  localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(updatedLogs));
-  
-  return newLog;
+  postAuditLogEntry(action, details).catch((err) => {
+    console.error('Failed to record audit log entry:', err);
+  });
 };

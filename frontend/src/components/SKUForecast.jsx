@@ -12,92 +12,11 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { COLORS } from '../theme/colors';
-import { getSKUMape, getSKURmse, getConfidenceTier } from '../utils/forecastAccuracy';
+import { getABCClassification } from '../api/abc';
+import { getForecast } from '../api/forecast';
 import './SKUForecast.css';
 
-// Manuscript §3.5.5: "SARIMA demand projections for Category A SKUs across
-// a 4-week horizon." 8 weeks of trailing historical actuals (for chart
-// context) + a 4-week forward forecast & confidence band, recalculated from
-// today's system date. Week labels are the Monday of each week.
-const generateDynamicForecastData = () => {
-  const today = new Date();
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  // Anchor to the Monday of the current week
-  const dayOfWeek = today.getDay(); // 0 = Sun
-  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const currentWeekStart = new Date(today);
-  currentWeekStart.setDate(today.getDate() + diffToMonday);
-
-  const weekLabel = (d) => `${monthNames[d.getMonth()]} ${d.getDate()}`;
-
-  const data = [];
-
-  // 8 weeks of trailing historical actuals ending at the current week
-  for (let i = 8; i >= 0; i--) {
-    const d = new Date(currentWeekStart);
-    d.setDate(currentWeekStart.getDate() - i * 7);
-    const baseActual = 340 + Math.floor(Math.sin(i * 0.7) * 55) + (8 - i) * 8;
-
-    if (i === 0) {
-      // Current week bridge point connecting actuals to the 4-week forecast & CI band
-      data.push({
-        month: weekLabel(d),
-        actual: baseActual,
-        forecast: baseActual,
-        ci: [baseActual, baseActual]
-      });
-    } else {
-      data.push({
-        month: weekLabel(d),
-        actual: baseActual
-      });
-    }
-  }
-
-  // 4-week forward projection from the current week
-  const lastActual = data[data.length - 1].actual;
-  for (let i = 1; i <= 4; i++) {
-    const d = new Date(currentWeekStart);
-    d.setDate(currentWeekStart.getDate() + i * 7);
-    const fValue = Math.round(lastActual + i * 14 + Math.sin(i) * 10);
-    const lowerCi = Math.round(fValue - (18 + i * 8));
-    const upperCi = Math.round(fValue + (18 + i * 9));
-
-    data.push({
-      month: weekLabel(d),
-      forecast: fValue,
-      ci: [lowerCi, upperCi]
-    });
-  }
-
-  return data;
-};
-
-const forecastData = generateDynamicForecastData();
-
-// Unilever has true per-SKU data.
-const UNILEVER_SKU_DATABASE = [
-  { code: 'SKU-4721', name: 'Surf Powder Detergent 1kg', brand: 'Unilever', cat: 'A' },
-  { code: 'SKU-1052', name: 'Knorr Seasoning 250ml', brand: 'Unilever', cat: 'A' },
-  { code: 'SKU-2981', name: 'Pantasene Shampoo 180ml', brand: 'Unilever', cat: 'A' },
-  { code: 'SKU-7743', name: 'Jack n Jill Piattos Cheese 85g', brand: 'Unilever', cat: 'B' },
-  { code: 'SKU-5412', name: 'Downy Sunrise Fresh 900ml', brand: 'Unilever', cat: 'B' },
-];
-
-// Del Monte has no per-SKU forecast anywhere in this project — these are
-// category-level forecast targets (CAT- codes), not fabricated SKU rows.
-const DELMONTE_CATEGORY_DATABASE = [
-  { code: 'CAT-COFFEE-BEV', name: 'Coffee & Beverages', brand: 'Del Monte', cat: 'A' },
-  { code: 'CAT-SAUCES-DAIRY', name: 'Sauces & Dairy', brand: 'Del Monte', cat: 'C' },
-];
-
-const SKUS_BY_PRINCIPAL = {
-  unilever: UNILEVER_SKU_DATABASE,
-  delmonte: DELMONTE_CATEGORY_DATABASE,
-  all: [...UNILEVER_SKU_DATABASE, ...DELMONTE_CATEGORY_DATABASE],
-};
-
+const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
 // Components branch on this, never on the principal name.
 const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
 
@@ -111,7 +30,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             return (
               <p key={index} className="tooltip-item">
                 <span className="tooltip-dot" style={{ backgroundColor: '#F3E8FF', border: '1px solid #EBC9E1' }}></span>
-                90% CI: {entry.value[0]} - {entry.value[1]}
+                Confidence interval: {entry.value[0]} - {entry.value[1]}
               </p>
             );
           }
@@ -134,7 +53,42 @@ const SKUForecast = () => {
 
   const { principal } = useOutletContext() || { principal: 'all' };
   const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
-  const sourceSKUs = useMemo(() => SKUS_BY_PRINCIPAL[principal] ?? SKUS_BY_PRINCIPAL.all, [principal]);
+
+  const [rawItems, setRawItems] = useState([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setListLoading(true);
+    setListError(null);
+    getABCClassification({ principal })
+      .then((res) => {
+        if (cancelled) return;
+        setRawItems(res.items || []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setListError(err.message || 'Failed to load SKU list');
+      })
+      .finally(() => {
+        if (!cancelled) setListLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [principal]);
+
+  // Map ABC classification rows -> the SKU-picker shape this page renders.
+  const sourceSKUs = useMemo(
+    () =>
+      rawItems.map((item) => ({
+        code: item.sku_id,
+        name: item.product_name || 'Unknown Product',
+        brand: PRINCIPAL_BRAND[item.principal] || item.principal,
+        principal: item.principal,
+        cat: item.tier,
+      })),
+    [rawItems]
+  );
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -142,22 +96,24 @@ const SKUForecast = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Selected SKU (or Del Monte category)
-  const [selectedSKU, setSelectedSKU] = useState(sourceSKUs[0]);
+  const [selectedSKU, setSelectedSKU] = useState(null);
 
-  // Re-select when the principal filter changes — there is no per-SKU Del
-  // Monte forecast to fall back to, so this always lands on a real row for
-  // whichever principal is now active.
+  // Re-select when the principal filter (or the loaded list) changes.
   useEffect(() => {
-    setSelectedSKU(sourceSKUs[0]);
+    if (sourceSKUs.length > 0) {
+      setSelectedSKU((prev) => (prev && sourceSKUs.some((s) => s.code === prev.code) ? prev : sourceSKUs[0]));
+    } else {
+      setSelectedSKU(null);
+    }
   }, [sourceSKUs]);
 
   // Persistent Pinned SKUs
   const [pinnedSKUs, setPinnedSKUs] = useState(() => {
     try {
       const saved = localStorage.getItem('san2_pinned_skus');
-      return saved ? JSON.parse(saved) : ['SKU-4721'];
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return ['SKU-4721'];
+      return [];
     }
   });
 
@@ -165,9 +121,9 @@ const SKUForecast = () => {
   const [recentSKUs, setRecentSKUs] = useState(() => {
     try {
       const saved = localStorage.getItem('san2_recent_forecast_skus');
-      return saved ? JSON.parse(saved) : ['SKU-4721', 'SKU-1052', 'SKU-6190'];
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return ['SKU-4721', 'SKU-1052', 'SKU-6190'];
+      return [];
     }
   });
 
@@ -212,8 +168,8 @@ const SKUForecast = () => {
   // Filtering Logic
   const filteredSKUs = useMemo(() => {
     return sourceSKUs.filter(sku => {
-      const matchesSearch = searchQuery === '' || 
-        sku.code.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      const matchesSearch = searchQuery === '' ||
+        sku.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sku.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sku.brand.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCat = selectedCategory === 'ALL' || sku.cat === selectedCategory;
@@ -230,12 +186,60 @@ const SKUForecast = () => {
     sku => sku.cat === 'A' && !pinnedSKUs.includes(sku.code) && !recentSKUs.includes(sku.code)
   );
 
-  const isSelectedPinned = pinnedSKUs.includes(selectedSKU.code);
+  const isSelectedPinned = selectedSKU ? pinnedSKUs.includes(selectedSKU.code) : false;
 
-  // Story #49/#52 + Manuscript §3.5.5: MAPE and RMSE indicators, per SKU
-  const selectedMape = getSKUMape(selectedSKU.code);
-  const selectedRmse = getSKURmse(selectedSKU.code);
-  const confidenceTier = getConfidenceTier(selectedMape);
+  // Forecast data for the selected SKU — fetched from Forecast_Result via
+  // GET /forecast/{sku_id}. May legitimately come back with an empty
+  // forecast[] if the SARIMA pipeline hasn't produced output for this SKU.
+  const [forecastResult, setForecastResult] = useState(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastError, setForecastError] = useState(null);
+
+  useEffect(() => {
+    if (!selectedSKU) {
+      setForecastResult(null);
+      return;
+    }
+    let cancelled = false;
+    setForecastLoading(true);
+    setForecastError(null);
+    getForecast(selectedSKU.code, selectedSKU.principal)
+      .then((res) => {
+        if (cancelled) return;
+        setForecastResult(res);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setForecastError(err.message || 'Failed to load forecast');
+      })
+      .finally(() => {
+        if (!cancelled) setForecastLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedSKU]);
+
+  // Combine real trailing actuals + real forecast horizon into one chart
+  // series. No synthetic points — a SKU with no Unilever_SKU_Demand_Fact
+  // rows and no Forecast_Result rows renders an empty chart, not a fake one.
+  const chartData = useMemo(() => {
+    if (!forecastResult) return [];
+    const actualPoints = (forecastResult.actuals || []).map((a) => ({
+      label: a.period,
+      actual: a.quantity,
+    }));
+    const forecastPoints = (forecastResult.forecast || []).map((f) => ({
+      label: f.forecast_date,
+      forecast: f.forecast_value,
+      ci: f.confidence_lower != null && f.confidence_upper != null
+        ? [f.confidence_lower, f.confidence_upper]
+        : undefined,
+    }));
+    return [...actualPoints, ...forecastPoints];
+  }, [forecastResult]);
+
+  const latestForecastPoint = forecastResult?.forecast?.length
+    ? forecastResult.forecast[forecastResult.forecast.length - 1]
+    : null;
 
   return (
     <div className="forecast-page">
@@ -247,14 +251,11 @@ const SKUForecast = () => {
               Demand <span>forecasted</span>
             </h2>
             <p className="forecast-subtitle">
-              SARIMA projection for Category A SKUs - 4-week horizon
-            </p>
-            <p className="forecast-subtext-today">
-              Always shows the latest data as of today — this forecast doesn't change based on a selected month or year.
+              SARIMA projection for Category A SKUs, from Forecast_Result
             </p>
           </div>
 
-          <button 
+          <button
             className="browse-all-skus-btn"
             onClick={() => navigate('/sku-management')}
             title="Go to SKU Management table"
@@ -282,7 +283,7 @@ const SKUForecast = () => {
             <div className="forecast-filter-group">
               <div className="filter-dropdown-wrapper">
                 <span className="filter-icon-label"><Filter size={12} /> Cat:</span>
-                <select 
+                <select
                   className="filter-select"
                   value={selectedCategory}
                   onChange={(e) => {
@@ -299,7 +300,7 @@ const SKUForecast = () => {
 
               <div className="filter-dropdown-wrapper">
                 <span className="filter-icon-label">Brand:</span>
-                <select 
+                <select
                   className="filter-select"
                   value={selectedBrand}
                   onChange={(e) => {
@@ -314,7 +315,7 @@ const SKUForecast = () => {
               </div>
 
               {(selectedCategory !== 'ALL' || selectedBrand !== 'ALL' || searchQuery !== '') && (
-                <button 
+                <button
                   className="clear-filters-btn"
                   onClick={() => {
                     setSelectedCategory('ALL');
@@ -362,12 +363,12 @@ const SKUForecast = () => {
                       </div>
                       {filteredSKUs.length > 0 ? (
                         filteredSKUs.map(sku => (
-                          <div 
-                            key={sku.code} 
-                            className={`result-row ${selectedSKU.code === sku.code ? 'selected' : ''}`}
+                          <div
+                            key={sku.code}
+                            className={`result-row ${selectedSKU?.code === sku.code ? 'selected' : ''}`}
                             onClick={() => handleSelectSKU(sku)}
                           >
-                            <button 
+                            <button
                               className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                               onClick={(e) => togglePinSKU(sku.code, e)}
                               title={pinnedSKUs.includes(sku.code) ? "Unpin SKU" : "Pin SKU to top"}
@@ -397,12 +398,12 @@ const SKUForecast = () => {
                             <span>PINNED SKUS</span>
                           </div>
                           {pinnedSKUObjects.map(sku => (
-                            <div 
-                              key={sku.code} 
-                              className={`result-row ${selectedSKU.code === sku.code ? 'selected' : ''}`}
+                            <div
+                              key={sku.code}
+                              className={`result-row ${selectedSKU?.code === sku.code ? 'selected' : ''}`}
                               onClick={() => handleSelectSKU(sku)}
                             >
-                              <button 
+                              <button
                                 className="star-pin-btn pinned"
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Unpin SKU"
@@ -428,12 +429,12 @@ const SKUForecast = () => {
                             <span>RECENTLY FORECASTED</span>
                           </div>
                           {recentSKUObjects.map(sku => (
-                            <div 
-                              key={sku.code} 
-                              className={`result-row ${selectedSKU.code === sku.code ? 'selected' : ''}`}
+                            <div
+                              key={sku.code}
+                              className={`result-row ${selectedSKU?.code === sku.code ? 'selected' : ''}`}
                               onClick={() => handleSelectSKU(sku)}
                             >
-                              <button 
+                              <button
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Pin SKU"
@@ -458,12 +459,12 @@ const SKUForecast = () => {
                             <span>CATEGORY A SKUS (HIGH PRIORITY)</span>
                           </div>
                           {catASKUObjects.map(sku => (
-                            <div 
-                              key={sku.code} 
-                              className={`result-row ${selectedSKU.code === sku.code ? 'selected' : ''}`}
+                            <div
+                              key={sku.code}
+                              className={`result-row ${selectedSKU?.code === sku.code ? 'selected' : ''}`}
                               onClick={() => handleSelectSKU(sku)}
                             >
-                              <button 
+                              <button
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Pin SKU"
@@ -488,124 +489,145 @@ const SKUForecast = () => {
           </div>
         </div>
 
-        {/* Selected SKU Card */}
-        <div className="selected-sku-card">
-          <div className="sku-info-left">
-            <div className="sku-code-header-row">
-              <span className="sku-code-label">{grain === 'category' ? 'SELECTED CATEGORY CODE' : 'SELECTED SKU CODE'}</span>
-              <button 
-                className={`card-star-btn ${isSelectedPinned ? 'pinned' : ''}`}
-                onClick={(e) => togglePinSKU(selectedSKU.code, e)}
-                title={isSelectedPinned ? "Unpin SKU" : "Pin SKU to top of search"}
-              >
-                <Star size={15} fill={isSelectedPinned ? '#F5A623' : 'none'} color={isSelectedPinned ? '#F5A623' : '#a0aec0'} />
-                <span className="pin-text">{isSelectedPinned ? 'Pinned' : 'Pin SKU'}</span>
-              </button>
-            </div>
-            <span className="sku-code-value">{selectedSKU.code}</span>
-            <span className="sku-product-name">{selectedSKU.name}</span>
-            <span className="sku-brand-name">Brand: {selectedSKU.brand}</span>
-          </div>
-          <div className="sku-info-right">
-            <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Category {selectedSKU.cat}</span>
-          </div>
-        </div>
+        {listLoading && <p className="forecast-subtitle">Loading SKU list…</p>}
+        {listError && <p className="forecast-subtitle">Error: {listError}</p>}
 
-        {/* Chart Section */}
-        <div className="forecast-chart-container">
-          {/* Model Accuracy Stat Row — Manuscript §3.5.5: MAPE and RMSE indicators */}
-          <div className="forecast-accuracy-row">
-            <div className="forecast-stat-block">
-              <span className="forecast-stat-label">MAPE</span>
-              <span className={`forecast-stat-value accuracy-${confidenceTier.level}`}>
-                {selectedMape.toFixed(1)}%
-              </span>
-              <span className="forecast-stat-desc">{confidenceTier.label}</span>
+        {selectedSKU && (
+          <>
+            {/* Selected SKU Card */}
+            <div className="selected-sku-card">
+              <div className="sku-info-left">
+                <div className="sku-code-header-row">
+                  <span className="sku-code-label">{grain === 'category' ? 'SELECTED CATEGORY CODE' : 'SELECTED SKU CODE'}</span>
+                  <button
+                    className={`card-star-btn ${isSelectedPinned ? 'pinned' : ''}`}
+                    onClick={(e) => togglePinSKU(selectedSKU.code, e)}
+                    title={isSelectedPinned ? "Unpin SKU" : "Pin SKU to top of search"}
+                  >
+                    <Star size={15} fill={isSelectedPinned ? '#F5A623' : 'none'} color={isSelectedPinned ? '#F5A623' : '#a0aec0'} />
+                    <span className="pin-text">{isSelectedPinned ? 'Pinned' : 'Pin SKU'}</span>
+                  </button>
+                </div>
+                <span className="sku-code-value">{selectedSKU.code}</span>
+                <span className="sku-product-name">{selectedSKU.name}</span>
+                <span className="sku-brand-name">Brand: {selectedSKU.brand}</span>
+              </div>
+              <div className="sku-info-right">
+                <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Category {selectedSKU.cat}</span>
+              </div>
             </div>
-            <div className="forecast-stat-divider" />
-            <div className="forecast-stat-block">
-              <span className="forecast-stat-label">RMSE</span>
-              <span className="forecast-stat-value forecast-stat-value-neutral">{selectedRmse}</span>
-              <span className="forecast-stat-desc">units, holdout period</span>
-            </div>
-          </div>
 
-          {/* Chart Legend */}
-          <div className="chart-legend">
-            <div className="legend-item">
-              <span className="legend-line line-actual"></span>
-              <span className="legend-label">Actual Sales</span>
-            </div>
-            <div className="legend-item">
-              <span className="legend-line line-forecast"></span>
-              <span className="legend-label">Forecast</span>
-            </div>
-            <div className="legend-item">
-              <span className="legend-area area-ci"></span>
-              <span className="legend-label">Uncertainty Band (90% CI)</span>
-            </div>
-          </div>
+            {/* Chart Section */}
+            <div className="forecast-chart-container">
+              {forecastLoading && <p className="forecast-subtitle">Loading forecast…</p>}
+              {forecastError && <p className="forecast-subtitle">Error: {forecastError}</p>}
 
-          {/* Chart */}
-          <div className="chart-wrapper">
-            <ResponsiveContainer width="100%" height={400}>
-              <ComposedChart data={forecastData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={COLORS.gridline} />
-                <XAxis 
-                  dataKey="month" 
-                  axisLine={true} 
-                  tickLine={true} 
-                  tick={{ fill: '#a0aec0', fontSize: 12 }} 
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={true}
-                  tickLine={true}
-                  tick={{ fill: '#a0aec0', fontSize: 12 }}
-                  domain={[0, 600]}
-                  ticks={[0, 150, 300, 450, 600]}
-                  dx={-10}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                
-                {/* Uncertainty Band */}
-                <Area 
-                  type="monotone" 
-                  dataKey="ci" 
-                  stroke="none" 
-                  fill={COLORS.forecastBg} 
-                  name="90% CI"
-                  isAnimationActive={false}
-                />
-                
-                {/* Actual Sales */}
-                <Line 
-                  type="monotone" 
-                  dataKey="actual" 
-                  stroke={COLORS.salesTrend} 
-                  strokeWidth={2}
-                  dot={{ r: 4, fill: COLORS.salesTrend, strokeWidth: 0 }}
-                  activeDot={{ r: 6 }}
-                  name="Actual Sales"
-                  isAnimationActive={false}
-                />
-                
-                {/* Forecast */}
-                <Line 
-                  type="monotone" 
-                  dataKey="forecast" 
-                  stroke={COLORS.forecast} 
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={{ r: 4, fill: COLORS.forecast, strokeWidth: 0 }}
-                  activeDot={{ r: 6 }}
-                  name="Forecast"
-                  isAnimationActive={false}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+              {!forecastLoading && !forecastError && forecastResult && forecastResult.forecast.length === 0 && (
+                <p className="forecast-subtitle">
+                  No SARIMA forecast has been generated for {selectedSKU.code} yet.
+                </p>
+              )}
+
+              {!forecastLoading && !forecastError && forecastResult && forecastResult.forecast.length > 0 && (
+                <>
+                  {/* Model Accuracy Stat Row */}
+                  <div className="forecast-accuracy-row">
+                    <div className="forecast-stat-block">
+                      <span className="forecast-stat-label">MAPE</span>
+                      <span className="forecast-stat-value forecast-stat-value-neutral">
+                        {latestForecastPoint?.mape != null ? `${latestForecastPoint.mape.toFixed(1)}%` : '—'}
+                      </span>
+                      <span className="forecast-stat-desc">latest forecast run</span>
+                    </div>
+                    <div className="forecast-stat-divider" />
+                    <div className="forecast-stat-block">
+                      <span className="forecast-stat-label">HORIZON</span>
+                      <span className="forecast-stat-value forecast-stat-value-neutral">
+                        {forecastResult.forecast.length}
+                      </span>
+                      <span className="forecast-stat-desc">forecast point{forecastResult.forecast.length === 1 ? '' : 's'}</span>
+                    </div>
+                  </div>
+
+                  {/* Chart Legend */}
+                  <div className="chart-legend">
+                    {forecastResult.actuals.length > 0 && (
+                      <div className="legend-item">
+                        <span className="legend-line line-actual"></span>
+                        <span className="legend-label">Actual Sales</span>
+                      </div>
+                    )}
+                    <div className="legend-item">
+                      <span className="legend-line line-forecast"></span>
+                      <span className="legend-label">Forecast</span>
+                    </div>
+                    <div className="legend-item">
+                      <span className="legend-area area-ci"></span>
+                      <span className="legend-label">Confidence Interval</span>
+                    </div>
+                  </div>
+
+                  {/* Chart */}
+                  <div className="chart-wrapper">
+                    <ResponsiveContainer width="100%" height={400}>
+                      <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={COLORS.gridline} />
+                        <XAxis
+                          dataKey="label"
+                          axisLine={true}
+                          tickLine={true}
+                          tick={{ fill: '#a0aec0', fontSize: 12 }}
+                          dy={10}
+                        />
+                        <YAxis
+                          axisLine={true}
+                          tickLine={true}
+                          tick={{ fill: '#a0aec0', fontSize: 12 }}
+                          dx={-10}
+                        />
+                        <Tooltip content={<CustomTooltip />} />
+
+                        <Area
+                          type="monotone"
+                          dataKey="ci"
+                          stroke="none"
+                          fill={COLORS.forecastBg}
+                          name="Confidence interval"
+                          isAnimationActive={false}
+                        />
+
+                        <Line
+                          type="monotone"
+                          dataKey="actual"
+                          stroke={COLORS.salesTrend}
+                          strokeWidth={2}
+                          dot={{ r: 4, fill: COLORS.salesTrend, strokeWidth: 0 }}
+                          activeDot={{ r: 6 }}
+                          name="Actual Sales"
+                          isAnimationActive={false}
+                          connectNulls
+                        />
+
+                        <Line
+                          type="monotone"
+                          dataKey="forecast"
+                          stroke={COLORS.forecast}
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          dot={{ r: 4, fill: COLORS.forecast, strokeWidth: 0 }}
+                          activeDot={{ r: 6 }}
+                          name="Forecast"
+                          isAnimationActive={false}
+                          connectNulls
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

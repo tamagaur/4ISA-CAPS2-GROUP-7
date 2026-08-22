@@ -41,11 +41,12 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     sizeVal: '',
     sizeUnit: 'L',
     brand: '',
-    cat: 'A',
     unitPrice: '',
-    currentStock: '',
+    leadTimeDays: '',
+    notes: '',
     status: 'ACTIVE'
   });
+  const [saveError, setSaveError] = useState('');
 
   // Populate form state when sku prop changes
   useEffect(() => {
@@ -56,12 +57,13 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
         sizeVal: sizeVal,
         sizeUnit: sizeUnit || 'L',
         brand: sku.brand || '',
-        cat: sku.cat || 'A',
-        unitPrice: sku.unitPrice !== undefined ? String(sku.unitPrice) : '',
-        currentStock: sku.currentStock !== undefined ? String(sku.currentStock) : '',
+        unitPrice: sku.unitPrice !== undefined && sku.unitPrice !== null ? String(sku.unitPrice) : '',
+        leadTimeDays: sku.leadTimeDays !== undefined && sku.leadTimeDays !== null ? String(sku.leadTimeDays) : '',
+        notes: sku.notes || '',
         status: sku.status || 'ACTIVE'
       });
       setStep('FORM');
+      setSaveError('');
     }
   }, [sku, isOpen]);
 
@@ -127,11 +129,14 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     if (parseFloat(form.unitPrice) !== parseFloat(sku.unitPrice)) {
       changes.push({ label: 'Unit Price', from: `₱${parseFloat(sku.unitPrice || 0).toFixed(2)}`, to: `₱${parseFloat(form.unitPrice || 0).toFixed(2)}` });
     }
-    if (parseInt(form.currentStock) !== parseInt(sku.currentStock)) {
-      changes.push({ label: 'Stock Quantity', from: `${sku.currentStock || 0} units`, to: `${form.currentStock || 0} units` });
+    if ((form.leadTimeDays ? parseInt(form.leadTimeDays) : null) !== (sku.leadTimeDays ?? null)) {
+      changes.push({ label: 'Lead Time', from: sku.leadTimeDays != null ? `${sku.leadTimeDays} days` : '—', to: form.leadTimeDays ? `${form.leadTimeDays} days` : '—' });
     }
     if (form.status.toUpperCase() !== (sku.status || 'ACTIVE').toUpperCase()) {
       changes.push({ label: 'Status', from: sku.status, to: form.status });
+    }
+    if ((form.notes || '') !== (sku.notes || '')) {
+      changes.push({ label: 'Notes', from: sku.notes || '—', to: form.notes || '—' });
     }
     return changes;
   };
@@ -139,18 +144,25 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
   const changedFields = getChangedFields();
 
   // Confirm changes and save
-  const handleConfirmChanges = () => {
+  const handleConfirmChanges = async () => {
     const updatedSKU = {
       ...sku,
       product: constructFullProduct(),
       brand: form.brand,
       unitPrice: parseFloat(form.unitPrice) || 0,
-      currentStock: parseInt(form.currentStock) || 0,
+      leadTimeDays: form.leadTimeDays ? parseInt(form.leadTimeDays) : null,
+      notes: form.notes,
       status: form.status.toUpperCase()
     };
 
-    if (onSave) {
-      onSave(updatedSKU);
+    setSaveError('');
+    try {
+      if (onSave) {
+        await onSave(updatedSKU);
+      }
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save changes');
+      return;
     }
 
     setStep('SUCCESS');
@@ -247,7 +259,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                   </div>
                 </div>
 
-                {/* Row 4: Unit Price + Stock Quantity */}
+                {/* Row 4: Unit Price + Lead Time */}
                 <div className="edit-form-row two-col">
                   <div className="edit-form-group">
                     <label className="edit-form-label">
@@ -266,14 +278,13 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
 
                   <div className="edit-form-group">
                     <label className="edit-form-label">
-                      STOCK QUANTITY <span className="req-star">*</span>
+                      LEAD TIME (DAYS)
                     </label>
                     <input
                       type="number"
-                      name="currentStock"
-                      value={form.currentStock}
+                      name="leadTimeDays"
+                      value={form.leadTimeDays}
                       onChange={handleChange}
-                      required
                       className="edit-form-input"
                     />
                   </div>
@@ -296,7 +307,21 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                     </select>
                   </div>
                 </div>
+
+                {/* Row 6: Notes */}
+                <div className="edit-form-group full-width">
+                  <label className="edit-form-label">NOTES</label>
+                  <textarea
+                    name="notes"
+                    value={form.notes}
+                    onChange={handleChange}
+                    rows="3"
+                    className="edit-form-input"
+                  ></textarea>
+                </div>
               </div>
+
+              {saveError && <p className="error-text" style={{ textAlign: 'center' }}>{saveError}</p>}
 
               <div className="edit-sku-modal-footer">
                 <button type="button" className="edit-sku-btn-cancel" onClick={handleClose}>
@@ -338,6 +363,8 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                 </div>
               )}
             </div>
+
+            {saveError && <p className="error-text" style={{ textAlign: 'center' }}>{saveError}</p>}
 
             <div className="edit-sku-modal-footer">
               <button type="button" className="edit-sku-btn-back" onClick={handleBackToForm}>

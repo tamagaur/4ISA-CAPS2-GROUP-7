@@ -5,6 +5,10 @@ from backend.deps import TokenPayload, get_current_user, get_db
 
 router = APIRouter(prefix="/bo-monitoring", tags=["bo-monitoring"])
 
+_WEEKDAY_NAMES = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"}
+_PRINCIPAL_BRAND = {"unilever": "Unilever", "delmonte": "Del Monte"}
+
+
 @router.get("")
 def get_bo_monitoring(
     principal: str = Query("all"),
@@ -28,7 +32,7 @@ def get_bo_monitoring(
         params["to_period"] = to_period
 
     incidents_query = text(f"""
-        SELECT 
+        SELECT
             return_slip_num as id,
             principal,
             return_date as date,
@@ -53,7 +57,7 @@ def get_bo_monitoring(
         })
 
     kpi_query = text(f"""
-        SELECT 
+        SELECT
             COUNT(*) as incidents_count,
             COALESCE(SUM(net_amount), 0) as value_lost
         FROM SalesReturn_Fact_Real
@@ -61,12 +65,90 @@ def get_bo_monitoring(
     """)
     kpi_row = db.execute(kpi_query, params).mappings().first()
 
+    purchase_total_query = text(f"""
+        SELECT COALESCE(SUM(net_amount), 0) as purchase_total
+        FROM Purchase_Fact_Real
+        WHERE 1=1 {principal_filter} {period_filter}
+    """)
+    purchase_total_row = db.execute(purchase_total_query, params).mappings().first()
+    purchase_total = float(purchase_total_row["purchase_total"] or 0)
+    value_lost = float(kpi_row["value_lost"])
+    bo_rate_pct = round(value_lost / purchase_total * 100, 2) if purchase_total > 0 else None
+
+    # BO value/count trend per period, plus a real peso-based BO rate
+    # (BO net_amount / Purchase net_amount) — same ratio BO_Monitoring_View
+    # computes, but against the *_Real tables this API actually reads from.
+    # SalesReturn_Fact_Real has no sku/reason/qty column (confirmed against
+    # real staged headers, see analytics/db/schema.sql SalesReturn_Fact
+    # comment), so this is aggregate-only — no per-SKU or per-reason series
+    # exists to compute here.
+    trend_query = text(f"""
+        WITH bo AS (
+            SELECT _period, COUNT(*) AS incident_count, COALESCE(SUM(net_amount), 0) AS bo_value
+            FROM SalesReturn_Fact_Real
+            WHERE return_type = 'BO' {principal_filter} {period_filter}
+            GROUP BY _period
+        ),
+        purchases AS (
+            SELECT _period, COALESCE(SUM(net_amount), 0) AS purchase_value
+            FROM Purchase_Fact_Real
+            WHERE 1=1 {principal_filter} {period_filter}
+            GROUP BY _period
+        )
+        SELECT
+            bo._period AS period,
+            bo.incident_count,
+            bo.bo_value,
+            CASE WHEN purchases.purchase_value > 0
+                 THEN ROUND(bo.bo_value / purchases.purchase_value * 100, 2)
+                 ELSE NULL END AS bo_rate
+        FROM bo
+        LEFT JOIN purchases ON purchases._period = bo._period
+        ORDER BY bo._period
+    """)
+    trend_rows = db.execute(trend_query, params).mappings().all()
+    trend = [
+        {
+            "period": r["period"],
+            "incident_count": int(r["incident_count"]),
+            "value_lost": float(r["bo_value"]),
+            "bo_rate": float(r["bo_rate"]) if r["bo_rate"] is not None else None,
+        }
+        for r in trend_rows
+    ]
+
+    weekday_query = text(f"""
+        SELECT EXTRACT(ISODOW FROM return_date)::int AS dow, COUNT(*) AS count
+        FROM SalesReturn_Fact_Real
+        WHERE return_type = 'BO' {principal_filter} {period_filter}
+        GROUP BY dow
+        ORDER BY dow
+    """)
+    weekday_rows = db.execute(weekday_query, params).mappings().all()
+    weekday_counts = {_WEEKDAY_NAMES[r["dow"]]: int(r["count"]) for r in weekday_rows if r["dow"] in _WEEKDAY_NAMES}
+    weekday_breakdown = [{"day": day, "count": weekday_counts.get(day, 0)} for day in _WEEKDAY_NAMES.values()]
+
+    brand_query = text(f"""
+        SELECT principal, COUNT(*) as count
+        FROM SalesReturn_Fact_Real
+        WHERE return_type = 'BO' {principal_filter} {period_filter}
+        GROUP BY principal
+    """)
+    brand_rows = db.execute(brand_query, params).mappings().all()
+    brand_breakdown = [
+        {"brand": _PRINCIPAL_BRAND.get(r["principal"], r["principal"]), "count": int(r["count"])}
+        for r in brand_rows
+    ]
+
     return {
         "incidents": incidents,
         "kpis": {
             "incidents": int(kpi_row["incidents_count"]),
             "unitsLost": 0,
-            "valueLost": float(kpi_row["value_lost"]),
-            "rate": "0.0%"
-        }
+            "valueLost": value_lost,
+            "rate": f"{bo_rate_pct}%" if bo_rate_pct is not None else "N/A"
+        },
+        "trend": trend,
+        "weekday_breakdown": weekday_breakdown,
+        "brand_breakdown": brand_breakdown,
     }

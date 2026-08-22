@@ -53,7 +53,7 @@ class FakeSession:
             principal = params.get("principal")
             matched = [r for r in self.rows if r["_period"] == period]
             if principal is not None:
-                matched = [r for r in matched if r["_principal"] == principal]
+                matched = [r for r in matched if r["principal"] == principal]
             return FakeResult(matched)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -64,12 +64,12 @@ class FakeSession:
 @pytest.fixture
 def sample_rows():
     return [
-        {"sku_id": "SKU-A", "product_name": "Product A", "tier": "A", "revenue_share": 0.60,
-         "cumulative_share": 0.60, "boundary_flag": False, "_period": "2024-02", "_principal": "unilever"},
-        {"sku_id": "SKU-B", "product_name": "Product B", "tier": "B", "revenue_share": 0.20,
-         "cumulative_share": 0.80, "boundary_flag": True, "_period": "2024-02", "_principal": "unilever"},
-        {"sku_id": "/ACE/BASE", "product_name": None, "tier": "C", "revenue_share": 0.05,
-         "cumulative_share": 0.99, "boundary_flag": False, "_period": "2024-02", "_principal": "delmonte"},
+        {"sku_id": "SKU-A", "product_name": "Product A", "principal": "unilever", "tier": "A", "revenue_share": 0.60,
+         "cumulative_share": 0.60, "boundary_flag": False, "current_stock": 120, "_period": "2024-02"},
+        {"sku_id": "SKU-B", "product_name": "Product B", "principal": "unilever", "tier": "B", "revenue_share": 0.20,
+         "cumulative_share": 0.80, "boundary_flag": True, "current_stock": 40, "_period": "2024-02"},
+        {"sku_id": "/ACE/BASE", "product_name": None, "principal": "delmonte", "tier": "C", "revenue_share": 0.05,
+         "cumulative_share": 0.99, "boundary_flag": False, "current_stock": 0, "_period": "2024-02"},
     ]
 
 

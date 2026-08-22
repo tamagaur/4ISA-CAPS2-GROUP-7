@@ -56,6 +56,20 @@ def _get_engine() -> Engine:
     return _engine
 
 
+def check_db_connection() -> None:
+    """Runs a trivial query against Supabase to confirm SUPABASE_DB_URL is
+    both set and reachable. Called from backend.main's startup hook so a
+    bad connection string fails loudly when the server boots, instead of
+    surfacing as a confusing error on whatever request happens to be
+    first. Raises (RuntimeError if unset, sqlalchemy.exc.* if unreachable)
+    rather than returning a bool — startup should crash, not limp on."""
+    from sqlalchemy import text
+
+    engine = _get_engine()
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+
+
 def get_db() -> Generator[Session, None, None]:
     """Yields a SQLAlchemy session pointed at Supabase. Closed after each
     request regardless of success or failure."""
