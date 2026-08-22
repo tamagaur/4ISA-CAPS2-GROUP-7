@@ -130,6 +130,15 @@ const ABCClassification = () => {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [brandFilter, setBrandFilter] = useState('ALL');
 
+  // Table pagination — the full SKU table can run 600+ rows, which is
+  // slow to render and hard to scan in one scroll. PAGE_SIZE_OPTIONS
+  // lets the user trade off rows-per-page vs. number of pages; default
+  // matches the old "show everything" feel most closely while still
+  // capping the DOM node count per render.
+  const PAGE_SIZE_OPTIONS = [25, 50, 100];
+  const [pageSize, setPageSize] = useState(25);
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Which class's stock-status drill-down is showing below the chart.
   // Defaults to 'C' (same as the old hardcoded behavior) but now the
   // user can click any class's bar — or the tab buttons — to swap it.
@@ -325,6 +334,26 @@ const ABCClassification = () => {
       return matchesSearch && matchesCat && matchesBrand;
     });
   }, [dataWithCumulative, searchQuery, categoryFilter, brandFilter]);
+
+  // Whenever the filtered set changes shape (new search, new filter, or
+  // the page size itself), snap back to page 1 — staying on e.g. page 4
+  // after a filter shrinks the result set would otherwise show a blank
+  // page or an out-of-range slice.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, categoryFilter, brandFilter, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+
+  // Clamp defensively (e.g. if filteredData shrinks between renders
+  // before the reset effect above has run) so slice() below never goes
+  // out of range.
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const paginatedData = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, safeCurrentPage, pageSize]);
 
   const boundaryCount = useMemo(
     () => dataWithCumulative.filter(item => item.nearBoundary).length,
@@ -879,13 +908,13 @@ const ABCClassification = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredData.map((item, index) => (
+              {paginatedData.map((item, index) => (
                 <tr
                   key={item.id}
                   id={`abc-row-${item.id}`}
                   className={highlightedSKUId === item.id ? 'highlighted-row-flash' : ''}
                 >
-                  <td className="abc-row-num">{index + 1}</td>
+                  <td className="abc-row-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
                   <td className="abc-sku-cell">{formatSKU(item.sku)}</td>
                   <td className="abc-product-cell">
                     {(() => {
@@ -927,6 +956,61 @@ const ABCClassification = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination — table can run 600+ rows; only PAGE_SIZE_OPTIONS
+            rows render at once, so the DOM/scroll stays manageable. */}
+        {filteredData.length > 0 && (
+          <div className="abc-pagination-row">
+            <span className="abc-pagination-info">
+              Showing {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, filteredData.length)} of {filteredData.length}
+            </span>
+
+            <div className="abc-pagination-controls">
+              <button
+                className="abc-pagination-btn"
+                onClick={() => setCurrentPage(1)}
+                disabled={safeCurrentPage === 1}
+                title="First page"
+              >
+                «
+              </button>
+              <button
+                className="abc-pagination-btn"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safeCurrentPage === 1}
+              >
+                Prev
+              </button>
+              <span className="abc-pagination-page-label">
+                Page {safeCurrentPage} of {totalPages}
+              </span>
+              <button
+                className="abc-pagination-btn"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safeCurrentPage === totalPages}
+              >
+                Next
+              </button>
+              <button
+                className="abc-pagination-btn"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={safeCurrentPage === totalPages}
+                title="Last page"
+              >
+                »
+              </button>
+            </div>
+
+            <div className="abc-pagination-size">
+              <span>Rows per page:</span>
+              <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
