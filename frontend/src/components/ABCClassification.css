@@ -760,6 +760,10 @@
   color: #dd6b20;
 }
 
+.abc-no-data {
+  color: #a0aec0;
+}
+
 .abc-no-results {
   text-align: center;
   padding: 3rem 1rem !important;
