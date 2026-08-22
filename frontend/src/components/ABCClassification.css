@@ -115,7 +115,7 @@
   line-height: 1.4;
 }
 
-/*  Chart */
+/* Pareto Chart */
 .abc-pareto-container {
   background-color: #ffffff;
   border-radius: 12px;
@@ -224,6 +224,68 @@
   font-size: 0.72rem;
   color: #718096;
 }
+
+/* Class Aggregation Chart + Class C Drill-down layout */
+.abc-analysis-row {
+  display: flex;
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.abc-analysis-chart {
+  flex: 2 1 0;
+  min-width: 0;
+}
+
+.abc-analysis-drilldown {
+  flex: 1 1 0;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 900px) {
+  .abc-analysis-row {
+    flex-direction: column;
+  }
+}
+
+.abc-drilldown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.abc-drilldown-table th {
+  text-align: left;
+  padding: 0.5rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.abc-drilldown-table td {
+  padding: 0.6rem 0.4rem;
+  border-bottom: 1px solid #edf2f7;
+  color: #1a202c;
+  font-weight: 600;
+}
+
+.abc-drilldown-table tr:last-child td {
+  border-bottom: none;
+}
+
+.abc-drilldown-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+}
+
 /* Filters */
 .abc-filters-row {
   display: flex;
@@ -727,5 +789,3 @@
     grid-template-columns: 1fr;
   }
 }
-
-
