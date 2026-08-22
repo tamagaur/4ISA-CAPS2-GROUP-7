@@ -121,7 +121,7 @@ const ABCClassification = () => {
     };
   }, [principal]);
 
-  // Map API shape -> the row shape the rest of this page renders.
+ // Map API shape -> the row shape the rest of this page renders.
   const sourceData = useMemo(
     () =>
       rawData.map((item) => ({
@@ -130,8 +130,11 @@ const ABCClassification = () => {
         product: item.product_name || 'Unknown Product',
         brand: PRINCIPAL_BRAND[item.principal] || item.principal,
         cat: item.tier,
-        revPct: item.revenue_share ?? 0,
-        cumulativePct: item.cumulative_share ?? 0,
+        // revenue_share / cumulative_share come from the API as 0-1 fractions
+        // (see analytics/classification/abc.py); everything downstream here
+        // (table cells, chart axis 0-100, tooltip) expects 0-100 percentages.
+        revPct: (item.revenue_share ?? 0) * 100,
+        cumulativePct: (item.cumulative_share ?? 0) * 100,
         nearBoundary: !!item.boundary_flag,
         status: item.stock_status,
       })),
