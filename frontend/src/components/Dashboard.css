@@ -93,50 +93,6 @@
   min-height: 300px;
 }
 
-/* Merged reorder card — KPICard + AlertsList stacked and visually joined
-   into one card via matching corner radii so the recommendation and the
-   products it refers to read as a single unit. */
-.reorder-merged-card .kpi-card {
-  border-radius: 12px 12px 0 0;
-  box-shadow: none;
-  border-bottom: none;
-  padding-bottom: 1.25rem;
-  flex-shrink: 0;
-}
-
-.reorder-merged-card .kpi-card:hover {
-  transform: none;
-  box-shadow: none;
-}
-
-.reorder-merged-card .alerts-widget {
-  flex: 1;                          /* fill remaining height after KPI tile */
-  border-radius: 0 0 12px 12px;
-  border-top: 1px solid #f1f5f9;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-}
-
-/* Bad orders card — fill the full column height */
-.bad-orders-card .alerts-widget {
-  flex: 1;
-}
-
-.bad-orders-card .alerts-header {
-  align-items: flex-start;
-}
-
-.alerts-title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.alerts-title-summary {
-  font-size: 0.72rem;
-  font-weight: 400;
-  color: #a0aec0;
-}
-
 /* ── Loading — skeleton blocks ─────────────────────────────────────────── */
 .skeleton-card {
   position: relative;
@@ -197,6 +153,13 @@
   color: #a0aec0;
 }
 
+.dashboard-chart-footnote {
+  margin: 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #a0aec0;
+}
+
 /* ── Error — whole-dashboard state ────────────────────────────────────── */
 .dashboard-error-state {
   display: flex;
@@ -234,7 +197,7 @@
 
 /* ── Responsive ────────────────────────────────────────────────────────── */
 
-/* Large → medium: KPIs 2×2, secondary ABC spans full row */
+/* Large → medium: KPIs 2×2, secondary cards 2-up */
 @media (max-width: 1280px) {
   .dashboard-content {
     padding: 0 1.5rem 2rem 1.5rem;
@@ -244,10 +207,6 @@
   }
   .secondary-grid {
     grid-template-columns: 1fr 1fr;
-  }
-  /* ABC chart spans both columns on medium screens */
-  .secondary-grid .secondary-col:first-child {
-    grid-column: 1 / -1;
   }
   .secondary-grid .chart-widget {
     min-height: 240px;
@@ -259,16 +218,9 @@
   .secondary-grid {
     grid-template-columns: 1fr;
   }
-  .secondary-grid .secondary-col:first-child {
-    grid-column: auto;
-  }
   /* Restore auto height when stacked — no need to match siblings */
   .secondary-grid .chart-widget {
     height: 300px;
-    flex: none;
-  }
-  .reorder-merged-card .alerts-widget,
-  .bad-orders-card .alerts-widget {
     flex: none;
   }
 }
