@@ -86,12 +86,26 @@ def get_forecast(
                 FROM unilever_sku_demand_fact_real
                 WHERE product_key = :product_key
                 ORDER BY calendar_month DESC
-                LIMIT 12
             """),
             {"product_key": product_key},
         ).mappings().all()
         actuals = [
             ActualPoint(period=r["calendar_month"], quantity=_safe_float(r["quantity_sold"], 0.0))
+            for r in reversed(actual_rows)
+        ]
+    elif principal == "delmonte":
+        actual_rows = db.execute(
+            text("""
+                SELECT _period, SUM(quantity) as quantity_sold
+                FROM SellOut_Fact_Real
+                WHERE product_key = :product_key
+                GROUP BY _period
+                ORDER BY _period DESC
+            """),
+            {"product_key": product_key},
+        ).mappings().all()
+        actuals = [
+            ActualPoint(period=r["_period"], quantity=_safe_float(r["quantity_sold"], 0.0))
             for r in reversed(actual_rows)
         ]
 

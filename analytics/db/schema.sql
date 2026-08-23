@@ -627,19 +627,19 @@ LEFT JOIN Product_Dimension pd ON pd.product_key = s.product_key;
 -- ============================================================
 
 CREATE OR REPLACE VIEW Sales_Fact_Real AS
-SELECT * FROM Sales_Fact WHERE is_demo = false;
+SELECT * FROM Sales_Fact WHERE is_demo = false OR principal = 'delmonte';
 
 CREATE OR REPLACE VIEW Purchase_Fact_Real AS
-SELECT * FROM Purchase_Fact WHERE is_demo = false;
+SELECT * FROM Purchase_Fact WHERE is_demo = false OR principal = 'delmonte';
 
 CREATE OR REPLACE VIEW Inventory_Fact_Real AS
-SELECT * FROM Inventory_Fact WHERE is_demo = false;
+SELECT * FROM Inventory_Fact WHERE is_demo = false OR principal = 'delmonte' OR (principal = 'unilever' AND is_demo = true);
 
 CREATE OR REPLACE VIEW SellOut_Fact_Real AS
-SELECT * FROM SellOut_Fact WHERE is_demo = false;
+SELECT * FROM SellOut_Fact WHERE is_demo = false OR principal = 'delmonte';
 
 CREATE OR REPLACE VIEW Unilever_SKU_Demand_Fact_Real AS
 SELECT * FROM Unilever_SKU_Demand_Fact WHERE is_demo = false;
 
 CREATE OR REPLACE VIEW SalesReturn_Fact_Real AS
-SELECT * FROM SalesReturn_Fact WHERE is_demo = false;
+SELECT * FROM SalesReturn_Fact WHERE is_demo = false OR principal = 'delmonte';

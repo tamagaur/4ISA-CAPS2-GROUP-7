@@ -44,9 +44,15 @@ def main():
             d.period,
             SUM(d.quantity) as total_quantity
         FROM (
-            SELECT product_key, _period as period, quantity FROM SellOut_Fact
+            SELECT sf.product_key, sf._period as period, sf.quantity 
+            FROM SellOut_Fact_Real sf
+            JOIN Product_Dimension p ON sf.product_key = p.product_key
+            WHERE p.principal = 'delmonte'
+            
             UNION ALL
-            SELECT product_key, calendar_month as period, quantity_sold as quantity FROM Unilever_SKU_Demand_Fact
+            
+            SELECT product_key, calendar_month as period, quantity_sold as quantity 
+            FROM Unilever_SKU_Demand_Fact_Real
         ) d
         JOIN Product_Dimension pd ON d.product_key = pd.product_key
         JOIN ABC_Classification abc ON abc.product_key = pd.product_key
@@ -74,14 +80,14 @@ def main():
     logger.info(f"Found {len(skus)} Category A SKUs to forecast.")
 
     results_to_insert = []
-    
-    # Target date for the forecast (t+1) - assuming latest period + 1 month
-    latest_period = df['period'].max()
-    forecast_date = (latest_period + relativedelta(months=1)).date()
 
     for p_key in skus:
         sku_df = df[df['product_key'] == p_key].sort_values('period')
         sku_code = sku_df['sku_code'].iloc[0]
+        
+        # Target date for the forecast (t+1) relative to THIS SKU's latest actual data
+        sku_latest_period = sku_df['period'].max()
+        forecast_date = (sku_latest_period + relativedelta(months=1)).date()
         
         # Prepare series
         series = sku_df.set_index('period')['quantity']
@@ -134,10 +140,17 @@ def main():
                 forecast = full_fitted.get_forecast(steps=1)
                 f_val = float(forecast.predicted_mean.iloc[0])
                 
+                # Sanity check: prevent astronomical explosions (e.g. 2.4 million on a series that maxes at 5k)
+                historical_max = float(series.max())
+                if f_val > historical_max * 5:
+                    logger.warning(f"SARIMA forecast for {sku_code} exploded ({f_val} > 5x historical max of {historical_max}). Falling back to simple moving average.")
+                    mape = 999.0 # flag as unreliable
+                    f_val = float(series.tail(3).mean())
+                
             except Exception as e:
                 logger.warning(f"SARIMA failed for {sku_code}: {e}. Falling back to simple moving average mock.")
                 mape = 15.0 # Mock passing MAPE
-                f_val = series.tail(3).mean()
+                f_val = float(series.tail(3).mean())
             
             # Record result
             results_to_insert.append((
