@@ -544,7 +544,7 @@ const SKUForecast = () => {
                 </p>
               )}
 
-              {!forecastLoading && !forecastError && forecastResult && forecastResult.forecast.length > 0 && (
+              {!forecastLoading && !forecastError && forecastResult && (
                 <>
                   {/* Model Accuracy Stat Row */}
                   <div className="forecast-accuracy-row">
