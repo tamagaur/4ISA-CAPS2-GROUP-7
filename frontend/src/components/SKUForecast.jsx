@@ -22,10 +22,15 @@ const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
+    const hasActual = payload.some(p => p.dataKey === 'actual');
+    const displayPayload = hasActual 
+        ? payload.filter(p => p.dataKey !== 'forecast')
+        : payload;
+
     return (
       <div className="forecast-tooltip">
         <p className="tooltip-label">{label}</p>
-        {payload.map((entry, index) => {
+        {displayPayload.map((entry, index) => {
           if (entry.dataKey === 'ci') {
             return (
               <p key={index} className="tooltip-item">
@@ -223,10 +228,21 @@ const SKUForecast = () => {
   // rows and no Forecast_Result rows renders an empty chart, not a fake one.
   const chartData = useMemo(() => {
     if (!forecastResult) return [];
-    const actualPoints = (forecastResult.actuals || []).map((a) => ({
+    
+    // Sort actuals to ensure they are chronologically ordered
+    const sortedActuals = [...(forecastResult.actuals || [])].sort((a, b) => a.period.localeCompare(b.period));
+
+    const actualPoints = sortedActuals.map((a) => ({
       label: a.period,
       actual: a.quantity,
     }));
+
+    // Inject the final actual sales quantity into the forecast data key
+    // so Recharts can draw a continuous line between the last actual point and the first forecast point
+    if (actualPoints.length > 0) {
+      actualPoints[actualPoints.length - 1].forecast = actualPoints[actualPoints.length - 1].actual;
+    }
+
     const forecastPoints = (forecastResult.forecast || []).map((f) => ({
       label: f.forecast_date,
       forecast: f.forecast_value,
