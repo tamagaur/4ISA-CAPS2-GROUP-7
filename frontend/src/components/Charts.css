@@ -180,6 +180,28 @@
   border-radius: 50%;
 }
 
+/* Line-chart legend swatches (vs. the dot swatch above, meant for
+   categorical bars) — a short stroke sample matching the line style it
+   represents, solid for the actual series, dashed for a reference line. */
+.legend-line {
+  width: 16px;
+  height: 0;
+  border-top: 2px solid;
+}
+
+.legend-line-dashed {
+  border-top-style: dashed;
+}
+
+.chart-tooltip {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: #1a202c;
+}
+
 .abc-bars {
   display: flex;
   flex-direction: column;

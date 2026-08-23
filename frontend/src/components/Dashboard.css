@@ -61,6 +61,14 @@
   gap: 1.25rem;
 }
 
+/* Error state scoped to just the KPI grid (independent of the chart/
+   secondary-row error below) — spans all 4 columns instead of the
+   whole-page padding the shared .dashboard-error-state normally gets. */
+.kpi-grid-error {
+  grid-column: 1 / -1;
+  padding: 2rem;
+}
+
 /* ── Primary Chart — Cover Trend at full width ─────────────────────────── */
 /* Override the shared chart-widget height for the primary position;
    full-width means we don't need as much vertical space to feel spacious. */
@@ -244,4 +252,24 @@
   .kpi-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Empty-state compact height ──────────────────────────────────────────
+   Deliberately placed after every rule above (including the responsive
+   block) so it wins at every viewport width without needing a duplicate
+   override inside each @media query — same selector specificity as the
+   height/min-height rules above, so source order alone decides, and this
+   needs to be last. No axes/list to fill the space when a section is
+   empty, so it collapses to roughly a third of the normal height — just
+   the header plus the message with comfortable padding. Restored
+   automatically once real data is present, since this class is only
+   applied when it's not. */
+.chart-primary .chart-widget-empty {
+  height: 140px;
+}
+
+.secondary-grid .chart-widget-empty {
+  height: 140px;
+  min-height: 140px;
+  flex: none;
 }

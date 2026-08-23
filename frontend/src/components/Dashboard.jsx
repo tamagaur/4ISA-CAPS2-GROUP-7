@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import KPICard from './KPICard';
 import DateFilter from './DateFilter';
 import { getRecommendations } from '../api/recommendations';
+import { getDashboardData } from '../api/dashboard';
+import { CoverTrendWidget } from './Charts';
 import { Package, Wallet, ShieldAlert, ClipboardCheck } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
-
-const NO_DATA_YET = 'No recommendations yet';
 
 const KPISkeleton = () => (
   <div className="kpi-card skeleton-card">
@@ -26,15 +26,15 @@ const ChartSkeleton = () => (
 
 const EmptyNote = ({ children }) => <p className="dashboard-empty-note">{children}</p>;
 
-const Dashboard = () => {
-  const {
-    startMonth, startYear, endMonth, endYear, principal,
-  } = useOutletContext() || {
-    startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026',
-    principal: 'all',
-  };
+const formatPeso = (value) => `₱${Math.round(value).toLocaleString()}`;
+const formatWeeks = (value) => value.toFixed(1);
 
-  const [items, setItems] = useState([]);
+const Dashboard = () => {
+  const { principal } = useOutletContext() || { principal: 'all' };
+
+  // ── 3-card row data (unchanged) — drives Accept less, Request more,
+  // Projected savings. Left exactly as it was; the chart no longer uses
+  // this fetch (moved to kpiData.cover_series below).
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [retryTick, setRetryTick] = useState(0);
@@ -45,10 +45,7 @@ const Dashboard = () => {
     setError(null);
 
     getRecommendations({ principal, status: 'pending' })
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items || []);
-      })
+      .then(() => {})
       .catch(() => {
         if (cancelled) return;
         setError("Couldn't load data");
@@ -63,21 +60,79 @@ const Dashboard = () => {
   const handleRetry   = () => setRetryTick((t) => t + 1);
   const handleRefresh = () => window.location.reload();
 
-  const hasItems = items.length > 0;
+  // ── Top KPI strip data — independent fetch/loading/error from the
+  // section above, so a failure or slow load in one never blocks the other.
+  const [kpiData, setKpiData] = useState(null);
+  const [kpiLoading, setKpiLoading] = useState(true);
+  const [kpiError, setKpiError] = useState(null);
+  const [kpiRetryTick, setKpiRetryTick] = useState(0);
 
-  // Real, computable straight off RecommendationItem (q_i, urgency) — no
-  // price field exists anywhere in this response (backend/schemas/
-  // recommendations.py says so explicitly), so this is cases, not pesos.
-  const offeredCases = useMemo(
-    () => items.reduce((sum, item) => sum + (item.q_i || 0), 0),
-    [items]
-  );
-  // "Still short" = current_stock below the reorder point — same signal
-  // the backend already derived into urgency (CRITICAL/URGENT vs PLANNED).
-  const shortCount = useMemo(
-    () => items.filter((item) => item.urgency !== 'PLANNED').length,
-    [items]
-  );
+  useEffect(() => {
+    let cancelled = false;
+    setKpiLoading(true);
+    setKpiError(null);
+
+    getDashboardData({ principal })
+      .then((result) => {
+        if (cancelled) return;
+        setKpiData(result);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setKpiError("Couldn't load data");
+      })
+      .finally(() => {
+        if (!cancelled) setKpiLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [principal, kpiRetryTick]);
+
+  const handleKpiRetry = () => setKpiRetryTick((t) => t + 1);
+
+  // Card 1 — Cash tied up in stock. Null exactly when inventory.value is
+  // null (valuation hasn't been loaded) — never shows 0 as if it were empty.
+  const stockValue = kpiData?.inventory?.value ?? null;
+  const cashTiedUp = stockValue === null
+    ? { value: '—', contextLine: 'Inventory valuation not yet loaded' }
+    : { value: formatPeso(stockValue), contextLine: kpiData.period || undefined };
+
+  // Card 2 — Stock above policy. Depends on inventory.weeks_of_cover, which
+  // itself depends on the same valuation as Card 1 — same null reason chain.
+  const weeksOfCover = kpiData?.inventory?.weeks_of_cover ?? null;
+  const policyWeeks = kpiData?.inventory?.policy_weeks ?? 3;
+  let stockAbovePolicy;
+  if (weeksOfCover === null) {
+    stockAbovePolicy = { value: '—', contextLine: 'Depends on inventory valuation' };
+  } else {
+    const weeksOver = weeksOfCover - policyWeeks;
+    stockAbovePolicy = {
+      value: weeksOver <= 0 ? 'Within policy' : `${formatWeeks(weeksOver)} weeks over`,
+      contextLine: `${formatWeeks(weeksOfCover)} weeks held, policy is ${policyWeeks} weeks`,
+    };
+  }
+
+  // Card 3 — Order value. Null exactly when recommendations.order_value is
+  // null (LP optimisation hasn't produced a recommendation yet).
+  const orderValue = kpiData?.recommendations?.order_value ?? null;
+  const orderValueCard = orderValue === null
+    ? { value: '—', contextLine: 'Optimisation model has not been run' }
+    : { value: formatPeso(orderValue), contextLine: `${kpiData.recommendations.product_count} products recommended` };
+
+  // Card 4 — Needs manual review. Null exactly when forecast.unreliable_count
+  // is null (SARIMA forecasting hasn't been run yet).
+  const unreliableCount = kpiData?.forecast?.unreliable_count ?? null;
+  let needsManualReview;
+  if (unreliableCount === null) {
+    needsManualReview = { value: '—', contextLine: 'Forecasting model has not been run' };
+  } else {
+    const totalCount = kpiData.forecast.total_count;
+    const reliableCount = totalCount - unreliableCount;
+    needsManualReview = {
+      value: `${unreliableCount}`,
+      contextLine: `${reliableCount} of ${totalCount} forecasts reliable`,
+    };
+  }
 
   return (
     <div className="dashboard">
@@ -87,7 +142,73 @@ const Dashboard = () => {
             <h2>Inventory <span>pulse</span></h2>
             <DateFilter onRefresh={handleRefresh} />
           </div>
-          <p>Real-time KPIs across SSM's Urdaneta warehouse. Last synced: {startMonth} {startYear} – {endMonth} {endYear}</p>
+          <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
+        </div>
+
+        {/* KPI strip — independent data source (getDashboardData), own
+            loading/error/retry, scoped to this grid only. */}
+        <div className="dashboard-section">
+          <div className="kpi-grid">
+            {kpiLoading ? (
+              <>
+                <KPISkeleton /><KPISkeleton /><KPISkeleton /><KPISkeleton />
+              </>
+            ) : kpiError ? (
+              <div className="dashboard-error-state kpi-grid-error">
+                <p>{kpiError}</p>
+                <button className="dashboard-retry-btn" onClick={handleKpiRetry}>Retry</button>
+              </div>
+            ) : (
+              <>
+                <KPICard
+                  title="Cash tied up in stock"
+                  value={cashTiedUp.value}
+                  metricType="recommendation"
+                  contextLine={cashTiedUp.contextLine}
+                  icon={<Wallet size={20} />}
+                />
+                <KPICard
+                  title="Stock above policy"
+                  value={stockAbovePolicy.value}
+                  metricType="recommendation"
+                  contextLine={stockAbovePolicy.contextLine}
+                  icon={<ShieldAlert size={20} />}
+                />
+                <KPICard
+                  title="Order value"
+                  value={orderValueCard.value}
+                  metricType="recommendation"
+                  contextLine={orderValueCard.contextLine}
+                  icon={<Package size={20} />}
+                />
+                <KPICard
+                  title="Needs manual review"
+                  value={needsManualReview.value}
+                  metricType="recommendation"
+                  contextLine={needsManualReview.contextLine}
+                  icon={<ClipboardCheck size={20} />}
+                />
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Weeks-of-cover chart — same independent data source/loading/error
+            as the KPI strip above (kpiData.cover_series), since both need
+            the same inventory valuation the backend can't compute yet. */}
+        <div className="dashboard-section">
+          <div className="chart-primary">
+            {kpiLoading ? (
+              <ChartSkeleton />
+            ) : kpiError ? (
+              <div className="dashboard-error-state">
+                <p>{kpiError}</p>
+                <button className="dashboard-retry-btn" onClick={handleKpiRetry}>Retry</button>
+              </div>
+            ) : (
+              <CoverTrendWidget coverSeries={kpiData?.cover_series ?? []} policyTarget={policyWeeks} />
+            )}
+          </div>
         </div>
 
         {error ? (
@@ -97,77 +218,19 @@ const Dashboard = () => {
           </div>
         ) : (
           <>
-            {/* KPI strip. Offered-by-suppliers and Still-short are wired to
-                real fields on RecommendationItem. Capital-saved and
-                Needs-manual-review have no source anywhere in the API yet
-                (no price field, no bulk forecast-reliability endpoint) so
-                they always render the empty state, independent of row
-                count. */}
-            <div className="dashboard-section">
-              <div className="kpi-grid">
-                {loading ? (
-                  <>
-                    <KPISkeleton /><KPISkeleton /><KPISkeleton /><KPISkeleton />
-                  </>
-                ) : (
-                  <>
-                    <KPICard
-                      title="Offered by suppliers"
-                      value={hasItems ? `${Math.round(offeredCases).toLocaleString()} cases` : '—'}
-                      metricType="recommendation"
-                      contextLine={hasItems ? `${items.length} products` : NO_DATA_YET}
-                      icon={<Package size={20} />}
-                    />
-                    <KPICard
-                      title="Capital saved"
-                      value="—"
-                      metricType="recommendation"
-                      contextLine={NO_DATA_YET}
-                      icon={<Wallet size={20} />}
-                    />
-                    <KPICard
-                      title="Still short"
-                      value={hasItems ? `${shortCount} products` : '—'}
-                      metricType="recommendation"
-                      contextLine={hasItems ? `of ${items.length} total` : NO_DATA_YET}
-                      icon={<ShieldAlert size={20} />}
-                    />
-                    <KPICard
-                      title="Needs manual review"
-                      value="—"
-                      metricType="recommendation"
-                      contextLine={NO_DATA_YET}
-                      icon={<ClipboardCheck size={20} />}
-                    />
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Supply versus demand — no peso-impact-per-product field
-                exists in the API, so this stays an empty state regardless
-                of row count. */}
-            <div className="dashboard-section">
-              <div className="chart-primary">
-                {loading ? (
-                  <ChartSkeleton />
-                ) : (
-                  <div className="chart-widget">
-                    <div className="chart-header">
-                      <div className="chart-title-area">
-                        <h4>Supply versus demand</h4>
-                        <p>Comparing what suppliers offered against what demand requires</p>
-                      </div>
-                    </div>
-                    <EmptyNote>Order recommendations have not been generated yet</EmptyNote>
-                    <p className="dashboard-chart-footnote">{items.length} products in total</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Accept less / Request more / Projected savings — same gap:
-                no offer-vs-accept split and no cost fields exist yet. */}
+            {/* Order less of these / Order these now / Products to watch —
+                real, well-defined sources (lp_recommendation.q_i vs current
+                stock; inventory vs lp_recommendation.rop_i;
+                forecast_result.mape >= 0.20), but lp_recommendation and
+                forecast_result both have 0 rows, so all three stay in
+                their empty state until those models run. First two share
+                the optimisation-model blocker (both read lp_recommendation);
+                the third names the forecasting-model blocker instead
+                (reads forecast_result). chart-widget-empty is unconditional
+                here (not data-driven, unlike the KPI/chart sections above)
+                because none of these three has a live fetch behind it yet —
+                once one is wired, its className needs to go back to plain
+                "chart-widget" when that card actually has data. */}
             <div className="dashboard-section">
               <div className="secondary-grid">
                 {loading ? (
@@ -179,35 +242,36 @@ const Dashboard = () => {
                 ) : (
                   <>
                     <div className="secondary-col">
-                      <div className="chart-widget">
+                      <div className="chart-widget chart-widget-empty">
                         <div className="chart-header">
                           <div className="chart-title-area">
-                            <h4>Accept less</h4>
-                            <p>Products where the offer exceeds demand</p>
+                            <h4>Order less of these</h4>
+                            <p>Stock already above what demand needs</p>
                           </div>
                         </div>
-                        <EmptyNote>Waiting for the forecasting and optimisation run</EmptyNote>
+                        <EmptyNote>Not available yet — the optimisation model has not been run</EmptyNote>
                       </div>
                     </div>
                     <div className="secondary-col">
-                      <div className="chart-widget">
+                      <div className="chart-widget chart-widget-empty">
                         <div className="chart-header">
                           <div className="chart-title-area">
-                            <h4>Request more</h4>
-                            <p>Products where the offer falls short</p>
+                            <h4>Order these now</h4>
+                            <p>Stock below the reorder point</p>
                           </div>
                         </div>
-                        <EmptyNote>Waiting for the forecasting and optimisation run</EmptyNote>
+                        <EmptyNote>Not available yet — the optimisation model has not been run</EmptyNote>
                       </div>
                     </div>
                     <div className="secondary-col">
-                      <div className="chart-widget">
+                      <div className="chart-widget chart-widget-empty">
                         <div className="chart-header">
                           <div className="chart-title-area">
-                            <h4>Projected savings</h4>
+                            <h4>Products to watch</h4>
+                            <p>Forecast too irregular to rely on</p>
                           </div>
                         </div>
-                        <EmptyNote>Waiting for the forecasting and optimisation run</EmptyNote>
+                        <EmptyNote>Not available yet — the forecasting model has not been run</EmptyNote>
                       </div>
                     </div>
                   </>
