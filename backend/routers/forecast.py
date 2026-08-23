@@ -32,12 +32,11 @@ def get_forecast(
     if principal not in ("unilever", "delmonte"):
         raise HTTPException(status_code=400, detail="principal must be 'unilever' or 'delmonte'")
 
-    id_column = "sku_code" if principal == "unilever" else "category_path"
     product_row = db.execute(
-        text(f"""
+        text("""
             SELECT product_key, product_name
             FROM Product_Dimension
-            WHERE principal = :principal AND {id_column} = :sku_id
+            WHERE principal = :principal AND (sku_code = :sku_id OR category_path = :sku_id)
         """),
         {"principal": principal, "sku_id": sku_id},
     ).mappings().first()
@@ -45,6 +44,18 @@ def get_forecast(
         raise HTTPException(status_code=404, detail=f"No {principal} product found for '{sku_id}'")
 
     product_key = product_row["product_key"]
+
+    def _safe_float(val, default=None):
+        if val is None:
+            return default
+        try:
+            f = float(val)
+            import math
+            if math.isnan(f) or math.isinf(f):
+                return default
+            return f
+        except (ValueError, TypeError):
+            return default
 
     forecast_rows = db.execute(
         text("""
@@ -58,10 +69,10 @@ def get_forecast(
     forecast = [
         ForecastPoint(
             forecast_date=r["forecast_date"],
-            forecast_value=float(r["forecast_value"]),
-            confidence_lower=float(r["confidence_lower"]) if r["confidence_lower"] is not None else None,
-            confidence_upper=float(r["confidence_upper"]) if r["confidence_upper"] is not None else None,
-            mape=float(r["mape"]) if r["mape"] is not None else None,
+            forecast_value=_safe_float(r["forecast_value"], 0.0),
+            confidence_lower=_safe_float(r["confidence_lower"]),
+            confidence_upper=_safe_float(r["confidence_upper"]),
+            mape=_safe_float(r["mape"]),
             model_params=r["model_params"],
         )
         for r in forecast_rows
@@ -80,7 +91,7 @@ def get_forecast(
             {"product_key": product_key},
         ).mappings().all()
         actuals = [
-            ActualPoint(period=r["calendar_month"], quantity=float(r["quantity_sold"] or 0))
+            ActualPoint(period=r["calendar_month"], quantity=_safe_float(r["quantity_sold"], 0.0))
             for r in reversed(actual_rows)
         ]
 
@@ -91,3 +102,4 @@ def get_forecast(
         actuals=actuals,
         forecast=forecast,
     )
+
