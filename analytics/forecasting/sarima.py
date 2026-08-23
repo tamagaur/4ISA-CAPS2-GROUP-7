@@ -196,8 +196,6 @@ def grid_search_sarima(
                     train,
                     order=order,
                     seasonal_order=seasonal_order,
-                    enforce_stationarity=False,
-                    enforce_invertibility=False,
                 )
                 fitted = model.fit(disp=False)
 
