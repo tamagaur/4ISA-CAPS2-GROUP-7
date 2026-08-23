@@ -1,16 +1,15 @@
 .chart-widget {
   background-color: #ffffff;
   border-radius: 12px;
-  padding: 2rem;
+  padding: 20px;
   border: 1px solid #e2e8f0;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
-  height: 480px;
 }
 
 .chart-header {
-  margin-bottom: 1.25rem;
+  margin-bottom: 12px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -28,6 +27,13 @@
   font-size: 0.95rem;
   color: #1a202c;
   font-weight: 600;
+}
+
+/* Hero chart's own heading — a touch larger than the bottom panels' since
+   it leads the page, scoped via .chart-primary so it doesn't bump the
+   other three chart-widget headings too. */
+.chart-primary .chart-header h4 {
+  font-size: 1.15rem;
 }
 
 .chart-header p {
@@ -268,5 +274,11 @@
   font-size: 0.72rem;
   color: #718096;
   line-height: 1.4;
+}
+
+.allocation-subset-caption {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: #a0aec0;
 }
 

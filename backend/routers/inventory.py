@@ -33,8 +33,8 @@ def get_inventory_current(
             i.principal,
             pd.product_name,
             SUM(i.quantity_on_hand) as current_stock
-        FROM Inventory_Fact_Real i
-        JOIN Product_Dimension pd ON i.product_key = pd.product_key
+        FROM inventory_fact_real i
+        JOIN product_dimension pd ON i.product_key = pd.product_key
         WHERE 1=1 {principal_filter} {period_filter}
         GROUP BY i.sku_code, i.principal, pd.product_name
     """)
@@ -86,7 +86,7 @@ def get_inventory_movement(
             principal,
             units_received as qty,
             'RECEIVED' as type
-        FROM Purchase_Fact_Real
+        FROM purchase_fact_real
         WHERE 1=1 {principal_filter} {period_filter}
         LIMIT 50
     """)
@@ -100,7 +100,7 @@ def get_inventory_movement(
             principal,
             net_amount as qty, -- Sales_Fact_Real has no qty, use amount as proxy
             'DISPATCHED' as type
-        FROM Sales_Fact_Real
+        FROM sales_fact_real
         WHERE 1=1 {principal_filter} {period_filter}
         LIMIT 50
     """)

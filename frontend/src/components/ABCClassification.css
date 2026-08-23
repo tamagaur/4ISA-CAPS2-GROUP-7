@@ -198,6 +198,145 @@
   font-weight: 600;
 }
 
+.abc-class-summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+  text-align: center;
+}
+
+.abc-class-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.abc-class-summary-headline {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.abc-class-summary-archetype {
+  font-size: 0.72rem;
+  color: #718096;
+}
+
+/* Class Aggregation Chart + Class C Drill-down layout */
+.abc-analysis-row {
+  display: flex;
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.abc-analysis-chart {
+  flex: 2 1 0;
+  min-width: 0;
+}
+
+.abc-analysis-drilldown {
+  flex: 1 1 0;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 900px) {
+  .abc-analysis-row {
+    flex-direction: column;
+  }
+}
+
+.abc-drilldown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.abc-drilldown-table th {
+  text-align: left;
+  padding: 0.5rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.abc-drilldown-table td {
+  padding: 0.6rem 0.4rem;
+  border-bottom: 1px solid #edf2f7;
+  color: #1a202c;
+  font-weight: 600;
+}
+
+.abc-drilldown-table tr:last-child td {
+  border-bottom: none;
+}
+
+.abc-drilldown-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+}
+
+/* Interactive drill-down: class tabs + click hint under the chart */
+.abc-drilldown-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  color: #a0aec0;
+  text-align: center;
+}
+
+.abc-drilldown-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+}
+
+.abc-drilldown-tab {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #f7fafc;
+  color: #718096;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.abc-drilldown-tab:hover {
+  background: #edf2f7;
+}
+
+/* Colors mirror COLORS.abcA/abcB/abcC in theme/colors.js so a tab always
+   reads as the same color as its class's bar in the chart above. */
+.abc-drilldown-tab.active.abc-drilldown-tab-a {
+  background: #6B2C5F;
+  border-color: #6B2C5F;
+  color: #fff;
+}
+
+.abc-drilldown-tab.active.abc-drilldown-tab-b {
+  background: #B565A0;
+  border-color: #B565A0;
+  color: #fff;
+}
+
+.abc-drilldown-tab.active.abc-drilldown-tab-c {
+  background: #EBC9E1;
+  border-color: #EBC9E1;
+  color: #4a2540;
+}
+
 /* Filters */
 .abc-filters-row {
   display: flex;
@@ -672,11 +811,102 @@
   color: #dd6b20;
 }
 
+.abc-no-data {
+  color: #a0aec0;
+}
+
 .abc-no-results {
   text-align: center;
   padding: 3rem 1rem !important;
   color: #a0aec0;
   font-style: italic;
+}
+
+/* Pagination */
+.abc-pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 0.7rem 1.2rem;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
+}
+
+.abc-pagination-info {
+  font-size: 0.78rem;
+  color: #718096;
+  white-space: nowrap;
+}
+
+.abc-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.abc-pagination-btn {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4a5568;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.abc-pagination-btn:hover:not(:disabled) {
+  background-color: #f7fafc;
+  border-color: #cbd5e1;
+}
+
+.abc-pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.abc-pagination-page-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1a202c;
+  white-space: nowrap;
+  padding: 0 0.3rem;
+}
+
+.abc-pagination-size {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #718096;
+  white-space: nowrap;
+}
+
+.abc-pagination-size select {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #1a202c;
+  background-color: #ffffff;
+  cursor: pointer;
+  outline: none;
+}
+
+@media (max-width: 768px) {
+  .abc-pagination-row {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .abc-pagination-controls {
+    justify-content: center;
+  }
 }
 
 /* Responsive */
@@ -701,5 +931,3 @@
     grid-template-columns: 1fr;
   }
 }
-
-

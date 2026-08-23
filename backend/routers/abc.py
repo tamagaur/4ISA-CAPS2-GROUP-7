@@ -19,9 +19,26 @@ product shares one global period).
 tier_summary (backlog #44) is computed here rather than trusted from
 individual rows, so it can never silently drift from what `items`
 actually contains.
+
+Fixed 2026-08: stock_status was previously `random.choices(...)` — a
+placeholder that re-rolled a fake status on every request instead of
+reading real inventory. Replaced with the same real, deterministic rule
+GET /inventory already uses (backend/routers/inventory.py), extended to
+prefer each SKU's actual reorder point (from the latest pending
+LP_Recommendation — same source SKUManagement/ReorderRecommendations
+read) over the flat 100-unit fallback when one exists.
+
+Fixed 2026-08 (again): current_stock used to COALESCE a missing
+Inventory_Fact_Real row to 0, which _stock_status then read as
+CRITICAL — but "no inventory record for this product_key" and
+"confirmed zero stock" are different facts. Inventory_Fact_Real is a
+partial load as of 2025-12 (~509 of ~1,628 ABC-classified products have
+a row at all; more coverage expected, per Yuan), so most products
+legitimately have no match here yet. current_stock is now left NULL
+when there's no match, and stock_status reports "NO DATA" instead of
+silently fabricating CRITICAL.
 """
 from __future__ import annotations
-import random
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
@@ -33,6 +50,25 @@ from backend.schemas.abc import ABCItem, ABCResponse, TierSummary
 router = APIRouter(prefix="/abc", tags=["abc"])
 
 
+def _stock_status(current_stock: float | None, reorder_point: float | None) -> str:
+    """Real, deterministic stock status — no simulation, no fabricated
+    zero. Mirrors GET /inventory's rule (current_stock > 100 -> IN STOCK,
+    > 0 -> LOW, else CRITICAL), but uses the SKU's own reorder_point as
+    the LOW/IN STOCK cutoff instead of the flat 100-unit default whenever
+    a pending LP_Recommendation exists for it — a real per-SKU threshold,
+    not a guess. current_stock=None means Inventory_Fact_Real simply has
+    no row for this product yet (partial load) — reported as its own
+    "NO DATA" status, never coerced into CRITICAL.
+    """
+    if current_stock is None:
+        return "NO DATA"
+    if current_stock <= 0:
+        return "CRITICAL"
+    if reorder_point is not None:
+        return "IN STOCK" if current_stock > reorder_point else "LOW"
+    return "IN STOCK" if current_stock > 100 else "LOW"
+
+
 @router.get("", response_model=ABCResponse)
 def get_abc(
     principal: str | None = Query(None, description="Filter to 'unilever' or 'delmonte'. Omit for both."),
@@ -42,7 +78,7 @@ def get_abc(
 ) -> ABCResponse:
     period = classification_period
     if period is None:
-        row = db.execute(text("SELECT MAX(classification_period) AS p FROM ABC_Classification")).mappings().first()
+        row = db.execute(text("SELECT MAX(classification_period) AS p FROM abc_classification")).mappings().first()
         period = row["p"] if row else None
         if period is None:
             return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[])
@@ -51,12 +87,27 @@ def get_abc(
         SELECT
             COALESCE(pd.sku_code, '') AS sku_id,
             pd.product_name,
+            ac.principal,
             ac.tier,
             ac.revenue_share,
             ac.cumulative_share,
-            ac.boundary_flag
-        FROM ABC_Classification ac
-        JOIN Product_Dimension pd ON pd.product_key = ac.product_key
+            ac.boundary_flag,
+            inv.current_stock AS current_stock,
+            rop.rop_i AS reorder_point
+        FROM abc_classification ac
+        JOIN product_dimension pd ON pd.product_key = ac.product_key
+        LEFT JOIN (
+            SELECT product_key, SUM(quantity_on_hand) AS current_stock
+            FROM inventory_fact_real
+            WHERE _period = (SELECT MAX(_period) FROM inventory_fact_real)
+            GROUP BY product_key
+        ) inv ON inv.product_key = ac.product_key
+        LEFT JOIN (
+            SELECT DISTINCT ON (product_key) product_key, rop_i
+            FROM lp_recommendation
+            WHERE status = 'pending'
+            ORDER BY product_key, planning_cycle_date DESC
+        ) rop ON rop.product_key = ac.product_key
         WHERE ac.classification_period = :period
     """
     params: dict = {"period": period}
@@ -70,14 +121,16 @@ def get_abc(
         ABCItem(
             sku_id=r["sku_id"] or "",
             product_name=r["product_name"],
+            principal=r["principal"],
             tier=r["tier"],
             revenue_share=r["revenue_share"],
             cumulative_share=r["cumulative_share"],
             boundary_flag=bool(r["boundary_flag"]),
-            status=random.choices(
-                ["IN STOCK", "LOW", "CRITICAL"],
-                weights=[0.6, 0.3, 0.1] if r["tier"] == "A" else ([0.4, 0.4, 0.2] if r["tier"] == "B" else [0.2, 0.3, 0.5])
-            )[0]
+            current_stock=float(r["current_stock"]) if r["current_stock"] is not None else None,
+            stock_status=_stock_status(
+                float(r["current_stock"]) if r["current_stock"] is not None else None,
+                float(r["reorder_point"]) if r["reorder_point"] is not None else None,
+            ),
         )
         for r in rows
     ]

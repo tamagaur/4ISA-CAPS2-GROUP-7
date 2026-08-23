@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import {
-  ComposedChart, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ComposedChart, BarChart, Bar, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
 import { CHART_COLORS, STATUS_TIERS, COLORS } from '../theme/colors';
@@ -122,130 +122,140 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
   );
 };
 
-// Instruction per tier — same for every principal, since the tier's meaning
-// (not the grain) is what determines the action.
-const TIER_INSTRUCTIONS = {
-  A: 'Watch closely — never run out',
-  B: 'Check monthly',
-  C: "Don't tie up cash here",
-};
+// ₱500k / ₱1.2M / ₱0 — compact currency, unsigned (callers prepend a sign
+// where one is needed). Shared by the axis ticks and the bar-end labels so
+// the two can never disagree on formatting.
+function formatCompactPesos(value) {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) {
+    const millions = abs / 1_000_000;
+    return `₱${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;
+  }
+  if (abs >= 1_000) return `₱${Math.round(abs / 1000)}k`;
+  return `₱${Math.round(abs)}`;
+}
 
-// abc: { grain: 'sku' | 'category' | 'mixed', tiers: [{ tier, sku_count, revenue_share }] }
-// Components branch on grain, never on the principal name — see the label
-// and note below. Rendered as 3 horizontal bars rather than a curve: with
-// only 3 tiers (as few as 12 items for Del Monte) a Pareto curve implies a
-// SKU-count of data this widget doesn't have — that shape stays on the ABC
-// Classification page, which has the real ranked per-row data to justify it.
-export const ABCClassificationWidget = ({ abc }) => {
-  const grain = abc?.grain ?? 'sku';
-  const tiers = abc?.tiers ?? [];
-  const unitLabel = grain === 'sku' ? 'SKUs' : grain === 'category' ? 'categories' : 'items';
-  const showGrainNote = grain === 'category' || grain === 'mixed';
-
+const AllocationTooltip = ({ active, payload }) => {
+  if (!active || !payload || !payload.length) return null;
+  const row = payload[0].payload;
+  const shortfall = row.variancePesos < 0;
   return (
-    <div className="chart-widget">
-      <div className="chart-header">
-        <div className="chart-title-area">
-          <h4>ABC Classification</h4>
-        </div>
-        <div className="chart-header-right">
-          <span style={{ fontSize: '0.75rem', color: '#a0aec0' }}>By revenue share</span>
-        </div>
-      </div>
-
-      <div className="chart-container abc-bars">
-        {tiers.map((t, i) => (
-          <div className="abc-bar-row" key={t.tier}>
-            <div className="abc-bar-header">
-              <span className="abc-bar-label" style={{ color: CHART_COLORS.abcRamp[i] }}>Class {t.tier}</span>
-              <span className="abc-bar-count">{t.sku_count} {unitLabel}</span>
-              <span className="abc-bar-share">{t.revenue_share}% revenue</span>
-            </div>
-            <div className="abc-bar-track">
-              <div className="abc-bar-fill" style={{ width: `${t.revenue_share}%`, backgroundColor: CHART_COLORS.abcRamp[i] }} />
-            </div>
-            <p className="abc-bar-instruction">{TIER_INSTRUCTIONS[t.tier]}</p>
-          </div>
-        ))}
-      </div>
-
-      {showGrainNote && (
-        <p className="abc-grain-note">
-          Del Monte is analysed at category level — no SKU-level data is available from this principal
-        </p>
-      )}
+    <div style={{
+      backgroundColor: '#ffffff', border: '1px solid #e2e8f0', padding: '0.6rem 0.8rem',
+      borderRadius: '8px', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.08)',
+    }}>
+      <p style={{ fontWeight: 700, color: '#1a202c', margin: '0 0 0.3rem 0', fontSize: '0.8rem' }}>{row.sku}</p>
+      <p style={{ margin: '0.1rem 0', fontSize: '0.75rem', color: '#4a5568' }}>Allocation: {row.allocationCases} cases</p>
+      <p style={{ margin: '0.1rem 0', fontSize: '0.75rem', color: '#4a5568' }}>Forecast: {row.forecastCases} cases</p>
+      <p style={{
+        margin: '0.35rem 0 0 0', fontSize: '0.78rem', fontWeight: 700,
+        color: shortfall ? COLORS.critical : COLORS.warning,
+      }}>
+        {shortfall ? '−' : '+'}{Math.abs(row.varianceCases)} cases · {shortfall ? '−' : '+'}{formatCompactPesos(row.variancePesos)}
+      </p>
     </div>
   );
 };
 
-// Bad Order Trend — stacked bar chart by reason (Expiry / Transport Damage /
-// Storage Issue). Source: SalesReturn_Fact grouped by (week, return_type).
-// Colors are from the shared palette — deliberately not red, since red is
-// reserved for chart-layer alert markers (policy reference lines, etc.).
-// Expiry → amber (warning), Transport Damage → teal (dispatched),
-// Storage Issue → violet (forecast). All three avoid status-tier red.
-export const BadOrderTrendWidget = ({ badOrderSeries = [] }) => {
-  const reasonLabels = {
-    expiry:           'Expiry',
-    transport_damage: 'Transport Damage',
-    storage_issue:    'Storage Issue',
-  };
-  const reasonColors = {
-    expiry:           COLORS.warning,    // amber
-    transport_damage: COLORS.dispatched, // teal
-    storage_issue:    COLORS.forecast,   // violet
-  };
+// Tighter than a typical single-purpose bar chart on purpose: showing
+// every shortfall (Fix 2) can put up to 12 rows in this chart for "All
+// principals", and the page still has to fit a 900px-tall viewport with
+// no scroll, so per-row height has to shrink as the row count can grow.
+const BAR_HEIGHT = 16;
+const BAR_GAP = 6;
 
-  const renderLegend = () => (
-    <ul className="custom-legend" style={{ marginTop: '0.75rem' }}>
-      {Object.entries(reasonLabels).map(([key, label]) => (
-        <li key={key} className="legend-item">
-          <span className="legend-color" style={{ backgroundColor: reasonColors[key] }} />
-          {label}
-        </li>
-      ))}
-    </ul>
-  );
+// Round outer tick candidates (each with a clean half, e.g. 600000 -> its
+// own ticks land on 300000) — picking from this list instead of scaling
+// the raw data max is what keeps the axis reading "₱600k / ₱300k / ₱0"
+// instead of an arbitrary "₱646k / ₱270k / ₱0".
+const NICE_OUTER_TICKS = [
+  50_000, 100_000, 150_000, 200_000, 300_000, 400_000, 600_000, 800_000,
+  1_000_000, 1_500_000, 2_000_000, 3_000_000, 5_000_000, 7_500_000, 10_000_000,
+];
+function niceOuterTick(maxAbs) {
+  const padded = maxAbs * 1.1;
+  return NICE_OUTER_TICKS.find((t) => t >= padded) || Math.ceil(padded / 1_000_000) * 1_000_000;
+}
+
+// Allocation vs Forecast — diverging horizontal bar, one bar per SKU
+// centred on a zero axis. Left/negative = allocation is below forecast
+// (shortfall, stockout risk, red); right/positive = allocation exceeds
+// forecast (excess, trapped capital, amber). Sorted defensively here (not
+// just trusting mockData's own ordering) by signed peso variance ascending
+// — most-negative first, most-positive last — so the bars always taper
+// into a clean arrow instead of zigzagging, regardless of what order the
+// data happens to arrive in.
+//
+// classACount comes from the caller (it isn't in `rows` itself, which is
+// already capped to the top 5 by impact) and drives the "N products in
+// total" caption below the chart — the chart's job is scale, not detail:
+// no bar-end value labels (the exact peso figures live in the "Accept
+// less"/"Request more" cards below instead, so they aren't duplicated
+// here) and no per-side axis captions.
+export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
+  const sortedRows = [...rows].sort((a, b) => a.variancePesos - b.variancePesos);
+
+  const values = sortedRows.map((r) => r.variancePesos);
+  const maxAbsValue = Math.max(1, ...values.map((v) => Math.abs(v)));
+  const outerTick = niceOuterTick(maxAbsValue);
+  const domain = [-outerTick, outerTick];
+  const axisTicks = [-outerTick, -outerTick / 2, 0, outerTick / 2, outerTick];
+  const tickFormatter = (v) => (v < 0 ? `−${formatCompactPesos(v)}` : formatCompactPesos(v));
+
+  const plotHeight = sortedRows.length * (BAR_HEIGHT + BAR_GAP);
+  const chartHeight = plotHeight + 40; // + room for the x-axis tick row
 
   return (
     <div className="chart-widget">
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Bad Order Trend</h4>
-          <p>Weekly bad order value (₱k) by incident reason — from SalesReturn records</p>
+          <h4>Supply versus demand</h4>
+          <p>Comparing what suppliers offered against what demand requires</p>
         </div>
       </div>
 
-      <div className="chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={{ flex: 1 }}>
-          <ResponsiveContainer width="99%" height="100%">
-            <BarChart data={badOrderSeries} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-              <XAxis
-                dataKey="period"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
-                dy={6}
-              />
-              <YAxis
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
-                label={{ value: '₱k', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
-              />
-              <Tooltip
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                formatter={(value, name) => [`₱${value}k`, reasonLabels[name] || name]}
-              />
-              <Bar dataKey="expiry"           name="expiry"           stackId="bo" fill={reasonColors.expiry}           isAnimationActive={false} />
-              <Bar dataKey="transport_damage" name="transport_damage" stackId="bo" fill={reasonColors.transport_damage} isAnimationActive={false} />
-              <Bar dataKey="storage_issue"    name="storage_issue"    stackId="bo" fill={reasonColors.storage_issue}    radius={[3, 3, 0, 0]} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        {renderLegend()}
+      <div className="chart-container">
+        <ResponsiveContainer width="99%" height={chartHeight}>
+          <BarChart
+            data={sortedRows}
+            layout="vertical"
+            barSize={BAR_HEIGHT}
+            barCategoryGap={BAR_GAP}
+            margin={{ top: 10, right: 60, left: 0, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={CHART_COLORS.gridline} />
+            <XAxis
+              type="number"
+              domain={domain}
+              ticks={axisTicks}
+              tickFormatter={tickFormatter}
+              tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="sku"
+              width={190}
+              tick={{ fontSize: 11, fill: '#4a5568', textAnchor: 'end' }}
+              tickMargin={6}
+              axisLine={false}
+              tickLine={false}
+            />
+            <ReferenceLine x={0} stroke="#cbd5e0" />
+            <Tooltip content={<AllocationTooltip />} />
+            <Bar dataKey="variancePesos" radius={[3, 3, 3, 3]} isAnimationActive={false}>
+              {sortedRows.map((r) => (
+                <Cell key={r.sku} fill={r.variancePesos < 0 ? COLORS.critical : COLORS.warning} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
+
+      {typeof classACount === 'number' && (
+        <p className="allocation-subset-caption">{classACount} products in total</p>
+      )}
     </div>
   );
 };

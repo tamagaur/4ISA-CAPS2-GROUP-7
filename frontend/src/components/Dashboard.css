@@ -8,17 +8,16 @@
 }
 
 .dashboard-content {
-  padding: 0 2.5rem 3rem 2.5rem;
+  padding: 0 24px 24px 24px;
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
+  gap: 16px;
 }
 
 .dashboard-header {
-  margin-bottom: 0.25rem;
+  margin-bottom: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
 .dashboard-title-row {
@@ -42,12 +41,6 @@
   font-size: 1.75rem;
 }
 
-.dashboard-header p {
-  color: #a0aec0;
-  font-size: 0.8rem;
-  margin: 0;
-}
-
 /* Section groups — each band separated by gap on .dashboard-content */
 .dashboard-section {
   display: flex;
@@ -58,32 +51,17 @@
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1.25rem;
-}
-
-/* Error state scoped to just the KPI grid (independent of the chart/
-   secondary-row error below) — spans all 4 columns instead of the
-   whole-page padding the shared .dashboard-error-state normally gets. */
-.kpi-grid-error {
-  grid-column: 1 / -1;
-  padding: 2rem;
-}
-
-/* ── Primary Chart — Cover Trend at full width ─────────────────────────── */
-/* Override the shared chart-widget height for the primary position;
-   full-width means we don't need as much vertical space to feel spacious. */
-.chart-primary .chart-widget {
-  height: 300px;
+  gap: 12px;
 }
 
 /* ── Secondary Grid — 3 equal columns, all same height ────────────────── */
-/* align-items: stretch makes every cell fill the tallest column's height.
-   Each .secondary-col is a flex container so its children can fill it
-   with flex: 1, keeping all three cards visually level at the bottom. */
+/* align-items: stretch makes every cell fill the tallest column's height —
+   the only mechanism used for equal-height panels; none of the three is
+   individually padded or given a min-height to force a match. */
 .secondary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
+  gap: 12px;
   align-items: stretch;
 }
 
@@ -93,119 +71,100 @@
   min-width: 0;
 }
 
-/* ABC chart: grow to fill its column instead of a fixed height,
-   so it always matches the tallest sibling (reorder or bad-orders). */
+/* Bottom panels use a tighter padding than the hero chart card. */
 .secondary-grid .chart-widget {
-  height: auto;
   flex: 1;
-  min-height: 300px;
+  padding: 16px;
 }
 
-/* ── Loading — skeleton blocks ─────────────────────────────────────────── */
-.skeleton-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.skeleton-line {
-  background: linear-gradient(90deg, #edf2f7 25%, #e2e8f0 37%, #edf2f7 63%);
-  background-size: 400% 100%;
-  animation: skeleton-shimmer 1.4s ease infinite;
-  border-radius: 6px;
-}
-
-.skeleton-line-title {
-  width: 40%;
-  height: 0.7rem;
-  margin-bottom: 1rem;
-}
-
-.skeleton-line-value {
-  width: 60%;
-  height: 2.2rem;
-  margin-bottom: 0.75rem;
-}
-
-.skeleton-line-subtext {
-  width: 50%;
-  height: 0.75rem;
-}
-
-.skeleton-line-row {
-  width: 100%;
-  height: 2.5rem;
-  margin-top: 1rem;
-}
-
-.skeleton-chart-body {
-  flex: 1;
-  min-height: 180px;
-  margin-top: 1.25rem;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #edf2f7 25%, #e2e8f0 37%, #edf2f7 63%);
-  background-size: 400% 100%;
-  animation: skeleton-shimmer 1.4s ease infinite;
-}
-
-@keyframes skeleton-shimmer {
-  0% { background-position: 100% 50%; }
-  100% { background-position: 0 50%; }
-}
-
-/* ── Empty — per-card note ─────────────────────────────────────────────── */
-.dashboard-empty-note {
-  margin: auto;
-  padding: 2rem;
-  text-align: center;
-  font-size: 0.85rem;
-  color: #a0aec0;
-}
-
-.dashboard-chart-footnote {
-  margin: 0;
-  text-align: center;
-  font-size: 0.75rem;
-  color: #a0aec0;
-}
-
-/* ── Error — whole-dashboard state ────────────────────────────────────── */
-.dashboard-error-state {
+/* ── Panels 1 & 2 — "Accept less" / "Request more" ──────────────────────── */
+/* The instruction (what to do) is the primary text; the peso figure is
+   secondary — small and grey, since it duplicates what the chart's bar
+   length already shows and isn't the part the chart can't say. */
+.action-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  padding: 4rem 2rem;
-  background-color: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
 }
 
-.dashboard-error-state p {
-  margin: 0;
-  font-size: 0.95rem;
+.action-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.action-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.action-instruction {
+  font-size: 0.85rem;
+  color: #1a202c;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-secondary {
+  font-size: 0.75rem;
+  color: #a0aec0;
+  font-weight: 400;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.action-footer {
+  margin: 8px 0 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.action-footer-excess {
+  color: #F5A623;
+}
+
+.action-footer-shortfall {
+  color: #E5484D;
+}
+
+/* ── Panel 3 — "Model vs current practice" ──────────────────────────────── */
+.benchmark-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.benchmark-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 8px 0;
+}
+
+.benchmark-label {
+  font-size: 0.82rem;
   color: #4a5568;
-  font-weight: 600;
 }
 
-.dashboard-retry-btn {
-  background-color: #c53030;
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  padding: 0.6rem 1.5rem;
+.benchmark-values {
   font-size: 0.85rem;
   font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  color: #1a202c;
+  white-space: nowrap;
 }
 
-.dashboard-retry-btn:hover {
-  background-color: #9b2c2c;
+/* Every row here is a reduction, so this is always the success colour —
+   never conditional the way the accept-panel arrows are. */
+.benchmark-delta {
+  color: #2E9E5B;
 }
 
 /* ── Responsive ────────────────────────────────────────────────────────── */
 
-/* Large → medium: KPIs 2×2, secondary cards 2-up */
+/* Large → medium: KPIs 2×2, secondary panels 2 columns */
 @media (max-width: 1280px) {
   .dashboard-content {
     padding: 0 1.5rem 2rem 1.5rem;
@@ -216,8 +175,8 @@
   .secondary-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .secondary-grid .chart-widget {
-    min-height: 240px;
+  .secondary-grid .secondary-col:first-child {
+    grid-column: 1 / -1;
   }
 }
 
@@ -226,10 +185,8 @@
   .secondary-grid {
     grid-template-columns: 1fr;
   }
-  /* Restore auto height when stacked — no need to match siblings */
-  .secondary-grid .chart-widget {
-    height: 300px;
-    flex: none;
+  .secondary-grid .secondary-col:first-child {
+    grid-column: auto;
   }
 }
 
@@ -237,13 +194,10 @@
 @media (max-width: 768px) {
   .dashboard-content {
     padding: 0 1rem 2rem 1rem;
-    gap: 1.25rem;
+    gap: 1rem;
   }
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-  .chart-primary .chart-widget {
-    height: 220px;
   }
 }
 
@@ -252,24 +206,4 @@
   .kpi-grid {
     grid-template-columns: 1fr;
   }
-}
-
-/* ── Empty-state compact height ──────────────────────────────────────────
-   Deliberately placed after every rule above (including the responsive
-   block) so it wins at every viewport width without needing a duplicate
-   override inside each @media query — same selector specificity as the
-   height/min-height rules above, so source order alone decides, and this
-   needs to be last. No axes/list to fill the space when a section is
-   empty, so it collapses to roughly a third of the normal height — just
-   the header plus the message with comfortable padding. Restored
-   automatically once real data is present, since this class is only
-   applied when it's not. */
-.chart-primary .chart-widget-empty {
-  height: 140px;
-}
-
-.secondary-grid .chart-widget-empty {
-  height: 140px;
-  min-height: 140px;
-  flex: none;
 }

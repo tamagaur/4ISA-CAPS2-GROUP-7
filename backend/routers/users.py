@@ -34,7 +34,7 @@ def list_users(
 ) -> list[UserOut]:
     _require_admin(current_user)
     rows = db.execute(
-        text("SELECT user_id, email, full_name, role, created_at FROM Users ORDER BY user_id")
+        text("SELECT user_id, email, full_name, role, created_at FROM users ORDER BY user_id")
     ).mappings().all()
     return [UserOut(**row) for row in rows]
 
@@ -49,14 +49,14 @@ def update_user(
     _require_admin(current_user)
 
     existing = db.execute(
-        text("SELECT user_id FROM Users WHERE user_id = :user_id"), {"user_id": user_id}
+        text("SELECT user_id FROM users WHERE user_id = :user_id"), {"user_id": user_id}
     ).first()
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     if body.email is not None:
         dupe = db.execute(
-            text("SELECT 1 FROM Users WHERE email = :email AND user_id != :user_id"),
+            text("SELECT 1 FROM users WHERE email = :email AND user_id != :user_id"),
             {"email": body.email, "user_id": user_id},
         ).first()
         if dupe is not None:
@@ -84,7 +84,7 @@ def update_user(
     set_clause = ", ".join(f"{col} = :{col}" for col in fields)
     row = db.execute(
         text(
-            f"UPDATE Users SET {set_clause} WHERE user_id = :user_id "
+            f"UPDATE users SET {set_clause} WHERE user_id = :user_id "
             "RETURNING user_id, email, full_name, role, created_at"
         ),
         {**fields, "user_id": user_id},
@@ -109,7 +109,7 @@ def delete_user(
             detail="You cannot delete your own account.",
         )
 
-    result = db.execute(text("DELETE FROM Users WHERE user_id = :user_id"), {"user_id": user_id})
+    result = db.execute(text("DELETE FROM users WHERE user_id = :user_id"), {"user_id": user_id})
     db.commit()
     if result.rowcount == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")

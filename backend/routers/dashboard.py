@@ -15,9 +15,11 @@ def get_dashboard(
 ):
     # Principal filter
     principal_filter = ""
+    pd_principal_filter = ""
     params = {}
     if principal in ("unilever", "delmonte"):
         principal_filter = "AND principal = :principal"
+        pd_principal_filter = "AND pd.principal = :principal"
         params["principal"] = principal
 
     # Period filter (convert YYYY-MM-DD to YYYY-MM for monthly facts)
@@ -51,7 +53,7 @@ def get_dashboard(
         FROM LP_Recommendation lr
         JOIN Product_Dimension pd ON lr.product_key = pd.product_key
         WHERE status = 'pending'
-        {principal_filter.replace("principal", "pd.principal")}
+        {pd_principal_filter}
     """)
     reorder_row = db.execute(reorder_query, params).mappings().first()
     reorder_items = int(reorder_row["total_items"])
@@ -75,17 +77,49 @@ def get_dashboard(
         for r in trend_rows
     ]
 
-    # 4. ABC Classification
+    # 4. ABC Classification — a point-in-time snapshot recomputed every
+    # month (one row per SKU per classification_period, back to 2021-01),
+    # not a range to sum. The old query had no period filter at all, so
+    # SUM(revenue_share) GROUP BY tier summed every historical snapshot
+    # together (confirmed: 46,016 rows across 68 periods) - that's why
+    # Class A alone showed 107% revenue share. Anchor to the latest
+    # snapshot at or before the selected end period instead (falls back to
+    # the newest snapshot overall if no date range was supplied).
+    #
+    # Also: revenue_share is stored as a 0-1 fraction (e.g. 0.0144), and
+    # each principal's own shares already sum to ~1.0 independently -
+    # summing both principals' shares together under principal='all' would
+    # again exceed 100% (confirmed: Unilever ~0.80 + Del Monte ~0.80 = 1.60
+    # for tier A in 2026-08). Average across principals instead when 'all'
+    # is selected - the same unweighted-average approximation this
+    # project's mock data already used for grain='mixed' - and multiply by
+    # 100 to report a percentage instead of a fraction.
+    if to_date:
+        abc_period_filter = """AND classification_period = (
+            SELECT MAX(classification_period) FROM ABC_Classification
+            WHERE classification_period <= :abc_anchor_period
+        )"""
+        params["abc_anchor_period"] = to_date[:7]
+    else:
+        abc_period_filter = "AND classification_period = (SELECT MAX(classification_period) FROM ABC_Classification)"
+
     abc_query = text(f"""
-        SELECT tier, COUNT(*) as sku_count, SUM(revenue_share) as revenue_share
-        FROM ABC_Classification ac
-        WHERE 1=1 {principal_filter}
+        WITH period_scoped AS (
+            SELECT principal, tier, SUM(revenue_share) AS principal_tier_share, COUNT(*) AS sku_count
+            FROM ABC_Classification ac
+            WHERE 1=1 {principal_filter} {abc_period_filter}
+            GROUP BY principal, tier
+        )
+        SELECT tier,
+               SUM(sku_count) AS sku_count,
+               AVG(principal_tier_share) * 100 AS revenue_share
+        FROM period_scoped
         GROUP BY tier
         ORDER BY tier
     """)
     abc_rows = db.execute(abc_query, params).mappings().all()
     abc_tiers = [
-        {"tier": r["tier"], "sku_count": r["sku_count"], "revenue_share": float(r["revenue_share"] or 0)}
+        {"tier": r["tier"], "sku_count": r["sku_count"], "revenue_share": round(float(r["revenue_share"] or 0), 2)}
         for r in abc_rows
     ]
 
@@ -97,7 +131,7 @@ def get_dashboard(
         FROM LP_Recommendation lr
         JOIN Product_Dimension pd ON lr.product_key = pd.product_key
         WHERE status = 'pending'
-        {principal_filter.replace("principal", "pd.principal")}
+        {pd_principal_filter}
         LIMIT 5
     """)
     alerts_rows = db.execute(alerts_query, params).mappings().all()

@@ -22,6 +22,7 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
   const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM' | 'SUCCESS'
   const [form, setForm] = useState({ ...initialFormState });
   const [errors, setErrors] = useState({});
+  const [saveError, setSaveError] = useState('');
 
   if (!isOpen) return null;
 
@@ -52,7 +53,7 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
 
   // Uniform Title Case formatting for Product Name
   const handleProductNameBlur = () => {
-    if (form.productName.trim()) {
+    if ((form.productName || '').trim()) {
       const formatted = form.productName
         .trim()
         .replace(/\s+/g, ' ')
@@ -71,18 +72,14 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
   };
 
   const validate = () => {
-    const newErrors = {};
-    const skuRegex = /^SKU-\d{5}$/;
-
-    if (!form.skuCode.trim()) {
+    if (!(form.skuCode || '').trim()) {
       newErrors.skuCode = 'SKU Code is required';
-    } else if (!skuRegex.test(form.skuCode.trim())) {
+    } else if (!skuRegex.test((form.skuCode || '').trim())) {
       newErrors.skuCode = 'Must follow format SKU-XXXXX (e.g. SKU-10001)';
     }
 
-    if (!form.brand.trim()) newErrors.brand = 'Brand is required';
-    if (!form.productName.trim()) newErrors.productName = 'Product Name is required';
-    if (!form.unitPrice || parseFloat(form.unitPrice) <= 0) newErrors.unitPrice = 'Valid unit price is required';
+    if (!(form.brand || '').trim()) newErrors.brand = 'Brand is required';
+    if (!(form.productName || '').trim()) newErrors.productName = 'Product Name is required';
     return newErrors;
   };
 
@@ -98,11 +95,10 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
   };
 
   // Step 2: Confirm & Save New SKU
-  const [saveError, setSaveError] = useState('');
   const handleConfirmSave = async () => {
-    const fullProduct = form.sizeVal.trim()
-      ? `${form.productName.trim()} ${form.sizeVal.trim()}${form.sizeUnit}`
-      : form.productName.trim();
+    const fullProduct = (form.sizeVal || '').trim()
+      ? `${(form.productName || '').trim()} ${(form.sizeVal || '').trim()}${form.sizeUnit || ''}`
+      : (form.productName || '').trim();
 
     setSaveError('');
     try {
@@ -142,9 +138,9 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
     }
   };
 
-  const constructedFullProduct = form.sizeVal.trim()
-    ? `${form.productName.trim()} ${form.sizeVal.trim()}${form.sizeUnit}`
-    : form.productName.trim();
+  const constructedFullProduct = (form.sizeVal || '').trim()
+    ? `${(form.productName || '').trim()} ${(form.sizeVal || '').trim()}${form.sizeUnit || ''}`
+    : (form.productName || '').trim();
 
   return (
     <div className="modal-overlay" onClick={handleOverlayClick}>

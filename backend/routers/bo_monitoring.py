@@ -37,7 +37,7 @@ def get_bo_monitoring(
             principal,
             return_date as date,
             net_amount as value
-        FROM SalesReturn_Fact_Real
+        FROM salesreturn_fact_real
         WHERE return_type = 'BO' {principal_filter} {period_filter}
         ORDER BY return_date DESC
     """)
@@ -60,14 +60,14 @@ def get_bo_monitoring(
         SELECT
             COUNT(*) as incidents_count,
             COALESCE(SUM(net_amount), 0) as value_lost
-        FROM SalesReturn_Fact_Real
+        FROM salesreturn_fact_real
         WHERE return_type = 'BO' {principal_filter} {period_filter}
     """)
     kpi_row = db.execute(kpi_query, params).mappings().first()
 
     purchase_total_query = text(f"""
         SELECT COALESCE(SUM(net_amount), 0) as purchase_total
-        FROM Purchase_Fact_Real
+        FROM purchase_fact_real
         WHERE 1=1 {principal_filter} {period_filter}
     """)
     purchase_total_row = db.execute(purchase_total_query, params).mappings().first()
@@ -85,13 +85,13 @@ def get_bo_monitoring(
     trend_query = text(f"""
         WITH bo AS (
             SELECT _period, COUNT(*) AS incident_count, COALESCE(SUM(net_amount), 0) AS bo_value
-            FROM SalesReturn_Fact_Real
+            FROM salesreturn_fact_real
             WHERE return_type = 'BO' {principal_filter} {period_filter}
             GROUP BY _period
         ),
         purchases AS (
             SELECT _period, COALESCE(SUM(net_amount), 0) AS purchase_value
-            FROM Purchase_Fact_Real
+            FROM purchase_fact_real
             WHERE 1=1 {principal_filter} {period_filter}
             GROUP BY _period
         )
@@ -119,7 +119,7 @@ def get_bo_monitoring(
 
     weekday_query = text(f"""
         SELECT EXTRACT(ISODOW FROM return_date)::int AS dow, COUNT(*) AS count
-        FROM SalesReturn_Fact_Real
+        FROM salesreturn_fact_real
         WHERE return_type = 'BO' {principal_filter} {period_filter}
         GROUP BY dow
         ORDER BY dow
@@ -130,7 +130,7 @@ def get_bo_monitoring(
 
     brand_query = text(f"""
         SELECT principal, COUNT(*) as count
-        FROM SalesReturn_Fact_Real
+        FROM salesreturn_fact_real
         WHERE return_type = 'BO' {principal_filter} {period_filter}
         GROUP BY principal
     """)

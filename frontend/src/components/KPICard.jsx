@@ -10,6 +10,11 @@ import './KPICard.css';
 // instead of re-implemented ad hoc per card in Dashboard.jsx.
 //
 // metricType:
+//   'danger'          — an explicit "too little" signal that must match
+//                       the chart layer's shortfall red exactly (e.g. the
+//                       dashboard's Stockout risk card, which is the same
+//                       condition as the allocation chart's red bars) —
+//                       bypasses the loss tier's softer amber on purpose.
 //   'loss'           — any amount is bad; colour by direction ('worse'/
 //                       'better') only, never by the amount itself.
 //   'gap'             — the raw amount is normal; only exceeding a target
@@ -19,6 +24,7 @@ import './KPICard.css';
 //   'recommendation'  — model output, not a health metric. Always the
 //                       neutral 'action' tier, never red or green.
 function tierFor(metricType, direction, isOverTarget) {
+  if (metricType === 'danger') return 'danger';
   if (metricType === 'recommendation') return 'action';
   if (metricType === 'gap') return isOverTarget ? 'loss' : 'healthy';
   if (direction === 'worse') return 'loss';
@@ -26,12 +32,15 @@ function tierFor(metricType, direction, isOverTarget) {
   return 'diagnostic';
 }
 
-// Card accent colours — separate from STATUS_TIERS so the KPI card chrome
-// never uses red (red is reserved for chart-layer alerts: data viz only).
-// Border and icon use these non-red accents; the small delta-line text
-// keeps STATUS_TIERS colours because directional text is a different
-// semantic register from the card's decorative chrome.
+// Card accent colours — separate from STATUS_TIERS so most KPI card chrome
+// avoids red (red is normally reserved for chart-layer alerts: data viz
+// only). 'danger' is the deliberate exception — a card whose condition IS
+// exactly a chart's red-bar condition should look like it, not be softened.
+// Border and icon use these accents; the small delta-line text keeps
+// STATUS_TIERS colours because directional text is a different semantic
+// register from the card's decorative chrome.
 const CARD_ACCENT_COLORS = {
+  danger:     '#E5484D', // same red as the allocation chart's shortfall bars
   loss:       '#D97706', // amber  — caution signal without chart-alert red
   healthy:    '#059669', // emerald
   diagnostic: '#64748B', // slate  — no inherent direction
@@ -52,14 +61,20 @@ const KPICard = ({
   trendDirection,
   contextLine,
   deltaLine,
+  tooltip,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
   const accentColor = CARD_ACCENT_COLORS[tier]; // card chrome (border, icon)
-  const statusColor = STATUS_TIERS[tier];        // delta text only
+  // STATUS_TIERS has no 'danger' entry of its own — it's the same "this got
+  // worse" delta-text meaning as 'loss', just with different card chrome.
+  const statusColor = STATUS_TIERS[tier === 'danger' ? 'loss' : tier]; // delta text only
   const TrendIcon = trendDirection === 'up' ? ArrowUp : trendDirection === 'down' ? ArrowDown : null;
 
+  // Native title attribute — a plain hover tooltip for cards that need to
+  // hold a technical definition (e.g. MAPE) off the always-visible text
+  // but still available to whoever wants it, with no new dependency.
   return (
-    <div className="kpi-card" style={{ borderTopColor: accentColor }}>
+    <div className="kpi-card" style={{ borderTopColor: accentColor }} title={tooltip}>
       <div className="kpi-header">
         <h3 className="kpi-title">{title}</h3>
         {icon && <div className="kpi-icon" style={{ color: accentColor }}>{icon}</div>}
