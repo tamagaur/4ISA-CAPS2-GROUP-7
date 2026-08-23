@@ -224,22 +224,47 @@ const SKUForecast = () => {
   }, [selectedSKU]);
 
   // Combine real trailing actuals + real forecast horizon into one chart
-  // series. No synthetic points — a SKU with no Unilever_SKU_Demand_Fact
-  // rows and no Forecast_Result rows renders an empty chart, not a fake one.
+  // series. It now dynamically fills missing months between the first and last
+  // actual data point with 0 to prevent straight lines skipping across void periods.
   const chartData = useMemo(() => {
     if (!forecastResult) return [];
     
     // Sort actuals to ensure they are chronologically ordered
     const sortedActuals = [...(forecastResult.actuals || [])].sort((a, b) => a.period.localeCompare(b.period));
 
-    const actualPoints = sortedActuals.map((a) => ({
-      label: a.period,
-      actual: a.quantity,
-    }));
+    const actualPoints = [];
+    if (sortedActuals.length > 0) {
+      let currentPeriod = sortedActuals[0].period;
+      const endPeriod = sortedActuals[sortedActuals.length - 1].period;
+      let actualIndex = 0;
+      
+      while (currentPeriod <= endPeriod) {
+        if (actualIndex < sortedActuals.length && sortedActuals[actualIndex].period === currentPeriod) {
+          actualPoints.push({
+            label: currentPeriod,
+            actual: sortedActuals[actualIndex].quantity,
+          });
+          actualIndex++;
+        } else {
+          actualPoints.push({
+            label: currentPeriod,
+            actual: 0,
+          });
+        }
+        
+        const [yearStr, monthStr] = currentPeriod.split('-');
+        let year = parseInt(yearStr, 10);
+        let month = parseInt(monthStr, 10);
+        month++;
+        if (month > 12) {
+          month = 1;
+          year++;
+        }
+        currentPeriod = `${year}-${month.toString().padStart(2, '0')}`;
+      }
 
-    // Inject the final actual sales quantity into the forecast data key
-    // so Recharts can draw a continuous line between the last actual point and the first forecast point
-    if (actualPoints.length > 0) {
+      // Inject the final actual sales quantity into the forecast data key
+      // so Recharts can draw a continuous line between the last actual point and the first forecast point
       actualPoints[actualPoints.length - 1].forecast = actualPoints[actualPoints.length - 1].actual;
     }
 
@@ -551,7 +576,11 @@ const SKUForecast = () => {
                     <div className="forecast-stat-block">
                       <span className="forecast-stat-label">MAPE</span>
                       <span className="forecast-stat-value forecast-stat-value-neutral">
-                        {latestForecastPoint?.mape != null ? `${latestForecastPoint.mape.toFixed(1)}%` : '—'}
+                        {latestForecastPoint?.mape != null
+                          ? latestForecastPoint.mape >= 999.0
+                            ? '>999%'
+                            : `${latestForecastPoint.mape.toFixed(1)}%`
+                          : '—'}
                       </span>
                       <span className="forecast-stat-desc">latest forecast run</span>
                     </div>
