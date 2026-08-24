@@ -94,8 +94,22 @@ def _fetch_unilever_sku_revenue(engine: Engine, period: str) -> tuple[pd.DataFra
     # correctly turns None into NaN, so the null-count check below still
     # works unchanged.
     df["total_revenue"] = df["total_revenue"].astype(float)
+    
+    # NEW: Fetch ALL Unilever product_keys so zero-sale items get included
+    prod_dim = Table("product_dimension", metadata, autoload_with=engine)
+    with engine.connect() as conn:
+        all_skus = conn.execute(
+            select(prod_dim.c.product_key)
+            .where(prod_dim.c.principal == 'unilever')
+        ).fetchall()
+    
+    all_df = pd.DataFrame(all_skus, columns=["sku_id"])
+    df = all_df.merge(df, on="sku_id", how="left")
+    
     null_count = int(df["total_revenue"].isna().sum())
-    df = df.dropna(subset=["total_revenue"])
+    # Fill missing sales with 0.0 so they fall into Category C
+    df["total_revenue"] = df["total_revenue"].fillna(0.0)
+    
     return df, null_count
 
 
@@ -117,9 +131,23 @@ def _fetch_delmonte_category_revenue(engine: Engine, period: str) -> tuple[pd.Da
     # see that function's comment for the full reasoning. Cast before the
     # groupby/sum so the aggregation itself is float arithmetic too.
     raw["total_revenue"] = raw["total_revenue"].astype(float)
-    null_count = int(raw["total_revenue"].isna().sum())
-    raw = raw.dropna(subset=["total_revenue"])
     df = raw.groupby("sku_id", as_index=False)["total_revenue"].sum()
+
+    # NEW: Fetch ALL Del Monte product_keys so zero-sale items get included
+    prod_dim = Table("product_dimension", metadata, autoload_with=engine)
+    with engine.connect() as conn:
+        all_skus = conn.execute(
+            select(prod_dim.c.product_key)
+            .where(prod_dim.c.principal == 'delmonte')
+        ).fetchall()
+        
+    all_df = pd.DataFrame(all_skus, columns=["sku_id"])
+    df = all_df.merge(df, on="sku_id", how="left")
+    
+    null_count = int(df["total_revenue"].isna().sum())
+    # Fill missing sales with 0.0 so they fall into Category C
+    df["total_revenue"] = df["total_revenue"].fillna(0.0)
+    
     return df, null_count
 
 
