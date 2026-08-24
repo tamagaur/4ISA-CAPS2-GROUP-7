@@ -160,7 +160,9 @@ def _split_negative_revenue(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
     zeroed or dropped without a trace."""
     negative_mask = df["total_revenue"] < 0
     negative_ids = df.loc[negative_mask, "sku_id"].tolist()
-    return df.loc[~negative_mask].reset_index(drop=True), negative_ids
+    # Clamp negative revenue to 0.0 so they fall into Category C instead of being dropped
+    df.loc[negative_mask, "total_revenue"] = 0.0
+    return df, negative_ids
 
 
 def _upsert_abc_classification(
