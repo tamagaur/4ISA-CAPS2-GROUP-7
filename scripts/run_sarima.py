@@ -195,9 +195,23 @@ def main():
             model_params,
         ))
 
-    # Step 3 (write): Insert into Forecast_Result
+    # Step 3 (write): Insert into Forecast_Result. Fitting ~100+ SARIMA
+    # models can take long enough that the connection opened at the top
+    # of main() gets dropped by Supabase's pooler before we get here
+    # (confirmed: "server closed the connection unexpectedly" on a real
+    # run). Close it and open a fresh one just for the write, rather than
+    # trust an hours-old connection with the one step that must not fail.
     if results_to_insert:
         logger.info(f"Inserting {len(results_to_insert)} real forecast records into DB...")
+        try:
+            cur.close()
+            conn.close()
+        except Exception:
+            pass
+        conn = psycopg2.connect(db_url)
+        conn.autocommit = True
+        cur = conn.cursor()
+
         insert_query = """
             INSERT INTO Forecast_Result
             (product_key, forecast_date, forecast_value, confidence_lower, confidence_upper, mape, model_params)
