@@ -35,6 +35,28 @@ const formatWeeks = (value) => value.toFixed(1);
 // instead. The real cards' fetch/logic below is untouched — flip this
 // back to true to restore them at the top; nothing else needs to change.
 const SHOW_REAL_KPI_CARDS = false;
+// Same reasoning, for the chart and the 3-card row below it.
+const SHOW_REAL_CHART = false;
+const SHOW_REAL_THREE_CARDS = false;
+
+// Sample-only — same 12-period shape as the real cover_series, feeding
+// the same CoverTrendWidget the real chart uses. Trending down toward
+// the 3-week policy line to tell a coherent "the model finds the excess
+// and it comes down" story, not just a flat illustration.
+const DEMO_COVER_SERIES = [
+  { period: '2025-09', weeks_of_cover: 7.1 },
+  { period: '2025-10', weeks_of_cover: 6.8 },
+  { period: '2025-11', weeks_of_cover: 6.4 },
+  { period: '2025-12', weeks_of_cover: 6.6 },
+  { period: '2026-01', weeks_of_cover: 6.0 },
+  { period: '2026-02', weeks_of_cover: 5.7 },
+  { period: '2026-03', weeks_of_cover: 5.3 },
+  { period: '2026-04', weeks_of_cover: 5.5 },
+  { period: '2026-05', weeks_of_cover: 4.9 },
+  { period: '2026-06', weeks_of_cover: 4.6 },
+  { period: '2026-07', weeks_of_cover: 4.2 },
+  { period: '2026-08', weeks_of_cover: 3.8 },
+];
 
 const Dashboard = () => {
   const { principal } = useOutletContext() || { principal: 'all' };
@@ -202,6 +224,79 @@ const Dashboard = () => {
               icon={<Leaf size={20} />}
             />
           </div>
+
+          {/* Same CoverTrendWidget the real chart uses (see SHOW_REAL_CHART
+              below) — only the input data differs, so the sample looks and
+              behaves exactly like the real thing will once it has data. */}
+          <div className="chart-primary demo-chart">
+            <CoverTrendWidget coverSeries={DEMO_COVER_SERIES} policyTarget={3} />
+          </div>
+
+          <div className="secondary-grid demo-secondary-grid">
+            <div className="secondary-col">
+              <div className="chart-widget">
+                <div className="chart-header">
+                  <div className="chart-title-area">
+                    <h4>Order less of these</h4>
+                    <p>Stock already above what demand needs</p>
+                  </div>
+                </div>
+                <div className="demo-list">
+                  <div className="demo-list-row">
+                    <span className="demo-list-name">Surf Powder Detergent 1kg</span>
+                    <span className="demo-list-detail">38 cases above what's needed</span>
+                  </div>
+                  <div className="demo-list-row">
+                    <span className="demo-list-name">Dove Shampoo 340ml</span>
+                    <span className="demo-list-detail">22 cases above what's needed</span>
+                  </div>
+                </div>
+                <p className="demo-list-footer">~₱410k in capital freed up</p>
+              </div>
+            </div>
+            <div className="secondary-col">
+              <div className="chart-widget">
+                <div className="chart-header">
+                  <div className="chart-title-area">
+                    <h4>Order these now</h4>
+                    <p>Stock below the reorder point</p>
+                  </div>
+                </div>
+                <div className="demo-list">
+                  <div className="demo-list-row">
+                    <span className="demo-list-name">Knorr Cubes 8g</span>
+                    <span className="demo-list-detail">15 cases below reorder point</span>
+                  </div>
+                  <div className="demo-list-row">
+                    <span className="demo-list-name">Canned Juices (category)</span>
+                    <span className="demo-list-detail">60 cases below reorder point</span>
+                  </div>
+                </div>
+                <p className="demo-list-footer">2 products at risk of stocking out</p>
+              </div>
+            </div>
+            <div className="secondary-col">
+              <div className="chart-widget">
+                <div className="chart-header">
+                  <div className="chart-title-area">
+                    <h4>Products to watch</h4>
+                    <p>Forecast too irregular to rely on</p>
+                  </div>
+                </div>
+                <div className="demo-list">
+                  <div className="demo-list-row">
+                    <span className="demo-list-name">Sauces &amp; Vegetables (category)</span>
+                    <span className="demo-list-detail">34% forecast error</span>
+                  </div>
+                  <div className="demo-list-row">
+                    <span className="demo-list-name">Fabric Conditioner 800ml</span>
+                    <span className="demo-list-detail">28% forecast error</span>
+                  </div>
+                </div>
+                <p className="demo-list-footer">Flagged for manual check</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* KPI strip — independent data source (getDashboardData), own
@@ -257,21 +352,25 @@ const Dashboard = () => {
 
         {/* Weeks-of-cover chart — same independent data source/loading/error
             as the KPI strip above (kpiData.cover_series), since both need
-            the same inventory valuation the backend can't compute yet. */}
-        <div className="dashboard-section">
-          <div className="chart-primary">
-            {kpiLoading ? (
-              <ChartSkeleton />
-            ) : kpiError ? (
-              <div className="dashboard-error-state">
-                <p>{kpiError}</p>
-                <button className="dashboard-retry-btn" onClick={handleKpiRetry}>Retry</button>
-              </div>
-            ) : (
-              <CoverTrendWidget coverSeries={kpiData?.cover_series ?? []} policyTarget={policyWeeks} />
-            )}
+            the same inventory valuation the backend can't compute yet.
+            Temporarily hidden (SHOW_REAL_CHART) — see the note by that
+            constant. */}
+        {SHOW_REAL_CHART && (
+          <div className="dashboard-section">
+            <div className="chart-primary">
+              {kpiLoading ? (
+                <ChartSkeleton />
+              ) : kpiError ? (
+                <div className="dashboard-error-state">
+                  <p>{kpiError}</p>
+                  <button className="dashboard-retry-btn" onClick={handleKpiRetry}>Retry</button>
+                </div>
+              ) : (
+                <CoverTrendWidget coverSeries={kpiData?.cover_series ?? []} policyTarget={policyWeeks} />
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {error ? (
           <div className="dashboard-error-state">
@@ -294,7 +393,9 @@ const Dashboard = () => {
                 unlike the KPI/chart sections above) because none of these
                 three has a live fetch behind it yet — once one is wired,
                 its className needs to go back to plain "chart-widget" when
-                that card actually has data. */}
+                that card actually has data. Temporarily hidden
+                (SHOW_REAL_THREE_CARDS) — see the note by that constant. */}
+            {SHOW_REAL_THREE_CARDS && (
             <div className="dashboard-section">
               <div className="secondary-grid">
                 {loading ? (
@@ -342,6 +443,7 @@ const Dashboard = () => {
                 )}
               </div>
             </div>
+            )}
           </>
         )}
       </div>

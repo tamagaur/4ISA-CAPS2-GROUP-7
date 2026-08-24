@@ -111,6 +111,53 @@
   white-space: nowrap;
 }
 
+/* The illustrative chart and 3-card row live inside .demo-section too
+   (one continuous story under one badge) rather than as separate
+   top-level .dashboard-section siblings, so they need their own
+   top spacing instead of relying on .dashboard-content's gap. */
+.demo-chart,
+.demo-secondary-grid {
+  margin-top: 1.5rem;
+}
+
+.demo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.demo-list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.demo-list-row:last-child {
+  border-bottom: none;
+}
+
+.demo-list-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #1a202c;
+}
+
+.demo-list-detail {
+  font-size: 0.78rem;
+  color: #718096;
+  white-space: nowrap;
+}
+
+.demo-list-footer {
+  margin: 0.75rem 0 0 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #92400e;
+}
+
 /* Error state scoped to just the KPI grid (independent of the chart/
    secondary-row error below) — spans all 4 columns instead of the
    whole-page padding the shared .dashboard-error-state normally gets. */
