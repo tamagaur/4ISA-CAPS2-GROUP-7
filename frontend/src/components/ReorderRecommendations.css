@@ -104,29 +104,28 @@
   overflow: hidden;
 }
 
-/* Same black accent on every card — colour lives only in the status chip,
-   not the card frame (only two of these four cards flag a problem at
-   all; the other two are a neutral fact and a positive result). */
-.reorder-card-neutral {
-  border-left: 3px solid #1a202c;
-  border-top: 3px solid #1a202c;
+/* Colored borders top and left */
+.card-red {
+  border-left: 3px solid #e53e3e;
+  border-top: 3px solid #e53e3e;
+}
+.card-yellow {
+  border-left: 3px solid #d69e2e;
+  border-top: 3px solid #d69e2e;
+}
+.card-blue {
+  border-left: 3px solid #3182ce;
+  border-top: 3px solid #3182ce;
+}
+.card-green {
+  border-left: 3px solid #38a169;
+  border-top: 3px solid #38a169;
 }
 
 .card-content {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-}
-
-.reorder-card-label-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.2rem;
-}
-
-.reorder-card-label-row .reorder-card-label {
-  margin-bottom: 0;
 }
 
 .reorder-card-label {
@@ -138,27 +137,6 @@
   margin-bottom: 0.2rem;
 }
 
-/* Small colour-coded status pill — the one place colour is allowed to
-   carry meaning on these cards. */
-.reorder-card-chip {
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.reorder-card-chip-danger {
-  background-color: #FEE2E2;
-  color: #B91C1C;
-}
-
-.reorder-card-chip-warning {
-  background-color: #FEF3C7;
-  color: #92400E;
-}
-
 .reorder-card-value {
   font-size: 2rem;
   font-weight: 700;
@@ -166,58 +144,10 @@
   line-height: 1.1;
 }
 
-/* Card 4's figure is a real button — clicking it filters the table below
-   to just the manual-review rows. Reset to plain text sizing/weight so it
-   reads identically to the other three cards' (non-interactive) figures. */
-.reorder-card-value-clickable {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  font-size: 2rem;
-  font-weight: 700;
-  color: #1a202c;
-  line-height: 1.1;
-  text-align: left;
-  cursor: pointer;
-}
-
-.reorder-card-value-clickable:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
-.reorder-card-value-clickable:disabled {
-  cursor: default;
-}
-
 .reorder-card-desc {
   font-size: 0.75rem;
   color: #a0aec0;
   margin-top: 0.3rem;
-}
-
-.reorder-card-delta {
-  font-size: 0.72rem;
-  color: #718096;
-  margin-top: 0.15rem;
-}
-
-/* Note shown above the table when card 4's filter is active. */
-.reorder-filter-note {
-  margin: 0 0 0.75rem 0;
-  font-size: 0.8rem;
-  color: #718096;
-}
-
-.reorder-filter-clear {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  font-weight: 600;
-  color: #c53030;
-  cursor: pointer;
-  text-decoration: underline;
 }
 
 /* Table */

@@ -1,52 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Loader2, ArrowDown, ClipboardList, ListChecks } from 'lucide-react';
+import { Loader2, ClipboardList, ListChecks } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
 import { getCurrentUser } from '../auth';
 import { logAction } from '../utils/auditLogger';
-import { getMockDashboard } from '../data/mockData';
+import { getRecommendations, decideRecommendation } from '../api/recommendations';
 import './ReorderRecommendations.css';
-
-// MAPE_GATE mirrors the Dashboard's Forecast health gate (mockData.js's
-// forecastHealth: pass under 20% error, fallback/manual review above it) —
-// same threshold, applied fresh to this page's own rows so "Manual
-// review"'s count and its click-to-filter correspond to real rows in the
-// table below, not a population figure from a different tracked SKU set.
-const MAPE_GATE = 20;
-
-// threeWeekRuleQty = what SSM's blanket "three weeks of stock" rule would
-// have ordered, computed here as the same baseline used pre-LP (rop * 7/3,
-// rounded) so the dashboard can show the paper's headline comparison
-// (backlog #56) instead of just the LP output in isolation.
-//
-// mapeError = this SKU's forecast error (%) for the cycle just solved —
-// not previously tracked on this page; added so "Manual review" (KPI card
-// 4) has a real per-row figure to count and filter by.
-//
-// Unilever has true per-SKU data.
-const UNILEVER_REORDER_DATA = [
-  { id: 1, sku: 'SKU-4721', brand: 'Unilever', product: 'Surf Powder Detergent 1kg', rop: 120, stock: 45, orderQty: 200, threeWeekRuleQty: 280, unitCost: 122.5, urgency: 'CRITICAL', estCost: '₱24,500', safetyStock: 34, leadTimeDays: 7, mapeError: 14, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
-  { id: 3, sku: 'SKU-2891', brand: 'Unilever', product: 'Knorr Cubes 8g', rop: 150, stock: 78, orderQty: 150, threeWeekRuleQty: 175, unitCost: 125, urgency: 'URGENT', estCost: '₱18,750', safetyStock: 40, leadTimeDays: 5, mapeError: 27, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
-  { id: 5, sku: 'SKU-7642', brand: 'Unilever', product: 'Dove Shampoo 340ml', rop: 90, stock: 56, orderQty: 120, threeWeekRuleQty: 130, unitCost: 118.3, urgency: 'PLANNED', estCost: '₱14,200', safetyStock: 24, leadTimeDays: 7, mapeError: 11, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
-];
-
-// Del Monte has no SKU-level data anywhere in this project — these rows
-// aggregate what used to be fabricated per-SKU Del Monte rows into
-// categories (CAT- codes).
-const DELMONTE_REORDER_DATA = [
-  { id: 101, sku: 'CAT-JUICES', brand: 'Del Monte', product: 'Juices', rop: 80, stock: 12, orderQty: 180, threeWeekRuleQty: 210, unitCost: 180, urgency: 'CRITICAL', estCost: '₱32,400', safetyStock: 22, leadTimeDays: 10, mapeError: 24, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
-  { id: 102, sku: 'CAT-SAUCES-VEG', brand: 'Del Monte', product: 'Sauces & Vegetables', rop: 240, stock: 191, orderQty: 300, threeWeekRuleQty: 320, unitCost: 89.0, urgency: 'URGENT', estCost: '₱26,700', safetyStock: 64, leadTimeDays: 10, mapeError: 9, lpBreakdown: { cost: 45, service: 35, capacity: 20 }, actionStatus: null, loadingAction: null },
-];
-
-const REORDER_DATA_BY_PRINCIPAL = {
-  unilever: UNILEVER_REORDER_DATA,
-  delmonte: DELMONTE_REORDER_DATA,
-  all: [...UNILEVER_REORDER_DATA, ...DELMONTE_REORDER_DATA],
-};
 
 // Components branch on this, never on the principal name.
 const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
+const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
@@ -78,58 +42,66 @@ const formatTimestamp = (date) =>
 const ReorderRecommendations = () => {
   const { principal } = useOutletContext() || { principal: 'all' };
   const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
-  const sourceData = useMemo(() => REORDER_DATA_BY_PRINCIPAL[principal] ?? REORDER_DATA_BY_PRINCIPAL.all, [principal]);
 
-  // Cards 1-2 (Order value, Capital saved) are population-level financial
-  // figures with no equivalent in this page's own table (there's no
-  // "offered by suppliers" concept in rop/stock/orderQty) — read from the
-  // same shared mockData.js the Dashboard uses, so they can't disagree
-  // with it. Cards 3-4 (Below reorder point, Manual review) instead come
-  // from THIS page's own `data` below, because card 4 must correspond to
-  // real, clickable rows in the table beneath it — mockData.js tracks a
-  // different illustrative SKU set entirely, so it can't be the source of
-  // truth for something the reader is meant to click and filter by.
-  const dashboardKpis = useMemo(() => getMockDashboard(principal).kpis, [principal]);
-
-  const [data, setData] = useState(sourceData);
+  const [rawItems, setRawItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('RECOMMENDATIONS');
-  const [showOnlyReview, setShowOnlyReview] = useState(false);
 
   // Pending override awaiting a reason (Dismiss only — Accept logs immediately).
-  // Two states only, matching LP_Recommendation.status in schema.sql:
-  // CHECK (status IN ('pending', 'accepted', 'dismissed')) — no "hold" state exists.
   const [pendingOverride, setPendingOverride] = useState(null); // { item, action }
   const [decisionLog, setDecisionLog] = useState([]);
 
-  // Re-source recommendations when the principal filter changes. In-session
-  // accept/dismiss actions are tied to whichever principal's view they were
-  // made in and reset with it. The manual-review filter resets too — a
-  // filter set under one principal shouldn't silently carry over and hide
-  // rows under another.
   useEffect(() => {
-    setData(sourceData);
-    setShowOnlyReview(false);
-  }, [sourceData]);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getRecommendations({ principal, status: 'pending' })
+      .then((res) => {
+        if (cancelled) return;
+        setRawItems(res.items || []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.message || 'Failed to load reorder recommendations');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [principal]);
 
-  // "Below reorder point" — every row on this page is, by definition, a
-  // reorder recommendation (i.e. already below its ROP), so this is the
-  // full table's count, not a separate filtered figure.
-  const belowRopCount = data.length;
+  // Map API shape -> the row shape the rest of this page renders. actionStatus/
+  // loadingAction are local-only UI state layered on top of each real row.
+  const data = useMemo(
+    () =>
+      rawItems.map((item) => ({
+        id: item.recommendation_key,
+        sku: item.sku_id,
+        brand: PRINCIPAL_BRAND[item.principal] || item.principal,
+        product: item.product_name || 'Unknown Product',
+        rop: item.rop_i,
+        stock: item.current_stock,
+        orderQty: item.q_i,
+        safetyStock: item.ss_i,
+        urgency: item.urgency,
+        planningCycleDate: item.planning_cycle_date,
+        actionStatus: item.status === 'pending' ? null : item.status.toUpperCase(),
+        loadingAction: null,
+      })),
+    [rawItems]
+  );
+  const [localData, setLocalData] = useState([]);
+  useEffect(() => setLocalData(data), [data]);
 
-  // "Manual review" — rows whose forecast error exceeds the same 20% MAPE
-  // gate the Dashboard's Forecast health card uses (MAPE_GATE), computed
-  // fresh on this page's own rows.
-  const reviewItems = useMemo(() => data.filter((item) => item.mapeError > MAPE_GATE), [data]);
-  const reviewCount = reviewItems.length;
-  const reliableCount = data.length - reviewCount;
-  // Every row in this table is already below its reorder point (see
-  // belowRopCount above), so every manual-review row necessarily is too —
-  // the two cards' counts describe overlapping, not separate, groups.
-  const reviewBelowRopOverlap = reviewCount;
-
-  const displayedData = showOnlyReview ? reviewItems : data;
+  const criticalCount = localData.filter(item => item.urgency === 'CRITICAL').length;
+  const urgentCount = localData.filter(item => item.urgency === 'URGENT').length;
+  const totalOrderQty = localData.reduce((sum, item) => sum + (item.orderQty || 0), 0);
+  const totalStock = localData.reduce((sum, item) => sum + (item.stock || 0), 0);
 
   const handleOpenDetails = (item) => {
     setSelectedItem(item);
@@ -150,22 +122,27 @@ const ReorderRecommendations = () => {
       },
       ...prev,
     ]);
-    
+
     // Also push to the global audit log
     logAction(`Reorder Recommendation ${action === 'ACCEPTED' ? 'Accepted' : 'Dismissed'}`, `SKU ${item.sku}: ${reason}`);
   };
 
-  const applyAction = (id, actionType) => {
-    setData(prev => prev.map(item =>
+  const applyAction = async (id, actionType) => {
+    setLocalData(prev => prev.map(item =>
       item.id === id ? { ...item, loadingAction: actionType } : item
     ));
 
-    // Simulate API call
-    setTimeout(() => {
-      setData(prev => prev.map(item =>
+    try {
+      await decideRecommendation(id, actionType === 'ACCEPTED' ? 'accepted' : 'dismissed');
+      setLocalData(prev => prev.map(item =>
         item.id === id ? { ...item, loadingAction: null, actionStatus: actionType } : item
       ));
-    }, 800);
+    } catch (err) {
+      setLocalData(prev => prev.map(item =>
+        item.id === id ? { ...item, loadingAction: null } : item
+      ));
+      setError(err.message || 'Failed to update recommendation');
+    }
   };
 
   const handleAction = (item, actionType) => {
@@ -232,65 +209,35 @@ const ReorderRecommendations = () => {
 
   const renderRecommendationsTab = () => (
     <>
-      {/* Summary Cards — same black accent on all four; colour lives only
-          in the status chip on the two cards that flag a problem. */}
+      {/* Summary Cards */}
       <div className="reorder-summary-grid">
-        <div className="reorder-summary-card reorder-card-neutral">
+        <div className="reorder-summary-card card-red">
           <div className="card-content">
-            <span className="reorder-card-label">ORDER VALUE</span>
-            <span className="reorder-card-value">₱{dashboardKpis.cashFreed.offeredM}M</span>
-            <span className="reorder-card-desc">of ₱{dashboardKpis.allocationOffered.valueM}M offered by suppliers</span>
+            <span className="reorder-card-label">{grain === 'category' ? 'CRITICAL CATEGORIES' : 'CRITICAL SKUS'}</span>
+            <span className="reorder-card-value">{criticalCount}</span>
           </div>
         </div>
-        <div className="reorder-summary-card reorder-card-neutral">
+        <div className="reorder-summary-card card-yellow">
           <div className="card-content">
-            <span className="reorder-card-label">CAPITAL SAVED</span>
-            <span className="reorder-card-value">₱{dashboardKpis.cashFreed.valueM}M</span>
-            <span className="reorder-card-desc">{dashboardKpis.cashFreed.pctLess}% less capital tied up</span>
+            <span className="reorder-card-label">{grain === 'category' ? 'URGENT CATEGORIES' : 'URGENT SKUS'}</span>
+            <span className="reorder-card-value">{urgentCount}</span>
           </div>
         </div>
-        <div className="reorder-summary-card reorder-card-neutral">
+        <div className="reorder-summary-card card-blue">
           <div className="card-content">
-            <div className="reorder-card-label-row">
-              <span className="reorder-card-label">BELOW REORDER POINT</span>
-              <span className="reorder-card-chip reorder-card-chip-danger">ACTION</span>
-            </div>
-            <span className="reorder-card-value">{belowRopCount} products</span>
-            <span className="reorder-card-desc">Short of demand even at the full offer</span>
+            <span className="reorder-card-label">TOTAL ORDER QTY</span>
+            <span className="reorder-card-value">{totalOrderQty.toLocaleString()}</span>
+            <span className="reorder-card-desc">LP - optimized units</span>
           </div>
         </div>
-        <div className="reorder-summary-card reorder-card-neutral">
+        <div className="reorder-summary-card card-green">
           <div className="card-content">
-            <div className="reorder-card-label-row">
-              <span className="reorder-card-label">MANUAL REVIEW</span>
-              <span className="reorder-card-chip reorder-card-chip-warning">REVIEW</span>
-            </div>
-            <button
-              type="button"
-              className="reorder-card-value reorder-card-value-clickable"
-              onClick={() => setShowOnlyReview((v) => !v)}
-              disabled={reviewCount === 0}
-              title={reviewCount > 0 ? 'Filter the table below to these products' : undefined}
-            >
-              {reviewCount} products
-            </button>
-            <span className="reorder-card-desc">Forecast too irregular to rely on</span>
-            <span className="reorder-card-delta">{reliableCount} of {data.length} forecasts are reliable</span>
-            {reviewCount > 0 && (
-              <span className="reorder-card-delta">All {reviewBelowRopOverlap} also below reorder point</span>
-            )}
+            <span className="reorder-card-label">CURRENT STOCK</span>
+            <span className="reorder-card-value">{totalStock.toLocaleString()}</span>
+            <span className="reorder-card-desc">on hand across list</span>
           </div>
         </div>
       </div>
-
-      {showOnlyReview && (
-        <p className="reorder-filter-note">
-          Showing only the {reviewCount} product{reviewCount === 1 ? '' : 's'} flagged for manual review —{' '}
-          <button type="button" className="reorder-filter-clear" onClick={() => setShowOnlyReview(false)}>
-            clear filter
-          </button>
-        </p>
-      )}
 
       {(grain === 'category' || grain === 'mixed') && (
         <p className="reorder-grain-note">
@@ -308,67 +255,53 @@ const ReorderRecommendations = () => {
               <th>PRODUCT</th>
               <th>ROP</th>
               <th>CURRENT STOCK</th>
-              <th>LP QTY <span className="th-sub">vs 3-WK RULE</span></th>
+              <th>LP QTY</th>
               <th>URGENCY</th>
-              <th>EST. COST</th>
               <th>DETAILS</th>
               <th>ACTION</th>
             </tr>
           </thead>
           <tbody>
-            {displayedData.map((item) => {
-              const savedUnits = item.threeWeekRuleQty - item.orderQty;
-              const savedPct = Math.round((savedUnits / item.threeWeekRuleQty) * 100);
-              return (
-                <tr key={item.id}>
-                  <td className="reorder-sku-cell">{formatSKU(item.sku)}</td>
-                  <td>{item.brand}</td>
-                  <td className="reorder-product-cell">
-                    {(() => {
-                      const { name, weight } = parseProductAndWeight(item.product);
-                      return (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span className="reorder-product-name">{name}</span>
-                          {weight && (
-                            <span className="reorder-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
-                              {weight}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td>{item.rop}</td>
-                  <td className="reorder-stock-cell" style={{ color: item.stock < item.rop * 0.5 ? '#e53e3e' : item.stock < item.rop ? '#d69e2e' : '#4a5568' }}>{item.stock}</td>
-                  <td className="reorder-qty-cell">
-                    <div className="reorder-qty-compare">
-                      <span className="reorder-qty-main">{item.orderQty}</span>
-                      <span className="reorder-qty-baseline">
-                        <ArrowDown size={11} className="reorder-qty-down-icon" />
-                        {savedPct}% vs {item.threeWeekRuleQty}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={getUrgencyBadge(item.urgency)}>
-                      {item.urgency}
-                    </span>
-                  </td>
-                  <td className="reorder-cost-cell">{item.estCost}</td>
-                  <td>
-                    <button className="details-btn" onClick={() => handleOpenDetails(item)}>Details</button>
-                  </td>
-                  <td>
-                    {renderActionColumn(item)}
-                  </td>
-                </tr>
-              );
-            })}
-            {displayedData.length === 0 && (
-              <tr>
-                <td colSpan="10" className="reorder-no-results">
-                  {showOnlyReview ? 'No products currently need manual review.' : 'No data for this selection.'}
+            {localData.map((item) => (
+              <tr key={item.id}>
+                <td className="reorder-sku-cell">{formatSKU(item.sku)}</td>
+                <td>{item.brand}</td>
+                <td className="reorder-product-cell">
+                  {(() => {
+                    const { name, weight } = parseProductAndWeight(item.product);
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <span className="reorder-product-name">{name}</span>
+                        {weight && (
+                          <span className="reorder-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
+                            {weight}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </td>
+                <td>{item.rop}</td>
+                <td className="reorder-stock-cell" style={{ color: item.stock < item.rop * 0.5 ? '#e53e3e' : item.stock < item.rop ? '#d69e2e' : '#4a5568' }}>{item.stock}</td>
+                <td className="reorder-qty-cell">
+                  <span className="reorder-qty-main">{item.orderQty}</span>
+                </td>
+                <td>
+                  <span className={getUrgencyBadge(item.urgency)}>
+                    {item.urgency}
+                  </span>
+                </td>
+                <td>
+                  <button className="details-btn" onClick={() => handleOpenDetails(item)}>Details</button>
+                </td>
+                <td>
+                  {renderActionColumn(item)}
+                </td>
+              </tr>
+            ))}
+            {localData.length === 0 && (
+              <tr>
+                <td colSpan="9" className="reorder-no-results">No pending recommendations for this selection.</td>
               </tr>
             )}
           </tbody>
@@ -449,7 +382,9 @@ const ReorderRecommendations = () => {
           </button>
         </div>
 
-        {activeTab === 'RECOMMENDATIONS' ? renderRecommendationsTab() : renderDecisionLogTab()}
+        {loading && <p className="reorder-page-subtitle">Loading recommendations…</p>}
+        {error && <p className="reorder-page-subtitle">Error: {error}</p>}
+        {!loading && !error && (activeTab === 'RECOMMENDATIONS' ? renderRecommendationsTab() : renderDecisionLogTab())}
       </div>
 
       <ReorderModal
