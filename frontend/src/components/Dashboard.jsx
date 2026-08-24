@@ -221,16 +221,18 @@ const Dashboard = () => {
             {/* Order less of these / Order these now / Products to watch —
                 real, well-defined sources (lp_recommendation.q_i vs current
                 stock; inventory vs lp_recommendation.rop_i;
-                forecast_result.mape >= 0.20), but lp_recommendation and
-                forecast_result both have 0 rows, so all three stay in
-                their empty state until those models run. First two share
-                the optimisation-model blocker (both read lp_recommendation);
-                the third names the forecasting-model blocker instead
-                (reads forecast_result). chart-widget-empty is unconditional
-                here (not data-driven, unlike the KPI/chart sections above)
-                because none of these three has a live fetch behind it yet —
-                once one is wired, its className needs to go back to plain
-                "chart-widget" when that card actually has data. */}
+                forecast_result.mape >= 20.0 — mape is stored as a percent,
+                not a 0-1 fraction, see schema.sql's column comment). Still
+                empty: lp_recommendation has 0 rows (blocks the first two —
+                the optimisation model hasn't run), so the whole row stays
+                in its empty state below even though forecast_result now
+                has real rows (scripts/run_sarima.py has been run) — wiring
+                "Products to watch" to it is a separate, not-yet-done task.
+                chart-widget-empty is unconditional here (not data-driven,
+                unlike the KPI/chart sections above) because none of these
+                three has a live fetch behind it yet — once one is wired,
+                its className needs to go back to plain "chart-widget" when
+                that card actually has data. */}
             <div className="dashboard-section">
               <div className="secondary-grid">
                 {loading ? (
