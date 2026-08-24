@@ -5,7 +5,7 @@ import DateFilter from './DateFilter';
 import { getRecommendations } from '../api/recommendations';
 import { getDashboardData } from '../api/dashboard';
 import { CoverTrendWidget } from './Charts';
-import { Package, Wallet, ShieldAlert, ClipboardCheck, TrendingUp, PiggyBank, CheckCircle2, Leaf } from 'lucide-react';
+import { Package, Wallet, ShieldAlert, ClipboardCheck, PiggyBank, CheckCircle2, Leaf } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -196,11 +196,11 @@ const Dashboard = () => {
           </div>
           <div className="kpi-grid">
             <KPICard
-              title="Forecast accuracy"
-              value="87.3%"
+              title="Inventory cost"
+              value="₱6.4M"
               metricType="recommendation"
-              contextLine="Compared against a simple average-based estimate"
-              icon={<TrendingUp size={20} />}
+              contextLine="Current stock-on-hand value, SKU-level baseline"
+              icon={<Wallet size={20} />}
             />
             <KPICard
               title="Total inventory cost saved"
