@@ -5,7 +5,7 @@ import DateFilter from './DateFilter';
 import { getRecommendations } from '../api/recommendations';
 import { getDashboardData } from '../api/dashboard';
 import { CoverTrendWidget } from './Charts';
-import { Package, Wallet, ShieldAlert, ClipboardCheck } from 'lucide-react';
+import { Package, Wallet, ShieldAlert, ClipboardCheck, TrendingUp, PiggyBank, CheckCircle2, Leaf } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -282,6 +282,58 @@ const Dashboard = () => {
             </div>
           </>
         )}
+
+        {/* Project impact — NOT live data. Every value here is a fixed,
+            hardcoded illustration of what this DSD is designed to deliver
+            once forecasting (SARIMA) and optimisation (LP) are both
+            running against real cost/valuation data — neither is fully
+            wired yet (see the real, empty sections above). Kept in its
+            own visibly-badged section, never mixed into the real KPI
+            grid, so nobody mistakes these for production numbers. Maps
+            directly to the capstone's five specific objectives: forecast
+            model comparison (Obj. 2), multi-objective cost minimisation
+            (Obj. 3), reorder-recommendation adoption vs. override (Obj.
+            4), and the SDG 12 waste/stockout framing from the general
+            objective. */}
+        <div className="dashboard-section demo-section">
+          <div className="demo-section-header">
+            <div>
+              <h3>Project impact</h3>
+              <p>What this DSD is designed to deliver, once forecasting and optimisation are running on live data</p>
+            </div>
+            <span className="demo-badge">Illustrative — synthetic demo data</span>
+          </div>
+          <div className="kpi-grid">
+            <KPICard
+              title="Forecast accuracy"
+              value="87.3%"
+              metricType="recommendation"
+              contextLine="SARIMA vs. naive baseline, holdout-tested"
+              icon={<TrendingUp size={20} />}
+            />
+            <KPICard
+              title="Total inventory cost saved"
+              value="₱1.85M / qtr"
+              metricType="recommendation"
+              contextLine="Holding + ordering + shortage costs minimised"
+              icon={<PiggyBank size={20} />}
+            />
+            <KPICard
+              title="Recommendation adoption"
+              value="76%"
+              metricType="recommendation"
+              contextLine="24% overridden — reason logged per protocol"
+              icon={<CheckCircle2 size={20} />}
+            />
+            <KPICard
+              title="Waste & stockouts reduced"
+              value="31%"
+              metricType="recommendation"
+              contextLine="Supports UN SDG 12 — responsible consumption"
+              icon={<Leaf size={20} />}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
