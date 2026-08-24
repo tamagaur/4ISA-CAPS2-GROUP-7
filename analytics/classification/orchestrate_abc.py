@@ -176,8 +176,8 @@ def _upsert_abc_classification(
             "principal": principal,
             "classification_period": classification_period,
             "tier": row.tier,
-            "revenue_share": float(row.revenue_share),
-            "cumulative_share": float(row.cumulative_share),
+            "revenue_share": None if pd.isna(row.revenue_share) else float(row.revenue_share),
+            "cumulative_share": None if pd.isna(row.cumulative_share) else float(row.cumulative_share),
             "boundary_flag": bool(row.boundary_flag),
         }
         for row in tiered_df.itertuples()
