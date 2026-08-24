@@ -1,131 +1,138 @@
-import React, { useMemo } from 'react';
-import { useOutletContext, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import KPICard from './KPICard';
-import { AllocationVarianceWidget } from './Charts';
 import DateFilter from './DateFilter';
-import { getMockDashboard } from '../data/mockData';
-import { Package, Wallet, ShieldAlert, Activity } from 'lucide-react';
+import { getRecommendations } from '../api/recommendations';
+import { getDashboardData } from '../api/dashboard';
+import { CoverTrendWidget } from './Charts';
+import { Package, Wallet, ShieldAlert, ClipboardCheck } from 'lucide-react';
 import './Dashboard.css';
+import './Charts.css';
 
-// "Accept less" — the largest excesses. Uses the same amber the
-// chart's excess bars use. accept/offered/frees all come straight from
-// mockData's takeLessRecsFrom(), where accept is already capped at the
-// offer (Fix 1) — this panel can never show an impossible quantity.
-const TakeLessPanel = ({ recs, totalFreedLabel, onViewAll }) => (
-  <div className="chart-widget action-panel action-panel-excess">
-    <div className="chart-header">
-      <div className="chart-title-area">
-        <h4>Accept less</h4>
-        <p>Products where the offer exceeds demand</p>
-      </div>
-      <button className="view-all-btn" onClick={onViewAll}>View all &rarr;</button>
-    </div>
-    <div className="action-list">
-      {recs.map((r) => (
-        <div className="action-row" key={r.sku}>
-          <span className="action-instruction">{r.sku} — accept {r.accept} of {r.offered}</span>
-          <span className="action-secondary">saves {formatPesosK(r.freesPesos)}</span>
-        </div>
-      ))}
-    </div>
-    <p className="action-footer action-footer-excess">Total freed: {totalFreedLabel}</p>
+const KPISkeleton = () => (
+  <div className="kpi-card skeleton-card">
+    <div className="skeleton-line skeleton-line-title" />
+    <div className="skeleton-line skeleton-line-value" />
+    <div className="skeleton-line skeleton-line-subtext" />
   </div>
 );
 
-// "Request more" — the largest shortfalls. Uses the same red the
-// chart's shortfall bars use. SSM already accepts the full offer here
-// (there's nothing more to accept) — the gap is a request back to the
-// principal, reported in cases via mockData's shortfallCases.
-const AskMorePanel = ({ recs, stockoutCount, onViewAll }) => (
-  <div className="chart-widget action-panel action-panel-shortfall">
-    <div className="chart-header">
-      <div className="chart-title-area">
-        <h4>Request more</h4>
-        <p>Products where the offer falls short</p>
-      </div>
-      <button className="view-all-btn" onClick={onViewAll}>View all &rarr;</button>
-    </div>
-    <div className="action-list">
-      {recs.map((r) => (
-        <div className="action-row" key={r.sku}>
-          <span className="action-instruction">{r.sku} — {r.shortCases} cases short</span>
-          <span className="action-secondary">{formatPesosK(r.impactPesos)} impact</span>
-        </div>
-      ))}
-    </div>
-    <p className="action-footer action-footer-shortfall">
-      {stockoutCount} SKU{stockoutCount === 1 ? '' : 's'} will stock out even at full allocation
-    </p>
+const ChartSkeleton = () => (
+  <div className="chart-widget skeleton-card">
+    <div className="skeleton-line skeleton-line-title" style={{ width: '30%' }} />
+    <div className="skeleton-chart-body" />
   </div>
 );
 
-// "Projected savings" — each row appends the saving amount
-// and a direction arrow (always a reduction, so always the success colour)
-// so the improvement doesn't have to be inferred from two bare numbers.
-const BenchmarkPanel = ({ benchmark }) => {
-  const holdingDeltaK = Math.round((benchmark.holdingCost.currentM - benchmark.holdingCost.modelM) * 1000);
-  const spoilageDeltaK = Math.round(benchmark.spoilage.currentK - benchmark.spoilage.modelK);
-  const stockoutDelta = benchmark.stockoutDays.current - benchmark.stockoutDays.model;
+const EmptyNote = ({ children }) => <p className="dashboard-empty-note">{children}</p>;
 
-  return (
-    <div className="chart-widget">
-      <div className="chart-header">
-        <div className="chart-title-area">
-          <h4>Projected savings</h4>
-          <p>Based on the last six ordering cycles</p>
-        </div>
-      </div>
-      <div className="benchmark-list">
-        <div className="benchmark-row">
-          <span className="benchmark-label">Holding cost</span>
-          <span className="benchmark-values">
-            ₱{benchmark.holdingCost.currentM}M → ₱{benchmark.holdingCost.modelM}M
-            <span className="benchmark-delta"> ↓ ₱{holdingDeltaK}k</span>
-          </span>
-        </div>
-        <div className="benchmark-row">
-          <span className="benchmark-label">Spoilage</span>
-          <span className="benchmark-values">
-            ₱{benchmark.spoilage.currentK}k → ₱{benchmark.spoilage.modelK}k
-            <span className="benchmark-delta"> ↓ ₱{spoilageDeltaK}k</span>
-          </span>
-        </div>
-        <div className="benchmark-row">
-          <span className="benchmark-label">Stockout days</span>
-          <span className="benchmark-values">
-            {benchmark.stockoutDays.current} → {benchmark.stockoutDays.model}
-            <span className="benchmark-delta"> ↓ {stockoutDelta}</span>
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ₱287k / ₱1.8M — used only by the two action panels' peso amounts.
-function formatPesosK(value) {
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000) return `₱${(abs / 1_000_000).toFixed(1)}M`;
-  return `₱${Math.round(abs / 1000)}k`;
-}
+const formatPeso = (value) => `₱${Math.round(value).toLocaleString()}`;
+const formatWeeks = (value) => value.toFixed(1);
 
 const Dashboard = () => {
-  const navigate = useNavigate();
   const { principal } = useOutletContext() || { principal: 'all' };
 
-  // Mock data is synchronous and local (see src/data/mockData.js's own
-  // PLACEHOLDER comments for which fields are awaiting real sources), so
-  // there's no fetch/loading/error state to manage here — swapping in a
-  // real API later means this becomes an async call, not a rewrite of the
-  // JSX below.
-  const data = useMemo(() => getMockDashboard(principal), [principal]);
-  const { kpis, allocationVariance, funnel, takeLessRecs, askMoreRecs, benchmark } = data;
+  // ── 3-card row data (unchanged) — drives Accept less, Request more,
+  // Projected savings. Left exactly as it was; the chart no longer uses
+  // this fetch (moved to kpiData.cover_series below).
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [retryTick, setRetryTick] = useState(0);
 
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    getRecommendations({ principal, status: 'pending' })
+      .then(() => {})
+      .catch(() => {
+        if (cancelled) return;
+        setError("Couldn't load data");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [principal, retryTick]);
+
+  const handleRetry   = () => setRetryTick((t) => t + 1);
   const handleRefresh = () => window.location.reload();
 
-  const forecastTooltip =
-    `Forecast accuracy measured by MAPE. ${kpis.forecastHealth.passed} SKUs scored below 20% error; ` +
-    `${kpis.forecastHealth.fallback} use a fallback model.`;
+  // ── Top KPI strip data — independent fetch/loading/error from the
+  // section above, so a failure or slow load in one never blocks the other.
+  const [kpiData, setKpiData] = useState(null);
+  const [kpiLoading, setKpiLoading] = useState(true);
+  const [kpiError, setKpiError] = useState(null);
+  const [kpiRetryTick, setKpiRetryTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setKpiLoading(true);
+    setKpiError(null);
+
+    getDashboardData({ principal })
+      .then((result) => {
+        if (cancelled) return;
+        setKpiData(result);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setKpiError("Couldn't load data");
+      })
+      .finally(() => {
+        if (!cancelled) setKpiLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [principal, kpiRetryTick]);
+
+  const handleKpiRetry = () => setKpiRetryTick((t) => t + 1);
+
+  // Card 1 — Cash tied up in stock. Null exactly when inventory.value is
+  // null (valuation hasn't been loaded) — never shows 0 as if it were empty.
+  const stockValue = kpiData?.inventory?.value ?? null;
+  const cashTiedUp = stockValue === null
+    ? { value: '—', contextLine: 'Inventory valuation not yet loaded' }
+    : { value: formatPeso(stockValue), contextLine: kpiData.period || undefined };
+
+  // Card 2 — Stock above policy. Depends on inventory.weeks_of_cover, which
+  // itself depends on the same valuation as Card 1 — same null reason chain.
+  const weeksOfCover = kpiData?.inventory?.weeks_of_cover ?? null;
+  const policyWeeks = kpiData?.inventory?.policy_weeks ?? 3;
+  let stockAbovePolicy;
+  if (weeksOfCover === null) {
+    stockAbovePolicy = { value: '—', contextLine: 'Depends on inventory valuation' };
+  } else {
+    const weeksOver = weeksOfCover - policyWeeks;
+    stockAbovePolicy = {
+      value: weeksOver <= 0 ? 'Within policy' : `${formatWeeks(weeksOver)} weeks over`,
+      contextLine: `${formatWeeks(weeksOfCover)} weeks held, policy is ${policyWeeks} weeks`,
+    };
+  }
+
+  // Card 3 — Order value. Null exactly when recommendations.order_value is
+  // null (LP optimisation hasn't produced a recommendation yet).
+  const orderValue = kpiData?.recommendations?.order_value ?? null;
+  const orderValueCard = orderValue === null
+    ? { value: '—', contextLine: 'Optimisation model has not been run' }
+    : { value: formatPeso(orderValue), contextLine: `${kpiData.recommendations.product_count} products recommended` };
+
+  // Card 4 — Needs manual review. Null exactly when forecast.unreliable_count
+  // is null (SARIMA forecasting hasn't been run yet).
+  const unreliableCount = kpiData?.forecast?.unreliable_count ?? null;
+  let needsManualReview;
+  if (unreliableCount === null) {
+    needsManualReview = { value: '—', contextLine: 'Forecasting model has not been run' };
+  } else {
+    const totalCount = kpiData.forecast.total_count;
+    const reliableCount = totalCount - unreliableCount;
+    needsManualReview = {
+      value: `${unreliableCount}`,
+      contextLine: `${reliableCount} of ${totalCount} forecasts reliable`,
+    };
+  }
 
   return (
     <div className="dashboard">
@@ -135,73 +142,144 @@ const Dashboard = () => {
             <h2>Inventory <span>pulse</span></h2>
             <DateFilter onRefresh={handleRefresh} />
           </div>
+          <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
         </div>
 
-        {/* ── KPI row — the accept/reject question in four numbers ───────── */}
+        {/* KPI strip — independent data source (getDashboardData), own
+            loading/error/retry, scoped to this grid only. */}
         <div className="dashboard-section">
           <div className="kpi-grid">
-            <KPICard
-              title="Allocation offered"
-              value={`₱${kpis.allocationOffered.valueM}M`}
-              contextLine={`${kpis.allocationOffered.cases.toLocaleString()} cases · ${kpis.allocationOffered.classACount} class A`}
-              icon={<Package size={20} />}
-            />
-            <KPICard
-              title="Cash freed"
-              value={`₱${kpis.cashFreed.valueM}M`}
-              direction="better"
-              contextLine={`Accept ₱${kpis.cashFreed.offeredM}M of ₱${kpis.allocationOffered.valueM}M offered · ${kpis.cashFreed.pctLess}% less capital tied up`}
-              icon={<Wallet size={20} />}
-            />
-            <KPICard
-              title="Stockout risk"
-              value={`${kpis.stockoutRisk.count} SKUs`}
-              metricType="danger"
-              contextLine="Short even at full allocation"
-              icon={<ShieldAlert size={20} />}
-            />
-            <KPICard
-              title="Forecast health"
-              value={`${kpis.forecastHealth.passed} / ${kpis.forecastHealth.total}`}
-              contextLine={`${kpis.forecastHealth.passed} of ${kpis.forecastHealth.total} forecasts reliable`}
-              icon={<Activity size={20} />}
-              tooltip={forecastTooltip}
-            />
+            {kpiLoading ? (
+              <>
+                <KPISkeleton /><KPISkeleton /><KPISkeleton /><KPISkeleton />
+              </>
+            ) : kpiError ? (
+              <div className="dashboard-error-state kpi-grid-error">
+                <p>{kpiError}</p>
+                <button className="dashboard-retry-btn" onClick={handleKpiRetry}>Retry</button>
+              </div>
+            ) : (
+              <>
+                <KPICard
+                  title="Cash tied up in stock"
+                  value={cashTiedUp.value}
+                  metricType="recommendation"
+                  contextLine={cashTiedUp.contextLine}
+                  icon={<Wallet size={20} />}
+                />
+                <KPICard
+                  title="Stock above policy"
+                  value={stockAbovePolicy.value}
+                  metricType="recommendation"
+                  contextLine={stockAbovePolicy.contextLine}
+                  icon={<ShieldAlert size={20} />}
+                />
+                <KPICard
+                  title="Order value"
+                  value={orderValueCard.value}
+                  metricType="recommendation"
+                  contextLine={orderValueCard.contextLine}
+                  icon={<Package size={20} />}
+                />
+                <KPICard
+                  title="Needs manual review"
+                  value={needsManualReview.value}
+                  metricType="recommendation"
+                  contextLine={needsManualReview.contextLine}
+                  icon={<ClipboardCheck size={20} />}
+                />
+              </>
+            )}
           </div>
         </div>
 
-        {/* ── Hero chart — allocation vs forecast, diverging bar ──────────── */}
+        {/* Weeks-of-cover chart — same independent data source/loading/error
+            as the KPI strip above (kpiData.cover_series), since both need
+            the same inventory valuation the backend can't compute yet. */}
         <div className="dashboard-section">
           <div className="chart-primary">
-            <AllocationVarianceWidget
-              rows={allocationVariance}
-              classACount={funnel.classA}
-            />
+            {kpiLoading ? (
+              <ChartSkeleton />
+            ) : kpiError ? (
+              <div className="dashboard-error-state">
+                <p>{kpiError}</p>
+                <button className="dashboard-retry-btn" onClick={handleKpiRetry}>Retry</button>
+              </div>
+            ) : (
+              <CoverTrendWidget coverSeries={kpiData?.cover_series ?? []} policyTarget={policyWeeks} />
+            )}
           </div>
         </div>
 
-        {/* ── Bottom row — take less | ask for more | model benchmark ────── */}
-        <div className="dashboard-section">
-          <div className="secondary-grid">
-            <div className="secondary-col">
-              <TakeLessPanel
-                recs={takeLessRecs}
-                totalFreedLabel={`₱${kpis.cashFreed.valueM}M`}
-                onViewAll={() => navigate('/reorder')}
-              />
-            </div>
-            <div className="secondary-col">
-              <AskMorePanel
-                recs={askMoreRecs}
-                stockoutCount={kpis.stockoutRisk.count}
-                onViewAll={() => navigate('/reorder')}
-              />
-            </div>
-            <div className="secondary-col">
-              <BenchmarkPanel benchmark={benchmark} />
-            </div>
+        {error ? (
+          <div className="dashboard-error-state">
+            <p>{error}</p>
+            <button className="dashboard-retry-btn" onClick={handleRetry}>Retry</button>
           </div>
-        </div>
+        ) : (
+          <>
+            {/* Order less of these / Order these now / Products to watch —
+                real, well-defined sources (lp_recommendation.q_i vs current
+                stock; inventory vs lp_recommendation.rop_i;
+                forecast_result.mape >= 0.20), but lp_recommendation and
+                forecast_result both have 0 rows, so all three stay in
+                their empty state until those models run. First two share
+                the optimisation-model blocker (both read lp_recommendation);
+                the third names the forecasting-model blocker instead
+                (reads forecast_result). chart-widget-empty is unconditional
+                here (not data-driven, unlike the KPI/chart sections above)
+                because none of these three has a live fetch behind it yet —
+                once one is wired, its className needs to go back to plain
+                "chart-widget" when that card actually has data. */}
+            <div className="dashboard-section">
+              <div className="secondary-grid">
+                {loading ? (
+                  <>
+                    <div className="secondary-col"><ChartSkeleton /></div>
+                    <div className="secondary-col"><ChartSkeleton /></div>
+                    <div className="secondary-col"><ChartSkeleton /></div>
+                  </>
+                ) : (
+                  <>
+                    <div className="secondary-col">
+                      <div className="chart-widget chart-widget-empty">
+                        <div className="chart-header">
+                          <div className="chart-title-area">
+                            <h4>Order less of these</h4>
+                            <p>Stock already above what demand needs</p>
+                          </div>
+                        </div>
+                        <EmptyNote>Not available yet — the optimisation model has not been run</EmptyNote>
+                      </div>
+                    </div>
+                    <div className="secondary-col">
+                      <div className="chart-widget chart-widget-empty">
+                        <div className="chart-header">
+                          <div className="chart-title-area">
+                            <h4>Order these now</h4>
+                            <p>Stock below the reorder point</p>
+                          </div>
+                        </div>
+                        <EmptyNote>Not available yet — the optimisation model has not been run</EmptyNote>
+                      </div>
+                    </div>
+                    <div className="secondary-col">
+                      <div className="chart-widget chart-widget-empty">
+                        <div className="chart-header">
+                          <div className="chart-title-area">
+                            <h4>Products to watch</h4>
+                            <p>Forecast too irregular to rely on</p>
+                          </div>
+                        </div>
+                        <EmptyNote>Not available yet — the forecasting model has not been run</EmptyNote>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
