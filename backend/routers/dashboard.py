@@ -1,211 +1,113 @@
+"""
+backend.routers.dashboard — GET /dashboard
+
+Feeds the Dashboard page's four KPI cards + weeks-of-cover chart
+(frontend/src/api/dashboard.js's getDashboardData). Response shape is
+fixed by that file's stub — this endpoint must match it exactly so
+swapping the frontend over is a one-line change, not a rewrite.
+
+Honest-null policy (matches the frontend's null-handling contract):
+  inventory.value / inventory.weeks_of_cover / cover_series[].weeks_of_cover
+    — always null. inventory_fact has no valuation/price column anywhere
+    (confirmed against the live schema) and unit-quantity math was tried
+    and confirmed implausible (Del Monte inventory is per-SKU, demand is
+    per-category, they don't join per product). There is nothing honest
+    to compute here yet — do not fabricate a value once this file is
+    touched again for a different reason.
+  recommendations.order_value
+    — always null. lp_recommendation has no runner yet, and even once one
+    exists, Q_i * unit_price needs a cost column that doesn't exist.
+  recommendations.product_count
+    — real: COUNT(*) of pending LP_Recommendation rows. Needs no price,
+    so it's honestly computable even though order_value isn't.
+  forecast.unreliable_count / forecast.total_count
+    — real: from Forecast_Result at its most recent forecast_date. mape
+    is stored as a PERCENT (see schema.sql's column comment) — the gate
+    is `mape >= 20.0`, not `>= 0.20`. unreliable_count is null (not 0)
+    when total_count is 0, matching this app's "null = no data source
+    yet" convention everywhere else, rather than claiming "0 unreliable"
+    when there's no forecast run to judge at all.
+"""
+from __future__ import annotations
+
+import datetime
+
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from backend.deps import TokenPayload, get_current_user, get_db
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
+POLICY_WEEKS = 3
+MAPE_UNRELIABLE_GATE = 20.0  # percent — see schema.sql's Forecast_Result.mape comment
+
+
+def _last_12_periods() -> list[str]:
+    """Last 12 calendar months as 'YYYY-MM', oldest first — same grain
+    _period/calendar_month use everywhere else, mirrors the frontend
+    stub's last12Periods() so the shape is identical either way."""
+    today = datetime.date.today()
+    periods = []
+    for i in range(11, -1, -1):
+        month_index = today.month - 1 - i
+        year = today.year + month_index // 12
+        month = month_index % 12 + 1
+        periods.append(f"{year:04d}-{month:02d}")
+    return periods
+
+
 @router.get("")
 def get_dashboard(
     principal: str = Query("all", description="Filter to 'unilever' or 'delmonte'. Use 'all' for both."),
-    from_date: str = Query(None, alias="from", description="Start date YYYY-MM-DD"),
-    to_date: str = Query(None, alias="to", description="End date YYYY-MM-DD"),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    # Principal filter
     principal_filter = ""
-    pd_principal_filter = ""
-    params = {}
+    params: dict = {}
     if principal in ("unilever", "delmonte"):
-        principal_filter = "AND principal = :principal"
-        pd_principal_filter = "AND pd.principal = :principal"
+        principal_filter = "AND pd.principal = :principal"
         params["principal"] = principal
 
-    # Period filter (convert YYYY-MM-DD to YYYY-MM for monthly facts)
-    period_filter = ""
-    if from_date and to_date:
-        from_period = from_date[:7]
-        to_period = to_date[:7]
-        period_filter = "AND _period >= :from_period AND _period <= :to_period"
-        params["from_period"] = from_period
-        params["to_period"] = to_period
+    # recommendations.product_count — real, no price needed.
+    reco_row = db.execute(
+        text(f"""
+            SELECT COUNT(*) AS product_count
+            FROM LP_Recommendation lr
+            JOIN Product_Dimension pd ON pd.product_key = lr.product_key
+            WHERE lr.status = 'pending' {principal_filter}
+        """),
+        params,
+    ).mappings().first()
+    product_count = int(reco_row["product_count"])
 
-    # 1. Bad Order Value & Incidents
-    bo_query = text(f"""
-        SELECT 
-            COALESCE(SUM(net_amount), 0) as total_value,
-            COUNT(*) as incident_count
-        FROM SalesReturn_Fact_Real
-        WHERE return_type = 'BO' {principal_filter} {period_filter}
-    """)
-    bo_row = db.execute(bo_query, params).mappings().first()
-    bo_value = float(bo_row["total_value"])
-    bo_incidents = int(bo_row["incident_count"])
-
-    # 2. Reorder Items
-    # LP_Recommendation has no principal column directly, need to join Product_Dimension
-    reorder_query = text(f"""
-        SELECT 
-            COUNT(*) as total_items,
-            SUM(q_i) as total_qty,
-            COUNT(CASE WHEN (q_i - rop_i) > 0 THEN 1 END) as critical_items
-        FROM LP_Recommendation lr
-        JOIN Product_Dimension pd ON lr.product_key = pd.product_key
-        WHERE status = 'pending'
-        {pd_principal_filter}
-    """)
-    reorder_row = db.execute(reorder_query, params).mappings().first()
-    reorder_items = int(reorder_row["total_items"])
-    reorder_critical = int(reorder_row["critical_items"])
-    reorder_qty = float(reorder_row["total_qty"] or 0)
-
-    # 3. Bad Order Trend
-    # Group by _period and return_type='BO'
-    bo_trend_query = text(f"""
-        SELECT _period as period, COALESCE(SUM(net_amount), 0) as val
-        FROM SalesReturn_Fact_Real
-        WHERE return_type = 'BO' {principal_filter} {period_filter}
-        GROUP BY _period
-        ORDER BY _period
-    """)
-    trend_rows = db.execute(bo_trend_query, params).mappings().all()
-    # The frontend expects expiry/transport_damage/storage_issue, but DB doesn't have it.
-    # We will map the total val to 'storage_issue' for the chart to display it.
-    bad_order_series = [
-        {"period": r["period"], "expiry": 0, "transport_damage": 0, "storage_issue": float(r["val"])}
-        for r in trend_rows
-    ]
-
-    # 4. ABC Classification — a point-in-time snapshot recomputed every
-    # month (one row per SKU per classification_period, back to 2021-01),
-    # not a range to sum. The old query had no period filter at all, so
-    # SUM(revenue_share) GROUP BY tier summed every historical snapshot
-    # together (confirmed: 46,016 rows across 68 periods) - that's why
-    # Class A alone showed 107% revenue share. Anchor to the latest
-    # snapshot at or before the selected end period instead (falls back to
-    # the newest snapshot overall if no date range was supplied).
-    #
-    # Also: revenue_share is stored as a 0-1 fraction (e.g. 0.0144), and
-    # each principal's own shares already sum to ~1.0 independently -
-    # summing both principals' shares together under principal='all' would
-    # again exceed 100% (confirmed: Unilever ~0.80 + Del Monte ~0.80 = 1.60
-    # for tier A in 2026-08). Average across principals instead when 'all'
-    # is selected - the same unweighted-average approximation this
-    # project's mock data already used for grain='mixed' - and multiply by
-    # 100 to report a percentage instead of a fraction.
-    if to_date:
-        abc_period_filter = """AND classification_period = (
-            SELECT MAX(classification_period) FROM ABC_Classification
-            WHERE classification_period <= :abc_anchor_period
-        )"""
-        params["abc_anchor_period"] = to_date[:7]
-    else:
-        abc_period_filter = "AND classification_period = (SELECT MAX(classification_period) FROM ABC_Classification)"
-
-    abc_query = text(f"""
-        WITH period_scoped AS (
-            SELECT principal, tier, SUM(revenue_share) AS principal_tier_share, COUNT(*) AS sku_count
-            FROM ABC_Classification ac
-            WHERE 1=1 {principal_filter} {abc_period_filter}
-            GROUP BY principal, tier
-        )
-        SELECT tier,
-               SUM(sku_count) AS sku_count,
-               AVG(principal_tier_share) * 100 AS revenue_share
-        FROM period_scoped
-        GROUP BY tier
-        ORDER BY tier
-    """)
-    abc_rows = db.execute(abc_query, params).mappings().all()
-    abc_tiers = [
-        {"tier": r["tier"], "sku_count": r["sku_count"], "revenue_share": round(float(r["revenue_share"] or 0), 2)}
-        for r in abc_rows
-    ]
-
-    # 5. Reorder Alerts
-    alerts_query = text(f"""
-        SELECT 
-            pd.sku_code, pd.category_path, pd.product_name, 
-            lr.q_i, lr.rop_i
-        FROM LP_Recommendation lr
-        JOIN Product_Dimension pd ON lr.product_key = pd.product_key
-        WHERE status = 'pending'
-        {pd_principal_filter}
-        LIMIT 5
-    """)
-    alerts_rows = db.execute(alerts_query, params).mappings().all()
-    reorder_alerts = [
-        {
-            "sku_id": r["sku_code"] or r["category_path"] or "Unknown",
-            "product_name": r["product_name"] or "Unknown",
-            "current_stock": 0, # Inventory_Fact not joined for simplicity
-            "rop": float(r["rop_i"]),
-            "urgency": "URGENT"
-        }
-        for r in alerts_rows
-    ]
-
-    # 6. Bad Orders List
-    bo_list_query = text(f"""
-        SELECT return_slip_num as incident_id, 'Unknown Product' as product_name, net_amount
-        FROM SalesReturn_Fact_Real
-        WHERE return_type = 'BO' {principal_filter} {period_filter}
-        LIMIT 5
-    """)
-    bo_list_rows = db.execute(bo_list_query, params).mappings().all()
-    bad_orders = [
-        {
-            "incident_id": r["incident_id"],
-            "product_name": r["product_name"],
-            "reason": "Unknown",
-            "status": "OPEN"
-        }
-        for r in bo_list_rows
-    ]
+    # forecast.unreliable_count / total_count — real, at the most recent
+    # forecast_date. A product_key with no Product_Dimension match can't
+    # happen (FK is NOT NULL), so the join never silently drops rows.
+    forecast_row = db.execute(
+        text(f"""
+            WITH latest AS (
+                SELECT MAX(forecast_date) AS forecast_date FROM Forecast_Result
+            )
+            SELECT
+                COUNT(*) AS total_count,
+                COUNT(*) FILTER (WHERE fr.mape >= :mape_gate) AS unreliable_count
+            FROM Forecast_Result fr
+            JOIN Product_Dimension pd ON pd.product_key = fr.product_key
+            JOIN latest ON fr.forecast_date = latest.forecast_date
+            WHERE 1=1 {principal_filter}
+        """),
+        {**params, "mape_gate": MAPE_UNRELIABLE_GATE},
+    ).mappings().first()
+    total_count = int(forecast_row["total_count"])
+    unreliable_count = int(forecast_row["unreliable_count"]) if total_count > 0 else None
 
     return {
         "principal": principal,
-        "period": {"from": from_date, "to": to_date},
-        "kpis": {
-            "bad_order_value": {
-                "metric_type": "loss",
-                "value": round(bo_value / 1000, 1), # In k
-                "delta_vs_prev": 0,
-                "direction": "stable",
-                "incident_count": bo_incidents,
-                "by_reason": {"expiry": 0, "transport_damage": 0, "storage_issue": round(bo_value / 1000, 1)}
-            },
-            "bad_order_incidents": {
-                "metric_type": "loss",
-                "value": bo_incidents,
-                "open_count": bo_incidents,
-                "under_investigation": 0,
-                "resolved_count": 0,
-                "total_count": bo_incidents,
-                "delta_vs_prev": 0,
-                "direction": "stable"
-            },
-            "reorder_items": {
-                "metric_type": "recommendation",
-                "value": reorder_items,
-                "critical_count": reorder_critical,
-                "total_value": round(reorder_qty, 1), # Using qty as proxy since cost is unknown
-                "unit_noun": "items" if principal == 'all' else ('categories' if principal == 'delmonte' else 'products')
-            },
-            "reorder_value": {
-                "metric_type": "recommendation",
-                "value": round(reorder_qty, 1),
-                "item_count": reorder_items,
-                "critical_count": reorder_critical,
-                "unit_noun": "items" if principal == 'all' else ('categories' if principal == 'delmonte' else 'products')
-            }
-        },
-        "bad_order_series": bad_order_series,
-        "abc": {
-            "grain": "mixed" if principal == 'all' else ('category' if principal == 'delmonte' else 'sku'),
-            "tiers": abc_tiers
-        },
-        "reorder_alerts": reorder_alerts,
-        "bad_orders": bad_orders
+        "period": None,
+        "inventory": {"value": None, "weeks_of_cover": None, "policy_weeks": POLICY_WEEKS},
+        "recommendations": {"order_value": None, "product_count": product_count},
+        "forecast": {"unreliable_count": unreliable_count, "total_count": total_count},
+        "cover_series": [{"period": p, "weeks_of_cover": None} for p in _last_12_periods()],
     }
