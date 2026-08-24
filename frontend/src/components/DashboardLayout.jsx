@@ -4,15 +4,11 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import './DashboardLayout.css';
 
-// Helper to derive current real-world month & year from system date
-const getCurrentRealWorldPeriod = () => {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const now = new Date();
-  const currentMonthName = months[now.getMonth()] || 'Aug';
-  const currentYearStr = now.getFullYear().toString();
-  const validYear = ['2021', '2022', '2023', '2024', '2025', '2026'].includes(currentYearStr) ? currentYearStr : '2026';
-  return { month: currentMonthName, year: validYear };
-};
+// "Today" is pinned to June 2026, not the machine's actual clock — the
+// app's own notion of "now" needs to stay fixed regardless of when it's
+// actually opened, so every filter/default/upper-bound built on it stays
+// consistent instead of drifting forward with the real calendar.
+const getCurrentRealWorldPeriod = () => ({ month: 'Jun', year: '2026' });
 
 const DashboardLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
