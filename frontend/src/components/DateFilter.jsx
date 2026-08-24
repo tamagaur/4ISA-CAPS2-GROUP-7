@@ -3,10 +3,10 @@ import { useOutletContext } from 'react-router-dom';
 import './DateFilter.css';
 
 const DateFilter = ({ onRefresh }) => {
-  const { startMonth, startYear, endMonth, endYear, updatePeriodImmediately, realWorldPeriod } = useOutletContext() || { 
-    startMonth: 'Aug', startYear: '2026', endMonth: 'Aug', endYear: '2026',
-    updatePeriodImmediately: () => {}, 
-    realWorldPeriod: { month: 'Aug', year: '2026' } 
+  const { startMonth, startYear, endMonth, endYear, updatePeriodImmediately, realWorldPeriod } = useOutletContext() || {
+    startMonth: 'Jun', startYear: '2026', endMonth: 'Jun', endYear: '2026',
+    updatePeriodImmediately: () => {},
+    realWorldPeriod: { month: 'Jun', year: '2026' }
   };
 
   return (

@@ -418,7 +418,11 @@ CREATE TABLE IF NOT EXISTS Forecast_Result (
     forecast_value          NUMERIC(14,2) NOT NULL,
     confidence_lower          NUMERIC(14,2),
     confidence_upper          NUMERIC(14,2),
-    mape                        NUMERIC(6,3),        -- must be < 20.0 to gate into LP_Recommendation
+    mape                        NUMERIC(6,3),        -- PERCENT, not a 0-1 fraction (e.g. 20.0 means 20%,
+                                                       -- matching scripts/run_sarima.py's *100 conversion
+                                                       -- before insert) - must be < 20.0 to gate into
+                                                       -- LP_Recommendation. A `>= 0.20` comparison anywhere
+                                                       -- against this column is wrong by a factor of 100.
     model_params                  JSONB,             -- SARIMA (p,d,q)(P,D,Q,s) etc. - stored as given, not re-derived
     generated_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (product_key, forecast_date)

@@ -218,7 +218,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 const BadOrders = () => {
   const { startMonth, startYear, endMonth, endYear, principal } = useOutletContext() || {
-    startMonth: 'Apr', startYear: '2026', endMonth: 'Apr', endYear: '2026', principal: 'all',
+    startMonth: 'Jun', startYear: '2026', endMonth: 'Jun', endYear: '2026', principal: 'all',
   };
   const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
   const trackedList = useMemo(() => TRACKED_BY_PRINCIPAL[principal] ?? TRACKED_BY_PRINCIPAL.all, [principal]);
