@@ -29,6 +29,13 @@ const EmptyNote = ({ children }) => <p className="dashboard-empty-note">{childre
 const formatPeso = (value) => `₱${Math.round(value).toLocaleString()}`;
 const formatWeeks = (value) => value.toFixed(1);
 
+// TEMP: real KPI cards hidden per request (they're mostly empty states
+// right now — forecasting/optimisation aren't fully wired to live data
+// yet) in favour of leading with the illustrative "Project impact" cards
+// instead. The real cards' fetch/logic below is untouched — flip this
+// back to true to restore them at the top; nothing else needs to change.
+const SHOW_REAL_KPI_CARDS = false;
+
 const Dashboard = () => {
   const { principal } = useOutletContext() || { principal: 'all' };
 
@@ -145,53 +152,108 @@ const Dashboard = () => {
           <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
         </div>
 
-        {/* KPI strip — independent data source (getDashboardData), own
-            loading/error/retry, scoped to this grid only. */}
-        <div className="dashboard-section">
+        {/* Project impact — moved to the top, temporarily standing in for
+            the real KPI cards below (see SHOW_REAL_KPI_CARDS). NOT live
+            data. Every value here is a fixed, hardcoded illustration of
+            what this dashboard is designed to deliver once forecasting
+            (SARIMA) and optimisation (LP) are both running against real
+            cost/valuation data — neither is fully wired yet. Kept in its
+            own visibly-badged section so nobody mistakes these for
+            production numbers. Maps directly to the capstone's five
+            specific objectives: forecast model comparison (Obj. 2),
+            multi-objective cost minimisation (Obj. 3), reorder-
+            recommendation adoption vs. override (Obj. 4), and the SDG 12
+            waste/stockout framing from the general objective. */}
+        <div className="dashboard-section demo-section">
+          <div className="demo-section-header">
+            <div>
+              <h3>Project impact</h3>
+              <p>What this dashboard aims to deliver once it's fully connected to live data</p>
+            </div>
+            <span className="demo-badge">Sample figures — for illustration</span>
+          </div>
           <div className="kpi-grid">
-            {kpiLoading ? (
-              <>
-                <KPISkeleton /><KPISkeleton /><KPISkeleton /><KPISkeleton />
-              </>
-            ) : kpiError ? (
-              <div className="dashboard-error-state kpi-grid-error">
-                <p>{kpiError}</p>
-                <button className="dashboard-retry-btn" onClick={handleKpiRetry}>Retry</button>
-              </div>
-            ) : (
-              <>
-                <KPICard
-                  title="Cash tied up in stock"
-                  value={cashTiedUp.value}
-                  metricType="recommendation"
-                  contextLine={cashTiedUp.contextLine}
-                  icon={<Wallet size={20} />}
-                />
-                <KPICard
-                  title="Stock above policy"
-                  value={stockAbovePolicy.value}
-                  metricType="recommendation"
-                  contextLine={stockAbovePolicy.contextLine}
-                  icon={<ShieldAlert size={20} />}
-                />
-                <KPICard
-                  title="Order value"
-                  value={orderValueCard.value}
-                  metricType="recommendation"
-                  contextLine={orderValueCard.contextLine}
-                  icon={<Package size={20} />}
-                />
-                <KPICard
-                  title="Needs manual review"
-                  value={needsManualReview.value}
-                  metricType="recommendation"
-                  contextLine={needsManualReview.contextLine}
-                  icon={<ClipboardCheck size={20} />}
-                />
-              </>
-            )}
+            <KPICard
+              title="Forecast accuracy"
+              value="87.3%"
+              metricType="recommendation"
+              contextLine="Compared against a simple average-based estimate"
+              icon={<TrendingUp size={20} />}
+            />
+            <KPICard
+              title="Total inventory cost saved"
+              value="₱1.85M / qtr"
+              metricType="recommendation"
+              contextLine="Covers storage, ordering, and shortage costs"
+              icon={<PiggyBank size={20} />}
+            />
+            <KPICard
+              title="Recommendation adoption"
+              value="76%"
+              metricType="recommendation"
+              contextLine="24% adjusted manually, with reason recorded"
+              icon={<CheckCircle2 size={20} />}
+            />
+            <KPICard
+              title="Waste & stockouts reduced"
+              value="31%"
+              metricType="recommendation"
+              contextLine="Supports responsible consumption (UN SDG 12)"
+              icon={<Leaf size={20} />}
+            />
           </div>
         </div>
+
+        {/* KPI strip — independent data source (getDashboardData), own
+            loading/error/retry, scoped to this grid only. Temporarily
+            hidden (SHOW_REAL_KPI_CARDS) — see the note by that constant. */}
+        {SHOW_REAL_KPI_CARDS && (
+          <div className="dashboard-section">
+            <div className="kpi-grid">
+              {kpiLoading ? (
+                <>
+                  <KPISkeleton /><KPISkeleton /><KPISkeleton /><KPISkeleton />
+                </>
+              ) : kpiError ? (
+                <div className="dashboard-error-state kpi-grid-error">
+                  <p>{kpiError}</p>
+                  <button className="dashboard-retry-btn" onClick={handleKpiRetry}>Retry</button>
+                </div>
+              ) : (
+                <>
+                  <KPICard
+                    title="Cash tied up in stock"
+                    value={cashTiedUp.value}
+                    metricType="recommendation"
+                    contextLine={cashTiedUp.contextLine}
+                    icon={<Wallet size={20} />}
+                  />
+                  <KPICard
+                    title="Stock above policy"
+                    value={stockAbovePolicy.value}
+                    metricType="recommendation"
+                    contextLine={stockAbovePolicy.contextLine}
+                    icon={<ShieldAlert size={20} />}
+                  />
+                  <KPICard
+                    title="Order value"
+                    value={orderValueCard.value}
+                    metricType="recommendation"
+                    contextLine={orderValueCard.contextLine}
+                    icon={<Package size={20} />}
+                  />
+                  <KPICard
+                    title="Needs manual review"
+                    value={needsManualReview.value}
+                    metricType="recommendation"
+                    contextLine={needsManualReview.contextLine}
+                    icon={<ClipboardCheck size={20} />}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Weeks-of-cover chart — same independent data source/loading/error
             as the KPI strip above (kpiData.cover_series), since both need
@@ -282,58 +344,6 @@ const Dashboard = () => {
             </div>
           </>
         )}
-
-        {/* Project impact — NOT live data. Every value here is a fixed,
-            hardcoded illustration of what this DSD is designed to deliver
-            once forecasting (SARIMA) and optimisation (LP) are both
-            running against real cost/valuation data — neither is fully
-            wired yet (see the real, empty sections above). Kept in its
-            own visibly-badged section, never mixed into the real KPI
-            grid, so nobody mistakes these for production numbers. Maps
-            directly to the capstone's five specific objectives: forecast
-            model comparison (Obj. 2), multi-objective cost minimisation
-            (Obj. 3), reorder-recommendation adoption vs. override (Obj.
-            4), and the SDG 12 waste/stockout framing from the general
-            objective. */}
-        <div className="dashboard-section demo-section">
-          <div className="demo-section-header">
-            <div>
-              <h3>Project impact</h3>
-              <p>What this DSD is designed to deliver, once forecasting and optimisation are running on live data</p>
-            </div>
-            <span className="demo-badge">Illustrative — synthetic demo data</span>
-          </div>
-          <div className="kpi-grid">
-            <KPICard
-              title="Forecast accuracy"
-              value="87.3%"
-              metricType="recommendation"
-              contextLine="SARIMA vs. naive baseline, holdout-tested"
-              icon={<TrendingUp size={20} />}
-            />
-            <KPICard
-              title="Total inventory cost saved"
-              value="₱1.85M / qtr"
-              metricType="recommendation"
-              contextLine="Holding + ordering + shortage costs minimised"
-              icon={<PiggyBank size={20} />}
-            />
-            <KPICard
-              title="Recommendation adoption"
-              value="76%"
-              metricType="recommendation"
-              contextLine="24% overridden — reason logged per protocol"
-              icon={<CheckCircle2 size={20} />}
-            />
-            <KPICard
-              title="Waste & stockouts reduced"
-              value="31%"
-              metricType="recommendation"
-              contextLine="Supports UN SDG 12 — responsible consumption"
-              icon={<Leaf size={20} />}
-            />
-          </div>
-        </div>
       </div>
     </div>
   );
