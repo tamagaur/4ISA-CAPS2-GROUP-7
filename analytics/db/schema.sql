@@ -425,6 +425,11 @@ CREATE TABLE IF NOT EXISTS Forecast_Result (
                                                        -- against this column is wrong by a factor of 100.
     model_params                  JSONB,             -- SARIMA (p,d,q)(P,D,Q,s) etc. - stored as given, not re-derived
     generated_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Added by migrations/0008_add_forecast_result_status.sql: distinguishes
+    -- a real, measured forecast from one that couldn't be measured, so mape
+    -- is never fabricated to look like it passed the gate. See run_sarima.py.
+    status                         TEXT NOT NULL DEFAULT 'ok'
+                                     CHECK (status IN ('ok', 'insufficient_data', 'dead_sku', 'fit_failed', 'unreliable')),
     UNIQUE (product_key, forecast_date)
 );
 
@@ -630,20 +635,29 @@ LEFT JOIN Product_Dimension pd ON pd.product_key = s.product_key;
 -- fact tables, per that same spec note.
 -- ============================================================
 
+-- Fixed 2026-08 (analytics/db/migrations/0005_fix_real_views.sql): these six
+-- views briefly carried an `OR principal = 'delmonte'` (and, for
+-- Inventory_Fact_Real, an additional unconditional Unilever carve-out)
+-- that made the predicate always-true for that principal — i.e. every
+-- _Real view stopped excluding synthetic rows for Del Monte entirely, the
+-- opposite of what this view family exists to guarantee. Restored to the
+-- strict is_demo = false form below; see 0005's header for the full
+-- incident writeup.
+
 CREATE OR REPLACE VIEW Sales_Fact_Real AS
-SELECT * FROM Sales_Fact WHERE is_demo = false OR principal = 'delmonte';
+SELECT * FROM Sales_Fact WHERE is_demo = false;
 
 CREATE OR REPLACE VIEW Purchase_Fact_Real AS
-SELECT * FROM Purchase_Fact WHERE is_demo = false OR principal = 'delmonte';
+SELECT * FROM Purchase_Fact WHERE is_demo = false;
 
 CREATE OR REPLACE VIEW Inventory_Fact_Real AS
-SELECT * FROM Inventory_Fact WHERE is_demo = false OR principal = 'delmonte' OR (principal = 'unilever' AND is_demo = true);
+SELECT * FROM Inventory_Fact WHERE is_demo = false;
 
 CREATE OR REPLACE VIEW SellOut_Fact_Real AS
-SELECT * FROM SellOut_Fact WHERE is_demo = false OR principal = 'delmonte';
+SELECT * FROM SellOut_Fact WHERE is_demo = false;
 
 CREATE OR REPLACE VIEW Unilever_SKU_Demand_Fact_Real AS
 SELECT * FROM Unilever_SKU_Demand_Fact WHERE is_demo = false;
 
 CREATE OR REPLACE VIEW SalesReturn_Fact_Real AS
-SELECT * FROM SalesReturn_Fact WHERE is_demo = false OR principal = 'delmonte';
+SELECT * FROM SalesReturn_Fact WHERE is_demo = false;

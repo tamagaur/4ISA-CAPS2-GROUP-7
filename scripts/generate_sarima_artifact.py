@@ -8,8 +8,8 @@ query = """
 SELECT 
     pd.sku_code, 
     pd.product_name, 
-    fr.forecast_date, 
-    fr.forecast_quantity
+    fr.forecast_date,
+    fr.forecast_value
 FROM Forecast_Result fr
 JOIN Product_Dimension pd ON fr.product_key = pd.product_key
 WHERE pd.sku_code IN ('9IDK70634', '9JCU24802', '9WBI34725')
@@ -24,7 +24,7 @@ md_content += "| SKU Code | Product Name | Forecast Date | Forecasted Quantity |
 md_content += "|---|---|---|---|\n"
 
 for _, row in df.iterrows():
-    md_content += f"| {row['sku_code']} | {row['product_name']} | {row['forecast_date']} | {row['forecast_quantity']} |\n"
+    md_content += f"| {row['sku_code']} | {row['product_name']} | {row['forecast_date']} | {row['forecast_value']} |\n"
 
 out_path = r'C:\Users\kyuan\.gemini\antigravity-ide\brain\d778170f-1764-4450-b014-290662536617\sarima_results.md'
 with open(out_path, 'w', encoding='utf-8') as f:
