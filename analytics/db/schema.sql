@@ -311,7 +311,52 @@ CREATE TABLE IF NOT EXISTS Inventory_Fact (
     is_demo                   BOOLEAN NOT NULL DEFAULT false,
     _src_file                TEXT NOT NULL,
     _src_sheet                TEXT NOT NULL,
-    UNIQUE (sku_code, snapshot_date, region)  -- DEC-04 natural key (config/source_of_truth.yaml: inventory)
+    -- Backfilled 2026-08-27 (migrations/0009_add_soh_columns.sql):
+    -- both columns were ALREADY LIVE on Supabase before this line existed
+    -- here — valuation via migrations/0004_add_valuation.sql, cost added
+    -- live/ad hoc at some earlier point with no migration ever tracking
+    -- it (confirmed via a live information_schema query, 2026-08-27).
+    -- Documented here now, not dropped or altered — 0009 only ADDs
+    -- columns (IF NOT EXISTS), it never touches these two.
+    valuation                 NUMERIC,     -- Del Monte: extended peso total for this SKU/snapshot's on-hand qty
+    -- cost is Del Monte's own extended peso total, confirmed EQUAL to
+    -- valuation on real data (R10, 2026-08: 584 rows Cost==Valuation in
+    -- the 2025 layout, plus the totals row) — NOT a per-unit price.
+    -- Unilever's SOH source has no equivalent (its Last Purchase Price
+    -- is a per-case UNIT price, a different concept entirely — see
+    -- unit_cost_per_case below); Unilever rows leave this column NULL,
+    -- never populated from Last Purchase Price (R10: do not conflate the
+    -- two units under one column name).
+    cost                       NUMERIC,
+    -- R11 (2026-08, Unilever SOH Load): Last Purchase Price(GSV/CS) is a
+    -- per-CASE unit price (the source header says so directly), a
+    -- different unit than Del Monte's cost/valuation (extended peso
+    -- totals) above — kept in its own column rather than mixed into
+    -- `cost`. Del Monte rows leave this column NULL (no per-case unit
+    -- price concept exists in that source).
+    unit_cost_per_case         NUMERIC,
+    -- R12 (2026-08, Unilever SOH Load): the dead-stock signal (Blocked
+    -- Stock (CS/PC) split into cases/pieces, + Status) — flagged as
+    -- needed downstream in this session's Transform report, no prior
+    -- home. Unilever only for now; Del Monte rows leave these NULL (no
+    -- equivalent column in that source).
+    blocked_qty_cases          NUMERIC,
+    blocked_qty_pieces         NUMERIC,
+    stock_status                TEXT,
+    UNIQUE (sku_code, snapshot_date, region)  -- DEC-04 natural key (config/source_of_truth.yaml: inventory).
+    -- CAVEAT (2026-08-27, Unilever SOH Load): Postgres treats NULL <>
+    -- NULL in a UNIQUE constraint (same class of gap SalesReturn_Fact's
+    -- invoice_num had, see that table's comment) - Unilever SOH rows all
+    -- have region=NULL (R6: Storage Location dropped, no real region
+    -- concept for this source), so THIS CONSTRAINT DOES NOT ACTUALLY
+    -- ENFORCE (sku_code, snapshot_date) uniqueness for Unilever rows at
+    -- the database level. source_of_truth.yaml's inventory.unilever
+    -- natural_key is [sku_code, snapshot_date] (no region) for exactly
+    -- this reason; uniqueness for Unilever is verified by Transform's
+    -- dedup_facts() and this Load's own live post-load query, not by
+    -- this constraint. Not fixed here — out of this migration's scope
+    -- (R11/R12 additions + valuation/cost documentation only); flag for
+    -- a future migration if a real Unilever duplicate is ever a risk.
 );
 
 CREATE INDEX IF NOT EXISTS ix_inventory_fact_product ON Inventory_Fact (product_key);
@@ -418,11 +463,17 @@ CREATE TABLE IF NOT EXISTS Forecast_Result (
     forecast_value          NUMERIC(14,2) NOT NULL,
     confidence_lower          NUMERIC(14,2),
     confidence_upper          NUMERIC(14,2),
-    mape                        NUMERIC(6,3),        -- PERCENT, not a 0-1 fraction (e.g. 20.0 means 20%,
+    mape                        NUMERIC(10,3),       -- PERCENT, not a 0-1 fraction (e.g. 20.0 means 20%,
                                                        -- matching scripts/run_sarima.py's *100 conversion
                                                        -- before insert) - must be < 20.0 to gate into
                                                        -- LP_Recommendation. A `>= 0.20` comparison anywhere
                                                        -- against this column is wrong by a factor of 100.
+                                                       -- (Live precision confirmed NUMERIC(10,3), not the
+                                                       -- (6,3) this comment said until 2026-08 remediation.)
+    mase                        NUMERIC(10,3),       -- Scale-free (Hyndman & Koehler 2006), doesn't blow up
+                                                       -- on near-zero actuals the way mape can. Was live on
+                                                       -- Supabase but undocumented here and never populated
+                                                       -- by run_sarima.py until this fix - see evaluate_sarima().
     model_params                  JSONB,             -- SARIMA (p,d,q)(P,D,Q,s) etc. - stored as given, not re-derived
     generated_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Added by migrations/0008_add_forecast_result_status.sql: distinguishes
