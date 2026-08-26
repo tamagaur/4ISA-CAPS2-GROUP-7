@@ -292,7 +292,7 @@ export const SalesVsStockWidget = ({ data = [], fixedAllocation, emptyReason }) 
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Sales vs. stock on hand</h4>
+          <h4>Sales vs Stock on Hand</h4>
           <p>Compared against the suppliers&apos; fixed yearly allocation</p>
         </div>
       </div>
@@ -317,8 +317,9 @@ export const SalesVsStockWidget = ({ data = [], fixedAllocation, emptyReason }) 
                   <ReferenceLine
                     y={fixedAllocation}
                     stroke={STATUS_TIERS.diagnostic}
-                    strokeDasharray="4 4"
-                    label={{ value: 'Fixed allocation', position: 'insideTopRight', fontSize: 10, fill: STATUS_TIERS.diagnostic }}
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    label={{ value: 'Fixed allocation', position: 'insideTopRight', fontSize: 10, fontWeight: 700, fill: STATUS_TIERS.diagnostic }}
                   />
                 )}
                 <Line
