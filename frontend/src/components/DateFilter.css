@@ -29,6 +29,31 @@
   color: #a0aec0;
 }
 
+.date-save-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: #4F46E5;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.date-save-btn:hover:not(:disabled) {
+  background-color: #4338ca;
+}
+
+.date-save-btn:disabled {
+  background-color: #e2e8f0;
+  color: #a0aec0;
+  cursor: default;
+}
+
 .date-today-btn {
   display: flex;
   align-items: center;

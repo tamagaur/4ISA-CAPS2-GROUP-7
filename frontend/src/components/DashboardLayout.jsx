@@ -10,16 +10,40 @@ import './DashboardLayout.css';
 // consistent instead of drifting forward with the real calendar.
 const getCurrentRealWorldPeriod = () => ({ month: 'Jun', year: '2026' });
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Subtracts `count` months from (month, year), rolling the year backward
+// across a January boundary rather than clamping — e.g. 2 months before
+// Jan 2026 is Nov 2025.
+const subtractMonths = (month, year, count) => {
+  const total = MONTHS.indexOf(month) - count;
+  const yearOffset = Math.floor(total / 12);
+  const monthIndex = ((total % 12) + 12) % 12;
+  return { month: MONTHS[monthIndex], year: String(Number(year) + yearOffset) };
+};
+
+// Default period: at least 2 months back from "today" through "today" —
+// a 3-month window instead of the single current month, so the app opens
+// on a range with enough history to look like a trend, not one bar.
+// Both the initial state below and the "Today" reset button build off
+// this same function, so they can never drift apart.
+const getDefaultDateRange = () => {
+  const today = getCurrentRealWorldPeriod();
+  const start = subtractMonths(today.month, today.year, 2);
+  return { startMonth: start.month, startYear: start.year, endMonth: today.month, endYear: today.year };
+};
+
 const DashboardLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const realWorldPeriod = getCurrentRealWorldPeriod();
+  const defaultRange = getDefaultDateRange();
 
-  // Persistent Applied State (defaulting to real-world current month/year)
-  const [startMonth, setStartMonth] = useState(realWorldPeriod.month);
-  const [startYear, setStartYear] = useState(realWorldPeriod.year);
-  const [endMonth, setEndMonth] = useState(realWorldPeriod.month);
-  const [endYear, setEndYear] = useState(realWorldPeriod.year);
+  // Persistent Applied State (defaulting to the 3-month range ending "today")
+  const [startMonth, setStartMonth] = useState(defaultRange.startMonth);
+  const [startYear, setStartYear] = useState(defaultRange.startYear);
+  const [endMonth, setEndMonth] = useState(defaultRange.endMonth);
+  const [endYear, setEndYear] = useState(defaultRange.endYear);
 
   // Principal filter — 'all' | 'unilever' | 'delmonte'. Deliberately not
   // persisted (no localStorage), unlike the period above: it applies
@@ -67,12 +91,13 @@ const DashboardLayout = () => {
     setPendingEndYear(endYear);
   };
 
+  // "Today" is a one-click reset to the default range — unlike a manual
+  // month/year pick, it applies immediately (via updatePeriodImmediately,
+  // defined below) rather than staging a pending change that still needs
+  // a separate Save.
   const handleResetToToday = () => {
-    const todayPeriod = getCurrentRealWorldPeriod();
-    setPendingStartMonth(todayPeriod.month);
-    setPendingStartYear(todayPeriod.year);
-    setPendingEndMonth(todayPeriod.month);
-    setPendingEndYear(todayPeriod.year);
+    const range = getDefaultDateRange();
+    updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
   };
 
   // Intercept Sidebar module clicks if period is pending
@@ -148,7 +173,15 @@ const DashboardLayout = () => {
           principal={principal}
           setPrincipal={setPrincipal}
         />
-        <Outlet context={{ startMonth, startYear, endMonth, endYear, updatePeriodImmediately, realWorldPeriod, principal }} />
+        <Outlet context={{
+          startMonth, startYear, endMonth, endYear,
+          pendingStartMonth, setPendingStartMonth,
+          pendingStartYear, setPendingStartYear,
+          pendingEndMonth, setPendingEndMonth,
+          pendingEndYear, setPendingEndYear,
+          isPending, handleApplyPeriod, handleResetToToday,
+          updatePeriodImmediately, realWorldPeriod, principal,
+        }} />
       </div>
 
       {/* Nav Interception Confirmation Dialog */}

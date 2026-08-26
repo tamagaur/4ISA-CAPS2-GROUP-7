@@ -6,6 +6,7 @@ import OverrideReasonModal from './OverrideReasonModal';
 import { getCurrentUser } from '../auth';
 import { logAction } from '../utils/auditLogger';
 import { getRecommendations, decideRecommendation } from '../api/recommendations';
+import DateFilter from './DateFilter';
 import './ReorderRecommendations.css';
 
 // Components branch on this, never on the principal name.
@@ -356,9 +357,12 @@ const ReorderRecommendations = () => {
       <div className="reorder-content">
         {/* Page Header */}
         <div className="reorder-page-header">
-          <h2 className="reorder-page-title">
-            Reorder Recommendations
-          </h2>
+          <div className="reorder-page-title-row">
+            <h2 className="reorder-page-title">
+              Reorder Recommendations
+            </h2>
+            <DateFilter />
+          </div>
           <p className="reorder-page-subtitle">
             LP-optimized purchase quantities for Category A SKUs. Minimizes total inventory cost while preventing stockouts.
           </p>

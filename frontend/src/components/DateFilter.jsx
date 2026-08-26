@@ -1,40 +1,62 @@
 import React from 'react';
 import { useOutletContext } from 'react-router-dom';
+import { Calendar, ChevronDown, Check, RefreshCw } from 'lucide-react';
 import './DateFilter.css';
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const YEARS = ['2021', '2022', '2023', '2024', '2025', '2026'];
+
+const noop = () => {};
+
+// Rendered from the same title-row spot on every analytics page (Dashboard,
+// SKU Forecast, ABC Classification, Reorder Recs) so the control stays in
+// one uniform place app-wide. Every select here edits the *pending* period
+// held in DashboardLayout, not the applied one — nothing the rest of the
+// app reads changes until Save is clicked, matching the existing
+// nav-interception "unsaved period" dialog's rule, just surfaced inline
+// instead of only when navigating away.
 const DateFilter = ({ onRefresh }) => {
-  const { startMonth, startYear, endMonth, endYear, updatePeriodImmediately, realWorldPeriod } = useOutletContext() || {
-    startMonth: 'Jun', startYear: '2026', endMonth: 'Jun', endYear: '2026',
-    updatePeriodImmediately: () => {},
-    realWorldPeriod: { month: 'Jun', year: '2026' }
-  };
+  const {
+    pendingStartMonth, setPendingStartMonth,
+    pendingStartYear, setPendingStartYear,
+    pendingEndMonth, setPendingEndMonth,
+    pendingEndYear, setPendingEndYear,
+    isPending,
+    handleApplyPeriod,
+    handleResetToToday,
+  } = useOutletContext() || {};
+
+  const sm = pendingStartMonth ?? 'Apr';
+  const sy = pendingStartYear ?? '2026';
+  const em = pendingEndMonth ?? 'Jun';
+  const ey = pendingEndYear ?? '2026';
 
   return (
     <div className="dashboard-date-controls">
       <div className="date-select-btn" style={{ position: 'relative' }}>
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-calendar"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-        {startMonth}
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>
-        <select 
+        <Calendar size={14} />
+        {sm}
+        <ChevronDown size={14} />
+        <select
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-          value={startMonth}
-          onChange={(e) => updatePeriodImmediately(e.target.value, startYear, endMonth, endYear)}
+          value={sm}
+          onChange={(e) => (setPendingStartMonth || noop)(e.target.value)}
         >
-          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
+          {MONTHS.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
       </div>
-      
+
       <div className="date-select-btn" style={{ position: 'relative' }}>
-        {startYear}
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>
-        <select 
+        {sy}
+        <ChevronDown size={14} />
+        <select
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-          value={startYear}
-          onChange={(e) => updatePeriodImmediately(startMonth, e.target.value, endMonth, endYear)}
+          value={sy}
+          onChange={(e) => (setPendingStartYear || noop)(e.target.value)}
         >
-          {['2021', '2022', '2023', '2024', '2025', '2026'].map(y => (
+          {YEARS.map((y) => (
             <option key={y} value={y}>{y}</option>
           ))}
         </select>
@@ -43,42 +65,53 @@ const DateFilter = ({ onRefresh }) => {
       <span style={{ color: '#a0aec0', fontSize: '0.85rem', margin: '0 4px' }}>to</span>
 
       <div className="date-select-btn" style={{ position: 'relative' }}>
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-calendar"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-        {endMonth}
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>
-        <select 
+        <Calendar size={14} />
+        {em}
+        <ChevronDown size={14} />
+        <select
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-          value={endMonth}
-          onChange={(e) => updatePeriodImmediately(startMonth, startYear, e.target.value, endYear)}
+          value={em}
+          onChange={(e) => (setPendingEndMonth || noop)(e.target.value)}
         >
-          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
+          {MONTHS.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
       </div>
-      
+
       <div className="date-select-btn" style={{ position: 'relative' }}>
-        {endYear}
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>
-        <select 
+        {ey}
+        <ChevronDown size={14} />
+        <select
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-          value={endYear}
-          onChange={(e) => updatePeriodImmediately(startMonth, startYear, endMonth, e.target.value)}
+          value={ey}
+          onChange={(e) => (setPendingEndYear || noop)(e.target.value)}
         >
-          {['2021', '2022', '2023', '2024', '2025', '2026'].map(y => (
+          {YEARS.map((y) => (
             <option key={y} value={y}>{y}</option>
           ))}
         </select>
       </div>
-      
-      <button className="date-today-btn" onClick={() => updatePeriodImmediately(realWorldPeriod?.month || 'Aug', realWorldPeriod?.year || '2026', realWorldPeriod?.month || 'Aug', realWorldPeriod?.year || '2026')}>
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-calendar"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+
+      {isPending && (
+        <button
+          className="date-save-btn"
+          onClick={handleApplyPeriod || noop}
+          title="Apply the selected date range"
+        >
+          <Check size={14} />
+          Save
+        </button>
+      )}
+
+      <button className="date-today-btn" onClick={handleResetToToday || noop}>
+        <Calendar size={14} />
         Today
       </button>
 
       {onRefresh && (
         <button className="refresh-btn" onClick={onRefresh}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          <RefreshCw size={14} />
           Refresh
         </button>
       )}

@@ -19,6 +19,14 @@
   align-items: flex-start;
 }
 
+.forecast-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .forecast-title {
   font-size: 2rem;
   color: #1a202c;
@@ -584,6 +592,11 @@
   .forecast-header {
     flex-direction: column;
     gap: 0.8rem;
+  }
+
+  .forecast-header-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .forecast-filter-group {

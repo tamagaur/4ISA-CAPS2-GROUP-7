@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import {
-  ComposedChart, BarChart, Bar, Cell,
+  ComposedChart, BarChart, Bar, Cell, Line,
+  PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
@@ -255,6 +256,491 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
 
       {typeof classACount === 'number' && (
         <p className="allocation-subset-caption">{classACount} products in total</p>
+      )}
+    </div>
+  );
+};
+
+const SalesStockTooltip = ({ active, payload, label, fixedAllocation }) => {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="chart-tooltip">
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label}</p>
+      {payload.map((p) => (
+        <p key={p.dataKey} style={{ margin: '0.1rem 0', color: p.color }}>
+          {p.name}: {Math.round(p.value).toLocaleString()}
+        </p>
+      ))}
+      {typeof fixedAllocation === 'number' && (
+        <p style={{ margin: '0.25rem 0 0 0', color: STATUS_TIERS.diagnostic }}>
+          Supplier allocation target: {fixedAllocation.toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
+};
+
+// Sales vs. Stock on Hand — the dashboard's hero chart. `data` is
+// [{ period, sales, stockOnHand }]; `fixedAllocation` is the single flat
+// number suppliers commit to per year (the sketch's broken/dashed line) —
+// stock on hand is expected to track at or above it, so it's drawn as one
+// ReferenceLine rather than a per-period series.
+export const SalesVsStockWidget = ({ data = [], fixedAllocation, emptyReason }) => {
+  const hasData = data.length > 0;
+
+  return (
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>Sales vs. stock on hand</h4>
+          <p>Compared against the suppliers&apos; fixed yearly allocation</p>
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || 'No data available for this range'}</p>
+      ) : (
+        <>
+          <div className="chart-container">
+            <ResponsiveContainer width="99%" height="100%">
+              <ComposedChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                  tickFormatter={(v) => Math.round(v).toLocaleString()}
+                />
+                <Tooltip content={<SalesStockTooltip fixedAllocation={fixedAllocation} />} />
+                {typeof fixedAllocation === 'number' && (
+                  <ReferenceLine
+                    y={fixedAllocation}
+                    stroke={STATUS_TIERS.diagnostic}
+                    strokeDasharray="4 4"
+                    label={{ value: 'Fixed allocation', position: 'insideTopRight', fontSize: 10, fill: STATUS_TIERS.diagnostic }}
+                  />
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="sales"
+                  name="Sales"
+                  stroke={CHART_COLORS.salesSeries}
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="stockOnHand"
+                  name="Stock on hand"
+                  stroke={CHART_COLORS.stockSeries}
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <ul className="custom-legend">
+            <li className="legend-item">
+              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
+              Sales
+            </li>
+            <li className="legend-item">
+              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.stockSeries }} />
+              Stock on hand
+            </li>
+            <li className="legend-item">
+              <span className="legend-line legend-line-dashed" style={{ borderTopColor: STATUS_TIERS.diagnostic }} />
+              Fixed allocation
+            </li>
+          </ul>
+        </>
+      )}
+    </div>
+  );
+};
+
+const ABC_TIER_COLORS = { A: COLORS.abcA, B: COLORS.abcB, C: COLORS.abcC };
+
+const ABCDonutTooltip = ({ active, payload }) => {
+  if (!active || !payload || !payload.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="chart-tooltip">
+      <p style={{ fontWeight: 700, margin: '0 0 0.15rem 0' }}>Tier {row.tier}</p>
+      <p style={{ margin: 0 }}>{row.count} SKUs · {row.sharePct.toFixed(0)}% of revenue</p>
+    </div>
+  );
+};
+
+// ABC classification donut — `data` is [{ tier: 'A'|'B'|'C', count, sharePct }].
+// Center label shows the total SKU count across all tiers so the chart
+// still reads at a glance without hovering any slice.
+export const ABCDonutWidget = ({ data = [], emptyReason }) => {
+  const hasData = data.length > 0;
+  const total = data.reduce((sum, d) => sum + d.count, 0);
+
+  return (
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>ABC classification</h4>
+          <p>Products by revenue contribution</p>
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || 'No ABC classification available'}</p>
+      ) : (
+        <>
+          <div className="chart-container donut-container" style={{ position: 'relative' }}>
+            <ResponsiveContainer width="99%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="count"
+                  nameKey="tier"
+                  innerRadius="60%"
+                  outerRadius="85%"
+                  paddingAngle={2}
+                  isAnimationActive={false}
+                >
+                  {data.map((d) => (
+                    <Cell key={d.tier} fill={ABC_TIER_COLORS[d.tier] || CHART_COLORS.abcRamp[0]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<ABCDonutTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="donut-center-label">
+              <span className="donut-center-value">{total}</span>
+              <span className="donut-center-caption">SKUs</span>
+            </div>
+          </div>
+          <ul className="custom-legend">
+            {data.map((d) => (
+              <li className="legend-item" key={d.tier}>
+                <span className="legend-color" style={{ backgroundColor: ABC_TIER_COLORS[d.tier] || CHART_COLORS.abcRamp[0] }} />
+                Tier {d.tier} ({d.sharePct.toFixed(0)}%)
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+};
+
+const STOCK_STATUS_COLORS = { deadStock: '#94A3B8', inStock: CHART_COLORS.stockSeries };
+
+const CategoryStockTooltip = ({ active, payload, label }) => {
+  if (!active || !payload || !payload.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="chart-tooltip">
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label} · Tier {row.tier}</p>
+      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.inStock }}>In stock: {row.inStock.toLocaleString()}</p>
+      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.deadStock }}>Dead stock: {row.deadStock.toLocaleString()}</p>
+    </div>
+  );
+};
+
+// Category-tick label with a small ABC-tier chip underneath the category
+// name, so the grouping-by-tier the sketch shows (A / B / C bands under
+// the bars) survives without needing a second axis.
+const CategoryTick = ({ x, y, payload, dataByCategory }) => {
+  const row = dataByCategory[payload.value];
+  if (!row) return null;
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text dy={12} textAnchor="middle" fontSize={10} fill={CHART_COLORS.axisLabel}>{payload.value}</text>
+      <text dy={26} textAnchor="middle" fontSize={9} fontWeight={700} fill={ABC_TIER_COLORS[row.tier] || CHART_COLORS.axisLabel}>
+        Tier {row.tier}
+      </text>
+    </g>
+  );
+};
+
+// Stacked stock matrix per category — `data` is
+// [{ category, tier: 'A'|'B'|'C', deadStock, inStock }]. Stacked bar
+// (dead stock beneath in-stock) so each category's total column height is
+// its total stock; the ABC tier isn't a separate axis, it's the small
+// chip rendered under each category's tick (see CategoryTick above) and
+// the tint of the "in stock" segment.
+export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
+  const hasData = data.length > 0;
+  const dataByCategory = useMemo(
+    () => Object.fromEntries(data.map((d) => [d.category, d])),
+    [data]
+  );
+
+  return (
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>Stock matrix by category</h4>
+          <p>Dead stock vs. in-stock, grouped by ABC tier</p>
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || 'No category stock data available'}</p>
+      ) : (
+        <>
+          <div className="chart-container">
+            <ResponsiveContainer width="99%" height="100%">
+              <BarChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                <XAxis
+                  dataKey="category"
+                  axisLine={false}
+                  tickLine={false}
+                  interval={0}
+                  height={40}
+                  tick={<CategoryTick dataByCategory={dataByCategory} />}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                  tickFormatter={(v) => Math.round(v).toLocaleString()}
+                />
+                <Tooltip content={<CategoryStockTooltip />} />
+                <Bar dataKey="deadStock" name="Dead stock" stackId="stock" fill={STOCK_STATUS_COLORS.deadStock} radius={[0, 0, 3, 3]} isAnimationActive={false} />
+                <Bar dataKey="inStock" name="In stock" stackId="stock" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                  {data.map((d) => (
+                    <Cell key={d.category} fill={ABC_TIER_COLORS[d.tier] || STOCK_STATUS_COLORS.inStock} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <ul className="custom-legend">
+            <li className="legend-item">
+              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.deadStock, borderRadius: '3px' }} />
+              Dead stock
+            </li>
+            <li className="legend-item">
+              <span className="legend-color" style={{ backgroundColor: COLORS.abcA, borderRadius: '3px' }} />
+              In stock (colored by ABC tier)
+            </li>
+          </ul>
+        </>
+      )}
+    </div>
+  );
+};
+
+const PortfolioForecastTooltip = ({ active, payload, label }) => {
+  if (!active || !payload || !payload.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="chart-tooltip">
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label}</p>
+      {row.actual != null && (
+        <p style={{ margin: '0.1rem 0', color: CHART_COLORS.salesSeries }}>Actual demand: {Math.round(row.actual).toLocaleString()} units</p>
+      )}
+      {row.forecast != null && (
+        <p style={{ margin: '0.1rem 0', color: COLORS.forecast }}>Forecast: {Math.round(row.forecast).toLocaleString()} units</p>
+      )}
+    </div>
+  );
+};
+
+// Portfolio-level aggregate forecast — sums forecast_value across every
+// gated (MAPE < 20%) Category A SKU per period and plots it as one line
+// with a confidence band (sum of confidence_lower/confidence_upper)
+// against actual aggregate demand. Deliberately a directional visual, not
+// a statistically rigorous aggregate interval — summing independent
+// per-SKU confidence intervals overstates the true aggregate interval, so
+// this trades SKU-level nuance for an at-a-glance "is demand trending up
+// or down overall" read.
+//
+// series: [{ period, actual, forecast, confidenceLower, confidenceUpper }].
+// actual is only present for historical periods, forecast/confidence only
+// for projected ones — they're expected to share one point where the
+// two meet so the lines read as continuous.
+export const PortfolioForecastWidget = ({
+  series = [],
+  gatedSkuCount,
+  avgMape,
+  scopeLabel,
+  emptyReason,
+}) => {
+  const hasData = series.length > 0;
+
+  // Same base/excess stacking trick as CoverTrendWidget's policy shading:
+  // an invisible area up to confidenceLower, then a visible band on top
+  // of it sized to (confidenceUpper - confidenceLower), so the shaded
+  // region reads as "the uncertainty range" rather than filling from zero.
+  const chartData = useMemo(
+    () => series.map((point) => {
+      const hasBand = point.confidenceLower != null && point.confidenceUpper != null;
+      return {
+        ...point,
+        confidenceBase: hasBand ? point.confidenceLower : null,
+        confidenceBand: hasBand ? point.confidenceUpper - point.confidenceLower : null,
+      };
+    }),
+    [series]
+  );
+
+  return (
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>Portfolio-level aggregate forecast</h4>
+          <p>Summed demand across gated Category A SKUs vs. SARIMA forecast</p>
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || 'No forecast data available'}</p>
+      ) : (
+        <>
+          <div className="portfolio-stat-row">
+            <div className="portfolio-stat">
+              <span className="portfolio-stat-label">Gated SKUs (MAPE &lt; 20%)</span>
+              <span className="portfolio-stat-value">{gatedSkuCount}</span>
+            </div>
+            <div className="portfolio-stat">
+              <span className="portfolio-stat-label">Avg. MAPE, portfolio</span>
+              <span className="portfolio-stat-value">{avgMape.toFixed(1)}%</span>
+            </div>
+            <div className="portfolio-stat">
+              <span className="portfolio-stat-label">Scope</span>
+              <span className="portfolio-stat-value portfolio-stat-scope">{scopeLabel}</span>
+            </div>
+          </div>
+
+          <div className="chart-container">
+            <ResponsiveContainer width="99%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  domain={['auto', 'auto']}
+                  tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                  tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                />
+                <Tooltip content={<PortfolioForecastTooltip />} />
+                <Area type="monotone" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" isAnimationActive={false} />
+                <Area type="monotone" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} isAnimationActive={false} />
+                <Line
+                  type="monotone"
+                  dataKey="actual"
+                  name="Actual demand"
+                  stroke={CHART_COLORS.salesSeries}
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls={false}
+                  isAnimationActive={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="forecast"
+                  name="Forecast (SARIMA)"
+                  stroke={COLORS.forecast}
+                  strokeDasharray="5 3"
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls={false}
+                  isAnimationActive={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <ul className="custom-legend">
+            <li className="legend-item">
+              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
+              Actual demand
+            </li>
+            <li className="legend-item">
+              <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
+              Forecast (SARIMA)
+            </li>
+            <li className="legend-item">
+              <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
+              Confidence band
+            </li>
+          </ul>
+        </>
+      )}
+    </div>
+  );
+};
+
+const URGENCY_STYLES = {
+  CRITICAL: { bg: '#fff5f5', color: '#e53e3e' },
+  URGENT: { bg: '#fffff0', color: '#d69e2e' },
+  PLANNED: { bg: '#f0fff4', color: '#38a169' },
+};
+
+// Compact dashboard-card version of the ReorderRecommendations page — same
+// urgency badge colors/vocabulary (CRITICAL/URGENT/PLANNED) as that page's
+// full table, condensed to a short ranked list so it fits next to the
+// portfolio forecast chart. rows: [{ sku, product, urgency, orderQty }].
+export const ReorderRecommendationWidget = ({
+  rows = [],
+  criticalCount = 0,
+  urgentCount = 0,
+  totalOrderQty = 0,
+  emptyReason,
+}) => {
+  const hasData = rows.length > 0;
+
+  return (
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>Reorder recommendations</h4>
+          <p>LP-optimized purchase quantities, Category A SKUs</p>
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || 'No pending recommendations'}</p>
+      ) : (
+        <>
+          <div className="reorder-mini-summary">
+            <div className="reorder-mini-chip">
+              <span className="reorder-mini-value" style={{ color: URGENCY_STYLES.CRITICAL.color }}>{criticalCount}</span>
+              <span className="reorder-mini-label">Critical</span>
+            </div>
+            <div className="reorder-mini-chip">
+              <span className="reorder-mini-value" style={{ color: URGENCY_STYLES.URGENT.color }}>{urgentCount}</span>
+              <span className="reorder-mini-label">Urgent</span>
+            </div>
+            <div className="reorder-mini-chip">
+              <span className="reorder-mini-value">{totalOrderQty.toLocaleString()}</span>
+              <span className="reorder-mini-label">Total order qty</span>
+            </div>
+          </div>
+
+          <div className="reorder-mini-list">
+            {rows.map((r) => (
+              <div className="reorder-mini-row" key={r.sku}>
+                <div className="reorder-mini-row-main">
+                  <span className="reorder-mini-sku">{r.sku}</span>
+                  <span className="reorder-mini-product">{r.product}</span>
+                </div>
+                <div className="reorder-mini-row-side">
+                  <span
+                    className="urgency-badge-mini"
+                    style={{ backgroundColor: URGENCY_STYLES[r.urgency]?.bg, color: URGENCY_STYLES[r.urgency]?.color }}
+                  >
+                    {r.urgency}
+                  </span>
+                  <span className="reorder-mini-qty">{r.orderQty.toLocaleString()} units</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

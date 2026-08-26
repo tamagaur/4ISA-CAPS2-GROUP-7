@@ -61,6 +61,32 @@
   gap: 1.25rem;
 }
 
+/* 5 equal tiles for the sketch's KPI row */
+.kpi-grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+/* ── Two charts side by side ────────────────────────────────────────────── */
+.chart-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.chart-duo .chart-widget {
+  height: 340px;
+  min-width: 0;
+}
+
+/* ABC donut needs far less horizontal room than the per-category stock
+   matrix (more categories = more bars = needs the space) — narrower left
+   column, wider right one, instead of the default even split. */
+.chart-duo-abc {
+  grid-template-columns: 0.7fr 1.3fr;
+}
+
 /* ── Demo section — visibly not live data ──────────────────────────────── */
 /* Dashed border + tinted background (vs. the solid-card look everywhere
    else) so this section reads as structurally different at a glance, not
@@ -307,8 +333,11 @@
   .dashboard-content {
     padding: 0 1.5rem 2rem 1.5rem;
   }
-  .kpi-grid {
+  .kpi-grid, .kpi-grid-5 {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .chart-duo, .chart-duo-abc {
+    grid-template-columns: 1fr;
   }
   .secondary-grid {
     grid-template-columns: 1fr 1fr;
@@ -336,17 +365,20 @@
     padding: 0 1rem 2rem 1rem;
     gap: 1.25rem;
   }
-  .kpi-grid {
+  .kpi-grid, .kpi-grid-5 {
     grid-template-columns: repeat(2, 1fr);
   }
   .chart-primary .chart-widget {
     height: 220px;
   }
+  .chart-duo .chart-widget {
+    height: 300px;
+  }
 }
 
 /* Mobile portrait: single column everything */
 @media (max-width: 480px) {
-  .kpi-grid {
+  .kpi-grid, .kpi-grid-5 {
     grid-template-columns: 1fr;
   }
 }

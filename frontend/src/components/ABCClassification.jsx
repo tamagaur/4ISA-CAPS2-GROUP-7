@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
 import { getABCClassification } from '../api/abc';
+import DateFilter from './DateFilter';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
@@ -24,6 +25,20 @@ const BOUNDARY_TOLERANCE_PP = 3;
 const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
 // Components branch on this, never on the principal name.
 const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
+
+const MONTH_TO_NUM = {
+  Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+  Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+};
+
+// GET /abc takes a single 'YYYY-MM' classification_period (there's one
+// classification run per period, not a range) — the shared date-range
+// picker's *end* month/year is what maps onto it, so "Apr-Jun 2026"
+// requests the Jun 2026 classification. Omitted (undefined) falls back to
+// the backend's own "latest period present" default when the picker's
+// applied period isn't available yet.
+const toClassificationPeriod = (month, year) =>
+  month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
@@ -118,8 +133,9 @@ const ClassAggregateTooltip = ({ active, payload }) => {
 };
 
 const ABCClassification = () => {
-  const { principal } = useOutletContext() || { principal: 'all' };
+  const { principal, endMonth, endYear } = useOutletContext() || { principal: 'all' };
   const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  const requestedPeriod = toClassificationPeriod(endMonth, endYear);
 
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -162,7 +178,7 @@ const ABCClassification = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getABCClassification({ principal })
+    getABCClassification({ principal, classification_period: requestedPeriod })
       .then((res) => {
         if (cancelled) return;
         setRawData(res.items || []);
@@ -178,7 +194,7 @@ const ABCClassification = () => {
     return () => {
       cancelled = true;
     };
-  }, [principal]);
+  }, [principal, requestedPeriod]);
 
   // Map API shape -> the row shape the rest of this page renders.
   const sourceData = useMemo(
@@ -438,7 +454,10 @@ const ABCClassification = () => {
       <div className="abc-content">
         {/* Page Header */}
         <div className="abc-page-header">
-          <h2 className="abc-page-title">ABC Classification</h2>
+          <div className="abc-page-title-row">
+            <h2 className="abc-page-title">ABC Classification</h2>
+            <DateFilter />
+          </div>
           <p className="abc-page-subtitle">
             Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
             {classificationPeriod && <> Period: {classificationPeriod}.</>}

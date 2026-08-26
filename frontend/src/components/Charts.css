@@ -153,6 +153,30 @@
   justify-content: center;
 }
 
+.donut-center-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.donut-center-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1a202c;
+  line-height: 1;
+}
+
+.donut-center-caption {
+  font-size: 0.7rem;
+  color: #a0aec0;
+  margin-top: 0.15rem;
+}
+
 .custom-legend {
   list-style: none;
   padding: 0;
@@ -280,5 +304,140 @@
   margin: 8px 0 0 0;
   font-size: 12px;
   color: #a0aec0;
+}
+
+/* ── Portfolio forecast — header stat row ──────────────────────────────── */
+.portfolio-stat-row {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.portfolio-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.portfolio-stat-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #a0aec0;
+}
+
+.portfolio-stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.portfolio-stat-scope {
+  font-size: 0.95rem;
+}
+
+/* ── Reorder recommendation widget — compact dashboard-card version ───── */
+.reorder-mini-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.reorder-mini-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.reorder-mini-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.reorder-mini-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #a0aec0;
+}
+
+.reorder-mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.reorder-mini-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.reorder-mini-row:last-child {
+  border-bottom: none;
+}
+
+.reorder-mini-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.reorder-mini-sku {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #3182ce;
+}
+
+.reorder-mini-product {
+  font-size: 0.8rem;
+  color: #1a202c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Badge stacked above qty (rather than side by side) so the qty line has
+   room to spell out "units" in full without crowding the card's right
+   edge or forcing the badge further right than it needs to be. */
+.reorder-mini-row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  margin-right: 0.2rem;
+}
+
+.urgency-badge-mini {
+  display: inline-block;
+  padding: 0.22rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.reorder-mini-qty {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #1a202c;
+  white-space: nowrap;
 }
 

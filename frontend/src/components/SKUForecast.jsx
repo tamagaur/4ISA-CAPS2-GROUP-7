@@ -14,6 +14,7 @@ import {
 import { COLORS } from '../theme/colors';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
+import DateFilter from './DateFilter';
 import './SKUForecast.css';
 
 const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
@@ -296,14 +297,17 @@ const SKUForecast = () => {
             </p>
           </div>
 
-          <button
-            className="browse-all-skus-btn"
-            onClick={() => navigate('/sku-management')}
-            title="Go to SKU Management table"
-          >
-            <span>Browse all SKUs</span>
-            <ArrowRight size={14} />
-          </button>
+          <div className="forecast-header-actions">
+            <DateFilter />
+            <button
+              className="browse-all-skus-btn"
+              onClick={() => navigate('/sku-management')}
+              title="Go to SKU Management table"
+            >
+              <span>Browse all SKUs</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
         </div>
 
         {/* Selection Area with Filter Controls */}
