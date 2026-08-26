@@ -26,6 +26,10 @@ const MOCK_SALES_VS_STOCK = [
   { period: 'Jun', sales: 48000, stockOnHand: 51000 },
   { period: 'Jul', sales: 52000, stockOnHand: 49500 },
   { period: 'Aug', sales: 49500, stockOnHand: 54000 },
+  { period: 'Sep', sales: 46500, stockOnHand: 56500 },
+  { period: 'Oct', sales: 51000, stockOnHand: 52500 },
+  { period: 'Nov', sales: 53500, stockOnHand: 50000 },
+  { period: 'Dec', sales: 57000, stockOnHand: 47500 },
 ];
 const MOCK_FIXED_ALLOCATION = 52000;
 
@@ -80,7 +84,6 @@ const Dashboard = () => {
             <DateFilter />
           </div>
           <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
-          <span className="demo-badge">Layout preview — sample figures, not live data</span>
         </div>
 
         {/* ── 4 KPI cards ────────────────────────────────────────────── */}
