@@ -10,7 +10,9 @@
 # directly against staging/_manifest.json — not a hand-picked label. The
 # canonical 8: sales_register, daily_sales_report, purchase_order,
 # inventory_sign_off, sell_out, rmr_gs_bo, unilever_sku, ssis_summary
-# (extractor added T3 Option A, 2026-07 — see ARCHITECTURE.md §7).
+# (extractor added T3 Option A, 2026-07 — see ARCHITECTURE.md §7). Plus
+# ssis_soh (2026-08 — Extract-only so far, see inventory.unilever below;
+# not yet wired into analytics/etl/extract/driver.py's FAMILY_PARSERS).
 
 # NOTE on doc_type <-> column_maps/*.yaml naming: doc_type here must equal
 # the filename (minus .yaml) of the map transform.py loads via
@@ -170,6 +172,38 @@ inventory:
     # "region" header (confirmed via column_maps/inventory_sign_off.yaml),
     # so this comes from transform.backfill_provenance_fields() (_region).
     natural_key: [sku_code, snapshot_date, region]
+  unilever:
+    doc_type: ssis_soh   # New driver (analytics/etl/extract/ssis_soh.py),
+                          # 2026-08 — the SOH(<date>) sheet embedded in SSIS
+                          # Sales Summary Report workbooks. Real, SKU-level
+                          # Unilever inventory-on-hand snapshots. See
+                          # reports/SOH_PROFILE.md for the discovery pass and
+                          # this doc_type's rulings (R1-R7) as implemented.
+    system_of_record_role: data
+    cross_check_roles: []
+    # ssis_summary is a different _doc_type (the file this sheet lives
+    # inside is classified ssis_summary at file-selection time; every
+    # OTHER sheet in the same workbook — RAW DATA, INVENTORY, etc. — is
+    # staged under _doc_type=ssis_summary, not ssis_soh). Same class of
+    # note as inventory.both's cross_check_doc_types above.
+    cross_check_doc_types: [ssis_summary]
+    # No Storage Location in this key (R6: dropped at Extract, confirmed
+    # single-valued "SALE" across the whole corpus — carries no
+    # discriminating information, unlike inventory.both's region, which
+    # is a real Pangasinan/Ilocos split).
+    #
+    # Uniqueness PROVEN against real staged data, not assumed: an
+    # EXTRACT-ONLY run (2026-08) against data/raw/ under rulings R1-R7
+    # staged 39 in-scope snapshots (2023-01 reporting period onward),
+    # 27,321 rows total. Grouping the staged rows by
+    # (sku_code, snapshot_date) produced ZERO groups with more than one
+    # row — the natural key below is unique in-scope, confirmed by
+    # actual dedup arithmetic, not by inspection. (39 rows have a null
+    # sku_code — one per snapshot, a blank/totals-adjacent row in the
+    # source sheet — those don't collide with anything real, and
+    # transform_fact() should decide separately whether to keep or drop
+    # them; this key's uniqueness claim is about the non-null rows.)
+    natural_key: [sku_code, snapshot_date]
 
 sell_out:
   delmonte:

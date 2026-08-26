@@ -1,0 +1,144 @@
+# config/column_maps/ssis_soh.yaml
+#
+# doc_type: ssis_soh — the Unilever SOH(<date>) sheet embedded inside SSIS
+# Sales Summary Report workbooks (data/raw/SSIS/**, data/raw/Unilever/**).
+# Real, SKU-level Unilever inventory-on-hand snapshots. See
+# reports/SOH_PROFILE.md for the full discovery pass this map is built
+# from (9 distinct header signatures across 102 real SOH sheets, all
+# supersets of the 14-column list mapped below).
+#
+# Unlike this repo's other column_maps/*.yaml, ssis_soh's Extract driver
+# (analytics/etl/extract/ssis_soh.py) applies this mapping itself, at
+# Extract time, rather than leaving it for Transform — the rulings for
+# this doc_type (scope, dedupe, date validation) are themselves Extract-
+# stage decisions, so the case/piece split below has to happen before
+# Transform ever sees the data. This file documents the mapping and the
+# parse function for review; the Python is the executable copy.
+#
+# Ruling scope: this map (and the extractor) implement rulings R1-R7 as
+# specified — 2023-01+ snapshots only. Do not extend to pre-2023 data
+# without a fresh ruling (pre-2023 files use a different price column,
+# "MOVING AVERAGE PRICE(CS)" instead of "Last Purchase Price(GSV/CS)" —
+# see R7 below).
+
+# R6: Storage Location is single-valued ("SALE") across every file in the
+# corpus (confirmed in SOH_PROFILE.md §g) — carries no information, so it
+# is dropped at Extract, not just left unmapped. Not listed below at all.
+
+sku_code:
+  - "Article No"
+  # text_code — 8-digit Unilever article number (e.g. "64401259"). Forced
+  # text at Extract (analytics.etl.extract._shared._force_text) so a
+  # native-float round-trip (9012345.0) never injects a spurious ".0" and
+  # no leading zero is ever silently dropped. This is the join key against
+  # the real (non-synthetic) Unilever SKU universe — see source_of_truth.yaml.
+
+article_description:
+  - "Article Description"
+
+pack_size:
+  - "PACK SIZE"
+  # numeric — units per case. Required to compute stock_qty_total_units /
+  # blocked_stock_total_units below; a row with a missing/unparseable
+  # pack_size gets total_units=None rather than a fabricated combination.
+
+# --- Stock Quantity (CS/PC) parse -------------------------------------
+# Raw cell is always "<cases>/<pieces>" (confirmed 100% of populated
+# values across all 102 profiled sheets — no bare integers, no blanks-as-
+# zero, no negatives; SOH_PROFILE.md §d). Split into two integer columns
+# plus a total-units column combining PACK SIZE, per the ruling.
+#
+# Parse function (analytics/etl/extract/ssis_soh.py::parse_cs_pc):
+#
+#   def parse_cs_pc(raw: object) -> tuple[int | None, int | None]:
+#       if is_blank(raw):
+#           return None, None
+#       m = CS_PC_RE.fullmatch(str(raw).strip())
+#       if not m:
+#           raise ValueError(f"unparseable CS/PC quantity: {raw!r}")
+#       return int(m.group(1)), int(m.group(2))
+#
+#   def combine_total_units(cases, pieces, pack_size) -> int | None:
+#       if cases is None and pieces is None:
+#           return None
+#       if pack_size is None:
+#           return None  # can't combine without a real pack size - no guess
+#       return (cases or 0) * pack_size + (pieces or 0)
+#
+# CS_PC_RE = re.compile(r"(-?\d+)/(-?\d+)") — a non-matching non-blank
+# value raises rather than silently coalescing to (None, None), since
+# every in-scope file has been confirmed to follow this exact format;
+# a mismatch is new evidence, not an edge case to paper over.
+stock_quantity_raw:
+  - "Stock Quantity (CS/PC)"
+# Derived (not raw headers, computed by the parse function above):
+#   stock_qty_cases, stock_qty_pieces, stock_qty_total_units
+
+stock_value:
+  - "Stock Value"
+  # decimal (money) — analytics.etl._coerce.to_decimal
+
+po_qty_raw:
+  - "PO Qty"
+  # Also CS/PC-slash-or-blank format in the source, same as Stock
+  # Quantity, but the ruling only calls for splitting Stock Quantity and
+  # Blocked Stock — kept as raw text, unsplit, per scope.
+
+open_so_quantity_raw:
+  - "Open SO Quantity"
+  # Same shape/scope note as po_qty_raw above.
+
+balance_quantity_raw:
+  - "Balance Quantity"
+  # Same shape/scope note as po_qty_raw above. Observed (not verified
+  # invariant) to equal Stock Quantity (CS/PC) row-for-row in sampled
+  # files — kept as its own raw column rather than assumed identical.
+
+# --- Price column: era split (R7) --------------------------------------
+# 2023-01+ (this doc_type's entire in-scope range) uses
+# "Last Purchase Price(GSV/CS)" exclusively. Pre-2023 files use
+# "MOVING AVERAGE PRICE(CS)" instead — a different pricing methodology,
+# not just a renamed header (SOH_PROFILE.md §b). Since this doc_type is
+# scoped to 2023-01+ only (R1), only the Last Purchase Price header
+# should ever be seen here. The extractor raises RuntimeError immediately
+# if MOVING AVERAGE PRICE(CS) appears on an in-scope sheet — that would
+# mean either R1's scope filter has a bug or a pre-2023-shaped file
+# somehow parsed as in-scope, and either way silently coalescing the two
+# price concepts into one column would corrupt the number, not just the
+# label.
+last_purchase_price_gsv_per_cs:
+  - "Last Purchase Price(GSV/CS)"
+  # decimal (money). Do NOT add "MOVING AVERAGE PRICE(CS)" as a second
+  # alias here — see the raise-don't-coalesce note above.
+
+status:
+  - "Status"
+
+category_desc:
+  - "CATEGORY DESC"
+  # 20 distinct values confirmed stable across every era in the corpus
+  # (SOH_PROFILE.md §f) — no known vocabulary drift, unlike Del Monte's.
+
+# --- Blocked Stock (CS/PC) parse ----------------------------------------
+# Same slash format and same parse_cs_pc/combine_total_units functions as
+# Stock Quantity above. Missing from 24 files in the full corpus (not a
+# clean era cutover — scattered across both eras); a row from one of
+# those sheets gets blocked_stock_cases/pieces/total_units = None, not 0
+# — the column being absent means "not reported here", not "zero blocked
+# stock", and asserting 0 would be fabricating a measurement (CLAUDE.md
+# anti-fabrication rule).
+blocked_stock_raw:
+  - "Blocked Stock(CS/PC)"
+# Derived: blocked_stock_cases, blocked_stock_pieces, blocked_stock_total_units
+
+batch:
+  - "Batch"
+  # Observed value is the literal string "VALUATED" in every sampled row
+  # (not an actual batch number) — kept as-is, unmapped meaning not
+  # investigated further; out of scope for this extractor.
+
+# Extra columns seen in some sheets but NOT in the confirmed 14-column
+# list (Sales Route, Hierarchy Node, Sales Route Description, and one
+# file's 3 leading blank columns) are deliberately NOT mapped here and
+# NOT extracted — confirmed blank/uninformative in profiling
+# (SOH_PROFILE.md §b). Not "every confirmed column" per the ruling scope.
