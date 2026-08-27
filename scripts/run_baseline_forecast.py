@@ -745,64 +745,220 @@ def _write_md(df, abc_period, latest_demand_month):
     print(f"Wrote {RUN_MD}")
 
 
+DEPLOYED_METHOD = "ma3"  # the verdict — see module docstring; SARIMA / routing / ensemble all lose to plain MA3 here
+
+
+def _clean_metric(v, scale=1.0):
+    """None / NaN -> None; else float * scale, capped at the live NUMERIC(10,3) ceiling."""
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return None
+    return min(float(v) * scale, 999.999)
+
+
+def _all_method_metrics(r):
+    """Every method's holdout metrics, verbatim, for model_params provenance."""
+    return {
+        m: {
+            "mase": _f(r[f"{m}_mase"]), "mape": _f(r[f"{m}_mape"]),
+            "mae": _f(r[f"{m}_mae"]), "rmse": _f(r[f"{m}_rmse"]),
+            "mase_gate_passed": (None if pd.isna(r[f"{m}_mase_gate_passed"])
+                                 else bool(r[f"{m}_mase_gate_passed"])),
+            "mase_denominator_zero": bool(r[f"{m}_mase_denominator_zero"]),
+        }
+        for m in METHODS
+    }
+
+
+def _f(v):
+    v = pd.to_numeric(pd.Series([v]), errors="coerce").iloc[0]
+    return None if pd.isna(v) else round(float(v), 4)
+
+
 def _write_forecast_result(cur, df):
-    """--write path: upsert Forecast_Result for status='ok' SKUs using the
-    rule_method (deployable) pick. insufficient_data / dead_sku numeric
-    fallbacks are NOT computed this pass - see module docstring."""
-    df_ok = df[df["status"] == "ok"]
-    logger.warning(f"--write: upserting {len(df_ok)} status='ok' baseline forecasts to Forecast_Result.")
+    """--write path (atomic): upsert Forecast_Result for every real Tier A SKU.
+
+      status='ok'                -> forecast_value = MA3 one-step-ahead, refit on
+                                    the SKU's FULL real series; MA3's holdout
+                                    mape/mase in the columns; ALL THREE methods'
+                                    metrics + oracle/rule picks in model_params.
+      status='insufficient_data' -> forecast_value = trailing average of the real
+                                    observed months, provisional=true, mape/mase
+                                    NULL, mase_gate_passed null. LP fallback spec.
+      status='dead_sku'          -> forecast_value = 0 (no order), provisional=false.
+
+    forecast_date is the single planning month = (MAX real calendar_month) + 1,
+    identical for every row, so the upsert key (product_key, forecast_date) is
+    predictable and existing same-date rows are overwritten, not duplicated.
+    Wrapped in one transaction — all rows commit together or none do.
+    """
     upsert = """
         INSERT INTO Forecast_Result
         (product_key, forecast_date, forecast_value, confidence_lower, confidence_upper, mape, mase, status, model_params)
         VALUES (%s, %s, %s, NULL, NULL, %s, %s, %s, %s)
         ON CONFLICT (product_key, forecast_date) DO UPDATE SET
-            forecast_value = EXCLUDED.forecast_value,
-            mape = EXCLUDED.mape,
-            mase = EXCLUDED.mase,
-            status = EXCLUDED.status,
-            model_params = EXCLUDED.model_params
+            forecast_value   = EXCLUDED.forecast_value,
+            confidence_lower = NULL,
+            confidence_upper = NULL,
+            mape             = EXCLUDED.mape,
+            mase             = EXCLUDED.mase,
+            status           = EXCLUDED.status,
+            model_params     = EXCLUDED.model_params,
+            generated_at     = now()
     """
-    # re-fetch demand once for the one-step forecasts
     demand = fetch_demand(cur)
     demand_by_key = {k: g for k, g in demand.groupby("product_key")}
+    cur.execute("SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real")
+    planning_date = (pd.Timestamp(cur.fetchone()[0] + "-01") + relativedelta(months=1)).date()
+    logger.warning(f"--write: upserting {len(df)} Tier A rows to Forecast_Result at forecast_date={planning_date} "
+                   f"(deployed method: {DEPLOYED_METHOD.upper()}). One transaction.")
 
-    written = 0
-    for _, r in df_ok.iterrows():
-        p_key = int(r["product_key"])
-        sku_df = demand_by_key.get(p_key)
-        if sku_df is None:
-            continue
-        series = build_series(sku_df)
-        forecast_date = (series.index.max() + relativedelta(months=1)).date()
-        method = r["rule_method"]
-        f_val = max(0.0, one_step(method, series))
-        mase = r[f"{method}_mase"]
-        mape = r[f"{method}_mape"]
-        mp = {
-            "method": method,
-            "selection": "rule_method",
-            "oracle_method": r["oracle_method"],
-            "demand_class_train": r["demand_class_train"],
-            "months_span": int(r["months_span"]),
-            "months_with_sales": int(r["months_with_sales"]),
-            "abc_period_used": r["abc_period_used"],
-            "min_months_threshold": MIN_MONTHS_WITH_SALES,
-            "abc_tier_a_cutoff": ABC_TIER_A_CUTOFF,
-            "alpha": SBA_ALPHA if method == "sba" else None,
-            "alpha_tuned": SBA_ALPHA_TUNED if method == "sba" else None,
-            "window": MA_WINDOW if method == "ma3" else None,
-            "mase_denominator_zero": bool(r[f"{method}_mase_denominator_zero"]),
-            "lp_input_method": None,
-            "provisional": None,
-        }
-        cur.execute(upsert, (
-            p_key, forecast_date, float(f_val),
-            None if mape is None or (isinstance(mape, float) and np.isnan(mape)) else min(float(mape) * 100, 999.999),
-            None if mase is None or (isinstance(mase, float) and np.isnan(mase)) else min(float(mase), 999.999),
-            "ok", json.dumps(mp),
-        ))
-        written += 1
-    print(f"--write: {written} Forecast_Result rows upserted.")
+    target_keys = [int(k) for k in df["product_key"]]
+    conn = cur.connection
+    prev_autocommit = conn.autocommit
+    conn.autocommit = False
+    counts = {"ok": 0, "insufficient_data": 0, "dead_sku": 0, "skipped_no_demand": 0, "orphans_deleted": 0}
+    orphan_dump_path = None
+    try:
+        # --- orphaned rows: any existing Forecast_Result row whose product_key is
+        #     NOT in the current real Tier A target set. On this DB these are the
+        #     SARIMA rows keyed to a synthetic-inclusive ABC period (2026-08).
+        #     Dump them in FULL (recoverable) before deleting, in this same txn.
+        cur.execute("""
+            SELECT fr.forecast_key, fr.product_key, pd.sku_code, pd.principal, pd.product_name,
+                   fr.forecast_date::text, fr.forecast_value::float, fr.confidence_lower::float,
+                   fr.confidence_upper::float, fr.mape::float, fr.mase::float, fr.status,
+                   fr.model_params, fr.generated_at::text
+            FROM forecast_result fr JOIN product_dimension pd ON pd.product_key = fr.product_key
+            WHERE NOT (fr.product_key = ANY(%s))
+            ORDER BY fr.product_key, fr.forecast_date
+        """, (target_keys,))
+        cols = [d[0] for d in cur.description]
+        orphans = [dict(zip(cols, row)) for row in cur.fetchall()]
+        if orphans:
+            # name the dump by the period run_sarima.py's unconditional MAX() resolved
+            # to (the synthetic-inclusive period these orphans were keyed to)
+            cur.execute("SELECT MAX(classification_period) FROM abc_classification WHERE principal = %s",
+                        (PRINCIPAL,))
+            stale_period = cur.fetchone()[0]
+            orphan_dump_path = os.path.join(REPORTS_DIR, f"orphaned_sarima_rows_{stale_period}.json")
+            os.makedirs(REPORTS_DIR, exist_ok=True)
+            with open(orphan_dump_path, "w", encoding="utf-8") as fh:
+                json.dump({
+                    "dumped_at": pd.Timestamp.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+                    "reason": (f"Forecast_Result rows for product_keys not in the real "
+                               f"{df['abc_period_used'].iloc[0]} Unilever Tier A set — SARIMA output "
+                               f"keyed to the ABC period {stale_period} (run_sarima.py's unconditional "
+                               f"MAX(classification_period), which resolves to a synthetic-inclusive "
+                               f"catalog ranking). Deleted by run_baseline_forecast.py --write in the "
+                               f"same transaction as the MA3 upsert."),
+                    "count": len(orphans),
+                    "restore_hint": "re-INSERT these into Forecast_Result (drop forecast_key; it is identity-generated)",
+                    "rows": orphans,
+                }, fh, indent=2, default=str)
+            logger.warning(f"--write: dumped {len(orphans)} orphaned rows -> {orphan_dump_path}, deleting them.")
+            cur.execute("DELETE FROM forecast_result WHERE NOT (product_key = ANY(%s))", (target_keys,))
+            counts["orphans_deleted"] = cur.rowcount
+
+        for _, r in df.iterrows():
+            p_key = int(r["product_key"])
+            sku_df = demand_by_key.get(p_key)
+            if sku_df is None or sku_df.empty:
+                counts["skipped_no_demand"] += 1
+                continue
+            series = build_series(sku_df)
+            status = r["status"]
+            base_mp = {
+                "abc_period_used": r["abc_period_used"],
+                "min_months_threshold": MIN_MONTHS_WITH_SALES,
+                "abc_tier_a_cutoff": ABC_TIER_A_CUTOFF,
+                "months_span": int(r["months_span"]),
+                "months_with_sales": int(r["months_with_sales"]),
+                "demand_class_full": r["demand_class_full"],
+            }
+
+            if status == "ok":
+                f_val = max(0.0, one_step(DEPLOYED_METHOD, series))
+                mp = {
+                    **base_mp,
+                    "method": DEPLOYED_METHOD,
+                    "method_rationale": "MA3 deployed for all Tier A; beat SARIMA / naive / SBA / "
+                                        "demand-class routing / history-length routing / ensemble / "
+                                        "per-SKU selector on this data",
+                    "oracle_method": r["oracle_method"],
+                    "rule_method": r["rule_method"],
+                    "demand_class_train": r["demand_class_train"],
+                    "train_months": int(r["train_months"]),
+                    "holdout_months": int(r["holdout_months"]),
+                    "ma_window": MA_WINDOW,
+                    "sba_alpha": SBA_ALPHA,
+                    "sba_alpha_tuned": SBA_ALPHA_TUNED,
+                    "holdout_metrics_all_methods": _all_method_metrics(r),
+                    "one_step_all_methods": {
+                        "naive": round(one_step("naive", series), 3),
+                        "ma3": round(f_val, 3),
+                        "sba": round(one_step("sba", series), 3),
+                    },
+                    "provisional": False,
+                    "lp_input_method": "ma3_one_step",
+                }
+                cur.execute(upsert, (
+                    p_key, planning_date, float(f_val),
+                    _clean_metric(r["ma3_mape"], 100.0), _clean_metric(r["ma3_mase"]),
+                    "ok", json.dumps(mp),
+                ))
+                counts["ok"] += 1
+
+            elif status == "insufficient_data":
+                observed = series[series > 0]
+                trailing = float(observed.mean()) if len(observed) else 0.0
+                mp = {
+                    **base_mp,
+                    "method": "trailing_average",
+                    "provisional": True,
+                    "lp_input_method": "trailing_avg_provisional",
+                    "mase_gate_passed": None,
+                    "observed_months_used": int(len(observed)),
+                    "trailing_average": round(trailing, 3),
+                    "note": f"< {MIN_MONTHS_WITH_SALES} months of real sales — no holdout, no MASE. "
+                            "Recomputed each run as more real months land.",
+                }
+                cur.execute(upsert, (
+                    p_key, planning_date, float(max(0.0, trailing)),
+                    None, None, "insufficient_data", json.dumps(mp),
+                ))
+                counts["insufficient_data"] += 1
+
+            elif status == "dead_sku":
+                mp = {
+                    **base_mp,
+                    "method": "zero_no_order",
+                    "provisional": False,
+                    "lp_input_method": "zero_no_order",
+                    "mase_gate_passed": None,
+                    "note": "no sale in the last 6 months — LP orders nothing.",
+                }
+                cur.execute(upsert, (
+                    p_key, planning_date, 0.0, None, None, "dead_sku", json.dumps(mp),
+                ))
+                counts["dead_sku"] += 1
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        # the delete never happened -> the dump would be misleading, remove it
+        if orphan_dump_path and os.path.exists(orphan_dump_path):
+            os.remove(orphan_dump_path)
+        logger.error("--write: transaction rolled back, nothing written (orphan dump removed).")
+        raise
+    finally:
+        conn.autocommit = prev_autocommit
+
+    total = counts["ok"] + counts["insufficient_data"] + counts["dead_sku"]
+    print(f"--write: committed {total} rows at {planning_date} — "
+          f"ok={counts['ok']}, insufficient_data={counts['insufficient_data']}, "
+          f"dead_sku={counts['dead_sku']}, skipped(no demand)={counts['skipped_no_demand']}; "
+          f"orphaned SARIMA rows deleted={counts['orphans_deleted']}"
+          + (f" (dump: {os.path.relpath(orphan_dump_path)})" if orphan_dump_path else "") + ".")
 
 
 if __name__ == "__main__":
