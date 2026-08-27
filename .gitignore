@@ -81,3 +81,7 @@ SSM_ACCEPTANCE_CRITERIA.xlsx
 
 # Reference file exports for the team — regenerated from staging/, not committed
 REFERENCE_FILES/
+
+# Throwaway analysis / exploration scripts — not project code (29 legacy
+# files predate this rule and stay tracked; new ones are ignored)
+scratch/
