@@ -1,0 +1,717 @@
+<title>Tier A Forecast Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<style>
+:root {
+  --ground: #FBFAFC;
+  --surface: #FFFFFF;
+  --surface-2: #F4F2F7;
+  --ink: #1C1A22;
+  --ink-2: #4A4654;
+  --muted: #8A8594;
+  --line: #E5E1EC;
+  --line-2: #D6D1DE;
+  --accent: #6B2C5F;
+  --brand: #C53030;
+  --actual: #0D9488;
+  --forecast: #9333EA;
+  --holdout-wash: rgba(147, 51, 234, 0.07);
+  --good: #2E9E5B;
+  --warn: #C77700;
+  --bad: #D64545;
+  --focus: #9333EA;
+  --shadow: 0 1px 2px rgba(28, 26, 34, 0.06), 0 8px 24px rgba(28, 26, 34, 0.05);
+}
+:root:not([data-theme="light"]) {
+  @media (prefers-color-scheme: dark) {
+    --ground: #16131A;
+    --surface: #1E1A24;
+    --surface-2: #26212E;
+    --ink: #ECE8F0;
+    --ink-2: #B6AFC2;
+    --muted: #8B8397;
+    --line: #322C3C;
+    --line-2: #423A4E;
+    --accent: #D98FC6;
+    --brand: #F16A6A;
+    --actual: #2DD4BF;
+    --forecast: #C084FC;
+    --holdout-wash: rgba(192, 132, 252, 0.10);
+    --good: #4ADE80;
+    --warn: #F5A623;
+    --bad: #F87171;
+    --focus: #C084FC;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #16131A;
+  --surface: #1E1A24;
+  --surface-2: #26212E;
+  --ink: #ECE8F0;
+  --ink-2: #B6AFC2;
+  --muted: #8B8397;
+  --line: #322C3C;
+  --line-2: #423A4E;
+  --accent: #D98FC6;
+  --brand: #F16A6A;
+  --actual: #2DD4BF;
+  --forecast: #C084FC;
+  --holdout-wash: rgba(192, 132, 252, 0.10);
+  --good: #4ADE80;
+  --warn: #F5A623;
+  --bad: #F87171;
+  --focus: #C084FC;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace; }
+.num { font-variant-numeric: tabular-nums; }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding: 24px; }
+
+header.page {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px;
+  border-bottom: 1px solid var(--line); padding-bottom: 16px; margin-bottom: 20px;
+}
+header.page .rail { width: 3px; align-self: stretch; background: var(--brand); border-radius: 2px; }
+header.page h1 {
+  font-size: 19px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance;
+}
+header.page .sub { color: var(--muted); font-size: 12.5px; }
+header.page .spacer { flex: 1; }
+.pilltag {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.layout { display: grid; grid-template-columns: 288px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+/* ---- SKU rail ---- */
+.rail-panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow); overflow: hidden; position: sticky; top: 16px;
+}
+.rail-panel .search { padding: 12px; border-bottom: 1px solid var(--line); }
+.rail-panel input[type="search"] {
+  width: 100%; padding: 8px 10px; font: inherit; font-size: 13px;
+  background: var(--ground); color: var(--ink);
+  border: 1px solid var(--line-2); border-radius: 8px;
+}
+.rail-panel input[type="search"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.chip {
+  font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 999px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--ink-2); cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .chip[aria-pressed="true"],
+:root:not([data-theme="light"]) .chip[aria-pressed="true"] { color: #1a1420; }
+.chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.sku-list { max-height: 62vh; overflow-y: auto; padding: 6px; }
+.sku-group-label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); padding: 10px 8px 5px;
+}
+.sku-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; text-align: left; padding: 7px 8px; border-radius: 8px;
+  border: 1px solid transparent; background: transparent; color: var(--ink); cursor: pointer;
+}
+.sku-item:hover { background: var(--surface-2); }
+.sku-item[aria-current="true"] { background: var(--surface-2); border-color: var(--line-2); }
+.sku-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
+.sku-item .txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.sku-item .code { font-size: 12.5px; font-weight: 500; }
+.sku-item .meta { font-size: 11px; color: var(--muted); }
+.sku-item .badge-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.sku-item .badge {
+  font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px;
+  border: 1px solid var(--line-2); color: var(--ink-2);
+}
+.sku-item .badge.pass { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.sku-item .badge.fail { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+.sku-item .badge.na { color: var(--muted); }
+.sku-item .hold { font-size: 9.5px; font-weight: 500; letter-spacing: 0.03em; color: var(--muted); }
+.sku-item .hold.short { color: var(--warn); }
+/* holdout < 3 months — the MASE rests on 1-2 points; dim it so a lucky
+   score on a tiny test window doesn't out-shout a solid one on 6+. */
+.sku-item.lowconf { opacity: 0.5; }
+.sku-item.lowconf:hover, .sku-item.lowconf[aria-current="true"] { opacity: 1; }
+
+/* ---- main ---- */
+.main-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 18px;
+}
+.sku-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.sku-head .code { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.sku-head .name { color: var(--ink-2); font-size: 14px; }
+.sku-head .facts { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.stat-badge {
+  font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2);
+  border: 1px solid var(--line); color: var(--ink-2);
+}
+.stat-badge b { color: var(--ink); font-weight: 600; }
+.stat-badge.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+.stat-badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+
+.metric-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+@media (max-width: 560px) { .metric-row { grid-template-columns: repeat(2, 1fr); } }
+.metric {
+  background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px;
+}
+.metric .k { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.metric .v { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.metric .d { font-size: 11px; color: var(--muted); }
+.metric .v.pass { color: var(--good); }
+.metric .v.fail { color: var(--bad); }
+
+.chart-card h2, .cmp-card h2 {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 4px;
+}
+.chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 6px 0 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; }
+.legend .li { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.legend .sw { width: 16px; height: 0; border-top-width: 2px; border-top-style: solid; }
+.legend .sw.actual { border-color: var(--actual); }
+.legend .sw.forecast { border-color: var(--forecast); border-top-style: dashed; }
+.legend .sw.bench { border-color: var(--muted); border-top-style: dotted; }
+.legend .sw.wash { height: 12px; border: 0; background: var(--holdout-wash); border-radius: 2px; }
+.toggle {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); cursor: pointer;
+  user-select: none;
+}
+.toggle input { accent-color: var(--forecast); }
+
+.chart-frame { width: 100%; overflow-x: auto; }
+svg.chart { display: block; width: 100%; height: auto; touch-action: pan-y; }
+svg.chart text { fill: var(--muted); font-size: 11px; font-family: "IBM Plex Sans", sans-serif; }
+svg.chart .axis-line { stroke: var(--line-2); stroke-width: 1; }
+svg.chart .grid { stroke: var(--line); stroke-width: 1; }
+svg.chart .actual-line { fill: none; stroke: var(--actual); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+svg.chart .fc-line { fill: none; stroke: var(--forecast); stroke-width: 2; stroke-dasharray: 5 4; stroke-linejoin: round; }
+svg.chart .bench-line { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linejoin: round; }
+svg.chart .bench-line.naive { stroke-dasharray: 6 3; }
+svg.chart .bench-line.sba { stroke-dasharray: 1.5 3; }
+svg.chart .dot-bench { fill: var(--muted); }
+svg.chart .dot-actual { fill: var(--actual); }
+svg.chart .dot-fc { fill: var(--forecast); }
+svg.chart .future-ring { fill: var(--surface); stroke: var(--forecast); stroke-width: 2; }
+svg.chart .crosshair { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.5; }
+svg.chart .bench-label { fill: var(--muted); font-size: 10px; }
+
+.tooltip {
+  position: fixed; z-index: 20; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px;
+  box-shadow: var(--shadow); padding: 8px 10px; font-size: 12px; min-width: 140px;
+}
+.tooltip .tt-m { font-weight: 600; margin-bottom: 4px; }
+.tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; }
+.tooltip .tt-row .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 5px; }
+
+.cmp-note { font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+
+/* per-SKU method table */
+.mtable { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12.5px; }
+.mtable th, .mtable td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.mtable th { font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.mtable th:first-child, .mtable td:first-child { text-align: left; }
+.mtable tbody tr:last-child td { border-bottom: 0; }
+.mtable tr.is-verdict td { background: color-mix(in srgb, var(--forecast) 8%, transparent); }
+.mtable tr.is-verdict td:first-child { font-weight: 600; color: var(--forecast); box-shadow: inset 2px 0 0 var(--forecast); }
+.mtable .verdict-tag { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-left: 6px; padding: 1px 5px; border-radius: 4px; background: var(--forecast); color: #fff; }
+:root[data-theme="dark"] .mtable .verdict-tag,
+:root:not([data-theme="light"]) .mtable .verdict-tag { color: #1a1420; }
+.mtable .pf { font-weight: 600; }
+.mtable .pf.pass { color: var(--good); }
+.mtable .pf.fail { color: var(--bad); }
+.mtable .pf.na { color: var(--muted); }
+
+/* next-month forecast callout */
+.nextcall {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
+  padding: 12px 14px; margin-top: 12px; border-radius: 10px;
+  background: color-mix(in srgb, var(--forecast) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--forecast) 22%, transparent);
+}
+.nextcall .nc-k { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.nextcall .nc-v { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--forecast); font-variant-numeric: tabular-nums; }
+.nextcall .nc-unit { font-size: 12px; color: var(--ink-2); }
+.nextcall .nc-conf { width: 100%; font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+.nextcall .nc-conf b { color: var(--ink); }
+.nextcall .nc-conf.tier-moderate b { color: var(--good); }
+.nextcall .nc-conf.tier-modest b { color: var(--warn); }
+.nextcall .nc-conf.tier-low b { color: var(--bad); }
+
+/* short-holdout caveat banner in detail pane */
+.shortcav {
+  margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 9%, transparent); border-radius: 0 6px 6px 0;
+  font-size: 12px; color: var(--ink-2);
+}
+.shortcav b { color: var(--ink); }
+
+.empty-note {
+  background: var(--surface-2); border: 1px dashed var(--line-2); border-radius: 10px;
+  padding: 14px; font-size: 13px; color: var(--ink-2);
+}
+.empty-note b { color: var(--ink); }
+
+footer.page {
+  margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line);
+  font-size: 11.5px; color: var(--muted); line-height: 1.7;
+}
+footer.page b { color: var(--ink-2); font-weight: 600; }
+.disclaim {
+  margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, transparent); border-radius: 0 6px 6px 0;
+  color: var(--ink-2); font-size: 12px;
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <span class="rail"></span>
+    <h1>Tier A Forecast Viewer</h1>
+    <span class="pilltag" id="tag-period">ABC 2026-02</span>
+    <span class="pilltag" id="tag-verdict">verdict: MA3</span>
+    <span class="spacer"></span>
+    <span class="sub" id="gen-note"></span>
+  </header>
+
+  <div class="layout">
+    <aside class="rail-panel">
+      <div class="search">
+        <input type="search" id="q" placeholder="Filter SKU code…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="chips" id="chips" role="group" aria-label="Filter by demand class"></div>
+      <div class="sku-list" id="sku-list" role="listbox" aria-label="Tier A SKUs" tabindex="0"></div>
+    </aside>
+
+    <main class="main-panel" id="main"></main>
+  </div>
+
+  <footer class="page" id="footer"></footer>
+</div>
+
+<div class="tooltip" id="tt" role="status" aria-live="polite"></div>
+
+<script type="application/json" id="data">__VIZ_DATA__</script>
+
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("data").textContent);
+const METHODS = ["naive", "ma3", "sba"];
+const METHOD_LABEL = { naive: "Naive", ma3: "MA3", sba: "SBA" };
+const fmtN = (v, d = 0) => v == null ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+const fmt2 = v => v == null ? "—" : Number(v).toFixed(2);
+const pct = v => v == null ? "—" : (v * 100).toFixed(1) + "%";
+const holdoutN = s => s.split ? s.split.holdout_months : (s.holdout ? s.holdout.months.length : null);
+const isLowConf = s => { const h = holdoutN(s); return h != null && h < 3; };
+const passOf = mase => mase == null ? "na" : (mase < 1 ? "pass" : "fail");
+
+document.getElementById("tag-verdict").textContent = "verdict: " + DATA.verdict.toUpperCase();
+document.getElementById("tag-period").textContent = "ABC " + DATA.abc_period;
+document.getElementById("gen-note").textContent = "computed " + DATA.generated + " · report-only, not written to Forecast_Result";
+
+/* ---------- rail ---------- */
+const CLASS_ORDER = ["smooth", "erratic", "unclassifiable", "insufficient"];
+const state = { q: "", cls: new Set(), sel: DATA.skus[0].sku };
+
+const chipsEl = document.getElementById("chips");
+CLASS_ORDER.forEach(c => {
+  const b = document.createElement("button");
+  b.className = "chip"; b.type = "button"; b.textContent = c;
+  b.setAttribute("aria-pressed", "false");
+  b.onclick = () => { b.getAttribute("aria-pressed") === "true" ? state.cls.delete(c) : state.cls.add(c);
+    b.setAttribute("aria-pressed", state.cls.has(c) ? "true" : "false"); renderList(); };
+  chipsEl.appendChild(b);
+});
+document.getElementById("q").addEventListener("input", e => { state.q = e.target.value.trim().toLowerCase(); renderList(); });
+
+function classOf(s) { return s.status === "insufficient_data" ? "insufficient" : (s.class_train || s.class_full || "unclassifiable"); }
+function matches(s) {
+  if (state.q && !s.sku.toLowerCase().includes(state.q)) return false;
+  if (state.cls.size && !state.cls.has(classOf(s))) return false;
+  return true;
+}
+
+const listEl = document.getElementById("sku-list");
+const TOTAL_OK = DATA.skus.filter(s => s.status === "ok").length;
+const TOTAL_INS = DATA.skus.filter(s => s.status !== "ok").length;
+
+function renderList() {
+  const rows = DATA.skus.filter(matches);
+  listEl.innerHTML = "";
+  const groups = [
+    ["Forecastable (MA3)", rows.filter(s => s.status === "ok"), TOTAL_OK],
+    ["Insufficient history", rows.filter(s => s.status !== "ok"), TOTAL_INS],
+  ];
+  for (const [label, gr, total] of groups) {
+    if (!gr.length) continue;
+    const h = document.createElement("div"); h.className = "sku-group-label";
+    h.textContent = gr.length === total ? `${label} · ${total}` : `${label} · ${gr.length} of ${total}`;
+    listEl.appendChild(h);
+    for (const s of gr) {
+      const b = document.createElement("button");
+      b.className = "sku-item" + (isLowConf(s) ? " lowconf" : "");
+      b.type = "button"; b.dataset.sku = s.sku;
+      b.setAttribute("role", "option");
+      b.setAttribute("aria-current", s.sku === state.sel ? "true" : "false");
+      const m = s.metrics && s.metrics.ma3.mase;
+      const hd = holdoutN(s);
+      let badgeCls = "na", badgeTxt = "—";
+      if (m != null) { badgeCls = m < 1 ? "pass" : "fail"; badgeTxt = m.toFixed(2); }
+      const holdTxt = hd == null ? "" :
+        `<span class="hold${hd < 3 ? " short" : ""}" title="holdout length (months the MASE was scored on)">${hd}-mo holdout${hd < 3 ? " ⚠" : ""}</span>`;
+      b.innerHTML = `<span class="txt">
+          <span class="code mono">${s.sku}</span>
+          <span class="meta">${classOf(s)} · ${s.months_with_sales} mo sold</span>
+        </span>
+        <span class="badge-wrap">
+          <span class="badge ${badgeCls} mono num" title="MA3 holdout MASE">${badgeTxt}</span>
+          ${holdTxt}
+        </span>`;
+      b.onclick = () => select(s.sku);
+      listEl.appendChild(b);
+    }
+  }
+  if (!listEl.children.length) listEl.innerHTML = '<div class="sku-group-label">No SKU matches the current filter</div>';
+
+  // keep the detail pane in sync with what's actually visible
+  if (rows.length === 0) { state.sel = null; }
+  else if (!rows.some(s => s.sku === state.sel)) { state.sel = rows[0].sku; }
+  renderMain();
+}
+
+listEl.addEventListener("keydown", e => {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  e.preventDefault();
+  const items = [...listEl.querySelectorAll(".sku-item")];
+  let i = items.findIndex(x => x.dataset.sku === state.sel);
+  i = e.key === "ArrowDown" ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1);
+  if (items[i]) { select(items[i].dataset.sku); items[i].scrollIntoView({ block: "nearest" }); }
+});
+
+function select(sku) {
+  state.sel = sku;
+  listEl.querySelectorAll(".sku-item").forEach(b =>
+    b.setAttribute("aria-current", b.dataset.sku === sku ? "true" : "false"));
+  renderMain();
+}
+
+/* ---------- main panel ---------- */
+const showBench = { on: true };
+
+function confTier(s) {
+  const M = s.metrics.ma3, h = holdoutN(s);
+  if (M.mase == null)
+    return { tier: "low", txt: "Unscored — this SKU has no naive benchmark (flat training window)." };
+  if (h < 3)
+    return { tier: "low", txt: `Low confidence — MA3's error here is estimated on only <b>${h}</b> holdout month${h === 1 ? "" : "s"}.` };
+  if (M.mase >= 1)
+    return { tier: "low", txt: `Low confidence — MA3 did <b>not</b> beat a naive forecast on the holdout (MASE ${fmt2(M.mase)}).` };
+  if (M.mase < 0.75 && h >= 6)
+    return { tier: "moderate", txt: `Moderate confidence — MA3 clearly beat the naive benchmark (MASE <b>${fmt2(M.mase)}</b>) across <b>${h}</b> holdout months.` };
+  return { tier: "modest", txt: `Modest confidence — MA3 edged the naive benchmark (MASE <b>${fmt2(M.mase)}</b>) over <b>${h}</b> holdout months.` };
+}
+
+function renderMain() {
+  const main = document.getElementById("main");
+  const s = state.sel ? DATA.skus.find(x => x.sku === state.sel) : null;
+  if (!s) {
+    main.innerHTML = `<section class="card"><div class="empty-note">
+      <b>No SKU matches the current filter.</b> Clear a class chip or the search box to bring the list back.
+    </div></section>`;
+    return;
+  }
+  const cls = classOf(s);
+  const spanTxt = s.first_sale ? `${s.first_sale} → ${s.last_sale}` : "—";
+
+  const head = `<section class="card">
+    <div class="sku-head">
+      <span class="code mono">${s.sku}</span>
+      <span class="name">${s.name}</span>
+      <div class="facts">
+        <span class="stat-badge ${s.status === "ok" ? "good" : "warn"}">${s.status === "ok" ? "forecastable" : "insufficient history"}</span>
+        <span class="stat-badge">class <b>${cls}</b></span>
+        <span class="stat-badge">sold <b>${s.months_with_sales}</b> / span <b>${s.months_span}</b> mo</span>
+        <span class="stat-badge">sales window <b>${spanTxt}</b></span>
+        ${s.split ? `<span class="stat-badge">train <b>${s.split.train_months}</b> · holdout <b>${s.split.holdout_months}</b></span>` : ""}
+      </div>
+    </div>
+  </section>`;
+
+  let body = "";
+  if (s.status === "ok") {
+    const M = s.metrics.ma3, N = s.metrics.naive;
+    const pass = M.mase != null && M.mase < 1;
+    const h = holdoutN(s);
+    const low = isLowConf(s);
+    const ct = confTier(s);
+    body = `<section class="card">
+      <div class="metric-row">
+        <div class="metric"><span class="k">MA3 · MASE</span>
+          <span class="v num ${M.mase == null ? "" : (pass ? "pass" : "fail")}">${fmt2(M.mase)}</span>
+          <span class="d">${M.mase == null ? "no benchmark" : (pass ? "beats naive (&lt;1.0)" : "worse than naive")} · on ${h}-mo holdout</span></div>
+        <div class="metric"><span class="k">MA3 · MAPE</span>
+          <span class="v num">${pct(M.mape)}</span><span class="d">mean abs % error</span></div>
+        <div class="metric"><span class="k">MA3 · MAE</span>
+          <span class="v num">${fmtN(M.mae)}</span><span class="d">units / month</span></div>
+        <div class="metric"><span class="k">vs naive</span>
+          <span class="v num">${fmt2(N.mase)}</span><span class="d">naive MASE · ${h}-mo holdout</span></div>
+      </div>
+      ${low ? `<div class="shortcav">Holdout is only <b>${h} month${h === 1 ? "" : "s"}</b> — every MASE/MAPE/MAE below is
+        an estimate from ${h} point${h === 1 ? "" : "s"}. Treat it as indicative, not a measured accuracy.</div>` : ""}
+      <div class="nextcall">
+        <span class="nc-k">Next month · ${s.future.month}</span>
+        <span class="nc-v">${fmtN(s.future.ma3)}</span><span class="nc-unit">units (MA3)</span>
+        <span class="nc-conf tier-${ct.tier}">${ct.txt}</span>
+      </div>
+    </section>
+    <section class="card chart-card">
+      <h2>Actuals &amp; MA3 forecast — next point ${s.future.month}</h2>
+      <div class="chart-toolbar">
+        <div class="legend">
+          <span class="li"><span class="sw actual"></span>actual sales</span>
+          <span class="li"><span class="sw forecast"></span>MA3 forecast</span>
+          <span class="li"><span class="sw wash"></span>holdout window</span>
+          ${showBench.on ? '<span class="li"><span class="sw bench"></span>naive / SBA forecast</span>' : ""}
+        </div>
+        <label class="toggle"><input type="checkbox" id="benchToggle" ${showBench.on ? "checked" : ""}>show all three forecast lines</label>
+      </div>
+      <div class="chart-frame" id="chart-frame"></div>
+    </section>
+    <section class="card cmp-card">
+      <h2>All three methods on this SKU — holdout accuracy (MASE gate = 1.0)</h2>
+      <div class="chart-frame"><table class="mtable" id="method-table"></table></div>
+      <p class="cmp-note">One-step-ahead for ${s.future.month}: MA3 <b>${fmtN(s.future.ma3)}</b> · naive ${fmtN(s.future.naive)} · SBA ${fmtN(s.future.sba)} units.
+      Deployed method is <b>MA3</b> for every Tier A SKU regardless of which row wins here — see footer.</p>
+    </section>`;
+  } else {
+    const f = s.future || {};
+    body = `<section class="card">
+      <div class="empty-note">
+        Only <b>${s.months_with_sales} month${s.months_with_sales === 1 ? "" : "s"}</b> with real sales —
+        below the <b>${DATA.params.min_months}-month</b> floor, so no holdout forecast is scored.
+        LP fallback would use a trailing average of observed months
+        (<b>${fmtN(f.provisional)}</b> units${f.month ? " for " + f.month : ""}), flagged <b>provisional</b>, with no MASE claim.
+      </div>
+    </section>
+    <section class="card chart-card">
+      <h2>Actual sales — ${s.sku}</h2>
+      <div class="chart-toolbar"><div class="legend">
+        <span class="li"><span class="sw actual"></span>actual sales</span>
+      </div></div>
+      <div class="chart-frame" id="chart-frame"></div>
+    </section>`;
+  }
+  main.innerHTML = head + body;
+
+  drawChart(s);
+  if (s.status === "ok") {
+    drawMethodTable(s);
+    const bt = document.getElementById("benchToggle");
+    if (bt) bt.onchange = e => { showBench.on = e.target.checked; renderMain(); };
+  }
+}
+
+/* ---------- chart ---------- */
+function drawChart(s) {
+  const frame = document.getElementById("chart-frame");
+  const W = 880, H = 340, PAD = { t: 16, r: 74, b: 30, l: 52 };
+  const iw = W - PAD.l - PAD.r, ih = H - PAD.t - PAD.b;
+
+  const months = s.actuals.map(a => a.m);
+  const future = s.future && s.future.month && s.status === "ok" ? s.future.month : null;
+  const allMonths = future ? [...months, future] : months;
+  const n = allMonths.length;
+  const x = i => PAD.l + (n === 1 ? iw / 2 : iw * i / (n - 1));
+
+  const vals = s.actuals.map(a => a.q);
+  if (s.holdout) METHODS.forEach(m => vals.push(...s.holdout[m]));
+  if (s.future && s.status === "ok") vals.push(s.future.ma3, s.future.naive, s.future.sba);
+  let vmax = Math.max(1, ...vals), vmin = Math.min(0, ...vals);
+  const padv = (vmax - vmin) * 0.08; vmax += padv;
+  const y = v => PAD.t + ih - ih * (v - vmin) / (vmax - vmin || 1);
+
+  const hoStart = s.split ? months.indexOf(s.split.holdout_start) : -1;
+
+  const P = pts => pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const actualPts = s.actuals.map((a, i) => [x(i), y(a.q)]);
+
+  // y gridlines
+  const TICKS = 4;
+  let grid = "";
+  for (let t = 0; t <= TICKS; t++) {
+    const gv = vmin + (vmax - vmin) * t / TICKS, gy = y(gv);
+    grid += `<line class="grid" x1="${PAD.l}" y1="${gy.toFixed(1)}" x2="${PAD.l + iw}" y2="${gy.toFixed(1)}"/>
+      <text x="${PAD.l - 8}" y="${gy + 3.5}" text-anchor="end">${fmtN(gv, gv < 10 ? 1 : 0)}</text>`;
+  }
+  // x labels (sparse)
+  const step = Math.ceil(n / 9);
+  let xlab = "";
+  allMonths.forEach((m, i) => {
+    if (i % step && i !== n - 1) return;
+    xlab += `<text x="${x(i).toFixed(1)}" y="${H - 10}" text-anchor="middle">${m.slice(2)}</text>`;
+  });
+
+  // holdout wash
+  let wash = "";
+  if (hoStart >= 0) {
+    const x0 = x(hoStart) - (iw / (n - 1)) / 2;
+    wash = `<rect x="${Math.max(PAD.l, x0).toFixed(1)}" y="${PAD.t}" width="${(PAD.l + iw - Math.max(PAD.l, x0)).toFixed(1)}" height="${ih}" fill="var(--holdout-wash)"/>`;
+  }
+
+  // forecast + bench lines over holdout, anchored at last train actual
+  let fcPath = "", benchPaths = "";
+  if (s.holdout) {
+    const anchorIdx = hoStart - 1;
+    const anchor = anchorIdx >= 0 ? [x(anchorIdx), y(s.actuals[anchorIdx].q)] : null;
+    const mk = arr => {
+      const seg = s.holdout.months.map((mm, k) => [x(months.indexOf(mm)), y(arr[k])]);
+      return anchor ? [anchor, ...seg] : seg;
+    };
+    fcPath = `<path class="fc-line" d="${P(mk(s.holdout.ma3))}"/>`;
+    if (future) {
+      const lastHo = months.indexOf(s.holdout.months[s.holdout.months.length - 1]);
+      fcPath += `<path class="fc-line" d="${P([[x(lastHo), y(s.holdout.ma3[s.holdout.ma3.length - 1])], [x(n - 1), y(s.future.ma3)]])}"/>`;
+    }
+    const lastHoIdx = months.indexOf(s.holdout.months[s.holdout.months.length - 1]);
+    const endLabels = [];  // {y, text, color} — de-collided at the right margin
+    if (future) endLabels.push({ y: y(s.future.ma3), text: "MA3 " + fmtN(s.future.ma3), color: "var(--forecast)", w: 700 });
+    if (showBench.on) {
+      for (const m of ["naive", "sba"]) {
+        const seg = mk(s.holdout[m]);
+        let d = P(seg);
+        if (future && s.future[m] != null) d += ` L ${x(n - 1).toFixed(1)} ${y(s.future[m]).toFixed(1)}`;
+        benchPaths += `<path class="bench-line ${m}" d="${d}"/>`;
+        const endY = future && s.future[m] != null ? y(s.future[m]) : y(s.holdout[m][s.holdout[m].length - 1]);
+        const endX = future && s.future[m] != null ? x(n - 1) : x(lastHoIdx);
+        benchPaths += `<circle class="dot-bench" cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="2"/>`;
+        endLabels.push({ y: endY, text: METHOD_LABEL[m] + (future && s.future[m] != null ? " " + fmtN(s.future[m]) : ""), color: "var(--muted)", w: 500 });
+      }
+    }
+    // spread labels so none overlap (min 12px apart), keep within plot
+    endLabels.sort((a, b) => a.y - b.y);
+    for (let k = 1; k < endLabels.length; k++)
+      if (endLabels[k].y - endLabels[k - 1].y < 12) endLabels[k].y = endLabels[k - 1].y + 12;
+    const lx = (PAD.l + iw + 5).toFixed(1);
+    for (const L of endLabels) {
+      const ly = Math.max(PAD.t + 8, Math.min(PAD.t + ih, L.y)) + 3;
+      benchPaths += `<text class="bench-label" x="${lx}" y="${ly.toFixed(1)}" fill="${L.color}" style="font-weight:${L.w}">${L.text}</text>`;
+    }
+  }
+
+  const actualDots = s.actuals.map((a, i) => `<circle class="dot-actual" cx="${x(i).toFixed(1)}" cy="${y(a.q).toFixed(1)}" r="2.5"/>`).join("");
+  let futureMark = "";
+  if (future) {
+    futureMark = `<circle class="future-ring" cx="${x(n - 1).toFixed(1)}" cy="${y(s.future.ma3).toFixed(1)}" r="4.5"/>`;
+  }
+
+  frame.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
+      aria-label="Monthly actual sales for ${s.sku} with MA3 forecast over the holdout window">
+    ${wash}${grid}
+    <line class="axis-line" x1="${PAD.l}" y1="${PAD.t + ih}" x2="${PAD.l + iw}" y2="${PAD.t + ih}"/>
+    ${benchPaths}
+    <path class="actual-line" d="${P(actualPts)}"/>
+    ${fcPath}${actualDots}${futureMark}${xlab}
+    <g id="hover-layer"></g>
+  </svg>`;
+
+  attachHover(frame.querySelector("svg"), s, { x, y, months, allMonths, n, PAD, ih });
+}
+
+function attachHover(svg, s, geo) {
+  const tt = document.getElementById("tt");
+  const layer = svg.querySelector("#hover-layer");
+  const hoMonths = s.holdout ? s.holdout.months : [];
+  svg.addEventListener("pointermove", ev => {
+    const r = svg.getBoundingClientRect();
+    const sx = (ev.clientX - r.left) / r.width * 880;
+    let i = geo.n <= 1 ? 0 : Math.round((sx - geo.PAD.l) / ((880 - geo.PAD.l - geo.PAD.r) / (geo.n - 1)));
+    i = Math.max(0, Math.min(geo.n - 1, i));
+    const m = geo.allMonths[i];
+    const px = geo.x(i);
+    layer.innerHTML = `<line class="crosshair" x1="${px}" y1="${geo.PAD.t}" x2="${px}" y2="${geo.PAD.t + geo.ih}"/>`;
+    const rows = [];
+    const a = s.actuals.find(o => o.m === m);
+    if (a) rows.push(["actual sales", fmtN(a.q), "var(--actual)"]);
+    const hk = hoMonths.indexOf(m);
+    if (hk >= 0) {
+      rows.push(["MA3", fmtN(s.holdout.ma3[hk]), "var(--forecast)"]);
+      if (showBench.on) { rows.push(["naive", fmtN(s.holdout.naive[hk]), "var(--muted)"]);
+        rows.push(["SBA", fmtN(s.holdout.sba[hk]), "var(--muted)"]); }
+    }
+    if (s.future && m === s.future.month) rows.push(["MA3 next", fmtN(s.future.ma3), "var(--forecast)"]);
+    if (!rows.length) { tt.style.opacity = 0; return; }
+    tt.innerHTML = `<div class="tt-m mono">${m}</div>` + rows.map(([k, v, c]) =>
+      `<div class="tt-row"><span><span class="dot" style="background:${c}"></span>${k}</span><span class="mono num">${v}</span></div>`).join("");
+    tt.style.opacity = 1;
+    tt.style.left = Math.min(window.innerWidth - 170, ev.clientX + 14) + "px";
+    tt.style.top = (ev.clientY + 14) + "px";
+  });
+  svg.addEventListener("pointerleave", () => { tt.style.opacity = 0; layer.innerHTML = ""; });
+}
+
+/* ---------- 3-method table ---------- */
+function drawMethodTable(s) {
+  const el = document.getElementById("method-table");
+  const h = holdoutN(s);
+  const best = METHODS
+    .filter(m => s.metrics[m].mase != null)
+    .sort((a, b) => s.metrics[a].mase - s.metrics[b].mase)[0];
+  const rowHtml = m => {
+    const x = s.metrics[m];
+    const pf = passOf(x.mase);
+    const pfTxt = pf === "na" ? "not scored" : (pf === "pass" ? "beats naive" : "worse");
+    const isV = m === "ma3";
+    return `<tr class="${isV ? "is-verdict" : ""}">
+      <td>${METHOD_LABEL[m]}${isV ? '<span class="verdict-tag">deployed</span>' : ""}${m === best && !isV ? ' <span class="hold">best here</span>' : ""}</td>
+      <td class="mono num">${fmt2(x.mase)}</td>
+      <td class="mono num">${pct(x.mape)}</td>
+      <td class="mono num">${fmtN(x.mae)}</td>
+      <td class="pf ${pf}">${pf === "pass" ? "✓ " : pf === "fail" ? "✗ " : ""}${pfTxt}</td>
+    </tr>`;
+  };
+  el.innerHTML = `<thead><tr>
+      <th>method</th><th>MASE</th><th>MAPE</th><th>MAE</th><th>vs naive (gate 1.0)</th>
+    </tr></thead><tbody>${METHODS.map(rowHtml).join("")}</tbody>
+    <tfoot><tr><td colspan="5" style="border:0;padding-top:8px;color:var(--muted);font-size:11px;">
+      All scored on the same ${h}-month time-ordered holdout${h < 3 ? " — only " + h + " point" + (h === 1 ? "" : "s") + ", treat as indicative" : ""}.
+    </td></tr></tfoot>`;
+}
+
+/* ---------- footer ---------- */
+document.getElementById("footer").innerHTML = `
+  <b>${DATA.summary.total}</b> real Tier A SKUs (ABC period ${DATA.abc_period}) ·
+  <b>${DATA.summary.ok}</b> forecastable · <b>${DATA.summary.insufficient_data}</b> insufficient history · 0 dead.
+  Method: <b>MA3</b> (3-month moving average) is the deployable choice — it beat SARIMA, naive, SBA,
+  demand-class routing, history-length routing, an ensemble, and a per-SKU selector on this data.
+  Holdout = last ${(DATA.params.holdout_fraction * 100).toFixed(0)}% of each SKU's series (time-ordered).
+  MASE &lt; 1.0 = beats a naive forecast. SBA α = ${DATA.params.sba_alpha}, untuned.
+  <div class="disclaim">These numbers are <b>report-only</b>. Nothing here has been written to
+  <span class="mono">Forecast_Result</span> — the live dashboard still shows the older SARIMA run.</div>`;
+
+renderList();  // also renders the detail pane for the current selection
+</script>
