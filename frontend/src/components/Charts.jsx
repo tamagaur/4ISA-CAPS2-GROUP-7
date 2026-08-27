@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import {
-  ComposedChart, BarChart, Bar, Cell, Line,
+  ComposedChart, BarChart, Bar, Cell, Line, LabelList,
   PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
@@ -434,98 +434,120 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
   );
 };
 
-const STOCK_STATUS_COLORS = { deadStock: '#94A3B8', inStock: CHART_COLORS.stockSeries };
+// In-stock reads as the neutral, "normal" state — a calm teal, not the
+// warm/amber/red end of the palette. Dead stock is the one that should
+// draw the eye, but it's still a watch-list condition, not a critical
+// alert, so it gets amber rather than red — red on this dashboard is
+// reserved for genuinely critical signals elsewhere (e.g. the reorder
+// card's CRITICAL badge), and reusing it here would make this chart read
+// as an alarm it isn't. Allocation gets its own color entirely (violet,
+// already this dashboard's token for "a projected/target figure" — see
+// the forecast band in PortfolioForecastWidget) since it isn't a stock
+// *status*, it's a supplier commitment being compared against one.
+const STOCK_STATUS_COLORS = {
+  inStock: CHART_COLORS.salesSeries,
+  deadStock: COLORS.warning,
+  allocation: COLORS.forecast,
+};
 
 const CategoryStockTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   const row = payload[0].payload;
+  const total = row.deadStock + row.inStock;
+  const pct = (v) => (total > 0 ? `${Math.round((v / total) * 100)}%` : '—');
   return (
     <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label} · Tier {row.tier}</p>
-      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.inStock }}>In stock: {row.inStock.toLocaleString()}</p>
-      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.deadStock }}>Dead stock: {row.deadStock.toLocaleString()}</p>
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>Tier {label}</p>
+      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.inStock }}>
+        In stock: {row.inStock.toLocaleString()} ({pct(row.inStock)})
+      </p>
+      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.deadStock }}>
+        Dead stock: {row.deadStock.toLocaleString()} ({pct(row.deadStock)})
+      </p>
+      <p style={{ margin: '0.3rem 0 0 0', paddingTop: '0.3rem', borderTop: '1px solid #f1f5f9', color: STOCK_STATUS_COLORS.allocation, fontWeight: 600 }}>
+        Fixed allocation: {row.allocation.toLocaleString()}
+      </p>
     </div>
   );
 };
 
-// Category-tick label with a small ABC-tier chip underneath the category
-// name, so the grouping-by-tier the sketch shows (A / B / C bands under
-// the bars) survives without needing a second axis.
-const CategoryTick = ({ x, y, payload, dataByCategory }) => {
-  const row = dataByCategory[payload.value];
-  if (!row) return null;
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text dy={12} textAnchor="middle" fontSize={10} fill={CHART_COLORS.axisLabel}>{payload.value}</text>
-      <text dy={26} textAnchor="middle" fontSize={9} fontWeight={700} fill={ABC_TIER_COLORS[row.tier] || CHART_COLORS.axisLabel}>
-        Tier {row.tier}
-      </text>
-    </g>
-  );
-};
+const barLabelStyle = { fontSize: 10, fontWeight: 700, fill: '#ffffff' };
+const allocationLabelStyle = { fontSize: 10, fill: CHART_COLORS.axisLabel };
 
-// Stacked stock matrix per category — `data` is
-// [{ category, tier: 'A'|'B'|'C', deadStock, inStock }]. Stacked bar
-// (dead stock beneath in-stock) so each category's total column height is
-// its total stock; the ABC tier isn't a separate axis, it's the small
-// chip rendered under each category's tick (see CategoryTick above) and
-// the tint of the "in stock" segment.
+// Paired bar chart per ABC tier — `data` is
+// [{ tier: 'A'|'B'|'C', deadStock, inStock, allocation }]. Two bars per
+// tier: a stacked bar (dead stock beneath in-stock, so their split of the
+// tier's actual total reads as proportion, not two separately-scaled
+// numbers) next to a single plain bar for that tier's fixed allocation
+// from suppliers — the same figure the Sales vs. Stock chart's dashed
+// line represents, just broken out per tier here so "are we over or
+// under our allocation" is answerable at the tier level, not just
+// portfolio-wide.
 export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
   const hasData = data.length > 0;
-  const dataByCategory = useMemo(
-    () => Object.fromEntries(data.map((d) => [d.category, d])),
-    [data]
-  );
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Stock matrix by category</h4>
-          <p>Dead stock vs. in-stock, grouped by ABC tier</p>
+          <h4>Stock status by ABC tier</h4>
+          <p>Dead/in-stock mix vs. fixed allocation, by classification tier</p>
         </div>
       </div>
 
       {!hasData ? (
-        <p className="dashboard-empty-note">{emptyReason || 'No category stock data available'}</p>
+        <p className="dashboard-empty-note">{emptyReason || 'No stock status data available'}</p>
       ) : (
         <>
           <div className="chart-container">
             <ResponsiveContainer width="99%" height="100%">
-              <BarChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+              <BarChart
+                data={data}
+                margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
+                barGap={4}
+                barCategoryGap="30%"
+              >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
                 <XAxis
-                  dataKey="category"
+                  dataKey="tier"
                   axisLine={false}
                   tickLine={false}
-                  interval={0}
-                  height={40}
-                  tick={<CategoryTick dataByCategory={dataByCategory} />}
+                  tickFormatter={(t) => `Tier ${t}`}
+                  tick={{ fontSize: 11, fontWeight: 700, fill: CHART_COLORS.axisLabel }}
+                  dy={6}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                   tickFormatter={(v) => Math.round(v).toLocaleString()}
+                  label={{ value: 'SKUs', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
                 />
-                <Tooltip content={<CategoryStockTooltip />} />
-                <Bar dataKey="deadStock" name="Dead stock" stackId="stock" fill={STOCK_STATUS_COLORS.deadStock} radius={[0, 0, 3, 3]} isAnimationActive={false} />
-                <Bar dataKey="inStock" name="In stock" stackId="stock" radius={[3, 3, 0, 0]} isAnimationActive={false}>
-                  {data.map((d) => (
-                    <Cell key={d.category} fill={ABC_TIER_COLORS[d.tier] || STOCK_STATUS_COLORS.inStock} />
-                  ))}
+                <Tooltip content={<CategoryStockTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }} />
+                <Bar dataKey="deadStock" name="Dead stock" stackId="mix" fill={STOCK_STATUS_COLORS.deadStock} isAnimationActive={false}>
+                  <LabelList dataKey="deadStock" position="center" style={barLabelStyle} formatter={(v) => v.toLocaleString()} />
+                </Bar>
+                <Bar dataKey="inStock" name="In stock" stackId="mix" fill={STOCK_STATUS_COLORS.inStock} radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                  <LabelList dataKey="inStock" position="center" style={barLabelStyle} formatter={(v) => v.toLocaleString()} />
+                </Bar>
+                <Bar dataKey="allocation" name="Fixed allocation" fill={STOCK_STATUS_COLORS.allocation} radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                  <LabelList dataKey="allocation" position="top" style={allocationLabelStyle} formatter={(v) => v.toLocaleString()} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
           <ul className="custom-legend">
             <li className="legend-item">
+              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.inStock, borderRadius: '3px' }} />
+              In stock
+            </li>
+            <li className="legend-item">
               <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.deadStock, borderRadius: '3px' }} />
               Dead stock
             </li>
             <li className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: COLORS.abcA, borderRadius: '3px' }} />
-              In stock (colored by ABC tier)
+              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.allocation, borderRadius: '3px' }} />
+              Fixed allocation
             </li>
           </ul>
         </>

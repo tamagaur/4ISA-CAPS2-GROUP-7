@@ -39,13 +39,13 @@ const MOCK_ABC_DATA = [
   { tier: 'C', count: 260, sharePct: 7 },
 ];
 
+// allocation is each tier's slice of the suppliers' fixed yearly
+// allocation — the same concept as MOCK_FIXED_ALLOCATION above, just
+// broken out per tier instead of one portfolio-wide number.
 const MOCK_CATEGORY_STOCK = [
-  { category: 'Deo', tier: 'A', deadStock: 320, inStock: 1850 },
-  { category: 'Snacks', tier: 'A', deadStock: 180, inStock: 2100 },
-  { category: 'Personal Care', tier: 'B', deadStock: 410, inStock: 1200 },
-  { category: 'Fragrance', tier: 'B', deadStock: 260, inStock: 980 },
-  { category: 'Seasoning', tier: 'C', deadStock: 540, inStock: 610 },
-  { category: 'Canned Goods', tier: 'C', deadStock: 390, inStock: 520 },
+  { tier: 'A', deadStock: 500, inStock: 3950, allocation: 4600 },
+  { tier: 'B', deadStock: 670, inStock: 2180, allocation: 2600 },
+  { tier: 'C', deadStock: 930, inStock: 1130, allocation: 2200 },
 ];
 
 // Actual demand for Wk 1-8, then SARIMA forecast + confidence band for
