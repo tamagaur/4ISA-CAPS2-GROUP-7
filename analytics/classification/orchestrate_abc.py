@@ -94,22 +94,35 @@ def _fetch_unilever_sku_revenue(engine: Engine, period: str) -> tuple[pd.DataFra
     # correctly turns None into NaN, so the null-count check below still
     # works unchanged.
     df["total_revenue"] = df["total_revenue"].astype(float)
-    
-    # NEW: Fetch ALL Unilever product_keys so zero-sale items get included
+
+    # An EXPLICIT NULL net_amount on a real unilever_sku_demand_fact row is
+    # a data-quality gap, not a zero sale — excluded here (anti-fabrication,
+    # see module docstring), same as before the zero-sale fill below was
+    # added. Tracked by sku_id, not just counted, so the zero-sale fill
+    # below can't silently re-include these under the different "no row at
+    # all this period" case.
+    null_count = int(df["total_revenue"].isna().sum())
+    null_sku_ids = set(df.loc[df["total_revenue"].isna(), "sku_id"])
+    df = df.dropna(subset=["total_revenue"])
+
+    # Every OTHER real Unilever product with NO ROW AT ALL this period is a
+    # genuine zero-sale month (a fact, not a gap) — included as 0.0 so it
+    # correctly lands in Category C instead of silently vanishing from the
+    # classification. Explicit-NULL products (null_sku_ids) are excluded
+    # from this set too, so they stay excluded rather than being
+    # re-introduced as a fabricated zero via this left join.
     prod_dim = Table("product_dimension", metadata, autoload_with=engine)
     with engine.connect() as conn:
         all_skus = conn.execute(
             select(prod_dim.c.product_key)
             .where(prod_dim.c.principal == 'unilever')
         ).fetchall()
-    
+
     all_df = pd.DataFrame(all_skus, columns=["sku_id"])
+    all_df = all_df[~all_df["sku_id"].isin(null_sku_ids)]
     df = all_df.merge(df, on="sku_id", how="left")
-    
-    null_count = int(df["total_revenue"].isna().sum())
-    # Fill missing sales with 0.0 so they fall into Category C
     df["total_revenue"] = df["total_revenue"].fillna(0.0)
-    
+
     return df, null_count
 
 
