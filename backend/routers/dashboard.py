@@ -167,12 +167,39 @@ zero):
     (the task's literal formula), not silently changed to something else.
 
   tier_stock[]
-    — real: per-tier counts of PRODUCTS by stock status, reusing
-    backend.routers.abc._stock_status verbatim (imported, not
-    reimplemented) including its NO DATA handling — a product with no
-    Inventory_Fact_Real row counts toward `no_data`, never toward
-    `critical`. No allocation bar — no supplier allocation table exists
-    anywhere in the schema (see kpis.weeks_of_cover's docstring section).
+    — real: per-tier counts of PRODUCTS by dead-stock status, from
+    Inventory_Fact_Real.stock_status at the latest inventory period (NOT
+    the reorder-point-derived in_stock/low/critical split
+    backend.routers.abc._stock_status computes for GET /abc — a
+    different, genuinely-populated column, chosen per this dashboard
+    widget's own "dead stock" framing). A product with ANY row that
+    period flagged stock_status='Inactive' counts as dead_stock; else ANY
+    row flagged 'Active' counts as in_stock; a product with no
+    Inventory_Fact_Real row that period, or rows with stock_status still
+    NULL, counts toward `no_data` — never guessed into either bucket.
+    KNOWN LIMITATION (documented, not a bug): stock_status is Unilever-
+    only (R12, 2026-08 SOH Load — Del Monte's source has no equivalent
+    column and leaves it NULL for every row), confirmed against the live
+    table (32,453 Inventory_Fact_Real rows: only Unilever's 27,282 ever
+    populate stock_status, all NULL for Del Monte's 5,171). So Del Monte
+    products fall into `no_data` here almost entirely — an honest gap,
+    not a fabricated 0. No allocation bar — no supplier allocation table
+    exists anywhere in the schema (see kpis.weeks_of_cover's docstring
+    section), and Purchase_Fact (the proxy sales_vs_stock.received uses
+    instead) has no product_key at all, so there is no grain to break an
+    allocation proxy down by ABC tier even proximately.
+
+  tier_stock[].pending_reorder_count
+    — real: COUNT(DISTINCT product_key) per tier with a pending
+    LP_Recommendation row, at the SAME classification_period as the rest
+    of tier_stock. Deliberately a different source table (LP_Recommendation,
+    not Inventory_Fact_Real) than in_stock/dead_stock/no_data above — chosen
+    specifically so this bar doesn't restate the ABC donut's own
+    count/revenue-share view under a different name; it answers "how many
+    products in this tier need reordering right now", not "how big is
+    this tier". Never null — 0 is a real, meaningful answer here (no
+    pending recommendations for that tier), unlike the honest-null fields
+    elsewhere in this file.
 
   portfolio_forecast
     — real, but structurally different from the old mock's clean 4-period
@@ -221,7 +248,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
-from backend.routers.abc import _stock_status
 from backend.routers.recommendations import _SELECT_ONE as _RECOMMENDATION_SELECT_ONE
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 
@@ -721,21 +747,18 @@ def get_dashboard(
             text(f"""
                 SELECT
                     ac.tier,
-                    inv.current_stock AS current_stock,
-                    rop.rop_i AS rop_i
+                    inv.any_active AS any_active,
+                    inv.any_inactive AS any_inactive
                 FROM ABC_Classification ac
                 LEFT JOIN (
-                    SELECT product_key, SUM(quantity_on_hand) AS current_stock
+                    SELECT
+                        product_key,
+                        BOOL_OR(stock_status = 'Active') AS any_active,
+                        BOOL_OR(stock_status = 'Inactive') AS any_inactive
                     FROM Inventory_Fact_Real
                     WHERE _period = (SELECT MAX(_period) FROM Inventory_Fact_Real)
                     GROUP BY product_key
                 ) inv ON inv.product_key = ac.product_key
-                LEFT JOIN (
-                    SELECT DISTINCT ON (product_key) product_key, rop_i
-                    FROM LP_Recommendation
-                    WHERE status = 'pending'
-                    ORDER BY product_key, planning_cycle_date DESC
-                ) rop ON rop.product_key = ac.product_key
                 WHERE ac.classification_period = :period {ts_principal_filter}
             """),
             {"period": abc_period, "principal": principal} if principal in ("unilever", "delmonte") else {"period": abc_period},
@@ -743,21 +766,34 @@ def get_dashboard(
         buckets: dict[str, dict[str, int]] = {}
         for r in ts_rows:
             tier = r["tier"]
-            status = _stock_status(
-                float(r["current_stock"]) if r["current_stock"] is not None else None,
-                float(r["rop_i"]) if r["rop_i"] is not None else None,
-            )
-            b = buckets.setdefault(tier, {"in_stock": 0, "low": 0, "critical": 0, "no_data": 0})
-            if status == "IN STOCK":
+            b = buckets.setdefault(tier, {"in_stock": 0, "dead_stock": 0, "no_data": 0})
+            # Dead stock takes priority if a product has both an Active and
+            # an Inactive row for the period (multiple snapshot_dates/
+            # regions) — flagged Inactive even once is the signal worth
+            # surfacing, same "don't average away a bad signal" reasoning
+            # tier_stock's own no_data bucket already applies elsewhere.
+            if r["any_inactive"]:
+                b["dead_stock"] += 1
+            elif r["any_active"]:
                 b["in_stock"] += 1
-            elif status == "LOW":
-                b["low"] += 1
-            elif status == "CRITICAL":
-                b["critical"] += 1
-            else:  # "NO DATA"
+            else:
                 b["no_data"] += 1
+
+        pending_rows = db.execute(
+            text(f"""
+                SELECT ac.tier, COUNT(DISTINCT lr.product_key) AS cnt
+                FROM ABC_Classification ac
+                JOIN LP_Recommendation lr ON lr.product_key = ac.product_key AND lr.status = 'pending'
+                WHERE ac.classification_period = :period {ts_principal_filter}
+                GROUP BY ac.tier
+            """),
+            {"period": abc_period, "principal": principal} if principal in ("unilever", "delmonte") else {"period": abc_period},
+        ).mappings().all()
+        pending_by_tier = {r["tier"]: int(r["cnt"]) for r in pending_rows}
+
         tier_stock = [
-            {"tier": tier, **counts} for tier, counts in sorted(buckets.items())
+            {"tier": tier, **counts, "pending_reorder_count": pending_by_tier.get(tier, 0)}
+            for tier, counts in sorted(buckets.items())
         ]
 
     # ---- portfolio_forecast --------------------------------------------

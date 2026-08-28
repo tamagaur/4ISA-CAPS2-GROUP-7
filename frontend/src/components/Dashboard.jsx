@@ -117,9 +117,9 @@ const Dashboard = () => {
   const tierStock = (data.tier_stock || []).map((t) => ({
     tier: t.tier,
     inStock: t.in_stock,
-    low: t.low,
-    critical: t.critical,
+    deadStock: t.dead_stock,
     noData: t.no_data,
+    pendingReorderCount: t.pending_reorder_count,
   }));
 
   const portfolioForecast = data.portfolio_forecast || {};

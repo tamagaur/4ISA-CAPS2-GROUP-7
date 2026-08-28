@@ -345,10 +345,11 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   type="monotone"
                   dataKey="received"
                   name={RECEIVED_LABEL}
-                  stroke={STATUS_TIERS.diagnostic}
-                  strokeDasharray="5 3"
-                  strokeWidth={2}
-                  dot={false}
+                  stroke={COLORS.forecast}
+                  strokeDasharray="7 5"
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: COLORS.forecast, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
                   isAnimationActive={false}
                 />
               </ComposedChart>
@@ -364,7 +365,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
               Stock on hand
             </li>
             <li className="legend-item">
-              <span className="legend-line legend-line-dashed" style={{ borderTopColor: STATUS_TIERS.diagnostic }} />
+              <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
               {RECEIVED_LABEL}
             </li>
           </ul>
@@ -445,47 +446,58 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
   );
 };
 
-// Same 4-status vocabulary GET /abc's stock_status already uses (see
-// backend/routers/abc.py._stock_status, reused verbatim by GET
-// /dashboard's tier_stock) — in_stock reads as the neutral "normal" state
-// (calm teal), low is a caution amber, critical is this dashboard's one
-// reserved alert red (matches the reorder card's CRITICAL badge), and
-// no_data gets the neutral "we don't know" slate STATUS_TIERS already
-// uses for "no inherent direction" rather than being folded into
-// critical — a missing Inventory_Fact_Real row is a data gap, not a
-// confirmed stockout.
+// In-stock reads as the neutral, "normal" state — a calm teal. Dead stock
+// (Inventory_Fact_Real.stock_status = 'Inactive') is the one that should
+// draw the eye, but it's a watch-list condition rather than a critical
+// alert, so it gets amber rather than this dashboard's one reserved alert
+// red (the reorder card's CRITICAL badge). No_data gets the neutral
+// "we don't know" slate STATUS_TIERS already uses for "no inherent
+// direction" — most of it is Del Monte, whose source has no stock_status
+// column at all (Unilever-only signal, see GET /dashboard's tier_stock
+// docstring), never folded into either real bucket.
 const STOCK_STATUS_COLORS = {
   inStock: CHART_COLORS.salesSeries,
-  low: COLORS.warning,
-  critical: COLORS.critical,
+  deadStock: COLORS.warning,
   noData: STATUS_TIERS.diagnostic,
+  // Indigo — this dashboard's own token for "a recommendation the system
+  // is outputting" (STATUS_TIERS.action), reused here since
+  // pendingReorderCount IS that: a count of LP_Recommendation rows, not a
+  // stock status. Deliberately distinct from the stock-status colors so
+  // the two bars never read as the same kind of thing.
+  pendingReorder: STATUS_TIERS.action,
 };
 
 const CategoryStockTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
-  const row = payload[0].payload;
-  const total = row.inStock + row.low + row.critical + row.noData;
-  const pct = (v) => (total > 0 ? `${Math.round((v / total) * 100)}%` : '—');
+  const row = payload[0].payload || {};
+  const inStock = row.inStock || 0;
+  const deadStock = row.deadStock || 0;
+  const noData = row.noData || 0;
+  const pendingReorderCount = row.pendingReorderCount || 0;
+  const covered = inStock + deadStock;
+  const total = covered + noData;
+  const pct = (v) => (covered > 0 ? `${Math.round((v / covered) * 100)}%` : '—');
   return (
     <div className="chart-tooltip">
       <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>Tier {label}</p>
       <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.inStock }}>
-        In stock: {row.inStock.toLocaleString()} ({pct(row.inStock)})
+        In stock: {inStock.toLocaleString()} ({pct(inStock)})
       </p>
-      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.low }}>
-        Low: {row.low.toLocaleString()} ({pct(row.low)})
+      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.deadStock }}>
+        Dead stock: {deadStock.toLocaleString()} ({pct(deadStock)})
       </p>
-      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.critical }}>
-        Critical: {row.critical.toLocaleString()} ({pct(row.critical)})
+      <p style={{ margin: '0.1rem 0 0 0', color: STOCK_STATUS_COLORS.noData }}>
+        No inventory data: {noData.toLocaleString()} of {total.toLocaleString()} products
       </p>
-      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.noData }}>
-        No data: {row.noData.toLocaleString()} ({pct(row.noData)})
+      <p style={{ margin: '0.3rem 0 0 0', paddingTop: '0.3rem', borderTop: '1px solid #f1f5f9', color: STOCK_STATUS_COLORS.pendingReorder, fontWeight: 600 }}>
+        Pending reorder: {pendingReorderCount.toLocaleString()} products
       </p>
     </div>
   );
 };
 
 const barLabelStyle = { fontSize: 10, fontWeight: 700, fill: '#ffffff' };
+const pendingReorderLabelStyle = { fontSize: 10, fill: CHART_COLORS.axisLabel };
 
 // A segment under this fraction of its own bar's covered height renders no
 // inline label — Tier A/B's smallest slices used to overlap into an
@@ -496,15 +508,15 @@ const MIN_LABEL_FRACTION = 0.04;
 // Per-segment LabelList content renderer: `data[index]` is that bar's own
 // row (recharts renders one rect per data item in array order, so `index`
 // lines up directly — no separate lookup key needed), used to compute this
-// segment's share of ITS OWN bar (in_stock+low+critical only — no_data is
-// no longer part of the stack, see CategoryStockBarWidget below) rather
-// than a global threshold, so a small tier isn't penalized differently
-// than a large one.
+// segment's share of ITS OWN bar (in_stock+dead_stock only — no_data is
+// not part of the stack, see CategoryStockBarWidget below) rather than a
+// global threshold, so a small tier isn't penalized differently than a
+// large one.
 function makeSegmentLabel(data) {
   return ({ x, y, width, height, value, index }) => {
     if (!value) return null;
     const row = data[index] || {};
-    const covered = (row.inStock || 0) + (row.low || 0) + (row.critical || 0);
+    const covered = (row.inStock || 0) + (row.deadStock || 0);
     if (covered <= 0 || value / covered < MIN_LABEL_FRACTION) return null;
     return (
       <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="middle" style={barLabelStyle}>
@@ -515,14 +527,15 @@ function makeSegmentLabel(data) {
 }
 
 // Custom two-line X-axis tick: "Tier A" plus a muted coverage caption
-// ("inventory data for 499 of 1,492") — no_data is deliberately kept
-// OUT of the stacked bar (it dominated Tier C, 993 of ~1,492, and crushed
-// the three segments that actually carry a decision-relevant signal) but
-// must stay visible somewhere on the chart, not be silently dropped.
+// ("inventory data for 499 of 1,492") — no_data is deliberately kept OUT
+// of the stacked bar (it's mostly Del Monte, whose source has no
+// stock_status column at all, and would otherwise crush the two segments
+// that actually carry a decision-relevant signal) but must stay visible
+// somewhere on the chart, not be silently dropped.
 function makeCategoryStockTick(data) {
   return ({ x, y, payload }) => {
     const row = data.find((d) => d.tier === payload.value) || {};
-    const covered = (row.inStock || 0) + (row.low || 0) + (row.critical || 0);
+    const covered = (row.inStock || 0) + (row.deadStock || 0);
     const total = covered + (row.noData || 0);
     return (
       <g transform={`translate(${x},${y})`}>
@@ -537,16 +550,22 @@ function makeCategoryStockTick(data) {
   };
 }
 
-// Stacked bar chart per ABC tier — `data` is
-// [{ tier: 'A'|'B'|'C', inStock, low, critical, noData }], the same 4-way
-// stock_status split GET /abc already computes per product
-// (backend.routers.abc._stock_status, reused verbatim by GET
-// /dashboard's tier_stock) rolled up to a per-tier count. Y-axis is
-// genuinely "SKUs" now — these are product counts, not the unit
-// quantities this widget used to be fed. No allocation bar: no supplier
-// allocation table exists anywhere in the schema (see GET /dashboard's
-// kpis.weeks_of_cover docstring, which documents the same gap), so there
-// is nothing honest to plot beside it.
+// Paired bar chart per ABC tier — `data` is
+// [{ tier: 'A'|'B'|'C', inStock, deadStock, noData, pendingReorderCount }],
+// from GET /dashboard's tier_stock. Two bars per tier: a stacked bar (dead
+// stock beneath in-stock, from Inventory_Fact_Real.stock_status at the
+// latest inventory period — a real, Unilever-only "is this product
+// moving" signal, NOT the reorder-point-derived in_stock/low/critical
+// split GET /abc uses) next to a single plain bar for that tier's pending
+// reorder count (COUNT(DISTINCT product_key) with a pending
+// LP_Recommendation row — a different source table, deliberately chosen
+// so this bar doesn't restate the ABC donut's own count/revenue-share
+// view under a different name). Y-axis is "SKUs" for both — both are
+// product counts. No allocation bar: no supplier allocation table exists
+// anywhere in the schema (see GET /dashboard's kpis.weeks_of_cover
+// docstring), and the proxy SalesVsStockWidget uses instead
+// (Purchase_Fact_Real) has no product key to break down by ABC tier at
+// all — there is nothing honest to plot in its place.
 export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
   const hasData = data.length > 0;
 
@@ -555,7 +574,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Stock status by ABC tier</h4>
-          <p>In-stock / low / critical mix, by classification tier</p>
+          <p>Dead/in-stock mix vs. pending reorders, by classification tier</p>
         </div>
       </div>
 
@@ -587,14 +606,14 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
                   label={{ value: 'SKUs', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
                 />
                 <Tooltip content={<CategoryStockTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }} />
-                <Bar dataKey="inStock" name="In stock" stackId="mix" fill={STOCK_STATUS_COLORS.inStock} isAnimationActive={false}>
+                <Bar dataKey="deadStock" name="Dead stock" stackId="mix" fill={STOCK_STATUS_COLORS.deadStock} isAnimationActive={false}>
+                  <LabelList dataKey="deadStock" content={makeSegmentLabel(data)} />
+                </Bar>
+                <Bar dataKey="inStock" name="In stock" stackId="mix" fill={STOCK_STATUS_COLORS.inStock} radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   <LabelList dataKey="inStock" content={makeSegmentLabel(data)} />
                 </Bar>
-                <Bar dataKey="low" name="Low" stackId="mix" fill={STOCK_STATUS_COLORS.low} isAnimationActive={false}>
-                  <LabelList dataKey="low" content={makeSegmentLabel(data)} />
-                </Bar>
-                <Bar dataKey="critical" name="Critical" stackId="mix" fill={STOCK_STATUS_COLORS.critical} radius={[3, 3, 0, 0]} isAnimationActive={false}>
-                  <LabelList dataKey="critical" content={makeSegmentLabel(data)} />
+                <Bar dataKey="pendingReorderCount" name="Pending reorder" fill={STOCK_STATUS_COLORS.pendingReorder} radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                  <LabelList dataKey="pendingReorderCount" position="top" style={pendingReorderLabelStyle} formatter={(v) => v.toLocaleString()} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -605,12 +624,12 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
               In stock
             </li>
             <li className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.low, borderRadius: '3px' }} />
-              Low
+              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.deadStock, borderRadius: '3px' }} />
+              Dead stock
             </li>
             <li className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.critical, borderRadius: '3px' }} />
-              Critical
+              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.pendingReorder, borderRadius: '3px' }} />
+              Pending reorder
             </li>
           </ul>
         </>

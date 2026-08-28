@@ -84,6 +84,8 @@ class FakeSession:
         soh_delmonte: dict | None = None,
         latest_abc_period: str | None = None,
         abc_rows: list | None = None,
+        tier_stock_rows: list | None = None,
+        tier_pending_reorder_rows: list | None = None,
         latest_forecast_date=None,
         gated_forecast_rows: list | None = None,
         portfolio_actual_unilever: dict | None = None,
@@ -103,6 +105,8 @@ class FakeSession:
         self.soh_delmonte = soh_delmonte or {}
         self.latest_abc_period = latest_abc_period
         self.abc_rows = abc_rows or []
+        self.tier_stock_rows = tier_stock_rows or []
+        self.tier_pending_reorder_rows = tier_pending_reorder_rows or []
         self.latest_forecast_date = latest_forecast_date
         self.gated_forecast_rows = gated_forecast_rows or []
         self.portfolio_actual_unilever = portfolio_actual_unilever or {}
@@ -184,11 +188,14 @@ class FakeSession:
                 b["rev"] += r.get("revenue_share") or 0.0
             return FakeResult([{"tier": t, "cnt": b["cnt"], "rev_share_sum": b["rev"]} for t, b in by_tier.items()])
 
-        if "rop.rop_i AS rop_i" in sql:
+        if "BOOL_OR(stock_status = 'Active') AS any_active" in sql:
             period = params["period"]
             principal = params.get("principal")
-            rows = [r for r in self.abc_rows if r["period"] == period and (principal is None or r["principal"] == principal)]
-            return FakeResult([{"tier": r["tier"], "current_stock": r["current_stock"], "rop_i": r["rop_i"]} for r in rows])
+            rows = [
+                r for r in self.tier_stock_rows
+                if r["period"] == period and (principal is None or r["principal"] == principal)
+            ]
+            return FakeResult([{"tier": r["tier"], "any_active": r["any_active"], "any_inactive": r["any_inactive"]} for r in rows])
 
         if sql.strip() == "SELECT MAX(forecast_date) AS d FROM Forecast_Result":
             return FakeResult([{"d": self.latest_forecast_date}])
@@ -203,6 +210,18 @@ class FakeSession:
 
         if "SUM(quantity) AS qty" in sql and "SellOut_Fact_Real" in sql:
             return FakeResult([{"period": p, "qty": v} for p, v in self.portfolio_actual_delmonte.items()])
+
+        if "COUNT(DISTINCT lr.product_key) AS cnt" in sql:
+            period = params["period"]
+            principal = params.get("principal")
+            rows = [
+                r for r in self.tier_pending_reorder_rows
+                if r["period"] == period and (principal is None or r["principal"] == principal)
+            ]
+            by_tier: dict = {}
+            for r in rows:
+                by_tier.setdefault(r["tier"], set()).add(r["product_key"])
+            return FakeResult([{"tier": t, "cnt": len(keys)} for t, keys in by_tier.items()])
 
         if "FROM lp_recommendation lr" in sql and "WHERE lr.status = 'pending'" in sql:
             principal = params.get("principal")
@@ -556,21 +575,40 @@ def test_abc_mix_empty_when_no_classification_rows_exist():
     assert resp.json()["abc_mix"] == []
 
 
-# ---- tier_stock (reuses backend.routers.abc._stock_status) -------------
+# ---- tier_stock (Inventory_Fact_Real.stock_status, dead-stock signal) --
 
-def test_tier_stock_reuses_abc_stock_status_including_no_data_bucket():
-    abc_rows = [
-        {"product_key": 1, "principal": "unilever", "tier": "A", "period": "2024-02", "current_stock": 200, "rop_i": 100, "ss_i": None, "revenue_share": 0.5},
-        {"product_key": 2, "principal": "unilever", "tier": "A", "period": "2024-02", "current_stock": 50, "rop_i": 100, "ss_i": None, "revenue_share": 0.3},
-        {"product_key": 3, "principal": "unilever", "tier": "A", "period": "2024-02", "current_stock": 0, "rop_i": 100, "ss_i": None, "revenue_share": 0.1},
-        # No Inventory_Fact_Real row at all — must land in no_data, never critical.
-        {"product_key": 4, "principal": "unilever", "tier": "A", "period": "2024-02", "current_stock": None, "rop_i": 100, "ss_i": None, "revenue_share": 0.1},
+def test_tier_stock_dead_stock_from_stock_status_including_no_data_bucket():
+    tier_stock_rows = [
+        {"product_key": 1, "principal": "unilever", "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": False},
+        {"product_key": 2, "principal": "unilever", "tier": "A", "period": "2024-02", "any_active": False, "any_inactive": True},
+        # Both flags true (e.g. multiple snapshot rows) — dead stock takes priority.
+        {"product_key": 3, "principal": "unilever", "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": True},
+        # No Inventory_Fact_Real row at all (LEFT JOIN miss) — must land in no_data.
+        {"product_key": 4, "principal": "unilever", "tier": "A", "period": "2024-02", "any_active": None, "any_inactive": None},
     ]
-    session = FakeSession(latest_abc_period="2024-02", abc_rows=abc_rows)
+    tier_pending_reorder_rows = [
+        {"product_key": 1, "principal": "unilever", "tier": "A", "period": "2024-02"},
+        {"product_key": 3, "principal": "unilever", "tier": "A", "period": "2024-02"},
+    ]
+    session = FakeSession(
+        latest_abc_period="2024-02", tier_stock_rows=tier_stock_rows,
+        tier_pending_reorder_rows=tier_pending_reorder_rows,
+    )
     with make_client(session) as c:
         resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
     tier_a = next(t for t in resp.json()["tier_stock"] if t["tier"] == "A")
-    assert tier_a == {"tier": "A", "in_stock": 1, "low": 1, "critical": 1, "no_data": 1}
+    assert tier_a == {"tier": "A", "in_stock": 1, "dead_stock": 2, "no_data": 1, "pending_reorder_count": 2}
+
+
+def test_tier_stock_pending_reorder_count_is_zero_not_null_when_no_pending_rows():
+    tier_stock_rows = [
+        {"product_key": 1, "principal": "unilever", "tier": "B", "period": "2024-02", "any_active": True, "any_inactive": False},
+    ]
+    session = FakeSession(latest_abc_period="2024-02", tier_stock_rows=tier_stock_rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+    tier_b = next(t for t in resp.json()["tier_stock"] if t["tier"] == "B")
+    assert tier_b["pending_reorder_count"] == 0
 
 
 # ---- portfolio_forecast ------------------------------------------------
