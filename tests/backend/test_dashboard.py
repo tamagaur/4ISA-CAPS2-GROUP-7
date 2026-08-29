@@ -509,6 +509,81 @@ def test_sales_vs_stock_anchors_to_latest_real_sales_period_not_today():
     assert periods_in_series[0] == "2022-07"
 
 
+def test_sales_vs_stock_period_query_param_overrides_latest_sales_period_anchor():
+    """The frontend date-range picker's applied end month/year is passed as
+    ?period=YYYY-MM (Dashboard.jsx) — it must win over _latest_sales_period,
+    the same way passing an explicit classification_period overrides
+    GET /abc's own latest-period default."""
+    session = FakeSession(latest_sales_period="2024-02")
+    with make_client(session) as c:
+        resp = c.get("/dashboard?period=2023-06", headers={"Authorization": f"Bearer {user_token()}"})
+    periods_in_series = [pt["period"] for pt in resp.json()["sales_vs_stock"]]
+    assert periods_in_series[-1] == "2023-06"
+    assert periods_in_series[0] == "2022-07"
+
+
+def test_sales_vs_stock_period_query_param_rejects_malformed_value():
+    session = FakeSession()
+    with make_client(session) as c:
+        resp = c.get("/dashboard?period=not-a-period", headers={"Authorization": f"Bearer {user_token()}"})
+    assert resp.status_code == 422
+
+
+def test_sales_vs_stock_start_period_widens_window_beyond_fixed_12_months():
+    """Regression test for the range-picker bug: applying a > 12-month
+    range (e.g. Apr 2023 - Mar 2026) must render the FULL range, not
+    silently clip to the trailing 12 months ending at `period` — the chart
+    was doing exactly that until start_period was wired in, which reads as
+    "the start month I picked was ignored" from the UI."""
+    session = FakeSession(latest_sales_period="2024-02")
+    with make_client(session) as c:
+        resp = c.get(
+            "/dashboard?start_period=2023-04&period=2026-03",
+            headers={"Authorization": f"Bearer {user_token()}"},
+        )
+    periods_in_series = [pt["period"] for pt in resp.json()["sales_vs_stock"]]
+    assert periods_in_series[0] == "2023-04"
+    assert periods_in_series[-1] == "2026-03"
+    assert len(periods_in_series) == 36  # Apr 2023 through Mar 2026 inclusive
+
+
+def test_sales_vs_stock_start_period_can_be_narrower_than_12_months():
+    session = FakeSession(latest_sales_period="2024-02")
+    with make_client(session) as c:
+        resp = c.get(
+            "/dashboard?start_period=2023-11&period=2024-01",
+            headers={"Authorization": f"Bearer {user_token()}"},
+        )
+    periods_in_series = [pt["period"] for pt in resp.json()["sales_vs_stock"]]
+    assert periods_in_series == ["2023-11", "2023-12", "2024-01"]
+
+
+def test_sales_vs_stock_start_period_without_explicit_end_uses_resolved_anchor():
+    """start_period with no `period` still needs an end — falls back to
+    _latest_sales_period, same anchor _last_12_periods itself falls back
+    to, rather than requiring the frontend to always send both."""
+    session = FakeSession(latest_sales_period="2023-08")
+    with make_client(session) as c:
+        resp = c.get("/dashboard?start_period=2023-05", headers={"Authorization": f"Bearer {user_token()}"})
+    periods_in_series = [pt["period"] for pt in resp.json()["sales_vs_stock"]]
+    assert periods_in_series == ["2023-05", "2023-06", "2023-07", "2023-08"]
+
+
+def test_sales_vs_stock_start_period_after_end_period_is_swapped_not_empty():
+    """DateFilter.jsx's start/end month+year are 4 independent <select>s
+    with no ordering constraint — an inverted pick (start after end) is
+    reachable from the UI and must still render a real window, not an
+    empty/inverted one."""
+    session = FakeSession(latest_sales_period="2024-02")
+    with make_client(session) as c:
+        resp = c.get(
+            "/dashboard?start_period=2024-01&period=2023-11",
+            headers={"Authorization": f"Bearer {user_token()}"},
+        )
+    periods_in_series = [pt["period"] for pt in resp.json()["sales_vs_stock"]]
+    assert periods_in_series == ["2023-11", "2023-12", "2024-01"]
+
+
 def test_sales_vs_stock_falls_back_to_today_only_when_no_sales_data_exists():
     session = FakeSession(latest_sales_period=None)
     with make_client(session) as c:
@@ -573,6 +648,28 @@ def test_abc_mix_empty_when_no_classification_rows_exist():
     with make_client(session) as c:
         resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
     assert resp.json()["abc_mix"] == []
+
+
+def test_abc_mix_period_query_param_overrides_latest_abc_period_anchor():
+    """Same override convention as sales_vs_stock's period param — the
+    picker's applied end month/year must win over _latest_abc_period, an
+    EXACT match with no 'nearest available' fallback (mirrors GET /abc's
+    own classification_period param). Without this, abc_mix (and
+    tier_stock / kpis.safety_stock_rate, which share the same abc_period)
+    always showed the latest classification run regardless of the shared
+    date filter."""
+    abc_rows = [
+        {"product_key": 1, "principal": "unilever", "tier": "A", "period": "2023-06", "current_stock": None, "ss_i": None, "rop_i": None, "revenue_share": 0.5},
+        # A different classification run the endpoint must NOT read from
+        # once an explicit period is requested.
+        {"product_key": 2, "principal": "unilever", "tier": "B", "period": "2024-02", "current_stock": None, "ss_i": None, "rop_i": None, "revenue_share": 0.9},
+    ]
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=abc_rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?period=2023-06", headers={"Authorization": f"Bearer {user_token()}"})
+    mix = resp.json()["abc_mix"]
+    assert [m["tier"] for m in mix] == ["A"]
+    assert mix[0]["revenue_share_pct"] == pytest.approx(50.0)
 
 
 # ---- tier_stock (Inventory_Fact_Real.stock_status, dead-stock signal) --

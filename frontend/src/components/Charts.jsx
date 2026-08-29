@@ -278,12 +278,14 @@ const SalesStockTooltip = ({ active, payload, label }) => {
 // SUPPLIER-ALLOCATION PROXY — no supplier allocation schedule exists
 // anywhere in the schema or the source files; SSM has never provided one.
 // backend/routers/dashboard.py's sales_vs_stock[].received sums
-// Purchase_Fact_Real.net_amount as a stand-in instead. The ONE line to
-// change the day a real Supplier_Allocation table shows up: drop
-// "(proxy for allocation)" here and in the tooltip (SalesStockTooltip
-// already renders whatever `name` each Line declares, so that's the only
-// other place the wording lives).
-const RECEIVED_LABEL = 'Received (proxy for allocation)';
+// Purchase_Fact_Real.net_amount as a stand-in instead. Displayed as "Fixed
+// Allocation" per product decision (2026-08) despite being received-
+// quantity data underneath, not a real allocation schedule — see this
+// file's git history for the more literal "Received (proxy for
+// allocation)" wording this replaced. SalesStockTooltip renders whatever
+// `name` each Line declares, so that's the only other place this label
+// lives.
+const RECEIVED_LABEL = 'Fixed Allocation';
 
 // Sales vs. Stock on Hand — the dashboard's hero chart. `data` is
 // [{ period, sales, stockOnHand, received }], all three in pesos (GET

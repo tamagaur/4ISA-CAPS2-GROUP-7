@@ -24,8 +24,24 @@ function kpiDisplay(value, blockedReason, formatter, normalContext) {
 
 const formatPercent = (v) => `${Math.round(v * 100)}%`;
 
+// GET /dashboard's sales/stock window ends at a single 'YYYY-MM' `period`
+// anchor (a fixed trailing 12 months, same "picker's end maps onto the
+// anchor" convention ABCClassification.jsx's toClassificationPeriod uses
+// for GET /abc) UNLESS `startPeriod` is also sent, in which case it covers
+// the exact start-through-end range the picker applied — otherwise a
+// range wider than 12 months (e.g. Apr 2023 - Mar 2026) silently clipped
+// to just its last 12 months, which read as "the start date does nothing."
+const MONTH_TO_NUM = {
+  Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+  Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+};
+const toPeriod = (month, year) =>
+  month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
+
 const Dashboard = () => {
-  const { principal } = useOutletContext() || { principal: 'all' };
+  const { principal, startMonth, startYear, endMonth, endYear } = useOutletContext() || { principal: 'all' };
+  const period = toPeriod(endMonth, endYear);
+  const startPeriod = toPeriod(startMonth, startYear);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +51,7 @@ const Dashboard = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getDashboardData({ principal })
+    getDashboardData({ principal, period, startPeriod })
       .then((res) => {
         if (cancelled) return;
         setData(res);
@@ -50,7 +66,7 @@ const Dashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [principal]);
+  }, [principal, period, startPeriod]);
 
   if (loading) {
     return (

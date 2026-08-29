@@ -294,10 +294,42 @@ def _latest_sales_period(db: Session) -> str | None:
     return p or None
 
 
-def _last_12_periods(db: Session) -> list[str]:
-    """Last 12 calendar months as 'YYYY-MM', oldest first, ENDING AT THE
-    MOST RECENT REAL SALES PERIOD (_latest_sales_period), not today's
-    wall-clock date.
+def _resolve_sales_anchor(db: Session, end_override: str | None) -> str:
+    """The 'YYYY-MM' to treat as the sales/stock trend's END: end_override
+    (the date-range picker's applied end month/year) if given, else the
+    most recent real sales period (_latest_sales_period), else today's
+    wall-clock date as a last resort. Centralizes the one fallback chain
+    both _last_12_periods and the explicit-range window below need, so
+    it's defined in exactly one place.
+
+    Falls back to today's date only if _latest_sales_period finds no sales
+    data anywhere yet — never silently defaults to "today" over a real
+    anchor that exists."""
+    anchor = end_override or _latest_sales_period(db)
+    if anchor:
+        return anchor
+    today = datetime.date.today()
+    return f"{today.year:04d}-{today.month:02d}"
+
+
+def _last_12_periods(db: Session, anchor_override: str | None = None) -> list[str]:
+    """Last 12 calendar months as 'YYYY-MM', oldest first, ENDING AT
+    _resolve_sales_anchor's result (real sales data, not today's wall-clock
+    date, unless anchor_override or a real anchor is unavailable — see that
+    function's docstring).
+
+    anchor_override, when given (the frontend date-range picker's applied
+    *end* month/year — same "picker's end maps onto the anchor" convention
+    backend/routers/abc.py's classification_period already uses), is used
+    as the window's end instead of _latest_sales_period. This makes
+    kpis.sales / sales_vs_stock / kpis.weeks_of_cover respond to the
+    shared date filter instead of always showing the latest-data window
+    regardless of what the user picked.
+
+    Only ever called for the picker's END when no START was also applied
+    (see get_dashboard: an applied start uses _month_range instead, the
+    picker's actual full width) — this function's job is purely "no start
+    given yet, what's a reasonable single-anchor default."
 
     Bug this anchor fixes: with today's real date as the anchor, this
     window can (and, 2026-08 on the live database, does — real sales
@@ -313,22 +345,44 @@ def _last_12_periods(db: Session) -> list[str]:
     2023-01 through 2026-02 on the live database) renders a complete
     line; principal=delmonte / combined 'all' still show real gaps where
     Del Monte's SellOut_Fact_Real coverage is genuinely sparse — honest,
-    not a bug.
-
-    Falls back to today's date only if _latest_sales_period finds no
-    sales data anywhere yet — never silently defaults to "today" over a
-    real anchor that exists."""
-    anchor = _latest_sales_period(db)
-    if anchor:
-        today = datetime.date(int(anchor[:4]), int(anchor[5:7]), 1)
-    else:
-        today = datetime.date.today()
+    not a bug."""
+    anchor = _resolve_sales_anchor(db, anchor_override)
+    today = datetime.date(int(anchor[:4]), int(anchor[5:7]), 1)
     periods = []
     for i in range(11, -1, -1):
         month_index = today.month - 1 - i
         year = today.year + month_index // 12
         month = month_index % 12 + 1
         periods.append(f"{year:04d}-{month:02d}")
+    return periods
+
+
+def _month_range(start: str, end: str) -> list[str]:
+    """Every 'YYYY-MM' from start through end inclusive, oldest first.
+
+    Used instead of _last_12_periods once the frontend date-range picker's
+    applied START is also present (not just its end) — the picker exposes
+    a full start+end range, and the chart/KPIs should honor the width the
+    user actually picked (which may be longer OR shorter than 12 months),
+    not silently clip to a fixed trailing 12.
+
+    Swapped if start is after end: DateFilter.jsx's start and end
+    month/year are four independent <select> elements with no ordering
+    constraint between them, so an inverted pick is reachable from the UI
+    and should still render something sensible rather than an empty chart
+    or a crash."""
+    sy, sm = int(start[:4]), int(start[5:7])
+    ey, em = int(end[:4]), int(end[5:7])
+    if (sy, sm) > (ey, em):
+        sy, sm, ey, em = ey, em, sy, sm
+    periods = []
+    y, m = sy, sm
+    while (y, m) <= (ey, em):
+        periods.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
     return periods
 
 
@@ -518,6 +572,34 @@ def _weeks_of_cover(
 @router.get("")
 def get_dashboard(
     principal: str = Query("all", description="Filter to 'unilever' or 'delmonte'. Use 'all' for both."),
+    period: str | None = Query(
+        None,
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        description=(
+            "'YYYY-MM'. The shared date-range picker's applied end month/year. "
+            "Anchors the sales/stock trend window kpis.sales / sales_vs_stock / "
+            "kpis.weeks_of_cover are computed over (a fixed trailing 12 months "
+            "when start_period is omitted, or the end of the exact range when "
+            "it's given), AND is used as an exact "
+            "ABC_Classification.classification_period match for "
+            "kpis.safety_stock_rate / abc_mix / tier_stock. Omit to anchor "
+            "sales at the latest real sales period and ABC at the latest "
+            "classification run, independently."
+        ),
+    ),
+    start_period: str | None = Query(
+        None,
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        description=(
+            "'YYYY-MM'. The shared date-range picker's applied START month/"
+            "year. When given, kpis.sales / sales_vs_stock / "
+            "kpis.weeks_of_cover cover every month from here through `period` "
+            "(or through the latest real sales period if `period` is also "
+            "omitted) inclusive, instead of a fixed trailing 12 months — the "
+            "exact width the user picked, not clipped to 12. Ignored (falls "
+            "back to the fixed trailing-12 window) if omitted."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
@@ -560,7 +642,11 @@ def get_dashboard(
 
     # ---- kpis.sales / sales_vs_stock.sales ----------------------------
 
-    periods = _last_12_periods(db)
+    periods = (
+        _month_range(start_period, _resolve_sales_anchor(db, period))
+        if start_period is not None
+        else _last_12_periods(db, period)
+    )
     # Always fetched for BOTH principals (principal="all" here, regardless
     # of this request's own ?principal=) — kpis.weeks_of_cover below needs
     # both sides unconditionally. sales_by_period (the request-scoped view
@@ -616,7 +702,14 @@ def get_dashboard(
 
     # ---- kpis.safety_stock_rate ----------------------------------------
 
-    abc_period = _latest_abc_period(db)
+    # Same override convention as periods/_last_12_periods above — an exact
+    # match against the picker's applied end month/year (no "nearest
+    # available" fallback), same as GET /abc's own classification_period
+    # param. Feeds kpis.safety_stock_rate, abc_mix, AND tier_stock below —
+    # all three go empty/null together if ABC_Classification genuinely has
+    # no row for the requested period, rather than silently drifting back
+    # to the latest run.
+    abc_period = period if period is not None else _latest_abc_period(db)
     safety_stock_rate = None
     safety_stock_rate_blocked_reason = "ABC_Classification has no rows yet."
     if abc_period is not None:
