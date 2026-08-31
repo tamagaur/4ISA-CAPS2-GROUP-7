@@ -126,7 +126,7 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
 // ₱500k / ₱1.2M / ₱0 — compact currency, unsigned (callers prepend a sign
 // where one is needed). Shared by the axis ticks and the bar-end labels so
 // the two can never disagree on formatting.
-function formatCompactPesos(value) {
+export function formatCompactPesos(value) {
   const abs = Math.abs(value);
   if (abs >= 1_000_000) {
     const millions = abs / 1_000_000;
@@ -261,31 +261,40 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
   );
 };
 
-const SalesStockTooltip = ({ active, payload, label, fixedAllocation }) => {
+const SalesStockTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   return (
     <div className="chart-tooltip">
       <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label}</p>
       {payload.map((p) => (
         <p key={p.dataKey} style={{ margin: '0.1rem 0', color: p.color }}>
-          {p.name}: {Math.round(p.value).toLocaleString()}
+          {p.name}: {formatCompactPesos(p.value)}
         </p>
       ))}
-      {typeof fixedAllocation === 'number' && (
-        <p style={{ margin: '0.25rem 0 0 0', color: STATUS_TIERS.diagnostic }}>
-          Supplier allocation target: {fixedAllocation.toLocaleString()}
-        </p>
-      )}
     </div>
   );
 };
 
+// SUPPLIER-ALLOCATION PROXY — no supplier allocation schedule exists
+// anywhere in the schema or the source files; SSM has never provided one.
+// backend/routers/dashboard.py's sales_vs_stock[].received sums
+// Purchase_Fact_Real.net_amount as a stand-in instead. Displayed as "Fixed
+// Allocation" per product decision (2026-08) despite being received-
+// quantity data underneath, not a real allocation schedule — see this
+// file's git history for the more literal "Received (proxy for
+// allocation)" wording this replaced. SalesStockTooltip renders whatever
+// `name` each Line declares, so that's the only other place this label
+// lives.
+const RECEIVED_LABEL = 'Fixed Allocation';
+
 // Sales vs. Stock on Hand — the dashboard's hero chart. `data` is
-// [{ period, sales, stockOnHand }]; `fixedAllocation` is the single flat
-// number suppliers commit to per year (the sketch's broken/dashed line) —
-// stock on hand is expected to track at or above it, so it's drawn as one
-// ReferenceLine rather than a per-period series.
-export const SalesVsStockWidget = ({ data = [], fixedAllocation, emptyReason }) => {
+// [{ period, sales, stockOnHand, received }], all three in pesos (GET
+// /dashboard sums stock_on_hand and received as peso figures specifically
+// so all three plot on one axis — see backend/routers/dashboard.py's
+// kpis.soh_value and sales_vs_stock[].received docstring sections). No
+// flat ReferenceLine for `received`: it varies per period like the other
+// two series, so it's a dashed Line, not a constant.
+export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
   const hasData = data.length > 0;
 
   return (
@@ -293,7 +302,10 @@ export const SalesVsStockWidget = ({ data = [], fixedAllocation, emptyReason }) 
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Sales vs Stock on Hand</h4>
-          <p>Compared against the suppliers&apos; fixed yearly allocation</p>
+          <p>
+            Monthly revenue and stock-on-hand valuation, in pesos. Received quantities stand in
+            for the supplier allocation schedule, which SSM has not yet provided.
+          </p>
         </div>
       </div>
 
@@ -310,18 +322,9 @@ export const SalesVsStockWidget = ({ data = [], fixedAllocation, emptyReason }) 
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
-                  tickFormatter={(v) => Math.round(v).toLocaleString()}
+                  tickFormatter={(v) => formatCompactPesos(v)}
                 />
-                <Tooltip content={<SalesStockTooltip fixedAllocation={fixedAllocation} />} />
-                {typeof fixedAllocation === 'number' && (
-                  <ReferenceLine
-                    y={fixedAllocation}
-                    stroke={STATUS_TIERS.diagnostic}
-                    strokeWidth={2}
-                    strokeDasharray="6 4"
-                    label={{ value: 'Fixed allocation', position: 'insideTopRight', fontSize: 10, fontWeight: 700, fill: STATUS_TIERS.diagnostic }}
-                  />
-                )}
+                <Tooltip content={<SalesStockTooltip />} />
                 <Line
                   type="monotone"
                   dataKey="sales"
@@ -340,6 +343,17 @@ export const SalesVsStockWidget = ({ data = [], fixedAllocation, emptyReason }) 
                   dot={false}
                   isAnimationActive={false}
                 />
+                <Line
+                  type="monotone"
+                  dataKey="received"
+                  name={RECEIVED_LABEL}
+                  stroke={COLORS.forecast}
+                  strokeDasharray="7 5"
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: COLORS.forecast, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                  isAnimationActive={false}
+                />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -353,8 +367,8 @@ export const SalesVsStockWidget = ({ data = [], fixedAllocation, emptyReason }) 
               Stock on hand
             </li>
             <li className="legend-item">
-              <span className="legend-line legend-line-dashed" style={{ borderTopColor: STATUS_TIERS.diagnostic }} />
-              Fixed allocation
+              <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
+              {RECEIVED_LABEL}
             </li>
           </ul>
         </>
@@ -401,7 +415,7 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
               <PieChart>
                 <Pie
                   data={data}
-                  dataKey="count"
+                  dataKey="sharePct"
                   nameKey="tier"
                   innerRadius="60%"
                   outerRadius="85%"
@@ -434,55 +448,126 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
   );
 };
 
-// In-stock reads as the neutral, "normal" state — a calm teal, not the
-// warm/amber/red end of the palette. Dead stock is the one that should
-// draw the eye, but it's still a watch-list condition, not a critical
-// alert, so it gets amber rather than red — red on this dashboard is
-// reserved for genuinely critical signals elsewhere (e.g. the reorder
-// card's CRITICAL badge), and reusing it here would make this chart read
-// as an alarm it isn't. Allocation gets its own color entirely (violet,
-// already this dashboard's token for "a projected/target figure" — see
-// the forecast band in PortfolioForecastWidget) since it isn't a stock
-// *status*, it's a supplier commitment being compared against one.
+// In-stock reads as the neutral, "normal" state — a calm teal. Dead stock
+// (Inventory_Fact_Real.stock_status = 'Inactive') is the one that should
+// draw the eye, but it's a watch-list condition rather than a critical
+// alert, so it gets amber rather than this dashboard's one reserved alert
+// red (the reorder card's CRITICAL badge). No_data gets the neutral
+// "we don't know" slate STATUS_TIERS already uses for "no inherent
+// direction" — most of it is Del Monte, whose source has no stock_status
+// column at all (Unilever-only signal, see GET /dashboard's tier_stock
+// docstring), never folded into either real bucket.
 const STOCK_STATUS_COLORS = {
   inStock: CHART_COLORS.salesSeries,
   deadStock: COLORS.warning,
-  allocation: COLORS.forecast,
+  noData: STATUS_TIERS.diagnostic,
+  // Indigo — this dashboard's own token for "a recommendation the system
+  // is outputting" (STATUS_TIERS.action), reused here since
+  // pendingReorderCount IS that: a count of LP_Recommendation rows, not a
+  // stock status. Deliberately distinct from the stock-status colors so
+  // the two bars never read as the same kind of thing.
+  pendingReorder: STATUS_TIERS.action,
 };
 
 const CategoryStockTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
-  const row = payload[0].payload;
-  const total = row.deadStock + row.inStock;
-  const pct = (v) => (total > 0 ? `${Math.round((v / total) * 100)}%` : '—');
+  const row = payload[0].payload || {};
+  const inStock = row.inStock || 0;
+  const deadStock = row.deadStock || 0;
+  const noData = row.noData || 0;
+  const pendingReorderCount = row.pendingReorderCount || 0;
+  const covered = inStock + deadStock;
+  const total = covered + noData;
+  const pct = (v) => (covered > 0 ? `${Math.round((v / covered) * 100)}%` : '—');
   return (
     <div className="chart-tooltip">
       <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>Tier {label}</p>
       <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.inStock }}>
-        In stock: {row.inStock.toLocaleString()} ({pct(row.inStock)})
+        In stock: {inStock.toLocaleString()} ({pct(inStock)})
       </p>
       <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.deadStock }}>
-        Dead stock: {row.deadStock.toLocaleString()} ({pct(row.deadStock)})
+        Dead stock: {deadStock.toLocaleString()} ({pct(deadStock)})
       </p>
-      <p style={{ margin: '0.3rem 0 0 0', paddingTop: '0.3rem', borderTop: '1px solid #f1f5f9', color: STOCK_STATUS_COLORS.allocation, fontWeight: 600 }}>
-        Fixed allocation: {row.allocation.toLocaleString()}
+      <p style={{ margin: '0.1rem 0 0 0', color: STOCK_STATUS_COLORS.noData }}>
+        No inventory data: {noData.toLocaleString()} of {total.toLocaleString()} products
+      </p>
+      <p style={{ margin: '0.3rem 0 0 0', paddingTop: '0.3rem', borderTop: '1px solid #f1f5f9', color: STOCK_STATUS_COLORS.pendingReorder, fontWeight: 600 }}>
+        Pending reorder: {pendingReorderCount.toLocaleString()} products
       </p>
     </div>
   );
 };
 
 const barLabelStyle = { fontSize: 10, fontWeight: 700, fill: '#ffffff' };
-const allocationLabelStyle = { fontSize: 10, fill: CHART_COLORS.axisLabel };
+const pendingReorderLabelStyle = { fontSize: 10, fill: CHART_COLORS.axisLabel };
+
+// A segment under this fraction of its own bar's covered height renders no
+// inline label — Tier A/B's smallest slices used to overlap into an
+// unreadable smear; the exact figure is still available on hover via
+// CategoryStockTooltip.
+const MIN_LABEL_FRACTION = 0.04;
+
+// Per-segment LabelList content renderer: `data[index]` is that bar's own
+// row (recharts renders one rect per data item in array order, so `index`
+// lines up directly — no separate lookup key needed), used to compute this
+// segment's share of ITS OWN bar (in_stock+dead_stock only — no_data is
+// not part of the stack, see CategoryStockBarWidget below) rather than a
+// global threshold, so a small tier isn't penalized differently than a
+// large one.
+function makeSegmentLabel(data) {
+  return ({ x, y, width, height, value, index }) => {
+    if (!value) return null;
+    const row = data[index] || {};
+    const covered = (row.inStock || 0) + (row.deadStock || 0);
+    if (covered <= 0 || value / covered < MIN_LABEL_FRACTION) return null;
+    return (
+      <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="middle" style={barLabelStyle}>
+        {value.toLocaleString()}
+      </text>
+    );
+  };
+}
+
+// Custom two-line X-axis tick: "Tier A" plus a muted coverage caption
+// ("inventory data for 499 of 1,492") — no_data is deliberately kept OUT
+// of the stacked bar (it's mostly Del Monte, whose source has no
+// stock_status column at all, and would otherwise crush the two segments
+// that actually carry a decision-relevant signal) but must stay visible
+// somewhere on the chart, not be silently dropped.
+function makeCategoryStockTick(data) {
+  return ({ x, y, payload }) => {
+    const row = data.find((d) => d.tier === payload.value) || {};
+    const covered = (row.inStock || 0) + (row.deadStock || 0);
+    const total = covered + (row.noData || 0);
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={14} textAnchor="middle" fontSize={11} fontWeight={700} fill={CHART_COLORS.axisLabel}>
+          Tier {payload.value}
+        </text>
+        <text x={0} y={0} dy={28} textAnchor="middle" fontSize={9} fill={CHART_COLORS.axisLabel}>
+          inventory data for {covered.toLocaleString()} of {total.toLocaleString()}
+        </text>
+      </g>
+    );
+  };
+}
 
 // Paired bar chart per ABC tier — `data` is
-// [{ tier: 'A'|'B'|'C', deadStock, inStock, allocation }]. Two bars per
-// tier: a stacked bar (dead stock beneath in-stock, so their split of the
-// tier's actual total reads as proportion, not two separately-scaled
-// numbers) next to a single plain bar for that tier's fixed allocation
-// from suppliers — the same figure the Sales vs. Stock chart's dashed
-// line represents, just broken out per tier here so "are we over or
-// under our allocation" is answerable at the tier level, not just
-// portfolio-wide.
+// [{ tier: 'A'|'B'|'C', inStock, deadStock, noData, pendingReorderCount }],
+// from GET /dashboard's tier_stock. Two bars per tier: a stacked bar (dead
+// stock beneath in-stock, from Inventory_Fact_Real.stock_status at the
+// latest inventory period — a real, Unilever-only "is this product
+// moving" signal, NOT the reorder-point-derived in_stock/low/critical
+// split GET /abc uses) next to a single plain bar for that tier's pending
+// reorder count (COUNT(DISTINCT product_key) with a pending
+// LP_Recommendation row — a different source table, deliberately chosen
+// so this bar doesn't restate the ABC donut's own count/revenue-share
+// view under a different name). Y-axis is "SKUs" for both — both are
+// product counts. No allocation bar: no supplier allocation table exists
+// anywhere in the schema (see GET /dashboard's kpis.weeks_of_cover
+// docstring), and the proxy SalesVsStockWidget uses instead
+// (Purchase_Fact_Real) has no product key to break down by ABC tier at
+// all — there is nothing honest to plot in its place.
 export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
   const hasData = data.length > 0;
 
@@ -491,7 +576,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Stock status by ABC tier</h4>
-          <p>Dead/in-stock mix vs. fixed allocation, by classification tier</p>
+          <p>Dead/in-stock mix vs. pending reorders, by classification tier</p>
         </div>
       </div>
 
@@ -512,9 +597,8 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
                   dataKey="tier"
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(t) => `Tier ${t}`}
-                  tick={{ fontSize: 11, fontWeight: 700, fill: CHART_COLORS.axisLabel }}
-                  dy={6}
+                  height={44}
+                  tick={makeCategoryStockTick(data)}
                 />
                 <YAxis
                   axisLine={false}
@@ -525,13 +609,13 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
                 />
                 <Tooltip content={<CategoryStockTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }} />
                 <Bar dataKey="deadStock" name="Dead stock" stackId="mix" fill={STOCK_STATUS_COLORS.deadStock} isAnimationActive={false}>
-                  <LabelList dataKey="deadStock" position="center" style={barLabelStyle} formatter={(v) => v.toLocaleString()} />
+                  <LabelList dataKey="deadStock" content={makeSegmentLabel(data)} />
                 </Bar>
                 <Bar dataKey="inStock" name="In stock" stackId="mix" fill={STOCK_STATUS_COLORS.inStock} radius={[3, 3, 0, 0]} isAnimationActive={false}>
-                  <LabelList dataKey="inStock" position="center" style={barLabelStyle} formatter={(v) => v.toLocaleString()} />
+                  <LabelList dataKey="inStock" content={makeSegmentLabel(data)} />
                 </Bar>
-                <Bar dataKey="allocation" name="Fixed allocation" fill={STOCK_STATUS_COLORS.allocation} radius={[3, 3, 0, 0]} isAnimationActive={false}>
-                  <LabelList dataKey="allocation" position="top" style={allocationLabelStyle} formatter={(v) => v.toLocaleString()} />
+                <Bar dataKey="pendingReorderCount" name="Pending reorder" fill={STOCK_STATUS_COLORS.pendingReorder} radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                  <LabelList dataKey="pendingReorderCount" position="top" style={pendingReorderLabelStyle} formatter={(v) => v.toLocaleString()} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -546,8 +630,8 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
               Dead stock
             </li>
             <li className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.allocation, borderRadius: '3px' }} />
-              Fixed allocation
+              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.pendingReorder, borderRadius: '3px' }} />
+              Pending reorder
             </li>
           </ul>
         </>

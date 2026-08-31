@@ -1,80 +1,160 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import KPICard from './KPICard';
 import DateFilter from './DateFilter';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget,
+  formatCompactPesos,
 } from './Charts';
-import { Package, Wallet, ShieldAlert, Target } from 'lucide-react';
+import { getDashboardData } from '../api/dashboard';
+import { Package, Wallet, ShieldAlert, Clock } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
 
-// ── LAYOUT-ONLY MOCK DATA ────────────────────────────────────────────────
-// This dashboard is being rebuilt against the hand-drawn wireframe (5 KPI
-// cards, Sales vs. Stock on Hand hero chart with the suppliers' fixed
-// allocation line, ABC donut, and the per-category stock matrix). None of
-// it is wired to the backend yet — per the anti-fabrication principle,
-// everything below is clearly-mock, deliberately unrealistic-looking
-// placeholder data, not a stand-in for real figures. Swap this block out
-// once the real endpoints for these five widgets exist.
-const MOCK_SALES_VS_STOCK = [
-  { period: 'Jan', sales: 42000, stockOnHand: 58000 },
-  { period: 'Feb', sales: 45500, stockOnHand: 55000 },
-  { period: 'Mar', sales: 41000, stockOnHand: 60000 },
-  { period: 'Apr', sales: 47000, stockOnHand: 57500 },
-  { period: 'May', sales: 50500, stockOnHand: 53000 },
-  { period: 'Jun', sales: 48000, stockOnHand: 51000 },
-  { period: 'Jul', sales: 52000, stockOnHand: 49500 },
-  { period: 'Aug', sales: 49500, stockOnHand: 54000 },
-  { period: 'Sep', sales: 46500, stockOnHand: 56500 },
-  { period: 'Oct', sales: 51000, stockOnHand: 52500 },
-  { period: 'Nov', sales: 53500, stockOnHand: 50000 },
-  { period: 'Dec', sales: 57000, stockOnHand: 47500 },
-];
-const MOCK_FIXED_ALLOCATION = 52000;
+// value/contextLine for a KPI card whose backend field can be honestly
+// null: blockedReason present -> render "—" with the reason underneath
+// (KPICard's existing contextLine slot, directly under the value — no
+// new prop needed); otherwise the real formatted value with its normal
+// context line.
+function kpiDisplay(value, blockedReason, formatter, normalContext) {
+  if (blockedReason) return { value: '—', contextLine: blockedReason };
+  return { value: formatter(value), contextLine: normalContext };
+}
 
-const MOCK_ABC_DATA = [
-  { tier: 'A', count: 48, sharePct: 78 },
-  { tier: 'B', count: 112, sharePct: 15 },
-  { tier: 'C', count: 260, sharePct: 7 },
-];
+const formatPercent = (v) => `${Math.round(v * 100)}%`;
 
-// allocation is each tier's slice of the suppliers' fixed yearly
-// allocation — the same concept as MOCK_FIXED_ALLOCATION above, just
-// broken out per tier instead of one portfolio-wide number.
-const MOCK_CATEGORY_STOCK = [
-  { tier: 'A', deadStock: 500, inStock: 3950, allocation: 4600 },
-  { tier: 'B', deadStock: 670, inStock: 2180, allocation: 2600 },
-  { tier: 'C', deadStock: 930, inStock: 1130, allocation: 2200 },
-];
-
-// Actual demand for Wk 1-8, then SARIMA forecast + confidence band for
-// Wk 8-12, sharing the Wk 8 point so the two lines read as continuous —
-// same shape as the reference screenshot.
-const MOCK_PORTFOLIO_FORECAST = [
-  { period: 'Wk 1', actual: 18500 },
-  { period: 'Wk 2', actual: 19200 },
-  { period: 'Wk 3', actual: 20100 },
-  { period: 'Wk 4', actual: 21400 },
-  { period: 'Wk 5', actual: 21800 },
-  { period: 'Wk 6', actual: 21200 },
-  { period: 'Wk 7', actual: 22600 },
-  { period: 'Wk 8', actual: 24000, forecast: 24000, confidenceLower: 24000, confidenceUpper: 24000 },
-  { period: 'Wk 9', forecast: 24800, confidenceLower: 23600, confidenceUpper: 26200 },
-  { period: 'Wk 10', forecast: 25600, confidenceLower: 23200, confidenceUpper: 28200 },
-  { period: 'Wk 11', forecast: 26400, confidenceLower: 23000, confidenceUpper: 30200 },
-  { period: 'Wk 12', forecast: 27200, confidenceLower: 22800, confidenceUpper: 32200 },
-];
-
-const MOCK_REORDER_ROWS = [
-  { sku: 'SKU-00231', product: 'Dove Shampoo 340ml', urgency: 'CRITICAL', orderQty: 420 },
-  { sku: 'SKU-00118', product: 'Knorr Cubes 8g', urgency: 'CRITICAL', orderQty: 610 },
-  { sku: 'SKU-00305', product: 'Surf Powder Detergent 1kg', urgency: 'URGENT', orderQty: 260 },
-  { sku: 'SKU-00092', product: 'Close-Up Toothpaste 160g', urgency: 'URGENT', orderQty: 190 },
-  { sku: 'SKU-00447', product: 'Lipton Iced Tea 25s', urgency: 'PLANNED', orderQty: 340 },
-];
+// GET /dashboard's sales/stock window ends at a single 'YYYY-MM' `period`
+// anchor (a fixed trailing 12 months, same "picker's end maps onto the
+// anchor" convention ABCClassification.jsx's toClassificationPeriod uses
+// for GET /abc) UNLESS `startPeriod` is also sent, in which case it covers
+// the exact start-through-end range the picker applied — otherwise a
+// range wider than 12 months (e.g. Apr 2023 - Mar 2026) silently clipped
+// to just its last 12 months, which read as "the start date does nothing."
+const MONTH_TO_NUM = {
+  Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+  Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+};
+const toPeriod = (month, year) =>
+  month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
 const Dashboard = () => {
+  const { principal, startMonth, startYear, endMonth, endYear } = useOutletContext() || { principal: 'all' };
+  const period = toPeriod(endMonth, endYear);
+  const startPeriod = toPeriod(startMonth, startYear);
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getDashboardData({ principal, period, startPeriod })
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.message || 'Failed to load dashboard data');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [principal, period, startPeriod]);
+
+  if (loading) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-content">
+          <p className="dashboard-empty-note">Loading dashboard data…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-content">
+          <p className="dashboard-empty-note">Failed to load dashboard data: {error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const kpis = data.kpis || {};
+  const weeksOfCover = kpis.weeks_of_cover || {};
+  const policyWeeks = data.inventory?.policy_weeks ?? 3;
+
+  const sales = kpiDisplay(kpis.sales, kpis.sales_blocked_reason, formatCompactPesos, "This period's total sales");
+  const sohValue = kpiDisplay(kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos, 'Stock-on-hand valuation');
+  const safetyStockRate = kpiDisplay(
+    kpis.safety_stock_rate, kpis.safety_stock_rate_blocked_reason, formatPercent, 'Share of Category A SKUs at/above safety stock'
+  );
+
+  // weeks_of_cover carries per-principal AND combined figures on every
+  // response (see backend/routers/dashboard.py) — pick whichever matches
+  // the currently-selected principal tab, same as every other card.
+  const weeksOfCoverKey = principal === 'all' ? 'combined' : principal;
+  const weeksOfCoverValue = weeksOfCover[weeksOfCoverKey] ?? null;
+  const weeksOfCoverReason = weeksOfCover[`${weeksOfCoverKey}_blocked_reason`] ?? null;
+  const weeksOfCoverDisplay = kpiDisplay(
+    weeksOfCoverValue, weeksOfCoverReason, (v) => `${v.toFixed(1)} wks`, "vs. SSM's 3-week policy"
+  );
+  // Below policy is a stockout-risk signal (KPICard's 'danger' tier is
+  // documented for exactly this "too little" case); at/above policy reads
+  // as excess tied-up capital via the 'gap' tier's isOverTarget branch.
+  // Blocked (no value to judge) falls back to the same neutral 'action'
+  // tier the other three cards already use in their own blocked state —
+  // never a colored verdict on data that isn't there.
+  const weeksOfCoverMetricType =
+    weeksOfCoverValue === null ? 'recommendation' : weeksOfCoverValue < policyWeeks ? 'danger' : 'gap';
+  const weeksOfCoverIsOverTarget = weeksOfCoverValue !== null && weeksOfCoverValue > policyWeeks;
+
+  const salesVsStock = (data.sales_vs_stock || []).map((pt) => ({
+    period: pt.period,
+    sales: pt.sales,
+    stockOnHand: pt.stock_on_hand,
+    received: pt.received,
+  }));
+
+  const abcMix = (data.abc_mix || []).map((d) => ({
+    tier: d.tier,
+    count: d.count,
+    sharePct: d.revenue_share_pct,
+  }));
+
+  const tierStock = (data.tier_stock || []).map((t) => ({
+    tier: t.tier,
+    inStock: t.in_stock,
+    deadStock: t.dead_stock,
+    noData: t.no_data,
+    pendingReorderCount: t.pending_reorder_count,
+  }));
+
+  const portfolioForecast = data.portfolio_forecast || {};
+  const portfolioSeries = (portfolioForecast.series || []).map((pt) => ({
+    period: pt.period,
+    actual: pt.actual,
+    forecast: pt.forecast,
+    confidenceLower: pt.confidence_lower,
+    confidenceUpper: pt.confidence_upper,
+  }));
+
+  const reorderPreview = data.reorder_preview || {};
+  const reorderRows = (reorderPreview.rows || []).map((r) => ({
+    sku: r.sku_id,
+    product: r.product_name,
+    urgency: r.urgency,
+    orderQty: r.q_i,
+  }));
+
   return (
     <div className="dashboard">
       <div className="dashboard-content">
@@ -91,31 +171,32 @@ const Dashboard = () => {
           <div className="kpi-grid">
             <KPICard
               title="Sales"
-              value="₱48,000"
+              value={sales.value}
               metricType="recommendation"
-              contextLine="This period's total sales"
+              contextLine={sales.contextLine}
               icon={<Wallet size={20} />}
             />
             <KPICard
-              title="SOH value"
-              value="₱6.4M"
+              title="Stock on hand value"
+              value={sohValue.value}
               metricType="recommendation"
-              contextLine="Stock-on-hand valuation"
+              contextLine={sohValue.contextLine}
               icon={<Package size={20} />}
             />
             <KPICard
-              title="Safety stock rate"
-              value="82%"
+              title="SKUs at or above safety stock"
+              value={safetyStockRate.value}
               metricType="recommendation"
-              contextLine="Share of SKUs at/above safety stock"
+              contextLine={safetyStockRate.contextLine}
               icon={<ShieldAlert size={20} />}
             />
             <KPICard
-              title="Fixed point ratio"
-              value="0.94"
-              metricType="recommendation"
-              contextLine="Stock on hand vs. fixed allocation"
-              icon={<Target size={20} />}
+              title="Weeks of cover"
+              value={weeksOfCoverDisplay.value}
+              metricType={weeksOfCoverMetricType}
+              isOverTarget={weeksOfCoverIsOverTarget}
+              contextLine={weeksOfCoverDisplay.contextLine}
+              icon={<Clock size={20} />}
             />
           </div>
         </div>
@@ -123,15 +204,15 @@ const Dashboard = () => {
         {/* ── Sales vs. Stock on Hand — hero chart ──────────────────────── */}
         <div className="dashboard-section">
           <div className="chart-primary">
-            <SalesVsStockWidget data={MOCK_SALES_VS_STOCK} fixedAllocation={MOCK_FIXED_ALLOCATION} />
+            <SalesVsStockWidget data={salesVsStock} />
           </div>
         </div>
 
         {/* ── ABC donut + category stock matrix ─────────────────────────── */}
         <div className="dashboard-section">
           <div className="chart-duo chart-duo-abc">
-            <ABCDonutWidget data={MOCK_ABC_DATA} />
-            <CategoryStockBarWidget data={MOCK_CATEGORY_STOCK} />
+            <ABCDonutWidget data={abcMix} />
+            <CategoryStockBarWidget data={tierStock} />
           </div>
         </div>
 
@@ -139,16 +220,17 @@ const Dashboard = () => {
         <div className="dashboard-section">
           <div className="chart-duo">
             <PortfolioForecastWidget
-              series={MOCK_PORTFOLIO_FORECAST}
-              gatedSkuCount={142}
-              avgMape={12.4}
-              scopeLabel="Unilever only"
+              series={portfolioSeries}
+              gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
+              avgMape={portfolioForecast.avg_mape}
+              scopeLabel={portfolioForecast.scope_label}
+              emptyReason={portfolioForecast.scope_label}
             />
             <ReorderRecommendationWidget
-              rows={MOCK_REORDER_ROWS}
-              criticalCount={2}
-              urgentCount={2}
-              totalOrderQty={1820}
+              rows={reorderRows}
+              criticalCount={reorderPreview.critical_count ?? 0}
+              urgentCount={reorderPreview.urgent_count ?? 0}
+              totalOrderQty={reorderPreview.total_order_qty ?? 0}
             />
           </div>
         </div>
