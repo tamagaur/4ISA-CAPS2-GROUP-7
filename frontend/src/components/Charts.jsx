@@ -787,15 +787,34 @@ const URGENCY_STYLES = {
   PLANNED: { bg: '#f0fff4', color: '#38a169' },
 };
 
-// Compact dashboard-card version of the ReorderRecommendations page — same
-// urgency badge colors/vocabulary (CRITICAL/URGENT/PLANNED) as that page's
-// full table, condensed to a short ranked list so it fits next to the
-// portfolio forecast chart. rows: [{ sku, product, urgency, orderQty }].
+// Keys match GET /dashboard's reorder_preview.lp_weights exactly (backend/
+// routers/dashboard.py's LP_WEIGHT_* constants, themselves a mirror of
+// analytics/optimization/lp.py's W1/W2/W3 — the weights the LP solver
+// actually used for every currently-pending recommendation). Read-only:
+// there is no warehouse-capacity/supplier-ceiling/storage-cost data
+// anywhere in the schema to re-solve the LP against, so this is a display
+// of the real weights in effect, not an adjustable control — see
+// reorder_preview.lp_weights's docstring in dashboard.py for the full
+// reasoning.
+const LP_PRIORITY_ROWS = [
+  { key: 'cost', label: 'Cost', color: COLORS.critical },
+  { key: 'service_level', label: 'Service level', color: COLORS.salesTrend },
+  { key: 'storage', label: 'Storage', color: COLORS.warning },
+];
+
+// Compact dashboard-card version of the ReorderRecommendations page.
+// rows: [{ sku, product, urgency, orderQty }] — still fetched and passed
+// down (Dashboard.jsx), just no longer rendered here; kept in the prop
+// list so callers/tests don't need to change, and hasData still gates on
+// real pending rows existing, not on weights (which are always present).
+// weights: { cost, service_level, storage } fractions (0-1), from GET
+// /dashboard's reorder_preview.lp_weights.
 export const ReorderRecommendationWidget = ({
   rows = [],
   criticalCount = 0,
   urgentCount = 0,
   totalOrderQty = 0,
+  weights,
   emptyReason,
 }) => {
   const hasData = rows.length > 0;
@@ -828,25 +847,39 @@ export const ReorderRecommendationWidget = ({
             </div>
           </div>
 
-          <div className="reorder-mini-list">
-            {rows.map((r) => (
-              <div className="reorder-mini-row" key={r.sku}>
-                <div className="reorder-mini-row-main">
-                  <span className="reorder-mini-sku">{r.sku}</span>
-                  <span className="reorder-mini-product">{r.product}</span>
-                </div>
-                <div className="reorder-mini-row-side">
-                  <span
-                    className="urgency-badge-mini"
-                    style={{ backgroundColor: URGENCY_STYLES[r.urgency]?.bg, color: URGENCY_STYLES[r.urgency]?.color }}
-                  >
-                    {r.urgency}
-                  </span>
-                  <span className="reorder-mini-qty">{r.orderQty.toLocaleString()} units</span>
-                </div>
+          {weights && (
+            <div className="reorder-priorities">
+              <div className="reorder-priorities-header">
+                <span className="reorder-priorities-title">Optimization priorities</span>
+                <span className="reorder-priorities-caption">Weights used for these recommendations</span>
               </div>
-            ))}
-          </div>
+              {LP_PRIORITY_ROWS.map((p) => {
+                const fraction = weights[p.key];
+                const pct = typeof fraction === 'number' ? Math.round(fraction * 100) : null;
+                return (
+                  <div className="reorder-priority-row" key={p.key}>
+                    <div className="reorder-priority-row-top">
+                      <span className="reorder-priority-label">
+                        <span className="reorder-priority-swatch" style={{ backgroundColor: p.color }} />
+                        {p.label}
+                      </span>
+                      <span className="reorder-priority-pct">{pct === null ? '—' : `${pct}%`}</span>
+                    </div>
+                    <div className="reorder-priority-track">
+                      {pct !== null && (
+                        <div
+                          className="reorder-priority-fill"
+                          style={{ width: `${pct}%`, backgroundColor: p.color }}
+                        >
+                          <span className="reorder-priority-knob" style={{ backgroundColor: p.color }} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
     </div>

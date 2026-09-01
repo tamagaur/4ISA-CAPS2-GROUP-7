@@ -231,6 +231,7 @@ const Dashboard = () => {
               criticalCount={reorderPreview.critical_count ?? 0}
               urgentCount={reorderPreview.urgent_count ?? 0}
               totalOrderQty={reorderPreview.total_order_qty ?? 0}
+              weights={reorderPreview.lp_weights}
             />
           </div>
         </div>
