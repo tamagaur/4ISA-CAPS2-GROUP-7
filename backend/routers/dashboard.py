@@ -176,13 +176,16 @@ zero):
     analytics/forecasting/baseline.py's module docstring for the
     evidence — but the one-step-per-product shape this section already
     documented carries over unchanged, so no aggregation logic below
-    needed to change, only this wording). series contains the
-    last 8 REAL actual periods (summed quantity_sold across the gated
-    product set, i.e. products with a forecast_date row where status='ok'
-    AND mape < 20 at the most recent forecast_date in the table), followed
-    by however many distinct real forecast_date buckets exist among those
-    gated rows (usually one, sometimes a few if products' own latest
-    periods differ) — never fabricated into a clean synchronized run.
+    needed to change, only this wording). series covers the SAME `period`/
+    `start_period`-derived window as kpis.sales / sales_vs_stock above
+    (summed quantity_sold across the gated product set, i.e. products with
+    a forecast_date row where status='ok' AND mape < 20 at the most recent
+    forecast_date in the table) — the date-range picker's applied range,
+    not a hardcoded trailing window — followed by however many distinct
+    real forecast_date buckets exist among those gated rows (usually one,
+    sometimes a few if products' own latest periods differ), which land
+    past the picker's range whenever its end predates the forecast month.
+    Never fabricated into a clean synchronized run.
     gated_sku_count / avg_mape are computed from the same gated-row set.
     Null/empty across the board (gated_sku_count=0, avg_mape=None,
     series=[]) when nothing passes the gate.
@@ -429,6 +432,28 @@ def _latest_abc_period(db: Session) -> str | None:
     return row["p"] if row else None
 
 
+def _nearest_abc_period_at_or_before(db: Session, period: str) -> str | None:
+    """Latest UNILEVER classification_period <= `period`, or None if the
+    ETL hasn't produced any ABC run that old yet. The classification batch
+    runs roughly monthly and lags the sales data it's derived from, so the
+    date-range picker's applied end month (DashboardLayout's "today", one
+    month ahead of the latest loaded sales/ABC data by construction — see
+    DashboardLayout.jsx's getCurrentRealWorldPeriod comment) routinely has
+    no exact ABC_Classification row of its own. Falling back to the
+    nearest earlier real run (instead of the exact-match dead end this
+    replaced) keeps kpis.safety_stock_rate/abc_mix/tier_stock populated
+    for that common case, while still going genuinely blocked if `period`
+    predates every ABC run that exists."""
+    row = db.execute(
+        text(
+            "SELECT MAX(classification_period) AS p FROM ABC_Classification "
+            "WHERE principal = 'unilever' AND classification_period <= :period"
+        ),
+        {"period": period},
+    ).mappings().first()
+    return row["p"] if row else None
+
+
 def _avg_weekly_demand(period_values: dict[str, float | None]) -> tuple[float | None, str | None]:
     """Mean of whatever non-null months exist in `period_values` (already
     scoped to the trailing 12-month window by the caller), converted to a
@@ -529,11 +554,22 @@ def get_dashboard(
         else _last_12_periods(db, period)
     )
     sales_by_period = _sales_by_period(db, periods)
-    current_period = periods[-1]
+    # Walk backward from the picker's applied end month to the nearest
+    # period WITHIN the selected range that actually has a real sales row,
+    # rather than requiring an exact match on the range's literal end —
+    # the end month is routinely one the sales ETL hasn't loaded yet (see
+    # _nearest_abc_period_at_or_before's docstring for why: the app's
+    # pinned "today" runs a month ahead of the latest loaded data by
+    # construction), which was blanking this card even when the rest of
+    # the selected range had plenty of real data to show.
+    current_period = next(
+        (p for p in reversed(periods) if sales_by_period.get(p) is not None),
+        periods[-1],
+    )
     sales = sales_by_period[current_period]
     sales_blocked_reason = (
         None if sales is not None
-        else f"No Unilever_SKU_Demand_Fact_Real rows for {current_period} yet."
+        else f"No Unilever_SKU_Demand_Fact_Real rows anywhere from {periods[0]} through {periods[-1]} yet."
     )
 
     # ---- kpis.soh_value / sales_vs_stock.stock_on_hand ----------------
@@ -556,14 +592,20 @@ def get_dashboard(
 
     # ---- kpis.safety_stock_rate ----------------------------------------
 
-    # Same override convention as periods/_last_12_periods above — an exact
-    # match against the picker's applied end month/year (no "nearest
-    # available" fallback), same as GET /abc's own classification_period
-    # param. Feeds kpis.safety_stock_rate, abc_mix, AND tier_stock below —
-    # all three go empty/null together if ABC_Classification genuinely has
-    # no row for the requested period, rather than silently drifting back
-    # to the latest run.
-    abc_period = period if period is not None else _latest_abc_period(db)
+    # Resolves to the nearest real ABC_Classification run AT OR BEFORE the
+    # picker's applied end month/year (_nearest_abc_period_at_or_before),
+    # not an exact match against it — the picker's end is routinely a
+    # month the classification batch hasn't run for yet (see that
+    # function's docstring), and an exact-match dead end there blanked
+    # this card even when the selected range's earlier months had a real
+    # run to show. Falls back to the latest run overall when no override
+    # is given at all. Feeds kpis.safety_stock_rate, abc_mix, AND
+    # tier_stock below — all three go empty/null together only if
+    # ABC_Classification genuinely has no run that old.
+    abc_period = (
+        _nearest_abc_period_at_or_before(db, period) if period is not None
+        else _latest_abc_period(db)
+    )
     safety_stock_rate = None
     safety_stock_rate_blocked_reason = "ABC_Classification has no rows for unilever yet."
     if abc_period is not None:
@@ -762,9 +804,16 @@ def get_dashboard(
         for r in rows:
             actual_totals[r["period"]] = actual_totals.get(r["period"], 0.0) + float(r["qty"] or 0)
 
-        last_8_actual_periods = sorted(actual_totals.keys())[-8:]
-        for p in last_8_actual_periods:
-            series_by_period[p] = {"period": p, "actual": actual_totals[p], "forecast": None,
+        # Follows the picker's selected range (the same `periods` window
+        # kpis.sales / sales_vs_stock above are computed over) instead of a
+        # hardcoded trailing 8 months, so this chart moves with the
+        # dashboard's date filter like every other one does. Every period
+        # in the picked range gets an entry — actual_totals.get(p) is None
+        # (not omitted) for a period with no real sales among the gated
+        # SKUs, so a genuine gap breaks the line (connectNulls={false} on
+        # the frontend) instead of silently being skipped over.
+        for p in periods:
+            series_by_period[p] = {"period": p, "actual": actual_totals.get(p), "forecast": None,
                                     "confidence_lower": None, "confidence_upper": None}
 
         forecast_buckets: dict[str, dict] = {}

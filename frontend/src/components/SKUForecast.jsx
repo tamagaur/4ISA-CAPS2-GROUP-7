@@ -33,6 +33,14 @@ const MONTH_TO_NUM = {
 const toPeriod = (month, year) =>
   month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
+const NUM_TO_MONTH = Object.fromEntries(Object.entries(MONTH_TO_NUM).map(([m, n]) => [n, m]));
+// 'YYYY-MM' -> 'Mon YYYY', for the data-start note below.
+const formatPeriod = (period) => {
+  if (!period) return '';
+  const [year, num] = period.split('-');
+  return `${NUM_TO_MONTH[num] || num} ${year}`;
+};
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     const hasActual = payload.some(p => p.dataKey === 'actual');
@@ -90,14 +98,23 @@ const SKUForecast = () => {
   const rangeStartPeriod = toPeriod(localRange.startMonth, localRange.startYear);
   const rangeEndPeriod = toPeriod(localRange.endMonth, localRange.endYear);
 
-  // "Reset" (DateFilter's local-mode reset button) — snaps this page's own
+  // "Clear" (DateFilter's local-mode reset button) — snaps this page's own
   // range back to the dashboard's, same source the initial seed above used.
+  // Nothing else on this page writes to the shared dashboard range, so
+  // comparing localRange against the LIVE dashboardRange is equivalent to
+  // comparing against the original seed — only shown once the user has
+  // actually picked something different, never just because the page loaded.
   const resetToDashboardRange = () => setLocalRange({
     startMonth: dashboardRange.startMonth,
     startYear: dashboardRange.startYear,
     endMonth: dashboardRange.endMonth,
     endYear: dashboardRange.endYear,
   });
+  const isCustomRange =
+    localRange.startMonth !== dashboardRange.startMonth ||
+    localRange.startYear !== dashboardRange.startYear ||
+    localRange.endMonth !== dashboardRange.endMonth ||
+    localRange.endYear !== dashboardRange.endYear;
 
   const [rawItems, setRawItems] = useState([]);
   const [listLoading, setListLoading] = useState(true);
@@ -275,6 +292,17 @@ const SKUForecast = () => {
   // point is NOT filtered by range — GET /forecast always returns MA3's
   // single latest-real-month+1 forecast regardless of what range is picked
   // (see this file's MONTH_TO_NUM comment above).
+  // This SKU's own earliest real sale — independent of whatever range is
+  // picked. When it's LATER than rangeStartPeriod, the chart's visible
+  // start is set by this SKU genuinely having no sales before that month,
+  // not by the picker "failing" to reach further back — surfaced as a
+  // note below so that isn't mistaken for a bug (it isn't: some Category A
+  // SKUs only have ~31 months of real history vs. others' full 38).
+  const earliestRealPeriod = useMemo(() => {
+    const periods = (forecastResult?.actuals || []).map((a) => a.period);
+    return periods.length ? periods.reduce((min, p) => (p < min ? p : min)) : null;
+  }, [forecastResult]);
+
   const chartData = useMemo(() => {
     if (!forecastResult) return [];
 
@@ -349,7 +377,11 @@ const SKUForecast = () => {
           </div>
 
           <div className="forecast-header-actions">
-            <DateFilter localValue={localRange} onLocalChange={setLocalRange} onReset={resetToDashboardRange} />
+            <DateFilter
+              localValue={localRange}
+              onLocalChange={setLocalRange}
+              onReset={isCustomRange ? resetToDashboardRange : undefined}
+            />
             <button
               className="browse-all-skus-btn"
               onClick={() => navigate('/sku-management')}
@@ -642,6 +674,12 @@ const SKUForecast = () => {
                       <span className="forecast-stat-desc">forecast point{forecastResult.forecast.length === 1 ? '' : 's'}</span>
                     </div>
                   </div>
+
+                  {rangeStartPeriod && earliestRealPeriod && earliestRealPeriod > rangeStartPeriod && (
+                    <p className="forecast-range-note">
+                      Showing from <strong>{formatPeriod(earliestRealPeriod)}</strong> — {selectedSKU.code} has no recorded sales before that month.
+                    </p>
+                  )}
 
                   {/* Chart Legend */}
                   <div className="chart-legend">

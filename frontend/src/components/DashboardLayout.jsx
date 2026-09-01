@@ -37,8 +37,15 @@ const getDefaultDateRange = () => {
   return { startMonth: start.month, startYear: start.year, endMonth: today.month, endYear: today.year };
 };
 
+// On phone/tablet widths the sidebar becomes a slide-over overlay (see
+// Sidebar.css's matching max-width: 900px breakpoint) rather than a
+// permanently docked column, so it shouldn't default open and immediately
+// cover the page on first load there — computed once at mount, not
+// live-tracked across resizes.
+const startsWithSidebarOpen = () => !window.matchMedia('(max-width: 900px)').matches;
+
 const DashboardLayout = () => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(startsWithSidebarOpen);
 
   const realWorldPeriod = getCurrentRealWorldPeriod();
   const defaultRange = getDefaultDateRange();
@@ -144,8 +151,9 @@ const DashboardLayout = () => {
 
   return (
     <div className={`dashboard-layout ${isSidebarOpen ? '' : 'sidebar-closed'}`}>
-      <Sidebar 
-        isOpen={isSidebarOpen} 
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={toggleSidebar}
         onNavAttempt={handleNavAttempt}
         currentMonth={realWorldPeriod.month}
       />

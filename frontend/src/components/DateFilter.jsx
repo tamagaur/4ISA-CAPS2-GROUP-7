@@ -180,10 +180,10 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset }) => {
         <button
           className="date-today-btn"
           onClick={onReset}
-          title="Reset this chart back to the dashboard's date range"
+          title="Clear this chart's custom date range and follow the dashboard's again"
         >
           <RotateCcw size={14} />
-          Reset
+          Clear
         </button>
       )}
 

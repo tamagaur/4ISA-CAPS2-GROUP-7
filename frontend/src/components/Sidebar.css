@@ -16,6 +16,43 @@
   margin-left: -250px;
 }
 
+/* Click-outside-to-close scrim behind the overlay sidebar — only ever
+   rendered while the sidebar is open, and only ever visible at the
+   max-width: 900px breakpoint below, where the sidebar switches from
+   pushing .main-content to floating over it. */
+.sidebar-backdrop {
+  display: none;
+}
+
+/* Below tablet width there's no room for the sidebar to permanently push
+   the page content over (the "push" layout crushes .main-content to a
+   sliver) — it becomes a fixed slide-over instead, closed by default
+   (see DashboardLayout.jsx's startsWithSidebarOpen) and toggled via the
+   topbar's hamburger button, with a scrim to close it by tapping outside. */
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 900;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background-color: rgba(15, 23, 42, 0.45);
+    z-index: 899;
+    animation: sidebar-backdrop-fade-in 0.2s ease-out;
+  }
+}
+
+@keyframes sidebar-backdrop-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .sidebar-profile-top {
   display: flex;
   align-items: center;

@@ -682,17 +682,38 @@ export const PortfolioForecastWidget = ({
   // an invisible area up to confidenceLower, then a visible band on top
   // of it sized to (confidenceUpper - confidenceLower), so the shaded
   // region reads as "the uncertainty range" rather than filling from zero.
-  const chartData = useMemo(
-    () => series.map((point) => {
+  const chartData = useMemo(() => {
+    const withBand = series.map((point) => {
       const hasBand = point.confidenceLower != null && point.confidenceUpper != null;
       return {
         ...point,
         confidenceBase: hasBand ? point.confidenceLower : null,
         confidenceBand: hasBand ? point.confidenceUpper - point.confidenceLower : null,
       };
-    }),
-    [series]
-  );
+    });
+
+    // Bridge the actual/forecast junction: dashboard.py's portfolio_forecast
+    // usually has exactly ONE real forecast bucket (see its docstring) —
+    // an isolated point with nothing adjacent to connect to. Both Lines
+    // below use dot={false}, so with no bridge that lone point renders as
+    // literally nothing (Recharts needs 2 adjacent non-null points to draw
+    // a segment, and the Area needs the same for the confidence band).
+    // Injecting the last actual value as that point's own "forecast" (and
+    // a zero-width band) gives both a real 2-point run to draw from —
+    // the same fix SKUForecast.jsx already applies to its own chart.
+    const lastActualIndex = withBand.reduce(
+      (found, point, i) => (point.actual != null ? i : found), -1
+    );
+    const firstForecastIndex = withBand.findIndex((point) => point.forecast != null);
+    if (lastActualIndex !== -1 && firstForecastIndex !== -1 && lastActualIndex < firstForecastIndex) {
+      const bridge = withBand[lastActualIndex];
+      bridge.forecast = bridge.actual;
+      bridge.confidenceBase = bridge.actual;
+      bridge.confidenceBand = 0;
+    }
+
+    return withBand;
+  }, [series]);
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
@@ -726,7 +747,14 @@ export const PortfolioForecastWidget = ({
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} />
+                {/* equidistantPreserveStart, not Recharts' default preserveEnd —
+                    this series now spans the dashboard's picked date range
+                    (can be 30+ months) instead of a fixed trailing 8, and
+                    preserveEnd calculates its label-skipping backward from
+                    the END, silently dropping the label at the true first
+                    point on a wide range (diagnosed for SKUForecast.jsx's
+                    identical chart earlier — same fix, same cause). */}
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval="equidistantPreserveStart" />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
