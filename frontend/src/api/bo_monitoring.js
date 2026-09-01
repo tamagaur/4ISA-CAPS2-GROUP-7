@@ -1,8 +1,9 @@
 import { apiFetch } from '../auth';
 
-export async function getBOMonitoringData({ principal, from, to }) {
+// Unilever-only (2026-09): no more principal param — the backend always
+// scopes to Unilever now.
+export async function getBOMonitoringData({ from, to } = {}) {
   const query = new URLSearchParams();
-  if (principal) query.append('principal', principal);
   if (from) query.append('from', from);
   if (to) query.append('to', to);
   

@@ -14,7 +14,6 @@ const initialFormState = {
 };
 
 const DEFAULT_BRANDS = [
-  'Del Monte',
   'Unilever',
 ];
 

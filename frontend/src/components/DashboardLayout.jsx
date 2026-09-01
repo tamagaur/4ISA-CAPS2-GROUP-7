@@ -4,11 +4,15 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import './DashboardLayout.css';
 
-// "Today" is pinned to June 2026, not the machine's actual clock — the
+// "Today" is pinned to March 2026, not the machine's actual clock — the
 // app's own notion of "now" needs to stay fixed regardless of when it's
 // actually opened, so every filter/default/upper-bound built on it stays
-// consistent instead of drifting forward with the real calendar.
-const getCurrentRealWorldPeriod = () => ({ month: 'Jun', year: '2026' });
+// consistent instead of drifting forward with the real calendar. March
+// 2026 is also the system-wide upper bound on selectable dates (see
+// DateFilter.jsx's YEARS/month-options — Unilever's real data run ends
+// there), so "today" and "the latest pickable date" are the same value
+// by construction, not two numbers that have to be kept in sync by hand.
+const getCurrentRealWorldPeriod = () => ({ month: 'Mar', year: '2026' });
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -44,11 +48,6 @@ const DashboardLayout = () => {
   const [startYear, setStartYear] = useState(defaultRange.startYear);
   const [endMonth, setEndMonth] = useState(defaultRange.endMonth);
   const [endYear, setEndYear] = useState(defaultRange.endYear);
-
-  // Principal filter — 'all' | 'unilever' | 'delmonte'. Deliberately not
-  // persisted (no localStorage), unlike the period above: it applies
-  // instantly, no pending/confirm step needed.
-  const [principal, setPrincipal] = useState('all');
 
   // Pending Unsaved Selection State
   const [pendingStartMonth, setPendingStartMonth] = useState(startMonth);
@@ -170,8 +169,6 @@ const DashboardLayout = () => {
           handleResetToToday={handleResetToToday}
           realWorldMonth={realWorldPeriod.month}
           realWorldYear={realWorldPeriod.year}
-          principal={principal}
-          setPrincipal={setPrincipal}
         />
         <Outlet context={{
           startMonth, startYear, endMonth, endYear,
@@ -180,7 +177,7 @@ const DashboardLayout = () => {
           pendingEndMonth, setPendingEndMonth,
           pendingEndYear, setPendingEndYear,
           isPending, handleApplyPeriod, handleResetToToday,
-          updatePeriodImmediately, realWorldPeriod, principal,
+          updatePeriodImmediately, realWorldPeriod,
         }} />
       </div>
 

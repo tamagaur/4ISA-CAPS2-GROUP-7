@@ -39,7 +39,7 @@ const toPeriod = (month, year) =>
   month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
 const Dashboard = () => {
-  const { principal, startMonth, startYear, endMonth, endYear } = useOutletContext() || { principal: 'all' };
+  const { startMonth, startYear, endMonth, endYear } = useOutletContext() || {};
   const period = toPeriod(endMonth, endYear);
   const startPeriod = toPeriod(startMonth, startYear);
 
@@ -51,7 +51,7 @@ const Dashboard = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getDashboardData({ principal, period, startPeriod })
+    getDashboardData({ period, startPeriod })
       .then((res) => {
         if (cancelled) return;
         setData(res);
@@ -66,7 +66,7 @@ const Dashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [principal, period, startPeriod]);
+  }, [period, startPeriod]);
 
   if (loading) {
     return (
@@ -98,12 +98,8 @@ const Dashboard = () => {
     kpis.safety_stock_rate, kpis.safety_stock_rate_blocked_reason, formatPercent, 'Share of Category A SKUs at/above safety stock'
   );
 
-  // weeks_of_cover carries per-principal AND combined figures on every
-  // response (see backend/routers/dashboard.py) — pick whichever matches
-  // the currently-selected principal tab, same as every other card.
-  const weeksOfCoverKey = principal === 'all' ? 'combined' : principal;
-  const weeksOfCoverValue = weeksOfCover[weeksOfCoverKey] ?? null;
-  const weeksOfCoverReason = weeksOfCover[`${weeksOfCoverKey}_blocked_reason`] ?? null;
+  const weeksOfCoverValue = weeksOfCover.value ?? null;
+  const weeksOfCoverReason = weeksOfCover.blocked_reason ?? null;
   const weeksOfCoverDisplay = kpiDisplay(
     weeksOfCoverValue, weeksOfCoverReason, (v) => `${v.toFixed(1)} wks`, "vs. SSM's 3-week policy"
   );

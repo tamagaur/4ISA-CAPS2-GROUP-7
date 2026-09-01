@@ -7,18 +7,16 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 @router.get("/current")
 def get_inventory_current(
-    principal: str = Query("all"),
     from_date: str = Query(None, alias="from"),
     to_date: str = Query(None, alias="to"),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    principal_filter = ""
+    # Unilever-only (2026-09) — see backend/routers/dashboard.py's module
+    # docstring for the full reasoning. No more ?principal= param.
+    principal_filter = "AND i.principal = 'unilever'"
     params = {}
-    if principal in ("unilever", "delmonte"):
-        principal_filter = "AND i.principal = :principal"
-        params["principal"] = principal
-        
+
     period_filter = ""
     if from_date and to_date:
         from_period = from_date[:7]
@@ -45,7 +43,7 @@ def get_inventory_current(
         inventory.append({
             "id": r["sku_code"],
             "sku": r["sku_code"],
-            "brand": "Unilever" if r["principal"] == "unilever" else "Del Monte",
+            "brand": "Unilever",
             "product": r["product_name"] or "Unknown Product",
             "currentStock": float(r["current_stock"] or 0),
             "receivedMts": 0,
@@ -58,18 +56,21 @@ def get_inventory_current(
 
 @router.get("/movement")
 def get_inventory_movement(
-    principal: str = Query("all"),
     from_date: str = Query(None, alias="from"),
     to_date: str = Query(None, alias="to"),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    principal_filter = ""
+    # Unilever-only (2026-09) — see backend/routers/dashboard.py's module
+    # docstring for the full reasoning. No more ?principal= param. NOTE:
+    # sales_fact_real is Del Monte-only at the schema level (CHECK
+    # (principal = 'delmonte')), so the SALES/DISPATCHED section below
+    # always returns zero rows now — a pre-existing gap this change
+    # exposes rather than causes (this endpoint has no frontend caller,
+    # confirmed via repo-wide search, so it's not user-visible today).
+    principal_filter = "AND principal = 'unilever'"
     params = {}
-    if principal in ("unilever", "delmonte"):
-        principal_filter = "AND principal = :principal"
-        params["principal"] = principal
-        
+
     period_filter = ""
     if from_date and to_date:
         from_period = from_date[:7]
@@ -117,7 +118,7 @@ def get_inventory_movement(
             "type": r["type"],
             "qty": float(r["qty"] or 0),
             "ref": r["ref"],
-            "supplier": "Unilever" if r["principal"] == "unilever" else "Del Monte"
+            "supplier": "Unilever"
         })
         _id += 1
 

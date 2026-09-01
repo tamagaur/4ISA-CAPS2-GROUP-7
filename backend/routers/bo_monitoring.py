@@ -6,22 +6,21 @@ from backend.deps import TokenPayload, get_current_user, get_db
 router = APIRouter(prefix="/bo-monitoring", tags=["bo-monitoring"])
 
 _WEEKDAY_NAMES = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"}
-_PRINCIPAL_BRAND = {"unilever": "Unilever", "delmonte": "Del Monte"}
+
+# Unilever-only (2026-09) — see backend/routers/dashboard.py's module
+# docstring for the full reasoning. No more ?principal= param.
+_PRINCIPAL_FILTER = "AND principal = 'unilever'"
 
 
 @router.get("")
 def get_bo_monitoring(
-    principal: str = Query("all"),
     from_date: str = Query(None, alias="from"),
     to_date: str = Query(None, alias="to"),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    principal_filter = ""
+    principal_filter = _PRINCIPAL_FILTER
     params = {}
-    if principal in ("unilever", "delmonte"):
-        principal_filter = "AND principal = :principal"
-        params["principal"] = principal
 
     period_filter = ""
     if from_date and to_date:
@@ -48,7 +47,7 @@ def get_bo_monitoring(
         incidents.append({
             "id": r["id"] or "Unknown",
             "sku": "N/A",
-            "brand": "Unilever" if r["principal"] == "unilever" else "Del Monte",
+            "brand": "Unilever",
             "product": "Assorted Returns",
             "qty": 0,
             "reason": "Unknown",
@@ -129,16 +128,12 @@ def get_bo_monitoring(
     weekday_breakdown = [{"day": day, "count": weekday_counts.get(day, 0)} for day in _WEEKDAY_NAMES.values()]
 
     brand_query = text(f"""
-        SELECT principal, COUNT(*) as count
+        SELECT COUNT(*) as count
         FROM salesreturn_fact_real
         WHERE return_type = 'BO' {principal_filter} {period_filter}
-        GROUP BY principal
     """)
-    brand_rows = db.execute(brand_query, params).mappings().all()
-    brand_breakdown = [
-        {"brand": _PRINCIPAL_BRAND.get(r["principal"], r["principal"]), "count": int(r["count"])}
-        for r in brand_rows
-    ]
+    brand_row = db.execute(brand_query, params).mappings().first()
+    brand_breakdown = [{"brand": "Unilever", "count": int(brand_row["count"])}]
 
     return {
         "incidents": incidents,

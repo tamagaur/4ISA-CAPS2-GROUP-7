@@ -454,9 +454,9 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
 // alert, so it gets amber rather than this dashboard's one reserved alert
 // red (the reorder card's CRITICAL badge). No_data gets the neutral
 // "we don't know" slate STATUS_TIERS already uses for "no inherent
-// direction" — most of it is Del Monte, whose source has no stock_status
-// column at all (Unilever-only signal, see GET /dashboard's tier_stock
-// docstring), never folded into either real bucket.
+// direction" — a product with no Inventory_Fact_Real row that
+// period, or a NULL stock_status, lands here (see GET /dashboard's
+// tier_stock docstring), never folded into either real bucket.
 const STOCK_STATUS_COLORS = {
   inStock: CHART_COLORS.salesSeries,
   deadStock: COLORS.warning,
@@ -530,10 +530,10 @@ function makeSegmentLabel(data) {
 
 // Custom two-line X-axis tick: "Tier A" plus a muted coverage caption
 // ("inventory data for 499 of 1,492") — no_data is deliberately kept OUT
-// of the stacked bar (it's mostly Del Monte, whose source has no
-// stock_status column at all, and would otherwise crush the two segments
-// that actually carry a decision-relevant signal) but must stay visible
-// somewhere on the chart, not be silently dropped.
+// of the stacked bar (a product with no Inventory_Fact_Real row that
+// period would otherwise crush the two segments that actually carry a
+// decision-relevant signal) but must stay visible somewhere on the
+// chart, not be silently dropped.
 function makeCategoryStockTick(data) {
   return ({ x, y, payload }) => {
     const row = data.find((d) => d.tier === payload.value) || {};
@@ -699,7 +699,7 @@ export const PortfolioForecastWidget = ({
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Portfolio-level aggregate forecast</h4>
-          <p>Summed demand across gated Category A SKUs vs. SARIMA forecast</p>
+          <p>Summed demand across gated Category A SKUs vs. MA3 forecast</p>
         </div>
       </div>
 
@@ -750,7 +750,7 @@ export const PortfolioForecastWidget = ({
                 <Line
                   type="monotone"
                   dataKey="forecast"
-                  name="Forecast (SARIMA)"
+                  name="Forecast (MA3)"
                   stroke={COLORS.forecast}
                   strokeDasharray="5 3"
                   strokeWidth={2}
@@ -768,7 +768,7 @@ export const PortfolioForecastWidget = ({
             </li>
             <li className="legend-item">
               <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
-              Forecast (SARIMA)
+              Forecast (MA3)
             </li>
             <li className="legend-item">
               <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />

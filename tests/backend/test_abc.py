@@ -4,6 +4,9 @@ tests/backend/test_abc.py — GET /abc (backend/routers/abc.py).
 Backlog #40, #42, #43, #44. Uses a FakeSession (same pattern as
 tests/backend/test_auth.py's) so these never touch a real Supabase
 instance.
+
+UNILEVER ONLY (2026-09): GET /abc no longer accepts a ?principal= param —
+every query is hardcoded to principal='unilever' in the SQL text itself.
 """
 from __future__ import annotations
 
@@ -48,12 +51,9 @@ class FakeSession:
         params = params or {}
         if "MAX(classification_period)" in sql:
             return FakeResult([{"p": self.latest_period}])
-        if "FROM ABC_Classification ac" in sql:
+        if "FROM abc_classification ac" in sql:
             period = params["period"]
-            principal = params.get("principal")
             matched = [r for r in self.rows if r["_period"] == period]
-            if principal is not None:
-                matched = [r for r in matched if r["principal"] == principal]
             return FakeResult(matched)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -65,11 +65,11 @@ class FakeSession:
 def sample_rows():
     return [
         {"sku_id": "SKU-A", "product_name": "Product A", "principal": "unilever", "tier": "A", "revenue_share": 0.60,
-         "cumulative_share": 0.60, "boundary_flag": False, "current_stock": 120, "_period": "2024-02"},
+         "cumulative_share": 0.60, "boundary_flag": False, "current_stock": 120, "reorder_point": None, "_period": "2024-02"},
         {"sku_id": "SKU-B", "product_name": "Product B", "principal": "unilever", "tier": "B", "revenue_share": 0.20,
-         "cumulative_share": 0.80, "boundary_flag": True, "current_stock": 40, "_period": "2024-02"},
-        {"sku_id": "/ACE/BASE", "product_name": None, "principal": "delmonte", "tier": "C", "revenue_share": 0.05,
-         "cumulative_share": 0.99, "boundary_flag": False, "current_stock": 0, "_period": "2024-02"},
+         "cumulative_share": 0.80, "boundary_flag": True, "current_stock": 40, "reorder_point": None, "_period": "2024-02"},
+        {"sku_id": "SKU-C", "product_name": "Product C", "principal": "unilever", "tier": "C", "revenue_share": 0.05,
+         "cumulative_share": 0.99, "boundary_flag": False, "current_stock": 0, "reorder_point": None, "_period": "2024-02"},
     ]
 
 
@@ -102,23 +102,7 @@ def test_returns_all_items_for_latest_period_by_default(client):
     body = resp.json()
     assert body["classification_period"] == "2024-02"
     assert body["count"] == 3
-    assert {i["sku_id"] for i in body["items"]} == {"SKU-A", "SKU-B", "/ACE/BASE"}
-
-
-def test_delmonte_sku_id_is_a_category_path_not_a_sku(client):
-    """backend/schemas/abc.py's own note: sku_id is COALESCE(sku_code,
-    category_path) — for Del Monte this is a category, not a SKU."""
-    resp = client.get("/abc", headers={"Authorization": f"Bearer {user_token()}"})
-    body = resp.json()
-    delmonte_item = next(i for i in body["items"] if i["tier"] == "C")
-    assert delmonte_item["sku_id"] == "/ACE/BASE"
-
-
-def test_filters_by_principal(client):
-    resp = client.get("/abc?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
-    body = resp.json()
-    assert body["count"] == 2
-    assert all(i["sku_id"] in {"SKU-A", "SKU-B"} for i in body["items"])
+    assert {i["sku_id"] for i in body["items"]} == {"SKU-A", "SKU-B", "SKU-C"}
 
 
 def test_boundary_flag_passed_through(client):

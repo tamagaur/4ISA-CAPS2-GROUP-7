@@ -17,9 +17,21 @@ import { getForecast } from '../api/forecast';
 import DateFilter from './DateFilter';
 import './SKUForecast.css';
 
-const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
-// Components branch on this, never on the principal name.
-const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
+// Unlike Dashboard/ABC Classification/Reorder Recs/Bad Orders, this page's
+// date range is its OWN, local to this component — not the shared
+// cross-page one in DashboardLayout (see the localRange state below, and
+// DateFilter's "local mode"). It seeds from the dashboard's range once on
+// mount, then never affects and is never affected by any other page.
+// Trims which real actuals get plotted (see chartData below); the
+// forecast point itself always stays anchored to the latest real month —
+// MA3's one-step forecast is a batch-computed value, not something a
+// picked range can honestly recompute on the fly.
+const MONTH_TO_NUM = {
+  Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+  Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+};
+const toPeriod = (month, year) =>
+  month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -57,8 +69,35 @@ const SKUForecast = () => {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
-  const { principal } = useOutletContext() || { principal: 'all' };
-  const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  // This page's chart has its OWN date range, independent of the shared
+  // cross-page one in DashboardLayout — seeded from the dashboard's
+  // CURRENT applied range the moment this page mounts (matching "opens
+  // with the dashboard's selection"), then lives entirely in this
+  // component's own state from that point on. Changing it here never
+  // writes back to the shared range (see DateFilter's `localValue`/
+  // `onLocalChange` "local mode"), and since this is a route-level
+  // component it remounts — re-seeding fresh — every time the user
+  // navigates back to this page, so a later dashboard change is picked
+  // up on the NEXT visit without this page's own pick ever leaking to
+  // any other page in the meantime.
+  const dashboardRange = useOutletContext() || {};
+  const [localRange, setLocalRange] = useState(() => ({
+    startMonth: dashboardRange.startMonth,
+    startYear: dashboardRange.startYear,
+    endMonth: dashboardRange.endMonth,
+    endYear: dashboardRange.endYear,
+  }));
+  const rangeStartPeriod = toPeriod(localRange.startMonth, localRange.startYear);
+  const rangeEndPeriod = toPeriod(localRange.endMonth, localRange.endYear);
+
+  // "Reset" (DateFilter's local-mode reset button) — snaps this page's own
+  // range back to the dashboard's, same source the initial seed above used.
+  const resetToDashboardRange = () => setLocalRange({
+    startMonth: dashboardRange.startMonth,
+    startYear: dashboardRange.startYear,
+    endMonth: dashboardRange.endMonth,
+    endYear: dashboardRange.endYear,
+  });
 
   const [rawItems, setRawItems] = useState([]);
   const [listLoading, setListLoading] = useState(true);
@@ -68,7 +107,7 @@ const SKUForecast = () => {
     let cancelled = false;
     setListLoading(true);
     setListError(null);
-    getABCClassification({ principal })
+    getABCClassification({})
       .then((res) => {
         if (cancelled) return;
         setRawItems(res.items || []);
@@ -81,7 +120,7 @@ const SKUForecast = () => {
         if (!cancelled) setListLoading(false);
       });
     return () => { cancelled = true; };
-  }, [principal]);
+  }, []);
 
   // Map ABC classification rows -> the SKU-picker shape this page renders.
   const sourceSKUs = useMemo(
@@ -89,8 +128,7 @@ const SKUForecast = () => {
       rawItems.map((item) => ({
         code: item.sku_id,
         name: item.product_name || 'Unknown Product',
-        brand: PRINCIPAL_BRAND[item.principal] || item.principal,
-        principal: item.principal,
+        brand: 'Unilever',
         cat: item.tier,
       })),
     [rawItems]
@@ -101,10 +139,10 @@ const SKUForecast = () => {
   const [selectedBrand, setSelectedBrand] = useState('ALL');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Selected SKU (or Del Monte category)
+  // Selected SKU
   const [selectedSKU, setSelectedSKU] = useState(null);
 
-  // Re-select when the principal filter (or the loaded list) changes.
+  // Re-select when the loaded list changes.
   useEffect(() => {
     if (sourceSKUs.length > 0) {
       setSelectedSKU((prev) => (prev && sourceSKUs.some((s) => s.code === prev.code) ? prev : sourceSKUs[0]));
@@ -196,7 +234,8 @@ const SKUForecast = () => {
 
   // Forecast data for the selected SKU — fetched from Forecast_Result via
   // GET /forecast/{sku_id}. May legitimately come back with an empty
-  // forecast[] if the SARIMA pipeline hasn't produced output for this SKU.
+  // forecast[] if the MA3 baseline runner (scripts/run_baseline_forecast.py)
+  // hasn't produced output for this SKU.
   const [forecastResult, setForecastResult] = useState(null);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState(null);
@@ -209,7 +248,7 @@ const SKUForecast = () => {
     let cancelled = false;
     setForecastLoading(true);
     setForecastError(null);
-    getForecast(selectedSKU.code, selectedSKU.principal)
+    getForecast(selectedSKU.code)
       .then((res) => {
         if (cancelled) return;
         setForecastResult(res);
@@ -227,11 +266,23 @@ const SKUForecast = () => {
   // Combine real trailing actuals + real forecast horizon into one chart
   // series. It now dynamically fills missing months between the first and last
   // actual data point with 0 to prevent straight lines skipping across void periods.
+  //
+  // This page's OWN local date range (2026-09, see localRange above): actuals
+  // are trimmed to [rangeStartPeriod, rangeEndPeriod] before the gap-fill
+  // below runs, so a narrower pick shows a narrower trailing-history window —
+  // same "picker controls what's plotted" behavior Dashboard/ABC/Bad Orders
+  // have with the shared range, just scoped to this one chart. The forecast
+  // point is NOT filtered by range — GET /forecast always returns MA3's
+  // single latest-real-month+1 forecast regardless of what range is picked
+  // (see this file's MONTH_TO_NUM comment above).
   const chartData = useMemo(() => {
     if (!forecastResult) return [];
-    
-    // Sort actuals to ensure they are chronologically ordered
-    const sortedActuals = [...(forecastResult.actuals || [])].sort((a, b) => a.period.localeCompare(b.period));
+
+    // Sort actuals to ensure they are chronologically ordered, trimmed to
+    // this page's own local range (never selected yet -> full history).
+    const sortedActuals = [...(forecastResult.actuals || [])]
+      .filter((a) => (!rangeStartPeriod || a.period >= rangeStartPeriod) && (!rangeEndPeriod || a.period <= rangeEndPeriod))
+      .sort((a, b) => a.period.localeCompare(b.period));
 
     const actualPoints = [];
     if (sortedActuals.length > 0) {
@@ -277,7 +328,7 @@ const SKUForecast = () => {
         : undefined,
     }));
     return [...actualPoints, ...forecastPoints];
-  }, [forecastResult]);
+  }, [forecastResult, rangeStartPeriod, rangeEndPeriod]);
 
   const latestForecastPoint = forecastResult?.forecast?.length
     ? forecastResult.forecast[forecastResult.forecast.length - 1]
@@ -293,12 +344,12 @@ const SKUForecast = () => {
               Demand <span>forecasted</span>
             </h2>
             <p className="forecast-subtitle">
-              SARIMA projection for Category A SKUs, from Forecast_Result
+              MA3 (3-month moving average) projection for Category A SKUs, from Forecast_Result
             </p>
           </div>
 
           <div className="forecast-header-actions">
-            <DateFilter />
+            <DateFilter localValue={localRange} onLocalChange={setLocalRange} onReset={resetToDashboardRange} />
             <button
               className="browse-all-skus-btn"
               onClick={() => navigate('/sku-management')}
@@ -313,14 +364,8 @@ const SKUForecast = () => {
         {/* Selection Area with Filter Controls */}
         <div className="forecast-selection">
           <div className="selection-top-bar">
-            <label className="selection-label">{grain === 'category' ? 'SELECT CATEGORY TO FORECAST' : 'SELECT SKU TO FORECAST'}</label>
+            <label className="selection-label">SELECT SKU TO FORECAST</label>
           </div>
-
-          {(grain === 'category' || grain === 'mixed') && (
-            <p className="forecast-grain-note">
-              Del Monte is analysed at category level — no SKU-level data is available from this principal
-            </p>
-          )}
 
           {/* Controls Bar: Filters & Search Combobox */}
           <div className="combobox-controls-bar">
@@ -543,7 +588,7 @@ const SKUForecast = () => {
             <div className="selected-sku-card">
               <div className="sku-info-left">
                 <div className="sku-code-header-row">
-                  <span className="sku-code-label">{grain === 'category' ? 'SELECTED CATEGORY CODE' : 'SELECTED SKU CODE'}</span>
+                  <span className="sku-code-label">SELECTED SKU CODE</span>
                   <button
                     className={`card-star-btn ${isSelectedPinned ? 'pinned' : ''}`}
                     onClick={(e) => togglePinSKU(selectedSKU.code, e)}
@@ -569,7 +614,7 @@ const SKUForecast = () => {
 
               {!forecastLoading && !forecastError && forecastResult && forecastResult.forecast.length === 0 && (
                 <p className="forecast-subtitle">
-                  No SARIMA forecast has been generated for {selectedSKU.code} yet.
+                  No MA3 forecast has been generated for {selectedSKU.code} yet.
                 </p>
               )}
 
@@ -600,7 +645,7 @@ const SKUForecast = () => {
 
                   {/* Chart Legend */}
                   <div className="chart-legend">
-                    {forecastResult.actuals.length > 0 && (
+                    {chartData.some((pt) => pt.actual != null) && (
                       <div className="legend-item">
                         <span className="legend-line line-actual"></span>
                         <span className="legend-label">Actual Sales</span>
@@ -610,10 +655,12 @@ const SKUForecast = () => {
                       <span className="legend-line line-forecast"></span>
                       <span className="legend-label">Forecast</span>
                     </div>
-                    <div className="legend-item">
-                      <span className="legend-area area-ci"></span>
-                      <span className="legend-label">Confidence Interval</span>
-                    </div>
+                    {forecastResult.forecast.some((f) => f.confidence_lower != null && f.confidence_upper != null) && (
+                      <div className="legend-item">
+                        <span className="legend-area area-ci"></span>
+                        <span className="legend-label">Confidence Interval</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Chart */}
@@ -627,6 +674,20 @@ const SKUForecast = () => {
                           tickLine={true}
                           tick={{ fill: '#a0aec0', fontSize: 12 }}
                           dy={10}
+                          // Recharts' default tick-skip anchors from the END
+                          // of the axis (interval="preserveEnd") — harmless
+                          // at the old fixed ~12-point series, but with a
+                          // range picker now able to span ~39 months
+                          // (Jan 2023 - Mar 2026), that default silently
+                          // dropped the label at the true first month,
+                          // reading as "the chart starts later than I
+                          // picked" even though the plotted line itself
+                          // was always correct (verified: chartData's
+                          // first point is genuinely the picked start
+                          // month). preserveStart guarantees the first
+                          // tick is always shown; equidistant keeps the
+                          // rest evenly spaced instead of clumping.
+                          interval="equidistantPreserveStart"
                         />
                         <YAxis
                           axisLine={true}

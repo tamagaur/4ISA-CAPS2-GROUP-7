@@ -4,12 +4,6 @@ import { Check, Calendar } from 'lucide-react';
 import { getCurrentUser } from '../auth';
 import './Topbar.css';
 
-const PRINCIPALS = [
-  { key: 'all', label: 'All principals' },
-  { key: 'unilever', label: 'Unilever' },
-  { key: 'delmonte', label: 'Del Monte' },
-];
-
 const Topbar = ({
   toggleSidebar,
   startMonth,
@@ -29,22 +23,14 @@ const Topbar = ({
   handleResetToToday,
   realWorldMonth = 'Aug',
   realWorldYear = '2026',
-  principal = 'all',
-  setPrincipal = () => {},
 }) => {
   const location = useLocation();
-  const isToday = 
-    pendingStartMonth === realWorldMonth && 
-    pendingStartYear === realWorldYear && 
-    pendingEndMonth === realWorldMonth && 
+  const isToday =
+    pendingStartMonth === realWorldMonth &&
+    pendingStartYear === realWorldYear &&
+    pendingEndMonth === realWorldMonth &&
     pendingEndYear === realWorldYear;
   const isForecastPage = location.pathname === '/forecast';
-
-  // Principal filter is only meaningful on analytics & management pages.
-  // Admin-only pages (audit log, data upload, user management) operate
-  // across all data and have no per-principal view, so the filter is hidden.
-  const ADMIN_PAGES = ['/audit-log', '/upload', '/users'];
-  const showPrincipalFilter = !ADMIN_PAGES.includes(location.pathname);
 
   const user = getCurrentUser();
   const getInitials = (u) => {
@@ -74,35 +60,6 @@ const Topbar = ({
         </button>
 
         {/* Date Filter removed and placed in page headers */}
-
-        {showPrincipalFilter && (
-          <div className="principal-filter">
-            <div className="principal-segmented" role="tablist" aria-label="Principal filter">
-              {PRINCIPALS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={principal === p.key}
-                  className={`principal-segment ${principal === p.key ? 'active' : ''}`}
-                  onClick={() => setPrincipal(p.key)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <select
-              className="principal-dropdown dropdown-select"
-              value={principal}
-              onChange={(e) => setPrincipal(e.target.value)}
-              aria-label="Principal filter"
-            >
-              {PRINCIPALS.map((p) => (
-                <option key={p.key} value={p.key}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
       
       <div className="topbar-right">

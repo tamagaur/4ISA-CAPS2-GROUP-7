@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="SSM Decision Support Dashboard API",
-    description="Read-only API over Supabase-stored ETL/ABC/SARIMA/LP pipeline outputs.",
+    description="Read-only API over Supabase-stored ETL/ABC/MA3-forecast/LP pipeline outputs.",
     version="0.1.0",
     lifespan=lifespan,
 )

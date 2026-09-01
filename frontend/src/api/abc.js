@@ -1,8 +1,9 @@
 import { apiFetch } from '../auth';
 
-export async function getABCClassification({ principal, classification_period } = {}) {
+// Unilever-only (2026-09): no more principal param — the backend always
+// scopes to Unilever now.
+export async function getABCClassification({ classification_period } = {}) {
   const query = new URLSearchParams();
-  if (principal && principal !== 'all') query.append('principal', principal);
   if (classification_period) query.append('classification_period', classification_period);
 
   const res = await apiFetch(`/abc?${query.toString()}`);

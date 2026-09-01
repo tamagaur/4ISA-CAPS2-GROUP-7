@@ -37,6 +37,13 @@ a row at all; more coverage expected, per Yuan), so most products
 legitimately have no match here yet. current_stock is now left NULL
 when there's no match, and stock_status reports "NO DATA" instead of
 silently fabricating CRITICAL.
+
+UNILEVER ONLY (2026-09): Del Monte has been dropped from this app's
+scope — there is no more `?principal=` query param, and every query is
+hardcoded to `ac.principal = 'unilever'`, including the latest-period
+lookup (ABC_Classification carries both principals, so an unfiltered
+MAX(classification_period) could resolve to a period Unilever has no
+rows for at all).
 """
 from __future__ import annotations
 
@@ -71,14 +78,15 @@ def _stock_status(current_stock: float | None, reorder_point: float | None) -> s
 
 @router.get("", response_model=ABCResponse)
 def get_abc(
-    principal: str | None = Query(None, description="Filter to 'unilever' or 'delmonte'. Omit for both."),
     classification_period: str | None = Query(None, description="'YYYY-MM'. Omit to use the latest period present."),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> ABCResponse:
     period = classification_period
     if period is None:
-        row = db.execute(text("SELECT MAX(classification_period) AS p FROM abc_classification")).mappings().first()
+        row = db.execute(text(
+            "SELECT MAX(classification_period) AS p FROM abc_classification WHERE principal = 'unilever'"
+        )).mappings().first()
         period = row["p"] if row else None
         if period is None:
             return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[])
@@ -108,13 +116,10 @@ def get_abc(
             WHERE status = 'pending'
             ORDER BY product_key, planning_cycle_date DESC
         ) rop ON rop.product_key = ac.product_key
-        WHERE ac.classification_period = :period
+        WHERE ac.classification_period = :period AND ac.principal = 'unilever'
+        ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST
     """
     params: dict = {"period": period}
-    if principal is not None:
-        query += " AND ac.principal = :principal"
-        params["principal"] = principal
-    query += " ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST"
 
     rows = db.execute(text(query), params).mappings().all()
     items = [

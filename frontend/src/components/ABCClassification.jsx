@@ -22,10 +22,6 @@ import './ABCClassification.css';
 // this constant is display-only (used in the legend copy).
 const BOUNDARY_TOLERANCE_PP = 3;
 
-const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
-// Components branch on this, never on the principal name.
-const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
-
 const MONTH_TO_NUM = {
   Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
   Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
@@ -133,8 +129,7 @@ const ClassAggregateTooltip = ({ active, payload }) => {
 };
 
 const ABCClassification = () => {
-  const { principal, endMonth, endYear } = useOutletContext() || { principal: 'all' };
-  const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  const { endMonth, endYear } = useOutletContext() || {};
   const requestedPeriod = toClassificationPeriod(endMonth, endYear);
 
   const [rawData, setRawData] = useState([]);
@@ -178,7 +173,7 @@ const ABCClassification = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getABCClassification({ principal, classification_period: requestedPeriod })
+    getABCClassification({ classification_period: requestedPeriod })
       .then((res) => {
         if (cancelled) return;
         setRawData(res.items || []);
@@ -194,7 +189,7 @@ const ABCClassification = () => {
     return () => {
       cancelled = true;
     };
-  }, [principal, requestedPeriod]);
+  }, [requestedPeriod]);
 
   // Map API shape -> the row shape the rest of this page renders.
   const sourceData = useMemo(
@@ -203,8 +198,7 @@ const ABCClassification = () => {
         id: item.sku_id,
         sku: item.sku_id,
         product: item.product_name || 'Unknown Product',
-        brand: PRINCIPAL_BRAND[item.principal] || item.principal,
-        principal: item.principal,
+        brand: 'Unilever',
         cat: item.tier,
         // revenue_share / cumulative_share come from the API as 0-1 fractions
         // (see analytics/classification/abc.py); everything downstream here
@@ -241,11 +235,7 @@ const ABCClassification = () => {
     return sorted.map((item, index) => ({ ...item, rank: index + 1 }));
   }, [sourceData]);
 
-  // Roll per-item revenue share + stock_status up to the 3 tiers. Pulled
-  // out as a plain function (not a hook) because it needs to run once for
-  // "all items" (single-principal view) and once per principal (mixed
-  // "All" view) — see isMixedPrincipal below for why revenue_share can't
-  // just be summed across principals directly.
+  // Roll per-item revenue share + stock_status up to the 3 tiers.
   const buildClassAggregates = (items) => {
     const totalCount = items.length;
     return ['A', 'B', 'C'].map((cat) => {
@@ -278,23 +268,6 @@ const ABCClassification = () => {
     });
   };
 
-  // orchestrate_abc.py runs ABC classification ONCE PER PRINCIPAL — each
-  // principal's revenue_share sums to 100% within itself only (Unilever
-  // SKU revenue and Del Monte category revenue are different, non-
-  // comparable magnitudes). Loading "All" principals returns both sets
-  // of rows together with no filter, so simply summing revenue_share
-  // across all of them adds two different 100% baselines together
-  // (Class A could read ~160%, not a bug in the math — just an invalid
-  // combination). isMixedPrincipal detects that case so the revenue
-  // chart is never built by summing across principals.
-  const presentPrincipals = useMemo(
-    () => Array.from(new Set(dataWithCumulative.map((d) => d.principal).filter(Boolean))),
-    [dataWithCumulative]
-  );
-  const isMixedPrincipal = presentPrincipals.length > 1;
-
-  // Single-principal view (or the whole dataset when only one principal
-  // is present/selected): one set of aggregates, same as before.
   const classAggregates = useMemo(
     () => buildClassAggregates(dataWithCumulative),
     [dataWithCumulative]
@@ -305,39 +278,6 @@ const ABCClassification = () => {
     () => buildStockBreakdown(dataWithCumulative.filter((d) => d.cat === selectedClass)),
     [dataWithCumulative, selectedClass]
   );
-
-  // Mixed view: one full aggregate set PER principal, each computed only
-  // from that principal's own rows — revenue and stock mix both stay
-  // within one classification run's own 100% baseline.
-  const perPrincipalPanels = useMemo(() => {
-    if (!isMixedPrincipal) return [];
-    return presentPrincipals.map((p) => {
-      const items = dataWithCumulative.filter((d) => d.principal === p);
-      return {
-        principal: p,
-        label: PRINCIPAL_BRAND[p] || p,
-        classAggregates: buildClassAggregates(items),
-        selectedClassStockBreakdown: buildStockBreakdown(items.filter((d) => d.cat === selectedClass)),
-      };
-    });
-  }, [isMixedPrincipal, presentPrincipals, dataWithCumulative, selectedClass]);
-
-  // Cross-principal comparison chart: one bar per principal per tier,
-  // never summed — each principal's own revenue % stays on its own
-  // 0-100 scale, just placed side by side for comparison.
-  const tierComparisonData = useMemo(() => {
-    if (!isMixedPrincipal) return [];
-    return ['A', 'B', 'C'].map((cat) => {
-      const row = { cat, label: `Class ${cat}` };
-      presentPrincipals.forEach((p) => {
-        const items = dataWithCumulative.filter((d) => d.principal === p && d.cat === cat);
-        row[p] = items.reduce((sum, d) => sum + (d.revPct || 0), 0);
-      });
-      return row;
-    });
-  }, [isMixedPrincipal, presentPrincipals, dataWithCumulative]);
-
-  const PRINCIPAL_CHART_COLOR = { unilever: COLORS.abcA, delmonte: COLORS.dispatched };
 
   const filteredData = useMemo(() => {
     return dataWithCumulative.filter(item => {
@@ -483,7 +423,7 @@ const ABCClassification = () => {
             <span className="abc-card-desc">Long tail · 5% of revenue</span>
           </div>
           <div className="abc-summary-card abc-card-total">
-            <span className="abc-card-label">{grain === 'category' ? 'TOTAL CATEGORIES' : 'TOTAL SKUS'}</span>
+            <span className="abc-card-label">TOTAL SKUS</span>
             <span className="abc-card-value">{sourceData.length}</span>
             {boundaryCount > 0 && (
               <span className="abc-card-desc abc-card-desc-warning">
@@ -493,82 +433,15 @@ const ABCClassification = () => {
           </div>
         </div>
 
-        {(grain === 'category' || grain === 'mixed') && (
-          <p className="abc-page-grain-note">
-            Del Monte is analysed at category level — no SKU-level data is available from this principal
-          </p>
-        )}
-
-        {/* Revenue Concentration by Tier, by Principal — cross-principal
-            comparison chart, shown only when "All" is selected. Never
-            sums revenue_share across principals (see isMixedPrincipal
-            above for why that's invalid) — one bar per principal per
-            tier, each on its own 0-100% scale, placed side by side. */}
-        {isMixedPrincipal && (
-          <div className="abc-pareto-container">
-            <div className="abc-pareto-header">
-              <h3 className="abc-pareto-title">Revenue Concentration by Tier, by Principal</h3>
-              <div className="abc-pareto-legend">
-                {presentPrincipals.map((p) => (
-                  <div className="abc-pareto-legend-item" key={p}>
-                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: PRINCIPAL_CHART_COLOR[p] || CHART_COLORS.axisLabel }} />
-                    <span>{PRINCIPAL_BRAND[p] || p}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="abc-pareto-chart-wrapper">
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={tierComparisonData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                  <XAxis
-                    dataKey="label"
-                    axisLine={true}
-                    tickLine={false}
-                    tick={{ fill: CHART_COLORS.axisLabel, fontSize: 12, fontWeight: 600 }}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    ticks={[0, 20, 40, 60, 80, 100]}
-                    tickFormatter={(v) => `${v}%`}
-                    axisLine={true}
-                    tickLine={true}
-                    tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
-                  />
-                  <Tooltip
-                    formatter={(value, name) => [`${value.toFixed(1)}%`, PRINCIPAL_BRAND[name] || name]}
-                    cursor={{ fill: '#f7fafc' }}
-                  />
-                  {presentPrincipals.map((p) => (
-                    <Bar
-                      key={p}
-                      dataKey={p}
-                      name={p}
-                      fill={PRINCIPAL_CHART_COLOR[p] || CHART_COLORS.axisLabel}
-                      radius={[6, 6, 0, 0]}
-                      barSize={44}
-                      isAnimationActive={false}
-                    />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
-
-        {/* Class Aggregation Chart(s) + interactive drill-down — replaces
+        {/* Class Aggregation Chart + interactive drill-down — replaces
             the per-SKU Pareto chart, which wasn't readable/actionable at
-            600+ SKUs. Each panel: revenue share vs. stock-status mix per
-            class (both real fields, no fabricated $ value or risk
-            score). Clicking any bar for a class (or its tab below the
-            chart) swaps the drill-down table on the right to that
-            class's real stock_status counts — it's no longer locked to
-            Class C. In mixed mode this renders once per principal (see
-            perPrincipalPanels above) so revenue/stock numbers never
-            cross a classification-run boundary; otherwise it renders
-            once for the whole dataset. */}
-        {(isMixedPrincipal ? perPrincipalPanels : [{ principal: null, label: null, classAggregates, selectedClassStockBreakdown }]).map((panel) => (
-          <div className="abc-analysis-row" key={panel.principal || 'single'}>
+            600+ SKUs. Revenue share vs. stock-status mix per class (both
+            real fields, no fabricated $ value or risk score). Clicking
+            any bar for a class (or its tab below the chart) swaps the
+            drill-down table on the right to that class's real
+            stock_status counts — it's no longer locked to Class C. */}
+        {[{ label: null, classAggregates, selectedClassStockBreakdown }].map((panel) => (
+          <div className="abc-analysis-row" key="single">
             <div className="abc-pareto-container abc-analysis-chart">
               <div className="abc-pareto-header">
                 <h3 className="abc-pareto-title">
@@ -671,7 +544,7 @@ const ABCClassification = () => {
                 {panel.classAggregates.map((entry) => (
                   <div key={entry.cat} className="abc-class-summary-item">
                     <span className="abc-class-summary-headline">
-                      ~{entry.skuSharePct.toFixed(0)}% {grain === 'category' ? 'Category' : 'SKU'} Count · ~{entry.revenueTotal.toFixed(0)}% Revenue
+                      ~{entry.skuSharePct.toFixed(0)}% SKU Count · ~{entry.revenueTotal.toFixed(0)}% Revenue
                     </span>
                     <span className="abc-class-summary-archetype">{CLASS_ARCHETYPE[entry.cat]}</span>
                   </div>
@@ -704,7 +577,7 @@ const ABCClassification = () => {
                 <thead>
                   <tr>
                     <th>Status</th>
-                    <th>{grain === 'category' ? 'Category' : 'SKU'} Count</th>
+                    <th>SKU Count</th>
                     <th>% of Class {selectedClass}</th>
                   </tr>
                 </thead>
@@ -918,7 +791,7 @@ const ABCClassification = () => {
             <thead>
               <tr>
                 <th>#</th>
-                <th>{grain === 'category' ? 'CATEGORY' : 'SKU'}</th>
+                <th>SKU</th>
                 <th>PRODUCT</th>
                 <th>BRAND</th>
                 <th>CAT</th>

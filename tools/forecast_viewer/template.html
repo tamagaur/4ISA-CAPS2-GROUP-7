@@ -332,7 +332,7 @@ const passOf = mase => mase == null ? "na" : (mase < 1 ? "pass" : "fail");
 
 document.getElementById("tag-verdict").textContent = "verdict: " + DATA.verdict.toUpperCase();
 document.getElementById("tag-period").textContent = "ABC " + DATA.abc_period;
-document.getElementById("gen-note").textContent = "computed " + DATA.generated + " · report-only, not written to Forecast_Result";
+document.getElementById("gen-note").textContent = "computed " + DATA.generated + " · MA3 is deployed to Forecast_Result — see footer";
 
 /* ---------- rail ---------- */
 const CLASS_ORDER = ["smooth", "erratic", "unclassifiable", "insufficient"];
@@ -710,8 +710,10 @@ document.getElementById("footer").innerHTML = `
   demand-class routing, history-length routing, an ensemble, and a per-SKU selector on this data.
   Holdout = last ${(DATA.params.holdout_fraction * 100).toFixed(0)}% of each SKU's series (time-ordered).
   MASE &lt; 1.0 = beats a naive forecast. SBA α = ${DATA.params.sba_alpha}, untuned.
-  <div class="disclaim">These numbers are <b>report-only</b>. Nothing here has been written to
-  <span class="mono">Forecast_Result</span> — the live dashboard still shows the older SARIMA run.</div>`;
+  <div class="disclaim">MA3 is <b>deployed</b>: <span class="mono">Forecast_Result</span> was upserted from this
+  same computation (<span class="mono">scripts/run_baseline_forecast.py --write</span>) and the live dashboard reads it —
+  the numbers below are recomputed independently from raw actuals for this exhibit, not a live read of that table,
+  so treat this as a corroborating snapshot rather than the system of record.</div>`;
 
 renderList();  // also renders the detail pane for the current selection
 </script>
