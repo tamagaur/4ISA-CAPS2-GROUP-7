@@ -153,3 +153,34 @@ history.** Matched 89-SKU comparison, median sMAPE (the window-independent metri
 **Conclusion: adding the synthetic history changes the answer for the worse. Keep the
 purge. Model on real 2023-01 → 2026-02 only.** If longer real history ever arrives
 (pre-2023 Unilever from SSM), re-test — but synthetic backfill is not a substitute.
+
+---
+
+## Addendum 2 — auto-ARIMA (per-SKU order selection)
+
+The main table used two *fixed* SARIMA specs. To rule ARIMA out fairly, ran a proper
+**auto-ARIMA**: per-SKU grid over (p,d,q) × seasonal (P,D,Q,12), order chosen once by
+**AICc** on the pre-test training window, then the same rolling-origin 1-step backtest.
+Data: `reports/arima_bakeoff_unilever_tierA.csv` (89 evaluable Tier A SKUs).
+
+| model | MAPE med | MASE med | sMAPE med | MAPE<.20 | beats naive |
+|---|---|---|---|---|---|
+| **auto-ARIMA** | **0.394** | **0.936** | **0.361** | **9%** | **55%** |
+| SBA α=.3 | 0.333 | 0.788 | 0.314 | 15% | 79% |
+| MA3 | 0.351 | 0.819 | 0.296 | 7% | 75% |
+| Theta | 0.363 | 0.792 | 0.301 | 9% | 74% |
+| SES | 0.363 | 0.821 | 0.300 | 9% | 67% |
+| naive | 0.448 | 1.081 | 0.394 | 4% | — |
+
+**Auto-ARIMA is worse than every incumbent except naive**, and barely beats naive (55%
+of SKUs). Head-to-head it loses to SBA α=.3 (wins only 37% of SKUs), MA3 (31%), Theta
+(33%). It is the outright best method on just 17–19% of SKUs — nobody's clear winner.
+
+**Why:** AICc keeps selecting seasonal models — 45% of SKUs got `(0,1,2)(0,1,1)₁₂` — but
+with only 38 months (3 seasonal cycles), a seasonal MA term is estimated on ~3 points
+per season. It fits in-sample and fails out-of-sample, exactly like the fixed seasonal
+SARIMA in the main table (MASE 0.989). 38 months is simply too short for ARIMA's
+AR/MA/seasonal machinery.
+
+**Verdict: ARIMA is ruled out — fixed spec or auto-selected. Order selection does not
+rescue it.** The simple methods (SBA α=.3, MA3, Theta) are both better and ~100× faster.
