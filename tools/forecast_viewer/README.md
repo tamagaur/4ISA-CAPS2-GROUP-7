@@ -23,6 +23,12 @@ each of the 132 real Tier A SKUs it shows:
 Short-holdout SKUs (< 3 holdout months) are dimmed — a 0.38 MASE scored on
 2 points is not more trustworthy than a 0.94 on 6.
 
+**`Real data` / `+ Synthetic` toggle** (SKU header): `+ Synthetic` prepends
+the synthetic 2021-22 months to training (still the same real holdout), so
+you can see per-SKU whether the extra history changes the forecast — it
+mostly doesn't for MA3, sometimes does for SBA. Diagnostic only; the
+deployed forecasts always use real data.
+
 ## Rebuild it
 
 Run this whenever `reports/baseline_forecast_per_sku.csv` changes or fresh

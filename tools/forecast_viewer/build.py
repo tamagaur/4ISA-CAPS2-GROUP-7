@@ -57,9 +57,43 @@ def nextmonth(ts):
     return (ts + pd.offsets.MonthBegin(1)).strftime("%Y-%m")
 
 
+def _score(pred, actual, train):
+    """MASE (lag-1) / MAPE / MAE / RMSE on the holdout — same conventions
+    as analytics.forecasting.baseline.evaluate_baseline. Used only for the
+    synthetic-data variant (the real variant reads the frozen CSV)."""
+    pred = np.asarray(pred, float)
+    actual = np.asarray(actual, float)
+    err = actual - pred
+    ae = np.abs(err)
+    mae = float(ae.mean())
+    rmse = float(np.sqrt((err ** 2).mean()))
+    nz = actual != 0
+    mape = float((ae[nz] / np.abs(actual[nz])).mean()) if nz.any() else None
+    lag1 = np.abs(np.diff(np.asarray(train, float)))
+    scale = float(lag1.mean()) if lag1.size else 0.0
+    mase = float(mae / scale) if scale > 0 else None
+    return {"mase": None if mase is None else round(mase, 4),
+            "mape": None if mape is None else round(mape, 4),
+            "mae": round(mae, 4), "rmse": round(rmse, 4)}
+
+
+def _inline():
+    """Re-inline the existing viz_data.json into the template (no DB)."""
+    data_str = open(os.path.join(HERE, "viz_data.json"), encoding="utf-8").read()
+    template = open(os.path.join(HERE, "template.html"), encoding="utf-8").read()
+    if "__VIZ_DATA__" not in template:
+        sys.exit("template.html is missing the __VIZ_DATA__ placeholder")
+    with open(os.path.join(HERE, "forecast_viewer.html"), "w", encoding="utf-8") as fh:
+        fh.write(template.replace("__VIZ_DATA__", data_str))
+    print("re-inlined viz_data.json into forecast_viewer.html (no DB)")
+
+
 def main():
+    if "--html-only" in sys.argv:
+        _inline()
+        return
     load_dotenv(os.path.join(REPO, ".env"))
-    db_url = os.environ.get("SUPABASE_DB_URL")
+    db_url = os.environ.get("SUPABASE_DIRECT_URL") or os.environ.get("SUPABASE_DB_URL")
     if not db_url:
         sys.exit("SUPABASE_DB_URL not set (.env at repo root)")
     if not os.path.exists(CSV_PATH):
@@ -84,6 +118,19 @@ def main():
     raw = {}
     for pk, m, qty in cur.fetchall():
         raw.setdefault(pk, {})[m] = qty
+
+    # Combined series for the "+ synthetic" toggle: real + is_demo rows,
+    # capped at the last real month so the holdout stays real. Synthetic
+    # is training context only - see reports/MODEL_BAKEOFF_UNILEVER.md.
+    cur.execute("""
+        SELECT product_key, calendar_month, SUM(COALESCE(quantity_sold, 0))
+        FROM unilever_sku_demand_fact
+        WHERE calendar_month <= (SELECT MAX(calendar_month) FROM unilever_sku_demand_fact_real)
+        GROUP BY product_key, calendar_month
+    """)
+    raw_all = {}
+    for pk, m, qty in cur.fetchall():
+        raw_all.setdefault(pk, {})[m] = qty
 
     skus = []
     for pk, sc, name in tier_a:
@@ -133,6 +180,48 @@ def main():
                     "mae": f4(r[f"{m}_mae"]), "rmse": f4(r[f"{m}_rmse"])}
                 for m in ("naive", "ma3", "sba")
             }
+
+            # ---- "+ synthetic" variant: synthetic 2021-22 prepended to
+            # training, SAME holdout months so the two views are directly
+            # comparable. Diagnostic only.
+            s_all = series_of(pk, raw_all)
+            ho_months = rec["holdout"]["months"]
+            ho_start_ts = pd.Timestamp(ho_months[0] + "-01")
+            train_all = s_all[s_all.index < ho_start_ts]
+            ho_all = s_all[s_all.index.isin([pd.Timestamp(m + "-01") for m in ho_months])]
+            has_synth = len(train_all) > len(train) and len(ho_all) == len(ho_months)
+            if has_synth:
+                fca = {
+                    "naive": naive_forecast(train_all, len(ho_all)),
+                    "ma3": moving_average_forecast(train_all, len(ho_all), MA_WINDOW),
+                    "sba": sba_forecast(train_all, len(ho_all), SBA_ALPHA),
+                }
+                rec["synthetic"] = {
+                    "actuals": [{"m": ts.strftime("%Y-%m"), "q": round(float(v), 2)}
+                                for ts, v in s_all.items()],
+                    "split": {
+                        "train_end": train_all.index.max().strftime("%Y-%m"),
+                        "holdout_start": ho_months[0],
+                        "train_months": int(len(train_all)),
+                        "holdout_months": int(len(ho_all)),
+                        "synthetic_months": int(len(train_all) - len(train)),
+                    },
+                    "holdout": {
+                        "months": ho_months,
+                        "actual": [round(float(v), 2) for v in ho_all.values],
+                        **{k: [round(float(x), 2) for x in v] for k, v in fca.items()},
+                    },
+                    "future": {
+                        "month": nextmonth(s_all.index.max()),
+                        "naive": round(float(naive_forecast(s_all, 1)[0]), 2),
+                        "ma3": round(float(moving_average_forecast(s_all, 1, MA_WINDOW)[0]), 2),
+                        "sba": round(float(sba_forecast(s_all, 1, SBA_ALPHA)[0]), 2),
+                    },
+                    "metrics": {
+                        m: _score(fca[m], ho_all.values, train_all.values)
+                        for m in ("naive", "ma3", "sba")
+                    },
+                }
         elif r["status"] == "insufficient_data":
             obs = [a["q"] for a in actuals if a["q"] > 0]
             rec["future"] = {
@@ -148,7 +237,8 @@ def main():
                    "sba_alpha": SBA_ALPHA, "min_months": MIN_MONTHS_WITH_SALES},
         "summary": {"total": len(skus),
                     "ok": sum(1 for r in skus if r["status"] == "ok"),
-                    "insufficient_data": sum(1 for r in skus if r["status"] == "insufficient_data")},
+                    "insufficient_data": sum(1 for r in skus if r["status"] == "insufficient_data"),
+                    "with_synthetic": sum(1 for r in skus if r.get("synthetic"))},
         "skus": skus,
     }
     data_str = json.dumps(payload, separators=(",", ":"), allow_nan=False)
