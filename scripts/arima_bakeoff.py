@@ -69,8 +69,10 @@ def _fetch():
     cur.execute("SELECT product_key FROM abc_classification "
                 "WHERE principal = 'unilever' AND classification_period = %s AND tier = 'A'", (ABC_PERIOD,))
     tier_a = sorted({r[0] for r in cur.fetchall()})
+    cur.execute("SELECT product_key, sku_code, product_name FROM product_dimension WHERE principal = 'unilever'")
+    names = {r[0]: (r[1], r[2]) for r in cur.fetchall()}
     c.close()
-    return raw, tier_a
+    return raw, tier_a, names
 
 
 def _series(g):
@@ -173,7 +175,7 @@ def _metrics(actual, pred, scale):
 
 
 def main():
-    raw, tier_a = _fetch()
+    raw, tier_a, names = _fetch()
     S = {pk: _series(g) for pk, g in raw.groupby("pk")}
     pks = [pk for pk in tier_a if pk in S]
     print(f"Tier A ({ABC_PERIOD}): {len(pks)} SKUs")
@@ -193,7 +195,10 @@ def main():
         scale = np.mean(np.abs(np.diff(base))) if len(base) > 1 else 0.0
 
         order, sorder = select_order(x[:origins[0]])
-        rec = {"pk": pk, "months": n, "nonzero": int((S[pk] > 0).sum()),
+        rec = {"pk": pk,
+               "sku_code": names.get(pk, (None, None))[0],
+               "product_name": names.get(pk, (None, None))[1],
+               "months": n, "nonzero": int((S[pk] > 0).sum()),
                "arima_order": f"{order}x{sorder if sorder[3] else '-'}"}
 
         preds = np.array([arima_forecast(x[:t], order, sorder) for t in origins])

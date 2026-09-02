@@ -110,8 +110,11 @@ def fetch(with_synthetic: bool):
         WHERE principal = 'unilever' AND classification_period = %s AND tier = 'A'
     """, (ABC_PERIOD,))
     tier_a = sorted({r[0] for r in cur.fetchall()})
+
+    cur.execute("SELECT product_key, sku_code, product_name FROM product_dimension WHERE principal = 'unilever'")
+    names = {r[0]: (r[1], r[2]) for r in cur.fetchall()}
     conn.close()
-    return df, tier_a
+    return df, tier_a, names
 
 
 def _last_real_month(cur) -> str:
@@ -330,7 +333,7 @@ def main() -> None:
     ap.add_argument("--out", default=None, help="CSV path (default under reports/).")
     args = ap.parse_args()
 
-    raw, tier_a = fetch(args.with_synthetic)
+    raw, tier_a, names = fetch(args.with_synthetic)
     print(f"demand rows: {len(raw)}   SKUs: {raw.product_key.nunique()}   "
           f"Tier A ({ABC_PERIOD}): {len(tier_a)}   with_synthetic={args.with_synthetic}")
 
@@ -357,7 +360,10 @@ def main() -> None:
         r = backtest_sku(series[pk], args.test_months, args.min_train, real_test_index)
         if r is None:
             continue
-        rec = {"product_key": pk, "months": len(series[pk]),
+        rec = {"product_key": pk,
+               "sku_code": names.get(pk, (None, None))[0],
+               "product_name": names.get(pk, (None, None))[1],
+               "months": len(series[pk]),
                "nonzero": int((series[pk] > 0).sum())}
         for m, d in r.items():
             rec[f"{m}_mape"] = d["mape"]
