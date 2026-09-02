@@ -4,15 +4,19 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import './DashboardLayout.css';
 
-// "Today" is pinned to March 2026, not the machine's actual clock — the
+// "Today" is pinned to February 2026, not the machine's actual clock — the
 // app's own notion of "now" needs to stay fixed regardless of when it's
 // actually opened, so every filter/default/upper-bound built on it stays
-// consistent instead of drifting forward with the real calendar. March
-// 2026 is also the system-wide upper bound on selectable dates (see
-// DateFilter.jsx's YEARS/month-options — Unilever's real data run ends
-// there), so "today" and "the latest pickable date" are the same value
-// by construction, not two numbers that have to be kept in sync by hand.
-const getCurrentRealWorldPeriod = () => ({ month: 'Mar', year: '2026' });
+// consistent instead of drifting forward with the real calendar.
+//
+// Feb 2026 is also the system-wide upper bound on selectable dates (see
+// DateFilter.jsx's LATEST_YEAR_MONTHS — it's the last month of real
+// Unilever demand data), so "today" and "the latest pickable date" are the
+// same value by construction rather than two numbers kept in sync by hand.
+// This was Mar 2026, which is the FORECAST month, not a month with
+// actuals — leaving it there made "Today" select an end month the picker
+// no longer offers.
+const getCurrentRealWorldPeriod = () => ({ month: 'Feb', year: '2026' });
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

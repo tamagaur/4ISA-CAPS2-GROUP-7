@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   ComposedChart, BarChart, Bar, Cell, Line, LabelList,
   PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
+import { HelpCircle, RotateCcw } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS } from '../theme/colors';
 import './Charts.css';
 
@@ -818,25 +819,62 @@ const URGENCY_STYLES = {
 // Keys match GET /dashboard's reorder_preview.lp_weights exactly (backend/
 // routers/dashboard.py's LP_WEIGHT_* constants, themselves a mirror of
 // analytics/optimization/lp.py's W1/W2/W3 — the weights the LP solver
-// actually used for every currently-pending recommendation). Read-only:
-// there is no warehouse-capacity/supplier-ceiling/storage-cost data
-// anywhere in the schema to re-solve the LP against, so this is a display
-// of the real weights in effect, not an adjustable control — see
-// reorder_preview.lp_weights's docstring in dashboard.py for the full
-// reasoning.
+// actually used for every currently-pending recommendation).
+//
+// The sliders below are a WHAT-IF control, not a re-solve: moving one
+// changes the displayed weight only. The recommendations underneath keep
+// reflecting the weights the solver actually ran with, because there is no
+// warehouse-capacity/supplier-ceiling/storage-cost data anywhere in the
+// schema to re-solve the LP against (see reorder_preview.lp_weights's
+// docstring in dashboard.py). Rather than silently implying the list
+// updated, the widget shows an explicit "not re-solved" note the moment
+// the sliders diverge from the solver's real weights.
+//
+// `blurb` is placeholder copy for each priority's hover tooltip — meant to
+// be replaced with the real methodology wording from the manuscript.
 const LP_PRIORITY_ROWS = [
-  { key: 'cost', label: 'Cost', color: COLORS.critical },
-  { key: 'service_level', label: 'Service level', color: COLORS.salesTrend },
-  { key: 'storage', label: 'Storage', color: COLORS.warning },
+  {
+    key: 'cost',
+    label: 'Cost',
+    color: COLORS.critical,
+    blurb: 'Placeholder: how strongly the optimizer favours minimizing total purchase and holding cost when choosing order quantities.',
+  },
+  {
+    key: 'service_level',
+    label: 'Service level',
+    color: COLORS.salesTrend,
+    blurb: 'Placeholder: how strongly the optimizer favours avoiding stockouts, so demand can be met from stock on hand.',
+  },
+  {
+    key: 'storage',
+    label: 'Storage',
+    color: COLORS.warning,
+    blurb: 'Placeholder: how strongly the optimizer favours keeping within warehouse space and limiting spoilage risk.',
+  },
 ];
 
+// The solver's real defaults (analytics/optimization/lp.py W1/W2/W3),
+// used to seed the sliders whenever the API hasn't sent weights.
+const LP_DEFAULT_PCT = { cost: 45, service_level: 35, storage: 20 };
+
+// Small "?" affordance — hover (or keyboard focus) reveals the blurb.
+// Pure CSS visibility off :hover/:focus-within, so there's no popover
+// dependency and nothing to position in JS.
+const PriorityInfo = ({ text }) => (
+  <span className="reorder-priority-info" tabIndex={0} role="button" aria-label="More information">
+    <HelpCircle size={12} />
+    <span className="reorder-priority-tip" role="tooltip">{text}</span>
+  </span>
+);
+
 // Compact dashboard-card version of the ReorderRecommendations page.
-// rows: [{ sku, product, urgency, orderQty }] — still fetched and passed
-// down (Dashboard.jsx), just no longer rendered here; kept in the prop
-// list so callers/tests don't need to change, and hasData still gates on
-// real pending rows existing, not on weights (which are always present).
+// rows: [{ sku, product, urgency, orderQty }] — rendered below the
+// priority sliders as a scrollable list, most-urgent first.
 // weights: { cost, service_level, storage } fractions (0-1), from GET
-// /dashboard's reorder_preview.lp_weights.
+// /dashboard's reorder_preview.lp_weights — seeds the sliders' starting
+// position; LP_DEFAULT_PCT is the fallback when the API sends nothing.
+const URGENCY_RANK = { CRITICAL: 0, URGENT: 1, PLANNED: 2 };
+
 export const ReorderRecommendationWidget = ({
   rows = [],
   criticalCount = 0,
@@ -847,6 +885,49 @@ export const ReorderRecommendationWidget = ({
 }) => {
   const hasData = rows.length > 0;
 
+  // The solver's real weights as whole percents — both the sliders' seed
+  // and the baseline the "not re-solved" note compares against.
+  const solverPct = useMemo(() => {
+    const read = (key) =>
+      typeof weights?.[key] === 'number' ? Math.round(weights[key] * 100) : LP_DEFAULT_PCT[key];
+    return { cost: read('cost'), service_level: read('service_level'), storage: read('storage') };
+  }, [weights]);
+
+  const [draftPct, setDraftPct] = useState(solverPct);
+
+  // Re-seed if the API's weights change (e.g. a new date range loads a
+  // different planning cycle) — but only when the user hasn't dragged yet,
+  // so a background refetch can't yank a slider out from under them.
+  const [touched, setTouched] = useState(false);
+  useEffect(() => {
+    if (!touched) setDraftPct(solverPct);
+  }, [solverPct, touched]);
+
+  const isModified = LP_PRIORITY_ROWS.some((p) => draftPct[p.key] !== solverPct[p.key]);
+  const draftTotal = LP_PRIORITY_ROWS.reduce((sum, p) => sum + draftPct[p.key], 0);
+
+  const handleSlide = (key, value) => {
+    setTouched(true);
+    setDraftPct((prev) => ({ ...prev, [key]: Number(value) }));
+  };
+
+  const handleReset = () => {
+    setTouched(false);
+    setDraftPct(solverPct);
+  };
+
+  // Most-urgent first so the critical SKUs are what's visible before the
+  // list is scrolled; ties break on the larger order quantity.
+  const sortedRows = useMemo(
+    () =>
+      [...rows].sort(
+        (a, b) =>
+          (URGENCY_RANK[a.urgency] ?? 9) - (URGENCY_RANK[b.urgency] ?? 9) ||
+          (b.orderQty ?? 0) - (a.orderQty ?? 0)
+      ),
+    [rows]
+  );
+
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
@@ -854,6 +935,12 @@ export const ReorderRecommendationWidget = ({
           <h4>Reorder recommendations</h4>
           <p>LP-optimized purchase quantities, Category A SKUs</p>
         </div>
+        {isModified && (
+          <button type="button" className="reorder-card-reset" onClick={handleReset}>
+            <RotateCcw size={12} />
+            Reset
+          </button>
+        )}
       </div>
 
       {!hasData ? (
@@ -875,39 +962,73 @@ export const ReorderRecommendationWidget = ({
             </div>
           </div>
 
-          {weights && (
-            <div className="reorder-priorities">
-              <div className="reorder-priorities-header">
-                <span className="reorder-priorities-title">Optimization priorities</span>
-                <span className="reorder-priorities-caption">Weights used for these recommendations</span>
-              </div>
-              {LP_PRIORITY_ROWS.map((p) => {
-                const fraction = weights[p.key];
-                const pct = typeof fraction === 'number' ? Math.round(fraction * 100) : null;
-                return (
-                  <div className="reorder-priority-row" key={p.key}>
-                    <div className="reorder-priority-row-top">
-                      <span className="reorder-priority-label">
-                        <span className="reorder-priority-swatch" style={{ backgroundColor: p.color }} />
-                        {p.label}
-                      </span>
-                      <span className="reorder-priority-pct">{pct === null ? '—' : `${pct}%`}</span>
-                    </div>
-                    <div className="reorder-priority-track">
-                      {pct !== null && (
-                        <div
-                          className="reorder-priority-fill"
-                          style={{ width: `${pct}%`, backgroundColor: p.color }}
-                        >
-                          <span className="reorder-priority-knob" style={{ backgroundColor: p.color }} />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+          <div className="reorder-priorities">
+            <div className="reorder-priorities-header">
+              <span className="reorder-priorities-title">Optimization priorities</span>
+              <span className="reorder-priorities-caption">Weights used for these recommendations</span>
             </div>
-          )}
+
+            {LP_PRIORITY_ROWS.map((p) => (
+              <div className="reorder-priority-row" key={p.key}>
+                <div className="reorder-priority-row-top">
+                  <label className="reorder-priority-label" htmlFor={`lp-weight-${p.key}`}>
+                    <span className="reorder-priority-swatch" style={{ backgroundColor: p.color }} />
+                    {p.label}
+                  </label>
+                  <PriorityInfo text={p.blurb} />
+                  <span className="reorder-priority-pct">{draftPct[p.key]}%</span>
+                </div>
+                <input
+                  id={`lp-weight-${p.key}`}
+                  className="reorder-priority-slider"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={draftPct[p.key]}
+                  onChange={(e) => handleSlide(p.key, e.target.value)}
+                  style={{ '--slider-accent': p.color, '--slider-pct': `${draftPct[p.key]}%` }}
+                />
+              </div>
+            ))}
+
+            {/* Honest about what the sliders do and don't do: they're a
+                what-if, and the list below is still the solver's real
+                output. Also surfaces when the three stop summing to 100%,
+                since the LP's weights are shares of one whole. */}
+            {isModified && (
+              <p className="reorder-priorities-note">
+                What-if only — recommendations below still use the solver&apos;s actual weights
+                ({solverPct.cost}/{solverPct.service_level}/{solverPct.storage}).
+                {draftTotal !== 100 && ` Weights total ${draftTotal}%, not 100%.`}
+              </p>
+            )}
+          </div>
+
+          <div className="reorder-mini-list">
+            {sortedRows.map((r) => (
+              <div className="reorder-mini-row" key={r.sku}>
+                <div className="reorder-mini-row-main">
+                  <span className="reorder-mini-sku">{r.sku}</span>
+                  <span className="reorder-mini-product">{r.product}</span>
+                </div>
+                <div className="reorder-mini-row-side">
+                  <span
+                    className="urgency-badge-mini"
+                    style={{
+                      backgroundColor: URGENCY_STYLES[r.urgency]?.bg,
+                      color: URGENCY_STYLES[r.urgency]?.color,
+                    }}
+                  >
+                    {r.urgency}
+                  </span>
+                  <span className="reorder-mini-qty">
+                    {Number(r.orderQty ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} units
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </>
       )}
     </div>

@@ -214,7 +214,7 @@ const Dashboard = () => {
 
         {/* ── Portfolio-level aggregate forecast + reorder recommendations ── */}
         <div className="dashboard-section">
-          <div className="chart-duo">
+          <div className="chart-duo chart-duo-tall">
             <PortfolioForecastWidget
               series={portfolioSeries}
               gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}

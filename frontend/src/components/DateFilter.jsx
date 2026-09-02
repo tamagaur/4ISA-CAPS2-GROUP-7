@@ -5,17 +5,25 @@ import './DateFilter.css';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// System-wide selectable range: Jan 2023 through Mar 2026 — Unilever's
-// real data (the only principal left, see DashboardLayout.jsx/backend's
-// 2026-09 Del Monte removal) runs Jan 2023 - Mar 2026 on the live
-// database; anything outside that is real, but permanently empty, so it
-// isn't offered as a choice rather than being pickable and then showing
-// a blank page. 2023 is the floor, so every one of its months is valid;
-// 2026 is the ceiling, so only Jan-Mar 2026 are — no month-restriction is
-// needed for 2024/2025, which sit entirely inside the range.
+// System-wide selectable range: Jan 2023 through FEBRUARY 2026 — the exact
+// span of real Unilever demand data (verified against
+// Unilever_SKU_Demand_Fact_Real: MIN = 2023-01, MAX = 2026-02). Unilever is
+// the only principal left, see DashboardLayout.jsx / the backend's 2026-09
+// Del Monte removal.
+//
+// The ceiling was Mar 2026 before, which conflated two different things:
+// 2026-03 is the FORECAST month (MA3 projects last-actual + 1), not a month
+// anyone has actuals for. Offering it as a selectable end let the user pick
+// a window whose final month is empty by definition on every page that
+// plots actuals. The forecast month is now derived from the selected end
+// rather than being pickable itself.
+//
+// 2023 is the floor, so all of its months are valid; 2026 is the ceiling,
+// so only Jan-Feb are. 2024/2025 sit entirely inside the range and need no
+// month restriction.
 const YEARS = ['2023', '2024', '2025', '2026'];
 const LATEST_YEAR = '2026';
-const LATEST_YEAR_MONTHS = ['Jan', 'Feb', 'Mar'];
+const LATEST_YEAR_MONTHS = ['Jan', 'Feb'];
 const monthsForYear = (year) => (year === LATEST_YEAR ? LATEST_YEAR_MONTHS : MONTHS);
 
 const noop = () => {};
@@ -24,7 +32,7 @@ const noop = () => {};
 // SKU Forecast, ABC Classification, Reorder Recs) so the control stays in
 // one uniform place app-wide.
 //
-// Two modes, same bounded Jan 2023 - Mar 2026 option logic either way:
+// Two modes, same bounded Jan 2023 - Feb 2026 option logic either way:
 //   SHARED (default — no `localValue`/`onLocalChange` passed): edits the
 //     *pending* period held in DashboardLayout, not the applied one —
 //     nothing the rest of the app reads changes until Save is clicked
@@ -47,7 +55,7 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset }) => {
 
   const sm = (isLocal ? localValue.startMonth : outlet.pendingStartMonth) ?? 'Jan';
   const sy = (isLocal ? localValue.startYear : outlet.pendingStartYear) ?? '2026';
-  const em = (isLocal ? localValue.endMonth : outlet.pendingEndMonth) ?? 'Mar';
+  const em = (isLocal ? localValue.endMonth : outlet.pendingEndMonth) ?? 'Feb';
   const ey = (isLocal ? localValue.endYear : outlet.pendingEndYear) ?? '2026';
 
   const startMonthOptions = monthsForYear(sy);

@@ -108,6 +108,129 @@
   font-weight: 600;
 }
 
+/* ── Empty state — shown until a SKU is chosen ─────────────────────────── */
+.forecast-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.5rem;
+  /* Roughly the height the chart card occupies, so selecting a SKU swaps
+     content in place instead of making the page jump. */
+  min-height: 380px;
+  padding: 3rem 2rem;
+  background-color: #ffffff;
+  border: 1px dashed #dbe2ea;
+  border-radius: 12px;
+}
+
+.forecast-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 0.35rem;
+  border-radius: 50%;
+  background-color: #f5f0f8;
+  color: #6B2C5F;
+}
+
+.forecast-empty-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.forecast-empty-body {
+  margin: 0;
+  max-width: 30rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #718096;
+}
+
+/* ── Date-range coverage states ──────────────────────────────────────────
+   Amber = the chart is real but narrower than what was picked (partial
+   overlap). Reserved amber rather than red because nothing is wrong — the
+   data simply doesn't extend that far. */
+.forecast-range-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 0.9rem 0;
+  padding: 0.7rem 1rem;
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+}
+
+.forecast-range-warning-text {
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: #92400e;
+  min-width: 0;
+}
+
+.forecast-range-warning-text strong {
+  color: #78350f;
+  font-weight: 700;
+}
+
+/* Blocking state: no overlap at all, so no chart is drawn. */
+.forecast-range-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 2rem 1.75rem;
+  background-color: #f8fafc;
+  border: 1px dashed #cbd5e0;
+  border-radius: 10px;
+}
+
+.forecast-range-error-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.forecast-range-error-body {
+  margin: 0;
+  max-width: 46rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #4a5568;
+}
+
+.forecast-range-error-body strong {
+  color: #1a202c;
+  font-weight: 600;
+}
+
+.forecast-range-fix-btn {
+  flex-shrink: 0;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid #6B2C5F;
+  border-radius: 6px;
+  background-color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6B2C5F;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.forecast-range-fix-btn:hover {
+  background-color: #6B2C5F;
+  color: #ffffff;
+}
+
 /* Combobox Controls Bar & Filter Chips */
 .combobox-controls-bar {
   display: flex;
@@ -332,7 +455,15 @@
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.05rem;
+}
+
+/* Product name + brand share one line in the compact card. */
+.sku-meta-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .card-star-btn {
@@ -362,17 +493,19 @@
   color: #d97706;
 }
 
-/* Selected SKU Card */
+/* Selected SKU Card — deliberately compact. It's an identity banner, not
+   the content of the page, so it's kept short to pull the chart higher up
+   the fold rather than pushing it below it. */
 .selected-sku-card {
   background-color: #ffffff;
   border-radius: 12px;
-  padding: 1.5rem 2rem;
+  padding: 0.85rem 1.5rem;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
   border: 1px solid #e2e8f0;
   border-left: 4px solid #6B2C5F;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .sku-info-left {
@@ -388,22 +521,23 @@
 }
 
 .sku-code-value {
-  font-size: 1.6rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: #1a202c;
   line-height: 1.2;
-  margin-bottom: 0.2rem;
-}
-
-.sku-product-name {
-  font-size: 0.95rem;
-  color: #4a5568;
-  font-weight: 500;
   margin-bottom: 0.1rem;
 }
 
+.sku-product-name {
+  font-size: 0.85rem;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+/* Brand sits inline after the product name rather than on its own line —
+   one row saved, and "Unilever" is low-value now the app is Unilever-only. */
 .sku-brand-name {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #a0aec0;
 }
 
@@ -445,37 +579,129 @@
    same visual weight as every other module's key metrics. */
 .forecast-accuracy-row {
   display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 1rem 1.25rem;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 1.75rem;
+  padding: 1.15rem 1.5rem;
   margin-bottom: 1.25rem;
-  background-color: #f7fafc;
-  border: 1px solid #edf2f7;
+  /* Subtle violet wash keyed to the forecast series, so the stat strip
+     reads as part of the forecast card rather than generic grey chrome. */
+  background: linear-gradient(180deg, #faf8ff 0%, #f7fafc 100%);
+  border: 1px solid #ede9fe;
   border-radius: 10px;
 }
 
 .forecast-stat-block {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.25rem;
+  min-width: 0;
 }
 
 .forecast-stat-label {
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #a0aec0;
+  color: #8b93a7;
   text-transform: uppercase;
 }
 
 .forecast-stat-value {
-  font-size: 1.3rem;
+  font-size: 1.35rem;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+/* Tinted to match the chart series each number describes. The figure and
+   its unit are deliberately two different weights/colours so the eye lands
+   on the magnitude first and reads "units" as the label it is, instead of
+   one flat block of colour. */
+.forecast-stat-value-forecast {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+/* Violet -> indigo gradient across the digits, echoing the forecast line
+   fading into its confidence band. Falls back to solid violet anywhere
+   background-clip:text isn't supported (the `color` below is the fallback;
+   -webkit-text-fill-color only wins where the clip actually works). */
+.forecast-stat-number {
+  color: #7C3AED;
+  background-image: linear-gradient(95deg, #7C3AED 0%, #4F46E5 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.forecast-stat-unit {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #9F8FCB;
+  letter-spacing: 0.02em;
+}
+
+/* Low and high bounds carry slightly different tones so the range reads as
+   two endpoints rather than one long number, with the dash receding. */
+.forecast-stat-value-range {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+
+.range-low {
+  color: #8B5CF6;
+}
+
+.range-dash {
+  color: #cbd5e0;
+  font-weight: 500;
+}
+
+.range-high {
+  color: #5B21B6;
 }
 
 .forecast-stat-value-neutral {
   color: #1a202c;
+}
+
+/* Trend reads as a chip so the direction is legible at a glance. Colours
+   are DIRECTIONAL, not judgemental — slate-blue for rising, amber for
+   falling, grey for flat. Deliberately not green/red: a rising or falling
+   forecast isn't inherently good or bad on its own (whether it's a problem
+   depends on ROP/current stock, which live elsewhere in the app), and
+   red here would clash with the alert-red used for genuine criticals. */
+.forecast-trend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  align-self: flex-start;
+  padding: 0.1rem 0.5rem 0.1rem 0.35rem;
+  border-radius: 6px;
+  font-size: 1.15rem;
+}
+
+.forecast-trend-chip.trend-up {
+  color: #3730A3;
+  background-color: #eef2ff;
+}
+
+.forecast-trend-chip.trend-down {
+  color: #92400e;
+  background-color: #fffbeb;
+}
+
+.forecast-trend-chip.trend-flat {
+  color: #475569;
+  background-color: #f1f5f9;
+}
+
+.forecast-trend-icon {
+  flex-shrink: 0;
 }
 
 .forecast-stat-desc {
@@ -483,9 +709,11 @@
   color: #718096;
 }
 
+/* Stretches to the tallest stat block (align-items: stretch on the row)
+   instead of a fixed 32px, which left a stub next to the taller blocks. */
 .forecast-stat-divider {
   width: 1px;
-  height: 32px;
+  align-self: stretch;
   background-color: #e2e8f0;
 }
 
@@ -523,34 +751,14 @@
   gap: 0.5rem;
 }
 
-.legend-line {
-  height: 2px;
-  width: 24px;
-  display: inline-block;
-}
-
-.line-actual {
-  background-color: #5B5FEF;
-}
-
-.line-forecast {
-  background-image: linear-gradient(to right, #A855F7 50%, transparent 50%);
-  background-size: 8px 100%;
-  background-repeat: repeat-x;
-  height: 2px;
-  width: 24px;
-}
-
-.legend-area {
-  width: 24px;
+/* One rule for all three legend swatches — the shape and colour of each is
+   drawn as inline SVG in the JSX (see the chart-legend block there), which
+   keeps them pixel-exact miniatures of the actual chart marks. */
+.legend-swatch {
+  width: 28px;
   height: 12px;
-  border-radius: 4px;
-  display: inline-block;
-}
-
-.area-ci {
-  background-color: #F3E8FF;
-  border: 1px solid #EBC9E1;
+  flex-shrink: 0;
+  overflow: visible;
 }
 
 .legend-label {
@@ -558,9 +766,14 @@
   color: #4a5568;
 }
 
+/* No fixed height here on purpose. This used to be 400px while the
+   ResponsiveContainer inside also declared its own height — when the two
+   disagreed the X-axis tick row overflowed and got clipped, so the month
+   labels were invisible on load. Height is now declared in ONE place
+   (ResponsiveContainer's height prop in SKUForecast.jsx) and the wrapper
+   just grows to fit it. */
 .chart-wrapper {
   width: 100%;
-  height: 400px;
 }
 
 .forecast-tooltip {
