@@ -174,7 +174,8 @@ header.page .spacer { flex: 1; }
 .stat-badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
 .stat-badge.syn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 10%, var(--surface-2)); }
 
-.dataswitch { display: inline-flex; margin-left: auto; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+.switchrow { display: inline-flex; gap: 8px; margin-left: auto; }
+.dataswitch { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
 .ds-btn {
   font: inherit; font-size: 12px; font-weight: 500; padding: 4px 12px; cursor: pointer;
   background: var(--surface); color: var(--ink-2); border: 0; border-left: 1px solid var(--line);
@@ -346,7 +347,7 @@ document.getElementById("gen-note").textContent = "computed " + DATA.generated +
 
 /* ---------- rail ---------- */
 const CLASS_ORDER = ["smooth", "erratic", "unclassifiable", "insufficient"];
-const state = { q: "", cls: new Set(), sel: DATA.skus[0].sku, syn: false };
+const state = { q: "", cls: new Set(), sel: DATA.skus[0].sku, syn: false, h: 1 };
 
 /* Merge the "+ synthetic" variant over the base SKU record when the toggle
    is on. Identity (sku/name/status/class/span) always comes from the base;
@@ -402,7 +403,7 @@ function renderList() {
       let badgeCls = "na", badgeTxt = "—";
       if (m != null) { badgeCls = m < 1 ? "pass" : "fail"; badgeTxt = m.toFixed(2); }
       const holdTxt = hd == null ? "" :
-        `<span class="hold${hd < 3 ? " short" : ""}" title="holdout length (months the MASE was scored on)">${hd}-mo holdout${hd < 3 ? " ⚠" : ""}</span>`;
+        `<span class="hold${hd < 3 ? " short" : ""}" title="rolling backtest length (months the MASE was scored on)">${hd}-mo test${hd < 3 ? " ⚠" : ""}</span>`;
       b.innerHTML = `<span class="txt">
           <span class="code mono">${s.sku}</span>
           <span class="meta">${classOf(s)} · ${s.months_with_sales} mo sold</span>
@@ -447,12 +448,12 @@ function confTier(s) {
   if (M.mase == null)
     return { tier: "low", txt: "Unscored — this SKU has no naive benchmark (flat training window)." };
   if (h < 3)
-    return { tier: "low", txt: `Low confidence — MA3's error here is estimated on only <b>${h}</b> holdout month${h === 1 ? "" : "s"}.` };
+    return { tier: "low", txt: `Low confidence — MA3's error here is estimated on only <b>${h}</b> monthly test${h === 1 ? "" : "s"}.` };
   if (M.mase >= 1)
     return { tier: "low", txt: `Low confidence — MA3 did <b>not</b> beat a naive forecast on the holdout (MASE ${fmt2(M.mase)}).` };
   if (M.mase < 0.75 && h >= 6)
-    return { tier: "moderate", txt: `Moderate confidence — MA3 clearly beat the naive benchmark (MASE <b>${fmt2(M.mase)}</b>) across <b>${h}</b> holdout months.` };
-  return { tier: "modest", txt: `Modest confidence — MA3 edged the naive benchmark (MASE <b>${fmt2(M.mase)}</b>) over <b>${h}</b> holdout months.` };
+    return { tier: "moderate", txt: `Moderate confidence — MA3 clearly beat the naive benchmark (MASE <b>${fmt2(M.mase)}</b>) across <b>${h}</b> monthly 1-step tests.` };
+  return { tier: "modest", txt: `Modest confidence — MA3 edged the naive benchmark (MASE <b>${fmt2(M.mase)}</b>) over <b>${h}</b> monthly 1-step tests.` };
 }
 
 function renderMain() {
@@ -470,11 +471,18 @@ function renderMain() {
 
   const synAvail = !!(base && base.synthetic);
   const synN = synAvail ? base.synthetic.split.synthetic_months : 0;
-  const dataBtns = `<div class="dataswitch" role="group" aria-label="training data">
+  const dataBtns = `<div class="switchrow">
+    <div class="dataswitch" role="group" aria-label="training data">
       <button type="button" class="ds-btn${state.syn ? "" : " on"}" data-syn="0">Real data</button>
       <button type="button" class="ds-btn${state.syn ? " on" : ""}" data-syn="1" ${synAvail ? "" : "disabled"}
         title="${synAvail ? `prepend ${synN} synthetic months (2021-22) to training` : "no synthetic history for this SKU"}">+ Synthetic</button>
-    </div>`;
+    </div>
+    <div class="dataswitch" role="group" aria-label="forecast horizon">
+      <button type="button" class="ds-btn${state.h === 1 ? " on" : ""}" data-h="1">1 mo</button>
+      <button type="button" class="ds-btn${state.h === 3 ? " on" : ""}" data-h="3"
+        title="3-month forecast — naive/MA3/SBA are level forecasters, so the path is flat">3 mo</button>
+    </div>
+  </div>`;
 
   const head = `<section class="card">
     <div class="sku-head">
@@ -486,7 +494,7 @@ function renderMain() {
         <span class="stat-badge">class <b>${cls}</b></span>
         <span class="stat-badge">sold <b>${s.months_with_sales}</b> / span <b>${s.months_span}</b> mo</span>
         <span class="stat-badge">sales window <b>${spanTxt}</b></span>
-        ${s.split ? `<span class="stat-badge">train <b>${s.split.train_months}</b> · holdout <b>${s.split.holdout_months}</b></span>` : ""}
+        ${s.split ? `<span class="stat-badge">train <b>${s.split.train_months}</b>+ · <b>${s.split.holdout_months}</b> monthly tests</span>` : ""}
         ${state.syn && synAvail ? `<span class="stat-badge syn">+ ${synN} synthetic training months (2021-22)</span>` : ""}
       </div>
     </div>
@@ -503,29 +511,34 @@ function renderMain() {
       <div class="metric-row">
         <div class="metric"><span class="k">MA3 · MASE</span>
           <span class="v num ${M.mase == null ? "" : (pass ? "pass" : "fail")}">${fmt2(M.mase)}</span>
-          <span class="d">${M.mase == null ? "no benchmark" : (pass ? "beats naive (&lt;1.0)" : "worse than naive")} · on ${h}-mo holdout</span></div>
+          <span class="d">${M.mase == null ? "no benchmark" : (pass ? "beats naive (&lt;1.0)" : "worse than naive")} · on ${h}-mo rolling test</span></div>
         <div class="metric"><span class="k">MA3 · MAPE</span>
           <span class="v num">${pct(M.mape)}</span><span class="d">mean abs % error</span></div>
         <div class="metric"><span class="k">MA3 · MAE</span>
           <span class="v num">${fmtN(M.mae)}</span><span class="d">units / month</span></div>
         <div class="metric"><span class="k">vs naive</span>
-          <span class="v num">${fmt2(N.mase)}</span><span class="d">naive MASE · ${h}-mo holdout</span></div>
+          <span class="v num">${fmt2(N.mase)}</span><span class="d">naive MASE · ${h}-mo rolling test</span></div>
       </div>
       ${low ? `<div class="shortcav">Holdout is only <b>${h} month${h === 1 ? "" : "s"}</b> — every MASE/MAPE/MAE below is
         an estimate from ${h} point${h === 1 ? "" : "s"}. Treat it as indicative, not a measured accuracy.</div>` : ""}
       <div class="nextcall">
-        <span class="nc-k">Next month · ${s.future.month}</span>
-        <span class="nc-v">${fmtN(s.future.ma3)}</span><span class="nc-unit">units (MA3)</span>
-        <span class="nc-conf tier-${ct.tier}">${ct.txt}</span>
+        ${state.h === 3 && s.future3
+          ? `<span class="nc-k">Next 3 months</span>
+             <span class="nc-v">${s.future3.months.map((mm, k) => fmtN(s.future3.ma3[k])).join(" · ")}</span>
+             <span class="nc-unit">units/mo (MA3) — ${s.future3.months.join(", ")}</span>
+             <span class="nc-conf tier-${ct.tier}">MA3 holds the level flat across the horizon — ${ct.txt}</span>`
+          : `<span class="nc-k">Next month · ${s.future.month}</span>
+             <span class="nc-v">${fmtN(s.future.ma3)}</span><span class="nc-unit">units (MA3)</span>
+             <span class="nc-conf tier-${ct.tier}">${ct.txt}</span>`}
       </div>
     </section>
     <section class="card chart-card">
-      <h2>Actuals &amp; MA3 forecast — next point ${s.future.month}</h2>
+      <h2>Actuals &amp; MA3 forecast — ${state.h === 3 ? "next 3 months" : "next point " + s.future.month}</h2>
       <div class="chart-toolbar">
         <div class="legend">
           <span class="li"><span class="sw actual"></span>actual sales</span>
           <span class="li"><span class="sw forecast"></span>MA3 forecast</span>
-          <span class="li"><span class="sw wash"></span>holdout window</span>
+          <span class="li"><span class="sw wash"></span>rolling test window</span>
           ${showBench.on ? '<span class="li"><span class="sw bench"></span>naive / SBA forecast</span>' : ""}
         </div>
         <label class="toggle"><input type="checkbox" id="benchToggle" ${showBench.on ? "checked" : ""}>show all three forecast lines</label>
@@ -533,7 +546,7 @@ function renderMain() {
       <div class="chart-frame" id="chart-frame"></div>
     </section>
     <section class="card cmp-card">
-      <h2>All three methods on this SKU — holdout accuracy (MASE gate = 1.0)</h2>
+      <h2>All three methods on this SKU — rolling backtest accuracy (MASE gate = 1.0)</h2>
       <div class="chart-frame"><table class="mtable" id="method-table"></table></div>
       <p class="cmp-note">One-step-ahead for ${s.future.month}: MA3 <b>${fmtN(s.future.ma3)}</b> · naive ${fmtN(s.future.naive)} · SBA ${fmtN(s.future.sba)} units.
       Deployed method is <b>MA3</b> for every Tier A SKU regardless of which row wins here — see footer.</p>
@@ -560,9 +573,16 @@ function renderMain() {
 
   main.querySelectorAll(".ds-btn").forEach(b => {
     b.onclick = () => {
-      const want = b.dataset.syn === "1";
-      if (want === state.syn || b.disabled) return;
-      state.syn = want;
+      if (b.disabled) return;
+      if (b.dataset.syn !== undefined) {
+        const want = b.dataset.syn === "1";
+        if (want === state.syn) return;
+        state.syn = want;
+      } else if (b.dataset.h !== undefined) {
+        const want = +b.dataset.h;
+        if (want === state.h) return;
+        state.h = want;
+      }
       renderMain();
     };
   });
@@ -582,14 +602,21 @@ function drawChart(s) {
   const iw = W - PAD.l - PAD.r, ih = H - PAD.t - PAD.b;
 
   const months = s.actuals.map(a => a.m);
-  const future = s.future && s.future.month && s.status === "ok" ? s.future.month : null;
-  const allMonths = future ? [...months, future] : months;
+  // future path: 1 month, or 3 when the horizon toggle is on and future3 exists
+  const use3 = state.h === 3 && s.future3 && s.status === "ok";
+  const futMonths = s.status !== "ok" ? []
+    : use3 ? s.future3.months
+    : (s.future && s.future.month ? [s.future.month] : []);
+  const futVal = (m) => use3 ? s.future3[m] : (s.future ? [s.future[m]] : []);
+  const future = futMonths.length ? futMonths[futMonths.length - 1] : null;
+  const allMonths = [...months, ...futMonths];
   const n = allMonths.length;
+  const fi0 = months.length;                       // index of the first future month
   const x = i => PAD.l + (n === 1 ? iw / 2 : iw * i / (n - 1));
 
   const vals = s.actuals.map(a => a.q);
   if (s.holdout) METHODS.forEach(m => vals.push(...s.holdout[m]));
-  if (s.future && s.status === "ok") vals.push(s.future.ma3, s.future.naive, s.future.sba);
+  if (s.status === "ok") METHODS.forEach(m => vals.push(...futVal(m)));
   let vmax = Math.max(1, ...vals), vmin = Math.min(0, ...vals);
   const padv = (vmax - vmin) * 0.08; vmax += padv;
   const y = v => PAD.t + ih - ih * (v - vmin) / (vmax - vmin || 1);
@@ -631,24 +658,35 @@ function drawChart(s) {
       const seg = s.holdout.months.map((mm, k) => [x(months.indexOf(mm)), y(arr[k])]);
       return anchor ? [anchor, ...seg] : seg;
     };
+    // future segment for a method: last holdout point -> each future month
+    const futSeg = (m) => {
+      const fv = futVal(m);
+      if (!fv.length) return [];
+      const startY = s.holdout[m][s.holdout[m].length - 1];
+      const pts = [[x(months.length - 1 + 0), y(startY)]]; // last holdout x
+      pts[0] = [x(months.indexOf(s.holdout.months[s.holdout.months.length - 1])), y(startY)];
+      fv.forEach((v, k) => pts.push([x(fi0 + k), y(v)]));
+      return pts;
+    };
     fcPath = `<path class="fc-line" d="${P(mk(s.holdout.ma3))}"/>`;
-    if (future) {
-      const lastHo = months.indexOf(s.holdout.months[s.holdout.months.length - 1]);
-      fcPath += `<path class="fc-line" d="${P([[x(lastHo), y(s.holdout.ma3[s.holdout.ma3.length - 1])], [x(n - 1), y(s.future.ma3)]])}"/>`;
-    }
+    if (future) fcPath += `<path class="fc-line" d="${P(futSeg("ma3"))}"/>`;
     const lastHoIdx = months.indexOf(s.holdout.months[s.holdout.months.length - 1]);
     const endLabels = [];  // {y, text, color} — de-collided at the right margin
-    if (future) endLabels.push({ y: y(s.future.ma3), text: "MA3 " + fmtN(s.future.ma3), color: "var(--forecast)", w: 700 });
+    if (future) {
+      const lastMa3 = futVal("ma3")[futVal("ma3").length - 1];
+      endLabels.push({ y: y(lastMa3), text: "MA3 " + fmtN(lastMa3), color: "var(--forecast)", w: 700 });
+    }
     if (showBench.on) {
       for (const m of ["naive", "sba"]) {
-        const seg = mk(s.holdout[m]);
-        let d = P(seg);
-        if (future && s.future[m] != null) d += ` L ${x(n - 1).toFixed(1)} ${y(s.future[m]).toFixed(1)}`;
+        let d = P(mk(s.holdout[m]));
+        const seg = futSeg(m);
+        if (seg.length) d += " " + seg.slice(1).map(p => `L ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
         benchPaths += `<path class="bench-line ${m}" d="${d}"/>`;
-        const endY = future && s.future[m] != null ? y(s.future[m]) : y(s.holdout[m][s.holdout[m].length - 1]);
-        const endX = future && s.future[m] != null ? x(n - 1) : x(lastHoIdx);
+        const fv = futVal(m);
+        const endY = fv.length ? y(fv[fv.length - 1]) : y(s.holdout[m][s.holdout[m].length - 1]);
+        const endX = fv.length ? x(n - 1) : x(lastHoIdx);
         benchPaths += `<circle class="dot-bench" cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="2"/>`;
-        endLabels.push({ y: endY, text: METHOD_LABEL[m] + (future && s.future[m] != null ? " " + fmtN(s.future[m]) : ""), color: "var(--muted)", w: 500 });
+        endLabels.push({ y: endY, text: METHOD_LABEL[m] + (fv.length ? " " + fmtN(fv[fv.length - 1]) : ""), color: "var(--muted)", w: 500 });
       }
     }
     // spread labels so none overlap (min 12px apart), keep within plot
@@ -665,11 +703,13 @@ function drawChart(s) {
   const actualDots = s.actuals.map((a, i) => `<circle class="dot-actual" cx="${x(i).toFixed(1)}" cy="${y(a.q).toFixed(1)}" r="2.5"/>`).join("");
   let futureMark = "";
   if (future) {
-    futureMark = `<circle class="future-ring" cx="${x(n - 1).toFixed(1)}" cy="${y(s.future.ma3).toFixed(1)}" r="4.5"/>`;
+    const fv = futVal("ma3");
+    futureMark = fv.map((v, k) =>
+      `<circle class="future-ring" cx="${x(fi0 + k).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${k === fv.length - 1 ? 4.5 : 3}"/>`).join("");
   }
 
   frame.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
-      aria-label="Monthly actual sales for ${s.sku} with MA3 forecast over the holdout window">
+      aria-label="Monthly actual sales for ${s.sku} with MA3 forecast over the rolling test window">
     ${wash}${grid}
     <line class="axis-line" x1="${PAD.l}" y1="${PAD.t + ih}" x2="${PAD.l + iw}" y2="${PAD.t + ih}"/>
     ${benchPaths}
@@ -702,7 +742,16 @@ function attachHover(svg, s, geo) {
       if (showBench.on) { rows.push(["naive", fmtN(s.holdout.naive[hk]), "var(--muted)"]);
         rows.push(["SBA", fmtN(s.holdout.sba[hk]), "var(--muted)"]); }
     }
-    if (s.future && m === s.future.month) rows.push(["MA3 next", fmtN(s.future.ma3), "var(--forecast)"]);
+    if (s.future3 && state.h === 3) {
+      const fk = s.future3.months.indexOf(m);
+      if (fk >= 0) {
+        rows.push(["MA3 fcst", fmtN(s.future3.ma3[fk]), "var(--forecast)"]);
+        if (showBench.on) { rows.push(["naive fcst", fmtN(s.future3.naive[fk]), "var(--muted)"]);
+          rows.push(["SBA fcst", fmtN(s.future3.sba[fk]), "var(--muted)"]); }
+      }
+    } else if (s.future && m === s.future.month) {
+      rows.push(["MA3 next", fmtN(s.future.ma3), "var(--forecast)"]);
+    }
     if (!rows.length) { tt.style.opacity = 0; return; }
     tt.innerHTML = `<div class="tt-m mono">${m}</div>` + rows.map(([k, v, c]) =>
       `<div class="tt-row"><span><span class="dot" style="background:${c}"></span>${k}</span><span class="mono num">${v}</span></div>`).join("");
@@ -747,7 +796,8 @@ document.getElementById("footer").innerHTML = `
   <b>${DATA.summary.ok}</b> forecastable · <b>${DATA.summary.insufficient_data}</b> insufficient history · 0 dead.
   Method: <b>MA3</b> (3-month moving average) is the deployable choice — it beat SARIMA, naive, SBA,
   demand-class routing, history-length routing, an ensemble, and a per-SKU selector on this data.
-  Holdout = last ${(DATA.params.holdout_fraction * 100).toFixed(0)}% of each SKU's series (time-ordered).
+  Backtest: <b>${DATA.params.backtest}</b> — this matches how the forecast is actually run
+  (re-run before each order cycle), so these numbers are the realistic ones.
   MASE &lt; 1.0 = beats a naive forecast. SBA α = ${DATA.params.sba_alpha}, untuned.
   <div class="disclaim">These numbers are <b>report-only</b>. Nothing here has been written to
   <span class="mono">Forecast_Result</span> — the live dashboard still shows the older SARIMA run.</div>`;

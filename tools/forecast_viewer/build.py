@@ -8,10 +8,14 @@ Read-only against the DB. Produces two files next to this script:
 
 Data sources:
   - actuals:  Unilever_SKU_Demand_Fact_Real (the _Real view; demo rows excluded)
-  - forecasts: recomputed here exactly as analytics/forecasting/baseline.py does
-               (same 80/20 split, same MA3/Naive/SBA, same one-step-ahead)
-  - metrics:  reports/baseline_forecast_per_sku.csv (produced by
-              scripts/run_baseline_forecast.py — run that first)
+  - forecasts + metrics: recomputed here with a ROLLING-ORIGIN, 1-step-ahead
+    backtest over the last 6 real months (model refit at every origin), the
+    same method as scripts/model_bakeoff.py. This matches how the forecast is
+    actually run in production, so the numbers here == the bake-off Excel.
+    (The old single 80/20 split held one forecast flat for 6 months and
+    penalised MA3 for going stale — not how it's deployed.)
+  - reports/baseline_forecast_per_sku.csv is still read for the demand class,
+    span and first/last-sale month (not for the accuracy metrics anymore).
 
 Usage (from the repo root, with .env holding SUPABASE_DB_URL):
     python tools/forecast_viewer/build.py
@@ -31,7 +35,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, REPO)
 
-from analytics.forecasting.sarima import train_holdout_split, HOLDOUT_FRACTION
 from analytics.forecasting.baseline import (
     naive_forecast, moving_average_forecast, sba_forecast,
     MA_WINDOW, SBA_ALPHA, MIN_MONTHS_WITH_SALES,
@@ -39,6 +42,66 @@ from analytics.forecasting.baseline import (
 
 CSV_PATH = os.path.join(REPO, "reports", "baseline_forecast_per_sku.csv")
 ABC_PERIOD = "2026-02"  # the real ABC period run_baseline_forecast.py resolves to
+
+TEST_H = 6        # rolling-origin test months (the last 6 real months)
+MIN_TRAIN = 12    # months of history required before the first test origin
+
+
+def _one_step(method, x):
+    """1-step-ahead point forecast on the array x (all history so far)."""
+    xs = pd.Series(x)
+    if method == "naive":
+        return float(naive_forecast(xs, 1)[0])
+    if method == "ma3":
+        return float(moving_average_forecast(xs, 1, MA_WINDOW)[0])
+    return float(sba_forecast(xs, 1, SBA_ALPHA)[0])
+
+
+def rolling_backtest(s, prefix=None):
+    """Rolling-origin, 1-step-ahead over the last TEST_H real months —
+    the model is refit at every origin. This is how the forecast is
+    actually run in production (re-run before each order cycle), so these
+    metrics are the realistic ones. `prefix` (a Series of synthetic months)
+    is prepended to TRAINING only; the test origins stay real.
+
+    Returns None if there isn't enough history.
+    """
+    real = s.to_numpy(float)
+    n = len(real)
+    if n < MIN_TRAIN + 3:
+        return None
+    first = max(MIN_TRAIN, n - TEST_H)
+    origins = list(range(first, n))
+    if len(origins) < 3:
+        return None
+    combined = (np.concatenate([prefix.to_numpy(float), real])
+                if prefix is not None and len(prefix) else real)
+    off = len(combined) - n            # index shift into `combined`
+    months = [s.index[t].strftime("%Y-%m") for t in origins]
+    actual = [round(float(real[t]), 2) for t in origins]
+    out = {"months": months, "actual": actual, "origin_index": [t for t in origins]}
+    for m in ("naive", "ma3", "sba"):
+        preds = [round(max(0.0, _one_step(m, combined[:off + t])), 2) for t in origins]
+        out[m] = preds
+    # MASE scale: mean |lag-1 diff| of the training window before the first
+    # origin (constant across origins), same convention as scripts/model_bakeoff.py
+    base = combined[:off + first]
+    scale = float(np.mean(np.abs(np.diff(base)))) if len(base) > 1 else 0.0
+    a = np.array([real[t] for t in origins], float)
+    out["metrics"] = {}
+    for m in ("naive", "ma3", "sba"):
+        p = np.array(out[m], float)
+        err = a - p
+        ae = np.abs(err)
+        nz = a > 0
+        out["metrics"][m] = {
+            "mae": round(float(ae.mean()), 4),
+            "rmse": round(float(np.sqrt((err ** 2).mean())), 4),
+            "mape": round(float((ae[nz] / a[nz]).mean()), 4) if nz.any() else None,
+            "mase": round(float(ae.mean() / scale), 4) if scale > 0 else None,
+        }
+    out["train_months_at_first_origin"] = int(off + first)
+    return out
 
 
 def f4(v):
@@ -53,8 +116,22 @@ def series_of(pk, raw):
     return s.resample("MS").asfreq().fillna(0.0)
 
 
-def nextmonth(ts):
-    return (ts + pd.offsets.MonthBegin(1)).strftime("%Y-%m")
+def nextmonth(ts, k=1):
+    return (ts + pd.offsets.MonthBegin(k)).strftime("%Y-%m")
+
+
+def future_path(s, horizon):
+    """h-step-ahead point forecasts for the 3 methods. naive/MA3/SBA are
+    level forecasters, so the path is flat (the same value repeated) —
+    that flatness is the point of showing it. Returns
+    {months: [...], naive: [...], ma3: [...], sba: [...]}."""
+    last = s.index.max()
+    return {
+        "months": [nextmonth(last, k) for k in range(1, horizon + 1)],
+        "naive": [round(float(v), 2) for v in naive_forecast(s, horizon)],
+        "ma3": [round(float(v), 2) for v in moving_average_forecast(s, horizon, MA_WINDOW)],
+        "sba": [round(float(v), 2) for v in sba_forecast(s, horizon, SBA_ALPHA)],
+    }
 
 
 def _score(pred, actual, train):
@@ -152,50 +229,33 @@ def main():
             "actuals": actuals,
             "split": None, "holdout": None, "future": None, "metrics": None,
         }
-        if r["status"] == "ok":
-            train, holdout = train_holdout_split(s, holdout_fraction=HOLDOUT_FRACTION)
+        bt = rolling_backtest(s) if r["status"] == "ok" else None
+        if bt is not None:
+            first_origin = bt["months"][0]
             rec["split"] = {
-                "train_end": train.index.max().strftime("%Y-%m"),
-                "holdout_start": holdout.index.min().strftime("%Y-%m"),
-                "train_months": int(len(train)), "holdout_months": int(len(holdout)),
+                "train_end": nextmonth(pd.Timestamp(first_origin + "-01"), -1),
+                "holdout_start": first_origin,
+                "train_months": bt["train_months_at_first_origin"],
+                "holdout_months": len(bt["months"]),
+                "mode": "rolling",
             }
-            fc = {
-                "naive": naive_forecast(train, len(holdout)),
-                "ma3": moving_average_forecast(train, len(holdout), MA_WINDOW),
-                "sba": sba_forecast(train, len(holdout), SBA_ALPHA),
-            }
-            rec["holdout"] = {
-                "months": [ts.strftime("%Y-%m") for ts in holdout.index],
-                "actual": [round(float(v), 2) for v in holdout.values],
-                **{k: [round(float(x), 2) for x in v] for k, v in fc.items()},
-            }
+            rec["holdout"] = {k: bt[k] for k in ("months", "actual", "naive", "ma3", "sba")}
             rec["future"] = {
                 "month": nextmonth(s.index.max()),
                 "naive": round(float(naive_forecast(s, 1)[0]), 2),
                 "ma3": round(float(moving_average_forecast(s, 1, MA_WINDOW)[0]), 2),
                 "sba": round(float(sba_forecast(s, 1, SBA_ALPHA)[0]), 2),
             }
-            rec["metrics"] = {
-                m: {"mase": f4(r[f"{m}_mase"]), "mape": f4(r[f"{m}_mape"]),
-                    "mae": f4(r[f"{m}_mae"]), "rmse": f4(r[f"{m}_rmse"])}
-                for m in ("naive", "ma3", "sba")
-            }
+            rec["future3"] = future_path(s, 3)
+            rec["metrics"] = bt["metrics"]
 
-            # ---- "+ synthetic" variant: synthetic 2021-22 prepended to
-            # training, SAME holdout months so the two views are directly
-            # comparable. Diagnostic only.
+            # ---- "+ synthetic" variant: same rolling backtest, but each
+            # origin's TRAINING gets the synthetic 2021-22 months prepended.
+            # Test origins stay real. Diagnostic only.
             s_all = series_of(pk, raw_all)
-            ho_months = rec["holdout"]["months"]
-            ho_start_ts = pd.Timestamp(ho_months[0] + "-01")
-            train_all = s_all[s_all.index < ho_start_ts]
-            ho_all = s_all[s_all.index.isin([pd.Timestamp(m + "-01") for m in ho_months])]
-            has_synth = len(train_all) > len(train) and len(ho_all) == len(ho_months)
-            if has_synth:
-                fca = {
-                    "naive": naive_forecast(train_all, len(ho_all)),
-                    "ma3": moving_average_forecast(train_all, len(ho_all), MA_WINDOW),
-                    "sba": sba_forecast(train_all, len(ho_all), SBA_ALPHA),
-                }
+            prefix = s_all[s_all.index < s.index.min()]
+            bts = rolling_backtest(s, prefix=prefix) if len(prefix) else None
+            if bts is not None:
                 nz_all = s_all[s_all > 0]
                 rec["synthetic"] = {
                     "first_sale": nz_all.index.min().strftime("%Y-%m") if len(nz_all) else None,
@@ -205,29 +265,28 @@ def main():
                     "actuals": [{"m": ts.strftime("%Y-%m"), "q": round(float(v), 2)}
                                 for ts, v in s_all.items()],
                     "split": {
-                        "train_end": train_all.index.max().strftime("%Y-%m"),
-                        "holdout_start": ho_months[0],
-                        "train_months": int(len(train_all)),
-                        "holdout_months": int(len(ho_all)),
-                        "synthetic_months": int(len(train_all) - len(train)),
+                        "train_end": nextmonth(pd.Timestamp(bts["months"][0] + "-01"), -1),
+                        "holdout_start": bts["months"][0],
+                        "train_months": bts["train_months_at_first_origin"],
+                        "holdout_months": len(bts["months"]),
+                        "synthetic_months": int(len(prefix)),
+                        "mode": "rolling",
                     },
-                    "holdout": {
-                        "months": ho_months,
-                        "actual": [round(float(v), 2) for v in ho_all.values],
-                        **{k: [round(float(x), 2) for x in v] for k, v in fca.items()},
-                    },
+                    "holdout": {k: bts[k] for k in ("months", "actual", "naive", "ma3", "sba")},
+                    "metrics": bts["metrics"],
                     "future": {
                         "month": nextmonth(s_all.index.max()),
                         "naive": round(float(naive_forecast(s_all, 1)[0]), 2),
                         "ma3": round(float(moving_average_forecast(s_all, 1, MA_WINDOW)[0]), 2),
                         "sba": round(float(sba_forecast(s_all, 1, SBA_ALPHA)[0]), 2),
                     },
-                    "metrics": {
-                        m: _score(fca[m], ho_all.values, train_all.values)
-                        for m in ("naive", "ma3", "sba")
-                    },
+                    "future3": future_path(s_all, 3),
                 }
-        elif r["status"] == "insufficient_data":
+        else:
+            # insufficient_data, OR status='ok' but too few months (< 15)
+            # for a 6-origin rolling backtest — shown as insufficient
+            # (actuals + a provisional trailing average, no scored forecast).
+            rec["status"] = "insufficient_data"
             obs = [a["q"] for a in actuals if a["q"] > 0]
             rec["future"] = {
                 "month": nextmonth(s.index.max()) if len(s) else None,
@@ -238,8 +297,9 @@ def main():
     payload = {
         "generated": pd.Timestamp.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
         "abc_period": ABC_PERIOD, "verdict": "ma3",
-        "params": {"holdout_fraction": HOLDOUT_FRACTION, "ma_window": MA_WINDOW,
-                   "sba_alpha": SBA_ALPHA, "min_months": MIN_MONTHS_WITH_SALES},
+        "params": {"backtest": "rolling-origin, 1-step-ahead, last 6 real months, refit each origin",
+                   "test_months": TEST_H, "min_train": MIN_TRAIN,
+                   "ma_window": MA_WINDOW, "sba_alpha": SBA_ALPHA, "min_months": MIN_MONTHS_WITH_SALES},
         "summary": {"total": len(skus),
                     "ok": sum(1 for r in skus if r["status"] == "ok"),
                     "insufficient_data": sum(1 for r in skus if r["status"] == "insufficient_data"),
