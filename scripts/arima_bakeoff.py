@@ -59,11 +59,22 @@ def _connect():
     raise last
 
 
-def _fetch():
+def _fetch(with_synthetic: bool = False):
     c = _connect()
     cur = c.cursor()
-    cur.execute("SELECT product_key, calendar_month, COALESCE(quantity_sold, 0) "
-                "FROM unilever_sku_demand_fact_real ORDER BY 1, 2")
+    if with_synthetic:
+        # DIAGNOSTIC: base table, is_demo included, capped at the last real
+        # month so synthetic 2026-03.. never enters the series. Synthetic
+        # months are 2021-01..2022-12 (see reports/MODEL_BAKEOFF_UNILEVER.md).
+        cur.execute("""
+            SELECT product_key, calendar_month, COALESCE(quantity_sold, 0)
+            FROM unilever_sku_demand_fact
+            WHERE calendar_month <= (SELECT MAX(calendar_month) FROM unilever_sku_demand_fact_real)
+            ORDER BY 1, 2
+        """)
+    else:
+        cur.execute("SELECT product_key, calendar_month, COALESCE(quantity_sold, 0) "
+                    "FROM unilever_sku_demand_fact_real ORDER BY 1, 2")
     raw = pd.DataFrame(cur.fetchall(), columns=["pk", "m", "q"])
     raw["q"] = raw["q"].astype(float)
     cur.execute("SELECT product_key FROM abc_classification "
@@ -175,10 +186,17 @@ def _metrics(actual, pred, scale):
 
 
 def main():
-    raw, tier_a, names = _fetch()
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--with-synthetic", action="store_true",
+                    help="DIAGNOSTIC: prepend synthetic 2021-22 history. Not for reported results.")
+    args = ap.parse_args()
+
+    raw, tier_a, names = _fetch(args.with_synthetic)
     S = {pk: _series(g) for pk, g in raw.groupby("pk")}
     pks = [pk for pk in tier_a if pk in S]
-    print(f"Tier A ({ABC_PERIOD}): {len(pks)} SKUs")
+    out_path = OUT.replace(".csv", "_withsynth.csv") if args.with_synthetic else OUT
+    print(f"Tier A ({ABC_PERIOD}): {len(pks)} SKUs   with_synthetic={args.with_synthetic}")
 
     rows = []
     t0 = time.time()
@@ -217,8 +235,8 @@ def main():
             print(f"  {i + 1}/{len(pks)}  ({time.time() - t0:.0f}s)")
 
     df = pd.DataFrame(rows)
-    df.to_csv(OUT, index=False)
-    print(f"\nwrote {OUT}  ({len(df)} SKUs)\n")
+    df.to_csv(out_path, index=False)
+    print(f"\nwrote {out_path}  ({len(df)} SKUs)\n")
 
     models = ["arima_auto", "naive", "ma3", "sba_a3", "theta", "ses"]
     print(f"{'model':<14}{'MAPEmed':>9}{'MASEmed':>9}{'sMAPEmed':>10}{'MAPE<.20':>10}{'beat naive':>12}{'n':>5}")
