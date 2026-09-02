@@ -196,7 +196,12 @@ def main():
                     "ma3": moving_average_forecast(train_all, len(ho_all), MA_WINDOW),
                     "sba": sba_forecast(train_all, len(ho_all), SBA_ALPHA),
                 }
+                nz_all = s_all[s_all > 0]
                 rec["synthetic"] = {
+                    "first_sale": nz_all.index.min().strftime("%Y-%m") if len(nz_all) else None,
+                    "last_sale": nz_all.index.max().strftime("%Y-%m") if len(nz_all) else None,
+                    "months_span": int(len(s_all)),
+                    "months_with_sales": int(len(nz_all)),
                     "actuals": [{"m": ts.strftime("%Y-%m"), "q": round(float(v), 2)}
                                 for ts, v in s_all.items()],
                     "split": {
