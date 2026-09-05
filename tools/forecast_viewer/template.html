@@ -208,6 +208,16 @@ header.page .spacer { flex: 1; }
 .legend .sw.forecast { border-color: var(--forecast); border-top-style: dashed; }
 .legend .sw.bench { border-color: var(--muted); border-top-style: dotted; }
 .legend .sw.wash { height: 12px; border: 0; background: var(--holdout-wash); border-radius: 2px; }
+
+.model-toggles { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.model-toggle {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2);
+  padding: 3px 8px 3px 6px; border: 1px solid var(--line-2); border-radius: 999px; cursor: pointer;
+  user-select: none;
+}
+.model-toggle:has(input:checked) { color: var(--ink); border-color: var(--mc); background: color-mix(in srgb, var(--mc) 12%, transparent); }
+.model-toggle input { accent-color: var(--mc); margin: 0; }
+.model-toggle .swatch { width: 9px; height: 9px; border-radius: 2px; background: var(--mc); flex-shrink: 0; }
 .toggle {
   display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); cursor: pointer;
   user-select: none;
@@ -333,8 +343,14 @@ footer.page b { color: var(--ink-2); font-weight: 600; }
 <script>
 "use strict";
 const DATA = JSON.parse(document.getElementById("data").textContent);
-const METHODS = ["naive", "ma3", "sba"];
-const METHOD_LABEL = { naive: "Naive", ma3: "MA3", sba: "SBA" };
+const METHODS = ["naive", "ma3", "sba", "theta", "sarima"];
+const METHOD_LABEL = { naive: "Naive", ma3: "MA3", sba: "SBA", theta: "Theta", sarima: "SARIMA" };
+// ma3/naive/sba use only the last 1-3 months; theta/sarima use the full
+// training history at every origin — shown together so the "recency vs
+// full-history" comparison is on real numbers, not an assertion.
+const MODEL_COLOR = {
+  naive: "#9CA3AF", ma3: "var(--forecast)", sba: "#2DA9C9", theta: "#E08A2E", sarima: "#E0526B",
+};
 const fmtN = (v, d = 0) => v == null ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
 const fmt2 = v => v == null ? "—" : Number(v).toFixed(2);
 const pct = v => v == null ? "—" : (v * 100).toFixed(1) + "%";
@@ -442,7 +458,7 @@ function select(sku) {
 }
 
 /* ---------- main panel ---------- */
-const showBench = { on: true };
+const state_visible = new Set(METHODS);  // which model lines are drawn on the chart
 
 function confTier(s) {
   const M = s.metrics.ma3, h = holdoutN(s);
@@ -542,19 +558,23 @@ function renderMain() {
       <div class="chart-toolbar">
         <div class="legend">
           <span class="li"><span class="sw actual"></span>actual sales</span>
-          <span class="li"><span class="sw forecast"></span>MA3 forecast</span>
           <span class="li"><span class="sw wash"></span>rolling test window</span>
-          ${showBench.on ? '<span class="li"><span class="sw bench"></span>naive / SBA forecast</span>' : ""}
         </div>
-        <label class="toggle"><input type="checkbox" id="benchToggle" ${showBench.on ? "checked" : ""}>show all three forecast lines</label>
+        <div class="model-toggles">
+          ${METHODS.map(m => `<label class="model-toggle" style="--mc:${MODEL_COLOR[m]}">
+              <input type="checkbox" data-model="${m}" ${state_visible.has(m) ? "checked" : ""}>
+              <span class="swatch"></span>${METHOD_LABEL[m]}${m === "ma3" ? " (deployed)" : ""}
+            </label>`).join("")}
+        </div>
       </div>
       <div class="chart-frame" id="chart-frame"></div>
     </section>
     <section class="card cmp-card">
-      <h2>All three methods on this SKU — rolling backtest accuracy (MASE gate = 1.0)</h2>
+      <h2>All ${METHODS.length} methods on this SKU — rolling backtest accuracy (MASE gate = 1.0)</h2>
       <div class="chart-frame"><table class="mtable" id="method-table"></table></div>
-      <p class="cmp-note">One-step-ahead for ${s.future.month}: MA3 <b>${fmtN(s.future.ma3)}</b> · naive ${fmtN(s.future.naive)} · SBA ${fmtN(s.future.sba)} units.
-      Deployed method is <b>MA3</b> for every Tier A SKU regardless of which row wins here — see footer.</p>
+      <p class="cmp-note">One-step-ahead for ${s.future.month}: ${METHODS.map(m => `${METHOD_LABEL[m]} <b>${fmtN(s.future[m])}</b>`).join(" · ")} units.
+      Deployed method is <b>MA3</b> for every Tier A SKU regardless of which row wins here — see footer.
+      Naive/MA3/SBA use only the last 1-3 months; Theta/SARIMA use the full training history.</p>
     </section>`;
   } else {
     const f = s.future || {};
@@ -591,12 +611,17 @@ function renderMain() {
       renderMain();
     };
   });
+  main.querySelectorAll("[data-model]").forEach(cb => {
+    cb.onchange = () => {
+      const m = cb.dataset.model;
+      if (cb.checked) state_visible.add(m); else state_visible.delete(m);
+      drawChart(s);   // line visibility doesn't change any numbers — redraw only
+    };
+  });
 
   drawChart(s);
   if (s.status === "ok") {
     drawMethodTable(s);
-    const bt = document.getElementById("benchToggle");
-    if (bt) bt.onchange = e => { showBench.on = e.target.checked; renderMain(); };
   }
 }
 
@@ -654,8 +679,9 @@ function drawChart(s) {
     wash = `<rect x="${Math.max(PAD.l, x0).toFixed(1)}" y="${PAD.t}" width="${(PAD.l + iw - Math.max(PAD.l, x0)).toFixed(1)}" height="${ih}" fill="var(--holdout-wash)"/>`;
   }
 
-  // forecast + bench lines over holdout, anchored at last train actual
-  let fcPath = "", benchPaths = "";
+  // model lines over the rolling test window, anchored at last train actual —
+  // each VISIBLE method drawn in its own colour, MA3 emphasised (it's deployed)
+  let benchPaths = "";
   if (s.holdout) {
     const anchorIdx = hoStart - 1;
     const anchor = anchorIdx >= 0 ? [x(anchorIdx), y(s.actuals[anchorIdx].q)] : null;
@@ -667,32 +693,33 @@ function drawChart(s) {
     const futSeg = (m) => {
       const fv = futVal(m);
       if (!fv.length) return [];
-      const startY = s.holdout[m][s.holdout[m].length - 1];
-      const pts = [[x(months.length - 1 + 0), y(startY)]]; // last holdout x
-      pts[0] = [x(months.indexOf(s.holdout.months[s.holdout.months.length - 1])), y(startY)];
+      const pts = [[x(months.indexOf(s.holdout.months[s.holdout.months.length - 1])), y(s.holdout[m][s.holdout[m].length - 1])]];
       fv.forEach((v, k) => pts.push([x(fi0 + k), y(v)]));
       return pts;
     };
-    fcPath = `<path class="fc-line" d="${P(mk(s.holdout.ma3))}"/>`;
-    if (future) fcPath += `<path class="fc-line" d="${P(futSeg("ma3"))}"/>`;
     const lastHoIdx = months.indexOf(s.holdout.months[s.holdout.months.length - 1]);
     const endLabels = [];  // {y, text, color} — de-collided at the right margin
-    if (future) {
-      const lastMa3 = futVal("ma3")[futVal("ma3").length - 1];
-      endLabels.push({ y: y(lastMa3), text: "MA3 " + fmtN(lastMa3), color: "var(--forecast)", w: 700 });
-    }
-    if (showBench.on) {
-      for (const m of ["naive", "sba"]) {
-        let d = P(mk(s.holdout[m]));
-        const seg = futSeg(m);
-        if (seg.length) d += " " + seg.slice(1).map(p => `L ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
-        benchPaths += `<path class="bench-line ${m}" d="${d}"/>`;
-        const fv = futVal(m);
-        const endY = fv.length ? y(fv[fv.length - 1]) : y(s.holdout[m][s.holdout[m].length - 1]);
-        const endX = fv.length ? x(n - 1) : x(lastHoIdx);
-        benchPaths += `<circle class="dot-bench" cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="2"/>`;
-        endLabels.push({ y: endY, text: METHOD_LABEL[m] + (fv.length ? " " + fmtN(fv[fv.length - 1]) : ""), color: "var(--muted)", w: 500 });
+    for (const m of METHODS) {
+      if (!state_visible.has(m)) continue;
+      const isMa3 = m === "ma3";
+      let d = P(mk(s.holdout[m]));
+      const seg = futSeg(m);
+      if (seg.length) d += " " + seg.slice(1).map(p => `L ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
+      const w = isMa3 ? 2.4 : 1.6, dash = isMa3 ? "6 3" : "3 3";
+      benchPaths += `<path fill="none" stroke="${MODEL_COLOR[m]}" stroke-width="${w}" stroke-dasharray="${dash}" d="${d}"/>`;
+      const fv = futVal(m);
+      const endY = fv.length ? y(fv[fv.length - 1]) : y(s.holdout[m][s.holdout[m].length - 1]);
+      const endX = fv.length ? x(n - 1) : x(lastHoIdx);
+      if (isMa3 && fv.length) {
+        fv.forEach((v, k) => benchPaths += `<circle class="future-ring" cx="${x(fi0 + k).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${k === fv.length - 1 ? 4.5 : 3}"/>`);
+      } else {
+        benchPaths += `<circle cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="${isMa3 ? 3.5 : 2}" fill="${MODEL_COLOR[m]}"/>`;
       }
+      endLabels.push({
+        y: endY,
+        text: METHOD_LABEL[m] + (fv.length ? " " + fmtN(fv[fv.length - 1]) : ""),
+        color: MODEL_COLOR[m], w: isMa3 ? 700 : 500,
+      });
     }
     // spread labels so none overlap (min 12px apart), keep within plot
     endLabels.sort((a, b) => a.y - b.y);
@@ -706,20 +733,14 @@ function drawChart(s) {
   }
 
   const actualDots = s.actuals.map((a, i) => `<circle class="dot-actual" cx="${x(i).toFixed(1)}" cy="${y(a.q).toFixed(1)}" r="2.5"/>`).join("");
-  let futureMark = "";
-  if (future) {
-    const fv = futVal("ma3");
-    futureMark = fv.map((v, k) =>
-      `<circle class="future-ring" cx="${x(fi0 + k).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${k === fv.length - 1 ? 4.5 : 3}"/>`).join("");
-  }
 
   frame.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
-      aria-label="Monthly actual sales for ${s.sku} with MA3 forecast over the rolling test window">
+      aria-label="Monthly actual sales for ${s.sku} with model forecasts over the rolling test window">
     ${wash}${grid}
     <line class="axis-line" x1="${PAD.l}" y1="${PAD.t + ih}" x2="${PAD.l + iw}" y2="${PAD.t + ih}"/>
     ${benchPaths}
     <path class="actual-line" d="${P(actualPts)}"/>
-    ${fcPath}${actualDots}${futureMark}${xlab}
+    ${actualDots}${xlab}
     <g id="hover-layer"></g>
   </svg>`;
 
@@ -743,19 +764,21 @@ function attachHover(svg, s, geo) {
     if (a) rows.push(["actual sales", fmtN(a.q), "var(--actual)"]);
     const hk = hoMonths.indexOf(m);
     if (hk >= 0) {
-      rows.push(["MA3", fmtN(s.holdout.ma3[hk]), "var(--forecast)"]);
-      if (showBench.on) { rows.push(["naive", fmtN(s.holdout.naive[hk]), "var(--muted)"]);
-        rows.push(["SBA", fmtN(s.holdout.sba[hk]), "var(--muted)"]); }
+      for (const mo of METHODS) {
+        if (state_visible.has(mo)) rows.push([METHOD_LABEL[mo], fmtN(s.holdout[mo][hk]), MODEL_COLOR[mo]]);
+      }
     }
     if (s.future3 && state.h === 3) {
       const fk = s.future3.months.indexOf(m);
       if (fk >= 0) {
-        rows.push(["MA3 fcst", fmtN(s.future3.ma3[fk]), "var(--forecast)"]);
-        if (showBench.on) { rows.push(["naive fcst", fmtN(s.future3.naive[fk]), "var(--muted)"]);
-          rows.push(["SBA fcst", fmtN(s.future3.sba[fk]), "var(--muted)"]); }
+        for (const mo of METHODS) {
+          if (state_visible.has(mo)) rows.push([METHOD_LABEL[mo] + " fcst", fmtN(s.future3[mo][fk]), MODEL_COLOR[mo]]);
+        }
       }
     } else if (s.future && m === s.future.month) {
-      rows.push(["MA3 next", fmtN(s.future.ma3), "var(--forecast)"]);
+      for (const mo of METHODS) {
+        if (state_visible.has(mo)) rows.push([METHOD_LABEL[mo] + " next", fmtN(s.future[mo]), MODEL_COLOR[mo]]);
+      }
     }
     if (!rows.length) { tt.style.opacity = 0; return; }
     tt.innerHTML = `<div class="tt-m mono">${m}</div>` + rows.map(([k, v, c]) =>

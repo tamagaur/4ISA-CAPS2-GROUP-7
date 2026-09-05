@@ -25,11 +25,14 @@ from __future__ import annotations
 import json
 import os
 import sys
+import warnings
 
 import numpy as np
 import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
+
+warnings.simplefilter("ignore")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -39,6 +42,14 @@ from analytics.forecasting.baseline import (
     naive_forecast, moving_average_forecast, sba_forecast,
     MA_WINDOW, SBA_ALPHA, MIN_MONTHS_WITH_SALES,
 )
+from statsmodels.tsa.forecasting.theta import ThetaModel
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+# naive/ma3/sba use the last 1-3 months only (deliberately - see
+# reports/MODEL_BAKEOFF_UNILEVER.md). theta and sarima use the FULL
+# training history at every origin - added so the demo can show both
+# approaches head to head on real numbers, not just assert one is better.
+METHODS = ("naive", "ma3", "sba", "theta", "sarima")
 
 CSV_PATH = os.path.join(REPO, "reports", "baseline_forecast_per_sku.csv")
 ABC_PERIOD = "2026-02"  # the real ABC period run_baseline_forecast.py resolves to
@@ -54,6 +65,30 @@ MIN_TRAIN = 12    # months of history required before the first test origin
 NEW_PRODUCT_CUTOFF = "2023-02"
 
 
+def _theta_path(x, horizon):
+    """Theta method, full-history, h-step-ahead. Falls back to naive if the
+    fit fails (e.g. a flat or too-short series)."""
+    try:
+        y = pd.Series(x, index=pd.date_range("2000-01-01", periods=len(x), freq="MS"))
+        period = 12 if len(x) >= 14 else 1
+        return [float(v) for v in ThetaModel(y, period=period).fit().forecast(horizon)]
+    except Exception:  # noqa: BLE001
+        return [float(x[-1])] * horizon
+
+
+def _sarima_path(x, horizon):
+    """SARIMA(1,1,1), full-history, h-step-ahead - same fixed spec as
+    scripts/model_bakeoff.py's sarima_plain. Falls back to naive if the
+    fit fails."""
+    try:
+        y = pd.Series(x, index=pd.date_range("2000-01-01", periods=len(x), freq="MS"))
+        res = SARIMAX(y, order=(1, 1, 1), enforce_stationarity=False,
+                      enforce_invertibility=False).fit(disp=0)
+        return [float(v) for v in res.forecast(horizon)]
+    except Exception:  # noqa: BLE001
+        return [float(x[-1])] * horizon
+
+
 def _one_step(method, x):
     """1-step-ahead point forecast on the array x (all history so far)."""
     xs = pd.Series(x)
@@ -61,7 +96,11 @@ def _one_step(method, x):
         return float(naive_forecast(xs, 1)[0])
     if method == "ma3":
         return float(moving_average_forecast(xs, 1, MA_WINDOW)[0])
-    return float(sba_forecast(xs, 1, SBA_ALPHA)[0])
+    if method == "sba":
+        return float(sba_forecast(xs, 1, SBA_ALPHA)[0])
+    if method == "theta":
+        return _theta_path(x, 1)[0]
+    return _sarima_path(x, 1)[0]
 
 
 def rolling_backtest(s, prefix=None):
@@ -87,7 +126,7 @@ def rolling_backtest(s, prefix=None):
     months = [s.index[t].strftime("%Y-%m") for t in origins]
     actual = [round(float(real[t]), 2) for t in origins]
     out = {"months": months, "actual": actual, "origin_index": [t for t in origins]}
-    for m in ("naive", "ma3", "sba"):
+    for m in METHODS:
         preds = [round(max(0.0, _one_step(m, combined[:off + t])), 2) for t in origins]
         out[m] = preds
     # MASE scale: mean |lag-1 diff| of the training window before the first
@@ -96,7 +135,7 @@ def rolling_backtest(s, prefix=None):
     scale = float(np.mean(np.abs(np.diff(base)))) if len(base) > 1 else 0.0
     a = np.array([real[t] for t in origins], float)
     out["metrics"] = {}
-    for m in ("naive", "ma3", "sba"):
+    for m in METHODS:
         p = np.array(out[m], float)
         err = a - p
         ae = np.abs(err)
@@ -128,16 +167,20 @@ def nextmonth(ts, k=1):
 
 
 def future_path(s, horizon):
-    """h-step-ahead point forecasts for the 3 methods. naive/MA3/SBA are
-    level forecasters, so the path is flat (the same value repeated) —
-    that flatness is the point of showing it. Returns
-    {months: [...], naive: [...], ma3: [...], sba: [...]}."""
+    """h-step-ahead point forecasts for all METHODS. naive/MA3/SBA are
+    level forecasters, so their path is flat (the same value repeated) —
+    that flatness is the point of showing it. Theta and SARIMA use the
+    full history and produce a shaped (non-flat) path. Returns
+    {months: [...], naive: [...], ma3: [...], sba: [...], theta: [...], sarima: [...]}."""
     last = s.index.max()
+    x = s.to_numpy(float)
     return {
         "months": [nextmonth(last, k) for k in range(1, horizon + 1)],
         "naive": [round(float(v), 2) for v in naive_forecast(s, horizon)],
         "ma3": [round(float(v), 2) for v in moving_average_forecast(s, horizon, MA_WINDOW)],
         "sba": [round(float(v), 2) for v in sba_forecast(s, horizon, SBA_ALPHA)],
+        "theta": [round(max(0.0, v), 2) for v in _theta_path(x, horizon)],
+        "sarima": [round(max(0.0, v), 2) for v in _sarima_path(x, horizon)],
     }
 
 
@@ -246,14 +289,10 @@ def main():
                 "holdout_months": len(bt["months"]),
                 "mode": "rolling",
             }
-            rec["holdout"] = {k: bt[k] for k in ("months", "actual", "naive", "ma3", "sba")}
-            rec["future"] = {
-                "month": nextmonth(s.index.max()),
-                "naive": round(float(naive_forecast(s, 1)[0]), 2),
-                "ma3": round(float(moving_average_forecast(s, 1, MA_WINDOW)[0]), 2),
-                "sba": round(float(sba_forecast(s, 1, SBA_ALPHA)[0]), 2),
-            }
-            rec["future3"] = future_path(s, 3)
+            rec["holdout"] = {k: bt[k] for k in ("months", "actual", *METHODS)}
+            f3 = future_path(s, 3)                      # one fit covers both future and future3
+            rec["future"] = {"month": f3["months"][0], **{m: f3[m][0] for m in METHODS}}
+            rec["future3"] = f3
             rec["metrics"] = bt["metrics"]
 
             # ---- "+ synthetic" variant: same rolling backtest, but each
@@ -297,16 +336,12 @@ def main():
                         "synthetic_months": int(len(prefix)),
                         "mode": "rolling",
                     },
-                    "holdout": {k: bts[k] for k in ("months", "actual", "naive", "ma3", "sba")},
+                    "holdout": {k: bts[k] for k in ("months", "actual", *METHODS)},
                     "metrics": bts["metrics"],
-                    "future": {
-                        "month": nextmonth(s_all.index.max()),
-                        "naive": round(float(naive_forecast(s_all, 1)[0]), 2),
-                        "ma3": round(float(moving_average_forecast(s_all, 1, MA_WINDOW)[0]), 2),
-                        "sba": round(float(sba_forecast(s_all, 1, SBA_ALPHA)[0]), 2),
-                    },
-                    "future3": future_path(s_all, 3),
                 }
+                sf3 = future_path(s_all, 3)
+                rec["synthetic"]["future3"] = sf3
+                rec["synthetic"]["future"] = {"month": sf3["months"][0], **{m: sf3[m][0] for m in METHODS}}
         else:
             # insufficient_data, OR status='ok' but too few months (< 15)
             # for a 6-origin rolling backtest — shown as insufficient
