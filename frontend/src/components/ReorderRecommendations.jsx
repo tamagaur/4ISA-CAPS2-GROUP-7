@@ -9,10 +9,6 @@ import { getRecommendations, decideRecommendation } from '../api/recommendations
 import DateFilter from './DateFilter';
 import './ReorderRecommendations.css';
 
-// Components branch on this, never on the principal name.
-const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
-const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
-
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
   if (!product) return { name: '', weight: '' };
@@ -40,9 +36,18 @@ const formatSKU = (sku) => {
 const formatTimestamp = (date) =>
   date.toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+// Same shared date-range picker convention every other page's fetch effect
+// uses (Dashboard.jsx, ABCClassification.jsx, BadOrders.jsx) — DashboardLayout
+// holds the one applied {startMonth, startYear, endMonth, endYear}, passed
+// down via Outlet context, so it persists across page navigation and is
+// never reset except by the "Today" button.
+const MONTH_TO_NUM = {
+  Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+  Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+};
+
 const ReorderRecommendations = () => {
-  const { principal } = useOutletContext() || { principal: 'all' };
-  const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
+  const { startMonth, startYear, endMonth, endYear } = useOutletContext() || {};
 
   const [rawItems, setRawItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +64,9 @@ const ReorderRecommendations = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getRecommendations({ principal, status: 'pending' })
+    const from = startYear && startMonth ? `${startYear}-${MONTH_TO_NUM[startMonth]}-01` : undefined;
+    const to = endYear && endMonth ? `${endYear}-${MONTH_TO_NUM[endMonth]}-28` : undefined;
+    getRecommendations({ status: 'pending', from, to })
       .then((res) => {
         if (cancelled) return;
         setRawItems(res.items || []);
@@ -74,7 +81,7 @@ const ReorderRecommendations = () => {
     return () => {
       cancelled = true;
     };
-  }, [principal]);
+  }, [startMonth, startYear, endMonth, endYear]);
 
   // Map API shape -> the row shape the rest of this page renders. actionStatus/
   // loadingAction are local-only UI state layered on top of each real row.
@@ -83,7 +90,7 @@ const ReorderRecommendations = () => {
       rawItems.map((item) => ({
         id: item.recommendation_key,
         sku: item.sku_id,
-        brand: PRINCIPAL_BRAND[item.principal] || item.principal,
+        brand: 'Unilever',
         product: item.product_name || 'Unknown Product',
         rop: item.rop_i,
         stock: item.current_stock,
@@ -214,13 +221,13 @@ const ReorderRecommendations = () => {
       <div className="reorder-summary-grid">
         <div className="reorder-summary-card card-red">
           <div className="card-content">
-            <span className="reorder-card-label">{grain === 'category' ? 'CRITICAL CATEGORIES' : 'CRITICAL SKUS'}</span>
+            <span className="reorder-card-label">CRITICAL SKUS</span>
             <span className="reorder-card-value">{criticalCount}</span>
           </div>
         </div>
         <div className="reorder-summary-card card-yellow">
           <div className="card-content">
-            <span className="reorder-card-label">{grain === 'category' ? 'URGENT CATEGORIES' : 'URGENT SKUS'}</span>
+            <span className="reorder-card-label">URGENT SKUS</span>
             <span className="reorder-card-value">{urgentCount}</span>
           </div>
         </div>
@@ -240,18 +247,12 @@ const ReorderRecommendations = () => {
         </div>
       </div>
 
-      {(grain === 'category' || grain === 'mixed') && (
-        <p className="reorder-grain-note">
-          Del Monte is analysed at category level — no SKU-level data is available from this principal
-        </p>
-      )}
-
       {/* Table */}
       <div className="reorder-table-wrapper">
         <table className="reorder-table">
           <thead>
             <tr>
-              <th>{grain === 'category' ? 'CATEGORY' : 'SKU'}</th>
+              <th>SKU</th>
               <th>BRAND</th>
               <th>PRODUCT</th>
               <th>ROP</th>

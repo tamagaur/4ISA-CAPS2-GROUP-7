@@ -10,6 +10,17 @@ portfolio_forecast, reorder_preview. Response shape is additive only —
 every original key (principal, period, inventory, recommendations,
 forecast, cover_series) is unchanged.
 
+UNILEVER ONLY (2026-09 pass): Del Monte has been dropped from this app's
+scope. Every query in this file is hardcoded to `principal = 'unilever'`
+(or reads a table that only ever held Unilever rows to begin with) — there
+is no more `?principal=` query param, no "all principals" blend, and no
+per-principal split anywhere in the response. Del Monte's rows are
+untouched in Supabase; this file simply never reads them. `SellOut_Fact`/
+`SellOut_Fact_Real` and `Sales_Fact`/`Sales_Fact_Real` are Del Monte-only
+at the schema level (see analytics/db/schema.sql's CHECK constraints) and
+are no longer queried here at all — not filtered, removed, since a filtered
+query against them would only ever return zero rows.
+
 Honest-null policy (matches the frontend's null-handling contract — a null
 value means "cannot honestly compute this", never a guess or a fabricated
 zero):
@@ -17,11 +28,9 @@ zero):
   ORIGINAL FIELDS (unchanged from before this pass):
   inventory.value / inventory.weeks_of_cover / cover_series[].weeks_of_cover
     — always null. inventory_fact has no valuation/price column anywhere
-    (confirmed against the live schema) and unit-quantity math was tried
-    and confirmed implausible (Del Monte inventory is per-SKU, demand is
-    per-category, they don't join per product). There is nothing honest
-    to compute here yet — do not fabricate a value once this file is
-    touched again for a different reason.
+    (confirmed against the live schema). There is nothing honest to
+    compute here yet — do not fabricate a value once this file is touched
+    again for a different reason.
   recommendations.order_value
     — always null. lp_recommendation has no runner yet, and even once one
     exists, Q_i * unit_price needs a cost column that doesn't exist.
@@ -41,49 +50,40 @@ zero):
   re-checked here:
 
   kpis.sales
-    — real: SUM(net_amount) from Unilever_SKU_Demand_Fact_Real +
-    SellOut_Fact_Real for the CURRENT calendar month (the last entry of
-    the same 12-month list sales_vs_stock uses) — "this period's total
-    sales", matching the KPI card's own label. Null (with
-    sales_blocked_reason) when neither source has a row for that month
-    and principal scope — a real gap (data usually lags the current
-    calendar month), not a bug.
+    — real: SUM(net_amount) from Unilever_SKU_Demand_Fact_Real for the
+    CURRENT calendar month (the last entry of the same 12-month list
+    sales_vs_stock uses) — "this period's total sales", matching the KPI
+    card's own label. Null (with sales_blocked_reason) when there's no row
+    for that month — a real gap (data usually lags the current calendar
+    month), not a bug.
   kpis.soh_value
-    — real for BOTH principals, computed differently per principal
-    because the source columns mean different things (see the
-    Unilever-unit note below), then added together for principal=all:
-      Del Monte: SUM(Inventory_Fact_Real.cost) — already an extended
-        peso total per SKU/snapshot (R10 in schema.sql: confirmed equal
-        to `valuation` on real data), no unit conversion needed.
-      Unilever: SUM(quantity_on_hand * unit_cost_per_case). This
-        REQUIRED confirming quantity_on_hand is in CASES for Unilever SOH
-        rows before multiplying by a per-case price — verified, not
-        assumed:
-          - config/column_maps/ssis_soh.yaml's "Stock Quantity (CS/PC)"
-            parse splits the raw cell into stock_qty_cases /
-            stock_qty_pieces.
-          - analytics/etl/transform_ssis_soh.py's own column-mapping
-            docstring and code (`"quantity_on_hand": df["stock_qty_cases"]`)
-            confirm quantity_on_hand is loaded from stock_qty_cases
-            specifically — the CASES component, not the pieces remainder
-            and not the combined total-units-in-pieces figure.
-          - unit_cost_per_case is loaded from "Last Purchase Price(GSV/CS)"
-            — schema.sql's own comment on that column confirms the source
-            header states it is a per-CASE price.
-        quantity_on_hand (cases) x unit_cost_per_case (pesos/case) is
-        therefore unit-consistent. KNOWN LIMITATION (documented, not a
-        blocked/null condition): this deliberately excludes
-        quantity_pieces (the loose-piece remainder that doesn't make a
-        full case) — quantity_on_hand's own defined scope is cases only,
-        so this is under-counting a small remainder, not a wrong unit.
-        Null (with soh_value_blocked_reason) only when Inventory_Fact_Real
-        has no rows at all for the resolved period/principal scope — NOT
-        when the unit is unconfirmed (it is confirmed, see above). If a
-        future change to ssis_soh's Extract/Transform ever changes what
-        quantity_on_hand holds, UNILEVER_SOH_UNIT_CONFIRMED below is the
-        single switch that re-blocks this whole computation (soh_value
-        AND every sales_vs_stock.stock_on_hand point) rather than
-        silently multiplying the wrong unit.
+    — real: SUM(quantity_on_hand * unit_cost_per_case) from
+    Inventory_Fact_Real. This REQUIRED confirming quantity_on_hand is in
+    CASES for Unilever SOH rows before multiplying by a per-case price —
+    verified, not assumed:
+      - config/column_maps/ssis_soh.yaml's "Stock Quantity (CS/PC)" parse
+        splits the raw cell into stock_qty_cases / stock_qty_pieces.
+      - analytics/etl/transform_ssis_soh.py's own column-mapping docstring
+        and code (`"quantity_on_hand": df["stock_qty_cases"]`) confirm
+        quantity_on_hand is loaded from stock_qty_cases specifically — the
+        CASES component, not the pieces remainder and not the combined
+        total-units-in-pieces figure.
+      - unit_cost_per_case is loaded from "Last Purchase Price(GSV/CS)" —
+        schema.sql's own comment on that column confirms the source
+        header states it is a per-CASE price.
+    quantity_on_hand (cases) x unit_cost_per_case (pesos/case) is
+    therefore unit-consistent. KNOWN LIMITATION (documented, not a
+    blocked/null condition): this deliberately excludes quantity_pieces
+    (the loose-piece remainder that doesn't make a full case) —
+    quantity_on_hand's own defined scope is cases only, so this is
+    under-counting a small remainder, not a wrong unit. Null (with
+    soh_value_blocked_reason) only when Inventory_Fact_Real has no rows
+    at all for the resolved period — NOT when the unit is unconfirmed (it
+    is confirmed, see above). If a future change to ssis_soh's
+    Extract/Transform ever changes what quantity_on_hand holds,
+    UNILEVER_SOH_UNIT_CONFIRMED below is the single switch that re-blocks
+    this whole computation (soh_value AND every sales_vs_stock.
+    stock_on_hand point) rather than silently multiplying the wrong unit.
   kpis.safety_stock_rate
     — real: among Category A products (latest ABC_Classification period),
     the share whose current_stock (latest Inventory_Fact_Real period) is
@@ -95,45 +95,27 @@ zero):
     "LP_Recommendation is empty" degrades to in practice, since an empty
     LP_Recommendation makes ss_i unavailable for every product.
   kpis.weeks_of_cover
-    — an object, not a bare number: {combined, combined_blocked_reason,
-    unilever, unilever_blocked_reason, delmonte, delmonte_blocked_reason}.
-    Computed for BOTH principals AND combined on every request, regardless
-    of ?principal= — Del Monte and Unilever differ materially here and a
-    blended-only figure would hide that, same reasoning abc_mix's
-    revenue_share_pct caveat documents for a different field. Formula:
-    current stock on hand / average weekly demand.
-      Stock on hand reuses kpis.soh_value's own per-principal figures
-        verbatim (soh_uni/soh_del, the same _soh_value_by_period() call —
+    — {value, blocked_reason}. Formula: current stock on hand / average
+    weekly demand.
+      Stock on hand reuses kpis.soh_value's own figure verbatim
+        (soh_by_period, the same _soh_value_by_period() call —
         UNILEVER_SOH_UNIT_CONFIRMED is inherited automatically, not
         re-checked here).
-      Average weekly demand reuses kpis.sales' own per-principal figures
-        (sales_uni/sales_del): the mean of whatever non-null months exist
-        in the trailing 12-month window (a real gap stays excluded, never
+      Average weekly demand reuses kpis.sales' own figures
+        (sales_by_period): the mean of whatever non-null months exist in
+        the trailing 12-month window (a real gap stays excluded, never
         averaged in as 0 demand), converted from a monthly to a weekly
         rate via AVG_WEEKS_PER_MONTH (average days/month / 7 — a
         documented convention, not a fabricated number, same spirit as
         analytics/etl/granularity.py's business_days_in_month()).
-    unilever / delmonte: null (with their own *_blocked_reason) whenever
-    either that principal's stock or its average weekly demand is
-    unavailable, or weekly demand is exactly 0 (division by zero, not "0
-    weeks").
-    combined: the SAME partial-data rule kpis.soh_value/kpis.sales already
-    apply for principal=all — computed by summing BOTH principals' stock
-    and BOTH principals' weekly demand first, then dividing (not averaging
-    the two principals' own ratios, which would weight a small principal
-    equally with a large one) — and only when all four inputs (both
-    stocks, both weekly demands) are real. Null otherwise, never a
-    one-sided total presented as complete.
-    Replaces the removed kpis.fixed_point_ratio, which was always null —
-    no supplier allocation table exists anywhere in analytics/db/schema.sql,
-    and the frontend's old mock hardcoded 0.94 for it. weeks_of_cover has
-    a real formula and real inputs; fixed_point_ratio never did.
+    Null (with blocked_reason) whenever either stock or average weekly
+    demand is unavailable, or weekly demand is exactly 0 (division by
+    zero, not "0 weeks").
 
   sales_vs_stock[].sales
     — same SUM(net_amount) computation as kpis.sales, one point per
     period in the same last-12-calendar-months list as cover_series.
-    Null for any period neither real source has a row for (most of the
-    12-month window, in practice, until Load has run further back).
+    Null for any period Unilever_SKU_Demand_Fact_Real has no row for.
   sales_vs_stock[].stock_on_hand
     — same computation as kpis.soh_value, PESOS (not units — plotted on
     the same axis as sales), one point per Inventory_Fact_Real period
@@ -143,13 +125,10 @@ zero):
   sales_vs_stock[].received
     — SUPPLIER-ALLOCATION PROXY, not a fabricated fixed_allocation
     constant: no supplier allocation schedule exists anywhere in the
-    schema or the source files (see kpis.weeks_of_cover's docstring
-    section, which documents the same gap for a different field) — SSM
-    has never provided one. SUM(Purchase_Fact_Real.net_amount) per
-    period, in pesos (same axis as sales/stock_on_hand), via
-    _received_by_period() — same "both principals real before combining
-    for principal=all" rule as sales/soh_value. Null (a real gap, never
-    0) for any period Purchase_Fact_Real has no matching rows for.
+    schema or the source files — SSM has never provided one. SUM(
+    Purchase_Fact_Real.net_amount) per period, in pesos (same axis as
+    sales/stock_on_hand), via _received_by_period(). Null (a real gap,
+    never 0) for any period Purchase_Fact_Real has no matching rows for.
     Deliberately isolated in its own function (_received_by_period, one
     call site) so a future swap to a real Supplier_Allocation table is a
     source change inside that one function, not a rewrite of this
@@ -157,14 +136,7 @@ zero):
 
   abc_mix[].revenue_share_pct
     — real: SUM(revenue_share) * 100 per tier at the latest
-    classification_period, filtered by ?principal= like every other ABC
-    read. CAVEAT (documented, not fixed): revenue_share is only
-    normalized to 100% *within* its own principal (ABCClassification.jsx
-    already flags this same fact client-side) — Unilever revenue and Del
-    Monte revenue are separate 100%-normalized universes, so this figure
-    under principal=all is a sum of two independent shares, not a single
-    coherent "percent of one pooled revenue total". Kept as specified
-    (the task's literal formula), not silently changed to something else.
+    classification_period.
 
   tier_stock[]
     — real: per-tier counts of PRODUCTS by dead-stock status, from
@@ -176,16 +148,9 @@ zero):
     period flagged stock_status='Inactive' counts as dead_stock; else ANY
     row flagged 'Active' counts as in_stock; a product with no
     Inventory_Fact_Real row that period, or rows with stock_status still
-    NULL, counts toward `no_data` — never guessed into either bucket.
-    KNOWN LIMITATION (documented, not a bug): stock_status is Unilever-
-    only (R12, 2026-08 SOH Load — Del Monte's source has no equivalent
-    column and leaves it NULL for every row), confirmed against the live
-    table (32,453 Inventory_Fact_Real rows: only Unilever's 27,282 ever
-    populate stock_status, all NULL for Del Monte's 5,171). So Del Monte
-    products fall into `no_data` here almost entirely — an honest gap,
-    not a fabricated 0. No allocation bar — no supplier allocation table
-    exists anywhere in the schema (see kpis.weeks_of_cover's docstring
-    section), and Purchase_Fact (the proxy sales_vs_stock.received uses
+    NULL, counts toward `no_data` — never guessed into either bucket. No
+    allocation bar — no supplier allocation table exists anywhere in the
+    schema, and Purchase_Fact (the proxy sales_vs_stock.received uses
     instead) has no product_key at all, so there is no grain to break an
     allocation proxy down by ABC tier even proximately.
 
@@ -203,41 +168,45 @@ zero):
 
   portfolio_forecast
     — real, but structurally different from the old mock's clean 4-period
-    horizon: scripts/run_sarima.py forecasts ONE step ahead per product
-    (steps=1), and forecast_date is that product's OWN latest actual
-    period + 1 month — there is no shared, synchronized multi-period
-    horizon anywhere in Forecast_Result to report. Reporting one only
-    would be honest but term "gated products' forecast_date(s), whatever
-    they real are" is what series actually contains: the last 8 REAL
-    actual periods (summed quantity across the gated product set, i.e.
-    products with a forecast_date row where status='ok' AND mape < 20 at
-    the most recent forecast_date in the table), followed by however many
-    distinct real forecast_date buckets exist among those gated rows
-    (usually one, sometimes a few if products' own latest periods
-    differ) — never fabricated into a clean synchronized run. actual and
-    forecast use the same "quantity" concept run_sarima.py itself trains
-    on (Unilever quantity_sold + Del Monte SellOut quantity, summed
-    without unit conversion — the same simplification already accepted
-    in production model training, not a new one introduced here).
-    gated_sku_count / avg_mape are computed from the same gated-row set
-    (field name "sku" kept as specified even though Del Monte's gated
-    rows are category rows, not literal SKUs — DEC-03). scope_label is
-    built FROM the principals actually present among the gated rows, not
-    assumed — Forecast_Result is confirmed (scripts/run_sarima.py) to run
-    for both principals, contrary to an older schema.sql comment claiming
-    Unilever-only. Null/empty across the board (gated_sku_count=0,
-    avg_mape=None, series=[]) when nothing passes the gate for the
-    requested principal scope.
+    horizon: scripts/run_baseline_forecast.py's deployed MA3 method
+    forecasts ONE step ahead per product, and forecast_date is that
+    product's OWN latest actual period + 1 month — there is no shared,
+    synchronized multi-period horizon anywhere in Forecast_Result to
+    report (SARIMA was retired in favor of MA3 — see
+    analytics/forecasting/baseline.py's module docstring for the
+    evidence — but the one-step-per-product shape this section already
+    documented carries over unchanged, so no aggregation logic below
+    needed to change, only this wording). series covers the SAME `period`/
+    `start_period`-derived window as kpis.sales / sales_vs_stock above
+    (summed quantity_sold across the gated product set, i.e. products with
+    a forecast_date row where status='ok' AND mape < 20 at the most recent
+    forecast_date in the table) — the date-range picker's applied range,
+    not a hardcoded trailing window — followed by however many distinct
+    real forecast_date buckets exist among those gated rows (usually one,
+    sometimes a few if products' own latest periods differ), which land
+    past the picker's range whenever its end predates the forecast month.
+    Never fabricated into a clean synchronized run.
+    gated_sku_count / avg_mape are computed from the same gated-row set.
+    Null/empty across the board (gated_sku_count=0, avg_mape=None,
+    series=[]) when nothing passes the gate.
 
   reorder_preview
     — real: top 5 pending LP_Recommendation rows by urgency, reusing
     backend.routers.recommendations._to_item / _SELECT_ONE verbatim
     (imported, not reimplemented) for the exact same urgency derivation
     GET /recommendations uses. critical_count / urgent_count /
-    total_order_qty are computed over the FULL pending, principal-filtered
-    set (not just the 5 previewed rows) — a portfolio-wide summary next
-    to a 5-row preview, same relationship ABC's tier_summary has to its
-    own items list.
+    total_order_qty are computed over the FULL pending set (not just the
+    5 previewed rows) — a portfolio-wide summary next to a 5-row preview,
+    same relationship ABC's tier_summary has to its own items list.
+  reorder_preview.lp_weights
+    — {cost, service_level, storage} fractions, always present (never
+    null): a straight mirror of analytics/optimization/lp.py's W1/W2/W3
+    module constants (LP_WEIGHT_* below), not derived from any row or
+    query. Read-only display value, not an adjustable control — there is
+    no warehouse-capacity/supplier-ceiling/storage-cost data anywhere in
+    the schema to re-solve the LP against (see
+    frontend/src/components/Charts.jsx's ReorderRecommendationWidget for
+    the display side of this same note).
 """
 from __future__ import annotations
 
@@ -255,6 +224,21 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 POLICY_WEEKS = 3
 MAPE_UNRELIABLE_GATE = 20.0  # percent — see schema.sql's Forecast_Result.mape comment
+
+# Step 19's LP objective weights (analytics/optimization/lp.py's W1/W2/W3:
+# 0.45/0.35/0.20) — hardcoded module constants there, not stored per-
+# recommendation anywhere in the schema, so mirrored here BY VALUE rather
+# than imported (same "defensible default, not fact" mirroring convention
+# AVG_WEEKS_PER_MONTH above uses for analytics/etl/granularity.py's
+# constant — not imported directly since lp.py pulls in the pulp solver,
+# a batch-job dependency this always-on API router shouldn't require just
+# to read three floats). If lp.py's W1/W2/W3 ever change, update these to
+# match by hand. See reorder_preview.lp_weights's docstring section above
+# for why this is read-only, not an adjustable control.
+LP_WEIGHT_COST = 0.45
+LP_WEIGHT_SERVICE_LEVEL = 0.35
+LP_WEIGHT_STORAGE = 0.20
+assert abs((LP_WEIGHT_COST + LP_WEIGHT_SERVICE_LEVEL + LP_WEIGHT_STORAGE) - 1.00) < 1e-9
 
 # Average days/month (365.25/12) / 7 — converts an average MONTHLY figure to
 # a weekly rate for kpis.weeks_of_cover. A documented convention, not a
@@ -277,21 +261,13 @@ _URGENCY_RANK = {"CRITICAL": 0, "URGENT": 1, "PLANNED": 2}
 
 
 def _latest_sales_period(db: Session) -> str | None:
-    """The most recent real 'YYYY-MM' across the two sources kpis.sales /
-    sales_vs_stock read (Unilever_SKU_Demand_Fact_Real.calendar_month,
-    SellOut_Fact_Real._period) — the anchor _last_12_periods() uses.
-    GREATEST on TEXT works lexically for zero-padded 'YYYY-MM', same
-    convention MAX(classification_period) already relies on elsewhere
-    (backend/routers/abc.py). None only if both tables are completely
-    empty."""
-    row = db.execute(text("""
-        SELECT GREATEST(
-            COALESCE((SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real), ''),
-            COALESCE((SELECT MAX(_period) FROM SellOut_Fact_Real), '')
-        ) AS p
-    """)).mappings().first()
-    p = row["p"] if row else None
-    return p or None
+    """The most recent real 'YYYY-MM' in Unilever_SKU_Demand_Fact_Real —
+    the anchor _last_12_periods() uses. None only if the table is
+    completely empty."""
+    row = db.execute(text(
+        "SELECT MAX(calendar_month) AS p FROM Unilever_SKU_Demand_Fact_Real"
+    )).mappings().first()
+    return row["p"] if row else None
 
 
 def _resolve_sales_anchor(db: Session, end_override: str | None) -> str:
@@ -329,23 +305,7 @@ def _last_12_periods(db: Session, anchor_override: str | None = None) -> list[st
     Only ever called for the picker's END when no START was also applied
     (see get_dashboard: an applied start uses _month_range instead, the
     picker's actual full width) — this function's job is purely "no start
-    given yet, what's a reasonable single-anchor default."
-
-    Bug this anchor fixes: with today's real date as the anchor, this
-    window can (and, 2026-08 on the live database, does — real sales
-    coverage ends 2026-02, six months behind) run almost entirely past
-    real coverage. The few real points still inside a wall-clock-anchored
-    window were far enough apart (non-adjacent months) that
-    SalesVsStockWidget's Line elements — dot={false}, connectNulls={false},
-    a deliberate choice matching every other line chart in this file, so
-    a real gap always renders as a gap, never a fabricated interpolation
-    — drew literally nothing: no dots (dot=false) and no segments (no two
-    adjacent non-null points to connect). Anchoring to real data instead
-    means principal=unilever (contiguous real coverage every month
-    2023-01 through 2026-02 on the live database) renders a complete
-    line; principal=delmonte / combined 'all' still show real gaps where
-    Del Monte's SellOut_Fact_Real coverage is genuinely sparse — honest,
-    not a bug."""
+    given yet, what's a reasonable single-anchor default."""
     anchor = _resolve_sales_anchor(db, anchor_override)
     today = datetime.date(int(anchor[:4]), int(anchor[5:7]), 1)
     periods = []
@@ -406,61 +366,17 @@ def _query_period_sums(db: Session, sql: str, periods: list[str]) -> dict[str, f
     return result
 
 
-def _combine_principal_sums(
-    periods: list[str],
-    unilever: dict[str, float | None],
-    delmonte: dict[str, float | None],
-    principal: str,
-) -> dict[str, float | None]:
-    """Combines two independently-sourced per-principal period dicts.
-
-    principal='unilever'/'delmonte': pass that source straight through.
-    principal='all': a period's combined value requires BOTH sides to be
-    real (non-None) — if either principal has no honest figure for a
-    period, the 'all' total for that period is None too, NOT the other
-    side's number treated as if it were the whole portfolio. Silently
-    summing whichever side happens to have data would misrepresent a
-    partial total as complete (the exact fabrication this app's
-    honest-null convention exists to prevent)."""
-    if principal == "unilever":
-        return dict(unilever)
-    if principal == "delmonte":
-        return dict(delmonte)
-    combined: dict[str, float | None] = {}
-    for p in periods:
-        u, d = unilever.get(p), delmonte.get(p)
-        combined[p] = (u + d) if (u is not None and d is not None) else None
-    return combined
-
-
-def _sales_by_period(
-    db: Session, principal: str, periods: list[str]
-) -> tuple[dict[str, float | None], dict[str, float | None], dict[str, float | None]]:
-    """SUM(net_amount) per period from Unilever_SKU_Demand_Fact_Real +
-    SellOut_Fact_Real (product-mart demand facts — deliberately NOT
-    Sales_Fact, which is Del Monte-only invoice grain with no per-period
-    demand-comparable shape). Returns (combined, unilever, delmonte) so
-    callers needing the KPI's per-source blocked_reason don't have to
-    re-query."""
-    unilever = (
-        _query_period_sums(db, """
-            SELECT calendar_month AS period, SUM(net_amount) AS total
-            FROM Unilever_SKU_Demand_Fact_Real
-            WHERE calendar_month = ANY(:periods)
-            GROUP BY calendar_month
-        """, periods)
-        if principal in ("all", "unilever") else {p: None for p in periods}
-    )
-    delmonte = (
-        _query_period_sums(db, """
-            SELECT _period AS period, SUM(net_amount) AS total
-            FROM SellOut_Fact_Real
-            WHERE _period = ANY(:periods)
-            GROUP BY _period
-        """, periods)
-        if principal in ("all", "delmonte") else {p: None for p in periods}
-    )
-    return _combine_principal_sums(periods, unilever, delmonte, principal), unilever, delmonte
+def _sales_by_period(db: Session, periods: list[str]) -> dict[str, float | None]:
+    """SUM(net_amount) per period from Unilever_SKU_Demand_Fact_Real
+    (product-mart demand fact — deliberately NOT Sales_Fact, which is
+    Del Monte-only invoice grain with no per-period demand-comparable
+    shape, and not SellOut_Fact_Real, which is also Del Monte-only)."""
+    return _query_period_sums(db, """
+        SELECT calendar_month AS period, SUM(net_amount) AS total
+        FROM Unilever_SKU_Demand_Fact_Real
+        WHERE calendar_month = ANY(:periods)
+        GROUP BY calendar_month
+    """, periods)
 
 
 # SUPPLIER-ALLOCATION PROXY — see sales_vs_stock[].received's docstring
@@ -470,78 +386,71 @@ def _sales_by_period(
 # drop the "(proxy for allocation)" wording at the two frontend call sites
 # that reference it (frontend/src/components/Charts.jsx's
 # SalesVsStockWidget), and nothing else in this file needs to change.
-def _received_by_period(
-    db: Session, principal: str, periods: list[str]
-) -> tuple[dict[str, float | None], dict[str, float | None], dict[str, float | None]]:
-    """SUM(Purchase_Fact_Real.net_amount) per period — unlike sales/soh,
-    both principals live in ONE table here (Purchase_Fact.principal), but
-    the combine rule is identical: principal='all' still requires BOTH
-    sides real for a period before reporting a combined figure, same
-    reasoning _sales_by_period/_soh_value_by_period already apply."""
-    unilever = (
-        _query_period_sums(db, """
-            SELECT _period AS period, SUM(net_amount) AS total
-            FROM Purchase_Fact_Real
-            WHERE principal = 'unilever' AND _period = ANY(:periods)
-            GROUP BY _period
-        """, periods)
-        if principal in ("all", "unilever") else {p: None for p in periods}
-    )
-    delmonte = (
-        _query_period_sums(db, """
-            SELECT _period AS period, SUM(net_amount) AS total
-            FROM Purchase_Fact_Real
-            WHERE principal = 'delmonte' AND _period = ANY(:periods)
-            GROUP BY _period
-        """, periods)
-        if principal in ("all", "delmonte") else {p: None for p in periods}
-    )
-    return _combine_principal_sums(periods, unilever, delmonte, principal), unilever, delmonte
+def _received_by_period(db: Session, periods: list[str]) -> dict[str, float | None]:
+    """SUM(Purchase_Fact_Real.net_amount) per period, Unilever rows only —
+    Purchase_Fact carries both principals in one table (Purchase_Fact.
+    principal), so this is a straight WHERE filter, not a source swap."""
+    return _query_period_sums(db, """
+        SELECT _period AS period, SUM(net_amount) AS total
+        FROM Purchase_Fact_Real
+        WHERE principal = 'unilever' AND _period = ANY(:periods)
+        GROUP BY _period
+    """, periods)
 
 
 def _latest_inventory_period(db: Session) -> str | None:
-    row = db.execute(text("SELECT MAX(_period) AS p FROM Inventory_Fact_Real")).mappings().first()
+    """Latest Inventory_Fact_Real._period among UNILEVER rows only —
+    Inventory_Fact_Real carries both principals, so an unfiltered MAX
+    could resolve to a period Unilever has no rows for at all."""
+    row = db.execute(text(
+        "SELECT MAX(_period) AS p FROM Inventory_Fact_Real WHERE principal = 'unilever'"
+    )).mappings().first()
     return row["p"] if row else None
 
 
-def _soh_value_by_period(
-    db: Session, principal: str, periods: list[str]
-) -> tuple[dict[str, float | None], dict[str, float | None], dict[str, float | None]]:
+def _soh_value_by_period(db: Session, periods: list[str]) -> dict[str, float | None]:
     """Peso stock-on-hand valuation per Inventory_Fact_Real period — see
-    kpis.soh_value's docstring section for the unit-confirmation evidence
-    behind the Unilever branch. Returns (combined, unilever, delmonte),
-    same reasoning as _sales_by_period: principal='all' never silently
-    reports one side's total as if it were the whole portfolio's."""
-    none_periods = {p: None for p in periods}
-    if not UNILEVER_SOH_UNIT_CONFIRMED and principal in ("all", "unilever"):
-        # Structurally blocked — every period stays None on the Unilever
-        # side (and therefore on 'all' too, via _combine_principal_sums).
-        unilever = dict(none_periods)
-    elif principal in ("all", "unilever"):
-        unilever = _query_period_sums(db, """
-            SELECT _period AS period, SUM(quantity_on_hand * unit_cost_per_case) AS total
-            FROM Inventory_Fact_Real
-            WHERE principal = 'unilever' AND _period = ANY(:periods)
-            GROUP BY _period
-        """, periods)
-    else:
-        unilever = dict(none_periods)
-
-    delmonte = (
-        _query_period_sums(db, """
-            SELECT _period AS period, SUM(cost) AS total
-            FROM Inventory_Fact_Real
-            WHERE principal = 'delmonte' AND _period = ANY(:periods)
-            GROUP BY _period
-        """, periods)
-        if principal in ("all", "delmonte") else dict(none_periods)
-    )
-
-    return _combine_principal_sums(periods, unilever, delmonte, principal), unilever, delmonte
+    kpis.soh_value's docstring section for the unit-confirmation evidence."""
+    if not UNILEVER_SOH_UNIT_CONFIRMED:
+        # Structurally blocked — every period stays None.
+        return {p: None for p in periods}
+    return _query_period_sums(db, """
+        SELECT _period AS period, SUM(quantity_on_hand * unit_cost_per_case) AS total
+        FROM Inventory_Fact_Real
+        WHERE principal = 'unilever' AND _period = ANY(:periods)
+        GROUP BY _period
+    """, periods)
 
 
 def _latest_abc_period(db: Session) -> str | None:
-    row = db.execute(text("SELECT MAX(classification_period) AS p FROM ABC_Classification")).mappings().first()
+    """Latest ABC_Classification.classification_period among UNILEVER rows
+    only — ABC_Classification carries both principals, so an unfiltered
+    MAX could resolve to a period Unilever has no rows for at all."""
+    row = db.execute(text(
+        "SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE principal = 'unilever'"
+    )).mappings().first()
+    return row["p"] if row else None
+
+
+def _nearest_abc_period_at_or_before(db: Session, period: str) -> str | None:
+    """Latest UNILEVER classification_period <= `period`, or None if the
+    ETL hasn't produced any ABC run that old yet. The classification batch
+    runs roughly monthly and lags the sales data it's derived from, so the
+    date-range picker's applied end month (DashboardLayout's "today", one
+    month ahead of the latest loaded sales/ABC data by construction — see
+    DashboardLayout.jsx's getCurrentRealWorldPeriod comment) routinely has
+    no exact ABC_Classification row of its own. Falling back to the
+    nearest earlier real run (instead of the exact-match dead end this
+    replaced) keeps kpis.safety_stock_rate/abc_mix/tier_stock populated
+    for that common case, while still going genuinely blocked if `period`
+    predates every ABC run that exists."""
+    row = db.execute(
+        text(
+            "SELECT MAX(classification_period) AS p FROM ABC_Classification "
+            "WHERE principal = 'unilever' AND classification_period <= :period"
+        ),
+        {"period": period},
+    ).mappings().first()
     return row["p"] if row else None
 
 
@@ -571,7 +480,6 @@ def _weeks_of_cover(
 
 @router.get("")
 def get_dashboard(
-    principal: str = Query("all", description="Filter to 'unilever' or 'delmonte'. Use 'all' for both."),
     period: str | None = Query(
         None,
         pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
@@ -603,11 +511,10 @@ def get_dashboard(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    principal_filter = ""
-    params: dict = {}
-    if principal in ("unilever", "delmonte"):
-        principal_filter = "AND pd.principal = :principal"
-        params["principal"] = principal
+    # Unilever-only (2026-09): every query below is hardcoded to this
+    # filter rather than taking a ?principal= param — see this module's
+    # docstring for the full reasoning.
+    principal_filter = "AND pd.principal = 'unilever'"
 
     # ---- ORIGINAL FIELDS (unchanged) ----------------------------------
 
@@ -617,8 +524,7 @@ def get_dashboard(
             FROM LP_Recommendation lr
             JOIN Product_Dimension pd ON pd.product_key = lr.product_key
             WHERE lr.status = 'pending' {principal_filter}
-        """),
-        params,
+        """)
     ).mappings().first()
     product_count = int(reco_row["product_count"])
 
@@ -635,7 +541,7 @@ def get_dashboard(
             JOIN latest ON fr.forecast_date = latest.forecast_date
             WHERE 1=1 {principal_filter}
         """),
-        {**params, "mape_gate": MAPE_UNRELIABLE_GATE},
+        {"mape_gate": MAPE_UNRELIABLE_GATE},
     ).mappings().first()
     total_count = int(forecast_row["total_count"])
     unreliable_count = int(forecast_row["unreliable_count"]) if total_count > 0 else None
@@ -647,75 +553,64 @@ def get_dashboard(
         if start_period is not None
         else _last_12_periods(db, period)
     )
-    # Always fetched for BOTH principals (principal="all" here, regardless
-    # of this request's own ?principal=) — kpis.weeks_of_cover below needs
-    # both sides unconditionally. sales_by_period (the request-scoped view
-    # kpis.sales / sales_vs_stock actually use) is then derived from the
-    # same two dicts via _combine_principal_sums, so this is a strict
-    # superset of the old single-principal fetch, not a behavior change.
-    _, sales_uni, sales_del = _sales_by_period(db, "all", periods)
-    sales_by_period = _combine_principal_sums(periods, sales_uni, sales_del, principal)
-    current_period = periods[-1]
+    sales_by_period = _sales_by_period(db, periods)
+    # Walk backward from the picker's applied end month to the nearest
+    # period WITHIN the selected range that actually has a real sales row,
+    # rather than requiring an exact match on the range's literal end —
+    # the end month is routinely one the sales ETL hasn't loaded yet (see
+    # _nearest_abc_period_at_or_before's docstring for why: the app's
+    # pinned "today" runs a month ahead of the latest loaded data by
+    # construction), which was blanking this card even when the rest of
+    # the selected range had plenty of real data to show.
+    current_period = next(
+        (p for p in reversed(periods) if sales_by_period.get(p) is not None),
+        periods[-1],
+    )
     sales = sales_by_period[current_period]
-    if sales is not None:
-        sales_blocked_reason = None
-    elif principal == "all":
-        missing = [
-            name for name, d in (("Unilever", sales_uni), ("Del Monte", sales_del))
-            if d.get(current_period) is None
-        ]
-        sales_blocked_reason = (
-            f"No {' or '.join(missing)} sales rows for {current_period} yet — cannot report a "
-            "combined 'all principals' total from only one side."
-        )
-    else:
-        source = "Unilever_SKU_Demand_Fact_Real" if principal == "unilever" else "SellOut_Fact_Real"
-        sales_blocked_reason = f"No {source} rows for {current_period} yet."
+    sales_blocked_reason = (
+        None if sales is not None
+        else f"No Unilever_SKU_Demand_Fact_Real rows anywhere from {periods[0]} through {periods[-1]} yet."
+    )
 
     # ---- kpis.soh_value / sales_vs_stock.stock_on_hand ----------------
 
     inventory_period = _latest_inventory_period(db)
     soh_periods = periods if inventory_period is None else sorted(set(periods) | {inventory_period})
-    # Same "always both principals" reasoning as sales_uni/sales_del above.
-    _, soh_uni, soh_del = _soh_value_by_period(db, "all", soh_periods)
-    soh_by_period = _combine_principal_sums(soh_periods, soh_uni, soh_del, principal)
+    soh_by_period = _soh_value_by_period(db, soh_periods)
     soh_value = soh_by_period.get(inventory_period) if inventory_period is not None else None
     if inventory_period is None:
-        soh_value_blocked_reason = "Inventory_Fact_Real has no rows at all."
-    elif not UNILEVER_SOH_UNIT_CONFIRMED and principal in ("all", "unilever"):
+        soh_value_blocked_reason = "Inventory_Fact_Real has no rows for unilever at all."
+    elif not UNILEVER_SOH_UNIT_CONFIRMED:
         soh_value_blocked_reason = _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON
     elif soh_value is None:
-        if principal == "all":
-            missing = [
-                name for name, d in (("Unilever", soh_uni), ("Del Monte", soh_del))
-                if d.get(inventory_period) is None
-            ]
-            soh_value_blocked_reason = (
-                f"No computable {' or '.join(missing)} valuation for {inventory_period} — cannot "
-                "report a combined 'all principals' total from only one side."
-            )
-        else:
-            source = "quantity_on_hand x unit_cost_per_case" if principal == "unilever" else "cost"
-            soh_value_blocked_reason = f"No Inventory_Fact_Real rows with {source} populated for {principal} in {inventory_period}."
+        soh_value_blocked_reason = (
+            f"No Inventory_Fact_Real rows with quantity_on_hand x unit_cost_per_case "
+            f"populated for unilever in {inventory_period}."
+        )
     else:
         soh_value_blocked_reason = None
 
     # ---- kpis.safety_stock_rate ----------------------------------------
 
-    # Same override convention as periods/_last_12_periods above — an exact
-    # match against the picker's applied end month/year (no "nearest
-    # available" fallback), same as GET /abc's own classification_period
-    # param. Feeds kpis.safety_stock_rate, abc_mix, AND tier_stock below —
-    # all three go empty/null together if ABC_Classification genuinely has
-    # no row for the requested period, rather than silently drifting back
-    # to the latest run.
-    abc_period = period if period is not None else _latest_abc_period(db)
+    # Resolves to the nearest real ABC_Classification run AT OR BEFORE the
+    # picker's applied end month/year (_nearest_abc_period_at_or_before),
+    # not an exact match against it — the picker's end is routinely a
+    # month the classification batch hasn't run for yet (see that
+    # function's docstring), and an exact-match dead end there blanked
+    # this card even when the selected range's earlier months had a real
+    # run to show. Falls back to the latest run overall when no override
+    # is given at all. Feeds kpis.safety_stock_rate, abc_mix, AND
+    # tier_stock below — all three go empty/null together only if
+    # ABC_Classification genuinely has no run that old.
+    abc_period = (
+        _nearest_abc_period_at_or_before(db, period) if period is not None
+        else _latest_abc_period(db)
+    )
     safety_stock_rate = None
-    safety_stock_rate_blocked_reason = "ABC_Classification has no rows yet."
+    safety_stock_rate_blocked_reason = "ABC_Classification has no rows for unilever yet."
     if abc_period is not None:
-        ss_principal_filter = "AND ac.principal = :principal" if principal in ("unilever", "delmonte") else ""
         ss_rows = db.execute(
-            text(f"""
+            text("""
                 SELECT
                     ac.product_key,
                     inv.current_stock AS current_stock,
@@ -733,9 +628,9 @@ def get_dashboard(
                     WHERE status = 'pending'
                     ORDER BY product_key, planning_cycle_date DESC
                 ) rop ON rop.product_key = ac.product_key
-                WHERE ac.classification_period = :period AND ac.tier = 'A' {ss_principal_filter}
+                WHERE ac.classification_period = :period AND ac.tier = 'A' AND ac.principal = 'unilever'
             """),
-            {"period": abc_period, "principal": principal} if principal in ("unilever", "delmonte") else {"period": abc_period},
+            {"period": abc_period},
         ).mappings().all()
         comparable = [
             r for r in ss_rows
@@ -752,51 +647,24 @@ def get_dashboard(
             )
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
-    # current stock on hand / average weekly demand, per principal AND
-    # combined — see the docstring section above for the full reasoning.
-    # Reuses soh_uni/soh_del (already both-principals, already carrying
-    # UNILEVER_SOH_UNIT_CONFIRMED) and sales_uni/sales_del (same) — no new
+    # current stock on hand / average weekly demand — see the docstring
+    # section above for the full reasoning. Reuses soh_by_period (already
+    # carrying UNILEVER_SOH_UNIT_CONFIRMED) and sales_by_period — no new
     # queries.
-    uni_stock = soh_uni.get(inventory_period) if inventory_period is not None else None
-    del_stock = soh_del.get(inventory_period) if inventory_period is not None else None
-    if inventory_period is None:
-        uni_stock_reason = del_stock_reason = "Inventory_Fact_Real has no rows at all."
-    else:
-        uni_stock_reason = (
-            _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON if not UNILEVER_SOH_UNIT_CONFIRMED
-            else f"No Inventory_Fact_Real rows with quantity_on_hand x unit_cost_per_case populated for unilever in {inventory_period}."
-        )
-        del_stock_reason = f"No Inventory_Fact_Real rows with cost populated for delmonte in {inventory_period}."
-
-    uni_weekly_demand, uni_demand_reason = _avg_weekly_demand(sales_uni)
-    del_weekly_demand, del_demand_reason = _avg_weekly_demand(sales_del)
-
-    weeks_of_cover_unilever, weeks_of_cover_unilever_reason = _weeks_of_cover(
-        uni_stock, uni_stock_reason, uni_weekly_demand, uni_demand_reason
+    stock = soh_by_period.get(inventory_period) if inventory_period is not None else None
+    stock_reason = (
+        "Inventory_Fact_Real has no rows for unilever at all." if inventory_period is None
+        else _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON if not UNILEVER_SOH_UNIT_CONFIRMED
+        else f"No Inventory_Fact_Real rows with quantity_on_hand x unit_cost_per_case populated for unilever in {inventory_period}."
     )
-    weeks_of_cover_delmonte, weeks_of_cover_delmonte_reason = _weeks_of_cover(
-        del_stock, del_stock_reason, del_weekly_demand, del_demand_reason
+    weekly_demand, demand_reason = _avg_weekly_demand(sales_by_period)
+    weeks_of_cover_value, weeks_of_cover_reason = _weeks_of_cover(
+        stock, stock_reason, weekly_demand, demand_reason
     )
-
-    if uni_stock is not None and del_stock is not None and uni_weekly_demand is not None and del_weekly_demand is not None:
-        weeks_of_cover_combined, weeks_of_cover_combined_reason = _weeks_of_cover(
-            uni_stock + del_stock, None, uni_weekly_demand + del_weekly_demand, None
-        )
-    else:
-        missing = []
-        if uni_stock is None or del_stock is None:
-            missing.append("a stock-on-hand valuation")
-        if uni_weekly_demand is None or del_weekly_demand is None:
-            missing.append("an average weekly demand figure")
-        weeks_of_cover_combined = None
-        weeks_of_cover_combined_reason = (
-            f"Unilever or Del Monte is missing {' and '.join(missing)} — cannot report a combined "
-            "'all principals' figure from only one side."
-        )
 
     # ---- sales_vs_stock series -------------------------------------------
 
-    received_by_period, _, _ = _received_by_period(db, principal, periods)
+    received_by_period = _received_by_period(db, periods)
 
     sales_vs_stock = [
         {
@@ -812,15 +680,14 @@ def get_dashboard(
 
     abc_mix: list[dict] = []
     if abc_period is not None:
-        mix_principal_filter = "AND principal = :principal" if principal in ("unilever", "delmonte") else ""
         mix_rows = db.execute(
-            text(f"""
+            text("""
                 SELECT tier, COUNT(*) AS cnt, SUM(revenue_share) AS rev_share_sum
                 FROM ABC_Classification
-                WHERE classification_period = :period {mix_principal_filter}
+                WHERE classification_period = :period AND principal = 'unilever'
                 GROUP BY tier
             """),
-            {"period": abc_period, "principal": principal} if principal in ("unilever", "delmonte") else {"period": abc_period},
+            {"period": abc_period},
         ).mappings().all()
         abc_mix = [
             {
@@ -835,9 +702,8 @@ def get_dashboard(
 
     tier_stock: list[dict] = []
     if abc_period is not None:
-        ts_principal_filter = "AND ac.principal = :principal" if principal in ("unilever", "delmonte") else ""
         ts_rows = db.execute(
-            text(f"""
+            text("""
                 SELECT
                     ac.tier,
                     inv.any_active AS any_active,
@@ -852,9 +718,9 @@ def get_dashboard(
                     WHERE _period = (SELECT MAX(_period) FROM Inventory_Fact_Real)
                     GROUP BY product_key
                 ) inv ON inv.product_key = ac.product_key
-                WHERE ac.classification_period = :period {ts_principal_filter}
+                WHERE ac.classification_period = :period AND ac.principal = 'unilever'
             """),
-            {"period": abc_period, "principal": principal} if principal in ("unilever", "delmonte") else {"period": abc_period},
+            {"period": abc_period},
         ).mappings().all()
         buckets: dict[str, dict[str, int]] = {}
         for r in ts_rows:
@@ -873,14 +739,14 @@ def get_dashboard(
                 b["no_data"] += 1
 
         pending_rows = db.execute(
-            text(f"""
+            text("""
                 SELECT ac.tier, COUNT(DISTINCT lr.product_key) AS cnt
                 FROM ABC_Classification ac
                 JOIN LP_Recommendation lr ON lr.product_key = ac.product_key AND lr.status = 'pending'
-                WHERE ac.classification_period = :period {ts_principal_filter}
+                WHERE ac.classification_period = :period AND ac.principal = 'unilever'
                 GROUP BY ac.tier
             """),
-            {"period": abc_period, "principal": principal} if principal in ("unilever", "delmonte") else {"period": abc_period},
+            {"period": abc_period},
         ).mappings().all()
         pending_by_tier = {r["tier"]: int(r["cnt"]) for r in pending_rows}
 
@@ -896,21 +762,18 @@ def get_dashboard(
 
     gated_rows: list = []
     if latest_forecast_date is not None:
-        pf_principal_filter = "AND pd.principal = :principal" if principal in ("unilever", "delmonte") else ""
         gated_rows = db.execute(
             text(f"""
                 SELECT fr.product_key, fr.forecast_date, fr.forecast_value,
-                       fr.confidence_lower, fr.confidence_upper, fr.mape, pd.principal
+                       fr.confidence_lower, fr.confidence_upper, fr.mape
                 FROM Forecast_Result fr
                 JOIN Product_Dimension pd ON pd.product_key = fr.product_key
                 WHERE fr.forecast_date = :forecast_date
                   AND fr.status = 'ok'
                   AND fr.mape < :mape_gate
-                  {pf_principal_filter}
+                  {principal_filter}
             """),
-            {"forecast_date": latest_forecast_date, "mape_gate": MAPE_UNRELIABLE_GATE, "principal": principal}
-            if principal in ("unilever", "delmonte")
-            else {"forecast_date": latest_forecast_date, "mape_gate": MAPE_UNRELIABLE_GATE},
+            {"forecast_date": latest_forecast_date, "mape_gate": MAPE_UNRELIABLE_GATE},
         ).mappings().all()
 
     gated_sku_count = len({r["product_key"] for r in gated_rows})
@@ -918,50 +781,39 @@ def get_dashboard(
         round(sum(float(r["mape"]) for r in gated_rows) / len(gated_rows), 2)
         if gated_rows else None
     )
-
-    principals_present = sorted({r["principal"] for r in gated_rows})
-    if not principals_present:
-        scope_label = f"No products currently meet the MAPE < {MAPE_UNRELIABLE_GATE:.0f}% gate for principal={principal}."
-    elif principals_present == ["delmonte"]:
-        scope_label = "Del Monte only (category-level SARIMA forecasts meeting the MAPE gate)."
-    elif principals_present == ["unilever"]:
-        scope_label = "Unilever only (SKU-level SARIMA forecasts meeting the MAPE gate)."
-    else:
-        scope_label = "Unilever (SKU-level) and Del Monte (category-level) SARIMA forecasts meeting the MAPE gate."
+    scope_label = (
+        f"No products currently meet the MAPE < {MAPE_UNRELIABLE_GATE:.0f}% gate."
+        if not gated_rows
+        else "Unilever only (SKU-level MA3 forecasts meeting the MAPE gate)."
+    )
 
     series_by_period: dict[str, dict] = {}
     if gated_rows:
         gated_product_keys = sorted({r["product_key"] for r in gated_rows})
 
         actual_totals: dict[str, float] = {}
-        if principal in ("all", "unilever"):
-            rows = db.execute(
-                text("""
-                    SELECT calendar_month AS period, SUM(quantity_sold) AS qty
-                    FROM Unilever_SKU_Demand_Fact_Real
-                    WHERE product_key = ANY(:keys)
-                    GROUP BY calendar_month
-                """),
-                {"keys": gated_product_keys},
-            ).mappings().all()
-            for r in rows:
-                actual_totals[r["period"]] = actual_totals.get(r["period"], 0.0) + float(r["qty"] or 0)
-        if principal in ("all", "delmonte"):
-            rows = db.execute(
-                text("""
-                    SELECT _period AS period, SUM(quantity) AS qty
-                    FROM SellOut_Fact_Real
-                    WHERE product_key = ANY(:keys)
-                    GROUP BY _period
-                """),
-                {"keys": gated_product_keys},
-            ).mappings().all()
-            for r in rows:
-                actual_totals[r["period"]] = actual_totals.get(r["period"], 0.0) + float(r["qty"] or 0)
+        rows = db.execute(
+            text("""
+                SELECT calendar_month AS period, SUM(quantity_sold) AS qty
+                FROM Unilever_SKU_Demand_Fact_Real
+                WHERE product_key = ANY(:keys)
+                GROUP BY calendar_month
+            """),
+            {"keys": gated_product_keys},
+        ).mappings().all()
+        for r in rows:
+            actual_totals[r["period"]] = actual_totals.get(r["period"], 0.0) + float(r["qty"] or 0)
 
-        last_8_actual_periods = sorted(actual_totals.keys())[-8:]
-        for p in last_8_actual_periods:
-            series_by_period[p] = {"period": p, "actual": actual_totals[p], "forecast": None,
+        # Follows the picker's selected range (the same `periods` window
+        # kpis.sales / sales_vs_stock above are computed over) instead of a
+        # hardcoded trailing 8 months, so this chart moves with the
+        # dashboard's date filter like every other one does. Every period
+        # in the picked range gets an entry — actual_totals.get(p) is None
+        # (not omitted) for a period with no real sales among the gated
+        # SKUs, so a genuine gap breaks the line (connectNulls={false} on
+        # the frontend) instead of silently being skipped over.
+        for p in periods:
+            series_by_period[p] = {"period": p, "actual": actual_totals.get(p), "forecast": None,
                                     "confidence_lower": None, "confidence_upper": None}
 
         forecast_buckets: dict[str, dict] = {}
@@ -995,12 +847,8 @@ def get_dashboard(
 
     # ---- reorder_preview -------------------------------------------------
 
-    rp_query = _RECOMMENDATION_SELECT_ONE + " WHERE lr.status = 'pending'"
-    rp_params: dict = {}
-    if principal in ("unilever", "delmonte"):
-        rp_query += " AND pd.principal = :principal"
-        rp_params["principal"] = principal
-    rp_rows = db.execute(text(rp_query), rp_params).mappings().all()
+    rp_query = _RECOMMENDATION_SELECT_ONE + " WHERE lr.status = 'pending' AND pd.principal = 'unilever'"
+    rp_rows = db.execute(text(rp_query)).mappings().all()
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
     rp_items_sorted = sorted(rp_items, key=lambda it: _URGENCY_RANK.get(it.urgency, 99))
 
@@ -1009,10 +857,15 @@ def get_dashboard(
         "critical_count": sum(1 for it in rp_items if it.urgency == "CRITICAL"),
         "urgent_count": sum(1 for it in rp_items if it.urgency == "URGENT"),
         "total_order_qty": round(sum(it.q_i for it in rp_items), 2) if rp_items else 0,
+        "lp_weights": {
+            "cost": LP_WEIGHT_COST,
+            "service_level": LP_WEIGHT_SERVICE_LEVEL,
+            "storage": LP_WEIGHT_STORAGE,
+        },
     }
 
     return {
-        "principal": principal,
+        "principal": "unilever",
         "period": None,
         "inventory": {"value": None, "weeks_of_cover": None, "policy_weeks": POLICY_WEEKS},
         "recommendations": {"order_value": None, "product_count": product_count},
@@ -1026,12 +879,8 @@ def get_dashboard(
             "safety_stock_rate": safety_stock_rate,
             "safety_stock_rate_blocked_reason": safety_stock_rate_blocked_reason,
             "weeks_of_cover": {
-                "combined": weeks_of_cover_combined,
-                "combined_blocked_reason": weeks_of_cover_combined_reason,
-                "unilever": weeks_of_cover_unilever,
-                "unilever_blocked_reason": weeks_of_cover_unilever_reason,
-                "delmonte": weeks_of_cover_delmonte,
-                "delmonte_blocked_reason": weeks_of_cover_delmonte_reason,
+                "value": weeks_of_cover_value,
+                "blocked_reason": weeks_of_cover_reason,
             },
         },
         "sales_vs_stock": sales_vs_stock,

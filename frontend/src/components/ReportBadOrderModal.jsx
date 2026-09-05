@@ -19,19 +19,13 @@ const formatSKU = (sku) => {
 
 const skuDatabase = {
   'SKU-07642': { brand: 'Unilever', product: 'Dove Shampoo 340ml' },
-  'SKU-01523': { brand: 'Del Monte', product: 'Tomato Sauce 250g' },
-  'SKU-09234': { brand: 'Del Monte', product: 'Sweet Corn 425g' },
   'SKU-04721': { brand: 'Unilever', product: 'Surf Powder Detergent 1kg' },
-  'SKU-08934': { brand: 'Del Monte', product: 'Pineapple Juice 1L' },
   'SKU-02891': { brand: 'Unilever', product: 'Knorr Cubes 8g' },
 };
 
 const availableSKUs = [
   'SKU-07642',
-  'SKU-01523',
-  'SKU-09234',
   'SKU-04721',
-  'SKU-08934',
   'SKU-02891',
 ];
 

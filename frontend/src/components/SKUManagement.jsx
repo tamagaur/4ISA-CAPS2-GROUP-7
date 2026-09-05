@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
 import { Plus, Search, Clock, X, RotateCcw, Building, Tag, Layers, Filter, CheckCircle, XCircle, Package } from 'lucide-react';
 import AddSKUModal from './AddSKUModal';
 import ViewSKUModal from './ViewSKUModal';
@@ -7,13 +6,6 @@ import EditSKUModal from './EditSKUModal';
 import { logAction } from '../utils/auditLogger';
 import { getSKUs, createSKU, updateSKU } from '../api/sku';
 import './SKUManagement.css';
-
-const PRINCIPAL_BRAND = { unilever: 'Unilever', delmonte: 'Del Monte' };
-const PRINCIPAL_SUPPLIER = { unilever: 'Unilever Philippines', delmonte: 'Del Monte Philippines' };
-const BRAND_PRINCIPAL = { Unilever: 'unilever', 'Del Monte': 'delmonte' };
-
-// Components branch on this, never on the principal name.
-const GRAIN_BY_PRINCIPAL = { unilever: 'sku', delmonte: 'category', all: 'mixed' };
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
 const parseProductAndWeight = (product) => {
@@ -30,9 +22,6 @@ const parseProductAndWeight = (product) => {
 };
 
 const SKUManagement = () => {
-  const { principal } = useOutletContext() || { principal: 'all' };
-  const grain = GRAIN_BY_PRINCIPAL[principal] ?? 'mixed';
-
   const [rawItems, setRawItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -40,7 +29,7 @@ const SKUManagement = () => {
   const loadSKUs = () => {
     setLoading(true);
     setError(null);
-    return getSKUs({ principal })
+    return getSKUs({})
       .then((res) => {
         setRawItems(res.items || []);
       })
@@ -53,7 +42,7 @@ const SKUManagement = () => {
   useEffect(() => {
     loadSKUs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [principal]);
+  }, []);
 
   // Map API shape -> the row shape the rest of this page renders.
   const skus = useMemo(
@@ -61,9 +50,8 @@ const SKUManagement = () => {
       rawItems.map((item) => ({
         id: item.product_key,
         code: item.sku_id,
-        brand: PRINCIPAL_BRAND[item.principal] || item.principal,
-        principal: item.principal,
-        supplier: PRINCIPAL_SUPPLIER[item.principal] || item.principal,
+        brand: 'Unilever',
+        supplier: 'Unilever Philippines',
         product: item.product_name || 'Unknown Product',
         cat: item.tier,
         leadTime: item.lead_time_days != null ? `${item.lead_time_days} days` : null,
@@ -139,13 +127,12 @@ const SKUManagement = () => {
   const inactiveSKUs = skus.filter(s => s.status === 'DISABLED').length;
 
   const handleAddSKU = async (formData) => {
-    const skuPrincipal = BRAND_PRINCIPAL[formData.brand];
-    if (!skuPrincipal) {
+    if (formData.brand !== 'Unilever') {
       throw new Error(`Unrecognized brand "${formData.brand}"`);
     }
     const created = await createSKU({
       sku_code: formData.skuCode,
-      principal: skuPrincipal,
+      principal: 'unilever',
       product_name: formData.productName,
       brand: formData.brand,
       unit_price: parseFloat(formData.unitPrice) || null,
@@ -310,12 +297,6 @@ const SKUManagement = () => {
             <span className="summary-value">{inactiveSKUs}</span>
           </div>
         </div>
-
-        {(grain === 'category' || grain === 'mixed') && (
-          <p className="sku-grain-note">
-            Del Monte is analysed at category level — no SKU-level data is available from this principal
-          </p>
-        )}
 
         {loading && <p className="sku-page-subtitle">Loading SKUs…</p>}
         {error && <p className="sku-page-subtitle">Error: {error}</p>}
@@ -541,7 +522,7 @@ const SKUManagement = () => {
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>{grain === 'category' ? 'CATEGORY CODE' : 'SKU CODE'}</th>
+                    <th>SKU CODE</th>
                     <th>BRAND</th>
                     <th>SUPPLIER</th>
                     <th>PRODUCT</th>

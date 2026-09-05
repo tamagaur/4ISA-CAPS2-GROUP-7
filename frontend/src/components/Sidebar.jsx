@@ -52,7 +52,7 @@ const navSections = [
   },
 ];
 
-const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
+const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const currentUser = getCurrentUser();
@@ -70,12 +70,23 @@ const Sidebar = ({ isOpen, onNavAttempt, currentMonth }) => {
       const allowed = onNavAttempt(path);
       if (!allowed) {
         e.preventDefault();
+        return;
       }
+    }
+    // On the overlay breakpoint, picking a page should also close the
+    // slide-over so it doesn't keep covering the new page's content.
+    if (onClose && window.matchMedia('(max-width: 900px)').matches) {
+      onClose();
     }
   };
 
   return (
     <>
+      {/* Only rendered (and only visible, via Sidebar.css's max-width: 900px
+          block) on the overlay breakpoint, so the sidebar can slide over the
+          page instead of pushing it, with a click-outside-to-close scrim. */}
+      {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
+
       <aside className={`sidebar ${isOpen ? '' : 'sidebar-hidden'}`}>
         {/* Top Profile */}
         <div className="sidebar-profile-top">

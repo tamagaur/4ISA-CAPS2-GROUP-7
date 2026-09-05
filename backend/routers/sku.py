@@ -76,16 +76,14 @@ def _to_item(r) -> SKUItem:
 
 @router.get("", response_model=SKUListResponse)
 def get_skus(
-    principal: str | None = Query(None, description="Filter to 'unilever' or 'delmonte'. Omit for both."),
     status: str | None = Query(None, description="Filter to 'ACTIVE' or 'DISABLED'. Omit for both."),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> SKUListResponse:
-    query = _SELECT_ONE + " WHERE 1=1"
+    # Unilever-only (2026-09) — see backend/routers/dashboard.py's module
+    # docstring for the full reasoning.
+    query = _SELECT_ONE + " WHERE pd.principal = 'unilever'"
     params: dict = {}
-    if principal in ("unilever", "delmonte"):
-        query += " AND pd.principal = :principal"
-        params["principal"] = principal
     if status:
         query += " AND pd.status = :status"
         params["status"] = status
@@ -102,26 +100,30 @@ def create_sku(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> SKUItem:
-    if payload.principal not in ("unilever", "delmonte"):
-        raise HTTPException(status_code=400, detail="principal must be 'unilever' or 'delmonte'")
+    # Unilever-only (2026-09): hard-reject anything else rather than
+    # silently coercing — a client believing a non-Unilever SKU was
+    # created when it wasn't is worse than a clear 400. See
+    # backend/routers/dashboard.py's module docstring for the full
+    # reasoning.
+    if payload.principal != "unilever":
+        raise HTTPException(status_code=400, detail="principal must be 'unilever'")
 
     existing = db.execute(
-        text("SELECT 1 FROM product_dimension WHERE principal = :principal AND sku_code = :sku_code"),
-        {"principal": payload.principal, "sku_code": payload.sku_code},
+        text("SELECT 1 FROM product_dimension WHERE principal = 'unilever' AND sku_code = :sku_code"),
+        {"sku_code": payload.sku_code},
     ).first()
     if existing is not None:
-        raise HTTPException(status_code=409, detail=f"SKU {payload.sku_code} already exists for {payload.principal}")
+        raise HTTPException(status_code=409, detail=f"SKU {payload.sku_code} already exists for unilever")
 
     row = db.execute(
         text("""
             INSERT INTO product_dimension
                 (principal, grain, sku_code, product_name, pack_size, brand)
             VALUES
-                (:principal, 'sku', :sku_code, :product_name, :pack_size, :brand)
+                ('unilever', 'sku', :sku_code, :product_name, :pack_size, :brand)
             RETURNING product_key
         """),
         {
-            "principal": payload.principal,
             "sku_code": payload.sku_code,
             "product_name": payload.product_name,
             "pack_size": payload.pack_size,

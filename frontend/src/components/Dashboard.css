@@ -80,6 +80,14 @@
   min-width: 0;
 }
 
+/* The forecast + reorder row needs more vertical room than the other
+   chart pairs: the reorder card stacks a summary row, three weight
+   sliders, and a scrollable SKU list, and at 340px the list collapses to
+   barely a row and a half. */
+.chart-duo-tall .chart-widget {
+  height: 460px;
+}
+
 /* ABC donut needs far less horizontal room than the per-category stock
    matrix (more categories = more bars = needs the space) — narrower left
    column, wider right one, instead of the default even split. */
@@ -276,6 +284,9 @@
   }
   .chart-duo .chart-widget {
     height: 300px;
+  }
+  .chart-duo-tall .chart-widget {
+    height: 420px;
   }
 }
 

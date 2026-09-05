@@ -368,12 +368,38 @@
   color: #a0aec0;
 }
 
+/* flex:1 + min-height:0 is what makes this scroll rather than stretch the
+   card: it takes whatever vertical space the summary and sliders above it
+   leave over, then scrolls its own overflow inside that. */
 .reorder-mini-list {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  flex: 1;
+  min-height: 4.5rem;
   overflow-y: auto;
-  padding-right: 0.15rem;
+  padding-right: 0.4rem;
+  margin-top: 0.9rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Slim, unobtrusive scrollbar — the default Windows one is wide enough to
+   crowd the qty column at this card width. */
+.reorder-mini-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.reorder-mini-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.reorder-mini-list::-webkit-scrollbar-thumb {
+  background-color: #cbd5e0;
+  border-radius: 3px;
+}
+
+.reorder-mini-list::-webkit-scrollbar-thumb:hover {
+  background-color: #a0aec0;
 }
 
 .reorder-mini-row {
@@ -439,5 +465,239 @@
   font-weight: 700;
   color: #1a202c;
   white-space: nowrap;
+}
+
+.reorder-priorities {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.reorder-priorities-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.reorder-priorities-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.reorder-priorities-caption {
+  font-size: 0.65rem;
+  color: #a0aec0;
+  white-space: nowrap;
+}
+
+/* Top-right of the whole card (chart-header), not just the priorities
+   section — only rendered once the user actually drags a slider away from
+   the solver's real weights (see ReorderRecommendationWidget's isModified). */
+.reorder-card-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #4a5568;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.reorder-card-reset:hover {
+  background-color: #edf2f7;
+  border-color: #cbd5e0;
+}
+
+.reorder-priorities-note {
+  margin: 0.1rem 0 0 0;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  color: #92400e;
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+}
+
+.reorder-priority-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.reorder-priority-row-top {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.reorder-priority-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  color: #1a202c;
+  cursor: pointer;
+}
+
+.reorder-priority-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Pushes the percentage to the far right, leaving label + "?" grouped
+   together on the left (the info icon belongs to the label, not the value). */
+.reorder-priority-pct {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin-left: auto;
+}
+
+/* ── "?" info affordance + CSS-only hover/focus tooltip ─────────────────── */
+.reorder-priority-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: #a0aec0;
+  cursor: help;
+  flex-shrink: 0;
+}
+
+.reorder-priority-info:hover,
+.reorder-priority-info:focus-visible {
+  color: #4a5568;
+  outline: none;
+}
+
+.reorder-priority-tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: max-content;
+  /* Bigger and more readable, but never wider than the viewport has room
+     for — important since this card can end up quite narrow once
+     chart-duo stacks to one column on smaller screens. */
+  max-width: min(22rem, calc(100vw - 3rem));
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  background-color: #1a202c;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.55;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  pointer-events: none;
+}
+
+/* Little pointer triangle under the bubble. */
+.reorder-priority-tip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1a202c;
+}
+
+.reorder-priority-info:hover .reorder-priority-tip,
+.reorder-priority-info:focus-visible .reorder-priority-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ── Draggable weight slider ────────────────────────────────────────────
+   Native range input so keyboard/screen-reader support comes for free.
+   --slider-accent (the priority's colour) and --slider-pct (its current
+   value) are set inline per row, letting one rule paint the filled portion
+   of every track without a per-priority class. */
+.reorder-priority-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.reorder-priority-slider:focus {
+  outline: none;
+}
+
+.reorder-priority-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--slider-accent) 45%, #ffffff) 0 var(--slider-pct),
+    #edf2f7 var(--slider-pct) 100%
+  );
+}
+
+.reorder-priority-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #edf2f7;
+}
+
+.reorder-priority-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--slider-accent) 45%, #ffffff);
+}
+
+.reorder-priority-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px; /* centres the 14px thumb on the 4px track */
+  border: none;
+  border-radius: 50%;
+  background: var(--slider-accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease;
+}
+
+.reorder-priority-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--slider-accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.reorder-priority-slider:hover::-webkit-slider-thumb,
+.reorder-priority-slider:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.reorder-priority-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--slider-accent) 30%, transparent);
+}
+
+.reorder-priority-slider:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--slider-accent) 30%, transparent);
 }
 

@@ -1,8 +1,9 @@
 import { apiFetch } from '../auth';
 
-export async function getSKUs({ principal, status } = {}) {
+// Unilever-only (2026-09): no more principal param — the backend always
+// scopes to Unilever now.
+export async function getSKUs({ status } = {}) {
   const query = new URLSearchParams();
-  if (principal && principal !== 'all') query.append('principal', principal);
   if (status) query.append('status', status);
 
   const res = await apiFetch(`/sku?${query.toString()}`);
