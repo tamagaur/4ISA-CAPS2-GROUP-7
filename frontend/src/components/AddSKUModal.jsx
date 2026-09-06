@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import Modal from './Modal';
 import './AddSKUModal.css';
 
 const initialFormState = {
@@ -17,11 +18,18 @@ const DEFAULT_BRANDS = [
   'Unilever',
 ];
 
+// Every real Unilever sku_code in Product_Dimension is exactly 8 numeric
+// characters (2,098/2,098 verified), and backend/routers/sku.py enforces
+// only uniqueness, not shape — so the format rule lives here.
+const SKU_CODE_LENGTH = 8;
+const SKU_CODE_PATTERN = /^\d{8}$/;
+
 const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
   const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM' | 'SUCCESS'
   const [form, setForm] = useState({ ...initialFormState });
   const [errors, setErrors] = useState({});
   const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
 
@@ -35,14 +43,14 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
     }
   };
 
-  // Enforce uniform SKU Code formatting (SKU-XXXXX)
+  // Real Unilever sku_code values are all exactly 8 digits (verified against
+  // Product_Dimension: 2,098 rows, every one 8 numeric characters), so this
+  // strips anything that isn't a digit and stops at 8 rather than
+  // auto-prefixing "SKU-" — that older behavior mangled a genuine code as it
+  // was typed ("20071069" became "SKU-20071..."), and the backend has no
+  // SKU-prefixed rows for it to match.
   const handleSKUCodeChange = (e) => {
-    let val = e.target.value.toUpperCase();
-
-    // Auto-prefix SKU- if user enters digits
-    if (/^\d{1,5}$/.test(val)) {
-      val = `SKU-${val}`;
-    }
+    const val = e.target.value.replace(/\D/g, '').slice(0, SKU_CODE_LENGTH);
 
     setForm(prev => ({ ...prev, skuCode: val }));
     if (errors.skuCode) {
@@ -70,15 +78,34 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
     }
   };
 
+  // Was broken: referenced an undeclared `newErrors` and `skuRegex`, so every
+  // submit threw ReferenceError and the form silently did nothing. Both are
+  // declared properly now, and the format check matches the real data (8
+  // digits) instead of the "SKU-XXXXX" shape, which no row in
+  // Product_Dimension actually uses.
   const validate = () => {
-    if (!(form.skuCode || '').trim()) {
+    const newErrors = {};
+    const skuCode = (form.skuCode || '').trim();
+
+    if (!skuCode) {
       newErrors.skuCode = 'SKU Code is required';
-    } else if (!skuRegex.test((form.skuCode || '').trim())) {
-      newErrors.skuCode = 'Must follow format SKU-XXXXX (e.g. SKU-10001)';
+    } else if (!SKU_CODE_PATTERN.test(skuCode)) {
+      newErrors.skuCode = `Must be exactly ${SKU_CODE_LENGTH} digits (e.g. 20071069)`;
     }
 
     if (!(form.brand || '').trim()) newErrors.brand = 'Brand is required';
     if (!(form.productName || '').trim()) newErrors.productName = 'Product Name is required';
+
+    // Both optional, but if given they have to be sane — the backend stores
+    // these as numerics, so a negative price or lead time would be accepted
+    // silently and then read as real data downstream.
+    if ((form.unitPrice || '').trim() && !(Number(form.unitPrice) > 0)) {
+      newErrors.unitPrice = 'Unit price must be greater than 0';
+    }
+    if ((form.leadTimeDays || '').trim() && !(Number(form.leadTimeDays) >= 0)) {
+      newErrors.leadTimeDays = 'Lead time cannot be negative';
+    }
+
     return newErrors;
   };
 
@@ -95,11 +122,17 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
 
   // Step 2: Confirm & Save New SKU
   const handleConfirmSave = async () => {
+    // Guard against a double-click firing two POST /sku requests before the
+    // first resolves — the second would come back as a confusing 409
+    // "already exists" for the SKU the first call just created.
+    if (saving) return;
+
     const fullProduct = (form.sizeVal || '').trim()
       ? `${(form.productName || '').trim()} ${(form.sizeVal || '').trim()}${form.sizeUnit || ''}`
       : (form.productName || '').trim();
 
     setSaveError('');
+    setSaving(true);
     try {
       await onAdd({
         ...form,
@@ -107,8 +140,10 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
       });
     } catch (err) {
       setSaveError(err.message || 'Failed to add SKU');
+      setSaving(false);
       return;
     }
+    setSaving(false);
 
     setStep('SUCCESS');
 
@@ -131,19 +166,18 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
     onClose();
   };
 
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      handleCancel();
-    }
-  };
-
   const constructedFullProduct = (form.sizeVal || '').trim()
     ? `${(form.productName || '').trim()} ${(form.sizeVal || '').trim()}${form.sizeUnit || ''}`
     : (form.productName || '').trim();
 
   return (
-    <div className="modal-overlay" onClick={handleOverlayClick}>
-      <div className="modal-card">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleCancel}
+      label="Add new SKU"
+      overlayClassName="modal-overlay"
+      containerClassName="modal-card"
+    >
         {step === 'FORM' ? (
           /* STEP 1: ADD SKU FORM */
           <>
@@ -171,8 +205,9 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
                     name="skuCode"
                     value={form.skuCode}
                     onChange={handleSKUCodeChange}
-                    placeholder="e.g., SKU-10001"
-                    maxLength={9}
+                    placeholder="e.g., 20071069"
+                    inputMode="numeric"
+                    maxLength={SKU_CODE_LENGTH}
                     className={`form-input ${errors.skuCode ? 'input-error' : ''}`}
                   />
                   {errors.skuCode && <span className="error-text">{errors.skuCode}</span>}
@@ -280,8 +315,9 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
                     onChange={handleChange}
                     placeholder="e.g. 7"
                     min="0"
-                    className="form-input"
+                    className={`form-input ${errors.leadTimeDays ? 'input-error' : ''}`}
                   />
+                  {errors.leadTimeDays && <span className="error-text">{errors.leadTimeDays}</span>}
                 </div>
               </div>
 
@@ -361,12 +397,12 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
             {saveError && <p className="error-text" style={{ textAlign: 'center', marginTop: '0.5rem' }}>{saveError}</p>}
 
             <div className="modal-actions">
-              <button type="button" className="btn-cancel back-btn" onClick={handleBackToForm}>
+              <button type="button" className="btn-cancel back-btn" onClick={handleBackToForm} disabled={saving}>
                 <ArrowLeft size={14} />
                 Back
               </button>
-              <button type="button" className="btn-submit" onClick={handleConfirmSave}>
-                Confirm SKU
+              <button type="button" className="btn-submit" onClick={handleConfirmSave} disabled={saving}>
+                {saving ? 'Saving…' : 'Confirm SKU'}
               </button>
             </div>
           </>
@@ -382,8 +418,7 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
             </p>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 };
 

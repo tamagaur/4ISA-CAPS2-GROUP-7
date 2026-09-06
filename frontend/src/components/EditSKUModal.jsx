@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowLeft, CheckCircle2, XCircle } from 'lucide-react';
+import Modal from './Modal';
 import './EditSKUModal.css';
 
 // Helper to format SKU Code (e.g. SKU-10234)
@@ -47,6 +48,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     status: 'ACTIVE'
   });
   const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   // Populate form state when sku prop changes
   useEffect(() => {
@@ -67,28 +69,14 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     }
   }, [sku, isOpen]);
 
-  // Listen for Escape key press to dismiss modal
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
-
+  // Escape-to-close, focus trapping and role="dialog" now come from the
+  // shared <Modal> shell below (this file's own keydown listener was one of
+  // only three such ad hoc implementations in the app).
   if (!isOpen || !sku) return null;
 
   const handleClose = () => {
     setStep('FORM');
     onClose();
-  };
-
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      handleClose();
-    }
   };
 
   const handleChange = (e) => {
@@ -145,6 +133,10 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
 
   // Confirm changes and save
   const handleConfirmChanges = async () => {
+    // Guard against a double-click firing two PATCH /sku/:id requests — see
+    // the matching guard in AddSKUModal's handleConfirmSave.
+    if (saving) return;
+
     const updatedSKU = {
       ...sku,
       product: constructFullProduct(),
@@ -156,14 +148,17 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     };
 
     setSaveError('');
+    setSaving(true);
     try {
       if (onSave) {
         await onSave(updatedSKU);
       }
     } catch (err) {
       setSaveError(err.message || 'Failed to save changes');
+      setSaving(false);
       return;
     }
+    setSaving(false);
 
     setStep('SUCCESS');
 
@@ -173,8 +168,13 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
   };
 
   return (
-    <div className="edit-sku-modal-overlay" onClick={handleOverlayClick}>
-      <div className="edit-sku-modal-card">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      label={`Edit SKU ${sku.code}`}
+      overlayClassName="edit-sku-modal-overlay"
+      containerClassName="edit-sku-modal-card"
+    >
         {step === 'FORM' ? (
           /* STEP 1: EDIT SKU FORM */
           <>
@@ -371,8 +371,8 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                 <ArrowLeft size={14} />
                 Back
               </button>
-              <button type="button" className="edit-sku-btn-confirm" onClick={handleConfirmChanges}>
-                Confirm Changes
+              <button type="button" className="edit-sku-btn-confirm" onClick={handleConfirmChanges} disabled={saving}>
+                {saving ? 'Saving…' : 'Confirm Changes'}
               </button>
             </div>
           </>
@@ -388,8 +388,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
             </p>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 };
 

@@ -26,14 +26,14 @@
 .bo-page-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
   display: flex;
   align-items: baseline;
 }
 
 .bo-page-title span {
-  color: #c53030;
+  color: var(--color-brand-primary);
   font-weight: 600;
   font-style: italic;
   font-family: Georgia, 'Times New Roman', serif;
@@ -41,7 +41,7 @@
 }
 
 .bo-page-subtitle {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.85rem;
   margin: 0;
   line-height: 1.5;
@@ -50,8 +50,8 @@
 
 /* Report Button */
 .bo-report-btn {
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border: none;
   border-radius: 8px;
   padding: 0.6rem 1.2rem;
@@ -67,16 +67,16 @@
 }
 
 .bo-report-btn:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-brand-hover);
 }
 
 .bo-grain-note {
   margin: 0.5rem 0 0 0;
   padding: 0.6rem 0.9rem;
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
   border-radius: 8px;
   font-size: 0.72rem;
-  color: #718096;
+  color: var(--color-text-muted);
   line-height: 1.4;
 }
 
@@ -88,40 +88,40 @@
 }
 
 .bo-summary-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 1.5rem 2rem;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-left: 4px solid transparent;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 }
 
-.bo-card-incidents { border-left-color: #E5484D; }
-.bo-card-units { border-left-color: #F5A623; }
-.bo-card-value { border-left-color: #E5484D; }
+.bo-card-incidents { border-left-color: var(--color-critical); }
+.bo-card-units { border-left-color: var(--color-warning); }
+.bo-card-value { border-left-color: var(--color-critical); }
 .bo-card-rate { border-left-color: #3B6FE0; }
 
 .bo-card-label {
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   text-transform: uppercase;
 }
 
 .bo-card-value {
   font-size: 2.4rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   line-height: 1.1;
 }
 
 .bo-card-desc {
   font-size: 0.78rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   margin-top: 0.2rem;
 }
 
@@ -133,11 +133,11 @@
 }
 
 .bo-widget {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 1.5rem 2rem;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   min-height: 320px;
@@ -146,12 +146,12 @@
 .bo-widget-title {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 1.5rem 0;
 }
 
 .bo-widget-title span {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-weight: 400;
 }
 
@@ -170,18 +170,18 @@
 
 .bo-sku-select {
   padding: 0.4rem 0.7rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--color-border-strong);
   border-radius: 6px;
   font-size: 0.75rem;
-  color: #4a5568;
-  background-color: #f8fafc;
+  color: var(--color-text-body);
+  background-color: var(--color-surface-raised);
   outline: none;
   cursor: pointer;
   max-width: 220px;
 }
 
 .bo-sku-select:focus {
-  border-color: #c53030;
+  border-color: var(--color-brand-primary);
 }
 
 .bo-chart-wrapper {
@@ -192,27 +192,27 @@
 
 .bo-chart-footnote {
   font-size: 0.75rem;
-  color: #718096;
+  color: var(--color-text-muted);
   margin: 0.75rem 0 0 0;
   text-align: right;
 }
 
 .bo-footnote-over {
-  color: #e53e3e;
+  color: var(--color-brand-accent);
 }
 
 .bo-footnote-under {
-  color: #2E9E5B;
+  color: var(--color-success);
 }
 
 /* Incident Table */
 .bo-table-wrapper {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .bo-table {
@@ -223,7 +223,7 @@
 }
 
 .bo-table thead {
-  border-bottom: 2px solid #edf2f7;
+  border-bottom: 2px solid var(--color-surface-muted);
 }
 
 .bo-table th {
@@ -232,35 +232,35 @@
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   white-space: nowrap;
   vertical-align: middle;
 }
 
 .bo-table tbody tr {
-  border-bottom: 1px solid #f7fafc;
+  border-bottom: 1px solid var(--color-surface-raised);
   transition: background-color 0.15s;
 }
 
 .bo-table tbody tr:hover {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .bo-table td {
   padding: 0.85rem 0.8rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   vertical-align: middle;
   text-align: center;
 }
 
 .bo-id-cell {
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
   white-space: nowrap;
 }
 
 .bo-sku-cell {
-  color: #3182ce;
+  color: var(--color-info);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -272,7 +272,7 @@
 
 .bo-product-cell {
   font-weight: 500;
-  color: #1a202c;
+  color: var(--color-text);
 }
 
 .bo-qty-cell {
@@ -284,12 +284,12 @@
 .bo-value-cell {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: #2d3748;
+  color: var(--color-text-heading);
   white-space: nowrap;
 }
 
 .bo-date-cell {
-  color: #718096;
+  color: var(--color-text-muted);
   font-size: 0.82rem;
   white-space: nowrap;
 }
@@ -297,7 +297,7 @@
 .bo-no-results {
   text-align: center;
   padding: 3rem 1rem !important;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-style: italic;
 }
 
@@ -318,7 +318,7 @@
 
 /* Modal Content Container */
 .bo-modal-container {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   width: 100%;
   max-width: 500px;
@@ -333,20 +333,20 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.2rem 1.5rem;
-  border-bottom: 1px solid #edf2f7;
+  border-bottom: 1px solid var(--color-surface-muted);
 }
 
 .bo-modal-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0;
 }
 
 .bo-modal-close-btn {
   background: transparent;
   border: none;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   cursor: pointer;
   padding: 0.2rem;
   display: flex;
@@ -356,7 +356,7 @@
 }
 
 .bo-modal-close-btn:hover {
-  color: #4a5568;
+  color: var(--color-text-body);
 }
 
 /* Modal Form Body */
@@ -380,7 +380,7 @@
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: #718096;
+  color: var(--color-text-muted);
 }
 
 .bo-input,
@@ -388,11 +388,11 @@
 .bo-textarea {
   width: 100%;
   padding: 0.6rem 0.8rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 0.85rem;
-  color: #1a202c;
-  background-color: #ffffff;
+  color: var(--color-text);
+  background-color: var(--color-surface);
   outline: none;
   transition: border-color 0.2s;
   box-sizing: border-box;
@@ -400,13 +400,13 @@
 
 .bo-input::placeholder,
 .bo-textarea::placeholder {
-  color: #cbd5e0;
+  color: var(--color-border-strong);
 }
 
 .bo-input:focus,
 .bo-select:focus,
 .bo-textarea:focus {
-  border-color: #3182ce;
+  border-color: var(--color-info);
 }
 
 .bo-textarea {
@@ -434,23 +434,23 @@
 }
 
 .bo-btn-cancel {
-  background-color: #ffffff;
-  color: #4a5568;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
+  border: 1px solid var(--color-border);
 }
 
 .bo-btn-cancel:hover {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .bo-btn-submit {
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border: none;
 }
 
 .bo-btn-submit:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-brand-hover);
 }
 
 /* Animations */
@@ -495,3 +495,23 @@
 }
 
 
+
+/* Inline load/error banner. Sits above the KPI cards instead of replacing
+   the page, so the header and date filter stay usable while data refreshes
+   or after a failure — this page previously showed nothing at all on a
+   failed fetch and silently kept stale numbers on screen. */
+.bo-load-banner {
+  margin-bottom: 1rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-body);
+}
+
+.bo-load-banner-error {
+  background-color: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-brand-hover);
+}

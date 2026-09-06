@@ -12,6 +12,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
 import DateFilter from './DateFilter';
@@ -68,9 +69,9 @@ const formatAxisQty = (value) => {
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     const hasActual = payload.some(p => p.dataKey === 'actual');
-    const displayPayload = hasActual 
-        ? payload.filter(p => p.dataKey !== 'forecast')
-        : payload;
+    const displayPayload = hasActual
+      ? payload.filter(p => p.dataKey !== 'forecast')
+      : payload;
 
     const qty = (v) => Math.round(v).toLocaleString();
 
@@ -182,7 +183,6 @@ const SKUForecast = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
-  const [selectedBrand, setSelectedBrand] = useState('ALL');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Selected SKU. Starts EMPTY — the page opens on a "pick a SKU" prompt
@@ -278,17 +278,15 @@ const SKUForecast = () => {
   const handleClearSelection = () => {
     setSelectedSKU(null);
     setSelectedCategory('ALL');
-    setSelectedBrand('ALL');
     setSearchQuery('');
     try {
       sessionStorage.removeItem(SELECTED_SKU_KEY);
     } catch { /* nothing to forget if storage is unavailable */ }
   };
 
-  // Unique Brands list
-  const brandsList = ['ALL', ...Array.from(new Set(sourceSKUs.map(s => s.brand)))];
-
-  // Filtering Logic
+  // Filtering Logic. No brand filter: every SKU here is Unilever (see the
+  // "Unilever only" scope badge above the picker) — brand is still matched
+  // on for SEARCH, since typing "unilever" shouldn't come back empty.
   const filteredSKUs = useMemo(() => {
     return sourceSKUs.filter(sku => {
       const matchesSearch = searchQuery === '' ||
@@ -296,12 +294,11 @@ const SKUForecast = () => {
         sku.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sku.brand.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCat = selectedCategory === 'ALL' || sku.cat === selectedCategory;
-      const matchesBrand = selectedBrand === 'ALL' || sku.brand === selectedBrand;
-      return matchesSearch && matchesCat && matchesBrand;
+      return matchesSearch && matchesCat;
     });
-  }, [sourceSKUs, searchQuery, selectedCategory, selectedBrand]);
+  }, [sourceSKUs, searchQuery, selectedCategory]);
 
-  const hasActiveFilterOrSearch = selectedCategory !== 'ALL' || selectedBrand !== 'ALL' || searchQuery.trim() !== '';
+  const hasActiveFilterOrSearch = selectedCategory !== 'ALL' || searchQuery.trim() !== '';
 
   const pinnedSKUObjects = sourceSKUs.filter(sku => pinnedSKUs.includes(sku.code));
   const recentSKUObjects = sourceSKUs.filter(sku => recentSKUs.includes(sku.code) && !pinnedSKUs.includes(sku.code));
@@ -486,7 +483,7 @@ const SKUForecast = () => {
       let currentPeriod = sortedActuals[0].period;
       const endPeriod = sortedActuals[sortedActuals.length - 1].period;
       let actualIndex = 0;
-      
+
       while (currentPeriod <= endPeriod) {
         if (actualIndex < sortedActuals.length && sortedActuals[actualIndex].period === currentPeriod) {
           actualPoints.push({
@@ -500,7 +497,7 @@ const SKUForecast = () => {
             actual: 0,
           });
         }
-        
+
         const [yearStr, monthStr] = currentPeriod.split('-');
         let year = parseInt(yearStr, 10);
         let month = parseInt(monthStr, 10);
@@ -534,12 +531,12 @@ const SKUForecast = () => {
 
     const forecastPoints = derivedForecast
       ? [{
-          label: derivedForecast.period,
-          forecast: derivedForecast.value,
-          ci: derivedForecast.confidenceLower != null && derivedForecast.confidenceUpper != null
-            ? [derivedForecast.confidenceLower, derivedForecast.confidenceUpper]
-            : undefined,
-        }]
+        label: derivedForecast.period,
+        forecast: derivedForecast.value,
+        ci: derivedForecast.confidenceLower != null && derivedForecast.confidenceUpper != null
+          ? [derivedForecast.confidenceLower, derivedForecast.confidenceUpper]
+          : undefined,
+      }]
       : [];
     return [...actualPoints, ...forecastPoints];
   }, [forecastResult, rangeStartPeriod, rangeEndPeriod, derivedForecast]);
@@ -599,6 +596,12 @@ const SKUForecast = () => {
         <div className="forecast-selection">
           <div className="selection-top-bar">
             <label className="selection-label">SELECT SKU TO FORECAST</label>
+            {/* Replaces the old Brand dropdown, which had exactly one real
+                option: this is a Unilever-only system (see the backend
+                routers' hardcoded principal filter). Stated as fixed scope
+                rather than offered as a choice, so nobody goes hunting for
+                brands that were never in the data. */}
+            <span className="forecast-scope-badge">Unilever only</span>
           </div>
 
           {/* Controls Bar: Filters & Search Combobox */}
@@ -622,23 +625,7 @@ const SKUForecast = () => {
                 </select>
               </div>
 
-              <div className="filter-dropdown-wrapper">
-                <span className="filter-icon-label">Brand:</span>
-                <select
-                  className="filter-select"
-                  value={selectedBrand}
-                  onChange={(e) => {
-                    setSelectedBrand(e.target.value);
-                    setIsDropdownOpen(true);
-                  }}
-                >
-                  {brandsList.map(b => (
-                    <option key={b} value={b}>{b === 'ALL' ? 'All Brands' : b}</option>
-                  ))}
-                </select>
-              </div>
-
-              {(selectedCategory !== 'ALL' || selectedBrand !== 'ALL' || searchQuery !== '' || selectedSKU) && (
+              {(selectedCategory !== 'ALL' || searchQuery !== '' || selectedSKU) && (
                 <button
                   className="clear-filters-btn"
                   onClick={handleClearSelection}
@@ -692,6 +679,8 @@ const SKUForecast = () => {
                               className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                               onClick={(e) => togglePinSKU(sku.code, e)}
                               title={pinnedSKUs.includes(sku.code) ? "Unpin SKU" : "Pin SKU to top"}
+                              aria-label={`${pinnedSKUs.includes(sku.code) ? 'Unpin' : 'Pin'} SKU ${sku.code}`}
+                              aria-pressed={pinnedSKUs.includes(sku.code)}
                             >
                               <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
                             </button>
@@ -727,6 +716,8 @@ const SKUForecast = () => {
                                 className="star-pin-btn pinned"
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Unpin SKU"
+                                aria-label={`Unpin SKU ${sku.code}`}
+                                aria-pressed={true}
                               >
                                 <Star size={15} fill="#F5A623" />
                               </button>
@@ -758,6 +749,8 @@ const SKUForecast = () => {
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Pin SKU"
+                                aria-label={`Pin SKU ${sku.code}`}
+                                aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
                                 <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
                               </button>
@@ -788,6 +781,8 @@ const SKUForecast = () => {
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Pin SKU"
+                                aria-label={`Pin SKU ${sku.code}`}
+                                aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
                                 <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
                               </button>
@@ -840,6 +835,8 @@ const SKUForecast = () => {
                     className={`card-star-btn ${isSelectedPinned ? 'pinned' : ''}`}
                     onClick={(e) => togglePinSKU(selectedSKU.code, e)}
                     title={isSelectedPinned ? "Unpin SKU" : "Pin SKU to top of search"}
+                    aria-label={`${isSelectedPinned ? 'Unpin' : 'Pin'} SKU ${selectedSKU.code}`}
+                    aria-pressed={isSelectedPinned}
                   >
                     <Star size={15} fill={isSelectedPinned ? '#F5A623' : 'none'} color={isSelectedPinned ? '#F5A623' : '#a0aec0'} />
                     <span className="pin-text">{isSelectedPinned ? 'Pinned' : 'Pin SKU'}</span>
@@ -857,7 +854,14 @@ const SKUForecast = () => {
             </div>
 
             {/* Chart Section */}
-            <div className="forecast-chart-container">
+            {/* Keyed on the selected SKU so switching products replays the
+                container's entrance animation (index.css's chartWidgetEnter)
+                — a clear "this is a different product now" signal. The key
+                deliberately excludes the date range: a range tweak keeps the
+                same chart mounted and lets Recharts tween between the old
+                and new values, which reads better than a re-fade for what is
+                the same product's data. */}
+            <div className="forecast-chart-container" key={selectedSKU?.code || 'none'}>
               {forecastLoading && <p className="forecast-subtitle">Loading forecast…</p>}
               {forecastError && <p className="forecast-subtitle">Error: {forecastError}</p>}
 
@@ -930,9 +934,8 @@ const SKUForecast = () => {
                         <span className="forecast-stat-value forecast-stat-value-neutral">—</span>
                       ) : (
                         <span
-                          className={`forecast-stat-value forecast-trend-chip ${
-                            forecastTrendPct > 0.5 ? 'trend-up' : forecastTrendPct < -0.5 ? 'trend-down' : 'trend-flat'
-                          }`}
+                          className={`forecast-stat-value forecast-trend-chip ${forecastTrendPct > 0.5 ? 'trend-up' : forecastTrendPct < -0.5 ? 'trend-down' : 'trend-flat'
+                            }`}
                         >
                           {forecastTrendPct > 0.5 ? (
                             <ArrowUp size={16} className="forecast-trend-icon" />
@@ -1104,7 +1107,7 @@ const SKUForecast = () => {
                           fill={COLORS.forecast}
                           fillOpacity={0.16}
                           name="Confidence interval"
-                          isAnimationActive={false}
+                          {...chartAnim()}
                           connectNulls={false}
                         />
 
@@ -1122,7 +1125,7 @@ const SKUForecast = () => {
                           dot={{ r: 3, fill: CHART_COLORS.salesSeries, strokeWidth: 0 }}
                           activeDot={{ r: 6 }}
                           name="Actual Sales"
-                          isAnimationActive={false}
+                          {...chartAnim()}
                           connectNulls
                         />
 
@@ -1135,7 +1138,7 @@ const SKUForecast = () => {
                           dot={{ r: 4, fill: COLORS.forecast, strokeWidth: 0 }}
                           activeDot={{ r: 6 }}
                           name="Forecast"
-                          isAnimationActive={false}
+                          {...chartAnim()}
                           connectNulls
                         />
                       </ComposedChart>

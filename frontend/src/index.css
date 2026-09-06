@@ -19,6 +19,73 @@
   /* Brand Chrome */
   --color-brand-primary: #c53030;
   --color-brand-accent: #e53e3e;
+
+  /* ── UI chrome neutrals ──────────────────────────────────────────────
+     Added 2026-09. Before this, component CSS hardcoded its own hex
+     literals — ~970 of them across 26 files — which is how the codebase
+     ended up running TWO parallel gray scales at once (a Chakra-style
+     ramp and a Tailwind-slate ramp), several of whose steps sat 1-3/255
+     apart and were indistinguishable on screen. Everything below is the
+     exact value that was already in use, so this introduced no visual
+     change; the only exceptions are three deliberate merges, noted
+     inline, where the two scales differed by an imperceptible amount. */
+
+  /* Surfaces */
+  --color-surface: #ffffff;
+  --color-surface-raised: #f8fafc;    /* merged: was #f7fafc (45x) + #f8fafc (26x), 1/255 apart */
+  --color-surface-sunken: #f1f5f9;
+  --color-surface-muted: #edf2f7;
+
+  /* Borders */
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;     /* merged: was #cbd5e0 (18x) + #cbd5e1 (22x), 1/255 apart */
+
+  /* Text — primary ramp */
+  --color-text: #1a202c;
+  --color-text-heading: #2d3748;
+  --color-text-body: #4a5568;         /* merged: was #4a5568 (58x) + #475569 (10x), 3/255 apart */
+  --color-text-muted: #718096;
+  --color-text-subtle: #a0aec0;
+
+  /* Text — slate ramp. Genuinely distinct from the ramp above (12-15/255
+     apart), so kept rather than merged; a future design pass could
+     consolidate the two, which is now a change in this file alone. */
+  --color-slate-900: #0f172a;
+  --color-slate-800: #1e293b;
+  --color-slate-700: #334155;
+  --color-slate-500: #64748b;
+  --color-slate-400: #94a3b8;
+
+  /* Brand */
+  --color-brand-hover: #9b2c2c;
+
+  /* Feedback — danger */
+  --color-danger-bg: #fff5f5;
+  --color-danger-bg-alt: #fef2f2;
+  --color-danger-bg-strong: #fee2e2;
+  --color-danger-border: #feb2b2;
+  --color-danger-border-alt: #fca5a5;
+
+  /* Feedback — success */
+  --color-success-ui: #38a169;
+  --color-success-deep: #2f855a;
+  --color-success-bg: #f0fff4;
+  --color-success-bg-alt: #dcfce7;
+
+  /* Feedback — warning */
+  --color-warning-deep: #d69e2e;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-text: #92400e;
+
+  /* Info */
+  --color-info: #3182ce;
+  --color-info-alt: #3b82f6;
+
+  /* ABC tints (the ramp itself is --color-abc-a/b/c above) */
+  --color-abc-a-bg: #fdf2f8;
+  --color-abc-b-bg: #fdf4ff;
+  --color-abc-deep: #701a75;
 }
 
 html, body, #root, .App {
@@ -30,10 +97,73 @@ html, body, #root, .App {
   font-size: 14px; /* Standard dashboard density */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
   overflow: hidden;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* ── Chart entrance animation ─────────────────────────────────────────
+   Charts previously appeared with no transition at all (every Recharts
+   series carried isAnimationActive={false} — see theme/motion.js). Two
+   layers now work together:
+
+     1. This CSS fade+rise, which plays when a chart WIDGET mounts — i.e.
+        when the page opens, and again after a date/filter change on
+        Dashboard and ABC Classification, where the loading state
+        unmounts the charts and remounts them with fresh data.
+     2. Recharts' own series animation (theme/motion.js's chartAnim),
+        which tweens bars/lines/areas from their old values to the new
+        ones when `data` changes underneath a chart that stays mounted —
+        the SKU Forecast and Bad Orders case.
+
+   The widget rises a short distance only; a large travel distance reads
+   as sluggish on a dashboard the user is scanning for numbers. */
+@keyframes chartWidgetEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chart-widget,
+.abc-pareto-chart-wrapper,
+.bo-chart-wrapper,
+.forecast-chart-container {
+  animation: chartWidgetEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Dashboard shows several widgets at once; a small per-position delay
+   makes them arrive as a sequence rather than one simultaneous flash.
+   Capped at the 6th child — beyond that the wait starts to feel like
+   lag rather than polish. */
+.dashboard-section .chart-widget { animation-delay: 0.04s; }
+.charts-row .chart-widget:nth-child(2),
+.dashboard-grid .chart-widget:nth-child(2) { animation-delay: 0.10s; }
+.charts-row .chart-widget:nth-child(3),
+.dashboard-grid .chart-widget:nth-child(3) { animation-delay: 0.16s; }
+.charts-row .chart-widget:nth-child(4),
+.dashboard-grid .chart-widget:nth-child(4) { animation-delay: 0.22s; }
+.charts-row .chart-widget:nth-child(5),
+.dashboard-grid .chart-widget:nth-child(5) { animation-delay: 0.28s; }
+.charts-row .chart-widget:nth-child(n + 6),
+.dashboard-grid .chart-widget:nth-child(n + 6) { animation-delay: 0.32s; }
+
+/* Someone who has asked the OS to reduce motion gets the final state
+   immediately — no fade, no rise, no stagger. theme/motion.js disables
+   the Recharts series animation under the same condition, so the two
+   layers stay consistent. */
+@media (prefers-reduced-motion: reduce) {
+  .chart-widget,
+  .abc-pareto-chart-wrapper,
+  .bo-chart-wrapper,
+  .forecast-chart-container {
+    animation: none;
+  }
 }

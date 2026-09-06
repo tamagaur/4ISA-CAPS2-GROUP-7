@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { getABCClassification } from '../api/abc';
 import DateFilter from './DateFilter';
 import './ABCClassification.css';
@@ -369,11 +370,30 @@ const ABCClassification = () => {
     }
   };
 
+  // Rendered in every state (loading, error, loaded) rather than only on
+  // success — the date picker lives in this header, so blanking the page
+  // while refetching removed the control the user had just changed. Same
+  // fix as Dashboard.jsx's `header`.
+  const header = (
+    <div className="abc-page-header">
+      <div className="abc-page-title-row">
+        <h2 className="abc-page-title">ABC Classification</h2>
+        <DateFilter />
+      </div>
+      <p className="abc-page-subtitle">
+        Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
+        {classificationPeriod && <> Period: {classificationPeriod}.</>}
+        <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a SKU within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
+      </p>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="abc-page">
         <div className="abc-content">
-          <p className="abc-page-subtitle">Loading ABC classification data…</p>
+          {header}
+          <p className="abc-page-subtitle" role="status">Loading ABC classification data…</p>
         </div>
       </div>
     );
@@ -383,7 +403,8 @@ const ABCClassification = () => {
     return (
       <div className="abc-page">
         <div className="abc-content">
-          <p className="abc-page-subtitle">Failed to load ABC classification data: {error}</p>
+          {header}
+          <p className="abc-page-subtitle" role="alert">Failed to load ABC classification data: {error}</p>
         </div>
       </div>
     );
@@ -393,17 +414,7 @@ const ABCClassification = () => {
     <div className="abc-page">
       <div className="abc-content">
         {/* Page Header */}
-        <div className="abc-page-header">
-          <div className="abc-page-title-row">
-            <h2 className="abc-page-title">ABC Classification</h2>
-            <DateFilter />
-          </div>
-          <p className="abc-page-subtitle">
-            Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
-            {classificationPeriod && <> Period: {classificationPeriod}.</>}
-            <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a SKU within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
-          </p>
-        </div>
+        {header}
 
         {/* Summary Cards */}
         <div className="abc-summary-grid">
@@ -496,7 +507,7 @@ const ABCClassification = () => {
                       dataKey="revenueTotal"
                       radius={[6, 6, 0, 0]}
                       barSize={54}
-                      isAnimationActive={false}
+                      {...chartAnim()}
                       onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)}
                       style={{ cursor: 'pointer' }}
                     >
@@ -516,22 +527,22 @@ const ABCClassification = () => {
                         whichever real status segment is on top. Each
                         stacked segment is also clickable and outlines the
                         whole column for whichever class is selected. */}
-                    <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                    <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={54} {...chartAnim(0)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
                         <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
                       ))}
                     </Bar>
-                    <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                    <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
                         <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
                       ))}
                     </Bar>
-                    <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                    <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
                         <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
                       ))}
                     </Bar>
-                    <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                    <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
                         <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
                       ))}
@@ -862,6 +873,7 @@ const ABCClassification = () => {
                 className="abc-pagination-btn"
                 onClick={() => setCurrentPage(1)}
                 disabled={safeCurrentPage === 1}
+                aria-label="First page"
                 title="First page"
               >
                 «
@@ -870,6 +882,7 @@ const ABCClassification = () => {
                 className="abc-pagination-btn"
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={safeCurrentPage === 1}
+                aria-label="Previous page"
               >
                 Prev
               </button>
@@ -880,6 +893,7 @@ const ABCClassification = () => {
                 className="abc-pagination-btn"
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={safeCurrentPage === totalPages}
+                aria-label="Next page"
               >
                 Next
               </button>
@@ -887,6 +901,7 @@ const ABCClassification = () => {
                 className="abc-pagination-btn"
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={safeCurrentPage === totalPages}
+                aria-label="Last page"
                 title="Last page"
               >
                 »

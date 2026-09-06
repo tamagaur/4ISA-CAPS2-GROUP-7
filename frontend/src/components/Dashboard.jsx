@@ -68,11 +68,27 @@ const Dashboard = () => {
     };
   }, [period, startPeriod]);
 
+  // Header is rendered in every state — loading, error and loaded — rather
+  // than only on success. The date picker lives inside it, so blanking the
+  // whole page on load meant the control the user had just changed
+  // disappeared underneath them on every single refetch, and an error left
+  // them with no way to pick a different range to recover.
+  const header = (
+    <div className="dashboard-header">
+      <div className="dashboard-title-row">
+        <h2>Inventory <span>pulse</span></h2>
+        <DateFilter />
+      </div>
+      <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="dashboard">
         <div className="dashboard-content">
-          <p className="dashboard-empty-note">Loading dashboard data…</p>
+          {header}
+          <p className="dashboard-empty-note" role="status">Loading dashboard data…</p>
         </div>
       </div>
     );
@@ -82,7 +98,8 @@ const Dashboard = () => {
     return (
       <div className="dashboard">
         <div className="dashboard-content">
-          <p className="dashboard-empty-note">Failed to load dashboard data: {error}</p>
+          {header}
+          <p className="dashboard-empty-note" role="alert">Failed to load dashboard data: {error}</p>
         </div>
       </div>
     );
@@ -154,13 +171,7 @@ const Dashboard = () => {
   return (
     <div className="dashboard">
       <div className="dashboard-content">
-        <div className="dashboard-header">
-          <div className="dashboard-title-row">
-            <h2>Inventory <span>pulse</span></h2>
-            <DateFilter />
-          </div>
-          <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
-        </div>
+        {header}
 
         {/* ── 4 KPI cards ────────────────────────────────────────────── */}
         <div className="dashboard-section">

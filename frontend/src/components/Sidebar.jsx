@@ -14,6 +14,7 @@ import {
   Users
 } from 'lucide-react';
 import { logout, getCurrentUser } from '../auth';
+import Modal from './Modal';
 import './Sidebar.css';
 
 // Initials for the bottom-profile avatar, e.g. "Audrey Bugayong" -> "AB".
@@ -88,12 +89,17 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
       <aside className={`sidebar ${isOpen ? '' : 'sidebar-hidden'}`}>
-        {/* Top Profile */}
+        {/* App identity. This slot used to hold a hardcoded "San San /
+            Marketing" profile — a placeholder that showed every signed-in
+            user a stranger's name and role at the top of every page, directly
+            above their OWN real name in .sidebar-bottom. Replaced with the
+            app/warehouse identity, which is what a sidebar header is for;
+            the one true "who am I" indicator now lives only at the bottom. */}
         <div className="sidebar-profile-top">
-          <div className="avatar red-avatar">S</div>
+          <div className="avatar red-avatar" aria-hidden="true">S</div>
           <div className="profile-info">
-            <span className="profile-name">San San</span>
-            <span className="profile-role">Marketing</span>
+            <span className="profile-name">SAN2 Inventory DSS</span>
+            <span className="profile-role">SSM Urdaneta</span>
           </div>
         </div>
 
@@ -168,14 +174,19 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
 
       {/* Logout Confirmation Modal Popup */}
       {showLogoutModal && (
-        <div className="logout-modal-overlay" onClick={() => setShowLogoutModal(false)}>
-          <div className="logout-modal-card" onClick={(e) => e.stopPropagation()}>
+        <Modal
+          isOpen={showLogoutModal}
+          onClose={() => setShowLogoutModal(false)}
+          label="Log out confirmation"
+          overlayClassName="logout-modal-overlay"
+          containerClassName="logout-modal-card"
+        >
             <div className="logout-modal-header">
               <div className="logout-modal-icon-wrap">
                 <LogOut size={20} color="#c53030" />
               </div>
               <h3 className="logout-modal-title">Log Out Confirmation</h3>
-              <button className="logout-modal-close" onClick={() => setShowLogoutModal(false)}>
+              <button className="logout-modal-close" onClick={() => setShowLogoutModal(false)} aria-label="Close">
                 <X size={18} />
               </button>
             </div>
@@ -190,8 +201,7 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
                 Log Out
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

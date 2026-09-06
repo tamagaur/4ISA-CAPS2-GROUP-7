@@ -30,7 +30,7 @@
 }
 
 .period-nav-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   width: 90%;
   max-width: 420px;
@@ -46,7 +46,7 @@
 .period-nav-title {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -57,7 +57,7 @@
 .period-nav-body p {
   margin: 0;
   font-size: 0.88rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   line-height: 1.5;
 }
 
@@ -65,16 +65,16 @@
   display: flex;
   gap: 0.8rem;
   padding: 1rem 1.5rem 1.25rem 1.5rem;
-  background-color: #f8fafc;
-  border-top: 1px solid #edf2f7;
+  background-color: var(--color-surface-raised);
+  border-top: 1px solid var(--color-surface-muted);
 }
 
 .period-discard-btn {
   flex: 1;
   padding: 0.6rem;
-  border: 1px solid #cbd5e0;
-  background-color: #ffffff;
-  color: #4a5568;
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
   border-radius: 8px;
   font-size: 0.85rem;
   font-weight: 600;
@@ -83,15 +83,15 @@
 }
 
 .period-discard-btn:hover {
-  background-color: #edf2f7;
+  background-color: var(--color-surface-muted);
 }
 
 .period-save-btn {
   flex: 1;
   padding: 0.6rem;
   border: none;
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border-radius: 8px;
   font-size: 0.85rem;
   font-weight: 600;
@@ -100,5 +100,5 @@
 }
 
 .period-save-btn:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-brand-hover);
 }

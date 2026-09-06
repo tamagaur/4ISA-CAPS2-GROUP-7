@@ -1,8 +1,8 @@
 .alerts-widget {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 2rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
@@ -18,20 +18,20 @@
 .alerts-header h4 {
   margin: 0;
   font-size: 0.95rem;
-  color: #1a202c;
+  color: var(--color-text);
   font-weight: 600;
 }
 
 .view-all-btn {
   background: none;
   border: none;
-  color: #718096;
+  color: var(--color-text-muted);
   font-size: 0.75rem;
   cursor: pointer;
 }
 
 .view-all-btn:hover {
-  color: #4a5568;
+  color: var(--color-text-body);
 }
 
 .alerts-list {
@@ -55,12 +55,12 @@
 .alert-title {
   font-size: 0.9rem;
   font-weight: 500;
-  color: #2d3748;
+  color: var(--color-text-heading);
 }
 
 .alert-subtitle {
   font-size: 0.75rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .alert-badge {
@@ -73,7 +73,7 @@
 
 .badge-red {
   background-color: #fed7d7;
-  color: #c53030;
+  color: var(--color-brand-primary);
 }
 
 .badge-yellow {
@@ -83,12 +83,12 @@
 
 .badge-green {
   background-color: #c6f6d5;
-  color: #2f855a;
+  color: var(--color-success-deep);
 }
 
 .badge-default {
-  background-color: #edf2f7;
-  color: #4a5568;
+  background-color: var(--color-surface-muted);
+  color: var(--color-text-body);
 }
 
 

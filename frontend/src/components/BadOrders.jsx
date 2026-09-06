@@ -20,6 +20,7 @@ import {
 import ReportBadOrderModal from './ReportBadOrderModal';
 import DateFilter from './DateFilter';
 import { COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { BAD_ORDER_REASONS } from '../data/mockData';
 import './BadOrders.css';
 
@@ -198,9 +199,18 @@ const BadOrders = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBOSKU, setSelectedBOSKU] = useState(TRACKED_SKUS[0].code);
   const [boTrendGranularity, setBoTrendGranularity] = useState('monthly');
+  // This page used to swallow fetch failures into console.error alone, so a
+  // failed load left the KPI cards and charts showing stale/zero numbers with
+  // no indication anything was wrong — the one fetch-driven page in the app
+  // with no user-visible error path. Now matches the loading/error pattern
+  // every other page uses.
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     async function loadData() {
+      setLoading(true);
+      setError(null);
       try {
         let from = '';
         let to = '';
@@ -220,6 +230,9 @@ const BadOrders = () => {
         }
       } catch (err) {
         console.error('Failed to load BO monitoring data:', err);
+        setError(err.message || 'Failed to load bad-order data');
+      } finally {
+        setLoading(false);
       }
     }
     loadData();
@@ -343,6 +356,18 @@ const BadOrders = () => {
           </div>
         </div>
 
+        {/* Load status. Rendered above the cards rather than replacing the
+            page, so the header and date filter stay put while data refreshes
+            (the KPI values below are the stale ones until it resolves). */}
+        {error && (
+          <div className="bo-load-banner bo-load-banner-error" role="alert">
+            Couldn&apos;t load bad-order data: {error}. The figures below may be out of date.
+          </div>
+        )}
+        {loading && !error && (
+          <div className="bo-load-banner" role="status">Loading bad-order data…</div>
+        )}
+
         {/* Summary KPI Cards */}
         <div className="bo-summary-grid">
           <div className="bo-summary-card bo-card-incidents">
@@ -453,7 +478,7 @@ const BadOrders = () => {
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     formatter={(value, name, props) => [value, props.payload.reason]}
                   />
-                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={22} isAnimationActive={false}>
+                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={22} {...chartAnim()}>
                     <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
                   </Bar>
                 </BarChart>
@@ -482,7 +507,7 @@ const BadOrders = () => {
                   <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 11 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                  <Bar dataKey="count" name="Incidents" fill={COLORS.warning} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                  <Bar dataKey="count" name="Incidents" fill={COLORS.warning} radius={[4, 4, 0, 0]} {...chartAnim()} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -498,7 +523,7 @@ const BadOrders = () => {
                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                  <Bar dataKey="count" name="Incidents" fill={COLORS.dispatched} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                  <Bar dataKey="count" name="Incidents" fill={COLORS.dispatched} radius={[4, 4, 0, 0]} {...chartAnim()} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -524,7 +549,7 @@ const BadOrders = () => {
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     formatter={(value, name, props) => [value, props.payload.product]}
                   />
-                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
+                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={18} {...chartAnim()}>
                     <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
                   </Bar>
                 </BarChart>
@@ -545,7 +570,7 @@ const BadOrders = () => {
                   <XAxis dataKey="brand" axisLine={false} tickLine={false} tick={{ fill: '#4a5568', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                  <Bar dataKey="count" name="Incidents" radius={[4, 4, 0, 0]} barSize={60} isAnimationActive={false}>
+                  <Bar dataKey="count" name="Incidents" radius={[4, 4, 0, 0]} barSize={60} {...chartAnim()}>
                     <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
                     {brandBreakdown.map((entry) => (
                       <Cell key={entry.brand} fill={COLORS.salesTrend} />

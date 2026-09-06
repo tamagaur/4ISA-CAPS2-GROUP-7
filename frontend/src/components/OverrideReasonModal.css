@@ -20,7 +20,7 @@
 }
 
 .override-modal-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 16px;
   width: 100%;
   max-width: 460px;
@@ -40,7 +40,7 @@
   align-items: flex-start;
   gap: 0.85rem;
   padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-surface-sunken);
 }
 
 .override-icon-wrap {
@@ -61,20 +61,20 @@
 .override-modal-title {
   font-size: 1.05rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-slate-900);
   margin: 0 0 0.2rem 0;
 }
 
 .override-modal-subtitle {
   font-size: 0.78rem;
-  color: #64748b;
+  color: var(--color-slate-500);
   margin: 0;
 }
 
 .override-modal-close {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--color-slate-400);
   cursor: pointer;
   padding: 0.3rem;
   border-radius: 6px;
@@ -86,8 +86,8 @@
 }
 
 .override-modal-close:hover {
-  background-color: #f1f5f9;
-  color: #475569;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
 }
 
 .override-modal-body {
@@ -96,7 +96,7 @@
 
 .override-modal-copy {
   font-size: 0.83rem;
-  color: #475569;
+  color: var(--color-text-body);
   line-height: 1.55;
   margin: 0 0 1.1rem 0;
 }
@@ -105,23 +105,23 @@
   display: block;
   font-size: 0.72rem;
   font-weight: 700;
-  color: #475569;
+  color: var(--color-text-body);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   margin-bottom: 0.4rem;
 }
 
 .override-req {
-  color: #c53030;
+  color: var(--color-brand-primary);
 }
 
 .override-textarea {
   width: 100%;
   padding: 0.65rem 0.85rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
   font-size: 0.85rem;
-  color: #0f172a;
+  color: var(--color-slate-900);
   outline: none;
   resize: vertical;
   font-family: inherit;
@@ -129,7 +129,7 @@
 }
 
 .override-textarea:focus {
-  border-color: #c53030;
+  border-color: var(--color-brand-primary);
   box-shadow: 0 0 0 3px rgba(197, 48, 48, 0.1);
 }
 
@@ -137,7 +137,7 @@
   display: block;
   margin-top: 0.4rem;
   font-size: 0.72rem;
-  color: #e53e3e;
+  color: var(--color-brand-accent);
   font-weight: 600;
 }
 
@@ -147,7 +147,7 @@
   justify-content: flex-end;
   gap: 0.75rem;
   padding: 1rem 1.5rem 1.25rem 1.5rem;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--color-surface-sunken);
 }
 
 .override-btn {
@@ -169,25 +169,25 @@
 }
 
 .override-btn-cancel {
-  background-color: #ffffff;
-  border-color: #cbd5e1;
-  color: #475569;
+  background-color: var(--color-surface);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-body);
 }
 
 .override-btn-cancel:hover {
-  background-color: #f8fafc;
-  border-color: #94a3b8;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-slate-400);
 }
 
 .override-btn-dismiss {
-  background-color: #e53e3e;
-  border-color: #e53e3e;
-  color: #ffffff;
+  background-color: var(--color-brand-accent);
+  border-color: var(--color-brand-accent);
+  color: var(--color-surface);
 }
 
 .override-btn-dismiss:hover:not(:disabled) {
-  background-color: #c53030;
-  border-color: #c53030;
+  background-color: var(--color-brand-primary);
+  border-color: var(--color-brand-primary);
 }
 
 @media (max-width: 500px) {

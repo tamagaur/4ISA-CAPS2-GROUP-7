@@ -27,12 +27,12 @@
 .abc-page-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
 }
 
 .abc-page-subtitle {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.85rem;
   margin: 0;
   line-height: 1.5;
@@ -46,7 +46,7 @@
 }
 
 .abc-summary-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 1.5rem 2rem;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
@@ -56,28 +56,28 @@
   gap: 0.2rem;
 }
 
-.abc-card-a { border-top-color: #6B2C5F; }
-.abc-card-b { border-top-color: #B565A0; }
-.abc-card-c { border-top-color: #EBC9E1; }
-.abc-card-total { border-top-color: #1a202c; }
+.abc-card-a { border-top-color: var(--color-abc-a); }
+.abc-card-b { border-top-color: var(--color-abc-b); }
+.abc-card-c { border-top-color: var(--color-abc-c); }
+.abc-card-total { border-top-color: var(--color-text); }
 
 .abc-card-label {
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .abc-card-value {
   font-size: 2.4rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   line-height: 1.1;
 }
 
 .abc-card-desc {
   font-size: 0.78rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   margin-top: 0.2rem;
 }
 
@@ -97,7 +97,7 @@
 }
 
 .abc-boundary-legend-icon {
-  color: #d69e2e;
+  color: var(--color-warning-deep);
   flex-shrink: 0;
 }
 
@@ -108,7 +108,7 @@
 }
 
 .abc-boundary-icon {
-  color: #d69e2e;
+  color: var(--color-warning-deep);
   flex-shrink: 0;
   cursor: help;
 }
@@ -116,20 +116,20 @@
 .abc-page-grain-note {
   margin: -0.5rem 0 0 0;
   padding: 0.6rem 0.9rem;
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
   border-radius: 8px;
   font-size: 0.72rem;
-  color: #718096;
+  color: var(--color-text-muted);
   line-height: 1.4;
 }
 
 /* Pareto Chart */
 .abc-pareto-container {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 1.5rem 1.75rem;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .abc-pareto-header {
@@ -144,7 +144,7 @@
 .abc-pareto-title {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -159,7 +159,7 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.72rem;
-  color: #718096;
+  color: var(--color-text-muted);
 }
 
 .abc-pareto-legend-swatch {
@@ -186,8 +186,8 @@
 }
 
 .abc-pareto-tooltip {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   padding: 0.6rem 0.85rem;
   border-radius: 8px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
@@ -195,7 +195,7 @@
 
 .abc-pareto-tooltip-title {
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
   font-size: 0.78rem;
 }
@@ -212,7 +212,7 @@
   gap: 1rem;
   margin-top: 1.25rem;
   padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
   text-align: center;
 }
 
@@ -225,12 +225,12 @@
 .abc-class-summary-headline {
   font-size: 0.8rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
 }
 
 .abc-class-summary-archetype {
   font-size: 0.72rem;
-  color: #718096;
+  color: var(--color-text-muted);
 }
 
 /* Class Aggregation Chart + Class C Drill-down layout */
@@ -269,16 +269,16 @@
   padding: 0.5rem 0.4rem;
   font-size: 0.7rem;
   font-weight: 700;
-  color: #718096;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .abc-drilldown-table td {
   padding: 0.6rem 0.4rem;
-  border-bottom: 1px solid #edf2f7;
-  color: #1a202c;
+  border-bottom: 1px solid var(--color-surface-muted);
+  color: var(--color-text);
   font-weight: 600;
 }
 
@@ -298,7 +298,7 @@
 .abc-drilldown-hint {
   margin: 0.5rem 0 0;
   font-size: 0.72rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   text-align: center;
 }
 
@@ -314,34 +314,34 @@
   font-size: 0.75rem;
   font-weight: 700;
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: #f7fafc;
-  color: #718096;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .abc-drilldown-tab:hover {
-  background: #edf2f7;
+  background: var(--color-surface-muted);
 }
 
 /* Colors mirror COLORS.abcA/abcB/abcC in theme/colors.js so a tab always
    reads as the same color as its class's bar in the chart above. */
 .abc-drilldown-tab.active.abc-drilldown-tab-a {
-  background: #6B2C5F;
-  border-color: #6B2C5F;
+  background: var(--color-abc-a);
+  border-color: var(--color-abc-a);
   color: #fff;
 }
 
 .abc-drilldown-tab.active.abc-drilldown-tab-b {
-  background: #B565A0;
-  border-color: #B565A0;
+  background: var(--color-abc-b);
+  border-color: var(--color-abc-b);
   color: #fff;
 }
 
 .abc-drilldown-tab.active.abc-drilldown-tab-c {
-  background: #EBC9E1;
-  border-color: #EBC9E1;
+  background: var(--color-abc-c);
+  border-color: var(--color-abc-c);
   color: #4a2540;
 }
 
@@ -350,7 +350,7 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 0.8rem 1.2rem;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
@@ -372,24 +372,24 @@
 .abc-search-wrapper .abc-search-icon {
   position: absolute;
   left: 0.8rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .abc-search-input {
   width: 100%;
   padding: 0.6rem 2.2rem 0.6rem 2.4rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 0.85rem;
-  color: #1a202c;
-  background-color: #ffffff;
+  color: var(--color-text);
+  background-color: var(--color-surface);
   outline: none;
   transition: all 0.2s ease;
   box-sizing: border-box;
 }
 
 .abc-search-input:focus {
-  border-color: #c53030;
+  border-color: var(--color-brand-primary);
   box-shadow: 0 0 0 3px rgba(197, 48, 48, 0.1);
 }
 
@@ -398,7 +398,7 @@
   right: 0.6rem;
   background: none;
   border: none;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -406,7 +406,7 @@
 }
 
 .abc-input-clear-btn:hover {
-  color: #4a5568;
+  color: var(--color-text-body);
 }
 
 /* Combobox Dropdown Panel */
@@ -415,9 +415,9 @@
   top: calc(100% + 0.4rem);
   left: 0;
   right: 0;
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12);
   max-height: 340px;
   overflow-y: auto;
@@ -432,7 +432,7 @@
 
 .abc-combobox-section {
   padding: 0.4rem 0;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-surface-sunken);
 }
 
 .abc-combobox-section:last-child {
@@ -447,7 +447,7 @@
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #94a3b8;
+  color: var(--color-slate-400);
 }
 
 .abc-suggestion-row {
@@ -460,7 +460,7 @@
 }
 
 .abc-suggestion-row:hover {
-  background-color: #f8fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .abc-row-left {
@@ -473,12 +473,12 @@
   font-size: 0.8rem;
   font-weight: 700;
   font-family: monospace;
-  color: #3b82f6;
+  color: var(--color-info-alt);
 }
 
 .abc-row-brand {
   font-size: 0.7rem;
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .abc-row-middle {
@@ -491,7 +491,7 @@
 .abc-row-product {
   font-size: 0.82rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-slate-800);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -499,14 +499,14 @@
 
 .abc-row-rev {
   font-size: 0.7rem;
-  color: #94a3b8;
+  color: var(--color-slate-400);
 }
 
 .abc-no-suggestions {
   padding: 1.2rem 1rem;
   text-align: center;
   font-size: 0.8rem;
-  color: #94a3b8;
+  color: var(--color-slate-400);
   font-style: italic;
 }
 
@@ -521,15 +521,15 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0 0.6rem;
   transition: border-color 0.2s;
 }
 
 .abc-filter-select-wrapper:focus-within {
-  border-color: #c53030;
+  border-color: var(--color-brand-primary);
 }
 
 .abc-filter-icon-label {
@@ -538,7 +538,7 @@
   gap: 0.25rem;
   font-size: 0.72rem;
   font-weight: 700;
-  color: #718096;
+  color: var(--color-text-muted);
   white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -550,7 +550,7 @@
   padding: 0.55rem 1.6rem 0.55rem 0.2rem;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
   outline: none;
   cursor: pointer;
   appearance: none;
@@ -566,8 +566,8 @@
   gap: 0.5rem;
   flex-wrap: wrap;
   padding: 0.6rem 0.8rem;
-  background-color: #f8fafc;
-  border: 1px solid #edf2f7;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-surface-muted);
   border-radius: 10px;
   margin-top: 0.75rem;
   animation: abcChipFadeIn 0.2s ease;
@@ -581,7 +581,7 @@
 .abc-chips-label {
   font-size: 0.72rem;
   font-weight: 700;
-  color: #64748b;
+  color: var(--color-slate-500);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   display: flex;
@@ -595,19 +595,19 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.25rem 0.6rem;
-  background-color: #ffffff;
-  border: 1px solid #cbd5e1;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
   border-radius: 16px;
   font-size: 0.74rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--color-slate-700);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .abc-chip-remove {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--color-slate-400);
   cursor: pointer;
   padding: 0;
   display: flex;
@@ -617,7 +617,7 @@
 }
 
 .abc-chip-remove:hover {
-  color: #e53e3e;
+  color: var(--color-brand-accent);
 }
 
 .abc-clear-all-chips-btn {
@@ -628,7 +628,7 @@
   border: none;
   font-size: 0.74rem;
   font-weight: 700;
-  color: #c53030;
+  color: var(--color-brand-primary);
   cursor: pointer;
   padding: 0.25rem 0.5rem;
   border-radius: 6px;
@@ -637,13 +637,13 @@
 }
 
 .abc-clear-all-chips-btn:hover {
-  background-color: #fef2f2;
+  background-color: var(--color-danger-bg-alt);
 }
 
 /* Row Flash Highlight Animation */
 @keyframes rowSoftFlash {
-  0% { background-color: #fef2f2; }
-  50% { background-color: #fee2e2; }
+  0% { background-color: var(--color-danger-bg-alt); }
+  50% { background-color: var(--color-danger-bg-strong); }
   100% { background-color: transparent; }
 }
 
@@ -653,7 +653,7 @@
 
 .abc-cat-toggle-group {
   display: flex;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
   flex-shrink: 0;
@@ -662,32 +662,32 @@
 .abc-cat-toggle-btn {
   padding: 0.5rem 1rem;
   border: none;
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.03em;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
 }
 
 .abc-cat-toggle-btn:not(:last-child) {
-  border-right: 1px solid #e2e8f0;
+  border-right: 1px solid var(--color-border);
 }
 
 .abc-cat-toggle-btn.active {
-  background-color: #1a202c;
-  color: #ffffff;
+  background-color: var(--color-text);
+  color: var(--color-surface);
 }
 
 .abc-cat-toggle-btn:hover:not(.active) {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
 /* Table */
 .abc-table-wrapper {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -702,7 +702,7 @@
 }
 
 .abc-table thead {
-  border-bottom: 2px solid #edf2f7;
+  border-bottom: 2px solid var(--color-surface-muted);
 }
 
 .abc-table th {
@@ -711,34 +711,34 @@
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   white-space: nowrap;
   vertical-align: middle;
 }
 
 .abc-table tbody tr {
-  border-bottom: 1px solid #f7fafc;
+  border-bottom: 1px solid var(--color-surface-raised);
   transition: background-color 0.15s;
 }
 
 .abc-table tbody tr:hover {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .abc-table td {
   padding: 0.85rem 0.8rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   vertical-align: middle;
   text-align: center;
 }
 
 .abc-row-num {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.8rem;
 }
 
 .abc-sku-cell {
-  color: #e53e3e;
+  color: var(--color-brand-accent);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -750,11 +750,11 @@
 
 .abc-product-cell {
   font-weight: 500;
-  color: #1a202c;
+  color: var(--color-text);
 }
 
 .abc-brand-cell {
-  color: #718096;
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
@@ -785,18 +785,18 @@
 }
 
 .abc-cat-a {
-  background-color: #fdf2f8;
-  color: #6B2C5F;
+  background-color: var(--color-abc-a-bg);
+  color: var(--color-abc-a);
 }
 
 .abc-cat-b {
-  background-color: #fdf4ff;
-  color: #B565A0;
+  background-color: var(--color-abc-b-bg);
+  color: var(--color-abc-b);
 }
 
 .abc-cat-c {
-  background-color: #f8fafc;
-  color: #701a75;
+  background-color: var(--color-surface-raised);
+  color: var(--color-abc-deep);
 }
 
 /* Status */
@@ -808,11 +808,11 @@
 }
 
 .abc-in-stock {
-  color: #38a169;
+  color: var(--color-success-ui);
 }
 
 .abc-low {
-  color: #e53e3e;
+  color: var(--color-brand-accent);
 }
 
 .abc-critical {
@@ -820,13 +820,13 @@
 }
 
 .abc-no-data {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .abc-no-results {
   text-align: center;
   padding: 3rem 1rem !important;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-style: italic;
 }
 
@@ -837,7 +837,7 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem;
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 0.7rem 1.2rem;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
@@ -845,7 +845,7 @@
 
 .abc-pagination-info {
   font-size: 0.78rem;
-  color: #718096;
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
@@ -857,19 +857,19 @@
 
 .abc-pagination-btn {
   padding: 0.4rem 0.75rem;
-  border: 1px solid #e2e8f0;
-  background-color: #ffffff;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
   border-radius: 6px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .abc-pagination-btn:hover:not(:disabled) {
-  background-color: #f7fafc;
-  border-color: #cbd5e1;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
 }
 
 .abc-pagination-btn:disabled {
@@ -880,7 +880,7 @@
 .abc-pagination-page-label {
   font-size: 0.78rem;
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
   white-space: nowrap;
   padding: 0 0.3rem;
 }
@@ -890,18 +890,18 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.75rem;
-  color: #718096;
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .abc-pagination-size select {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 0.3rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #1a202c;
-  background-color: #ffffff;
+  color: var(--color-text);
+  background-color: var(--color-surface);
   cursor: pointer;
   outline: none;
 }

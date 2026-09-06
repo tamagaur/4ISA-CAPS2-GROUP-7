@@ -1,7 +1,7 @@
 .sidebar {
   width: 250px;
-  background-color: #ffffff;
-  border-right: 1px solid #e2e8f0;
+  background-color: var(--color-surface);
+  border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -74,11 +74,11 @@
 }
 
 .red-avatar {
-  background-color: #e53e3e;
+  background-color: var(--color-brand-accent);
 }
 
 .blue-avatar {
-  background-color: #3182ce;
+  background-color: var(--color-info);
   width: 32px;
   height: 32px;
   font-size: 0.9rem;
@@ -91,12 +91,12 @@
 
 .profile-name {
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
   font-size: 0.95rem;
 }
 
 .profile-role {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -108,7 +108,7 @@
 }
 
 .version-text {
-  color: #cbd5e0;
+  color: var(--color-border-strong);
   font-size: 0.7rem;
   letter-spacing: 1px;
 }
@@ -116,7 +116,7 @@
 .sidebar-nav-section {
   margin-bottom: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #edf2f7;
+  border-top: 1px solid var(--color-surface-muted);
 }
 
 .sidebar-nav-section:first-child {
@@ -130,7 +130,7 @@
 }
 
 .modules-title {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 1px;
@@ -147,7 +147,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.8rem 1.5rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;
@@ -155,11 +155,11 @@
 }
 
 .nav-item:hover {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .nav-item.active {
-  background-color: #c53030;
+  background-color: var(--color-brand-primary);
   color: white;
   border-radius: 0 20px 20px 0;
   margin-right: 1rem;
@@ -186,7 +186,7 @@
 .sidebar-bottom {
   padding: 0 1.5rem;
   margin-top: auto;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
   padding-top: 1.5rem;
 }
 
@@ -221,12 +221,12 @@
 }
 
 .status-date {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .privacy-btn {
   width: 100%;
-  background-color: #1a202c;
+  background-color: var(--color-text);
   color: white;
   border: none;
   border-radius: 6px;
@@ -248,7 +248,7 @@
   width: 100%;
   background: none;
   border: none;
-  color: #4a5568;
+  color: var(--color-text-body);
   font-size: 0.9rem;
   font-weight: 500;
   padding: 0.5rem 0;
@@ -258,16 +258,16 @@
 }
 
 .logout-btn:hover {
-  color: #c53030;
+  color: var(--color-brand-primary);
 }
 
 .logout-icon {
-  color: #4a5568;
+  color: var(--color-text-body);
   transition: color 0.2s ease;
 }
 
 .logout-btn:hover .logout-icon {
-  color: #c53030;
+  color: var(--color-brand-primary);
 }
 
 /* Logout Confirmation Modal */
@@ -286,7 +286,7 @@
 }
 
 .logout-modal-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   width: 90%;
   max-width: 400px;
@@ -305,7 +305,7 @@
 .logout-modal-icon-wrap {
   width: 38px;
   height: 38px;
-  background-color: #fff5f5;
+  background-color: var(--color-danger-bg);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -316,7 +316,7 @@
 .logout-modal-title {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0;
   flex: 1;
 }
@@ -324,7 +324,7 @@
 .logout-modal-close {
   background: none;
   border: none;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   cursor: pointer;
   padding: 0.2rem;
   display: flex;
@@ -335,7 +335,7 @@
 }
 
 .logout-modal-close:hover {
-  color: #4a5568;
+  color: var(--color-text-body);
 }
 
 .logout-modal-body {
@@ -345,7 +345,7 @@
 .logout-modal-body p {
   margin: 0;
   font-size: 0.9rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   line-height: 1.5;
 }
 
@@ -353,16 +353,16 @@
   display: flex;
   gap: 0.8rem;
   padding: 1rem 1.5rem 1.25rem 1.5rem;
-  background-color: #f8fafc;
-  border-top: 1px solid #edf2f7;
+  background-color: var(--color-surface-raised);
+  border-top: 1px solid var(--color-surface-muted);
 }
 
 .logout-cancel-btn {
   flex: 1;
   padding: 0.6rem;
-  border: 1px solid #cbd5e0;
-  background-color: #ffffff;
-  color: #4a5568;
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
   border-radius: 8px;
   font-size: 0.85rem;
   font-weight: 600;
@@ -371,15 +371,15 @@
 }
 
 .logout-cancel-btn:hover {
-  background-color: #edf2f7;
+  background-color: var(--color-surface-muted);
 }
 
 .logout-confirm-btn {
   flex: 1;
   padding: 0.6rem;
   border: none;
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border-radius: 8px;
   font-size: 0.85rem;
   font-weight: 600;
@@ -388,5 +388,5 @@
 }
 
 .logout-confirm-btn:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-brand-hover);
 }

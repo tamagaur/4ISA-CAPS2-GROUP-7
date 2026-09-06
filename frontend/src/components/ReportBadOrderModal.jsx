@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowLeft, CheckCircle2, XCircle } from 'lucide-react';
+import Modal from './Modal';
 import { BAD_ORDER_REASONS } from '../data/mockData';
 import './ReportBadOrderModal.css';
 
@@ -58,17 +59,8 @@ const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
     }
   }, [isOpen]);
 
-  // Listen for Escape key press to dismiss modal
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
-
+  // Escape-to-close now comes from the shared <Modal> shell below, along
+  // with focus trapping and role="dialog".
   if (!isOpen) return null;
 
   const handleClose = () => {
@@ -76,11 +68,6 @@ const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
     onClose();
   };
 
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      handleClose();
-    }
-  };
 
   // SKU formatting on blur
   const handleSkuBlur = () => {
@@ -142,8 +129,13 @@ const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
   const resolvedInfo = skuDatabase[formattedSKUDisplay] || { brand: 'Other', product: 'General Stock Item' };
 
   return (
-    <div className="report-modal-overlay" onClick={handleOverlayClick}>
-      <div className="report-modal-container">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      label="Report a bad order"
+      overlayClassName="report-modal-overlay"
+      containerClassName="report-modal-container"
+    >
         {/* Modal Header */}
         <div className="report-modal-header">
           <h3 className="report-modal-title">
@@ -369,8 +361,7 @@ const ReportBadOrderModal = ({ isOpen, onClose, onSubmitReport }) => {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

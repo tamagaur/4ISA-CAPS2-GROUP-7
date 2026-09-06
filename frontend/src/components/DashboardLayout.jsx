@@ -30,14 +30,19 @@ const subtractMonths = (month, year, count) => {
   return { month: MONTHS[monthIndex], year: String(Number(year) + yearOffset) };
 };
 
-// Default period: at least 2 months back from "today" through "today" —
-// a 3-month window instead of the single current month, so the app opens
-// on a range with enough history to look like a trend, not one bar.
+// Default period: 6 months back from "today" (the latest month with real
+// data) through "today" — a 7-point window, up from the 3 points this
+// used to open on. Short windows make the dashboard's trend charts read
+// as a couple of disconnected dots; six months back is enough shape to
+// see direction at a glance while still comfortably inside the data
+// (real Unilever demand starts Jan 2023, so this never underflows).
 // Both the initial state below and the "Today" reset button build off
 // this same function, so they can never drift apart.
+const DEFAULT_MONTHS_BACK = 6;
+
 const getDefaultDateRange = () => {
   const today = getCurrentRealWorldPeriod();
-  const start = subtractMonths(today.month, today.year, 2);
+  const start = subtractMonths(today.month, today.year, DEFAULT_MONTHS_BACK);
   return { startMonth: start.month, startYear: start.year, endMonth: today.month, endYear: today.year };
 };
 
@@ -73,8 +78,8 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
 
   // Evaluates to true only when pending selection differs from applied period
-  const isPending = 
-    pendingStartMonth !== startMonth || 
+  const isPending =
+    pendingStartMonth !== startMonth ||
     pendingStartYear !== startYear ||
     pendingEndMonth !== endMonth ||
     pendingEndYear !== endYear;
@@ -202,7 +207,7 @@ const DashboardLayout = () => {
             </div>
             <div className="period-nav-body">
               <p>
-                You changed the selected period to <strong>{pendingStartMonth} {pendingStartYear} - {pendingEndMonth} {pendingEndYear}</strong> but haven't applied it. 
+                You changed the selected period to <strong>{pendingStartMonth} {pendingStartYear} - {pendingEndMonth} {pendingEndYear}</strong> but haven't applied it.
                 Save this change, or discard it and keep viewing <strong>{startMonth} {startYear} - {endMonth} {endYear}</strong>?
               </p>
             </div>

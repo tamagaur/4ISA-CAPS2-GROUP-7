@@ -9,24 +9,24 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
   font-weight: 500;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .date-select-btn:hover {
-  background-color: #f7fafc;
-  border-color: #cbd5e0;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
 }
 
 .date-select-btn svg {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .date-save-btn {
@@ -39,7 +39,7 @@
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--color-surface);
   cursor: pointer;
   transition: background-color 0.2s, opacity 0.2s;
 }
@@ -49,8 +49,8 @@
 }
 
 .date-save-btn:disabled {
-  background-color: #e2e8f0;
-  color: #a0aec0;
+  background-color: var(--color-border);
+  color: var(--color-text-subtle);
   cursor: default;
 }
 
@@ -58,38 +58,38 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background-color: #e53e3e;
+  background-color: var(--color-brand-accent);
   border: none;
   border-radius: 8px;
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--color-surface);
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .date-today-btn:hover {
-  background-color: #c53030;
+  background-color: var(--color-brand-primary);
 }
 
 .refresh-btn {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 0.8rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   transition: all 0.2s;
 }
 
 .refresh-btn:hover {
-  background-color: #f7fafc;
-  border-color: #cbd5e0;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
 }

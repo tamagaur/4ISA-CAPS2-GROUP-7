@@ -1,5 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import Modal from './Modal';
 import { COLORS } from '../theme/colors';
 import './ReorderModal.css';
 
@@ -16,15 +17,15 @@ const OBJECTIVE_WEIGHTS = [
 const ReorderModal = ({ isOpen, onClose, data }) => {
   if (!isOpen || !data) return null;
 
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
 
   return (
-    <div className="reorder-modal-overlay" onClick={handleOverlayClick}>
-      <div className="reorder-modal-card">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      label="Reorder details"
+      overlayClassName="reorder-modal-overlay"
+      containerClassName="reorder-modal-card"
+    >
         {/* Header */}
         <div className="reorder-modal-header">
           <div>
@@ -100,8 +101,7 @@ const ReorderModal = ({ isOpen, onClose, data }) => {
             Constraints applied: service level ≥ 95%, supplier MOQ, and warehouse capacity headroom.
           </p>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

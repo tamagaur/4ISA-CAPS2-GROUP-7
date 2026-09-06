@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { HelpCircle, RotateCcw } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import './Charts.css';
 
 // Custom tooltip: "Wk 7 — 5.2 weeks (2.2 above policy)". wk is the point's
@@ -87,8 +88,8 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
                   label={{ value: 'Weeks of stock', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
                 />
                 <Tooltip content={<CoverTooltip policyTarget={policyTarget} />} />
-                <Area type="monotone" dataKey="base" stackId="cover" stroke="none" fill="transparent" isAnimationActive={false} />
-                <Area type="monotone" dataKey="excess" stackId="cover" fill={CHART_COLORS.stockSeries} fillOpacity={0.18} stroke="none" isAnimationActive={false} />
+                <Area type="monotone" dataKey="base" stackId="cover" stroke="none" fill="transparent" {...chartAnim()} />
+                <Area type="monotone" dataKey="excess" stackId="cover" fill={CHART_COLORS.stockSeries} fillOpacity={0.18} stroke="none" {...chartAnim()} />
                 <ReferenceLine
                   y={policyTarget}
                   stroke={STATUS_TIERS.loss}
@@ -103,7 +104,7 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
                   strokeWidth={2}
                   dot={false}
                   connectNulls={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -246,7 +247,7 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
             />
             <ReferenceLine x={0} stroke="#cbd5e0" />
             <Tooltip content={<AllocationTooltip />} />
-            <Bar dataKey="variancePesos" radius={[3, 3, 3, 3]} isAnimationActive={false}>
+            <Bar dataKey="variancePesos" radius={[3, 3, 3, 3]} {...chartAnim()}>
               {sortedRows.map((r) => (
                 <Cell key={r.sku} fill={r.variancePesos < 0 ? COLORS.critical : COLORS.warning} />
               ))}
@@ -333,7 +334,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   stroke={CHART_COLORS.salesSeries}
                   strokeWidth={2}
                   dot={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
                 <Line
                   type="monotone"
@@ -342,7 +343,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   stroke={CHART_COLORS.stockSeries}
                   strokeWidth={2}
                   dot={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
                 <Line
                   type="monotone"
@@ -353,7 +354,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   strokeWidth={2.5}
                   dot={{ r: 3, fill: COLORS.forecast, strokeWidth: 0 }}
                   activeDot={{ r: 5 }}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -421,7 +422,7 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
                   innerRadius="60%"
                   outerRadius="85%"
                   paddingAngle={2}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 >
                   {data.map((d) => (
                     <Cell key={d.tier} fill={ABC_TIER_COLORS[d.tier] || CHART_COLORS.abcRamp[0]} />
@@ -609,13 +610,13 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
                   label={{ value: 'SKUs', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
                 />
                 <Tooltip content={<CategoryStockTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }} />
-                <Bar dataKey="deadStock" name="Dead stock" stackId="mix" fill={STOCK_STATUS_COLORS.deadStock} isAnimationActive={false}>
+                <Bar dataKey="deadStock" name="Dead stock" stackId="mix" fill={STOCK_STATUS_COLORS.deadStock} {...chartAnim(0)}>
                   <LabelList dataKey="deadStock" content={makeSegmentLabel(data)} />
                 </Bar>
-                <Bar dataKey="inStock" name="In stock" stackId="mix" fill={STOCK_STATUS_COLORS.inStock} radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                <Bar dataKey="inStock" name="In stock" stackId="mix" fill={STOCK_STATUS_COLORS.inStock} radius={[3, 3, 0, 0]} {...chartAnim(1)}>
                   <LabelList dataKey="inStock" content={makeSegmentLabel(data)} />
                 </Bar>
-                <Bar dataKey="pendingReorderCount" name="Pending reorder" fill={STOCK_STATUS_COLORS.pendingReorder} radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                <Bar dataKey="pendingReorderCount" name="Pending reorder" fill={STOCK_STATUS_COLORS.pendingReorder} radius={[3, 3, 0, 0]} {...chartAnim(2)}>
                   <LabelList dataKey="pendingReorderCount" position="top" style={pendingReorderLabelStyle} formatter={(v) => v.toLocaleString()} />
                 </Bar>
               </BarChart>
@@ -764,8 +765,8 @@ export const PortfolioForecastWidget = ({
                   tickFormatter={(v) => `${Math.round(v / 1000)}k`}
                 />
                 <Tooltip content={<PortfolioForecastTooltip />} />
-                <Area type="monotone" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" isAnimationActive={false} />
-                <Area type="monotone" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} isAnimationActive={false} />
+                <Area type="monotone" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" {...chartAnim()} />
+                <Area type="monotone" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} {...chartAnim()} />
                 <Line
                   type="monotone"
                   dataKey="actual"
@@ -774,7 +775,7 @@ export const PortfolioForecastWidget = ({
                   strokeWidth={2}
                   dot={false}
                   connectNulls={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
                 <Line
                   type="monotone"
@@ -785,7 +786,7 @@ export const PortfolioForecastWidget = ({
                   strokeWidth={2}
                   dot={false}
                   connectNulls={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
               </ComposedChart>
             </ResponsiveContainer>

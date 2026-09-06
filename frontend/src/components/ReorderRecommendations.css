@@ -27,12 +27,12 @@
 .reorder-page-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
 }
 
 .reorder-page-subtitle {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.85rem;
   margin: 0;
   letter-spacing: 0.02em;
@@ -46,9 +46,9 @@
   gap: 0.4rem;
   margin-bottom: 0.2rem;
   padding: 0.3rem;
-  background-color: #f8fafc;
+  background-color: var(--color-surface-raised);
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   width: fit-content;
   max-width: 100%;
 }
@@ -73,19 +73,19 @@
 
 .reorder-tab-btn:hover:not(.active) {
   color: #1d4ed8;
-  background-color: #e2e8f0;
+  background-color: var(--color-border);
 }
 
 .reorder-tab-btn.active {
-  background-color: #ffffff;
-  border-color: #e2e8f0;
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
   color: #1e3a8a;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .reorder-tab-count {
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   font-size: 0.65rem;
   font-weight: 700;
   padding: 0.1rem 0.4rem;
@@ -101,11 +101,11 @@
 }
 
 .reorder-summary-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 1.2rem 1.5rem;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -114,20 +114,20 @@
 
 /* Colored borders top and left */
 .card-red {
-  border-left: 3px solid #e53e3e;
-  border-top: 3px solid #e53e3e;
+  border-left: 3px solid var(--color-brand-accent);
+  border-top: 3px solid var(--color-brand-accent);
 }
 .card-yellow {
-  border-left: 3px solid #d69e2e;
-  border-top: 3px solid #d69e2e;
+  border-left: 3px solid var(--color-warning-deep);
+  border-top: 3px solid var(--color-warning-deep);
 }
 .card-blue {
-  border-left: 3px solid #3182ce;
-  border-top: 3px solid #3182ce;
+  border-left: 3px solid var(--color-info);
+  border-top: 3px solid var(--color-info);
 }
 .card-green {
-  border-left: 3px solid #38a169;
-  border-top: 3px solid #38a169;
+  border-left: 3px solid var(--color-success-ui);
+  border-top: 3px solid var(--color-success-ui);
 }
 
 .card-content {
@@ -140,7 +140,7 @@
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   text-transform: uppercase;
   margin-bottom: 0.2rem;
 }
@@ -148,24 +148,24 @@
 .reorder-card-value {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   line-height: 1.1;
 }
 
 .reorder-card-desc {
   font-size: 0.75rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   margin-top: 0.3rem;
 }
 
 /* Table */
 .reorder-table-wrapper {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .reorder-table {
@@ -176,7 +176,7 @@
 }
 
 .reorder-table thead {
-  border-bottom: 2px solid #edf2f7;
+  border-bottom: 2px solid var(--color-surface-muted);
 }
 
 .reorder-table th {
@@ -185,29 +185,29 @@
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   white-space: nowrap;
   vertical-align: middle;
 }
 
 .reorder-table tbody tr {
-  border-bottom: 1px solid #f7fafc;
+  border-bottom: 1px solid var(--color-surface-raised);
   transition: background-color 0.15s;
 }
 
 .reorder-table tbody tr:hover {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .reorder-table td {
   padding: 0.6rem 0.4rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   vertical-align: middle;
   text-align: center;
 }
 
 .reorder-sku-cell {
-  color: #3182ce;
+  color: var(--color-info);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -219,7 +219,7 @@
 
 .reorder-product-cell {
   font-weight: 500;
-  color: #1a202c;
+  color: var(--color-text);
 }
 
 .reorder-stock-cell {
@@ -229,7 +229,7 @@
 
 .reorder-qty-cell {
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   white-space: nowrap;
 }
 
@@ -250,12 +250,12 @@
   gap: 0.15rem;
   font-size: 0.65rem;
   font-weight: 600;
-  color: #2E9E5B;
+  color: var(--color-success);
   white-space: nowrap;
 }
 
 .reorder-qty-down-icon {
-  color: #2E9E5B;
+  color: var(--color-success);
 }
 
 .th-sub {
@@ -263,7 +263,7 @@
   font-size: 0.55rem;
   font-weight: 500;
   letter-spacing: 0.05em;
-  color: #cbd5e1;
+  color: var(--color-border-strong);
   margin-top: 0.15rem;
 }
 
@@ -275,33 +275,33 @@
 .reorder-log-when {
   white-space: nowrap;
   font-size: 0.72rem;
-  color: #718096;
+  color: var(--color-text-muted);
 }
 
 .reorder-log-reason {
   max-width: 260px;
   text-align: left !important;
-  color: #4a5568;
+  color: var(--color-text-body);
   font-size: 0.75rem;
   line-height: 1.4;
 }
 
 .reorder-log-user {
   font-size: 0.75rem;
-  color: #3182ce;
+  color: var(--color-info);
   white-space: nowrap;
 }
 
 .reorder-log-empty {
   padding: 2.5rem 1rem !important;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.85rem;
   font-style: italic;
 }
 
 .reorder-no-results {
   padding: 2.5rem 1rem !important;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.85rem;
   font-style: italic;
   text-align: center;
@@ -310,10 +310,10 @@
 .reorder-grain-note {
   margin: -0.5rem 0 0 0;
   padding: 0.6rem 0.9rem;
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
   border-radius: 8px;
   font-size: 0.72rem;
-  color: #718096;
+  color: var(--color-text-muted);
   line-height: 1.4;
 }
 
@@ -336,25 +336,25 @@
 }
 
 .badge-critical {
-  background-color: #fff5f5;
-  color: #e53e3e;
+  background-color: var(--color-danger-bg);
+  color: var(--color-brand-accent);
 }
 
 .badge-urgent {
   background-color: #fffff0;
-  color: #d69e2e;
+  color: var(--color-warning-deep);
 }
 
 .badge-planned {
-  background-color: #f0fff4;
-  color: #38a169;
+  background-color: var(--color-success-bg);
+  color: var(--color-success-ui);
 }
 
 /* Action Buttons */
 .details-btn {
   background: transparent;
-  border: 1px solid #e53e3e;
-  color: #e53e3e;
+  border: 1px solid var(--color-brand-accent);
+  color: var(--color-brand-accent);
   font-size: 0.7rem;
   font-weight: 600;
   padding: 0.3rem 0.8rem;
@@ -366,7 +366,7 @@
 }
 
 .details-btn:hover {
-  background-color: #fff5f5;
+  background-color: var(--color-danger-bg);
 }
 
 .action-buttons {
@@ -418,7 +418,7 @@
 
 .spinner-icon {
   animation: spin 1s linear infinite;
-  color: #3182ce;
+  color: var(--color-info);
 }
 
 @keyframes spin {
@@ -428,7 +428,7 @@
 
 .loading-text {
   font-size: 0.75rem;
-  color: #718096;
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
@@ -440,15 +440,15 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #ffffff;
+  color: var(--color-surface);
 }
 
 .status-accepted {
-  background-color: #38a169;
+  background-color: var(--color-success-ui);
 }
 
 .status-dismissed {
-  background-color: #e53e3e;
+  background-color: var(--color-brand-accent);
 }
 
 /* Responsive */
@@ -468,3 +468,94 @@
 }
 
 
+
+/* Accept confirmation. Deliberately lighter than OverrideReasonModal's
+   dismiss flow (no typed justification) — accepting the LP's own
+   recommendation is the expected path, it just shouldn't be a single
+   unguarded click when the adjacent Dismiss button demands a written
+   reason. Mirrors UserManagement's confirm-card shape. */
+.reorder-accept-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 1rem;
+}
+
+.reorder-accept-card {
+  background-color: var(--color-surface);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.6rem;
+  text-align: center;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.25);
+}
+
+.reorder-accept-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 0.9rem auto;
+  border-radius: 50%;
+  background-color: var(--color-success-bg);
+  color: var(--color-success-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reorder-accept-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.reorder-accept-body {
+  margin: 0 0 1.3rem 0;
+  font-size: 0.85rem;
+  color: var(--color-text-body);
+  line-height: 1.5;
+}
+
+.reorder-accept-actions {
+  display: flex;
+  gap: 0.7rem;
+}
+
+.reorder-accept-cancel,
+.reorder-accept-confirm {
+  flex: 1;
+  padding: 0.6rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.reorder-accept-cancel {
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
+}
+
+.reorder-accept-cancel:hover {
+  background-color: var(--color-surface-muted);
+}
+
+.reorder-accept-confirm {
+  border: none;
+  background-color: var(--color-success-deep);
+  color: var(--color-surface);
+}
+
+.reorder-accept-confirm:hover {
+  background-color: #276749;
+}

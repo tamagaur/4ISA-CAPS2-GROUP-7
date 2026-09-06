@@ -8,7 +8,12 @@ export async function getSKUs({ status } = {}) {
 
   const res = await apiFetch(`/sku?${query.toString()}`);
   if (!res.ok) {
-    throw new Error('Failed to fetch SKUs');
+    // Surface the backend's own `detail` when there is one, same as
+    // createSKU/updateSKU below — this used to always throw the generic
+    // string, flattening a real cause (DB down, auth rejected) into
+    // something the user couldn't act on.
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail || 'Failed to fetch SKUs');
   }
   return res.json();
 }

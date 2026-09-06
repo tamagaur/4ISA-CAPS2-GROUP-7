@@ -68,8 +68,17 @@ export function getCurrentUser() {
   return { email: payload.email, role: payload.role, fullName: payload.full_name || '' };
 }
 
+// Set just before an involuntary redirect to /login so the login page can
+// explain WHY the user landed there. Without this the redirect fires before
+// any component can render the "Session expired" error apiFetch throws, so
+// the user was simply bounced mid-action with no explanation.
+export const SESSION_EXPIRED_KEY = 'san2_session_expired';
+
 function redirectToLogin() {
   if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.setItem(SESSION_EXPIRED_KEY, '1');
+    } catch { /* private mode / storage disabled — the redirect still works */ }
     window.location.href = '/login';
   }
 }

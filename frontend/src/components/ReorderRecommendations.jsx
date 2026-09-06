@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Loader2, ClipboardList, ListChecks } from 'lucide-react';
+import { Loader2, ClipboardList, ListChecks, CheckCircle2 } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
+import Modal from './Modal';
+import { useToast } from './ToastProvider';
 import { getCurrentUser } from '../auth';
 import { logAction } from '../utils/auditLogger';
 import { getRecommendations, decideRecommendation } from '../api/recommendations';
@@ -47,6 +49,7 @@ const MONTH_TO_NUM = {
 };
 
 const ReorderRecommendations = () => {
+  const toast = useToast();
   const { startMonth, startYear, endMonth, endYear } = useOutletContext() || {};
 
   const [rawItems, setRawItems] = useState([]);
@@ -58,6 +61,7 @@ const ReorderRecommendations = () => {
 
   // Pending override awaiting a reason (Dismiss only — Accept logs immediately).
   const [pendingOverride, setPendingOverride] = useState(null); // { item, action }
+  const [pendingAccept, setPendingAccept] = useState(null); // the item awaiting Accept confirmation
   const [decisionLog, setDecisionLog] = useState([]);
 
   useEffect(() => {
@@ -145,22 +149,42 @@ const ReorderRecommendations = () => {
       setLocalData(prev => prev.map(item =>
         item.id === id ? { ...item, loadingAction: null, actionStatus: actionType } : item
       ));
+      // The row itself only changes to a small status pill, which is easy to
+      // miss in a long table — the toast is the actual confirmation.
+      toast.success(
+        actionType === 'ACCEPTED' ? 'Reorder accepted' : 'Recommendation dismissed'
+      );
     } catch (err) {
       setLocalData(prev => prev.map(item =>
         item.id === id ? { ...item, loadingAction: null } : item
       ));
       setError(err.message || 'Failed to update recommendation');
+      toast.error(err.message || 'Failed to update recommendation');
     }
   };
 
   const handleAction = (item, actionType) => {
     if (actionType === 'ACCEPTED') {
-      applyAction(item.id, actionType);
-      logDecision(item, actionType, 'Accepted the LP-recommended order quantity as-is.');
+      // Accept commits a real purchase quantity, so it gets a confirmation
+      // step too. It used to fire instantly on click while Dismiss — the
+      // adjacent button in the same row — demanded a typed justification;
+      // that asymmetry made an accidental Accept the easiest mistake on the
+      // page. This confirm is deliberately lighter than Dismiss's (no typed
+      // reason): accepting the LP's own recommendation is the expected
+      // path, it just shouldn't be a single unguarded click.
+      setPendingAccept(item);
       return;
     }
     // Dismiss deviates from the recommendation — require a reason first
     setPendingOverride({ item, action: actionType });
+  };
+
+  const handleConfirmAccept = () => {
+    const item = pendingAccept;
+    if (!item) return;
+    applyAction(item.id, 'ACCEPTED');
+    logDecision(item, 'ACCEPTED', 'Accepted the LP-recommended order quantity as-is.');
+    setPendingAccept(null);
   };
 
   const handleConfirmOverride = (reason) => {
@@ -231,18 +255,18 @@ const ReorderRecommendations = () => {
             <span className="reorder-card-value">{urgentCount}</span>
           </div>
         </div>
-        <div className="reorder-summary-card card-blue">
-          <div className="card-content">
-            <span className="reorder-card-label">TOTAL ORDER QTY</span>
-            <span className="reorder-card-value">{totalOrderQty.toLocaleString()}</span>
-            <span className="reorder-card-desc">LP - optimized units</span>
-          </div>
-        </div>
         <div className="reorder-summary-card card-green">
           <div className="card-content">
             <span className="reorder-card-label">CURRENT STOCK</span>
             <span className="reorder-card-value">{totalStock.toLocaleString()}</span>
             <span className="reorder-card-desc">on hand across list</span>
+          </div>
+        </div>
+        <div className="reorder-summary-card card-blue">
+          <div className="card-content">
+            <span className="reorder-card-label">TOTAL ORDER QTY</span>
+            <span className="reorder-card-value">{totalOrderQty.toLocaleString()}</span>
+            <span className="reorder-card-desc">LP - optimized units</span>
           </div>
         </div>
       </div>
@@ -404,6 +428,34 @@ const ReorderRecommendations = () => {
         onCancel={() => setPendingOverride(null)}
         onConfirm={handleConfirmOverride}
       />
+
+      {pendingAccept && (
+        <Modal
+          isOpen={Boolean(pendingAccept)}
+          onClose={() => setPendingAccept(null)}
+          label="Confirm reorder acceptance"
+          overlayClassName="reorder-accept-overlay"
+          containerClassName="reorder-accept-card"
+        >
+          <div className="reorder-accept-icon">
+            <CheckCircle2 size={20} />
+          </div>
+          <h3 className="reorder-accept-title">Accept this reorder?</h3>
+          <p className="reorder-accept-body">
+            Order <strong>{pendingAccept.orderQty}</strong> units of{' '}
+            <strong>{formatSKU(pendingAccept.sku)}</strong>
+            {pendingAccept.product ? ` — ${pendingAccept.product}` : ''}, as recommended by the LP optimizer.
+          </p>
+          <div className="reorder-accept-actions">
+            <button className="reorder-accept-cancel" onClick={() => setPendingAccept(null)}>
+              Cancel
+            </button>
+            <button className="reorder-accept-confirm" onClick={handleConfirmAccept}>
+              Accept Reorder
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

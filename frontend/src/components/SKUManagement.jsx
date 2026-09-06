@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Plus, Search, Clock, X, RotateCcw, Building, Tag, Layers, Filter, CheckCircle, XCircle, Package } from 'lucide-react';
 import AddSKUModal from './AddSKUModal';
+import { useToast } from './ToastProvider';
 import ViewSKUModal from './ViewSKUModal';
 import EditSKUModal from './EditSKUModal';
 import { logAction } from '../utils/auditLogger';
@@ -72,6 +73,7 @@ const SKUManagement = () => {
   const [selectedSKU, setSelectedSKU] = useState(null);
   const [editingSKU, setEditingSKU] = useState(null);
 
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('All Suppliers');
   const [brandFilter, setBrandFilter] = useState('All Brands');
@@ -122,6 +124,31 @@ const SKUManagement = () => {
     });
   }, [skus, searchQuery, supplierFilter, brandFilter, categoryFilter, activeTab]);
 
+  // Pagination. The SKU master runs 2,000+ rows and this page renders the
+  // whole table — unpaginated it built every row into the DOM at once, which
+  // is slow to render and impossible to scan. Mirrors the pagination
+  // ABCClassification.jsx already added over the same corpus, so the two
+  // SKU tables behave the same way.
+  const PAGE_SIZE_OPTIONS = [25, 50, 100];
+  const [pageSize, setPageSize] = useState(25);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSKUs.length / pageSize));
+  // Clamped rather than stored, so narrowing the filters while on a high page
+  // number can't strand the user on an empty page.
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  // Any filter/search change puts the user back on page 1 — staying on page 7
+  // of a result set that just shrank to 2 pages shows nothing.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, supplierFilter, brandFilter, categoryFilter, activeTab, pageSize]);
+
+  const pagedSKUs = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredSKUs.slice(start, start + pageSize);
+  }, [filteredSKUs, safeCurrentPage, pageSize]);
+
   const totalSKUs = skus.length;
   const activeSKUs = skus.filter(s => s.status === 'ACTIVE').length;
   const inactiveSKUs = skus.filter(s => s.status === 'DISABLED').length;
@@ -142,6 +169,8 @@ const SKUManagement = () => {
 
     await loadSKUs();
     logAction('Add SKU', `Added new SKU: ${created.sku_id} (${created.product_name})`);
+    // Outlives the modal's own success screen, which auto-dismisses after 1.5s.
+    toast.success(`SKU ${created.sku_id} created`);
   };
 
   const handleOpenViewModal = (sku) => {
@@ -196,6 +225,7 @@ const SKUManagement = () => {
       : `Updated SKU ${updatedSKU.code} (minor details)`;
 
     logAction('Edit SKU', details);
+    toast.success(`SKU ${updatedSKU.code} updated`);
   };
 
   // Handle selecting a combobox suggestion row
@@ -534,13 +564,15 @@ const SKUManagement = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSKUs.map((sku, index) => (
+                  {pagedSKUs.map((sku, index) => (
                     <tr
                       key={sku.id}
                       id={`sku-row-${sku.id}`}
                       className={highlightedSKUId === sku.id ? 'highlighted-row-flash' : ''}
                     >
-                      <td className="row-number">{index + 1}</td>
+                      {/* Row number is position in the FULL filtered set, not
+                          within the page, so it stays stable across paging. */}
+                      <td className="row-number">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
                       <td
                         className="sku-code-cell"
                         style={{ cursor: 'pointer' }}
@@ -592,6 +624,69 @@ const SKUManagement = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination — mirrors ABCClassification's controls so both SKU
+                tables page identically. */}
+            {filteredSKUs.length > 0 && (
+              <div className="sku-pagination-row">
+                <span className="sku-pagination-info">
+                  Showing {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, filteredSKUs.length)} of {filteredSKUs.length}
+                </span>
+
+                <div className="sku-pagination-controls">
+                  <button
+                    className="sku-pagination-btn"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={safeCurrentPage === 1}
+                    aria-label="First page"
+                    title="First page"
+                  >
+                    «
+                  </button>
+                  <button
+                    className="sku-pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={safeCurrentPage === 1}
+                    aria-label="Previous page"
+                  >
+                    Prev
+                  </button>
+                  <span className="sku-pagination-page-label">
+                    Page {safeCurrentPage} of {totalPages}
+                  </span>
+                  <button
+                    className="sku-pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safeCurrentPage === totalPages}
+                    aria-label="Next page"
+                  >
+                    Next
+                  </button>
+                  <button
+                    className="sku-pagination-btn"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={safeCurrentPage === totalPages}
+                    aria-label="Last page"
+                    title="Last page"
+                  >
+                    »
+                  </button>
+                </div>
+
+                <div className="sku-pagination-size">
+                  <span>Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    aria-label="Rows per page"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>{size}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

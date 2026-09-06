@@ -13,6 +13,7 @@ import BadOrders from './components/BadOrders';
 import AuditLog from './components/AuditLog';
 import DataUpload from './components/DataUpload';
 import UserManagement from './components/UserManagement';
+import ToastProvider from './components/ToastProvider';
 import './App.css';
 
 const routeTitles = {
@@ -40,6 +41,7 @@ function DynamicTitle() {
 
 function App() {
   return (
+    <ToastProvider>
     <div className="App">
       <DynamicTitle />
       <Routes>
@@ -71,6 +73,7 @@ function App() {
         </Route>
       </Routes>
     </div>
+    </ToastProvider>
   );
 }
 

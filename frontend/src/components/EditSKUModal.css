@@ -22,7 +22,7 @@
 
 /* Modal Card */
 .edit-sku-modal-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 16px;
   width: 100%;
   max-width: 480px;
@@ -55,13 +55,13 @@
 .edit-sku-modal-title {
   font-size: 1.15rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
 }
 
 .edit-sku-modal-subtitle {
   font-size: 0.78rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   margin: 0;
   line-height: 1.4;
 }
@@ -69,7 +69,7 @@
 .edit-sku-close-btn {
   background: none;
   border: none;
-  color: #718096;
+  color: var(--color-text-muted);
   cursor: pointer;
   padding: 0.3rem;
   display: flex;
@@ -80,7 +80,7 @@
 }
 
 .edit-sku-close-btn:hover {
-  color: #1a202c;
+  color: var(--color-text);
 }
 
 /* Form Styling */
@@ -125,23 +125,23 @@
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: #718096;
+  color: var(--color-text-muted);
   text-transform: uppercase;
 }
 
 .req-star {
-  color: #e53e3e;
+  color: var(--color-brand-accent);
 }
 
 .edit-form-input,
 .edit-form-select {
   width: 100%;
   padding: 0.55rem 0.8rem;
-  background-color: #f7fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 0.85rem;
-  color: #1a202c;
+  color: var(--color-text);
   outline: none;
   box-sizing: border-box;
   transition: border-color 0.15s ease;
@@ -149,8 +149,8 @@
 
 .edit-form-input:focus,
 .edit-form-select:focus {
-  border-color: #c53030;
-  background-color: #ffffff;
+  border-color: var(--color-brand-primary);
+  background-color: var(--color-surface);
   box-shadow: 0 0 0 3px rgba(197, 48, 48, 0.1);
 }
 
@@ -177,8 +177,8 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background-color: #fef2f2;
-  color: #c53030;
+  background-color: var(--color-danger-bg-alt);
+  color: var(--color-brand-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -195,13 +195,13 @@
 .no-changes-msg {
   font-size: 0.95rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0;
 }
 
 .no-changes-subtext {
   font-size: 0.78rem;
-  color: #94a3b8;
+  color: var(--color-slate-400);
   margin: 0;
 }
 
@@ -215,7 +215,7 @@
 .changed-summary-title {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #4a5568;
+  color: var(--color-text-body);
   margin-bottom: 0.3rem;
 }
 
@@ -224,29 +224,29 @@
   align-items: center;
   gap: 0.5rem;
   font-size: 0.82rem;
-  background-color: #f8fafc;
+  background-color: var(--color-surface-raised);
   padding: 0.5rem 0.8rem;
   border-radius: 6px;
-  border: 1px solid #edf2f7;
+  border: 1px solid var(--color-surface-muted);
 }
 
 .changed-field-name {
   font-weight: 700;
-  color: #2d3748;
+  color: var(--color-text-heading);
 }
 
 .changed-from {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   text-decoration: line-through;
 }
 
 .changed-arrow {
-  color: #718096;
+  color: var(--color-text-muted);
   font-weight: 700;
 }
 
 .changed-to {
-  color: #2e9e5b;
+  color: var(--color-success);
   font-weight: 700;
 }
 
@@ -257,7 +257,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 0.6rem;
-  background-color: #ffffff;
+  background-color: var(--color-surface);
 }
 
 .edit-sku-btn-cancel,
@@ -266,9 +266,9 @@
   align-items: center;
   gap: 0.3rem;
   padding: 0.55rem 1.2rem;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  color: #2d3748;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-heading);
   font-size: 0.82rem;
   font-weight: 600;
   border-radius: 8px;
@@ -278,16 +278,16 @@
 
 .edit-sku-btn-cancel:hover,
 .edit-sku-btn-back:hover {
-  background-color: #f7fafc;
-  border-color: #cbd5e1;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
 }
 
 .edit-sku-btn-save,
 .edit-sku-btn-confirm {
   padding: 0.55rem 1.3rem;
-  background-color: #e53e3e;
+  background-color: var(--color-brand-accent);
   border: none;
-  color: #ffffff;
+  color: var(--color-surface);
   font-size: 0.82rem;
   font-weight: 600;
   border-radius: 8px;
@@ -297,7 +297,7 @@
 
 .edit-sku-btn-save:hover,
 .edit-sku-btn-confirm:hover {
-  background-color: #c53030;
+  background-color: var(--color-brand-primary);
 }
 
 /* In-Modal Success Checkmark Animation */
@@ -321,7 +321,7 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background-color: #dcfce7;
+  background-color: var(--color-success-bg-alt);
   color: #16a34a;
   display: flex;
   align-items: center;
@@ -339,19 +339,19 @@
 .success-title {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0;
 }
 
 .success-subtitle {
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--color-slate-500);
   margin: 0;
   line-height: 1.4;
 }
 
 .success-subtitle strong {
-  color: #1e293b;
+  color: var(--color-slate-800);
 }
 
 /* Responsive */
