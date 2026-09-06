@@ -774,13 +774,41 @@ def _f(v):
     return None if pd.isna(v) else round(float(v), 4)
 
 
+# ~90% normal-approximation multiplier (not 95%'s 1.96) — a deliberately
+# modest claim for a 3-month moving average scored on a single train/holdout
+# split, not a proper rolling-origin residual distribution. Rounder numbers
+# read as more certain than this method earns.
+CONFIDENCE_Z = 1.645
+
+
+def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float | None]:
+    """forecast_value +/- CONFIDENCE_Z * rmse, using the SKU's OWN real
+    holdout RMSE from evaluate_baseline (rec["ma3_rmse"], already computed
+    for the MASE gate and previously discarded rather than written to
+    Forecast_Result). None/None — never a fabricated band — when rmse is
+    itself None/NaN, e.g. a 1-point holdout. The lower bound is floored at
+    0: real demand can't be negative, and an unclipped band dips below zero
+    for a small forecast_value with a wide rmse."""
+    rmse = _f(rmse)
+    if rmse is None:
+        return None, None
+    return (
+        round(max(0.0, forecast_value - CONFIDENCE_Z * rmse), 2),
+        round(forecast_value + CONFIDENCE_Z * rmse, 2),
+    )
+
+
 def _write_forecast_result(cur, df):
     """--write path (atomic): upsert Forecast_Result for every real Tier A SKU.
 
       status='ok'                -> forecast_value = MA3 one-step-ahead, refit on
                                     the SKU's FULL real series; MA3's holdout
-                                    mape/mase in the columns; ALL THREE methods'
-                                    metrics + oracle/rule picks in model_params.
+                                    mape/mase in the columns; confidence_lower/
+                                    upper = forecast_value +/- CONFIDENCE_Z * the
+                                    SKU's own holdout RMSE (see _confidence_band;
+                                    None/None if that RMSE is undefined); ALL
+                                    THREE methods' metrics + oracle/rule picks
+                                    in model_params.
       status='insufficient_data' -> forecast_value = trailing average of the real
                                     observed months, provisional=true, mape/mase
                                     NULL, mase_gate_passed null. LP fallback spec.
@@ -794,11 +822,11 @@ def _write_forecast_result(cur, df):
     upsert = """
         INSERT INTO Forecast_Result
         (product_key, forecast_date, forecast_value, confidence_lower, confidence_upper, mape, mase, status, model_params)
-        VALUES (%s, %s, %s, NULL, NULL, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (product_key, forecast_date) DO UPDATE SET
             forecast_value   = EXCLUDED.forecast_value,
-            confidence_lower = NULL,
-            confidence_upper = NULL,
+            confidence_lower = EXCLUDED.confidence_lower,
+            confidence_upper = EXCLUDED.confidence_upper,
             mape             = EXCLUDED.mape,
             mase             = EXCLUDED.mase,
             status           = EXCLUDED.status,
@@ -901,8 +929,9 @@ def _write_forecast_result(cur, df):
                     "provisional": False,
                     "lp_input_method": "ma3_one_step",
                 }
+                ci_lower, ci_upper = _confidence_band(f_val, r["ma3_rmse"])
                 cur.execute(upsert, (
-                    p_key, planning_date, float(f_val),
+                    p_key, planning_date, float(f_val), ci_lower, ci_upper,
                     _clean_metric(r["ma3_mape"], 100.0), _clean_metric(r["ma3_mase"]),
                     "ok", json.dumps(mp),
                 ))
@@ -924,7 +953,7 @@ def _write_forecast_result(cur, df):
                 }
                 cur.execute(upsert, (
                     p_key, planning_date, float(max(0.0, trailing)),
-                    None, None, "insufficient_data", json.dumps(mp),
+                    None, None, None, None, "insufficient_data", json.dumps(mp),
                 ))
                 counts["insufficient_data"] += 1
 
@@ -938,7 +967,7 @@ def _write_forecast_result(cur, df):
                     "note": "no sale in the last 6 months — LP orders nothing.",
                 }
                 cur.execute(upsert, (
-                    p_key, planning_date, 0.0, None, None, "dead_sku", json.dumps(mp),
+                    p_key, planning_date, 0.0, None, None, None, None, "dead_sku", json.dumps(mp),
                 ))
                 counts["dead_sku"] += 1
 
