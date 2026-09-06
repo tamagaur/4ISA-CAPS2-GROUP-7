@@ -7,9 +7,12 @@ Phase 5 (CLAUDE.md Steps 17–21):
     SS_i = Z × σ_di   where Z = 1.28 (90% service level, hardcoded constant)
     σ_di from reconstructed daily demand series (granularity.py output).
 
-  Step 18 — Reorder Point:
+    Step 18 — Reorder Point:
     ROP_i = Ŷ_(t+1,i) + SS_i
-    Ŷ_(t+1,i) = one-month-ahead SARIMA forecast (sarima.py output).
+    Ŷ_(t+1,i) = one-month-ahead forecast (scripts/run_baseline_forecast.py's
+    deployed MA3 output, Forecast_Result.forecast_value — SARIMA was
+    retired; see analytics/forecasting/baseline.py's module docstring for
+    the bake-off evidence).
 
   Step 19 — LP Model (PuLP):
     Decision variable: Q_i (replenishment quantity per SKU)
