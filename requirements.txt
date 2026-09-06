@@ -14,6 +14,9 @@ PyYAML==6.0.2
 scipy==1.14.1
 xlrd==2.0.1
 pyarrow==18.1.0
+xgboost==3.4.1  # diagnostic tooling only (scripts/xgboost_bakeoff.py) —
+                # the model bake-off; not used by the ETL / forecasting
+                # pipeline. Release 2026-06, >7 days old.
 lxml==6.1.1  # 2026-08: required by pandas.read_html for the Unilever La
              # Union MHTML archive (profiling/reader.py) - was missing
              # entirely; only discovered once a real MHTML file was
