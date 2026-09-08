@@ -5,10 +5,15 @@
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* Left Side - Branding */
+/* Left Side - Branding. Was flex:6 against the card's flex:4 — at a wide
+   viewport that left the logo floating in a large, otherwise-empty white
+   field. Evened to a 1:1 split and given the same warm-tinted ground the
+   rest of the app's page background now uses (--color-surface-raised),
+   rather than pure white, so this doesn't read as a colder, separate
+   product from the app behind it. */
 .login-left {
-  flex: 6;
-  background-color: var(--color-surface);
+  flex: 1;
+  background-color: var(--color-surface-raised);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -23,8 +28,8 @@
 }
 
 .logo-image {
-  width: 700px;
-  max-width: 90%;
+  width: 520px;
+  max-width: 72%;
   height: auto;
   animation: pulse 3s infinite ease-in-out;
 }
@@ -32,13 +37,46 @@
 .dashboard-title {
   color: #8c98a4;
   font-size: 1.1rem;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
 
-/* Right Side - Login */
+/* Names three concrete things the system does, so the panel reads as
+   "here's what you're signing into" rather than a logo on empty space.
+   Deliberately plain text, not icon cards — this is a login screen, not a
+   marketing page, so the restraint is the point. */
+.login-feature-list {
+  list-style: none;
+  margin: 1.75rem 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.login-feature-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--color-text-body);
+  font-size: 0.92rem;
+}
+
+.login-feature-list li::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-brand-primary);
+  flex-shrink: 0;
+}
+
+/* Right Side - Login — same navy as the app sidebar (--color-nav-bg),
+   now that the sidebar uses it too; this used to be the only place that
+   colour appeared. */
 .login-right {
-  flex: 4;
-  background-color: #1C2230;
+  flex: 1;
+  background-color: var(--color-nav-bg);
   display: flex;
   flex-direction: column;
   align-items: center;

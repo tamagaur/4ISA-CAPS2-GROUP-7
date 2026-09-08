@@ -173,20 +173,26 @@
   margin: 0;
 }
 
+/* Not a brand-red fill: it stages files locally and goes no further (see
+   the banner above and handleFiles' comment in DataUpload.jsx) — a solid
+   brand button here reads as "commit this," which overstates what the
+   control does. Blue matches the dropzone's own hover accent, so the
+   whole zone reads as one "preview, not upload" affordance. */
 .du-select-btn {
-  background-color: var(--color-brand-primary);
-  color: var(--color-surface);
-  border: none;
+  background-color: var(--color-surface);
+  color: var(--color-info);
+  border: 1px solid var(--color-info);
   border-radius: 6px;
   padding: 0.6rem 1.4rem;
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .du-select-btn:hover {
-  background-color: var(--color-brand-hover);
+  background-color: var(--color-info);
+  color: var(--color-surface);
 }
 
 /* Uploading Progress list */

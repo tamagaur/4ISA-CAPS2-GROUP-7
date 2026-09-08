@@ -26,6 +26,24 @@ import './BadOrders.css';
 
 const BO_RATE_TARGET = 3; // %, manuscript §3.4.1.3 target threshold
 
+// The four KPI cards above (INCIDENTS/UNITS LOST/VALUE LOST/BAD ORDER RATE)
+// are real, from getBOMonitoringData — but every chart below them is
+// deterministic, hash-seeded MOCK data (see the generate* functions below:
+// generateBORateTrend, generateBOTrend, generateWeekdayBreakdown,
+// generateTopSKUIncidents, generateBrandBreakdown, REASON_WEIGHTS), not a
+// read of the same real incidents. Before this tag existed, that meant a
+// real "0 incidents this month" KPI sat directly above a chart reading
+// "Latest: 5.4% above target" — the same page contradicting itself with no
+// indication either number was synthetic. Flagged here rather than either
+// silently left unlabeled or having its data source rewritten as part of a
+// visual pass (that's a real feature-completion task — wiring these charts
+// to the real BO history — not a styling fix).
+const SampleDataTag = () => (
+  <span className="bo-sample-tag" title="Illustrative — not read from real bad-order history yet">
+    Sample data
+  </span>
+);
+
 // Mock share of incidents per BAD_ORDER_REASONS entry, same index order,
 // summing to 1.0 — Packaging Defect is the largest single cause, matching
 // the dashboard footer strip's "top cause: packaging defect".
@@ -399,6 +417,7 @@ const BadOrders = () => {
             <div className="bo-widget-header-row">
               <h3 className="bo-widget-title">
                 Bad Order rate <span style={{ color: '#a0aec0', fontWeight: 400 }}>— 6 months, per SKU</span>
+                <SampleDataTag />
               </h3>
               <select
                 className="bo-sku-select"
@@ -455,7 +474,7 @@ const BadOrders = () => {
               bar shows at a glance (Packaging Defect is ~2x Overlanded/
               Shortlanded) in a way a plain number list doesn't. */}
           <div className="bo-widget">
-            <h3 className="bo-widget-title">Top reasons</h3>
+            <h3 className="bo-widget-title">Top reasons <SampleDataTag /></h3>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart
@@ -489,7 +508,7 @@ const BadOrders = () => {
           {/* Bad Orders Over Time — aggregate volume trend, granularity toggle */}
           <div className="bo-widget">
             <div className="bo-widget-header-row">
-              <h3 className="bo-widget-title">Bad orders <span>— over time</span></h3>
+              <h3 className="bo-widget-title">Bad orders <span>— over time</span> <SampleDataTag /></h3>
               <select
                 className="bo-sku-select"
                 value={boTrendGranularity}
@@ -515,7 +534,7 @@ const BadOrders = () => {
 
           {/* When Bad Orders Happen — weekday breakdown */}
           <div className="bo-widget">
-            <h3 className="bo-widget-title">When bad orders happen <span>— by day of week</span></h3>
+            <h3 className="bo-widget-title">When bad orders happen <span>— by day of week</span> <SampleDataTag /></h3>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={weekdayBreakdown} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -531,7 +550,7 @@ const BadOrders = () => {
 
           {/* Top SKUs by Incidents — ranked horizontal bar */}
           <div className="bo-widget">
-            <h3 className="bo-widget-title">Top SKUs <span>— by incidents</span></h3>
+            <h3 className="bo-widget-title">Top SKUs <span>— by incidents</span> <SampleDataTag /></h3>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={topSKUIncidents} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
@@ -562,7 +581,7 @@ const BadOrders = () => {
               its own text label + x-axis category, so identity never
               depends on color alone. */}
           <div className="bo-widget">
-            <h3 className="bo-widget-title">Incidents <span>— by brand</span></h3>
+            <h3 className="bo-widget-title">Incidents <span>— by brand</span> <SampleDataTag /></h3>
             <div className="bo-chart-wrapper">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={brandBreakdown} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>

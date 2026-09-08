@@ -152,9 +152,11 @@ const ABCClassification = () => {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Which class's stock-status drill-down is showing below the chart.
-  // Defaults to 'C' (same as the old hardcoded behavior) but now the
-  // user can click any class's bar — or the tab buttons — to swap it.
-  const [selectedClass, setSelectedClass] = useState('C');
+  // Defaults to 'A' — Category A is the highest-value tier (top 20% of
+  // SKUs, ~80% of revenue) and the one a reviewer most wants to see on
+  // first load, not the long-tail Class C. Still swappable via any
+  // class's bar or the tab buttons.
+  const [selectedClass, setSelectedClass] = useState('A');
 
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
   const [highlightedSKUId, setHighlightedSKUId] = useState(null);

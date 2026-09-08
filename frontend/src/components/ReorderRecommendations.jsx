@@ -203,6 +203,19 @@ const ReorderRecommendations = () => {
     }
   };
 
+  // Left-edge severity stripe on the row itself, not just the badge cell —
+  // when most rows share one urgency (real data here runs heavily
+  // CRITICAL), a stripe down the whole row is scannable at a glance
+  // without hunting for the badge column.
+  const getUrgencyRowClass = (urgency) => {
+    switch (urgency) {
+      case 'CRITICAL': return 'reorder-row-critical';
+      case 'URGENT': return 'reorder-row-urgent';
+      case 'PLANNED': return 'reorder-row-planned';
+      default: return '';
+    }
+  };
+
   const getLogActionBadge = (action) => {
     switch (action) {
       case 'ACCEPTED': return 'status-badge status-accepted';
@@ -289,7 +302,7 @@ const ReorderRecommendations = () => {
           </thead>
           <tbody>
             {localData.map((item) => (
-              <tr key={item.id}>
+              <tr key={item.id} className={getUrgencyRowClass(item.urgency)}>
                 <td className="reorder-sku-cell">{formatSKU(item.sku)}</td>
                 <td>{item.brand}</td>
                 <td className="reorder-product-cell">
@@ -308,7 +321,18 @@ const ReorderRecommendations = () => {
                   })()}
                 </td>
                 <td>{item.rop}</td>
-                <td className="reorder-stock-cell" style={{ color: item.stock < item.rop * 0.5 ? '#e53e3e' : item.stock < item.rop ? '#d69e2e' : '#4a5568' }}>{item.stock}</td>
+                <td
+                  className="reorder-stock-cell"
+                  style={{
+                    color: item.stock < item.rop * 0.5
+                      ? 'var(--color-severity-critical)'
+                      : item.stock < item.rop
+                        ? 'var(--color-severity-urgent)'
+                        : 'var(--color-text-body)',
+                  }}
+                >
+                  {item.stock}
+                </td>
                 <td className="reorder-qty-cell">
                   <span className="reorder-qty-main">{item.orderQty}</span>
                 </td>

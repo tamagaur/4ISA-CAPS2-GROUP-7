@@ -89,22 +89,15 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
       <aside className={`sidebar ${isOpen ? '' : 'sidebar-hidden'}`}>
-        {/* App identity. This slot used to hold a hardcoded "San San /
-            Marketing" profile — a placeholder that showed every signed-in
-            user a stranger's name and role at the top of every page, directly
-            above their OWN real name in .sidebar-bottom. Replaced with the
-            app/warehouse identity, which is what a sidebar header is for;
-            the one true "who am I" indicator now lives only at the bottom. */}
+        {/* App identity — the real SAN2 logo (cropped to its own content
+            bounding box in public/logo-navbar.png; the source logo.png is a
+            1920x1080 canvas with the mark filling only the middle ~627px,
+            so using it uncropped here left the sidebar version tiny with
+            huge dead padding above/below it) instead of a text lockup that
+            just repeated the company name reworded. The "who am I" identity
+            still lives only in .sidebar-bottom, unchanged. */}
         <div className="sidebar-profile-top">
-          <div className="avatar red-avatar" aria-hidden="true">S</div>
-          <div className="profile-info">
-            <span className="profile-name">SAN2 Inventory DSS</span>
-            <span className="profile-role">SSM Urdaneta</span>
-          </div>
-        </div>
-
-        <div className="sidebar-version">
-          <span className="version-text">INVENTORY DSS - v2.0</span>
+          <img src="/logo-navbar.png" alt="SAN2 Corporation" className="sidebar-logo" />
         </div>
 
         {/* Navigation */}
@@ -183,7 +176,7 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
         >
             <div className="logout-modal-header">
               <div className="logout-modal-icon-wrap">
-                <LogOut size={20} color="#c53030" />
+                <LogOut size={20} color="var(--color-brand-primary)" />
               </div>
               <h3 className="logout-modal-title">Log Out Confirmation</h3>
               <button className="logout-modal-close" onClick={() => setShowLogoutModal(false)} aria-label="Close">

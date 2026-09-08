@@ -16,9 +16,45 @@
   --color-abc-b: #B565A0;
   --color-abc-c: #EBC9E1;
 
-  /* Brand Chrome */
-  --color-brand-primary: #c53030;
-  --color-brand-accent: #e53e3e;
+  /* Brand Chrome — sampled directly from public/logo.png (the swoosh is
+     #C74E3D), replacing the cooler #c53030 the UI drifted to. Accent/hover
+     are that same hue moved along one consistent lightness ramp rather
+     than picked independently, so brand chrome always reads as one family. */
+  --color-brand-primary: #C74E3D;
+  --color-brand-accent: #E75C4B;
+
+  /* Sidebar — ink navy, lifted from Login.css's dark panel (#1C2230) so
+     the sidebar and the login screen read as the same product instead of
+     the login screen being the only place the "other half" of the brand
+     pairing appears. Additive: these are new tokens, nothing existing
+     was renamed, so this can't silently change an unrelated component. */
+  --color-nav-bg: #1C2230;
+  --color-nav-border: #2C3444;
+  --color-nav-group-label: #7C8598;
+  --color-nav-item: #B9C0CC;
+  --color-nav-item-hover-bg: rgba(255, 255, 255, 0.06);
+  --color-nav-item-active-bg: rgba(199, 78, 61, 0.16);
+  --color-nav-item-active-text: #F5F1EE;
+  --color-nav-item-active-rail: #C74E3D;
+  --color-nav-heading: #F5F1EE;
+  --color-nav-subheading: #8D93A0;
+
+  /* Reorder urgency — a real three-step scale (was: CRITICAL/URGENT/PLANNED
+     text colors hardcoded ad hoc in ReorderRecommendations.css, with
+     URGENT and PLANNED never actually distinct from generic warning/
+     success tokens used elsewhere for unrelated things). Critical is kept
+     deliberately DARKER than --color-brand-primary/critical above — an
+     alert must not have the same visual weight as brand chrome or a
+     data-viz negative delta; it needs to be its own, heavier thing.  */
+  --color-severity-critical: #8E1C1C;
+  --color-severity-critical-bg: #FDEDEC;
+  --color-severity-critical-border: #F3C6C2;
+  --color-severity-urgent: #B45309;
+  --color-severity-urgent-bg: #FDF3E3;
+  --color-severity-urgent-border: #F0D8AE;
+  --color-severity-planned: #0F766E;
+  --color-severity-planned-bg: #E6F2F0;
+  --color-severity-planned-border: #BEDAD6;
 
   /* ── UI chrome neutrals ──────────────────────────────────────────────
      Added 2026-09. Before this, component CSS hardcoded its own hex
@@ -30,9 +66,14 @@
      change; the only exceptions are three deliberate merges, noted
      inline, where the two scales differed by an imperceptible amount. */
 
-  /* Surfaces */
+  /* Surfaces — the page ground (surface-raised) carries a slight warm
+     bias now instead of a neutral cool grey, so the app doesn't feel like
+     a different, colder product than its own logo. Deliberately a small
+     nudge (247,247,244 vs the old 248,250,252 — 3-6/255 per channel):
+     content cards stay pure --color-surface white, so nothing sitting on
+     them loses contrast; only the page ground behind those cards shifts. */
   --color-surface: #ffffff;
-  --color-surface-raised: #f8fafc;    /* merged: was #f7fafc (45x) + #f8fafc (26x), 1/255 apart */
+  --color-surface-raised: #F7F7F4;
   --color-surface-sunken: #f1f5f9;
   --color-surface-muted: #edf2f7;
 
@@ -57,7 +98,7 @@
   --color-slate-400: #94a3b8;
 
   /* Brand */
-  --color-brand-hover: #9b2c2c;
+  --color-brand-hover: #9E3628;
 
   /* Feedback — danger */
   --color-danger-bg: #fff5f5;

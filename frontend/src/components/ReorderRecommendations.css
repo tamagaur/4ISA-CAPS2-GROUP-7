@@ -112,14 +112,17 @@
   overflow: hidden;
 }
 
-/* Colored borders top and left */
+/* Colored borders top and left — same severity tokens as the urgency
+   badges below, so "critical" means the same colour everywhere on this
+   page instead of the card borrowing brand-accent and the badge borrowing
+   a separate, unrelated red. */
 .card-red {
-  border-left: 3px solid var(--color-brand-accent);
-  border-top: 3px solid var(--color-brand-accent);
+  border-left: 3px solid var(--color-severity-critical);
+  border-top: 3px solid var(--color-severity-critical);
 }
 .card-yellow {
-  border-left: 3px solid var(--color-warning-deep);
-  border-top: 3px solid var(--color-warning-deep);
+  border-left: 3px solid var(--color-severity-urgent);
+  border-top: 3px solid var(--color-severity-urgent);
 }
 .card-blue {
   border-left: 3px solid var(--color-info);
@@ -192,12 +195,21 @@
 
 .reorder-table tbody tr {
   border-bottom: 1px solid var(--color-surface-raised);
+  border-left: 3px solid transparent;
   transition: background-color 0.15s;
 }
 
 .reorder-table tbody tr:hover {
   background-color: var(--color-surface-raised);
 }
+
+/* Row-level severity stripe — see getUrgencyRowClass in the .jsx. Real
+   data here runs heavily CRITICAL (the KPI strip above can read "53
+   critical, 0 urgent"), so a badge alone in one column wasn't enough to
+   scan; a stripe down the whole row is visible without hunting for it. */
+.reorder-row-critical { border-left-color: var(--color-severity-critical); }
+.reorder-row-urgent   { border-left-color: var(--color-severity-urgent); }
+.reorder-row-planned  { border-left-color: var(--color-severity-planned); }
 
 .reorder-table td {
   padding: 0.6rem 0.4rem;
@@ -323,7 +335,12 @@
   white-space: nowrap;
 }
 
-/* Urgency Badges */
+/* Urgency Badges — a real three-step SEVERITY scale (--color-severity-*),
+   not borrowed from tokens that mean something else. Before this,
+   CRITICAL reused --color-brand-accent (so a brand-colour change would
+   silently change what "critical" looks like) and URGENT reused the same
+   generic --color-warning-deep as dead-stock/low-stock elsewhere in the
+   app — two unrelated meanings sharing one colour. */
 .urgency-badge {
   display: inline-block;
   padding: 0.3rem 0.8rem;
@@ -333,21 +350,25 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
+  border: 1px solid transparent;
 }
 
 .badge-critical {
-  background-color: var(--color-danger-bg);
-  color: var(--color-brand-accent);
+  background-color: var(--color-severity-critical-bg);
+  color: var(--color-severity-critical);
+  border-color: var(--color-severity-critical-border);
 }
 
 .badge-urgent {
-  background-color: #fffff0;
-  color: var(--color-warning-deep);
+  background-color: var(--color-severity-urgent-bg);
+  color: var(--color-severity-urgent);
+  border-color: var(--color-severity-urgent-border);
 }
 
 .badge-planned {
-  background-color: var(--color-success-bg);
-  color: var(--color-success-ui);
+  background-color: var(--color-severity-planned-bg);
+  color: var(--color-severity-planned);
+  border-color: var(--color-severity-planned-border);
 }
 
 /* Action Buttons */

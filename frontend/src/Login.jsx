@@ -48,6 +48,11 @@ const Login = () => {
         <div className="logo-section">
           <img src="/logo.png" alt="SAN2 Corporation Logo" className="logo-image" />
           <p className="dashboard-title">Inventory Decision Support Dashboard</p>
+          <ul className="login-feature-list">
+            <li>Per-SKU demand forecasting</li>
+            <li>ABC-classified replenishment</li>
+            <li>Reorder recommendations</li>
+          </ul>
         </div>
       </div>
 

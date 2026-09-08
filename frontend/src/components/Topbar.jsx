@@ -1,7 +1,6 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { Check, Calendar } from 'lucide-react';
-import { getCurrentUser } from '../auth';
 import './Topbar.css';
 
 const Topbar = ({
@@ -32,22 +31,6 @@ const Topbar = ({
     pendingEndYear === realWorldYear;
   const isForecastPage = location.pathname === '/forecast';
 
-  const user = getCurrentUser();
-  const getInitials = (u) => {
-    if (!u) return 'JD'; // Fallback
-    if (u.fullName) {
-      const parts = u.fullName.split(' ').filter(Boolean);
-      if (parts.length === 0) return '??';
-      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    if (u.email) {
-      return u.email.substring(0, 2).toUpperCase();
-    }
-    return '??';
-  };
-  const initials = getInitials(user);
-
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -61,10 +44,12 @@ const Topbar = ({
 
         {/* Date Filter removed and placed in page headers */}
       </div>
-      
-      <div className="topbar-right">
-        <div className="avatar blue-avatar" title={user?.fullName || user?.email || 'User'}>{initials}</div>
-      </div>
+
+      {/* The topbar used to end with a second, bare "who am I" avatar here
+          (no menu, no action — just initials in a circle) that duplicated
+          the real identity card at the bottom of Sidebar.jsx (name, role,
+          online status, logout). Removed rather than kept as a decoration;
+          the sidebar card is the one place that information lives now. */}
     </header>
   );
 };

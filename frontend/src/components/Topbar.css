@@ -1,9 +1,8 @@
 .topbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background-color: #F7F9FC;
+  background-color: var(--color-surface-raised);
   position: sticky;
   top: 0;
   z-index: 10;

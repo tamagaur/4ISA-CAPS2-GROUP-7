@@ -54,23 +54,33 @@
   cursor: default;
 }
 
+/* Quiet outline, not a solid brand fill — "Today" is a reset/utility
+   action taken constantly while browsing, not a primary call to action.
+   A solid red button here competed visually with genuine alerts (a
+   CRITICAL badge) elsewhere on the same screen; matches .refresh-btn's
+   weight now instead of outranking it. */
 .date-today-btn {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background-color: var(--color-brand-accent);
-  border: none;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--color-surface);
+  color: var(--color-text-body);
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
 }
 
 .date-today-btn:hover {
-  background-color: var(--color-brand-primary);
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+}
+
+.date-today-btn svg {
+  color: var(--color-brand-primary);
 }
 
 .refresh-btn {

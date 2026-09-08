@@ -1,9 +1,15 @@
+/* This is the real page canvas everywhere in the app — every page's own
+   container (.dashboard, .forecast-page, .abc-page, etc.) is transparent
+   and shows this through. It used to be a hardcoded cool blue-grey
+   (#F7F9FC) that quietly overrode the warm --color-surface-raised token
+   set in index.css for exactly this purpose, so that token change never
+   actually became visible anywhere except the strip behind the topbar. */
 .dashboard-layout {
   display: flex;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background-color: #F7F9FC;
+  background-color: var(--color-surface-raised);
 }
 
 .main-content {

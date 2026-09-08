@@ -155,6 +155,29 @@
   font-weight: 400;
 }
 
+/* Marks a chart's data as illustrative rather than read from real bad-order
+   history — see SampleDataTag in BadOrders.jsx for which widgets this is on
+   and why. Amber (not red) since nothing is wrong, it's disclosed; sits
+   inline in the title rather than as a corner ribbon so it's read before
+   the numbers are, not after. */
+.bo-sample-tag {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  color: var(--color-warning-text);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: help;
+}
+
 .bo-widget-header-row {
   display: flex;
   align-items: flex-start;
