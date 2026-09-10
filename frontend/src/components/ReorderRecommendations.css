@@ -372,24 +372,6 @@
 }
 
 /* Action Buttons */
-.details-btn {
-  background: transparent;
-  border: 1px solid var(--color-brand-accent);
-  color: var(--color-brand-accent);
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.3rem 0.8rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-  display: inline-block;
-}
-
-.details-btn:hover {
-  background-color: var(--color-danger-bg);
-}
-
 .action-buttons {
   display: flex;
   gap: 0.4rem;

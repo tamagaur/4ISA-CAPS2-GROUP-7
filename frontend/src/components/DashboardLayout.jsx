@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
+import { AlertTriangle } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import './DashboardLayout.css';
@@ -20,6 +21,14 @@ const getCurrentRealWorldPeriod = () => ({ month: 'Feb', year: '2026' });
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// Orders (month, year) pairs so a start/end range can be compared —
+// year*12+monthIndex sorts correctly across a year boundary (e.g. Dec 2024
+// < Jan 2025). Used to catch a start-after-end range, which the picker used
+// to accept silently: it saved fine, then every page's own real-period
+// filter (`a.period >= start && a.period <= end`) matched nothing, so the
+// user just saw an empty chart with no indication why.
+const periodValue = (month, year) => Number(year) * 12 + MONTHS.indexOf(month);
+
 // Subtracts `count` months from (month, year), rolling the year backward
 // across a January boundary rather than clamping — e.g. 2 months before
 // Jan 2026 is Nov 2025.
@@ -39,6 +48,20 @@ const subtractMonths = (month, year, count) => {
 // Both the initial state below and the "Today" reset button build off
 // this same function, so they can never drift apart.
 const DEFAULT_MONTHS_BACK = 6;
+
+// Minimum SELECTABLE range width (inclusive month count, not "months
+// back" — a 6-month minimum means Sep 2025-Feb 2026 is the shortest
+// allowed pick, 6 points on a line chart). Matches two real numbers
+// already in the pipeline, not an arbitrary UX guess:
+//   - analytics/forecasting/baseline.py's MIN_MONTHS_WITH_SALES = 3 is the
+//     hard floor below which MA3 won't even run for a SKU at all.
+//   - This app's own DEFAULT_MONTHS_BACK above already opens on 7 points,
+//     which is what "enough shape to see a trend, not just 2-3 connected
+//     dots" actually looks like in practice.
+// 6 sits between those: comfortably past the analytics floor, matching
+// what the app already defaults to, so "the minimum you can pick" and
+// "what you see with no changes" are the same order of magnitude.
+const MIN_RANGE_MONTHS = 6;
 
 const getDefaultDateRange = () => {
   const today = getCurrentRealWorldPeriod();
@@ -84,11 +107,31 @@ const DashboardLayout = () => {
     pendingEndMonth !== endMonth ||
     pendingEndYear !== endYear;
 
+  // false when the pending start is after the pending end (e.g. Dec 2024 -
+  // Jan 2024). Checked here, not just in the picker UI, so the one function
+  // that actually commits a range (handleApplyPeriod) can never be tricked
+  // into applying an invalid one via some other caller.
+  const isPendingRangeValid =
+    periodValue(pendingStartMonth, pendingStartYear) <= periodValue(pendingEndMonth, pendingEndYear);
+
+  // Inclusive month count of the PENDING range — only meaningful once it's
+  // chronologically valid (a backwards range's "count" is negative/noise,
+  // and already has its own message via isPendingRangeValid above).
+  const pendingRangeMonthCount =
+    periodValue(pendingEndMonth, pendingEndYear) - periodValue(pendingStartMonth, pendingStartYear) + 1;
+  const isPendingRangeLongEnough = isPendingRangeValid && pendingRangeMonthCount >= MIN_RANGE_MONTHS;
+
+  // The single gate that actually decides whether Save may commit the
+  // pending range — both checks have to pass, chronological order first
+  // (a backwards 8-month span shouldn't read as "long enough").
+  const canApplyPendingPeriod = isPendingRangeValid && isPendingRangeLongEnough;
+
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
   const handleApplyPeriod = () => {
+    if (!canApplyPendingPeriod) return; // belt-and-suspenders — UI should already prevent this
     setStartMonth(pendingStartMonth);
     setStartYear(pendingStartYear);
     setEndMonth(pendingEndMonth);
@@ -193,7 +236,8 @@ const DashboardLayout = () => {
           pendingStartYear, setPendingStartYear,
           pendingEndMonth, setPendingEndMonth,
           pendingEndYear, setPendingEndYear,
-          isPending, handleApplyPeriod, handleResetToToday,
+          isPending, isPendingRangeValid, isPendingRangeLongEnough, canApplyPendingPeriod,
+          handleApplyPeriod, handleResetToToday,
           updatePeriodImmediately, realWorldPeriod,
         }} />
       </div>
@@ -210,12 +254,32 @@ const DashboardLayout = () => {
                 You changed the selected period to <strong>{pendingStartMonth} {pendingStartYear} - {pendingEndMonth} {pendingEndYear}</strong> but haven't applied it.
                 Save this change, or discard it and keep viewing <strong>{startMonth} {startYear} - {endMonth} {endYear}</strong>?
               </p>
+              {!isPendingRangeValid && (
+                <p className="period-nav-error">
+                  <AlertTriangle size={16} className="period-nav-error-icon" />
+                  <span>That range starts after it ends — Save is disabled until the start month is on or before the end month.</span>
+                </p>
+              )}
+              {isPendingRangeValid && !isPendingRangeLongEnough && (
+                <p className="period-nav-error">
+                  <AlertTriangle size={16} className="period-nav-error-icon" />
+                  <span>
+                    That range only spans {pendingRangeMonthCount} month{pendingRangeMonthCount === 1 ? '' : 's'} —
+                    select at least {MIN_RANGE_MONTHS} for a meaningful trend before saving.
+                  </span>
+                </p>
+              )}
             </div>
             <div className="period-nav-footer">
               <button className="period-discard-btn" onClick={handleConfirmDiscardNav}>
                 Discard
               </button>
-              <button className="period-save-btn" onClick={handleConfirmSaveNav}>
+              <button
+                className="period-save-btn"
+                onClick={handleConfirmSaveNav}
+                disabled={!canApplyPendingPeriod}
+                title={canApplyPendingPeriod ? undefined : 'Fix the date range before saving'}
+              >
                 Save
               </button>
             </div>

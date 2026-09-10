@@ -143,6 +143,17 @@
   min-height: 320px;
 }
 
+/* Sits under the "Incidents by brand" chart, whose Del Monte column is a
+   dashed placeholder, not real data — see generateBrandBreakdown's own
+   comment in BadOrders.jsx for why it's never rendered as a number. */
+.bo-brand-preview-note {
+  margin: 0.6rem 0 0 0;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--color-text-subtle);
+  text-align: center;
+}
+
 .bo-widget-title {
   font-size: 0.95rem;
   font-weight: 600;

@@ -19,7 +19,7 @@ import {
 } from 'recharts';
 import ReportBadOrderModal from './ReportBadOrderModal';
 import DateFilter from './DateFilter';
-import { COLORS } from '../theme/colors';
+import { COLORS, CHART_COLORS } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
 import { BAD_ORDER_REASONS } from '../data/mockData';
 import './BadOrders.css';
@@ -145,17 +145,28 @@ const generateTopSKUIncidents = (trackedList, addedIncidents) => {
     .sort((a, b) => b.count - a.count);
 };
 
-// Incidents by Brand — Unilever-only now, so this is a single bar rather
-// than a comparison; kept as its own widget (not removed) since the chart
-// scaffolding costs nothing to keep and the page's widget grid stays
-// stable if a second brand ever returns.
+// Incidents by Brand — Unilever-only today (Del Monte was dropped from
+// the app in 2026-09), so a real comparison isn't possible yet. Rather
+// than leave it a lone bar, this previews the two-principal layout Del
+// Monte's return would restore: a real Unilever bar next to a dashed
+// PLACEHOLDER for Del Monte.
+//
+// The placeholder is deliberately NOT a number. `previewHeight` exists
+// only to give the dashed box some visible shape on the axis — it is
+// never rendered as a count (see displayLabel below, always "Not
+// connected yet" for this row) and must never be read as an estimate.
+// Faking a Del Monte figure here would be exactly the kind of fabricated
+// number this project's anti-fabrication principle exists to rule out.
 const generateBrandBreakdown = (dateOffset, addedIncidents) => {
   const baseIncidents = Math.round(135 + dateOffset * 6);
   let count = baseIncidents;
   addedIncidents.forEach((r) => {
     if (r.brand === 'Unilever') count += 1;
   });
-  return [{ brand: 'Unilever', count }];
+  return [
+    { brand: 'Unilever', barValue: count, displayLabel: count.toLocaleString(), isPlaceholder: false },
+    { brand: 'Del Monte', barValue: Math.round(count * 0.6), displayLabel: 'Not connected yet', isPlaceholder: true },
+  ];
 };
 
 // Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
@@ -497,7 +508,15 @@ const BadOrders = () => {
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     formatter={(value, name, props) => [value, props.payload.reason]}
                   />
-                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={22} {...chartAnim()}>
+                  {/* Was COLORS.critical (red) — this is a neutral Pareto
+                      ranking of reasons, not an alert; every bar was red
+                      regardless of how big or small the count, which
+                      diluted what red means everywhere else on this page
+                      (the actual over-target rate line above it). Violet
+                      isn't used elsewhere on this page, so it also stays
+                      visually distinct from "Bad orders over time" (amber)
+                      and "When bad orders happen" (teal). */}
+                  <Bar dataKey="count" fill={COLORS.forecast} radius={[0, 4, 4, 0]} barSize={22} {...chartAnim()}>
                     <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
                   </Bar>
                 </BarChart>
@@ -568,7 +587,11 @@ const BadOrders = () => {
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     formatter={(value, name, props) => [value, props.payload.product]}
                   />
-                  <Bar dataKey="count" fill={COLORS.critical} radius={[0, 4, 4, 0]} barSize={18} {...chartAnim()}>
+                  {/* Was COLORS.critical (red) — same reasoning as "Top
+                      reasons" above: a ranked count, not an alert. Matches
+                      that chart's violet so the two ranking charts on this
+                      page read as one family. */}
+                  <Bar dataKey="count" fill={COLORS.forecast} radius={[0, 4, 4, 0]} barSize={18} {...chartAnim()}>
                     <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
                   </Bar>
                 </BarChart>
@@ -576,10 +599,13 @@ const BadOrders = () => {
             </div>
           </div>
 
-          {/* Incidents by Brand — two-series comparison; passes the CVD
-              validator (ΔE 27.4 deutan / 31.7 normal) and each bar carries
+          {/* Incidents by Brand — a real Unilever bar next to a dashed
+              PLACEHOLDER for Del Monte, previewing the two-principal
+              layout Del Monte's return would restore. Each bar carries
               its own text label + x-axis category, so identity never
-              depends on color alone. */}
+              depends on color alone; the placeholder's label is text
+              ("Not connected yet"), never a number, so it can't be
+              mistaken for a real figure at a glance. */}
           <div className="bo-widget">
             <h3 className="bo-widget-title">Incidents <span>— by brand</span> <SampleDataTag /></h3>
             <div className="bo-chart-wrapper">
@@ -588,16 +614,49 @@ const BadOrders = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf2f7" />
                   <XAxis dataKey="brand" axisLine={false} tickLine={false} tick={{ fill: '#4a5568', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a0aec0', fontSize: 12 }} allowDecimals={false} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                  <Bar dataKey="count" name="Incidents" radius={[4, 4, 0, 0]} barSize={60} {...chartAnim()}>
-                    <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 700, fill: '#1a202c' }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    formatter={(value, name, props) =>
+                      props.payload.isPlaceholder ? ['Del Monte is not reconnected yet', ''] : [value, 'Incidents']
+                    }
+                  />
+                  <Bar dataKey="barValue" name="Incidents" radius={[4, 4, 0, 0]} barSize={60} {...chartAnim()}>
+                    <LabelList
+                      dataKey="displayLabel"
+                      position="top"
+                      content={(props) => {
+                        const entry = brandBreakdown[props.index];
+                        return (
+                          <text
+                            x={props.x + props.width / 2}
+                            y={props.y - 8}
+                            textAnchor="middle"
+                            fontSize={entry?.isPlaceholder ? 10 : 12}
+                            fontWeight={entry?.isPlaceholder ? 600 : 700}
+                            fontStyle={entry?.isPlaceholder ? 'italic' : 'normal'}
+                            fill={entry?.isPlaceholder ? CHART_COLORS.axisLabel : '#1a202c'}
+                          >
+                            {props.value}
+                          </text>
+                        );
+                      }}
+                    />
                     {brandBreakdown.map((entry) => (
-                      <Cell key={entry.brand} fill={COLORS.salesTrend} />
+                      <Cell
+                        key={entry.brand}
+                        fill={entry.isPlaceholder ? 'transparent' : COLORS.salesTrend}
+                        stroke={entry.isPlaceholder ? CHART_COLORS.axisLabel : 'none'}
+                        strokeWidth={entry.isPlaceholder ? 1.5 : 0}
+                        strokeDasharray={entry.isPlaceholder ? '5 4' : undefined}
+                      />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            <p className="bo-brand-preview-note">
+              Del Monte column previews the layout once that principal is reconnected — not a real count.
+            </p>
           </div>
         </div>
 

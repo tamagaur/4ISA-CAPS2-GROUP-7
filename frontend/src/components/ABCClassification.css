@@ -169,6 +169,19 @@
   flex-shrink: 0;
 }
 
+/* Mirrors the chart's #criticalHatch SVG pattern so the legend swatch
+   carries the same texture cue, not just a flat red square — see the
+   colorblind-safety comment above the stock-status BarChart. */
+.abc-pareto-legend-swatch--critical {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--color-critical) 0,
+    var(--color-critical) 2px,
+    rgba(255, 255, 255, 0.6) 2px,
+    rgba(255, 255, 255, 0.6) 4px
+  );
+}
+
 .abc-pareto-legend-line {
   width: 16px;
   height: 2px;
@@ -811,12 +824,16 @@
   color: var(--color-success-ui);
 }
 
+/* Fixed 2026-09: was swapped with .abc-critical below (LOW was red,
+   CRITICAL was orange) — see STOCK_STATUS_COLORS in ABCClassification.jsx
+   for the full reasoning. Now uses the same --color-warning/--color-critical
+   tokens as the chart above, so the table and the chart can't disagree. */
 .abc-low {
-  color: var(--color-brand-accent);
+  color: var(--color-warning);
 }
 
 .abc-critical {
-  color: #dd6b20;
+  color: var(--color-critical);
 }
 
 .abc-no-data {

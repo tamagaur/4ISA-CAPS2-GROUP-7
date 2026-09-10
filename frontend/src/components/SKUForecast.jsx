@@ -34,6 +34,31 @@ const MONTH_TO_NUM = {
 const toPeriod = (month, year) =>
   month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
+// Inclusive month count between two 'YYYY-MM' periods (a === b -> 1). Only
+// meaningful when a <= b — callers check chronological order first.
+const monthsBetween = (a, b) => {
+  const [ay, am] = a.split('-').map(Number);
+  const [by, bm] = b.split('-').map(Number);
+  return (by * 12 + bm) - (ay * 12 + am) + 1;
+};
+
+// Same reasoning as DateFilter.jsx/DashboardLayout.jsx's MIN_RANGE_MONTHS:
+// below this, the chart this page exists to show renders as 1-2
+// disconnected dots rather than a readable trend.
+const MIN_RANGE_MONTHS = 6;
+
+// 'YYYY-MM' minus (count-1) months, inclusive — the start of a `count`-month
+// window ending at `period`. Used by the too-short fix button to widen a
+// range by pulling the start back, keeping the end (what the user actually
+// picked) untouched.
+const periodMinusMonths = (period, count) => {
+  const [y, m] = period.split('-').map(Number);
+  const total = y * 12 + (m - 1) - (count - 1);
+  const year = Math.floor(total / 12);
+  const monthIndex = ((total % 12) + 12) % 12;
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+};
+
 const NUM_TO_MONTH = Object.fromEntries(Object.entries(MONTH_TO_NUM).map(([m, n]) => [n, m]));
 // -> 'Mon YYYY'. Deliberately accepts BOTH shapes the API returns: actuals
 // carry a 'YYYY-MM' period string, while forecast_date is a full ISO date
@@ -46,14 +71,16 @@ const formatPeriod = (period) => {
   return `${NUM_TO_MONTH[num] || num} ${year}`;
 };
 
-// Compact X-axis tick: "Jan '23". The raw labels arrive in two different
+// X-axis tick + tooltip header: "Jan · 2026" — short month, middle dot,
+// full year (matches the same format used on the Dashboard's charts, see
+// Charts.jsx's formatAxisPeriod). The raw labels arrive in two different
 // shapes (actuals 'YYYY-MM', forecast 'YYYY-MM-DD'), which rendered as a
 // visibly inconsistent axis; this normalises both and keeps ticks short
 // enough to sit horizontally without overlapping.
 const formatAxisPeriod = (period) => {
   if (!period) return '';
   const [year, num] = period.split('-');
-  return `${NUM_TO_MONTH[num] || num} '${String(year).slice(-2)}`;
+  return `${NUM_TO_MONTH[num] || num} · ${year}`;
 };
 
 // Y-axis tick: 1.2M / 155k / 940. Monthly Unilever volumes run into the
@@ -77,7 +104,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 
     return (
       <div className="forecast-tooltip">
-        <p className="tooltip-label">{formatPeriod(label)}</p>
+        <p className="tooltip-label">{formatAxisPeriod(label)}</p>
         {displayPayload.map((entry, index) => {
           if (entry.dataKey === 'ci') {
             // Zero-width at the anchor point (see chartData) — that's the
@@ -370,6 +397,21 @@ const SKUForecast = () => {
     return { start: periods[0], end: periods[periods.length - 1] };
   }, [forecastResult]);
 
+  // MIN_RANGE_MONTHS (6) assumes the SKU HAS 6 months to show. Plenty of
+  // real SKUs in the corpus don't — coverage runs from 2023-01 to 2026-02
+  // but only ~1/3 of SKUs span the whole thing (see skuCoverage's own
+  // comment above), so a SKU with 2 real months was being told to pick a
+  // 6-month range it could never fill with real data — 4 of those months
+  // would just be empty padding. The effective floor is now whichever is
+  // SMALLER: the usual 6-month readability floor, or this SKU's own total
+  // real coverage — so a 2-month SKU only needs to select 2 months, not
+  // pad out to 6 for a rule that was never really about this SKU.
+  const effectiveMinMonths = useMemo(() => {
+    if (!skuCoverage) return MIN_RANGE_MONTHS;
+    const skuSpan = monthsBetween(skuCoverage.start, skuCoverage.end);
+    return Math.min(MIN_RANGE_MONTHS, skuSpan);
+  }, [skuCoverage]);
+
   // The month the STORED forecast targets ('YYYY-MM'), sliced off the API's
   // ISO date. The pipeline always writes exactly last-real-month + 1, which
   // across the whole corpus is 2026-03.
@@ -378,15 +420,32 @@ const SKUForecast = () => {
     return d ? String(d).slice(0, 7) : null;
   }, [forecastResult]);
 
-  // 'ok'      — picked range sits fully inside this SKU's history
-  // 'partial' — overlaps, but one/both ends fall outside it
-  // 'none'    — no overlap at all; nothing honest to plot
+  // 'invalid'   — the range itself is backwards (start after end), e.g.
+  //               start Dec 2024, end Jan 2024. Checked before anything
+  //               else, since asking "does this SKU have 6 months of data
+  //               in a backwards range" is meaningless.
+  // 'too-short' — chronologically fine, but under effectiveMinMonths — the
+  //               chart below would render as 1-2 disconnected dots.
+  //               Checked before coverage too: a 1-month pick that also
+  //               misses this SKU's history should say "too short," not
+  //               "no data," since widening it is the actual fix either way.
+  //               Uses effectiveMinMonths (SKU-aware), not the flat
+  //               MIN_RANGE_MONTHS, so a SKU with genuinely less than 6
+  //               months of real history isn't asked to select more than
+  //               it has (see effectiveMinMonths above).
+  // 'ok'        — picked range sits fully inside this SKU's history
+  // 'partial'   — overlaps, but one/both ends fall outside it
+  // 'none'      — no overlap at all; nothing honest to plot
   const rangeStatus = useMemo(() => {
+    if (rangeStartPeriod && rangeEndPeriod && rangeStartPeriod > rangeEndPeriod) return 'invalid';
+    if (rangeStartPeriod && rangeEndPeriod && monthsBetween(rangeStartPeriod, rangeEndPeriod) < effectiveMinMonths) {
+      return 'too-short';
+    }
     if (!skuCoverage || !rangeStartPeriod || !rangeEndPeriod) return 'ok';
     if (rangeEndPeriod < skuCoverage.start || rangeStartPeriod > skuCoverage.end) return 'none';
     if (rangeStartPeriod < skuCoverage.start || rangeEndPeriod > skuCoverage.end) return 'partial';
     return 'ok';
-  }, [skuCoverage, rangeStartPeriod, rangeEndPeriod]);
+  }, [skuCoverage, rangeStartPeriod, rangeEndPeriod, effectiveMinMonths]);
 
   // Snap this page's local range to exactly the months this SKU has data for.
   const applySkuCoverageRange = () => {
@@ -580,6 +639,7 @@ const SKUForecast = () => {
               localValue={localRange}
               onLocalChange={setLocalRange}
               onReset={isCustomRange ? resetToDashboardRange : undefined}
+              minMonths={effectiveMinMonths}
             />
             <button
               className="browse-all-skus-btn"
@@ -871,6 +931,70 @@ const SKUForecast = () => {
                 </p>
               )}
 
+              {/* Start after end (e.g. Dec 2024 - Jan 2024) — DateFilter
+                  already shows an inline warning the instant this happens,
+                  but this page still has to refuse to render a chart for a
+                  backwards range rather than silently treating it as empty.
+                  Offers a one-click fix (swap the two dates) since, unlike
+                  the 'none' case below, there's no ambiguity about what the
+                  user actually meant. */}
+              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'invalid' && (
+                <div className="forecast-range-error">
+                  <span className="forecast-range-error-title">Invalid date range</span>
+                  <p className="forecast-range-error-body">
+                    Your start date (<strong>{formatPeriod(rangeStartPeriod)}</strong>) is after your end date
+                    (<strong>{formatPeriod(rangeEndPeriod)}</strong>). Pick a start date on or before the end date
+                    to see this SKU&apos;s demand history and forecast.
+                  </p>
+                  <button
+                    className="forecast-range-fix-btn"
+                    onClick={() => setLocalRange({
+                      startMonth: localRange.endMonth, startYear: localRange.endYear,
+                      endMonth: localRange.startMonth, endYear: localRange.startYear,
+                    })}
+                  >
+                    Swap dates ({formatPeriod(rangeEndPeriod)} – {formatPeriod(rangeStartPeriod)})
+                  </button>
+                </div>
+              )}
+
+              {/* Chronologically fine but too narrow to read as a trend —
+                  floor is effectiveMinMonths, not a flat MIN_RANGE_MONTHS,
+                  so a SKU with less than 6 months of real history (common —
+                  see skuCoverage's comment above) only has to select as
+                  many months as it actually has, not pad out to 6. Fix
+                  button widens to exactly that floor, ending at whatever
+                  end date the user already picked, rather than resetting
+                  the whole selection. */}
+              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'too-short' && (
+                <div className="forecast-range-error">
+                  <span className="forecast-range-error-title">
+                    Range too short — {monthsBetween(rangeStartPeriod, rangeEndPeriod)} month
+                    {monthsBetween(rangeStartPeriod, rangeEndPeriod) === 1 ? '' : 's'} selected
+                  </span>
+                  <p className="forecast-range-error-body">
+                    <strong>{formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}</strong> isn&apos;t
+                    enough points for a readable trend. Select at least <strong>{effectiveMinMonths} month{effectiveMinMonths === 1 ? '' : 's'}</strong>
+                    {effectiveMinMonths < MIN_RANGE_MONTHS
+                      ? ` — this SKU only has ${effectiveMinMonths} month${effectiveMinMonths === 1 ? '' : 's'} of real history, so that's this SKU's full available range.`
+                      : '.'}
+                  </p>
+                  <button
+                    className="forecast-range-fix-btn"
+                    onClick={() => {
+                      const widerStart = periodMinusMonths(rangeEndPeriod, effectiveMinMonths);
+                      const [wy, wm] = widerStart.split('-');
+                      setLocalRange({
+                        startMonth: NUM_TO_MONTH[wm], startYear: wy,
+                        endMonth: localRange.endMonth, endYear: localRange.endYear,
+                      });
+                    }}
+                  >
+                    Use last {effectiveMinMonths} month{effectiveMinMonths === 1 ? '' : 's'} (ending {formatPeriod(rangeEndPeriod)})
+                  </button>
+                </div>
+              )}
+
               {/* No overlap at all between the picked range and this SKU's
                   history — a chart here would be an empty grid, so state the
                   problem and offer the fix instead of rendering nothing. */}
@@ -892,7 +1016,7 @@ const SKUForecast = () => {
                 </div>
               )}
 
-              {!forecastLoading && !forecastError && forecastResult && rangeStatus !== 'none' && (
+              {!forecastLoading && !forecastError && forecastResult && (rangeStatus === 'ok' || rangeStatus === 'partial') && (
                 <>
                   {/* Headline Forecast Stat Row — the number this whole page
                       exists to produce (next period's forecast) plus how it
@@ -1018,41 +1142,6 @@ const SKUForecast = () => {
                     </p>
                   )}
 
-                  {/* Chart Legend — swatches are inline SVG so each one is an
-                      exact miniature of the mark it stands for (solid stroke,
-                      dashed stroke, filled band). The previous CSS-only
-                      version faked the dash with a background gradient and
-                      stacked a dot on top via ::after, which rendered as a
-                      lumpy bowtie at this size. */}
-                  <div className="chart-legend">
-                    {chartData.some((pt) => pt.actual != null) && (
-                      <div className="legend-item">
-                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <line x1="1" y1="6" x2="27" y2="6" stroke={CHART_COLORS.salesSeries} strokeWidth="2.5" strokeLinecap="round" />
-                        </svg>
-                        <span className="legend-label">Actual Sales</span>
-                      </div>
-                    )}
-                    <div className="legend-item">
-                      <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                        <line x1="1" y1="6" x2="27" y2="6" stroke={COLORS.forecast} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4" />
-                      </svg>
-                      <span className="legend-label">Forecast</span>
-                    </div>
-                    {forecastResult.forecast.some((f) => f.confidence_lower != null && f.confidence_upper != null) && (
-                      <div className="legend-item">
-                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <rect
-                            x="1" y="1.5" width="26" height="9" rx="2.5"
-                            fill={COLORS.forecast} fillOpacity="0.16"
-                            stroke={COLORS.forecast} strokeOpacity="0.35" strokeWidth="1"
-                          />
-                        </svg>
-                        <span className="legend-label">Confidence Interval</span>
-                      </div>
-                    )}
-                  </div>
-
                   {/* Chart */}
                   <div className="chart-wrapper">
                     {/* height 420 + bottom margin 32: the X tick row sits
@@ -1060,7 +1149,7 @@ const SKUForecast = () => {
                         being clipped off the bottom edge on load. */}
                     <ResponsiveContainer width="100%" height={420}>
                       <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 8, bottom: 32 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={COLORS.gridline} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
                         <XAxis
                           dataKey="label"
                           axisLine={true}
@@ -1143,6 +1232,45 @@ const SKUForecast = () => {
                         />
                       </ComposedChart>
                     </ResponsiveContainer>
+                  </div>
+
+                  {/* Chart legend — bottom-center, matching the
+                      .custom-legend convention every other page's charts
+                      use (Dashboard/Bad Orders' Charts.jsx), so the legend
+                      sits in the same spot on every graph app-wide instead
+                      of this page being the one exception up at top-right.
+                      Swatches are inline SVG so each one is an exact
+                      miniature of the mark it stands for (solid stroke,
+                      dashed stroke, filled band) — a CSS-only swatch faking
+                      the dash via a background gradient rendered as a lumpy
+                      bowtie at this size. */}
+                  <div className="chart-legend">
+                    {chartData.some((pt) => pt.actual != null) && (
+                      <div className="legend-item">
+                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={CHART_COLORS.salesSeries} strokeWidth="2.5" strokeLinecap="round" />
+                        </svg>
+                        <span className="legend-label">Actual Sales</span>
+                      </div>
+                    )}
+                    <div className="legend-item">
+                      <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                        <line x1="1" y1="6" x2="27" y2="6" stroke={COLORS.forecast} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4" />
+                      </svg>
+                      <span className="legend-label">Forecast</span>
+                    </div>
+                    {forecastResult.forecast.some((f) => f.confidence_lower != null && f.confidence_upper != null) && (
+                      <div className="legend-item">
+                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                          <rect
+                            x="1" y="1.5" width="26" height="9" rx="2.5"
+                            fill={COLORS.forecast} fillOpacity="0.16"
+                            stroke={COLORS.forecast} strokeOpacity="0.35" strokeWidth="1"
+                          />
+                        </svg>
+                        <span className="legend-label">Confidence Interval</span>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

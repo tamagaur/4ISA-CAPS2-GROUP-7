@@ -1,6 +1,6 @@
 import React from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Calendar, ChevronDown, Check, RefreshCw, RotateCcw } from 'lucide-react';
+import { Calendar, ChevronDown, Check, RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react';
 import './DateFilter.css';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -26,6 +26,28 @@ const LATEST_YEAR = '2026';
 const LATEST_YEAR_MONTHS = ['Jan', 'Feb'];
 const monthsForYear = (year) => (year === LATEST_YEAR ? LATEST_YEAR_MONTHS : MONTHS);
 
+// year*12+monthIndex sorts (month, year) pairs correctly across a year
+// boundary (Dec 2024 < Jan 2025) — used to catch a start-after-end pick
+// (e.g. start Dec 2024, end Jan 2024), which neither mode used to reject:
+// it saved/applied fine, then every page's own `period >= start && period
+// <= end` filter matched nothing, so the user just got a silently empty
+// chart with no explanation.
+const periodValue = (month, year) => Number(year) * 12 + MONTHS.indexOf(month);
+
+// Same default MIN_RANGE_MONTHS as DashboardLayout.jsx (kept as a literal
+// here rather than imported — this file already duplicates small per-file
+// constants like periodValue/MONTHS instead of a shared util module,
+// matching the rest of this codebase's convention). A too-short range
+// (e.g. one month) technically saves fine but every trend chart it feeds
+// renders as 1-2 disconnected dots, not a readable trend — 6 is the
+// analytics pipeline's own MIN_MONTHS_WITH_SALES (3) plus enough margin
+// to match what this app already defaults to (DEFAULT_MONTHS_BACK = 6,
+// a 7-point window). Overridable via the `minMonths` prop for local mode:
+// SKU Forecast passes its own per-SKU effectiveMinMonths, since a SKU with
+// under 6 months of real history shouldn't be told to select more than it
+// has (see SKUForecast.jsx's effectiveMinMonths comment).
+const DEFAULT_MIN_RANGE_MONTHS = 6;
+
 const noop = () => {};
 
 // Rendered from the same title-row spot on every analytics page (Dashboard,
@@ -49,7 +71,7 @@ const noop = () => {};
 //     own "go back to the dashboard's range" handler, since "reset to
 //     what" means something different per page in local mode (there is
 //     no single shared "Today" default to fall back to here).
-const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset }) => {
+const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS }) => {
   const outlet = useOutletContext() || {};
   const isLocal = !!(localValue && onLocalChange);
 
@@ -60,6 +82,19 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset }) => {
 
   const startMonthOptions = monthsForYear(sy);
   const endMonthOptions = monthsForYear(ey);
+
+  const isRangeValid = periodValue(sm, sy) <= periodValue(em, ey);
+  const rangeMonthCount = periodValue(em, ey) - periodValue(sm, sy) + 1; // only meaningful once isRangeValid
+  const isRangeLongEnough = isRangeValid && rangeMonthCount >= minMonths;
+
+  // Shared mode already has its own canApplyPendingPeriod computed in
+  // DashboardLayout (guards handleApplyPeriod itself, not just this
+  // button) — reuse it when present so the two can't disagree; local mode
+  // has no separate pending/applied split, so the live checks above (from
+  // the current sm/sy/em/ey) are the only ones that apply.
+  const rangeValid = isLocal
+    ? (isRangeValid && isRangeLongEnough)
+    : (outlet.canApplyPendingPeriod ?? (isRangeValid && isRangeLongEnough));
 
   // Changing TO 2026 can strand the other field's already-selected month
   // outside Jan-Mar (e.g. start year was 2025 with month=Aug, then the
@@ -105,6 +140,7 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset }) => {
   };
 
   return (
+    <div className="dashboard-date-controls-wrapper">
     <div className="dashboard-date-controls">
       <div className="date-select-btn" style={{ position: 'relative' }}>
         <Calendar size={14} />
@@ -170,7 +206,8 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset }) => {
         <button
           className="date-save-btn"
           onClick={outlet.handleApplyPeriod || noop}
-          title="Apply the selected date range"
+          disabled={!rangeValid}
+          title={rangeValid ? 'Apply the selected date range' : 'Fix the date range before saving'}
         >
           <Check size={14} />
           Save
@@ -201,6 +238,31 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset }) => {
           Refresh
         </button>
       )}
+    </div>
+
+    {/* Both checks are caught live, as soon as they happen, not only on
+        Save — local mode has no Save step at all, so this is the only
+        feedback that mode gets. Named explicitly with the actual months
+        picked (and, for the too-short case, the actual count), matching
+        the "flag the valid range" pattern the SKU Forecast per-SKU
+        coverage check already uses elsewhere on this page. Start-after-end
+        takes priority — a backwards range's month count is meaningless,
+        so there's nothing useful to say about length until that's fixed. */}
+    {!isRangeValid && (
+      <p className="date-range-error">
+        <AlertTriangle size={15} className="date-range-error-icon" />
+        <span>{sm} {sy} is after {em} {ey} — pick a start date on or before the end date.</span>
+      </p>
+    )}
+    {isRangeValid && !isRangeLongEnough && (
+      <p className="date-range-error">
+        <AlertTriangle size={15} className="date-range-error-icon" />
+        <span>
+          {sm} {sy} – {em} {ey} is only {rangeMonthCount} month{rangeMonthCount === 1 ? '' : 's'} — select at least{' '}
+          {minMonths} month{minMonths === 1 ? '' : 's'} so the trend charts have enough points to read.
+        </span>
+      </p>
+    )}
     </div>
   );
 };

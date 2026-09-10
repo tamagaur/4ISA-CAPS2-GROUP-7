@@ -766,11 +766,13 @@
   border: 1px solid var(--color-border);
 }
 
+/* Bottom-center, gap+centering match .custom-legend in Charts.css so this
+   page's legend sits in the same spot as every other chart's app-wide. */
 .chart-legend {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 1.5rem;
-  margin-bottom: 1.5rem;
+  margin-top: 1rem;
 }
 
 .legend-item {
@@ -851,7 +853,7 @@
 
   .chart-legend {
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   .selected-sku-card {

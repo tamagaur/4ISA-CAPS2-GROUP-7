@@ -67,6 +67,29 @@
   line-height: 1.5;
 }
 
+/* Matches DateFilter.css's .date-range-error — same message family, same
+   treatment: bigger/bolder than the surrounding body text, a stronger
+   border, and an icon, rather than reading as a thin caption. */
+.period-nav-body p.period-nav-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background-color: var(--color-danger-bg);
+  border: 1.5px solid var(--color-brand-primary);
+  border-radius: 8px;
+  color: var(--color-brand-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.period-nav-error-icon {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
 .period-nav-footer {
   display: flex;
   gap: 0.8rem;
@@ -105,6 +128,12 @@
   transition: background-color 0.2s;
 }
 
-.period-save-btn:hover {
+.period-save-btn:hover:not(:disabled) {
   background-color: var(--color-brand-hover);
+}
+
+.period-save-btn:disabled {
+  background-color: var(--color-border-strong);
+  color: var(--color-text-subtle);
+  cursor: not-allowed;
 }

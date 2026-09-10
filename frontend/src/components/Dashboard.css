@@ -21,10 +21,19 @@
   gap: 0.5rem;
 }
 
+/* flex-wrap was missing here — at narrow widths "Inventory pulse" and the
+   date picker were forced onto one row with nowrap, so the picker's 4
+   dropdowns got squeezed into a ~160px sliver that visually overlapped the
+   title text (confirmed at 375px: selects rendered, but overlapping the
+   heading enough to block clicks on them). ABC Classification/Reorder Recs
+   already had this and never had the problem — matching their pattern here
+   rather than inventing a new one. */
 .dashboard-title-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .dashboard-title-row h2 {

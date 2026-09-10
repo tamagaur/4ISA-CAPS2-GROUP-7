@@ -92,10 +92,18 @@ const CLASS_DRILLDOWN_NOTE = {
 // 2025-12 Inventory_Fact_Real only covers a subset of classified
 // products (partial ETL load, more coverage expected), so "no record
 // yet" and "confirmed zero stock" are kept visibly distinct.
+//
+// Fixed 2026-09: LOW and CRITICAL were swapped (LOW was red, CRITICAL was
+// orange) — a real severity-inversion bug, not a style choice. Red draws
+// the eye harder than orange, so at a glance LOW read as the more urgent
+// state and CRITICAL read as the calmer one, backwards from reality. Now
+// pulled from theme/colors.js's own tokens instead of ad-hoc hex, which
+// were already documented for exactly this ("Amber: ...low stock" /
+// "Red: ...critical reorders") but weren't being used.
 const STOCK_STATUS_COLORS = {
   'IN STOCK': '#38a169',
-  LOW: '#e53e3e',
-  CRITICAL: '#dd6b20',
+  LOW: COLORS.warning,
+  CRITICAL: COLORS.critical,
   'NO DATA': '#a0aec0',
 };
 
@@ -458,13 +466,9 @@ const ABCClassification = () => {
             <div className="abc-pareto-container abc-analysis-chart">
               <div className="abc-pareto-header">
                 <h3 className="abc-pareto-title">
-                  {panel.label ? `${panel.label} — Revenue Share vs. Stock Status Mix, by Class` : 'Revenue Share vs. Stock Status Mix, by Class'}
+                  {panel.label ? `${panel.label} — Stock Status Mix, by Class` : 'Stock Status Mix, by Class'}
                 </h3>
                 <div className="abc-pareto-legend">
-                  <div className="abc-pareto-legend-item">
-                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcA }} />
-                    <span>Revenue share</span>
-                  </div>
                   <div className="abc-pareto-legend-item">
                     <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['IN STOCK'] }} />
                     <span>In stock</span>
@@ -474,7 +478,7 @@ const ABCClassification = () => {
                     <span>Low</span>
                   </div>
                   <div className="abc-pareto-legend-item">
-                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.CRITICAL }} />
+                    <span className="abc-pareto-legend-swatch abc-pareto-legend-swatch--critical" />
                     <span>Critical</span>
                   </div>
                   <div className="abc-pareto-legend-item">
@@ -486,6 +490,19 @@ const ABCClassification = () => {
               <div className="abc-pareto-chart-wrapper">
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={panel.classAggregates} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
+                    {/* Colorblind safety: CRITICAL and IN STOCK sit right next
+                        to each other in this stack, and red/green is the one
+                        hue pair ~8% of men (red-green deficiency) can't
+                        reliably tell apart. A hatch pattern gives CRITICAL a
+                        texture cue that doesn't depend on hue at all, and the
+                        white segment borders below mean no boundary in the
+                        stack relies on color contrast alone. */}
+                    <defs>
+                      <pattern id="criticalHatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
+                        <rect width="7" height="7" fill={STOCK_STATUS_COLORS.CRITICAL} />
+                        <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,255,255,0.6)" strokeWidth="3" />
+                      </pattern>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
                     <XAxis
                       dataKey="label"
@@ -502,51 +519,40 @@ const ABCClassification = () => {
                       tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                     />
                     <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
-                    {/* Bar 1 of the pair: revenue share, one solid bar per class.
-                        Clicking any class's bar — either this one or the
-                        stock-mix bar below — drives the drill-down panel. */}
-                    <Bar
-                      dataKey="revenueTotal"
-                      radius={[6, 6, 0, 0]}
-                      barSize={54}
-                      {...chartAnim()}
-                      onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {panel.classAggregates.map((entry) => (
-                        <Cell
-                          key={entry.cat}
-                          fill={COLORS[`abc${entry.cat}`]}
-                          stroke={entry.cat === selectedClass ? '#1a202c' : 'none'}
-                          strokeWidth={entry.cat === selectedClass ? 2 : 0}
-                        />
-                      ))}
-                    </Bar>
-                    {/* Bar 2 of the pair: stock-status mix, stacked to 100%.
-                        NO DATA sits at the base since it's usually the
-                        largest segment right now (partial inventory load)
-                        — putting it first keeps the rounded top corner on
-                        whichever real status segment is on top. Each
-                        stacked segment is also clickable and outlines the
-                        whole column for whichever class is selected. */}
+                    {/* Was a two-bar-per-class combo: this stock-status stack
+                        next to a separate solid "revenue share" bar on the
+                        SAME 0-100% axis. Dropped the revenue-share bar
+                        (2026-09) — it mixed two different kinds of
+                        percentage on one axis (per-class stock composition
+                        vs. share-of-portfolio-revenue), which invited a
+                        false comparison, and it duplicated what the 4 KPI
+                        cards above already say ("Top 20% · 80% of
+                        revenue"). This chart now has one job: stock-status
+                        composition, stacked to 100%. NO DATA sits at the
+                        base since it's usually the largest segment right
+                        now (partial inventory load) — putting it first
+                        keeps the rounded top corner on whichever real
+                        status segment is on top. Each stacked segment is
+                        clickable and outlines the whole column for
+                        whichever class is selected. */}
                     <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={54} {...chartAnim(0)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
-                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
                       ))}
                     </Bar>
-                    <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                    <Bar dataKey="criticalPct" stackId="stockMix" fill="url(#criticalHatch)" barSize={54} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
-                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
                       ))}
                     </Bar>
                     <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
-                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
                       ))}
                     </Bar>
                     <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
-                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
                       ))}
                     </Bar>
                   </BarChart>

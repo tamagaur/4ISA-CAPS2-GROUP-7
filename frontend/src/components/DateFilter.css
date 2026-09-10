@@ -1,8 +1,48 @@
+/* Stacks the picker row above its own validation message, independent of
+   whatever flex/grid layout the page places this component into. */
+.dashboard-date-controls-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
 .dashboard-date-controls {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
+}
+
+/* Was 12px, 1px border, no icon — read as a thin, easy-to-miss caption
+   rather than a warning. Bumped size/weight, a stronger border, and an
+   icon so it's scannable at a glance instead of needing to be read
+   closely to register as "something's wrong." */
+.date-range-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  background-color: var(--color-danger-bg);
+  border: 1.5px solid var(--color-brand-primary);
+  border-radius: 8px;
+  color: var(--color-brand-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.45;
+  /* fit-content hugs the message on wide screens (no full-width blob for a
+     short sentence); max-width stops it from forcing the message onto one
+     un-wrapped line wider than a narrow viewport — without it, the longer
+     "too short" message could push the page into horizontal scroll on a
+     phone-width screen. */
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.date-range-error-icon {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
 }
 
 .date-select-btn {

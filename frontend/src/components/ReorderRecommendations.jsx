@@ -296,14 +296,26 @@ const ReorderRecommendations = () => {
               <th>CURRENT STOCK</th>
               <th>LP QTY</th>
               <th>URGENCY</th>
-              <th>DETAILS</th>
               <th>ACTION</th>
             </tr>
           </thead>
           <tbody>
             {localData.map((item) => (
               <tr key={item.id} className={getUrgencyRowClass(item.urgency)}>
-                <td className="reorder-sku-cell">{formatSKU(item.sku)}</td>
+                <td
+                  className="reorder-sku-cell"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleOpenDetails(item)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleOpenDetails(item);
+                    }
+                  }}
+                >
+                  {formatSKU(item.sku)}
+                </td>
                 <td>{item.brand}</td>
                 <td className="reorder-product-cell">
                   {(() => {
@@ -340,9 +352,6 @@ const ReorderRecommendations = () => {
                   <span className={getUrgencyBadge(item.urgency)}>
                     {item.urgency}
                   </span>
-                </td>
-                <td>
-                  <button className="details-btn" onClick={() => handleOpenDetails(item)}>Details</button>
                 </td>
                 <td>
                   {renderActionColumn(item)}

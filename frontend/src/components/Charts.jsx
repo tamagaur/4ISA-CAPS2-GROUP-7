@@ -10,6 +10,18 @@ import { CHART_COLORS, STATUS_TIERS, COLORS } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
 import './Charts.css';
 
+// X-axis tick + tooltip header for every period-keyed chart on this page:
+// "Jan · 2026" — short month, middle dot, full year. Was the raw 'YYYY-MM'
+// string with no formatting at all (e.g. "2025-08"). Accepts 'YYYY-MM' and
+// 'YYYY-MM-DD' alike — slicing only the first two '-'-separated segments
+// ignores any day part, so a forecast_date's day-of-month never leaks in.
+const AXIS_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const formatAxisPeriod = (period) => {
+  if (!period) return '';
+  const [year, num] = String(period).split('-');
+  return `${AXIS_MONTHS[Number(num) - 1] || num} · ${year}`;
+};
+
 // Custom tooltip: "Wk 7 — 5.2 weeks (2.2 above policy)". wk is the point's
 // 1-based position among the plotted (last-12) periods, not a calendar
 // week — this is monthly data, "Wk" here just means "this plotted point".
@@ -79,7 +91,7 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -267,7 +279,7 @@ const SalesStockTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   return (
     <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label}</p>
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(label)}</p>
       {payload.map((p) => (
         <p key={p.dataKey} style={{ margin: '0.1rem 0', color: p.color }}>
           {p.name}: {formatCompactPesos(p.value)}
@@ -319,7 +331,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -647,7 +659,7 @@ const PortfolioForecastTooltip = ({ active, payload, label }) => {
   const row = payload[0].payload;
   return (
     <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label}</p>
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(label)}</p>
       {row.actual != null && (
         <p style={{ margin: '0.1rem 0', color: CHART_COLORS.salesSeries }}>Actual demand: {Math.round(row.actual).toLocaleString()} units</p>
       )}
@@ -756,7 +768,7 @@ export const PortfolioForecastWidget = ({
                     the END, silently dropping the label at the true first
                     point on a wide range (diagnosed for SKUForecast.jsx's
                     identical chart earlier — same fix, same cause). */}
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval="equidistantPreserveStart" />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval="equidistantPreserveStart" tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -836,8 +848,15 @@ const URGENCY_STYLES = {
 const LP_PRIORITY_ROWS = [
   {
     key: 'cost',
+    // Was COLORS.critical (red). Cost, Service level, and Storage are three
+    // co-equal trade-off weights in one multi-objective LP — none of them
+    // is inherently more alarming than the others, so giving Cost the same
+    // red used for genuine alerts elsewhere (Reorder Recs' CRITICAL badge,
+    // the Bad Order rate line) implied a severity that isn't there. Teal
+    // keeps it visually distinct from Service level (indigo) and Storage
+    // (amber) without borrowing red's meaning.
     label: 'Cost',
-    color: COLORS.critical,
+    color: COLORS.dispatched,
     blurb: 'Placeholder: how strongly the optimizer favours minimizing total purchase and holding cost when choosing order quantities.',
   },
   {
