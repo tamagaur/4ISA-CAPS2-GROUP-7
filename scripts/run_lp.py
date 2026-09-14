@@ -2,29 +2,43 @@
 scripts.run_lp — Phase 5: Run safety stock / ROP / LP replenishment
 optimization for Category A products and save to LP_Recommendation.
 
-Mirrors scripts/run_sarima.py's structure (argparse -> load_dotenv ->
-psycopg2 connect -> one fetch query -> a per-item loop with an immediate
-upsert -> a closing summary) — see that file for the pattern this one
-follows. Difference in shape: SARIMA fits ONE SKU at a time independently;
-this LP is a single shared optimization PER PLANNING CYCLE (build_lp_model
-takes the whole SKU list for that cycle at once, per analytics/optimization/
-lp.py's own design — the constraints are portfolio-wide, not per-SKU), so
-the outer loop here is over planning cycles, not over SKUs.
+Mirrors scripts/run_baseline_forecast.py's structure (argparse ->
+load_dotenv -> psycopg2 connect -> one fetch query -> a per-item loop ->
+a closing summary) — see that file for the pattern this one follows.
+Difference in shape: the deployed MA3 forecast fits ONE SKU at a time
+independently; this LP is a single shared optimization PER PLANNING
+CYCLE (build_lp_model takes the whole SKU list for that cycle at once,
+per analytics/optimization/lp.py's own design — the constraints are
+portfolio-wide, not per-SKU), so the outer loop here is over planning
+cycles, not over SKUs.
 
-Candidate pool (task spec): Category A products (latest ABC_Classification
+Candidate pool: Category A products (latest ABC_Classification
 classification_period) with a Forecast_Result row at the latest
-forecast_date where status='ok' AND mape < MAPE_GATE. The
+forecast_date where status='ok' AND mase < MASE_GATE. The
 latest-classification_period join is REQUIRED, not optional — ABC_
 Classification keeps one row per (product, classification_period), so
 joining on product_key alone fans a single Forecast_Result row out across
 every historical period that product was ever tier A in (confirmed
 empirically while building this script: an unfiltered join produced 80+
-duplicate rows for a single product_key). Forecast_Result.forecast_date
-is confirmed (scripts/run_sarima.py) to differ per product — each SKU's
-own latest actual period + 1 month, not one shared date for the whole
-run — so "the latest forecast_date" below means the single global
-MAX(forecast_date) across the table, matching backend/routers/dashboard.py's
-portfolio_forecast gating, not a per-product latest.
+duplicate rows for a single product_key).
+
+Gate is mase < MASE_GATE (1.0), not mape < 20 — deliberately different
+from backend/routers/dashboard.py's portfolio_forecast gate, which still
+uses mape < 20. reports/MODEL_BAKEOFF_UNILEVER.md's real-data run found
+only ~15% of Tier A SKUs ever clear mape < 20% under any method tested,
+MA3 included, while ~50-56% clear mase < 1.0 — the same report's own
+conclusion is to move off the mape gate. The LP's candidate pool follows
+that evidence directly since it's read here, not copied from dashboard.py's
+now-stale threshold; dashboard.py's gate is a separate, not-yet-updated
+concern.
+
+Forecast_Result.forecast_date is confirmed (scripts/run_baseline_forecast.py's
+_write_forecast_result) to be IDENTICAL across every row in one write —
+the single planning month (MAX real calendar_month + 1), not a per-product
+date as it was under the retired SARIMA writer. "The latest forecast_date"
+below (MAX(forecast_date) across the table) is still correct under this
+new behavior, just no longer doing the per-product-date reconciliation
+work it was originally written for.
 
 THREE inputs this LP needs have NO real data source anywhere in the schema
 or Product_Dimension as of this writing — confirmed against a live query,
@@ -88,7 +102,8 @@ from analytics.optimization.lp import SKUInput, build_lp_model, compute_rop, com
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-MAPE_GATE = 20.0  # percent — task spec: "mape < 20", same scale/threshold backend/routers/dashboard.py uses.
+MASE_GATE = 1.0  # MASE < 1 beats the naive benchmark — see analytics/forecasting/baseline.py's
+                 # own MASE_GATE and reports/MODEL_BAKEOFF_UNILEVER.md for why mape < 20 was dropped here.
 LOUD_RULE = "=" * 78
 
 
@@ -218,7 +233,7 @@ def main():
     parser.add_argument(
         "--principal", choices=["both", "unilever", "delmonte"], default="both",
         help="Scope this run to one principal, filtered in Python after the gating query, "
-             "same convention as scripts/run_sarima.py's --principal.",
+              "same convention as scripts/run_baseline_forecast.py's --principal.",
     )
     args = parser.parse_args()
 
@@ -242,7 +257,7 @@ def main():
         return
 
     conn = psycopg2.connect(db_url)
-    conn.autocommit = True  # each cycle's upserts commit immediately, mirrors run_sarima.py's save_result
+    conn.autocommit = True  # each cycle's upserts commit immediately
     cur = conn.cursor()
 
     UPSERT_QUERY = """
@@ -262,7 +277,7 @@ def main():
 
     # ---- Step A: gated candidate pool -----------------------------------
     # Category A (latest classification_period) with a Forecast_Result row
-    # at the latest forecast_date, status='ok', mape < MAPE_GATE. Both
+    # at the latest forecast_date, status='ok', mase < MASE_GATE. Both
     # "latest" joins are load-bearing — see module docstring's fan-out note.
     logger.info("Fetching gated Category A candidate pool...")
     cur.execute(
@@ -270,22 +285,22 @@ def main():
         WITH latest_forecast AS (SELECT MAX(forecast_date) AS d FROM Forecast_Result),
              latest_abc AS (SELECT MAX(classification_period) AS p FROM ABC_Classification)
         SELECT pd.product_key, COALESCE(pd.sku_code, pd.category_path) AS sku_id, pd.principal,
-               pd.unit_price, fr.forecast_date, fr.forecast_value, fr.mape
+               pd.unit_price, fr.forecast_date, fr.forecast_value, fr.mase
         FROM Forecast_Result fr
         JOIN Product_Dimension pd ON pd.product_key = fr.product_key
         JOIN ABC_Classification ac ON ac.product_key = fr.product_key
         JOIN latest_forecast lf ON fr.forecast_date = lf.d
         JOIN latest_abc la ON ac.classification_period = la.p
-        WHERE fr.status = 'ok' AND fr.mape < %s
+        WHERE fr.status = 'ok' AND fr.mase < %s
         """,
-        (MAPE_GATE,),
+        (MASE_GATE,),
     )
     candidates = cur.fetchall()
-    columns = ["product_key", "sku_id", "principal", "unit_price", "forecast_date", "forecast_value", "mape"]
+    columns = ["product_key", "sku_id", "principal", "unit_price", "forecast_date", "forecast_value", "mase"]
     candidates_df = pd.DataFrame(candidates, columns=columns)
 
     considered = len(candidates_df)
-    logger.info(f"{considered} product(s) considered (Category A, status='ok', mape < {MAPE_GATE}, at the latest forecast_date).")
+    logger.info(f"{considered} product(s) considered (Category A, status='ok', mase < {MASE_GATE}, at the latest forecast_date).")
 
     if args.principal != "both":
         before = len(candidates_df)
