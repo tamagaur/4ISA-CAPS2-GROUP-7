@@ -73,9 +73,10 @@ SalesReturn_Fact UNIQUE constraint is still 4 until migration 0011 lands, and
 Postgres will reject the ON CONFLICT clause outright (a hard failure, not a
 silent misload) until it does.
 
-NOT YET BUILT, deliberately out of this script's scope: the scratch-vs-live
-diff (a separate, read-only script) and the cutover decision (separate,
-human, after the diff).
+The scratch-vs-live diff is scripts/diff_scratch_vs_live.py (separate,
+read-only). The cutover itself (--target-public, added 2026-09-15) is a
+separate, explicit, human-approved action from a normal scratch run — see
+that flag's own help text and reports/PROJECT_STATE_2026-09.md §10.
 
 SCHEMA SCOPING — two mechanisms, used for two different kinds of SQL, on
 purpose (a real bug in an earlier draft of this file mixed them up and would
@@ -145,7 +146,7 @@ FORBIDDEN_SCHEMAS = {"public"}  # never a valid --schema value, see _require_scr
 log = logging.getLogger("run_canonical_load")
 
 
-def _scratch_engine(engine: Engine, schema: str) -> Engine:
+def _scratch_engine(engine: Engine, schema: str, allow_public: bool = False) -> Engine:
     """Returns an Engine wrapper that schema-qualifies every SQLAlchemy Core
     construct (Table/insert/select via autoload_with=engine) to `schema`,
     via execution_options(schema_translate_map=...). Use this for every call
@@ -154,18 +155,26 @@ def _scratch_engine(engine: Engine, schema: str) -> Engine:
     Does NOT affect raw text() SQL — see this module's SCHEMA SCOPING note
     for why schema.sql/migrations and the backfill's raw SQL need SET LOCAL
     search_path instead, issued separately."""
-    _require_scratch_schema(schema)
+    _require_scratch_schema(schema, allow_public=allow_public)
     return engine.execution_options(schema_translate_map={None: schema})
 
 
-def _require_scratch_schema(schema: str) -> None:
+def _require_scratch_schema(schema: str, allow_public: bool = False) -> None:
     """Refuses `public` (or anything obviously not a scratch schema name) as
     a safety guard, not just a default — this script must never be pointed
     at the live schema, even by a typo. Matches the schema-safety finding
     from Phase 1 step 2a (nothing else in this repo qualifies a schema, so
     nothing reads/writes here by accident — this script is the one place
-    that must stay disciplined about which schema it targets)."""
-    if schema.lower() in FORBIDDEN_SCHEMAS:
+    that must stay disciplined about which schema it targets).
+
+    allow_public (2026-09-15, Phase 1 cutover, Yuan approved): the ONE
+    exception, threaded explicitly through every call site rather than a
+    global switch - only main()'s own top-level check and the two
+    engine-wrapping helpers it calls pass True, and only when
+    --target-public was itself explicitly passed on the command line.
+    _drop_scratch_schema() (the failure-path rollback) deliberately does
+    NOT accept this parameter at all - see its own docstring for why."""
+    if not allow_public and schema.lower() in FORBIDDEN_SCHEMAS:
         raise ValueError(
             f"--schema {schema!r} is refused. This script targets a SCRATCH schema only, "
             f"never 'public' (the live schema). Pass a distinct scratch schema name."
@@ -183,13 +192,34 @@ def _product_fk_spec(grain: str) -> DimensionFKSpec:
     natural key/columns as tests/etl/test_load.py's existing fixture, just
     parameterized on grain (sku vs category)."""
     if grain == "sku":
+        # NOT the 4-column table-wide key here (bug #4, found 2026-09-15
+        # cutover incident, reports/PROJECT_STATE_2026-09.md §10):
+        # category_path is mutated post-load for every Unilever SKU-grain
+        # row by run_category_brand_backfill() (NULL -> a real value, once,
+        # unconditionally) - a natural key that includes it goes stale the
+        # moment that backfill runs once, and every later resolution
+        # attempt (re-running the loader, a future incremental load) stops
+        # matching existing rows and silently re-inserts them as "new".
+        # Confirmed this is safe to narrow to (principal, grain, sku_code)
+        # ONLY for this Unilever-locked FactPlanItem (see FACT_PLAN below -
+        # this spec is never invoked for Del Monte): the backup shows 0 of
+        # 2,098 Unilever SKU-grain rows share a sku_code, so sku_code alone
+        # already uniquely identifies the row. Del Monte's product_dimension
+        # rows (loaded outside this codepath, pre-canonical-load era) are a
+        # DIFFERENT story - 252 Del Monte sku_codes legitimately span
+        # multiple category_path values there, so this narrowed key would be
+        # actively wrong if ever reused for Del Monte. Matching partial
+        # unique index: migration 0014, scoped to
+        # principal='unilever' AND grain='sku' - conflict_index_where below
+        # must repeat that predicate verbatim for Postgres to infer it.
         return DimensionFKSpec(
             fk_column="product_key",
             dimension_table="product_dimension",
             dimension_pk="product_key",
-            dimension_natural_key=["principal", "grain", "sku_code", "category_path"],
+            dimension_natural_key=["principal", "grain", "sku_code"],
             df_to_dimension_columns={"principal": "principal", "sku_code": "sku_code"},
-            static_values={"grain": "sku", "category_path": None},
+            static_values={"grain": "sku"},
+            conflict_index_where="principal = 'unilever' AND grain = 'sku'",
         )
     return DimensionFKSpec(
         fk_column="product_key",
@@ -198,6 +228,48 @@ def _product_fk_spec(grain: str) -> DimensionFKSpec:
         dimension_natural_key=["principal", "grain", "sku_code", "category_path"],
         df_to_dimension_columns={"principal": "principal", "category_path": "category_path"},
         static_values={"grain": "category", "sku_code": None},
+    )
+
+
+def _customer_fk_spec() -> DimensionFKSpec:
+    """Problem 2 (2026-09-14, Yuan's ruling — extend the loader, don't
+    accept the regression): live sales_fact.customer_key is ~99.9%
+    populated (53,275/53,320) via an old ad-hoc path; the canonical
+    FACT_PLAN entry for sales never had a dimension_fks spec for it at
+    all, so scratch's sales_fact.customer_key was 0/53,109 populated -
+    not a bug in resolve_dimension_fk(), just a spec that was never
+    written. Customer_Dimension's real UNIQUE(customer_name, region,
+    principal) is a usable natural key; all three parts are already
+    real, row-sourced columns (region/principal come from
+    backfill_provenance_fields(), customer_name from column_maps/
+    sales_register.yaml's "Customer Name" mapping) - no static_values
+    needed, same DimensionFKSpec shape already proven for
+    Product_Dimension above."""
+    return DimensionFKSpec(
+        fk_column="customer_key",
+        dimension_table="customer_dimension",
+        dimension_pk="customer_key",
+        dimension_natural_key=["customer_name", "region", "principal"],
+        df_to_dimension_columns={
+            "customer_name": "customer_name", "region": "region", "principal": "principal",
+        },
+    )
+
+
+def _salesman_fk_spec() -> DimensionFKSpec:
+    """Same problem/ruling as _customer_fk_spec() above, for
+    Salesman_Dimension's UNIQUE(salesman_name) - live salesman_key is
+    ~99.7% populated (53,261/53,320). Single-column natural key; the raw
+    field maps to canonical `salesman` (config/column_maps/
+    sales_register.yaml's "Salesman"), a different name than the
+    dimension's own `salesman_name` column - df_to_dimension_columns
+    exists exactly to bridge that, dimension-col-name -> df-col-name."""
+    return DimensionFKSpec(
+        fk_column="salesman_key",
+        dimension_table="salesman_dimension",
+        dimension_pk="salesman_key",
+        dimension_natural_key=["salesman_name"],
+        df_to_dimension_columns={"salesman_name": "salesman"},
     )
 
 
@@ -249,7 +321,12 @@ FACT_PLAN: list[FactPlanItem] = [
     ),
     FactPlanItem(
         "sales", "delmonte", "sales_fact", "net_amount",
-        dimension_fks=[],  # Sales_Fact carries no product_key (invoice-grain, DEC-02)
+        # No product_key (invoice-grain, DEC-02) - but customer_key/
+        # salesman_key ARE real FKs this table carries (schema.sql) that
+        # the loader never resolved until now (problem 2, 2026-09-14,
+        # Yuan's ruling - see _customer_fk_spec()/_salesman_fk_spec()
+        # docstrings for the full reasoning).
+        dimension_fks=[_customer_fk_spec(), _salesman_fk_spec()],
         # rows: 53742 combined - 432 combined-quarantined (invoice_num NOT
         # NULL, cannot insert) = 53310.
         # rows re-measured 2026-09-14 (was 53310): the first real
@@ -572,7 +649,7 @@ def _drop_conflicting_group_rows(
     return df.drop(index=dropped_idx).copy(), len(dropped_idx)
 
 
-def _run_one_fact(item: FactPlanItem, engine: Engine, dry_run: bool) -> TableRunResult:
+def _run_one_fact(item: FactPlanItem, engine: Engine, dry_run: bool, limit_rows: int | None = None) -> TableRunResult:
     rule = load_source_of_truth(item.fact, item.principal, DEFAULT_CONFIG_DIR)
     doc_dir = STAGING_DIR / rule.doc_type
     raw = pd.concat(
@@ -582,6 +659,19 @@ def _run_one_fact(item: FactPlanItem, engine: Engine, dry_run: bool) -> TableRun
     deduped_df, report = transform_fact(
         principal_df, item.fact, item.principal, DEFAULT_CONFIG_DIR, amount_col=item.amount_col,
     )
+    if limit_rows is not None:
+        # Smoke-test convenience (2026-09-15, post-incident verification
+        # step 2) - a plain head(N), not a representative sample. Exercises
+        # the SAME code path (dimension resolution, exclusions, load) at
+        # low volume before committing to a full-volume run. Expected/
+        # actual row targets will show MISMATCH under a limit - that's
+        # correct and expected, not a regression; --limit-rows is for
+        # verifying BEHAVIOR (does dimension resolution duplicate rows?),
+        # never for trusting the row counts it produces.
+        original_n = len(deduped_df)
+        deduped_df = deduped_df.head(limit_rows).copy()
+        print(f"  [{item.table_name}] --limit-rows {limit_rows}: truncated from {original_n} to "
+              f"{len(deduped_df)} rows (smoke test only, expected/actual counts below are not meaningful)")
     dedup = report["dedup"]  # REAL+DEMO combined — this is what actually gets loaded
 
     # Separate, real-only dedup pass — diagnostic only, nothing loaded from
@@ -917,8 +1007,8 @@ def _strip_sql_file(sql: str) -> str:
     return "\n".join(kept)
 
 
-def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool) -> None:
-    _require_scratch_schema(schema)
+def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_public: bool = False) -> None:
+    _require_scratch_schema(schema, allow_public=allow_public)
     print(f"\n[schema] ensuring '{schema}' exists" + (" (dry-run: SELECT-only check)" if dry_run else ""))
     if dry_run:
         with engine.connect() as conn:
@@ -989,6 +1079,108 @@ def _drop_scratch_schema(engine: Engine, schema: str) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+# The 6 tables the canonical loader actually populates - see FACT_PLAN plus
+# the separate ssis_soh path. Everything else in public (product_dimension,
+# customer_dimension, salesman_dimension, supplier_dimension, date_dimension,
+# abc_classification, forecast_result, lp_recommendation, users, audit_log)
+# is either updated in place (product_dimension, date_dimension) or never
+# touched at all by --target-public - see main()'s cutover block.
+CANONICAL_FACT_TABLES = [
+    "sales_fact", "purchase_fact", "salesreturn_fact",
+    "sellout_fact", "inventory_fact", "unilever_sku_demand_fact",
+]
+
+
+def _preflight_dimension_identity_check(engine: Engine) -> None:
+    """Abort BEFORE any real write (even the fact-table DELETE) if
+    resolving one already-known SKU against public's existing
+    Product_Dimension doesn't return its existing product_key.
+
+    Root cause this guards against (2026-09-15 cutover incident,
+    reports/PROJECT_STATE_2026-09.md §10): every identity sequence on
+    live was desynced - stuck at last_value=1 regardless of how much
+    real data already existed (populated by ad-hoc scripts that
+    explicitly set PK values, which never advances a GENERATED ALWAYS AS
+    IDENTITY column's sequence - a standard, well-documented Postgres
+    gotcha). resolve_dimension_fk()'s INSERT ... ON CONFLICT DO NOTHING
+    then generated a fresh, non-colliding product_key for every row via
+    nextval() - since that succeeds, ON CONFLICT never gets a chance to
+    reject it as a natural-key duplicate, and a brand new row is
+    inserted beside the real one. 1,807 Unilever SKU rows were silently
+    duplicated this way before a genuine batch-level collision on a
+    Del Monte category insert finally raised an error and stopped it.
+    NOT a pandas/type-coercion bug - tested and disproven directly (both
+    sides of the merge are `str`, byte-identical) before this was found.
+
+    This check performs a REAL insert attempt for one known SKU, inside
+    a transaction that is ALWAYS rolled back (never commits, regardless
+    of outcome) - so it proves the actual behavior public would exhibit,
+    not a simulation, without itself writing anything."""
+    with engine.connect() as conn:
+        # category_path IS NULL specifically - found 2026-09-15 while
+        # testing this guard itself: an unfiltered LIMIT 1 can pick a SKU
+        # whose product_dimension row already has a real category_path
+        # (leftover from an older, pre-this-session ad-hoc backfill on
+        # live, e.g. sku_code=20094079 -> 'ORAL CARE') - testing THAT
+        # row with a hardcoded NULL category_path tests a genuinely
+        # different key, not the actual incident scenario, and would
+        # correctly (and misleadingly) look like a fresh insert. The
+        # real incident's failure mode is specifically the
+        # category_path IS NULL case (every SKU-grain row via the
+        # canonical pipeline's own _product_fk_spec("sku")), so the test
+        # row must match that shape exactly.
+        known = conn.execute(text(
+            "SELECT product_key, sku_code FROM public.product_dimension "
+            "WHERE principal = 'unilever' AND grain = 'sku' AND sku_code IS NOT NULL "
+            "AND category_path IS NULL LIMIT 1"
+        )).fetchone()
+    if known is None:
+        print("\n[preflight] public.product_dimension has no existing Unilever SKU rows to "
+              "test against - skipping (nothing to collide with yet, a fresh cutover target).")
+        return
+
+    expected_pk, sku_code = known
+    print(f"\n[preflight] dimension-identity check: resolving known sku_code={sku_code!r} "
+          f"(expected product_key={expected_pk}) against public, in a rolled-back transaction ...")
+
+    with engine.begin() as conn:
+        savepoint = conn.begin_nested()
+        try:
+            result = conn.execute(text("""
+                INSERT INTO public.product_dimension (principal, grain, sku_code, category_path)
+                VALUES ('unilever', 'sku', :sku_code, NULL)
+                ON CONFLICT (principal, grain, sku_code, category_path) DO NOTHING
+                RETURNING product_key
+            """), {"sku_code": sku_code})
+            inserted_new = result.fetchone()
+            got_pk = conn.execute(text(
+                "SELECT product_key FROM public.product_dimension "
+                "WHERE principal='unilever' AND grain='sku' AND sku_code=:sku_code"
+            ), {"sku_code": sku_code}).scalar()
+        except Exception as e:
+            savepoint.rollback()
+            raise RuntimeError(
+                f"[preflight] ABORTED before writing a single row: resolving the known SKU "
+                f"{sku_code!r} raised {type(e).__name__}: {e}. This is exactly the identity-"
+                f"sequence desync class of bug from the 2026-09-15 incident - fix the "
+                f"sequence(s) (see reports/PROJECT_STATE_2026-09.md §10) before retrying."
+            ) from e
+        finally:
+            if savepoint.is_active:
+                savepoint.rollback()
+
+    if inserted_new is not None or got_pk != expected_pk:
+        raise RuntimeError(
+            f"[preflight] ABORTED before writing a single row: resolving known SKU "
+            f"{sku_code!r} returned product_key={got_pk!r} (inserted_new={inserted_new!r}), "
+            f"expected the PRE-EXISTING product_key={expected_pk}. This means dimension "
+            f"resolution would create a duplicate row instead of matching the existing one - "
+            f"the exact failure mode from the 2026-09-15 incident. Do not proceed."
+        )
+    print(f"[preflight] PASSED - resolved to the pre-existing product_key={got_pk}, no new "
+          f"row created. Rolled back (nothing committed by this check). Proceeding.")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--schema", default="ssm_canonical", help="Target scratch schema (never 'public').")
@@ -1001,15 +1193,46 @@ def main() -> int:
              "scoped to the scratch schema. Use to apply migration 0011 as its own reviewable "
              "step before a real (non-dry-run) fact load.",
     )
+    parser.add_argument(
+        "--target-public", action="store_true",
+        help="DANGEROUS, explicit-only: target the live 'public' schema (Phase 1 cutover, "
+             "2026-09-15, Yuan approved) instead of a scratch schema. Requires --schema public "
+             "as well (both must be explicit — no default path leads here). Deletes ONLY the "
+             "6 canonical fact tables' existing rows first (never product_dimension or any "
+             "other table), then loads fresh, resolving dimension FKs against public's "
+             "EXISTING rows (preserves every product_key/customer_key/salesman_key value — "
+             "does not renumber anything abc_classification/forecast_result/lp_recommendation "
+             "already reference). Requires a proven-restorable backup to already exist "
+             "(scripts/backup_live_db.py) — this flag does not create one. On any failure "
+             "AFTER the delete step, this does NOT auto-rollback (there is no scratch schema "
+             "to drop) — it stops and tells you to restore from the backup.",
+    )
+    parser.add_argument(
+        "--limit-rows", type=int, default=None, metavar="N",
+        help="Smoke-test convenience (2026-09-15 incident verification): truncate each fact's "
+             "deduped rows to the first N (a plain head(N), not a sample) before load. Exercises "
+             "the real code path (dimension resolution, exclusions, load) at low volume. "
+             "Expected/actual row-count targets will show MISMATCH under a limit — that's "
+             "correct, not a regression; this flag verifies BEHAVIOR, never trust the resulting "
+             "counts. Combine with --target-public for a safe first real-write test after a fix.",
+    )
     args = parser.parse_args()
     if args.schema_only and args.dry_run:
         parser.error("--schema-only and --dry-run are mutually exclusive (schema-only always writes DDL for real).")
+    if args.target_public:
+        if args.schema != "public":
+            parser.error("--target-public requires --schema public (both must be explicit, no default path leads here).")
+        if args.dry_run or args.schema_only:
+            parser.error("--target-public cannot be combined with --dry-run or --schema-only.")
+    else:
+        _require_scratch_schema(args.schema)
 
     logging.basicConfig(level=logging.WARNING if args.quiet else logging.INFO, format="%(message)s")
 
-    _require_scratch_schema(args.schema)
     print(f"=== run_canonical_load: schema='{args.schema}'  dry_run={args.dry_run}  "
-          f"schema_only={args.schema_only} ===")
+          f"schema_only={args.schema_only}  target_public={args.target_public} ===")
+    if args.target_public:
+        print("!!! TARGETING LIVE 'public' SCHEMA — Phase 1 cutover, explicit go required and given !!!")
 
     cfg = get_settings()
     engine = create_engine(cfg.supabase_db_url)
@@ -1027,12 +1250,35 @@ def main() -> int:
 
     results: list[TableRunResult] = []
     try:
-        ensure_scratch_schema(engine, args.schema, args.dry_run)
+        ensure_scratch_schema(engine, args.schema, args.dry_run, allow_public=args.target_public)
         if args.schema_only:
             print(f"\n--schema-only: schema.sql + migrations (incl. 0011) applied to "
                   f"'{args.schema}'. No fact loads, no backfill. Exiting.")
             return 0
-        scratch_engine = _scratch_engine(engine, args.schema)
+
+        if args.target_public:
+            _preflight_dimension_identity_check(engine)
+
+            # Explicit, visible, its own step - not folded into the loader's
+            # per-table upsert logic. load_to_supabase() upserts (ON
+            # CONFLICT DO UPDATE); without this, a row already in public
+            # whose natural key no longer appears in the fresh Transform
+            # output would be left behind as stale leftover data, not
+            # replaced. Scoped to exactly the 6 canonical fact tables -
+            # product_dimension and every non-canonical table (users,
+            # audit_log, abc_classification, forecast_result,
+            # lp_recommendation, customer_dimension, salesman_dimension,
+            # supplier_dimension) are never touched by this statement.
+            print(f"\n[cutover] deleting existing rows from {len(CANONICAL_FACT_TABLES)} "
+                  f"canonical fact tables in 'public' (not product_dimension, not any "
+                  f"other table) ...")
+            with engine.begin() as conn:
+                for t in CANONICAL_FACT_TABLES:
+                    before = conn.execute(text(f'SELECT count(*) FROM public."{t}"')).scalar()
+                    conn.execute(text(f'DELETE FROM public."{t}"'))
+                    print(f"  {t}: deleted {before} existing rows")
+
+        scratch_engine = _scratch_engine(engine, args.schema, allow_public=args.target_public)
 
         # Date_Dimension must exist before any fact with a date FK loads
         # (sales_fact.invoice_date, salesreturn_fact.return_date,
@@ -1051,11 +1297,15 @@ def main() -> int:
                   f"({date_result.rows_upserted} upserted)")
 
         for item in FACT_PLAN:
-            results.append(_run_one_fact(item, scratch_engine, args.dry_run))
+            results.append(_run_one_fact(item, scratch_engine, args.dry_run, limit_rows=args.limit_rows))
         # ssis_soh — separate path, not source_of_truth.yaml-driven
         soh_result = transform_ssis_soh(staging_dir=STAGING_DIR, real_sku_codes=None)
+        soh_df = soh_result.inventory_fact_df
+        if args.limit_rows is not None:
+            soh_df = soh_df.head(args.limit_rows).copy()
+            print(f"  [inventory_fact/ssis_soh] --limit-rows {args.limit_rows}: truncated to {len(soh_df)} rows")
         soh_load_input = _project_to_table_columns(
-            soh_result.inventory_fact_df, "inventory_fact", scratch_engine, [],
+            soh_df, "inventory_fact", scratch_engine, [],
         )
         # Found 2026-09-14 (Phase 1d, real load, flaky ~1-in-3 failure):
         # transform_ssis_soh.NATURAL_KEY is ["sku_code", "snapshot_date"]
@@ -1095,7 +1345,24 @@ def main() -> int:
         # does not apply to text() SQL.
         tally = run_category_brand_backfill(engine, args.schema, args.dry_run)
     except Exception:
-        if not args.dry_run:
+        if args.target_public:
+            # No scratch schema to drop - and _drop_scratch_schema() must
+            # never be handed 'public' even if some future edit here
+            # forgot this check (it has its own _require_scratch_schema
+            # call that would refuse it anyway - this is belt-and-suspenders,
+            # not the only guard). public is left in whatever state the
+            # DELETE + partial reload reached; the backup taken before this
+            # run is the real rollback path, restored manually, not
+            # automatically - an automatic partial-cutover "fix" here would
+            # be guessing at intent on a live database, which this whole
+            # session's anti-fabrication stance rules out.
+            print("\n!!! FAILURE during --target-public run. NOT auto-rolling-back "
+                  "(there is no scratch schema to drop, and this script will never "
+                  "touch 'public' with a DROP). 'public' may be left with some or all "
+                  "of the 6 canonical fact tables deleted/partially reloaded. "
+                  "Restore from the pre-cutover backup (scripts/backup_live_db.py "
+                  "--verify <backup dir>) before doing anything else.")
+        elif not args.dry_run:
             _drop_scratch_schema(engine, args.schema)
         raise
 
@@ -1105,8 +1372,11 @@ def main() -> int:
         print(f"  {r.label}: {r.actual_rows} rows" + ("  MISMATCH" if r.mismatch else ""))
     print(f"  category_path_source split: {tally}")
     print(f"\n{'DRY RUN — nothing written.' if args.dry_run else 'Load complete.'}")
-    print("Next: run the scratch-vs-live diff (separate script, not yet written), "
-          "then the cutover decision is yours.")
+    if args.target_public:
+        print("Cutover load into 'public' complete. Next: step 3 verification "
+              "(row counts vs frozen targets, non-loaded tables intact, backend connects).")
+    else:
+        print("Next: run scripts/diff_scratch_vs_live.py, then the cutover decision is yours.")
 
     return 1 if mismatches else 0
 

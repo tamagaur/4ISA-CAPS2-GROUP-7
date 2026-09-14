@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import Engine, MetaData, Table, select
+from sqlalchemy import Engine, MetaData, Table, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 
@@ -53,6 +53,14 @@ class DimensionFKSpec:
     dimension_natural_key: list[str]
     df_to_dimension_columns: dict[str, str] = field(default_factory=dict)
     static_values: dict = field(default_factory=dict)
+    # ON CONFLICT inference target is dimension_natural_key by default. Set
+    # this when the matching unique index is a PARTIAL index (e.g. scoped to
+    # one principal/grain slice rather than the whole table) - Postgres only
+    # infers a conflict target off an index whose predicate is repeated
+    # verbatim on the INSERT statement. Raw SQL boolean expression, e.g.
+    # "principal = 'unilever' AND grain = 'sku'". None = no predicate
+    # (ordinary, table-wide unique constraint/index).
+    conflict_index_where: str | None = None
 
 
 @dataclass
@@ -149,7 +157,10 @@ def resolve_dimension_fk(
             records = distinct_keys.to_dict(orient="records")
             with engine.begin() as conn:
                 stmt = pg_insert(dim_table).values(records)
-                stmt = stmt.on_conflict_do_nothing(index_elements=spec.dimension_natural_key)
+                stmt = stmt.on_conflict_do_nothing(
+                    index_elements=spec.dimension_natural_key,
+                    index_where=text(spec.conflict_index_where) if spec.conflict_index_where else None,
+                )
                 result = conn.execute(stmt)
                 rows_inserted = result.rowcount if result.rowcount and result.rowcount > 0 else 0
 

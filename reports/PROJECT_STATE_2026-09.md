@@ -430,3 +430,161 @@ been made or will be made without Yuan's explicit go.
 - Phase 2 (ABC + D1–D4) can now build on real, reproducible category data
   for the first time — `Product_Dimension.category_path`/`brand` and their
   `*_source` columns are load-bearing and queryable, not ad hoc.
+
+## 11. Cutover incident, 2026-09-15 — IN PROGRESS, session paused mid-fix
+
+**Status when this was written: public is consistent (verified, see below),
+but mid-cutover — NOT fully restored to the pre-incident backup, NOT yet
+cut over to the new load either.** Do not run `run_canonical_load.py`
+against `public` again until this section's "Next action" is done.
+
+### What happened, in order
+
+1. First cutover attempt (approved plan: delete 6 fact tables' rows,
+   re-run the loader against `public`, backfill in place) crashed and
+   created 1,807 duplicate `Product_Dimension` rows before raising a hard
+   `UniqueViolation`. Stopped immediately, no further live writes, reported
+   to Yuan without diagnosing against live.
+2. Per Yuan's incident instructions: dumped the broken state to
+   `broken_state_20260914/` (evidence, outside `backups/`), verified
+   `backups/live_backup_20260914T151217Z/` restores cleanly into a scratch
+   schema (counts + checksums matched), then restored `public` from it —
+   surgically for `Product_Dimension` (deleted only the 1,895 rows not in
+   the original backup, left the original 17,536 + everything referencing
+   them untouched), fully for the 6 fact tables.
+3. Diagnosed two independent root causes, both against `public` inside
+   rolled-back transactions before any live write:
+   - **Root cause #1 — desynced identity sequences.** All 9 relevant
+     tables' sequences were stuck at `last_value=1` regardless of actual
+     `max(pk)` (explicit-value inserts during the original ad-hoc load
+     never advanced them). **FIXED** — `setval()`'d via
+     `pg_get_serial_sequence()` for all 9, verified `nextval() > max(pk)`
+     for each.
+   - **Root cause #2 — inert `ON CONFLICT`.** `Product_Dimension`'s
+     `UNIQUE (principal, grain, sku_code, category_path)` never actually
+     enforced uniqueness for either grain's real rows, because standard
+     SQL `NULL <> NULL` — `sku_code IS NULL` for every category-grain row,
+     `category_path IS NULL` for every fresh Unilever SKU-grain row.
+     **FIXED** — migration `0013`, constraint rebuilt as
+     `UNIQUE NULLS NOT DISTINCT (...)` (PG17.6 confirmed, PG15+ feature).
+     Applied to `public`, verified via `pg_get_constraintdef()`.
+4. Re-ran the user's verification sequence. Step 1 (preflight dimension
+   identity check) passed. Step 2 (`--limit-rows 200` real run against
+   `public`) completed clean, 0 duplicates. Step 3 (re-run the same
+   1,807-SKU merge, expect 0 new inserts) **failed** — 1,807 rows were
+   still accepted as new.
+5. Diagnosed **root cause #3/#4 — a design flaw, not the same bug**:
+   `run_category_brand_backfill()` (runs as step 8 of every real load, not
+   row-limited) unconditionally mutates every existing Unilever SKU-grain
+   row's `category_path` from `NULL` to a real value (confirmed: step 2's
+   run already flipped all 2,098 existing Unilever SKU rows to non-NULL).
+   But `_product_fk_spec("sku")` hardcoded `category_path=None` as part of
+   its matching key for every resolution attempt — so after the backfill
+   has run once, that key can never match an existing row again, and every
+   later resolution (re-running the loader, a future incremental load)
+   silently re-inserts it as "new". This is why step 3 failed even with
+   root causes #1 and #2 fixed — a real fourth bug, distinct from both.
+6. Swept the same class codebase-wide (only 4 `DimensionFKSpec`s exist,
+   all in `scripts/run_canonical_load.py`) — this is the only natural key
+   with a member mutated post-load. Customer/salesman specs are clean; the
+   Del Monte category-grain product spec is clean (its `category_path` is
+   set once at insert time and never touched again).
+7. **Fixed**, per Yuan's direction (option b — drop the mutable column
+   from the key rather than re-look-up the current value):
+   - `_product_fk_spec("sku")` narrowed to
+     `dimension_natural_key=["principal", "grain", "sku_code"]` —
+     scoped to this ONE `FactPlanItem`
+     (`sales_unilever_sku_demand`/`unilever`), the only caller.
+   - **Checked before applying** (this mattered): Del Monte also has
+     `grain='sku'` rows in `Product_Dimension` (15,339 of them, loaded
+     pre-canonical-load era, outside this codepath) — and 252 Del Monte
+     `sku_code`s legitimately span multiple `category_path` values. A
+     3-column key would be actively wrong if ever reused for Del Monte.
+     Confirmed `_product_fk_spec("sku")` is Unilever-only via `FACT_PLAN`,
+     so this is safe as scoped.
+   - New migration `0014`: partial unique index
+     `product_dimension_unilever_sku_key_idx` on
+     `(principal, grain, sku_code)` `WHERE principal='unilever' AND grain='sku'`
+     — **applied to `public`, verified via `pg_indexes`.**
+   - `DimensionFKSpec` gained a `conflict_index_where` field
+     (`analytics/etl/load.py`) so `resolve_dimension_fk()`'s
+     `ON CONFLICT` can infer a partial index, not just a table-wide one.
+   - `schema.sql` and its `Product_Dimension` comment updated to match
+     (including correcting a previously-wrong comment that claimed
+     `category_path IS NULL` for every SKU-grain row table-wide — false
+     for Del Monte, true only for Unilever).
+8. **Re-verification of step 3 was IN PROGRESS, not completed**, when this
+   session paused. Built a full scratch-schema copy (`ssm_step3_verify`,
+   built from `schema.sql` + all migrations incl. 0014) to safely re-run
+   the real (committing) `resolve_dimension_fk()` path against a seeded
+   copy of `public`'s current `Product_Dimension` without touching live —
+   the seed insert kept failing on scaffolding issues (a stray
+   `manual_reorder_point` column live has that `schema.sql` doesn't, an
+   identity-column override, background-command wiring) and was not yet
+   completed successfully. **No conclusion reached** on whether the fix
+   actually produces 0 new inserts on re-test — code is fixed and applied
+   to `public`, but not yet re-proven.
+
+### Exact state of `public` right now (verified 2026-09-15, end of session)
+
+Everything below is real, checked directly, not inferred:
+
+| Table | Current `public` state | Backup target (`live_backup_20260914T151217Z`) |
+|---|---|---|
+| `product_dimension` | **17,602** rows, **0 duplicate-key groups**, all 2,098 Unilever SKU rows have non-NULL `category_path` (backfilled) | 17,536 (before the +66 legit new rows from step 2's 200-row sample) |
+| `customer_dimension` | 23,712 — unchanged | 23,712 (matches exactly) |
+| `salesman_dimension` | 33 — unchanged | 33 (matches exactly) |
+| `supplier_dimension` | untouched | untouched |
+| `sales_fact` | **200** (truncated sample, step 2) | 53,320 |
+| `purchase_fact` | **200** (truncated sample, step 2) | 2,110 |
+| `salesreturn_fact` | **42** (truncated sample, step 2) | 0 |
+| `sellout_fact` | **200** (truncated sample, step 2) | 8,368 |
+| `inventory_fact` | **400** (truncated sample, step 2) | 349,860 |
+| `unilever_sku_demand_fact` | **200** (truncated sample, step 2) | 44,575 |
+| `abc_classification`, `forecast_result`, `lp_recommendation` | untouched | untouched |
+
+Sequences: all 9 relevant identity sequences fixed/synced (root cause #1).
+Migration `0013` (NULLS NOT DISTINCT) applied. Migration `0014` (partial
+Unilever-sku index) applied.
+
+**Confirmed consistent, end of session:** no open/idle-in-transaction
+session touching any `public` table; `product_dimension` duplicate check
+= 0; the 6 fact tables' row counts above are stable, deliberate,
+intermediate values from step 2's `--limit-rows 200` run, not partial
+writes. One stray leaked connection (pid 3205147, `idle in transaction`)
+is sitting against the **scratch** schema `ssm_step3_verify` only (from a
+failed local seeding attempt) — does not touch `public`, holds no lock any
+`public` operation needs, safe to ignore or let Postgres reap; an attempt
+to terminate it was blocked by this session's own auto-mode tool
+classifier, not a data-safety concern.
+
+### Bug tally
+
+| # | Bug | Status |
+|---|---|---|
+| 1 | Desynced identity sequences (9 tables) | **Fixed**, applied to `public`, verified |
+| 2 | `Product_Dimension` `UNIQUE` constraint inert on NULL columns | **Fixed** — migration 0013, applied to `public`, verified |
+| 3/4 | `_product_fk_spec("sku")`'s natural key includes `category_path`, which `run_category_brand_backfill()` mutates post-load — stale-key false "new" inserts | **Code fixed** (migration 0014 + `conflict_index_where` + narrowed key) and applied to `public` — **re-verification not yet completed** |
+
+### Next action (when resumed)
+
+1. Finish the scratch-schema re-verification of step 3 (`ssm_step3_verify`
+   — currently empty/abandoned, safe to drop and redo, or redo from
+   scratch): seed `product_dimension` from `public`'s current state
+   (exclude `manual_reorder_point` — it's a live-only column `schema.sql`
+   doesn't define, a separate small drift worth a one-line fix later),
+   then run `resolve_dimension_fk()` for real against it with the full
+   Unilever SKU population and confirm **0 rows treated as new**.
+2. Only after that passes: re-run step 3 for real against `public` itself
+   (still just the merge/resolve step, not a full load) to close out the
+   user's original stop condition, per "Stop and report after step 3 if
+   the duplicate count isn't exactly zero."
+3. Only after step 3 passes cleanly: step 4 — full, non-limited load
+   against `public`, all 7 tables checked against the backup's target
+   counts (this restores the 6 fact tables from their current truncated
+   200-row sample state to full volume).
+4. Then the original cutover plan's deferred steps 3–4 (post-cutover
+   verification, flag visible changes) still need to happen.
+5. `ssm_step3_verify` scratch schema and `broken_state_20260914/` evidence
+   dump can be cleaned up once the incident is fully closed and folded
+   into this report — not yet, kept for now.
