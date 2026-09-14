@@ -63,11 +63,30 @@
 BEGIN;
 
 -- 1
-ALTER TABLE SalesReturn_Fact
-    DROP CONSTRAINT IF EXISTS salesreturn_fact_return_slip_num_principal_region_return_ty_key;
-ALTER TABLE SalesReturn_Fact
-    ADD CONSTRAINT salesreturn_fact_slip_principal_region_invoice_key
-    UNIQUE (return_slip_num, principal, region, invoice_num);
+-- Postgres has no ADD CONSTRAINT IF NOT EXISTS - unlike every ADD COLUMN
+-- below, a bare ADD CONSTRAINT is not idempotent and raises DuplicateTable
+-- on a second run against a schema that already has it (caught 2026-09-14,
+-- the first time this migration was re-applied to an already-migrated
+-- ssm_canonical - the scratch-drop rollback fired correctly, confirming
+-- that design still works, but re-running the FULL migration set from
+-- scratch on top of prior progress is a normal, expected case for a
+-- scratch schema, so this needed fixing here, not worked around in the
+-- loader). Guarded with a catalog check, matching the ADD COLUMN IF NOT
+-- EXISTS idiom used everywhere else in this file.
+DO $$
+BEGIN
+    ALTER TABLE SalesReturn_Fact
+        DROP CONSTRAINT IF EXISTS salesreturn_fact_return_slip_num_principal_region_return_ty_key;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'salesreturn_fact_slip_principal_region_invoice_key'
+          AND conrelid = 'SalesReturn_Fact'::regclass
+    ) THEN
+        ALTER TABLE SalesReturn_Fact
+            ADD CONSTRAINT salesreturn_fact_slip_principal_region_invoice_key
+            UNIQUE (return_slip_num, principal, region, invoice_num);
+    END IF;
+END $$;
 
 -- 2
 ALTER TABLE Product_Dimension ADD COLUMN IF NOT EXISTS category_path_source TEXT

@@ -45,6 +45,26 @@ UNILEVER_SKU_NUMERIC_COLUMNS = [
     "sale_quantity_cases", "sale_quantity_pieces", "gsv", "net_amount_inc_tax",
 ]
 
+# Found 2026-09-14 (Phase 1d, first real canonical load): inventory_sign_off
+# (Del Monte) numeric columns were never run through coerce_numeric_columns()
+# at all - unlike unilever_sku above, quantity_on_hand/cost/valuation/
+# valuation_with_vat passed through raw, whatever dtype Extract produced.
+# Surfaced as a real (is_demo=false) load failure: MARCH_2023_INVENTORY_
+# SANSAN_PANGASINAN&ILOCOS.xlsx, "PANGASINAN INVENTORY SIGNOFF" sheet, rows
+# 93-94 etc (9 rows total) have the literal Excel boolean FALSE - not a
+# formula error introduced by this pipeline, confirmed present in the raw
+# file itself via openpyxl - in their Valuation/Valuation with VAT cells.
+# _coerce_numeric() (used elsewhere in this module, e.g. quantity_pieces
+# below) would silently turn Python bool False into 0.0 (bool is an int
+# subclass) - that is fabrication, not correction: a broken source cell is
+# not evidence the true valuation was zero. coerce_numeric_columns() (via
+# to_decimal()) is the correct tool here: Decimal(str(False)) raises and
+# is caught, yielding null, not a guessed number - same principle already
+# applied to unilever_sku above.
+DELMONTE_INVENTORY_NUMERIC_COLUMNS = [
+    "quantity_on_hand", "cost", "valuation", "valuation_with_vat",
+]
+
 PROVENANCE_COLUMNS = [
     "_src_file", "_src_sheet", "_header_row", "_row_ordinal", "_principal",
     "_region", "_period", "_doc_type", "_sheet_role", "_grain",
@@ -236,15 +256,38 @@ def coerce_is_demo_column(df: pd.DataFrame) -> pd.DataFrame:
     anything reads `is_demo` for real/demo classification — not patched at
     each call site, so no analysis (in this codebase or a scratchpad
     script) can silently reproduce this bug by filtering before this
-    function runs."""
+    function runs.
+
+    SECOND FIX, same function, found 2026-09-14 (Phase 1 step 5d, the first
+    real, non-dry-run load): rows with a genuinely ABSENT/null `is_demo`
+    cell (real rows, by the documented convention this docstring already
+    states above — "real rows lack it entirely") were left as pandas `NA`
+    rather than filled `False`. That is correct for the `is_demo != True`
+    filtering this module's callers already do (NA reads as "not True"
+    there either way, so no analysis result changes), but it broke the
+    canonical load the first time real+demo rows shared one INSERT batch:
+    `load_to_supabase()` includes `is_demo` in that batch's column list
+    (because SOME rows in it are True/False), so every row - including the
+    NA ones - gets an EXPLICIT `is_demo=NULL` sent to Postgres, which
+    violates `is_demo BOOLEAN NOT NULL DEFAULT false` (an explicit NULL
+    always overrides a column DEFAULT; DEFAULT only applies when a column
+    is omitted from the INSERT entirely, which is what the "real rows omit
+    is_demo, the DEFAULT handles it" convention assumed - true for a
+    single-family, single-demo-status batch, false once real and demo rows
+    from the SAME family load together). Filling NA with `False` here
+    states the ALREADY-DOCUMENTED fact (absent = real = not demo)
+    explicitly instead of leaving it implicit - not a new judgment call,
+    not fabrication of an unknown value, just making a known fact
+    insertable. `caught via the actual first real-load attempt against
+    unilever_sku_demand_fact - NotNullViolation on a real 2023-01 La Union
+    row (sku_code 20292808), not a hypothetical."""
     if "is_demo" not in df.columns:
         return df
     out = df.copy()
     col = out["is_demo"]
     is_true = col.astype(str).str.strip().str.lower().isin({"true", "1", "yes"})
-    out["is_demo"] = pd.NA
+    out["is_demo"] = False
     out.loc[is_true, "is_demo"] = True
-    out.loc[col.notna() & ~is_true, "is_demo"] = False
     return out
 
 
@@ -794,17 +837,27 @@ class TotalRowExclusionReport:
 
 @dataclass
 class FooterRowCheck:
-    """One rule inside exclude_footer_rows()'s check list. Two shapes:
+    """One rule inside exclude_footer_rows()'s check list. Three shapes:
       - column + token [+ mode="eq"|"contains"]: row is junk if `column`'s
         value equals (mode="eq") or contains (mode="contains") `token`,
         case-insensitive and whitespace-trimmed either way.
       - all_null=[...]: row is junk if EVERY listed column is null on that
         row — a joint check across columns, not a per-column match. For a
-        row with no signal to match on beyond "there is nothing here"."""
+        row with no signal to match on beyond "there is nothing here".
+      - non_numeric="col": row is junk if `col` has a non-null value that
+        fails float() parsing — text sitting where a number belongs (added
+        2026-09-14, sales_register's signature-block name/role-title rows,
+        e.g. net_amount="ABRAHAM TABIAN"). Deliberately narrower than an
+        all_null check on the same rows would be: those rows also have
+        invoice_date/invoice_num both null, but at least one REAL row in
+        the same corpus has that same null pattern with a genuinely numeric
+        net_amount (a differently-shaped subtotal row, not confirmed junk,
+        not excluded) - checked before choosing this signal instead."""
     column: str | None = None
     token: str | None = None
     mode: str = "eq"
     all_null: list[str] | None = None
+    non_numeric: str | None = None
 
 
 def exclude_footer_rows(
@@ -850,6 +903,8 @@ def exclude_footer_rows(
             referenced_cols.add(c.column)
         if c.all_null:
             referenced_cols.update(c.all_null)
+        if c.non_numeric:
+            referenced_cols.add(c.non_numeric)
     if not any(col in df.columns for col in referenced_cols):
         if not required:
             return df.copy(), TotalRowExclusionReport(input_rows=len(df), excluded=0)
@@ -864,6 +919,11 @@ def exclude_footer_rows(
             cols = [col for col in c.all_null if col in df.columns]
             if len(cols) == len(c.all_null):
                 is_junk |= df[cols].isna().all(axis=1)
+        elif c.non_numeric:
+            if c.non_numeric in df.columns:
+                col = df[c.non_numeric]
+                numeric_ok = pd.to_numeric(col, errors="coerce").notna()
+                is_junk |= col.notna() & ~numeric_ok
         elif c.column in df.columns:
             vals = df[c.column].astype(str).str.strip().str.upper()
             tok = c.token.upper()
@@ -883,6 +943,95 @@ SELL_OUT_FOOTER_CHECKS = [
     # amount is the sum of every other row in the same file).
     FooterRowCheck(column="category_path", token="TOTAL", mode="eq"),
 ]
+
+# SSM's own Del Monte Sell Out template's leading category column
+# (__col0__ -> category_path) holds the literal text "False" or
+# "False  (N)" (a running occurrence-count suffix) instead of a real
+# category label, for an unknown subset of rows per sheet. Confirmed
+# 2026-09-14 (Phase 1d full sweep, item 40a) via raw Excel inspection
+# (data/raw/Del Monte/MONTHLY REPORT - FEBRUARY 2024/2024 FEBRUARY SELL
+# OUT.xlsx, ILOCOS_SELL OUT sheet, rows 64+) that this is genuinely baked
+# into the source file - a broken formula/lookup in SSM's template, not a
+# pipeline defect. Distinct from a footer/TOTAL row: the net_amount/
+# quantity values on these rows are real, non-zero figures that look like
+# genuine transactions, just missing a recoverable category identity.
+_SELLOUT_SOURCE_DEFECT_CATEGORY_RE = re.compile(r"^False(\s+\(\d+\))?$")
+
+
+def relabel_sellout_source_defect_categories(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Yuan's ruling (2026-09-14): same treatment as Unilever's 380 no-SOH-
+    match SKUs - category_path becomes the literal string 'UNCLASSIFIED',
+    revenue preserved, never dropped. But the natural key is
+    (category_path, region, _period) - schema.sql's own UNIQUE constraint
+    - so relabeling multiple distinct junk rows to the same 'UNCLASSIFIED'
+    string can make several of them share one key within a single
+    (region, _period). Treating that as a dedup_facts() conflict (flag,
+    drop) would silently lose real revenue - exactly item 36's failure
+    mode, inverted: this is the same legitimate "we don't know which
+    category" bucket, not a genuine disagreement between two different
+    real facts. The only revenue-preserving treatment is to SUM
+    net_amount/quantity across the relabeled rows sharing a
+    (region, _period, is_demo) group before dedup_facts ever sees them -
+    real and demo are summed separately (is_demo isn't part of the DB's
+    actual natural key, but never blending real and demo figures together
+    is a harder rule than the schema enforces, kept anyway)."""
+    if "category_path" not in df.columns:
+        return df, 0
+    is_defect = df["category_path"].apply(
+        lambda v: isinstance(v, str) and bool(_SELLOUT_SOURCE_DEFECT_CATEGORY_RE.match(v.strip()))
+    )
+    n = int(is_defect.sum())
+    if n == 0:
+        return df, 0
+
+    defect_rows = df.loc[is_defect].copy()
+    other_rows = df.loc[~is_defect].copy()
+    defect_rows["category_path"] = "UNCLASSIFIED"
+
+    group_cols = [c for c in ["category_path", "region", "_period", "is_demo"] if c in defect_rows.columns]
+    sum_cols = [c for c in ["net_amount", "quantity", "quantity_cases"] if c in defect_rows.columns]
+    other_cols = [c for c in defect_rows.columns if c not in group_cols and c not in sum_cols]
+
+    # net_amount/quantity arrive as a genuinely mixed float/str/Decimal
+    # object column (confirmed 2026-09-14, this function's first real run:
+    # pandas' groupby-sum on an object column containing strings does
+    # Python string CONCATENATION, not numeric addition - "15871.97" +
+    # "36578.41" became the literal text "15871.9736578.41", which then
+    # failed the INSERT with a Postgres numeric-parse error, not a silent
+    # wrong number). Explicit numeric coercion first, matching how the
+    # rest of this module treats money columns (to_decimal/coerce_numeric_
+    # columns) - errors="raise" via the assert below, not "coerce", because
+    # a genuinely unparseable value here would be a NEW, different defect
+    # worth stopping on, not silently zeroing revenue out from under a sum.
+    for c in sum_cols:
+        coerced = pd.to_numeric(defect_rows[c], errors="coerce")
+        bad = coerced.isna() & defect_rows[c].notna()
+        if bad.any():
+            raise ValueError(
+                f"relabel_sellout_source_defect_categories: {int(bad.sum())} rows in "
+                f"'{c}' didn't coerce to a number - {defect_rows.loc[bad, c].tolist()[:5]} "
+                f"- not summing over an unparseable value silently."
+            )
+        defect_rows[c] = coerced
+
+    agg = {c: "sum" for c in sum_cols}
+    agg.update({c: "first" for c in other_cols})
+    merged = defect_rows.groupby(group_cols, as_index=False).agg(agg)
+    # Provenance: this row no longer traces to one real file/sheet - say so
+    # explicitly rather than leaving the first-merged row's original
+    # _src_file/_src_sheet, which would misleadingly look like a single-
+    # source row.
+    if "_src_file" in merged.columns:
+        merged["_src_file"] = "AGGREGATED_source_file_defect_category"
+    if "_src_sheet" in merged.columns:
+        merged["_src_sheet"] = merged["region"].astype(str) + " " + merged["_period"].astype(str)
+
+    print(f"  [sell_out] {n} rows had an unrecoverable category_path ('False'/'False (N)', "
+          f"a confirmed source-file defect - see this function's docstring), relabeled to "
+          f"'UNCLASSIFIED' and merged into {len(merged)} rows by summing "
+          f"{sum_cols} per (region, _period, is_demo) - revenue preserved, never dropped")
+    return pd.concat([other_rows, merged], ignore_index=True), n
+
 
 SALES_REGISTER_FOOTER_CHECKS = [
     # Confirmed 2026-09-11: every daily sheet's footer stages as 1-3 extra
@@ -905,6 +1054,26 @@ SALES_REGISTER_FOOTER_CHECKS = [
     FooterRowCheck(column="invoice_date", token="PREPARED BY", mode="contains"),
     FooterRowCheck(column="customer_name", token="CHECKED BY", mode="contains"),
     FooterRowCheck(column="tax_amount", token="NOTED BY", mode="contains"),
+    # Found 2026-09-14 (first real, non-dry-run load - this specific
+    # month's sheets weren't in the sample that found the checks above):
+    # the "Prepared by:/Checked by:/Noted by:" LABEL row (caught above) is
+    # followed by TWO more rows in the same signature block that the label
+    # check can't catch - the actual people's names under each label (e.g.
+    # salesman="ELYSSA L. MASON", customer_name="MYRA FE DOMINGO",
+    # net_amount="ABRAHAM TABIAN"), then a role-title row right after it
+    # (salesman="ENCODER", customer_name="RECEIVABLE",
+    # net_amount="ADMINHEAD"). Confirmed 79 real rows (158 incl. the
+    # role-title row) across every sheet of one November 2025 file.
+    #
+    # NOT caught with an all_null(invoice_date, invoice_num) check, even
+    # though every one of these rows has both null - tested that first and
+    # found it would ALSO exclude one confirmed-real row (net_amount
+    # 172,283.33, a differently-shaped subtotal row with no invoice
+    # identity but real aggregate figures) that has no `token` to
+    # distinguish it from genuine junk. non_numeric is narrower and safe:
+    # only rows where net_amount holds unparseable text (a name, a role
+    # title) are excluded; a real row's net_amount is always numeric.
+    FooterRowCheck(non_numeric="net_amount"),
 ]
 
 SALES_RETURN_FOOTER_CHECKS = [
@@ -1009,6 +1178,13 @@ def transform_fact(
     total_row_exclusion_report = None
     if rule.doc_type == "sell_out":
         mapped_df, total_row_exclusion_report = exclude_footer_rows(mapped_df, SELL_OUT_FOOTER_CHECKS, "sell_out")
+        # Must run AFTER backfill_provenance_fields() above (needs real
+        # region/_period/is_demo to group by) and AFTER the footer-row
+        # exclusion (a "False"-labeled row is a real, non-footer row -
+        # excluding it here first would be wrong), BEFORE dedup_facts()
+        # below (so the merged rows go through the normal dedup/conflict
+        # machinery like any other row, not a special case).
+        mapped_df, _ = relabel_sellout_source_defect_categories(mapped_df)
     elif rule.doc_type == "sales_register":
         mapped_df, total_row_exclusion_report = exclude_footer_rows(
             mapped_df, SALES_REGISTER_FOOTER_CHECKS, "sales_register", required=False,
@@ -1083,6 +1259,9 @@ def transform_fact(
     numeric_coercion_report = None
     if rule.doc_type == "unilever_sku":
         mapped_df, unparseable_cols = coerce_numeric_columns(mapped_df, UNILEVER_SKU_NUMERIC_COLUMNS)
+        numeric_coercion_report = {"unparseable_columns": unparseable_cols}
+    elif rule.doc_type == "inventory_sign_off":
+        mapped_df, unparseable_cols = coerce_numeric_columns(mapped_df, DELMONTE_INVENTORY_NUMERIC_COLUMNS)
         numeric_coercion_report = {"unparseable_columns": unparseable_cols}
 
     deduped_df, dedup_report = dedup_facts(mapped_df, rule.natural_key, amount_col=amount_col)

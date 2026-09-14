@@ -74,6 +74,32 @@ one purchase order**, regardless of how big it is?
 
 ---
 
+## Separately — a data issue in your Sell Out reports (heads-up, not blocking)
+
+This isn't one of the six facts above — Del Monte isn't part of the active
+model yet, so it doesn't hold anything up. But you should know about it.
+
+In your **Sell Out** monthly reports (the ones with category/brand rows like
+"/ACE/BASE", "/CRUSHED/BASE"), the **first column is sometimes showing the
+text "False"** instead of a category name — across 2023 and early 2024
+exports, about **194 rows** total. The sales figures on those rows look real
+and correct; it's just the category label that's missing. This is almost
+certainly a broken formula or lookup in the report template on your end, not
+something that happened on our side — the row next to it, and every other
+column, looks normal.
+
+**Could someone check the Sell Out report template for a broken formula in
+that leading column?** If you have a corrected export for those months, or
+can tell us what those categories should have been, that would let us
+recover the real breakdown — otherwise we'll keep the sales figures grouped
+under "uncategorized" for that period, which is accurate but less useful
+than the real category would be.
+
+*→ either a corrected export, or confirmation of what's expected in that
+column so we know what to look for going forward*
+
+---
+
 ### Why we're asking
 
 Your current rule — hold three weeks of safety stock for every product — ties up

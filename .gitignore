@@ -85,3 +85,9 @@ REFERENCE_FILES/
 # Throwaway analysis / exploration scripts — not project code (29 legacy
 # files predate this rule and stay tracked; new ones are ignored)
 scratch/
+
+# Live DB backups (scripts/backup_live_db.py output) — full dumps of real
+# SSM client data, same never-committed policy as data/raw/ and staging/
+# above. The backup TOOL is tracked (scripts/backup_live_db.py); its output
+# is not.
+backups/

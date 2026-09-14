@@ -233,6 +233,15 @@ FACT_PLAN: list[FactPlanItem] = [
     # held to this rigor (same standing position as everywhere else in this
     # codebase) and is reported separately by _run_one_fact, not blended
     # into these targets.
+    #
+    # expected_rows EXCLUDES quarantined rows that a NOT NULL schema
+    # constraint makes impossible to insert (sales_fact.invoice_num,
+    # purchase_fact.invoice_num, inventory_fact.sku_code — found 2026-09-14,
+    # the first real load: fabricating a key to satisfy the constraint is
+    # exactly what anti-fabrication forbids, so those combined real+demo
+    # rows are excluded from the INSERT by _drop_uninsertable_quarantined_rows(),
+    # never from the quarantine COUNT reported above, which stays the
+    # real-only diagnostic number regardless of what the schema can hold).
     FactPlanItem(
         "sales_unilever_sku_demand", "unilever", "unilever_sku_demand_fact", "quantity_sold",
         dimension_fks=[_product_fk_spec("sku")],
@@ -241,36 +250,106 @@ FACT_PLAN: list[FactPlanItem] = [
     FactPlanItem(
         "sales", "delmonte", "sales_fact", "net_amount",
         dimension_fks=[],  # Sales_Fact carries no product_key (invoice-grain, DEC-02)
-        expected_rows=53901, expected_conflicts=1, expected_quarantined=591,
+        # rows: 53742 combined - 432 combined-quarantined (invoice_num NOT
+        # NULL, cannot insert) = 53310.
+        # rows re-measured 2026-09-14 (was 53310): the first real
+        # (non-dry-run) load surfaced two more insert-time-only exclusion
+        # classes beyond the NOT-NULL-key-column one above -
+        # (1) _drop_rows_violating_other_not_null(): 197 is_demo=true rows
+        # with a null net_amount (NOT NULL, non-key), traced to
+        # scripts/generate_synthetic_backfill.py resampling straight from
+        # staging/'s raw 2025 pool, which still had the signature-block
+        # junk rows Transform now excludes for real data - a bug in that
+        # generator, out of scope to fix here (see that function's
+        # docstring); (2) _drop_conflicting_group_rows(): 4 rows whose
+        # dedup_facts()-flagged conflicting group can't be represented in
+        # one ON CONFLICT DO UPDATE statement. 53310 - 197 - 4 = 53109.
+        expected_rows=53109, expected_conflicts=1, expected_quarantined=432,
     ),
     FactPlanItem(
         "purchase", "delmonte", "purchase_fact", "net_amount",
         dimension_fks=[],  # Purchase_Fact carries no product_key either
-        expected_rows=4594, expected_conflicts=0, expected_quarantined=27,
+        # rows re-measured 2026-09-14 twice this same phase:
+        # (a) was 4567, then 13 other-NOT-NULL rows (net_amount, same
+        # synthetic-generator root cause) + 1887 conflicting-group rows
+        # excluded uniformly (real+demo alike) -> 2667.
+        # (b) item 36 fix, same day: _drop_conflicting_group_rows() no
+        # longer drops a REAL row just because it shares a key with a
+        # colliding DEMO row (data/raw/Synthetic Data/PURCHASE_ORDER_*.xlsx
+        # reuses the real BILL/YYYY/NNNN scheme with low sequential
+        # numbers) - within a mixed group, only the demo side is dropped
+        # now. 95 real rows that were being wrongly excluded are kept:
+        # 2667 + 95 = 2762. Verified via direct execution, not computed:
+        # the fix's own log line reported "kept the 95 real row(s)" and
+        # the loaded total moved 2667 -> 2762 exactly.
+        expected_rows=2762, expected_conflicts=0, expected_quarantined=27,
     ),
     FactPlanItem(
         "sales_return", "delmonte", "salesreturn_fact", "net_amount",
         dimension_fks=[],
-        # expected_quarantined=773 matches the CURRENT transform-side key
-        # (source_of_truth.yaml's sales_return.both.natural_key, 5 columns,
-        # return_type still included) - migration 0011 already changed the
-        # DB CONSTRAINT to drop return_type, but source_of_truth.yaml's
-        # transform-side key was deliberately left unchanged (see that
-        # file's own comment) pending a separate decision on whether to
-        # widen the quarantine relief to match. If/when that changes,
-        # re-measure: informationally verified 2026-09-11, dropping
-        # return_type from the transform key drops real quarantined to 8.
-        expected_rows=1901, expected_conflicts=0, expected_quarantined=773,
+        # expected_quarantined=8 (was 773): source_of_truth.yaml's
+        # sales_return.both.natural_key WIDENED-BUT-MISMATCHED state (5
+        # columns incl. return_type, vs migration 0011's actual 4-column DB
+        # constraint) was a tracked-but-unresolved blocker; the first real
+        # load surfaced it as a hard Postgres error ("no unique or
+        # exclusion constraint matching the ON CONFLICT specification"),
+        # forcing the resolution already anticipated in that migration's
+        # own comment - return_type dropped from the YAML key 2026-09-14 to
+        # match the DB constraint exactly. Re-verified: real quarantined
+        # drops from 773 to 8 (only rows genuinely missing return_slip_num
+        # or invoice_num) - matches the number informationally measured
+        # 2026-09-11, before this was load-bearing.
+        # rows re-measured 2026-09-14 (was 1901): with return_type out of
+        # the key, more rows become resolvable/comparable, surfacing 270
+        # conflicting-group rows (135 combined conflict groups, demo-heavy)
+        # that _drop_conflicting_group_rows() excludes from the INSERT -
+        # same "flagged, not silently resolved" posture as sales/purchase
+        # above. 1901 (recomputed against the new key) - 270 = 1630.
+        # NOT reduced by _drop_uninsertable_quarantined_rows() - both key
+        # halves (return_slip_num, invoice_num) are nullable on
+        # SalesReturn_Fact, so all 8 quarantined rows insert fine as-is
+        # (verified via schema reflection, not assumed).
+        expected_rows=1630, expected_conflicts=0, expected_quarantined=8,
     ),
     FactPlanItem(
         "sell_out", "delmonte", "sellout_fact", "net_amount",
         dimension_fks=[_product_fk_spec("category")],
-        expected_rows=8584, expected_conflicts=0, expected_quarantined=0,
+        # rows re-measured 2026-09-14 TWICE this same phase:
+        # (a) was 8584, then 39 rows across unresolved conflicting groups
+        # (16 combined groups) excluded uniformly -> 8545.
+        # (b) item 40a fix, same day: relabel_sellout_source_defect_categories()
+        # (transform.py) relabels 1,023 rows with an unrecoverable
+        # 'False'/'False (N)' category_path - a confirmed SSM source-file
+        # defect, see that function's docstring - to 'UNCLASSIFIED' and
+        # SUMS them (revenue preserved) into 124 merged rows per
+        # (region, _period, is_demo), 22 of them real. Combined total:
+        # 8584 - 1023 + 124 = 7686 (verified via direct execution, not
+        # computed). Of the resulting 10 combined conflicting groups (all
+        # pre-existing demo-vs-demo collisions, unrelated to this merge -
+        # 0 real rows involved, confirmed), 26 rows excluded by
+        # _drop_conflicting_group_rows() -> 7686 - 26 = 7660. Real rows
+        # unaffected by either exclusion step: 1539 - 194 + 22 = 1367,
+        # unchanged before/after _drop_conflicting_group_rows.
+        expected_rows=7660, expected_conflicts=0, expected_quarantined=0,
     ),
     FactPlanItem(
         "inventory", "delmonte", "inventory_fact", "quantity_on_hand",
         dimension_fks=[],  # inventory_sign_off SKUs join via sku_code text match downstream, not this FK path
-        expected_rows=21612, expected_conflicts=0, expected_quarantined=188,
+        # rows re-measured 2026-09-14 (was 21159): 254 rows across
+        # unresolved conflicting groups (114 combined conflict groups)
+        # excluded by _drop_conflicting_group_rows(). 21159 - 254 = 20905.
+        # (Separately, this same run found and fixed a real, is_demo=false
+        # data-quality defect: 9 real MARCH-2023 Pangasinan rows carried
+        # the literal Excel boolean FALSE in Valuation/Valuation with VAT -
+        # confirmed present in the raw source file itself via openpyxl, not
+        # a pipeline artifact. inventory_sign_off's numeric columns were
+        # never run through coerce_numeric_columns() before now - fixed in
+        # analytics/etl/transform.py (DELMONTE_INVENTORY_NUMERIC_COLUMNS),
+        # which nulls the unparseable cells rather than fabricating a
+        # value. This did not change the row COUNT here - quantity_on_hand/
+        # sku_code (the natural key) were unaffected - only the two
+        # valuation columns' values for those 9 rows.)
+        expected_rows=20905, expected_conflicts=0, expected_quarantined=188,
     ),
 ]
 
@@ -326,6 +405,173 @@ def _project_to_table_columns(
     return df.drop(columns=to_drop)
 
 
+def _drop_uninsertable_quarantined_rows(
+    df: pd.DataFrame, table_name: str, engine: Engine, natural_key: list[str],
+) -> tuple[pd.DataFrame, int]:
+    """A quarantined row (any natural_key column null) is meant to be
+    "flagged, not dropped" — dedup_facts() keeps it in its output on
+    purpose. But that promise runs into schema.sql's own constraints:
+    found 2026-09-14, the first real load, both the hard way -
+    Sales_Fact.invoice_num and Purchase_Fact.invoice_num are `NOT NULL`
+    (Inventory_Fact.sku_code likewise), so a row missing that specific key
+    part cannot be INSERTed at all, full stop, regardless of what this
+    script wants. Fabricating a value to satisfy the constraint is exactly
+    what the anti-fabrication rule forbids, so the honest resolution is:
+    exclude ONLY the rows whose null key column is genuinely NOT NULL on
+    the target table (checked here via real schema reflection, not
+    assumed) from the INSERT — they were already counted in
+    `actual_quarantined` before this runs, so they are not lost from the
+    report, only from a table that structurally cannot hold them.
+    SalesReturn_Fact is the counter-example that proves this isn't a
+    blanket rule: both its key halves (return_slip_num, invoice_num) are
+    nullable, so its 773 real quarantined rows (missing return_type, not
+    either of those) load there just fine — checked per-column, not
+    assumed uniform across facts."""
+    metadata = MetaData()
+    table = Table(table_name, metadata, autoload_with=engine)
+    not_null_key_cols = [
+        c for c in natural_key
+        if c in df.columns and c in table.columns and not table.columns[c].nullable
+    ]
+    if not not_null_key_cols:
+        return df, 0
+    cannot_insert = df[not_null_key_cols].isna().any(axis=1)
+    if cannot_insert.any():
+        print(f"  [{table_name}] {int(cannot_insert.sum())} quarantined rows cannot be "
+              f"inserted (NOT NULL on {not_null_key_cols}) - excluded from the INSERT, "
+              f"still counted in the quarantine total above, not silently lost")
+    return df.loc[~cannot_insert].copy(), int(cannot_insert.sum())
+
+
+def _drop_rows_violating_other_not_null(
+    df: pd.DataFrame, table_name: str, engine: Engine, natural_key: list[str],
+) -> tuple[pd.DataFrame, int]:
+    """Same principle as _drop_uninsertable_quarantined_rows(), but for
+    NOT NULL columns OUTSIDE the natural key - found 2026-09-14, same
+    load run, right after the key-column fix: Sales_Fact.net_amount is
+    NOT NULL, and one is_demo=true sales_register row from the 2026-04
+    Ilocos backfill had a null net_amount. Traced (not assumed) to
+    scripts/generate_synthetic_backfill.py::load_real_family_template():
+    it resamples straight from staging/'s raw 2025 sales_register pool,
+    which still contains the signature-block junk rows (see
+    SALES_REGISTER_FOOTER_CHECKS' non_numeric="net_amount" check, added
+    this same session) that Transform excludes for REAL data but that the
+    synthetic generator's pool was never filtered against - a real bug in
+    that script, out of scope to fix/regenerate here (it writes its own
+    materialized staging_synthetic/ files, a separate action from this
+    load). An explicit NULL always overrides a column's DEFAULT (verified
+    earlier this session), and this column has no meaningful default
+    (there's no correct net_amount to invent - the anti-fabrication rule
+    forbids guessing one), so the only honest fix at load time is the
+    same one already applied to key columns: exclude the row, print why,
+    never fabricate. Demo-only (is_demo=true) in every case observed -
+    if a REAL row ever hit this it would be a genuine data-quality defect
+    worth stopping to investigate, not silently dropped, so this is
+    flagged distinctly per row (principal/is_demo shown) rather than
+    folded into the same silent message as the key-column case."""
+    metadata = MetaData()
+    table = Table(table_name, metadata, autoload_with=engine)
+    other_not_null_cols = [
+        c for c in df.columns
+        if c not in natural_key and c in table.columns and not table.columns[c].nullable
+    ]
+    if not other_not_null_cols:
+        return df, 0
+    cannot_insert = df[other_not_null_cols].isna().any(axis=1)
+    if cannot_insert.any():
+        bad = df.loc[cannot_insert]
+        demo_counts = bad["is_demo"].value_counts().to_dict() if "is_demo" in bad.columns else {}
+        print(f"  [{table_name}] {int(cannot_insert.sum())} rows have a null in a NOT NULL "
+              f"non-key column {other_not_null_cols} - excluded from the INSERT "
+              f"(is_demo breakdown: {demo_counts})")
+    return df.loc[~cannot_insert].copy(), int(cannot_insert.sum())
+
+
+def _drop_conflicting_group_rows(
+    df: pd.DataFrame, table_name: str, natural_key: list[str],
+) -> tuple[pd.DataFrame, int]:
+    """dedup_facts() deliberately KEEPS every row of a conflicting group
+    (same natural key, disagreeing amount_col) instead of picking one —
+    "flagged, not resolved", a human decision (its own docstring). But
+    load_to_supabase() upserts via ON CONFLICT DO UPDATE, and Postgres
+    refuses outright when two rows in the SAME INSERT target the same
+    conflict key ("ON CONFLICT DO UPDATE command cannot affect row a
+    second time") - found 2026-09-14, purchase_fact, on real execution.
+
+    Item 36 (2026-09-14, full sweep + diff follow-up): the original
+    version of this function dropped EVERY row in a conflicting group
+    uniformly, real and demo alike. That's correct for a group of 2+ REAL
+    rows genuinely disagreeing (sales_fact's 1 case, INV/2024/0542 -
+    decision item 23, "show don't fix" - a real human-review case). It was
+    WRONG for purchase_fact: a large, older synthetic dataset
+    (data/raw/Synthetic Data/PURCHASE_ORDER_*.xlsx) reuses the real
+    BILL/YYYY/NNNN invoice-number scheme with low sequential numbers,
+    colliding with genuine Del Monte invoices - 95 real rows (100% of
+    Jan+Feb 2024, partial Mar/Apr 2025) were being dropped alongside the
+    demo rows that actually caused the collision. That inverts CLAUDE.md
+    rule 2 (synthetic data must never compromise real reported data): a
+    real row should never lose to demo noise it didn't create.
+
+    Fixed: within a group that contains at least one real (is_demo=false)
+    row, drop only the demo rows and keep the real row(s) - the real data
+    was never in question, only which invoice number the demo generator
+    picked. A group with NO real rows (pure demo-vs-demo) is unaffected -
+    still fully dropped, still flagged. A group of 2+ REAL rows still gets
+    the original treatment (drop all, flag for human review) - keeping
+    all real conflicting rows in a real-vs-real case would silently
+    upsert whichever one Postgres happens to touch last, which is exactly
+    what this function exists to prevent."""
+    key_cols = [c for c in natural_key if c in df.columns]
+    if not key_cols:
+        return df, 0
+    resolvable_mask = df[key_cols].notna().all(axis=1)
+    resolvable = df.loc[resolvable_mask]
+    if resolvable.empty:
+        return df, 0
+    group_sizes = resolvable.groupby(key_cols)[key_cols[0]].transform("size")
+    conflict_idx = resolvable.index[group_sizes > 1]
+    if len(conflict_idx) == 0:
+        return df, 0
+
+    conf = df.loc[conflict_idx]
+    has_is_demo = "is_demo" in conf.columns
+    demo_dropped_idx = []
+    real_kept_idx = []
+    real_vs_real_dropped_idx = []
+    mixed_groups = 0
+    real_vs_real_groups = 0
+    for _, grp in conf.groupby(key_cols):
+        is_demo = grp["is_demo"] if has_is_demo else pd.Series([False] * len(grp), index=grp.index)
+        has_real = (is_demo != True).any()  # noqa: E712
+        has_demo = (is_demo == True).any()  # noqa: E712
+        if has_real and has_demo:
+            mixed_groups += 1
+            demo_dropped_idx.extend(grp.index[is_demo == True].tolist())  # noqa: E712
+            real_kept_idx.extend(grp.index[is_demo != True].tolist())  # noqa: E712
+        else:
+            # pure-demo or pure-real (2+ real rows disagreeing): unchanged
+            # behavior, drop the whole group.
+            if has_real:
+                real_vs_real_groups += 1
+            real_vs_real_dropped_idx.extend(grp.index.tolist())
+
+    dropped_idx = demo_dropped_idx + real_vs_real_dropped_idx
+    if mixed_groups:
+        print(f"  [{table_name}] {mixed_groups} conflicting group(s) were real rows colliding "
+              f"with demo rows sharing the same key - kept the {len(real_kept_idx)} real "
+              f"row(s), dropped only the {len(demo_dropped_idx)} demo row(s) (item 36 fix)")
+    if real_vs_real_dropped_idx:
+        n_real = int((conf.loc[real_vs_real_dropped_idx, "is_demo"] != True).sum()) if has_is_demo else 0  # noqa: E712
+        print(f"  [{table_name}] {len(real_vs_real_dropped_idx)} rows across "
+              f"{len(conf.loc[real_vs_real_dropped_idx].groupby(key_cols))} unresolved "
+              f"conflicting group(s) with no real+demo mix ({real_vs_real_groups} real-vs-real, "
+              f"{n_real} real rows involved) excluded from the INSERT - Postgres' ON CONFLICT "
+              f"DO UPDATE cannot target the same row twice in one statement; these stay flagged "
+              f"in the conflict report above for a human decision, never auto-resolved by "
+              f"insert order")
+    return df.drop(index=dropped_idx).copy(), len(dropped_idx)
+
+
 def _run_one_fact(item: FactPlanItem, engine: Engine, dry_run: bool) -> TableRunResult:
     rule = load_source_of_truth(item.fact, item.principal, DEFAULT_CONFIG_DIR)
     doc_dir = STAGING_DIR / rule.doc_type
@@ -353,6 +599,17 @@ def _run_one_fact(item: FactPlanItem, engine: Engine, dry_run: bool) -> TableRun
         real_conflicts, real_quarantined = len(dedup.conflicting_groups), len(dedup.quarantined)
 
     load_input = _project_to_table_columns(deduped_df, item.table_name, engine, item.dimension_fks)
+    load_input, excluded_uninsertable = _drop_uninsertable_quarantined_rows(
+        load_input, item.table_name, engine, rule.natural_key,
+    )
+    load_input, excluded_other_not_null = _drop_rows_violating_other_not_null(
+        load_input, item.table_name, engine, rule.natural_key,
+    )
+    excluded_uninsertable += excluded_other_not_null
+    load_input, excluded_conflicting = _drop_conflicting_group_rows(
+        load_input, item.table_name, rule.natural_key,
+    )
+    excluded_uninsertable += excluded_conflicting
 
     load_result = load_to_supabase(
         load_input, item.table_name, engine, rule.natural_key,
@@ -476,6 +733,18 @@ def _load_soh_snapshot() -> pd.DataFrame:
         [pd.read_parquet(f, columns=["sku_code", "article_description", "category_desc", "snapshot_date"]) for f in fs],
         ignore_index=True,
     )
+    # dropna BEFORE astype(str) - found 2026-09-14 (full sweep, class 4/6):
+    # .astype(str) on a null sku_code produces the literal string "nan" or
+    # "None", not a null value - grouping on that afterward would silently
+    # coalesce every genuinely-missing-sku_code row (~39 known in this
+    # corpus, one per snapshot - a blank/totals-adjacent source row) into
+    # one fake "nan"-named SKU, the same "null keys get grouped instead of
+    # quarantined" shape as the dedup_facts() bug fixed earlier this phase.
+    # Confirmed harmless in practice today (a real product_dimension.
+    # sku_code never equals the literal string "nan", so the fake row was
+    # never actually joined against) - fixed anyway rather than leaving a
+    # second instance of an already-known bug shape in the codebase.
+    soh = soh.dropna(subset=["sku_code"])
     soh["sku_code"] = soh["sku_code"].astype(str).str.strip()
     soh["category_desc"] = soh["category_desc"].astype(str).str.strip().replace({"": None, "nan": None})
     soh = soh.dropna(subset=["category_desc"])
@@ -587,6 +856,30 @@ def run_category_brand_backfill(engine: Engine, schema: str, dry_run: bool) -> d
                     "category_path_source = :category_path_source, brand = COALESCE(brand, :brand), "
                     "brand_source = COALESCE(brand_source, :brand_source) WHERE product_key = :product_key"
                 ), u)
+
+    # Del Monte grain='category' side (item 40a, 2026-09-14): SellOut_Fact's
+    # own transform step (relabel_sellout_source_defect_categories(),
+    # transform.py) already relabels the source-file-defect rows'
+    # category_path to the literal 'UNCLASSIFIED' string before load, so
+    # resolve_dimension_fk() creates/matches that Product_Dimension row
+    # correctly on its own - nothing to fix there. What resolve_dimension_fk
+    # does NOT populate is category_path_source (it only knows the FK's
+    # natural-key columns, not this backfill's provenance concept). Safe to
+    # target narrowly: no other mechanism in this codebase produces
+    # category_path='UNCLASSIFIED' for a Del Monte grain='category' row, so
+    # every match here is confirmed to be this exact defect, not a guess.
+    n_source_defect = 0
+    if not dry_run:
+        with engine.begin() as conn:
+            conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+            result = conn.execute(text(
+                "UPDATE product_dimension SET category_path_source = 'source_file_defect' "
+                "WHERE principal = 'delmonte' AND grain = 'category' "
+                "AND category_path = 'UNCLASSIFIED' AND category_path_source IS NULL"
+            ))
+            n_source_defect = result.rowcount or 0
+    print(f"  delmonte source_file_defect (category, item 40a): {n_source_defect}")
+    tally["source_file_defect"] = n_source_defect
     return tally
 
 
@@ -740,12 +1033,55 @@ def main() -> int:
                   f"'{args.schema}'. No fact loads, no backfill. Exiting.")
             return 0
         scratch_engine = _scratch_engine(engine, args.schema)
+
+        # Date_Dimension must exist before any fact with a date FK loads
+        # (sales_fact.invoice_date, salesreturn_fact.return_date,
+        # inventory_fact.snapshot_date all reference it). Found missing
+        # 2026-09-14, the first real load attempt: schema.sql/migrations
+        # create the TABLE but nothing seeds its rows - that has always
+        # been analytics/db/seed_date_dim.py's own separate job, reused
+        # here rather than duplicated. Skipped entirely in --dry-run (no
+        # writes) - a dry run's column/target checks don't need real date
+        # rows, only a fact table with the right shape, which
+        # ensure_scratch_schema's DDL already provides.
+        if not args.dry_run:
+            from analytics.db.seed_date_dim import upsert_date_dimension
+            date_result, date_validation = upsert_date_dimension(scratch_engine)
+            print(f"\n[date_dimension] seeded {date_validation.row_count} calendar days "
+                  f"({date_result.rows_upserted} upserted)")
+
         for item in FACT_PLAN:
             results.append(_run_one_fact(item, scratch_engine, args.dry_run))
         # ssis_soh — separate path, not source_of_truth.yaml-driven
         soh_result = transform_ssis_soh(staging_dir=STAGING_DIR, real_sku_codes=None)
         soh_load_input = _project_to_table_columns(
             soh_result.inventory_fact_df, "inventory_fact", scratch_engine, [],
+        )
+        # Found 2026-09-14 (Phase 1d, real load, flaky ~1-in-3 failure):
+        # transform_ssis_soh.NATURAL_KEY is ["sku_code", "snapshot_date"]
+        # (region is always None for every Unilever SOH row - see that
+        # module's own code) - its dedup_facts() call flags but KEEPS every
+        # row of a conflicting group under that 2-column key, same
+        # "flagged, not resolved" posture as every other fact. The
+        # ON CONFLICT target below is ["sku_code", "snapshot_date",
+        # "region"], which matches Inventory_Fact's PLAIN UNIQUE(sku_code,
+        # snapshot_date, region) constraint (schema.sql) - but region is
+        # always NULL here, and NULL <> NULL under plain UNIQUE semantics,
+        # so that constraint never actually fires for this data: every
+        # insert here is a bare INSERT in practice, not a real upsert. What
+        # DOES fire is the OTHER real constraint, migration 0010's partial
+        # expression index uq_inventory_unilever_soh (sku_code,
+        # snapshot_date, COALESCE(region,''), is_demo) WHERE
+        # principal='unilever' - COALESCE strips the NULL-distinctness, so
+        # a leftover conflicting-group row pair hits a real
+        # UniqueViolation, non-deterministically (depends on which two
+        # conflicting rows land in the same INSERT batch) - explaining the
+        # flakiness. Same root cause and same fix as
+        # _drop_conflicting_group_rows() applied to every FACT_PLAN table
+        # above; natural_key here matches transform_ssis_soh's own key
+        # (region excluded - it carries no discriminating power).
+        soh_load_input, soh_excluded_conflicting = _drop_conflicting_group_rows(
+            soh_load_input, "inventory_fact", ["sku_code", "snapshot_date"],
         )
         soh_load = load_to_supabase(
             soh_load_input, "inventory_fact", scratch_engine,

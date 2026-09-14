@@ -419,7 +419,23 @@ def load_to_supabase(
             f"silently dropped."
         )
 
-    records = df[df_columns].where(pd.notnull(df[df_columns]), None).to_dict(orient="records")
+    # .astype(object) BEFORE .where() is load-bearing, not defensive
+    # styling: pandas' DataFrame.where() cannot inject Python None into a
+    # homogeneously-typed column - on a float64 column (the common case for
+    # any numeric field never routed through coerce_numeric_columns(), i.e.
+    # most fact-table money/quantity columns today) it silently keeps NaN
+    # instead of the None we asked for, since a float64 array has no slot
+    # for None. Confirmed 2026-09-14 (Phase 1d full sweep, class 2): this is
+    # the single root cause behind every live NaN-in-NUMERIC-column defect
+    # found this session (sales_fact's untaxed/discount/tax/balance,
+    # purchase_fact's net/tax, inventory_fact's valuation/cost) AND an
+    # active defect in the CURRENT canonical load
+    # (unilever_sku_demand_fact.quantity_sold, 71 real rows) - Postgres
+    # accepts NaN as a valid NUMERIC value with no exception (unlike a
+    # non-numeric string or a NOT NULL violation), so this went silently
+    # uncaught by every other guard in this pipeline. Casting to object
+    # first gives pandas somewhere to actually put None.
+    records = df[df_columns].astype(object).where(pd.notnull(df[df_columns]), None).to_dict(orient="records")
 
     if dry_run:
         return LoadResult(

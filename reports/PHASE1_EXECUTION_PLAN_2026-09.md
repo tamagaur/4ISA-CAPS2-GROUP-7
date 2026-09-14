@@ -1561,3 +1561,465 @@ Schema structure exists (from `--schema-only`); zero data anywhere.
 **No DB writes beyond the approved sequence** (`--schema-only`'s DDL, both
 scratch-schema-only). `pytest tests/etl/`: 128 passed, final run. Stopping here
 for your review of the table above before the real load.
+
+## 9. Pre-load verification (Yuan's two checks) — both clean
+
+**1. is_demo string bug vs the Phase 0 132-SKU verdict — NOT touched.** The
+bug was staging/transform-side (`coerce_is_demo_column` leaving real rows as
+`pd.NA` instead of `False`); Phase 0's Tier-A contamination check queried the
+**live DB's** `is_demo` column directly, which is a genuine Postgres `boolean`
+— structurally cannot hold the string-typed bug (confirmed via
+`information_schema.columns`, not assumed). Live `unilever_sku_demand_fact.is_demo`
+distinct values are exactly `{False: 24906, True: 19669}`, matching Phase 0's
+numbers exactly, no third value. Phase 0's ABC recomputation ran against the
+live DB / `_Real` view, never staged parquet. Verdict: the 132-SKU Tier-A
+cohort rests entirely on live data untouched by this bug.
+
+**2. Remote check before diffing** — `git fetch group7` (not `origin`, which
+is the dead repo) surfaced 2 new commits (`bf8a3a3`, `344fcc3`) since last
+sync. `git diff --stat 85a8ebf group7/kelvin-etl` confirms they touch **only**
+`analytics/optimization/lp.py` and `scripts/run_lp.py` — zero overlap with
+`analytics/db/migrations/`, `schema.sql`, `backend/`, or `config/`. The
+scratch-vs-live baseline is not stale from a schema perspective.
+
+## 10. The real (non-dry-run) load — 5 more real bugs found and fixed
+
+Running `python -m scripts.run_canonical_load` for real (no flags) surfaced
+five genuine defects the dry-run couldn't see (schema constraints and
+Postgres upsert semantics only bind at real INSERT time):
+
+1. **`sales_fact`/`purchase_fact`/`inventory_fact` NOT NULL on the natural
+   key.** `dedup_facts()`'s "quarantine, never drop" design assumed every
+   quarantined row stays loadable — false for these three: `invoice_num`
+   (sales/purchase) and `sku_code` (inventory) are `NOT NULL` in schema.sql.
+   Fixed: `_drop_uninsertable_quarantined_rows()` excludes only the rows
+   whose specific NOT-NULL key column is null (checked via real schema
+   reflection), still counted in the quarantine total, never fabricated.
+   `SalesReturn_Fact` needed no change — both its key halves are nullable.
+
+2. **`sales_fact`/`purchase_fact` NOT NULL on a non-key column
+   (`net_amount`).** 197 + 13 is_demo=true rows had a null `net_amount`,
+   traced to `scripts/generate_synthetic_backfill.py::load_real_family_template()`
+   resampling straight from `staging/`'s raw 2025 pool — which still
+   contains the signature-block junk rows Transform now excludes for real
+   data (item 2 in §7 above), a bug in that generator, out of scope to fix
+   here. Fixed at load time: `_drop_rows_violating_other_not_null()`.
+
+3. **Conflicting-group rows vs `ON CONFLICT DO UPDATE`.** `dedup_facts()`
+   deliberately keeps every row of a conflicting group (same key, differing
+   amount) for human review. Postgres refuses outright when two rows in one
+   INSERT target the same conflict key ("cannot affect row a second time").
+   Demo data conflicts heavily (`purchase_order`: 456 combined groups vs 0
+   real); without a fix, whichever chunk happened to contain only one side
+   of a pair would silently "win" — the opposite of the report's own
+   "needs a human look" promise. Fixed: `_drop_conflicting_group_rows()`
+   excludes every row in an unresolved group from the INSERT, still fully
+   visible in the conflict report.
+
+4. **`sales_return`'s natural key didn't match its own DB constraint.**
+   Tracked as an open blocker in `source_of_truth.yaml`'s own comment
+   (5-column transform key incl. `return_type`, vs migration 0011's actual
+   4-column constraint) — surfaced as a hard Postgres error ("no unique or
+   exclusion constraint matching the ON CONFLICT specification"), forcing
+   the resolution migration 0011 already anticipated. Fixed: dropped
+   `return_type` from `source_of_truth.yaml`'s `sales_return.both.natural_key`
+   to match the DB constraint exactly. Real quarantined drops from 773 to 8
+   (only rows genuinely missing `return_slip_num`/`invoice_num`) — matches
+   the number informationally measured 2026-09-11.
+
+5. **9 real `inventory_sign_off` rows with a corrupted `valuation`.**
+   MARCH_2023 Pangasinan sheet, rows for SKUs `9FSE56117`/`9FSE56971`/etc:
+   the literal Excel boolean `FALSE` sits in the `Valuation`/`Valuation with
+   VAT` cells — confirmed present in the raw source file itself via
+   `openpyxl` (not a pipeline artifact). `inventory_sign_off` numeric
+   columns were never run through `coerce_numeric_columns()` (unlike
+   `unilever_sku`). Fixed in `transform.py`
+   (`DELMONTE_INVENTORY_NUMERIC_COLUMNS`): nulls the unparseable cells via
+   `to_decimal()` rather than `_coerce_numeric()` (which would have silently
+   turned Python `bool False` into a fabricated `0.0` — bool is an int
+   subclass). Row count unaffected; only the two valuation columns' values
+   for those 9 rows changed (null instead of the literal string `"False"`).
+
+6. **Separately, a flaky (not deterministic) `ssis_soh`/Unilever
+   `UniqueViolation`** turned out to be a **re-run idempotency gap**, not a
+   data bug: `inventory_fact`'s `ON CONFLICT (sku_code, snapshot_date,
+   region)` target matches the table's plain `UNIQUE(sku_code, snapshot_date,
+   region)` constraint, but Unilever's `region` is always `NULL` — and
+   `NULL <> NULL` under plain UNIQUE semantics, so that constraint never
+   actually fires for this data; every insert is a bare INSERT, not a real
+   upsert. The constraint that DOES fire is migration 0010's partial
+   expression index (`COALESCE(region,'')`, `is_demo`, `WHERE
+   principal='unilever'`), which `load_to_supabase()`'s plain
+   `index_elements` can't target (SQLAlchemy would need a matching
+   `index_where` + expression, not attempted here). Net effect: the very
+   first load into an empty schema always succeeds (confirmed — the data
+   itself has zero duplicate `(sku_code, snapshot_date)` pairs); only a
+   **second** run against a schema that already has this exact ssis_soh
+   data loaded collides. Not encountered by a genuine one-time production
+   run; surfaced only because this session re-ran the script repeatedly
+   against a not-yet-dropped scratch schema while debugging items 1-5.
+   **Left open, not fixed** — flagged for Yuan as a real but low-urgency
+   gap (proper fix needs either `index_where` support in `load_to_supabase()`
+   or a schema change to make `region` non-NULL for Unilever rows).
+
+Added `_drop_conflicting_group_rows()` defensively to the `ssis_soh` path too
+(no-op today — 0 conflicting groups in the current corpus — but the same
+class of bug as item 3 above, so it's there if that ever changes).
+
+`pytest tests/etl/`: 128/128 passed after every fix. Final run, against an
+explicitly-dropped-then-recreated `ssm_canonical` (guaranteed fresh): **zero
+mismatches, exit 0.**
+
+| table | rows: expected / actual | conflicts (real-only) | quarantined (real-only) |
+|---|---|---|---|
+| `unilever_sku_demand_fact` | 44,575 / 44,575 | 0 / 0 | 0 / 0 |
+| `sales_fact` | 53,109 / 53,109 | 1 / 1 | 432 / 432 |
+| `purchase_fact` | 2,667 / 2,667 | 0 / 0 | 27 / 27 |
+| `salesreturn_fact` | 1,630 / 1,630 | 0 / 0 | 8 / 8 |
+| `sellout_fact` | 8,545 / 8,545 | 0 / 0 | 0 / 0 |
+| `inventory_fact` (inventory_sign_off) | 20,905 / 20,905 | 0 / 0 | 188 / 188 |
+| `inventory_fact` (ssis_soh/unilever) | 27,282 / 27,282 | — | — |
+
+**Category/brand backfill (real, not dry-run 0/0/0 this time):**
+`direct_soh_match` 1,427 (79.0%), `unclassified` 380 (21.0%), `keyword_rule`
+0 — matches the frozen Phase 1d verification target exactly.
+
+`ssm_canonical` is left populated (not dropped) for your review. **Stopping
+here, as instructed — no scratch-vs-live diff has been written or run.**
+
+## 11. Full row accounting, dry-run → real load (Yuan's request, before the diff)
+
+Per-table exclusion breakdown, real vs demo, by which of the load-time
+exclusion functions caught it:
+
+| table | combined in | NOT NULL (key) | NOT NULL (other) | conflict-group | final loaded |
+|---|---|---|---|---|---|
+| `sales_fact` | 53,742 | 432 (real 432 / demo 0) | 197 (real 0 / demo 197) | 4 (real 2 / demo 2) | 53,109 |
+| `purchase_fact` | 4,594 | 27 (real 27 / demo 0) | 13 (real 0 / demo 13) | **1,887 (real 95 / demo 1,792)** | 2,667 |
+| `salesreturn_fact` | 1,900 | 0 | 0 | 270 (real 0 / demo 270) | 1,630 |
+| `sellout_fact` | 8,584 | 0 | 0 | 39 (real 0 / demo 39) | 8,545 |
+| `inventory_fact` | 21,612 | 453 (real 188 / demo 265) | 0 | 254 (real 0 / demo 254) | 20,905 |
+
+Every exclusion is confirmed junk (demo-only nulls, demo-only collisions, or
+already-documented NOT-NULL gaps) **except one: `purchase_fact`'s
+conflict-group exclusion took 95 real rows, not 0.**
+
+### `purchase_fact` — the real portion did not survive intact
+
+"353 real rows" (`PROJECT_STATE_2026-09.md` §1) is a stale Phase 0
+(2026-09-09) snapshot covering 10 months. The current staging has **526 real
+rows across 11 months** — legitimate growth from the 2026-09-14 Extract
+re-run picking up more real monthly files (e.g. September 2025 purchases),
+confirmed via `_src_file` value-counts, not a bug.
+
+Of those 526 real rows, **only 404 survive the load**:
+- 27 correctly excluded (null `invoice_num`, matches the known quarantine target).
+- **95 incorrectly excluded** — real, non-duplicate rows dropped because
+  `_drop_conflicting_group_rows()` treats every row in a same-natural-key
+  conflicting group uniformly, without checking `is_demo`. Root cause: a
+  separate, older synthetic dataset — `data/raw/Synthetic Data/
+  PURCHASE_ORDER_2024-*_*.xlsx` / `2025-*_*.xlsx` (22 files, distinct from
+  this session's `generate_synthetic_backfill.py`, which mints
+  collision-safe `INV/YYYY/9xxxxx` numbers) — reused the **real**
+  `BILL/YYYY/NNNN` invoice-number scheme with low sequential numbers,
+  directly colliding with genuine Del Monte invoice IDs. Verified via direct
+  row inspection (not assumed): every one of the 95 real conflicting rows
+  has an `invoice_num` starting `BILL`, and each collides with 2-7 synthetic
+  rows sharing that exact number, each with a different fabricated amount.
+
+  | real file | real rows | rows caught in a conflict | % lost |
+  |---|---|---|---|
+  | January 2024 purchases | 37 | 37 | **100%** |
+  | February 2024 purchases | 29 | 29 | **100%** |
+  | March 2025 purchases | 38 | 16 | 42% |
+  | April 2025 purchases | 64 | 13 | 20% |
+
+  **Two entire real months (Jan + Feb 2024) are currently missing from the
+  load, silently.** This is real data suppressed by a demo-data defect — the
+  opposite of CLAUDE.md rule 2 ("synthetic data never compromises real
+  reported results"). `_drop_conflicting_group_rows()`'s current behavior
+  (keep the group's flag, drop every row in it) was the right call for a
+  real-vs-real conflict (`sales_fact`'s 1 case) but is wrong here.
+
+**Not fixed this session** — flagged per instruction rather than acting
+unilaterally, since it changes what "the load" actually contains. Proposed
+fix (not applied, pending Yuan's go): within a conflicting group, if ≥1 row
+is real, drop only the demo rows and keep the real row(s); a group with 2+
+real rows in genuine disagreement still gets flagged for human review as
+today, unchanged. Logged as decision item 36 in `PROJECT_STATE_2026-09.md` §6.
+
+### Open items logged this session, not fixed
+
+- **Item 37 — `ssis_soh`/Unilever upsert re-run idempotency gap.** Its
+  `ON CONFLICT (sku_code, snapshot_date, region)` matches the plain
+  `UNIQUE(sku_code, snapshot_date, region)` constraint — but Unilever's
+  `region` is always `NULL`, and `NULL <> NULL` under plain UNIQUE
+  semantics, so that constraint never fires; every insert is a bare INSERT.
+  The constraint that DOES fire is migration 0010's partial expression index
+  `uq_inventory_unilever_soh` (`sku_code, snapshot_date, COALESCE(region,''),
+  is_demo` WHERE `principal='unilever'`), which `load_to_supabase()`'s plain
+  `index_elements` can't target. Harmless for a one-time load (the data has
+  zero duplicate `(sku_code, snapshot_date)` pairs today); a second load
+  against an already-populated schema hits a `UniqueViolation` and rolls
+  back the whole scratch schema — reproduced 2× this session.
+- **Item 38 — two remote LP commits on `group7/kelvin-etl`**
+  (`bf8a3a3`/`344fcc3`, `lp.py`/`run_lp.py` only) land while Phase 4 (which
+  owns the LP restructure) is on hold. Noted in the plan doc's Phase 4
+  section for reconciliation before that phase starts. Yuan messaging Audrey.
+
+## 12. Diff follow-up (Yuan's 3 requests, 2026-09-14) — before the Phase 1 gate
+
+### 12a. Live NaN defect — full scope
+
+Queried live directly for every affected row (not sampled):
+
+- **`sellout_fact`**: 137 real (`is_demo=false`) rows, `net_amount = 'NaN'::numeric`.
+  All in period `2023-08`, both regions (ilocos/pangasinan), across 76 distinct
+  `category_path` values — several of which are themselves junk
+  (`'False'`, `'False  (2)'` … `'False  (9)'`, a different manifestation of
+  the same class of parsing defect as the region bug elsewhere).
+- **`inventory_fact`**: 210 real rows, `quantity_on_hand = 'NaN'::numeric`.
+  All Del Monte, all Pangasinan, all snapshot `2023-08-01`, 210 distinct SKUs.
+- Both are confined to one old ad-hoc-loaded snapshot (August 2023 Del Monte).
+  `ssm_canonical` (the canonical pipeline) computes this exact period cleanly
+  — confirmed via the diff, 0 `NaN`s in scratch anywhere.
+
+**Which live endpoints are affected — checked every raw-SQL aggregator, not
+assumed:**
+
+| endpoint / function | aggregates | filter that protects it |
+|---|---|---|
+| `GET /inventory/current` (`inventory.py`) | `SUM(quantity_on_hand)` | hardcoded `principal='unilever'` |
+| `GET /inventory/movement` (`inventory.py`) | none relevant | Unilever-only, no frontend caller (confirmed no caller repo-wide) |
+| `GET /sku` (`sku.py`) | `SUM(quantity_on_hand)` | `_period = MAX(_period)` (live max is `2026-03`, Del Monte's own max is `2025-12` — 2023-08 is neither) |
+| `GET /recommendations` (`recommendations.py`) | `SUM(quantity_on_hand)` | same `MAX(_period)` filter |
+| `GET /abc` (`abc.py`) | `SUM(quantity_on_hand)` | same `MAX(_period)` filter |
+| `dashboard.py`'s SOH/safety-stock/valuation functions (4 call sites) | `SUM(quantity_on_hand ...)` | every one explicitly filters `principal='unilever'` or joins through a Unilever-only `_latest_inventory_period()` |
+| `orchestrate_abc.py::_fetch_delmonte_category_revenue` (only `sellout_fact.net_amount` consumer anywhere in the codebase) | fetches raw rows then `pandas.groupby().sum()` | **not filter-protected**, but **dormant**: `abc_classification` has Del Monte rows purged today (Phase 0 ground truth), no endpoint currently serves Del Monte ABC. If re-run, pandas' default `skipna=True` means the `NaN` rows would be silently *excluded* from the sum (undercounting those 2023-08 categories), not propagated to `NaN` the way a raw SQL `SUM` would — a different, milder failure mode than initially assumed, but still wrong. |
+
+**Verdict: no live dashboard or API number is wrong today because of this.**
+It is a real, scoped, pre-existing defect (old ad-hoc script, August 2023 Del
+Monte only) that would surface the moment someone re-runs Del Monte category
+ABC — worth fixing on the live DB directly (independent of the Phase 1
+cutover question), not something this session changed or will fix, since
+it's a live write outside this phase's scope.
+
+### 12b. `purchase_fact` +51 real rows — verified, not duplicates
+
+Per-month real-row counts, both schemas (`invoice_date`-based, unaffected by
+the region-key confusion below):
+
+| month | live | scratch | delta | explanation |
+|---|---|---|---|---|
+| 2023-09 | 34 | 34 | 0 | unchanged |
+| 2023-11 | 39 | 39 | 0 | unchanged |
+| 2023-12 | 57 | 57 | 0 | unchanged |
+| 2024-01 | 7 | **0** | **−7** | 100% lost — item 36 |
+| 2024-02 | 21 | **0** | **−21** | 100% lost — item 36 |
+| 2025-03 | 28 | 22 | −6 | item 36 losses (8) outweigh new-to-corpus growth for this month |
+| 2025-04 | 26 | 51 | +25 | genuine corpus growth |
+| 2025-06 | 32 | 58 | +26 | genuine corpus growth |
+| 2025-08 | 53 | 74 | +21 | genuine corpus growth |
+| 2025-12 | 56 | 69 | +13 | genuine corpus growth |
+| **total** | **353** | **404** | **+51** | |
+
+Net arithmetic checks out exactly: −7−21−6+25+26+21+13 = **+51**.
+
+**Duplicate check** (key = `(invoice_num, region)`, since `principal` is
+constant): of live's 353 real rows, **130 carry over into scratch completely
+unchanged** — same key, and (checked) **0 value mismatches** on
+`invoice_date`/`net_amount` for any of them. Another **180 are the exact
+same invoices**, re-keyed only because item 19's `region='False'` bug is
+fixed forward in the current pipeline (live has `region='False'`, scratch
+has the correct `'ilocos'`/`'pangasinan'` for the identical `invoice_num` —
+confirmed by looking up the same `invoice_num` under its new region and
+finding an identical row, not a coincidental match). These are **not new
+data** — same 180 transactions, corrected key. The remaining **43 of live's
+original rows have no matching `invoice_num` in scratch at all** — genuinely
+gone, and they're exactly the item-36 casualties (7+21+8+7=43, matching the
+2024-01/02025-03/2025-04 losses in the table above; 2025-08/12 had no
+casualties). The other 95−43=52 rows in item 36's total were never in live
+to begin with (real rows discovered only in the newer, fuller corpus, then
+immediately lost to the same collision bug before ever being counted).
+
+**Conclusion: the +51 is real. Zero re-staged duplicates found** — every
+matching real transaction agrees exactly on value; every "new" row is either
+a corrected key for an existing live invoice or a genuinely new one from the
+fuller current corpus. The only genuine loss is item 36's, already tracked
+as the top-priority open item.
+
+## 13. Full 8-class sweep (2026-09-14, read-only) — every bug shape found this
+session, checked across every table/family
+
+Per Yuan's instruction: before fixing item 36 in isolation, sweep for every
+class of defect found so far, across every table/family, read-only. Full
+findings (table condensed; see the original sweep turn for row-level detail
+per entry):
+
+| class | table/family | count | real/demo | severity | status |
+|---|---|---|---|---|---|
+| 2 (root cause) | `analytics/etl/load.py`, every numeric column | mechanism | — | critical | **Fixed (item 39)** |
+| 2 (symptom) | `sales_fact` (live): untaxed/discount/tax/balance | 513/1684/513/2668 | discount real=578, balance real=2155 | high | Live-only; item 39 protects future loads |
+| 2 (symptom, active) | `unilever_sku_demand_fact.quantity_sold`/`gsv` | 126/94 | 71 real / 50 real | **high — active in scratch** | **Fixed (item 39)**, re-verified |
+| 2 (symptom) | `purchase_fact` net/tax (live), `inventory_fact` valuation/cost (live) | 13/13/210/210 | demo/demo/real/real | medium | Live-only; item 39 protects future loads |
+| 3 (new instance) | `sellout_fact` `__col0__`→`category_path` | 1,023 staged → 194 real / 815 demo loaded | 194 real | **high, biggest real-row-count finding** | **Root-caused, not fixed (item 40a)** — confirmed genuine source-file defect via raw Excel inspection, not a pipeline bug |
+| 1 (item 36, generalized) | `purchase_fact` | 95 real | 95 real | high | **Fixed and re-verified (item 36)** |
+| 1 (swept, all other families) | `sales_fact`, `salesreturn_fact`, `sellout_fact`, `inventory_fact`, `unilever_sku_demand_fact`, `ssis_soh` | sales_fact 2 real (1 real-vs-real group, already known — item 23); all others 0 | — | low | Confirmed not a new bug |
+| 8 (new, small) | `sales_fact.discount_rate_label` | 1 | real=1 | low | Same root cause as the E family; not separately fixed |
+| 5 (swept, all column maps) | `daily_sales_report.yaml`, `rmr_gs_bo.yaml`: region←"Town Display" | n/a | — | low, dormant | Both cross-check-only, never loaded; no action needed unless promoted |
+| 4 (swept, all groupby sites) | `_load_soh_snapshot()`: `.astype(str)` masks null `sku_code` as `"nan"` before grouping | ~39 known null rows | n/a | low, confirmed inert | **Fixed defensively (item 40b)** |
+| 3 (swept, remaining families) | `purchase_order`, `unilever_sku`, `ssis_soh` | 0 | — | none | Clean |
+| 3 (swept, dormant family) | `rmr_gs_bo`: `Invoice Date='TOTAL'` | 12 | n/a | none, dormant | Cross-check only, never loaded |
+| 6 (swept, all FooterRowCheck defs) | all 4 already-fixed families | 0 new instances | — | none | The one raw-name reference (`SALES_RETURN_FOOTER_CHECKS`' `"Invoice Date"`) is deliberate/correct, confirmed via `sales_return.yaml`'s own comment |
+| 7 (swept, every family's key vs constraint) | all 7 | 0 new mismatches | — | none beyond item 37 | Every `natural_key` now matches its table's real `UNIQUE` constraint exactly |
+| 8 (already logged, re-confirmed) | `sellout_fact.net_amount`, `inventory_fact.quantity_on_hand` (live NaN) | 137/210 | 100% real | already in gate summary | No new rows beyond what's logged |
+| 8 (re-scoped) | `purchase_fact.region` (live) | 540 total (223 `'False'`, 317 `'false'`) | 223 real, 317 demo | already logged (item 19) | Confirms item 19 exactly; lowercase variant is inherited demo noise, same root cause |
+
+## 14. Batch fixes applied (2026-09-14) — A, F, J, per Yuan's batching decision
+
+**A — `load.py` null-cleaning fix (item 39).** Stated expectation before
+applying: only `unilever_sku_demand_fact.quantity_sold` currently holds
+`NaN` in `ssm_canonical` (126 rows: 71 real, 55 demo; 0 currently `NULL`) —
+every other nullable numeric column checked clean in *this* corpus. Applied
+`df[df_columns].astype(object).where(pd.notnull(df[df_columns]), None)` in
+`load_to_supabase()` (was: `.where()` alone, a no-op on `float64` columns —
+pandas cannot inject `None` into a homogeneous float array, so it silently
+kept `NaN`). Re-ran into a fresh scratch: **confirmed exactly as
+predicted** — `quantity_sold` NaN 126→0, NULL 0→126 (71 real/55 demo).
+`pytest tests/etl/`: 128/128 both before and after.
+
+**F — item 36 fix.** `_drop_conflicting_group_rows()` now checks each
+conflicting group's `is_demo` composition: a **mixed** group (≥1 real + ≥1
+demo) drops only the demo rows, keeping the real one(s); a **pure** group
+(all-demo, or 2+ real rows genuinely disagreeing) keeps the original
+behavior — drop the whole group, flag for human review. Re-run: `purchase_fact`
+real rows 404→499 (+95, exactly the count diagnosed). One bug caught in the
+new code's own print statement before reporting done (a copy-paste: reused
+the demo-row count where the real-row-kept count belonged) — fixed, re-ran,
+confirmed correct: `"95 conflicting group(s)... kept the 95 real row(s),
+dropped only the 351 demo row(s)"`.
+
+**J — `_load_soh_snapshot()` defensive fix (item 40b).** Added
+`soh = soh.dropna(subset=["sku_code"])` before the `.astype(str)` call
+that was masking null `sku_code` as the literal string `"nan"`.
+
+`pytest tests/etl/`: 128/128 passed after every change. FACT_PLAN's
+`purchase_fact` target updated 2667→2762 (2667 + 95).
+
+## 15. Re-verification — the gate condition, per month
+
+**`purchase_fact`, real rows, live vs. scratch, every month both sides
+cover:**
+
+| month | live | scratch | scratch ≥ live? |
+|---|---|---|---|
+| 2023-09 | 34 | 34 | YES |
+| 2023-11 | 39 | 39 | YES |
+| 2023-12 | 57 | 57 | YES |
+| 2024-01 | 7 | 37 | YES |
+| 2024-02 | 21 | 29 | YES |
+| 2025-03 | 28 | 38 | YES |
+| 2025-04 | 26 | 64 | YES |
+| 2025-06 | 32 | 58 | YES |
+| 2025-08 | 53 | 74 | YES |
+| 2025-12 | 56 | 69 | YES |
+| **total** | **353** | **499** | **9/9 months, YES** |
+
+**Gate condition met: scratch dominates live in every month.** Value check
+on all 130 matching `(invoice_num, region)` keys: **0 mismatches**. Of
+live's 223 `region='False'` real rows, **all 223** are now recoverable under
+their corrected region in scratch (was 180/223 before the fix) — **0 real
+rows truly lost**, down from 43.
+
+Re-ran the diff for every other table: `sales_fact`, `sellout_fact`,
+`inventory_fact` (`inventory_sign_off`), `unilever_sku_demand_fact` all
+unchanged and still exact real-row matches — none of this batch's fixes
+touch their row sets. `inventory_fact`'s full key-level diff hit a Supabase
+statement timeout on the live-only `EXCEPT` query (672s, a DB-side planner/
+resource issue, not a logic bug — the identical query ran in 3.1s in an
+earlier session run against the same table sizes) — worked around with a
+`principal='delmonte'`-scoped query instead, which confirmed the essential
+fact fast: real rows unchanged (5,171 = 5,171 both sides).
+
+**Still open, blocking the next gate check, not this one:** item 40(a) —
+the `sellout_fact` category defect (194 real rows) needs a decision before
+any further fix. Not blocking today's specific ask (item 36 + the diff
+re-run), which is done.
+
+## 16. Item 40(a) — Yuan's ruling applied, Phase 1 gate closed
+
+**Ruling (2026-09-14):** same treatment as Unilever's 380 no-SOH-match SKUs
+— `category_path` → the literal string `'UNCLASSIFIED'`, revenue preserved,
+never dropped; `category_path_source` records that it came from a confirmed
+source-file defect, not an absence of data.
+
+**Implementation:**
+- `analytics/etl/transform.py::relabel_sellout_source_defect_categories()` —
+  new function, runs in `transform_fact()`'s `sell_out` branch right after
+  footer-row exclusion and provenance backfill, before `dedup_facts()`.
+  Detects `category_path` matching `^False(\s+\(\d+\))?$`, relabels to
+  `'UNCLASSIFIED'`, then **sums** `net_amount`/`quantity`/`quantity_cases`
+  per `(region, _period, is_demo)` group — not a `dedup_facts()` conflict,
+  since the natural key `(category_path, region, _period)` can't distinguish
+  multiple relabeled rows sharing a period/region, and flagging them as a
+  conflict (dropping all) would repeat item 36's exact failure mode against
+  real revenue. Real and demo summed separately even though `is_demo` isn't
+  part of the DB's own natural key.
+- **Bug caught before shipping**: `net_amount` is a genuinely mixed
+  float/str/Decimal object column (confirmed: 5,431 float / 1,753 str /
+  1,402 Decimal instances in the same column). pandas' groupby-`sum()` on
+  the string values did Python string concatenation, not addition —
+  `"15871.97"` + `"36578.41"` became the literal text
+  `"15871.9736578.41"`, which then failed the real INSERT with a Postgres
+  numeric-parse error (loud, not a silently wrong number). Fixed: explicit
+  `pd.to_numeric()` coercion before summing, `errors` treated as `raise`
+  (a genuinely unparseable value would be a new, different defect worth
+  stopping on, not silently zeroed). Re-verified: same row counts, sane
+  values (e.g. ₱344,177.67, not a garbled string).
+- Migration `0012_sellout_source_defect_category.sql` — widens
+  `Product_Dimension.category_path_source`'s CHECK constraint to add
+  `'source_file_defect'` as a 4th allowed value, distinct from
+  `'unclassified'` (which means "no SOH match exists," a Unilever-only
+  concept that doesn't even apply to Del Monte's category grain).
+- `scripts/run_canonical_load.py::run_category_brand_backfill()` — added a
+  narrowly-scoped `UPDATE` at the end: any `Product_Dimension` row with
+  `principal='delmonte' AND grain='category' AND category_path='UNCLASSIFIED'
+  AND category_path_source IS NULL` gets `category_path_source =
+  'source_file_defect'`. Safe to target this broadly because no other
+  mechanism in the codebase produces that exact combination for Del Monte's
+  category grain.
+- `pytest tests/etl/`: 128/128 passed after every change, checked 3 times
+  (before the coercion fix, after it, and after the full re-run).
+
+**Verified via direct query, not assumed:**
+- `sellout_fact`: 1,023 rows relabeled → 124 merged rows (22 real, 102
+  demo). Real revenue preserved exactly: `SUM(net_amount)` over the 22 real
+  `UNCLASSIFIED` rows = ₱13,909,661.72.
+- `Product_Dimension`: the 12 former fake category rows (`'False'`,
+  `'False (2)'` … `'False (12)'`) collapse to exactly **1** real dimension
+  member (`category_path='UNCLASSIFIED', category_path_source=
+  'source_file_defect'`) — correct, not a bug: `Product_Dimension` is SCD
+  Type 1, so many `sellout_fact` rows sharing one `category_path`
+  correctly resolve to one dimension row regardless of which region/period
+  they came from.
+- Final `sellout_fact` load: 8,584 combined input → 7,686 after the
+  relabel+merge (1,023 removed, 124 added) → 7,660 after excluding 26 rows
+  in 10 remaining (pre-existing, demo-vs-demo, unrelated to this fix)
+  conflicting groups. **0 real rows affected by that last exclusion step.**
+- Full real load re-run (fresh scratch, `pytest` green, migration `0012`
+  applied): **zero mismatches**, `sellout_fact` 7,660/7,660,
+  `category_path_source` split `{direct_soh_match: 1427, unclassified: 380,
+  source_file_defect: 1}`.
+
+**Client informed:** `reports/CLIENT_QUESTIONS_SSM.md` gained a new section
+("Separately — a data issue in your Sell Out reports") asking SSM (via
+Thea) to check their Sell Out template for the broken leading-column
+formula, and offering to recover the real category breakdown if they can
+supply a corrected export. Explicitly framed as non-blocking — Del Monte is
+out of active scope.
+
+**Phase 1 gate: closed.** Full close-out, final frozen targets, every open
+item carried to Phase 2, and the cutover recommendation are in
+`reports/PROJECT_STATE_2026-09.md` §10. This file's job is done — per the
+standing report convention, it folds into `PROJECT_STATE_2026-09.md` and
+moves to `reports/archive/` once Yuan confirms the phase is closed.

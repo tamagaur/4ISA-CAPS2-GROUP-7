@@ -115,7 +115,7 @@ sales_return:
     # deduping it. If a future reconciliation wants to compare the RMR
     # Oct/Nov-2025 figures against sales_return for the same months, that
     # is a cross-check report, not a second load path.
-    natural_key: [return_slip_num, principal, region, return_type, invoice_num]
+    natural_key: [return_slip_num, principal, region, invoice_num]
     # WIDENED 2026-09-11 (Phase 1 step 2b, Yuan approved): added invoice_num.
     # Confirmed against all 20 real transform-stage conflicts (see
     # reports/PHASE1_EXECUTION_PLAN_2026-09.md): 18 of 20 are the SAME
@@ -132,24 +132,26 @@ sales_return:
     # (contrast rmr_gs_bo.yaml, which maps region <- "Town Display" — a
     # latent bug, now moot as rmr_gs_bo is cross-check).
     #
-    # NOT YET FIXED AT LOAD (open, blocks Phase 1d for this fact):
-    # schema.sql's SalesReturn_Fact UNIQUE constraint is STILL
-    # (return_slip_num, principal, region, return_type) — 4 columns, no
-    # invoice_num. Widening this YAML key only changes what Transform's
-    # dedup_facts() reports as a conflict; it does NOT change the DB
-    # constraint load_to_supabase()'s ON CONFLICT clause targets. Passing
-    # this 5-column key to load_to_supabase against the current 4-column
-    # DB constraint will raise (no matching unique/exclusion constraint),
-    # not silently misload — but it means this fact cannot actually load
-    # correctly until migration 0011 adds a matching 5-column UNIQUE (or an
-    # expression index per the schema.sql comment's own proposal). Tracked
-    # as a Phase 1d blocker, not fixed in this (transform-only) step.
+    # return_type DROPPED from this key 2026-09-14 (Phase 1d, first real
+    # canonical load): this key was left widened-but-mismatched against
+    # migration 0011's actual DB constraint as a tracked blocker ("NOT YET
+    # FIXED AT LOAD" — see prior revision of this comment); running the
+    # real load surfaced it as a hard failure (Postgres: "no unique or
+    # exclusion constraint matching the ON CONFLICT specification"), which
+    # forces the already-documented resolution rather than leaving it open.
+    # Migration 0011 itself already chose (a) DROP return_type, not (b)
+    # COALESCE it into the key — empirically equivalent (1 colliding group
+    # of 3 rows either way, verified against the real 1,383-row corpus,
+    # see that migration's own comment) and simpler DDL. This YAML key now
+    # matches that constraint exactly: (return_slip_num, principal, region,
+    # invoice_num). Re-verified 2026-09-11 (before this edit, informally;
+    # now load-bearing): dropping return_type drops real quarantined from
+    # 773 to 8 (only rows genuinely missing return_slip_num or invoice_num).
     #
-    # A row with a NULL return_type (the pre-2025 `data` shape, which never
-    # populated it) makes the row UNRESOLVABLE under this key regardless of
-    # invoice_num — dedup_facts() (2026-09-11 fix) now quarantines such rows
-    # individually rather than grouping them, which independently matches
-    # Postgres' own NULL <> NULL UNIQUE semantics for the pre-2025 shape.
+    # A row with a NULL invoice_num or return_slip_num is UNRESOLVABLE
+    # under this key — dedup_facts() (2026-09-11 fix) quarantines such rows
+    # individually rather than grouping them, matching Postgres' own NULL
+    # <> NULL UNIQUE semantics.
     #
     # DATA-QUALITY FLAGS, fixed at transform 2026-09-11:
     #   - 7 real rows (of 11 staged incl. demo) had Return Type == "Return
