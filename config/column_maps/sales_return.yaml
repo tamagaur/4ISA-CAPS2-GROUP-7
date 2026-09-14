@@ -1,81 +1,67 @@
 # config/column_maps/sales_return.yaml
 #
-# Maps confirmed Del Monte Sales Return file column vocabulary onto one
-# canonical schema. Checked directly against 7 of the 19 real files
-# (2023-01, 2023-09, 2023-11, 2023-12, 2024-01, 2025-03, 2025-04,
-# 2025-12) spanning all three real template shapes:
-#   - Shape A (Jan-Dec 2023): single sheet per region, 13 columns, no
-#     Branch Code / Town Display / Return Type.
-#   - Shape B (Jan-Feb 2024, at least): adds Salesman/Town Display/
-#     Branch Code, 15 columns. Still no Return Type.
-#   - Shape C (Mar 2025 onward, at least): sheets split GS/BO per
-#     region, adds Return Type, 16 columns.
-# Column ORDER differs between shapes (Shape A puts Invoice Num/REFNBR
-# right after Invoice Date; Shape B/C put Salesman/Town Display/Branch
-# Code first) - irrelevant here since matching is by header name, not
-# position (see transform.py's _normalize_header()).
+# Maps the Sales Return file column vocabulary onto SalesReturn_Fact.
+# Built 2026-09-09 (Phase 1 re-check) when sales_return replaced rmr_gs_bo
+# as the system of record for this fact (see config/source_of_truth.yaml).
 #
-# Nearly identical to sales_register.yaml's vocabulary (bo_rmr_gs.py's
-# own docstring already noted "same invoice-level column vocabulary as
-# Sales Register" for the GS/BO shape) - field names below match that
-# file's canonical names for consistency, in case these are ever
-# reconciled into one driver. Only vocab confirmed in real Sales Return
-# headers is listed; sales_register.yaml's AREA/Area region variants
-# and REFERENCE # invoice_num variant have not been observed here and
-# are deliberately not carried over - add them if a real file shows them.
+# Verified directly against the 68 staged sales_return parquet files
+# (1,931 rows, 2023-01 -> 2026-08, both regions, all Del Monte). Every
+# staged sheet shares one column shape:
+#   Invoice Date, Salesman, Town Display, Branch Code, Customer Name,
+#   Invoice Num, REFNBR, Untaxed Amount, Discount Rate, Discount Amount,
+#   Tax, Net Amount, Balance, Posted, Return Slip #, Return Type
+# This is the same vocabulary as sales_register.yaml's vocab A (returns
+# are recorded in the sales-register format), plus "Return Slip #" and
+# "Return Type".
 #
 # Extract leaves raw column names untouched; Transform applies this map.
-# Matching is case-insensitive and whitespace-normalized (see transform.py) -
-# note Shape C's Ilocos sheets carry "Return Type " with a trailing space,
-# which normalizes to the same key as "Return Type" without one.
-
-invoice_date:
-  - "Invoice Date"
-
-salesman:
-  - "Salesman"
-
-region:
-  - "Town Display"    # Shape B/C only - absent in Shape A real files
-
-customer_name:
-  - "Customer Name"
-
-invoice_num:
-  - "Invoice Num"
-  - "REFNBR"           # same collision as sales_register.yaml's pair -
-                        # transform.py's _coalesce_duplicate_columns()
-                        # already handles a batch mixing both vocabs
-
-untaxed_amount:
-  - "Untaxed Amount"
-
-discount_rate_label:
-  - "Discount Rate"    # text label (e.g. "Public Pricelist", "LESS 3%"),
-                        # never coerce to numeric - same as sales_register.yaml
-
-discount_amount:
-  - "Discount Amount"
-
-tax_amount:
-  - "Tax"
-
-net_amount:
-  - "Net Amount"
-
-balance:
-  - "Balance"
+# Matching is case-insensitive and whitespace-normalized (see transform.py).
+#
+# GRAIN / SOURCE-OF-TRUTH (DEC-04): _sheet_role is gs / bo / data /
+# one_pager. gs + bo + data load; one_pager (GS union BO, 2025 shape only)
+# is a cross-check. See source_of_truth.yaml's sales_return.both entry.
+#
+# NOT MAPPED, on purpose:
+#   - region      -> comes from Extract's _region provenance (site level:
+#                    pangasinan / ilocos) via transform.backfill_provenance_fields().
+#                    "Town Display" is the TOWN (half-blank), not the region -
+#                    do not map it to `region` (that is rmr_gs_bo.yaml's latent bug).
+#   - principal   -> from _principal provenance, same mechanism.
+#   - return_date -> the sheet has only "Invoice Date" (the original sale
+#                    date), which is NOT the return date. Mapping it to
+#                    return_date would be semantically wrong AND return_date
+#                    is a Date_Dimension FK. Left NULL until a real return
+#                    date column is confirmed. Flagged, not guessed.
+#   - bo_units    -> no source column exists (schema.sql: "always NULL for
+#                    real data"). BO value trend uses net_amount, not units.
+#   - Salesman, Town Display, Branch Code, Customer Name, REFNBR,
+#     Untaxed Amount, Discount Rate, Discount Amount, Tax, Balance, Posted
+#                 -> no column on SalesReturn_Fact. The canonical loader
+#                    projects to schema columns before load; these are
+#                    dropped there, not here.
 
 return_slip_num:
   - "Return Slip #"
 
+invoice_num:
+  - "Invoice Num"     # e.g. "INV/2024/0618" - present on 1,912/1,931 rows.
+                       # Not in the natural key (schema.sql keeps the key as
+                       # (return_slip_num, principal, region, return_type));
+                       # kept as a real attribute and a migration-0011
+                       # candidate for tightening the key.
+
 return_type:
-  - "Return Type"      # Shape C only ("GS"/"BO") - absent in Shape A/B
-                        # real files; those rows get return_type=NULL,
-                        # see schema.sql's SalesReturn_Fact comment
+  - "Return Type"      # values confirmed: "GS" / "BO" / NULL (pre-2025
+                        # "data" shape has no split). 11 staged rows carry
+                        # the literal string "Return Type" (an unstripped
+                        # header row) - a real data-quality issue, surfaced
+                        # by transform_driver, not silently coerced here.
 
-branch_code:
-  - "Branch Code"       # Shape B/C only - absent in Shape A real files
+net_amount:
+  - "Net Amount"
 
-# "Posted" - deliberately NOT mapped, same as sales_register.yaml /
-# purchase_order.yaml: a workflow status flag, no destination column.
+# Phase 4 (2026-08, is_demo load-bearing): only ever present on synthetic
+# demo rows - no real Sales Return file has this header. schema.sql's
+# DEFAULT false handles real rows at Load time.
+is_demo:
+  - "is_demo"

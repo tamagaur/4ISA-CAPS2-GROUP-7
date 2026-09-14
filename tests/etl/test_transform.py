@@ -34,11 +34,12 @@ from analytics.etl.transform import (
     backfill_provenance_fields,
     coerce_numeric_columns,
     dedup_facts,
-    exclude_sell_out_total_rows,
+    exclude_footer_rows,
     filter_source_of_truth,
     load_source_of_truth,
     normalize_quantities,
     reformat_calendar_month,
+    SELL_OUT_FOOTER_CHECKS,
     split_sku_description,
     transform_fact,
 )
@@ -113,19 +114,30 @@ def test_transform_fact_derives_doc_type_from_rule_end_to_end():
     assert out.loc[out["invoice_num"] == "INV-1", "discount_rate_label"].iloc[0] == "LESS_2PCT"
 
 
-def test_transform_fact_raises_on_unconfirmed_natural_key():
-    """sales/unilever has natural_key: null in source_of_truth.yaml on
-    purpose (no invoice/reference column exists in the real source) -
-    transform_fact must refuse rather than guess a key."""
+def test_transform_fact_raises_on_missing_source_of_truth_entry():
+    """sales/unilever was REMOVED from source_of_truth.yaml 2026-09-09
+    (Phase 1 step 1, reports/PROJECT_STATE_2026-09.md §8): the old
+    natural_key: null / ssis_summary entry was a dead declaration - 0 real
+    DB rows ever traced to it, ssis_summary has no product/SKU grain
+    anywhere, and Sales_Fact carries CHECK(principal='delmonte') so it
+    structurally cannot hold Unilever rows. sales/unilever now has no
+    entry at all (Unilever SKU demand loads from sales_unilever_sku_demand
+    instead) - load_source_of_truth() raises KeyError for it (the
+    "no rule for this fact/principal" branch, not the
+    "natural_key: null" ValueError branch this test asserted before the
+    entry was removed), and transform_fact() propagates that same KeyError
+    rather than guessing a key. Updated 2026-09-11 to match the current,
+    intentional shape - this was flagged as a known stale-test gap from
+    step 1 (reports/PHASE1_EXECUTION_PLAN_2026-09.md, step 2b) and left
+    failing for two sessions; fixing it now closes that gap."""
     df = pd.DataFrame({"_sheet_role": ["raw_data"], "_principal": ["unilever"]})
-    with pytest.raises(ValueError):
+    with pytest.raises(KeyError):
         transform_fact(df, fact="sales", principal="unilever")
 
 
-def test_load_source_of_truth_exposes_none_natural_key():
-    rule = load_source_of_truth("sales", "unilever")
-    assert rule.natural_key is None
-    assert rule.doc_type == "ssis_summary"
+def test_load_source_of_truth_raises_for_removed_sales_unilever_entry():
+    with pytest.raises(KeyError):
+        load_source_of_truth("sales", "unilever")
 
 
 def test_split_sku_description_separates_code_and_name():
@@ -235,24 +247,28 @@ def test_sell_out_natural_key_no_longer_collapses_cross_region_rows():
     assert report.duplicate_groups == 0
 
 
-def test_exclude_sell_out_total_rows_drops_total_case_and_whitespace_insensitive():
+def test_exclude_footer_rows_sell_out_drops_total_case_and_whitespace_insensitive():
+    """exclude_sell_out_total_rows was consolidated into exclude_footer_rows
+    2026-09-11 (Phase 1 step 2e, one shared function instead of the same
+    fix duplicated per family) - this test now calls the shared function
+    with sell_out's own check list, same behavior as before."""
     df = pd.DataFrame({
         "category_path": ["FRUITS", "  total  ", "BEVERAGE", "Total"],
         "net_amount": [100.0, 999.0, 200.0, 999.0],
     })
-    out, report = exclude_sell_out_total_rows(df)
+    out, report = exclude_footer_rows(df, SELL_OUT_FOOTER_CHECKS, "sell_out")
     assert list(out["category_path"]) == ["FRUITS", "BEVERAGE"]
     assert report.input_rows == 4
     assert report.excluded == 2
 
 
-def test_exclude_sell_out_total_rows_missing_column_raises():
+def test_exclude_footer_rows_missing_column_raises():
     """A missing category_path must fail loudly, not silently pass rows
     through unfiltered - a silent no-op here is the exact double-counting
     failure mode this function exists to prevent."""
     df = pd.DataFrame({"net_amount": [100.0]})
     with pytest.raises(KeyError):
-        exclude_sell_out_total_rows(df)
+        exclude_footer_rows(df, SELL_OUT_FOOTER_CHECKS, "sell_out")
 
 
 def test_purchase_natural_key_no_longer_collapses_cross_region_rows():

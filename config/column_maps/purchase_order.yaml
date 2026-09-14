@@ -40,8 +40,25 @@ invoice_date:
 salesman:
   - "Salesman"      # site/branch label in this file (e.g. "ILOCOS SITE"), not a person - kept as-is, not renamed to avoid asserting more than the header says
 
-region:
-  - "Town Display"
+# region: deliberately NOT mapped (removed 2026-09-11, Phase 1 step 2b).
+# Was mapped from "Town Display", but for this file family that raw column
+# is unusable: confirmed 1,106/2,703 staged rows carry the literal text
+# "FALSE" (two dtypes: bool False and str 'False' - an unresolved Excel
+# formula artifact in the source, not something this pipeline introduced),
+# and the remainder is either genuinely blank or a town name with no
+# discriminating value here (unlike sales_register, where town-level region
+# is real signal - see transform.py's backfill_provenance_fields docstring).
+# transform.backfill_provenance_fields() only fills true NULLs, so the
+# literal "FALSE" values blocked the clean site-level _region provenance
+# tag (pangasinan/ilocos, 100% populated, sourced from the sheet names
+# "ILOCOS PURCHASE"/"PANGASINAN PURCHASE") from ever reaching `region`.
+# Leaving this unmapped lets backfill_provenance_fields fill `region`
+# cleanly from _region for every row. Confirmed downstream: no backend
+# router, schema, or frontend file reads Purchase_Fact.region today (Phase 1
+# step 2a) - this was a live-but-inert defect, not one that changes any
+# reported number, but 223/353 real live purchase_fact rows already carry
+# the bad value; fixing this mapping is forward-only and does not touch
+# those live rows (that is a Phase 1d cutover question).
 
 branch_code:
   - "Branch Code"

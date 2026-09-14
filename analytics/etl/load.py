@@ -62,6 +62,10 @@ class DimensionResolutionReport:
     distinct_keys_seen: int
     rows_inserted: int
     rows_unresolved: int   # natural key had a null part - fk left NULL, never fabricated
+    dry_run: bool = False
+    # When dry_run=True, rows_inserted is "would insert" (computed via a
+    # read-only SELECT diff against existing dimension rows, never an
+    # actual INSERT) - see resolve_dimension_fk()'s dry_run branch.
 
 
 def build_dimension_key_frame(df: pd.DataFrame, spec: DimensionFKSpec) -> tuple[pd.DataFrame, pd.Series]:
@@ -105,7 +109,7 @@ def build_dimension_key_frame(df: pd.DataFrame, spec: DimensionFKSpec) -> tuple[
 
 
 def resolve_dimension_fk(
-    df: pd.DataFrame, engine: Engine, spec: DimensionFKSpec,
+    df: pd.DataFrame, engine: Engine, spec: DimensionFKSpec, dry_run: bool = False,
 ) -> tuple[pd.DataFrame, DimensionResolutionReport]:
     """Look up (or insert, if genuinely new) the dimension row matching
     each df row's natural key, and attach its surrogate key as
@@ -119,7 +123,20 @@ def resolve_dimension_fk(
     Existing dimension rows are matched, never duplicated: this issues
     an INSERT ... ON CONFLICT DO NOTHING against the dimension table's
     own natural-key UNIQUE constraint, so re-running is idempotent
-    (matches this module's existing upsert discipline)."""
+    (matches this module's existing upsert discipline).
+
+    dry_run (2026-09-11, Phase 1 step 4): when True, the INSERT above is
+    skipped entirely - a real SELECT still runs (read-only, against
+    whatever already exists in `engine`'s target schema) to resolve
+    fk_column for rows whose dimension row already exists, but a row whose
+    dimension row would need to be newly created gets fk_column=NULL and
+    is counted in `rows_inserted` as "would insert," never a fabricated
+    key. This means a dry run against an EMPTY scratch schema resolves
+    nothing (every fk is NULL, every distinct key reports as "would
+    insert") - that's a correct, honest answer for a schema with nothing
+    in it yet, not a bug; dry-run row-count estimates are only informative
+    once run against a schema that already has some dimension rows loaded
+    for real, or as a structural "does this crash" check."""
     key_df, resolvable_mask = build_dimension_key_frame(df, spec)
     distinct_keys = key_df[resolvable_mask].drop_duplicates().reset_index(drop=True)
 
@@ -128,16 +145,19 @@ def resolve_dimension_fk(
 
     rows_inserted = 0
     if not distinct_keys.empty:
-        records = distinct_keys.to_dict(orient="records")
-        with engine.begin() as conn:
-            stmt = pg_insert(dim_table).values(records)
-            stmt = stmt.on_conflict_do_nothing(index_elements=spec.dimension_natural_key)
-            result = conn.execute(stmt)
-            rows_inserted = result.rowcount if result.rowcount and result.rowcount > 0 else 0
+        if not dry_run:
+            records = distinct_keys.to_dict(orient="records")
+            with engine.begin() as conn:
+                stmt = pg_insert(dim_table).values(records)
+                stmt = stmt.on_conflict_do_nothing(index_elements=spec.dimension_natural_key)
+                result = conn.execute(stmt)
+                rows_inserted = result.rowcount if result.rowcount and result.rowcount > 0 else 0
 
         # Re-select rather than trust RETURNING here: ON CONFLICT DO
         # NOTHING doesn't return the pre-existing rows it skipped, and we
         # need the pk for every distinct key seen, not just the new ones.
+        # Also how dry_run resolves fk values for already-existing rows
+        # without ever inserting - this SELECT is read-only either way.
         select_cols = [dim_table.c[spec.dimension_pk]] + [dim_table.c[c] for c in spec.dimension_natural_key]
         with engine.connect() as conn:
             existing = pd.DataFrame(
@@ -146,6 +166,12 @@ def resolve_dimension_fk(
             )
         key_to_pk = existing.merge(distinct_keys, on=spec.dimension_natural_key, how="inner")
         key_to_pk = key_to_pk.drop_duplicates(subset=spec.dimension_natural_key)
+
+        if dry_run:
+            # "would insert" = distinct keys seen that don't already exist
+            # - never a fabricated count, computed the same way the real
+            # INSERT...ON CONFLICT DO NOTHING would have resolved it.
+            rows_inserted = len(distinct_keys) - len(key_to_pk)
 
         merged = key_df.merge(key_to_pk, on=spec.dimension_natural_key, how="left")
         fk_values = merged[spec.dimension_pk]
@@ -161,6 +187,7 @@ def resolve_dimension_fk(
         distinct_keys_seen=len(distinct_keys),
         rows_inserted=rows_inserted,
         rows_unresolved=int((~resolvable_mask).sum()),
+        dry_run=dry_run,
     )
     return out, report
 
@@ -172,6 +199,12 @@ class LoadResult:
     rows_upserted: int
     spot_check_sample: list[dict]
     dimension_resolutions: list[DimensionResolutionReport] = field(default_factory=list)
+    dry_run: bool = False
+    # When dry_run=True, rows_upserted is always 0 (no INSERT ran) -
+    # rows_attempted is still the real count that WOULD have been upserted,
+    # computed the same way as a real run (same column validation, same
+    # dimension-FK resolution reads). spot_check_sample is empty in dry-run
+    # mode - there is nothing written to sample.
 
 
 @dataclass
@@ -291,6 +324,7 @@ def load_to_supabase(
     dimension_fks: list[DimensionFKSpec] | None = None,
     manifest_path: Path | None = None,
     transform_dir: Path | None = None,
+    dry_run: bool = False,
 ) -> LoadResult:
     """Upsert df into table_name on natural_key using
     INSERT ... ON CONFLICT (natural_key) DO UPDATE. Raises if the
@@ -322,6 +356,20 @@ def load_to_supabase(
     transform_signoff.py). Also optional/opt-in, independent of
     manifest_path — both gates check different stages and can be used
     together or separately.
+
+    dry_run (2026-09-11, Phase 1 step 4): when True, every real write below
+    (the fact upsert AND, via resolve_dimension_fk(..., dry_run=True), any
+    new dimension-row insert) is skipped — but everything else that would
+    catch a real problem still runs against the live `engine`: the gates,
+    the natural-key check, the dimension-FK SELECT-based resolution, the
+    table introspection, and the unknown-column check. `rows_attempted` in
+    the returned LoadResult is the real count that would have been
+    upserted; `rows_upserted` is always 0 and `spot_check_sample` is always
+    empty (there is nothing written to sample). This is a structural
+    "does this run cleanly end-to-end" check, not a row-count guarantee —
+    an actual write can still fail for reasons a dry run can't see (a
+    constraint only enforced at INSERT time, a concurrent write from
+    elsewhere).
     """
     if manifest_path is not None:
         check_reject_rate_gate(manifest_path)
@@ -329,7 +377,7 @@ def load_to_supabase(
         check_signoff_gate(transform_dir)
 
     if df.empty:
-        return LoadResult(table_name=table_name, rows_attempted=0, rows_upserted=0, spot_check_sample=[])
+        return LoadResult(table_name=table_name, rows_attempted=0, rows_upserted=0, spot_check_sample=[], dry_run=dry_run)
 
     missing_key_cols = [k for k in natural_key if k not in df.columns]
     if missing_key_cols:
@@ -337,15 +385,33 @@ def load_to_supabase(
 
     dimension_resolutions: list[DimensionResolutionReport] = []
     for spec in dimension_fks or []:
-        df, dim_report = resolve_dimension_fk(df, engine, spec)
+        df, dim_report = resolve_dimension_fk(df, engine, spec, dry_run=dry_run)
         dimension_resolutions.append(dim_report)
 
     metadata = MetaData()
     table = Table(table_name, metadata, autoload_with=engine)
 
     table_columns = {c.name for c in table.columns}
+    # A dimension_fks spec's df_to_dimension_columns names real columns in
+    # df that resolve_dimension_fk() above needed to build the dimension's
+    # natural key - they are expected to still be present on df at this
+    # point (resolve_dimension_fk does not remove its inputs), but they
+    # describe the DIMENSION's identity, not this fact table's, and often
+    # have no column of the same name on the fact table at all (e.g.
+    # Unilever_SKU_Demand_Fact has no `principal` column even though
+    # Product_Dimension's natural key needs one to resolve product_key).
+    # Excluded from the unknown-columns check for that reason - 2026-09-14,
+    # first real --dry-run against a live scratch schema, caught by an
+    # honest run, not a static check. Everything else keeps the existing
+    # anti-fabrication posture: an unexplained extra column still raises.
+    dimension_source_columns = {
+        v for spec in (dimension_fks or []) for v in spec.df_to_dimension_columns.values()
+    }
     df_columns = [c for c in df.columns if c in table_columns]
-    unknown_columns = [c for c in df.columns if c not in table_columns and not c.startswith("_")]
+    unknown_columns = [
+        c for c in df.columns
+        if c not in table_columns and not c.startswith("_") and c not in dimension_source_columns
+    ]
     if unknown_columns:
         raise ValueError(
             f"Columns {unknown_columns} in DataFrame are not present in table '{table_name}'. "
@@ -354,6 +420,16 @@ def load_to_supabase(
         )
 
     records = df[df_columns].where(pd.notnull(df[df_columns]), None).to_dict(orient="records")
+
+    if dry_run:
+        return LoadResult(
+            table_name=table_name,
+            rows_attempted=len(records),
+            rows_upserted=0,
+            spot_check_sample=[],
+            dimension_resolutions=dimension_resolutions,
+            dry_run=True,
+        )
 
     total_upserted = 0
     with engine.begin() as conn:

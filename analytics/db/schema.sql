@@ -105,9 +105,16 @@ CREATE TABLE IF NOT EXISTS Product_Dimension (
     grain           TEXT NOT NULL CHECK (grain IN ('sku', 'category')),  -- DEC-03
     sku_code        TEXT,                   -- Unilever: real SKU code; NULL for Del Monte category rows
     category_path   TEXT,                   -- Del Monte: e.g. '/ACE/BASE'; NULL for Unilever SKU rows
+    -- Added migration 0011 (2026-09-11): records HOW category_path/brand
+    -- were populated, so the direct/fallback/unclassified split is
+    -- queryable afterward instead of recomputed. See each column's own
+    -- COMMENT ON COLUMN (migration 0011) for the full value meanings.
+    category_path_source TEXT CHECK (category_path_source IS NULL OR category_path_source IN
+        ('direct_soh_match', 'keyword_rule', 'unclassified')),
     product_name    TEXT,
     pack_size       TEXT,
     brand           TEXT,
+    brand_source    TEXT CHECK (brand_source IS NULL OR brand_source IN ('soh_first_token_rule')),
     -- Added for the SKU Management module (GET/POST/PATCH /sku) — see
     -- analytics/db/migrations/0002_add_sku_management_fields.sql for the
     -- incremental ALTER path on a database that already exists.
@@ -246,31 +253,24 @@ CREATE TABLE IF NOT EXISTS SalesReturn_Fact (
     _src_file                     TEXT NOT NULL,
     _src_sheet                     TEXT NOT NULL,
     _period                         TEXT NOT NULL,
-    -- Fixed 2026-08: invoice_num dropped from the key. Confirmed against
-    -- real rmr_gs_bo data (the sole source for this table) that
-    -- invoice_num never exists as a producible column at all (0/538 real
-    -- rows, not just mostly-null) - Postgres UNIQUE treats NULL <> NULL,
-    -- so including a column that's always NULL doesn't protect against
-    -- real duplicates; it was a silent no-op. Column kept on the table
-    -- itself in case a future source family actually has one.
-    --
-    -- OPEN ITEM (2026-08, flagged not fixed): return_type is now nullable
-    -- (see above), and this key includes it. Postgres UNIQUE treats NULL
-    -- as distinct from NULL, so two real rows sharing the same
-    -- (return_slip_num, principal, region) with return_type both NULL
-    -- (the pre-2025 shapes, which never populate return_type) would NOT
-    -- be caught as duplicates by this constraint - the exact class of gap
-    -- that got invoice_num dropped from this same key above. Likely
-    -- low-impact in practice (return_slip_num itself appears to already
-    -- be unique per region in the pre-2025 shapes, which never split into
-    -- GS/BO sheets - return_type only exists to disambiguate a
-    -- return_slip_num that could appear in both a GS and a BO sheet for
-    -- the 2025 shape), but not verified against real data. If this needs
-    -- closing, the fix is a unique expression index on
-    -- (return_slip_num, principal, region, COALESCE(return_type, '')),
-    -- not a change to this table-level UNIQUE, which can't express a
-    -- COALESCE. Not changed here - report first, per team decision.
-    UNIQUE (return_slip_num, principal, region, return_type)
+    -- CHANGED 2026-09-11 (migration 0011, Yuan approved): return_type
+    -- dropped from this key, invoice_num added back. The system of record
+    -- for this table changed 2026-09-09 (rmr_gs_bo -> sales_return,
+    -- config/source_of_truth.yaml) - unlike rmr_gs_bo, sales_return DOES
+    -- carry a real invoice_num (1,912/1,931 rows), so the "0/538 real
+    -- rows" reasoning below for dropping it no longer holds. Tested both
+    -- return_type options against real data before deciding (see migration
+    -- 0011's own header comment and reports/PHASE1_EXECUTION_PLAN_2026-09.md
+    -- step 2c, item 21): dropping return_type entirely vs
+    -- COALESCE(return_type,'') gave IDENTICAL results (1 colliding group,
+    -- 3 fully-blank rows, neither a real duplicate) - return_type adds no
+    -- discriminating power once invoice_num is in the key. Dropping it also
+    -- recovers the pre-2025 `data`-shaped sheets (~55% of the real corpus),
+    -- which never populated return_type at all and were previously
+    -- individually quarantined by transform.dedup_facts() purely for that
+    -- reason (verified: quarantine count drops 773 -> 8 once return_type is
+    -- out of the key).
+    UNIQUE (return_slip_num, principal, region, invoice_num)
 );
 
 CREATE INDEX IF NOT EXISTS ix_salesreturn_fact_principal_period ON SalesReturn_Fact (principal, _period);
@@ -299,6 +299,11 @@ CREATE TABLE IF NOT EXISTS Inventory_Fact (
     principal             TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
     region                 TEXT,
     quantity_on_hand        NUMERIC(14,2),
+    -- UNIT: CASES, not pieces (documented explicitly via COMMENT ON COLUMN,
+    -- migration 0011, 2026-09-11 — transform_ssis_soh.py:226 has always
+    -- loaded this from stock_qty_cases; no column carried that fact until
+    -- now). Consumers needing pieces must multiply by
+    -- Product_Dimension.pack_size.
     -- DEC-11: comparable-unit quantity, Del Monte only for now — set
     -- directly from the source file's PCS (pieces) column via
     -- transform.normalize_quantities(). CAS/PKG (cases/packages) are

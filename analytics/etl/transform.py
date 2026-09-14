@@ -207,6 +207,47 @@ _PROVENANCE_PLACEHOLDER_VALUES = {
 }
 
 
+def coerce_is_demo_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerces `is_demo` to a real boolean, in place of whatever raw type
+    the source cell produced. Found 2026-09-14 (Phase 1 step 5, discovered
+    while investigating an extract-vs-transform row-count reconciliation
+    mismatch that led to a full fresh Extract re-run): every real cell
+    checked in `data/raw/Synthetic Data/PURCHASE_ORDER_*.xlsx` and
+    `.../INVENTORY_SIGN_OFF_*.xlsx` carries the literal STRING `"True"`,
+    not a real Excel boolean — confirmed via direct staged-parquet dtype
+    inspection, only two forms found across both families:
+    `('True', str)` and `(np.True_, bool)`, no `False` variant at all
+    (consistent with the established convention that `is_demo` is only
+    ever present as a column on synthetic rows — real rows lack it
+    entirely, never carry an explicit False).
+
+    THIS WAS SILENTLY BREAKING every `df['is_demo'] != True` /
+    `df['is_demo'] == True` filter used throughout this codebase and its
+    scratchpad analyses: pandas/Python `'True' != True` is `True` (they are
+    different types), so string-typed synthetic rows were being counted as
+    REAL by every such filter — confirmed: 1,909 synthetic
+    `purchase_order` rows and 14,662 synthetic `inventory_sign_off` rows
+    (exactly half of each family's synthetic volume — the other half
+    already had a real bool) were silently misclassified as real data
+    before this fix. `sales_register` and `sell_out`'s synthetic rows were
+    NOT affected (checked: uniformly real bool `True` in both).
+
+    Applied here, in Transform, right after apply_column_map() and before
+    anything reads `is_demo` for real/demo classification — not patched at
+    each call site, so no analysis (in this codebase or a scratchpad
+    script) can silently reproduce this bug by filtering before this
+    function runs."""
+    if "is_demo" not in df.columns:
+        return df
+    out = df.copy()
+    col = out["is_demo"]
+    is_true = col.astype(str).str.strip().str.lower().isin({"true", "1", "yes"})
+    out["is_demo"] = pd.NA
+    out.loc[is_true, "is_demo"] = True
+    out.loc[col.notna() & ~is_true, "is_demo"] = False
+    return out
+
+
 def backfill_provenance_fields(df: pd.DataFrame, fields: tuple[str, ...] = ("principal", "region")) -> pd.DataFrame:
     """For each canonical field in `fields`, fill any row where the real
     mapped column is missing entirely or NULL on that row from the
@@ -663,21 +704,63 @@ class DedupReport:
     output_rows: int
     duplicate_groups: int
     conflicting_groups: list[dict]   # same key, differing non-key values — needs a human look
+    quarantined: list[dict] = field(default_factory=list)
+    # rows with a null natural-key column, reported individually — never
+    # grouped with each other. See dedup_facts()'s docstring.
 
 
 def dedup_facts(df: pd.DataFrame, natural_key: list[str], amount_col: str | None = None) -> tuple[pd.DataFrame, DedupReport]:
     """Dedup on the confirmed natural key. Anti-fabrication: if two rows
     share a key but disagree on amount_col, we do NOT silently pick one —
-    both are kept and the conflict is reported for a human decision."""
+    both are kept and the conflict is reported for a human decision.
+
+    Null-key quarantine (2026-09-11, Phase 1 step 2a/2b): pandas'
+    groupby(natural_key, dropna=False) treats every row with a fully-null
+    key as ONE group — the opposite of Postgres' own UNIQUE semantics,
+    where NULL <> NULL means every null-key row is already distinct. Left
+    alone, this silently (mis)groups unrelated rows as if they shared an
+    identity — confirmed on real data: 173 distinct unparseable
+    inventory_sign_off rows collapsed into one reported "conflict" (all
+    genuinely different stock lines, see reports/PHASE1_EXECUTION_PLAN_2026-09.md),
+    and 591 sales_register rows with a null invoice_num did the same once
+    footer-row noise was cleaned up.
+
+    So: a row is only ever grouped with another row if EVERY natural-key
+    column is non-null on both (`resolvable_mask` below — same concept and
+    name as load.py's build_dimension_key_frame(), applied one stage
+    earlier in anti-fabrication terms). A row with any null key column is
+    NEVER grouped with any other row, resolvable or not — it is reported
+    individually in DedupReport.quarantined, with which key column(s) were
+    null and its row identity (_src_file/_src_sheet/_row_ordinal when
+    present). Matching resolve_dimension_fk's existing "flag, never drop"
+    posture, quarantined rows are NOT removed from the returned DataFrame
+    — they may carry real, useful data (e.g. a genuine return missing only
+    its slip number) and a caller/loader may still choose to load them
+    with a NULL key; this function's job is to make sure they are never
+    silently miscounted as a same-key duplicate or conflict, not to decide
+    whether they ship."""
     missing = [k for k in natural_key if k not in df.columns]
     if missing:
         raise KeyError(f"Natural key column(s) missing from DataFrame: {missing}")
 
     input_rows = len(df)
-    grouped = df.groupby(natural_key, dropna=False)
+    resolvable_mask = df[natural_key].notna().all(axis=1)
+    resolvable = df.loc[resolvable_mask]
+    unresolvable = df.loc[~resolvable_mask]
+
+    id_cols = [c for c in ("_src_file", "_src_sheet", "_row_ordinal") if c in df.columns]
+    quarantined = []
+    for idx, row in unresolvable.iterrows():
+        null_cols = [k for k in natural_key if pd.isna(row[k])]
+        entry = {"null_key_columns": null_cols}
+        for c in id_cols:
+            entry[c] = row[c]
+        quarantined.append(entry)
+
+    grouped = resolvable.groupby(natural_key, dropna=False) if not resolvable.empty else []
 
     conflicts = []
-    keep_idx = []
+    keep_idx = list(unresolvable.index)  # quarantined rows: kept in output, never grouped
     for key_vals, group in grouped:
         if len(group) == 1:
             keep_idx.append(group.index[0])
@@ -696,8 +779,9 @@ def dedup_facts(df: pd.DataFrame, natural_key: list[str], amount_col: str | None
     report = DedupReport(
         input_rows=input_rows,
         output_rows=len(out),
-        duplicate_groups=sum(1 for _, g in grouped if len(g) > 1),
+        duplicate_groups=sum(1 for _, g in grouped if len(g) > 1) if not resolvable.empty else 0,
         conflicting_groups=conflicts,
+        quarantined=quarantined,
     )
     return out, report
 
@@ -708,32 +792,183 @@ class TotalRowExclusionReport:
     excluded: int
 
 
-def exclude_sell_out_total_rows(df: pd.DataFrame, column: str = "category_path") -> tuple[pd.DataFrame, TotalRowExclusionReport]:
-    """Drop Sell Out's per-file "Total" summary row before dedup. Every
-    real sell_out file has one (confirmed: 34/34 real sheets, 100%) - it's
-    a category_path value of "Total" (case/whitespace variants seen in
-    real data), not a real category, and if it reaches SellOut_Fact every
-    aggregate over category_path double-counts (the row's own amount is
-    the sum of every other row in the same file). Matched case-insensitive
-    and trimmed rather than an exact string, since real headers/values in
-    this corpus are inconsistently cased and padded elsewhere too (see
-    column_maps/sell_out.yaml's own note on __col0__ needing a strip).
+@dataclass
+class FooterRowCheck:
+    """One rule inside exclude_footer_rows()'s check list. Two shapes:
+      - column + token [+ mode="eq"|"contains"]: row is junk if `column`'s
+        value equals (mode="eq") or contains (mode="contains") `token`,
+        case-insensitive and whitespace-trimmed either way.
+      - all_null=[...]: row is junk if EVERY listed column is null on that
+        row — a joint check across columns, not a per-column match. For a
+        row with no signal to match on beyond "there is nothing here"."""
+    column: str | None = None
+    token: str | None = None
+    mode: str = "eq"
+    all_null: list[str] | None = None
 
-    Raises KeyError if `column` is absent rather than silently passing
-    the frame through: a missing category_path means Total rows can't be
-    identified at all, and letting that through unflagged is exactly the
-    failure mode this function exists to prevent - the caller must know
-    a Total row may have reached SellOut_Fact and doubled every
-    aggregate, not discover it later from a wrong dashboard number."""
-    if column not in df.columns:
+
+def exclude_footer_rows(
+    df: pd.DataFrame, checks: list[FooterRowCheck], label: str, required: bool = True,
+) -> tuple[pd.DataFrame, TotalRowExclusionReport]:
+    """Shared TOTAL/header/section-marker/blank-row exclusion for staged
+    fact frames — one function instead of the same fix applied separately
+    per family. Consolidated 2026-09-11 (Phase 1 step 2e): the same defect
+    (a per-sheet non-data row reaching the fact table, corrupting a dedup
+    key or a reported column) was found and fixed independently in
+    sell_out, sales_register, and sales_return — three near-identical
+    functions — then found a 4th time in inventory_sign_off before being
+    consolidated. See SELL_OUT_FOOTER_CHECKS / SALES_REGISTER_FOOTER_CHECKS
+    / SALES_RETURN_FOOTER_CHECKS / INVENTORY_SIGN_OFF_FOOTER_CHECKS below
+    for each family's specific, real-data-verified rule
+    (reports/PHASE1_EXECUTION_PLAN_2026-09.md has the row counts and
+    examples behind each one).
+
+    A check whose column(s) happen to be absent from `df` is simply
+    skipped, not an error. Separately, `required` controls what happens
+    when NONE of the columns referenced by ANY check are present at all:
+      - required=True (default, sell_out's and sales_return's shape): raise
+        KeyError - these columns are load-bearing for identifying junk rows
+        in that family (sell_out's category_path is its one discriminating
+        column; sales_return's four columns cover every real row shape), so
+        their total absence signals a real mapping failure, not a
+        legitimately thin frame. Anti-silent-failure: a caller must know
+        footer rows may have reached the fact table unflagged, not discover
+        it later from an inflated row count or a corrupted key column.
+      - required=False (sales_register's shape): pass the frame through
+        unchanged instead of raising - invoice_date/customer_name/
+        tax_amount are ordinary attribute columns, and a frame can
+        legitimately be missing all three (e.g. a partial/synthetic
+        vocab-B frame carrying only REFERENCE #/AMOUNT/Area,
+        tests/etl/test_transform_driver.py's fixture) without anything
+        being broken. Confirmed 2026-09-11: an earlier version raised
+        unconditionally here and broke that fixture.
+    `label` names which check-list this was called with, so a raised error
+    still says something specific and actionable."""
+    referenced_cols: set[str] = set()
+    for c in checks:
+        if c.column:
+            referenced_cols.add(c.column)
+        if c.all_null:
+            referenced_cols.update(c.all_null)
+    if not any(col in df.columns for col in referenced_cols):
+        if not required:
+            return df.copy(), TotalRowExclusionReport(input_rows=len(df), excluded=0)
         raise KeyError(
-            f"exclude_sell_out_total_rows: '{column}' column not found - Total rows cannot be "
-            f"excluded, and if this frame reaches SellOut_Fact, every category_path aggregate "
-            f"will double-count (each file's Total row sums every other row in that file)."
+            f"exclude_footer_rows({label}): none of {sorted(referenced_cols)} found - "
+            f"footer/header/blank rows cannot be identified, and if this frame reaches "
+            f"the fact table, they will corrupt a dedup key or a reported column."
         )
-    is_total = df[column].astype(str).str.strip().str.upper() == "TOTAL"
-    out = df.loc[~is_total].copy()
-    return out, TotalRowExclusionReport(input_rows=len(df), excluded=int(is_total.sum()))
+    is_junk = pd.Series(False, index=df.index)
+    for c in checks:
+        if c.all_null:
+            cols = [col for col in c.all_null if col in df.columns]
+            if len(cols) == len(c.all_null):
+                is_junk |= df[cols].isna().all(axis=1)
+        elif c.column in df.columns:
+            vals = df[c.column].astype(str).str.strip().str.upper()
+            tok = c.token.upper()
+            is_junk |= vals.eq(tok) if c.mode == "eq" else vals.str.contains(tok, na=False)
+    out = df.loc[~is_junk].copy()
+    return out, TotalRowExclusionReport(input_rows=len(df), excluded=int(is_junk.sum()))
+
+
+# Per-family check lists — each verified against real staged data before use
+# (reports/PHASE1_EXECUTION_PLAN_2026-09.md, Phase 1 steps 2b/2c/2e).
+
+SELL_OUT_FOOTER_CHECKS = [
+    # Every real sell_out file has one (confirmed: 34/34 real sheets,
+    # 100%) - a category_path value of "Total" (case/whitespace variants
+    # seen in real data), not a real category. If it reaches SellOut_Fact,
+    # every aggregate over category_path double-counts (the row's own
+    # amount is the sum of every other row in the same file).
+    FooterRowCheck(column="category_path", token="TOTAL", mode="eq"),
+]
+
+SALES_REGISTER_FOOTER_CHECKS = [
+    # Confirmed 2026-09-11: every daily sheet's footer stages as 1-3 extra
+    # rows depending on vocab. invoice_date == "TOTAL" is a per-sheet
+    # subtotal (Salesman/Customer Name blank, invoice_num null, a
+    # line-item COUNT landed in the `region` column - which is what
+    # surfaced these as spurious dedup conflicts under keys like
+    # (NaN, 'delmonte', '13')). The other three are a 3-cell signature
+    # line from the sheet's sign-off block ("Prepared by:"/"Checked by:"/
+    # "Noted by:"), staged as one more data row per sheet. Verified: 177
+    # rows across the full corpus (163 real + 14 demo, of 56,968 mapped
+    # rows total for Del Monte).
+    #
+    # Each token is checked against exactly ONE specific column, never
+    # cross-producted against all three - checking "TOTAL" as a substring
+    # against customer_name would wrongly exclude a real customer named
+    # "TOTAL ABANAO..." (confirmed present: 21 real rows; caught before
+    # this shipped).
+    FooterRowCheck(column="invoice_date", token="TOTAL", mode="eq"),
+    FooterRowCheck(column="invoice_date", token="PREPARED BY", mode="contains"),
+    FooterRowCheck(column="customer_name", token="CHECKED BY", mode="contains"),
+    FooterRowCheck(column="tax_amount", token="NOTED BY", mode="contains"),
+]
+
+SALES_RETURN_FOOTER_CHECKS = [
+    # 1. A second, unstripped header row - this runs AFTER apply_column_map
+    # (see transform_fact), so "Return Type" has already been renamed to
+    # canonical `return_type` by then. Checking all three of
+    # return_type/return_slip_num/invoice_num (not just one) is deliberate
+    # redundancy: a BUG in an earlier version checked the pre-rename raw
+    # column name "Return Type", which no longer existed by that point and
+    # silently did nothing, letting all 7 real header rows leak through as
+    # a false dedup "collision" (caught 2026-09-11 while testing
+    # schema.sql's COALESCE proposal against real data, item 21).
+    FooterRowCheck(column="return_type", token="RETURN TYPE", mode="eq"),
+    FooterRowCheck(column="return_slip_num", token="RETURN SLIP #", mode="eq"),
+    FooterRowCheck(column="invoice_num", token="INVOICE NUM", mode="eq"),
+    # 2. Section-marker rows from the pre-2025 `data`-shaped sheets: the
+    # raw "Invoice Date" column (deliberately NOT mapped by
+    # column_maps/sales_return.yaml) literally equal to "Good Stock" or
+    # "Bad Stock" (marking where that sub-listing starts inside a combined
+    # sheet, not a return). No return_slip_num, no invoice_num, no
+    # net_amount - genuinely no data, not a row with a missing key.
+    FooterRowCheck(column="Invoice Date", token="GOOD STOCK", mode="eq"),
+    FooterRowCheck(column="Invoice Date", token="BAD STOCK", mode="eq"),
+    # 3. Fully-blank rows: return_slip_num, invoice_num, AND net_amount
+    # ALL null on the same row (found 2026-09-11, item 21/22, testing the
+    # return_type key change: exactly 3 real rows, all ILOCOS BO,
+    # April/June/March 2025 - every field null, not just the key).
+    # Requiring all three null (not any one) keeps this from ever
+    # excluding a real return that's merely missing its slip number, which
+    # dedup_facts()'s quarantine handles on its own.
+    FooterRowCheck(all_null=["return_slip_num", "invoice_num", "net_amount"]),
+]
+
+INVENTORY_SIGN_OFF_FOOTER_CHECKS = [
+    # Added 2026-09-11 (Phase 1 step 2e), the 4th family with this defect.
+    # sku_description_raw == "Total" is a per-sheet TOTAL/footer row - the
+    # single largest chunk of the real "unmatched" sku_code_status bucket
+    # (previously misread as evidence of an uncovered header shape,
+    # ARCHITECTURE.md:196 - verified stale, see that file), but NOT all of
+    # it: of 46 real unmatched rows, only 29 are "Total". Must run AFTER
+    # route_inventory_sku_shapes()/split_sku_description() populate
+    # sku_description_raw for BOTH eras (2023's __col0__ and 2025's
+    # __col1__ converge on this canonical name only after that step) - see
+    # the call site in transform_fact(), not immediately after
+    # backfill_provenance_fields() like the other three families.
+    FooterRowCheck(column="sku_description_raw", token="TOTAL", mode="eq"),
+    # "#REF!" - a broken Excel formula reference (2 real rows). Confirmed
+    # genuinely no data: no quantity_on_hand/cost/valuation on either row,
+    # only cases/packages/pieces - unlike the remaining 15 unmatched rows
+    # below, safe to treat as pure junk.
+    FooterRowCheck(column="sku_description_raw", token="#REF!", mode="eq"),
+    # NOT included, deliberately - 15 real rows remain "unmatched" after
+    # the two checks above (12 with sku_description_raw=NULL, 1
+    # "DESCRIPTION" - an unstripped-header-style artifact, 2 "WH/Stock" /
+    # "IS-WH/Stock"). Checked before deciding: unlike "Total"/"#REF!",
+    # every one of these 15 carries REAL quantity_on_hand/cost/valuation
+    # data (one is 2,535 cases / ~2.6M valuation - large enough to look
+    # like a section subtotal, not a per-SKU line). Excluding them without
+    # confirming what they are risks silently dropping real inventory
+    # data, the exact anti-fabrication failure this function exists to
+    # prevent in the other direction. Left as sku_code_status='unmatched'
+    # - flagged, not guessed at. See
+    # reports/PHASE1_EXECUTION_PLAN_2026-09.md for the raw rows.
+]
 
 
 def transform_fact(
@@ -765,6 +1000,7 @@ def transform_fact(
 
     sot_df = filter_source_of_truth(df, fact, principal, config_dir)
     mapped_df, map_report = apply_column_map(sot_df, rule.doc_type, config_dir)
+    mapped_df = coerce_is_demo_column(mapped_df)
     mapped_df = backfill_provenance_fields(mapped_df)
 
     if discount_alias_table and "discount_rate_label" in mapped_df.columns:
@@ -772,7 +1008,13 @@ def transform_fact(
 
     total_row_exclusion_report = None
     if rule.doc_type == "sell_out":
-        mapped_df, total_row_exclusion_report = exclude_sell_out_total_rows(mapped_df)
+        mapped_df, total_row_exclusion_report = exclude_footer_rows(mapped_df, SELL_OUT_FOOTER_CHECKS, "sell_out")
+    elif rule.doc_type == "sales_register":
+        mapped_df, total_row_exclusion_report = exclude_footer_rows(
+            mapped_df, SALES_REGISTER_FOOTER_CHECKS, "sales_register", required=False,
+        )
+    elif rule.doc_type == "sales_return":
+        mapped_df, total_row_exclusion_report = exclude_footer_rows(mapped_df, SALES_RETURN_FOOTER_CHECKS, "sales_return")
 
     sku_split_report = None
     sku_shape_report = None
@@ -797,13 +1039,28 @@ def transform_fact(
                 if "ITEM DESCRIPTION" in mapped_df.columns:
                     mapped_df.loc[mask_c, "product_name"] = mapped_df.loc[mask_c, "ITEM DESCRIPTION"]
 
+        # Footer-row exclusion runs HERE, not immediately after
+        # backfill_provenance_fields() like the other three families -
+        # sku_description_raw only converges to one canonical name (across
+        # both the 2023 __col0__ and 2025 __col1__ eras) after
+        # split_sku_description() above has run. Excluding before
+        # sku_code_status is assigned below means a footer row never gets
+        # mislabeled "unmatched" (a real source-data-gap signal) in the
+        # first place - it's simply gone.
+        if "sku_description_raw" in mapped_df.columns:
+            mapped_df, total_row_exclusion_report = exclude_footer_rows(
+                mapped_df, INVENTORY_SIGN_OFF_FOOTER_CHECKS, "inventory_sign_off",
+            )
+
         # sku_code_status: makes a Shape D row (the source itself never
         # carries the alpha SKU prefix - confirmed 173/173 real rows in
         # the one real file this affects) distinguishable from an ordinary
-        # regex refusal (banner/corrupt rows like "Total"/"#REF!") or a
-        # Shape C direct match - all three otherwise collapse to the same
-        # "sku_code is null" signal, which would hide a real source-data
-        # gap behind the same label as an unremarkable banner-row skip.
+        # regex refusal (banner/corrupt rows like "Total"/"#REF!", now
+        # excluded above rather than reaching this classification at all)
+        # or a Shape C direct match - all three otherwise collapse to the
+        # same "sku_code is null" signal, which would hide a real
+        # source-data gap behind the same label as an unremarkable
+        # banner-row skip.
         if "sku_code" in mapped_df.columns:
             status = pd.Series("unmatched", index=mapped_df.index, dtype=object)
             status[mapped_df["sku_code"].notna()] = "matched"

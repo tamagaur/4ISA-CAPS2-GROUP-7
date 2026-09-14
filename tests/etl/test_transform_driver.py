@@ -70,7 +70,11 @@ def staging_dir(tmp_path):
         **_base_provenance(1, "delmonte", "data"),
     })
 
-    # --- ssis_summary: natural_key: null for sales/unilever -> blocked ---
+    # --- ssis_summary: sales/unilever entry REMOVED from source_of_truth.yaml
+    # 2026-09-09 (Phase 1 step 1) - ssis_summary has no owning (fact,
+    # principal) at all now, so this sheet demotes cleanly ("never a fact's
+    # primary source") instead of blocking on natural_key: null. See
+    # reports/PROJECT_STATE_2026-09.md §8. ---
     _write_sheet(d, "ssis_summary", "fileD", "raw_sheet", {
         "Salesman": ["Juan"], "GSV": [500.0],
         **_base_provenance(1, "unilever", "raw_data"),
@@ -95,8 +99,8 @@ def test_build_transform_manifest_classifies_promoted_demoted_conflict_blocked(s
     assert by_sheet[("fileA", "scratch_sheet")]["checksum_status"] == "demoted"
     assert by_sheet[("fileB", "conflict_sheet")]["checksum_status"] == "conflict"
     assert by_sheet[("fileC", "day_sheet")]["checksum_status"] == "demoted"
-    assert by_sheet[("fileD", "raw_sheet")]["checksum_status"] == "blocked"
-    assert "natural_key unconfirmed" in by_sheet[("fileD", "raw_sheet")]["reason"]
+    assert by_sheet[("fileD", "raw_sheet")]["checksum_status"] == "demoted"
+    assert "never a fact's primary source" in by_sheet[("fileD", "raw_sheet")]["reason"]
     assert by_sheet[("fileE", "sku_sheet")]["checksum_status"] == "promoted"
 
 

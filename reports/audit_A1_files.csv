@@ -1,0 +1,570 @@
+path,ext,principal,doc_type,period,is_synthetic_dir,n_sheets
+.gitkeep,,ambiguous,unknown,,False,
+Synthetic Data\INVENTORY_SIGN_OFF_2021-01_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-01_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-02_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-02_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-03_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-03_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-04_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-04_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-05_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-05_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-06_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-06_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-07_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-07_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-08_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-08_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-09_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-09_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-10_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-10_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-11_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-11_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-12_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2021-12_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-01_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-01_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-02_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-02_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-03_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-03_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-04_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-04_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-05_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-05_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-06_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-06_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-07_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-07_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-08_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-08_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-09_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-09_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-10_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-10_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-11_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-11_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-12_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2022-12_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2023-07_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2023-07_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2023-10_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2023-10_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2023-11_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2023-11_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-03_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-03_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-04_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-04_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-05_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-05_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-06_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-06_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-07_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-07_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-08_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-08_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-09_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-09_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-10_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-10_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-11_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-11_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-12_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2024-12_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-01_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-01_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-02_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-02_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-05_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-05_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-07_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-07_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-10_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-10_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-11_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2025-11_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2026-01_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2026-01_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2026-02_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2026-02_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2026-03_ILOCOS.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\INVENTORY_SIGN_OFF_2026-03_PANGASINAN.xlsx,.xlsx,ambiguous,inventory_sign_off,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-01_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-01_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-02_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-02_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-03_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-03_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-04_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-04_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-05_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-05_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-06_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-06_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-07_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-07_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-08_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-08_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-09_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-09_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-10_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-10_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-11_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-11_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-12_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2021-12_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-01_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-01_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-02_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-02_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-03_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-03_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-04_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-04_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-05_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-05_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-06_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-06_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-07_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-07_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-08_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-08_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-09_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-09_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-10_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-10_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-11_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-11_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-12_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2022-12_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-01_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-01_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-02_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-02_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-03_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-03_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-04_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-04_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-05_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-05_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-06_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-06_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-07_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-07_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-08_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-08_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-10_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2023-10_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-03_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-03_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-04_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-04_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-05_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-05_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-06_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-06_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-07_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-07_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-08_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-08_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-09_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-09_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-10_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-10_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-11_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-11_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-12_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2024-12_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-01_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-01_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-02_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-02_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-05_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-05_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-07_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-07_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-10_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-10_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-11_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2025-11_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2026-01_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2026-01_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2026-02_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2026-02_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2026-03_ILOCOS.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\PURCHASE_ORDER_2026-03_PANGASINAN.xlsx,.xlsx,ambiguous,purchase_order,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-01_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-01_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-02_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-02_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-03_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-03_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-04_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-04_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-05_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-05_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-06_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-06_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-08_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-08_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-09_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-09_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-10_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-10_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-11_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-11_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-12_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2021-12_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-01_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-01_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-02_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-02_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-03_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-03_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-04_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-04_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-05_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-05_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-06_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-06_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-08_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-08_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-09_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-09_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-10_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-10_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-11_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-11_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-12_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2022-12_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2023-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2023-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2023-10_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2023-10_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-03_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-03_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-04_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-04_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-05_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-05_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-06_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-06_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-08_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-08_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-09_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-09_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-10_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-10_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-11_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-11_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-12_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2024-12_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2025-01_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2025-01_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2025-02_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2025-02_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2025-05_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2025-05_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2025-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2025-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2026-01_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2026-01_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2026-02_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2026-02_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2026-03_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SALES_REGISTER_2026-03_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-01_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-01_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-02_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-02_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-03_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-03_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-04_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-04_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-05_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-05_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-06_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-06_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-08_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-08_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-09_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-09_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-10_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-10_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-11_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-11_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-12_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2021-12_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-01_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-01_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-02_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-02_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-03_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-03_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-04_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-04_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-05_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-05_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-06_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-06_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-08_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-08_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-09_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-09_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-10_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-10_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-11_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-11_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-12_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2022-12_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2023-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2023-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2023-10_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2023-10_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2023-12_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2023-12_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-03_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-03_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-04_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-04_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-05_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-05_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-06_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-06_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-08_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-08_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-09_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-09_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-10_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-10_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-11_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-11_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-12_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2024-12_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-01_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-01_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-02_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-02_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-05_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-05_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-07_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-07_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-10_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-10_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-11_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2025-11_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2026-01_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2026-01_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2026-02_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2026-02_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2026-03_ILOCOS.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+Synthetic Data\SELL_OUT_2026-03_PANGASINAN.xlsx,.xlsx,ambiguous,unknown,,True,1.0
+"Unilever\SSIS DAILY SALES SUMMARY REPORT (OCTOBER 1-30, 2021).xlsx",.xlsx,unilever,ssis_summary,2021-10,False,6.0
+Unilever\SSIS DAILY SALES SUMMARY REPORT APRIL 2022.xlsx,.xlsx,unilever,ssis_summary,2022-04,False,7.0
+Unilever\SSIS DAILY SALES SUMMARY REPORT FEBRUARY.2022.xlsx,.xlsx,unilever,ssis_summary,2022-02,False,7.0
+Unilever\SSIS DAILY SALES SUMMARY REPORT JANUARY 1-28.2022.xlsx,.xlsx,unilever,ssis_summary,2022-01,False,7.0
+Unilever\SSIS DAILY SALES SUMMARY REPORT MARCH.2022.xlsx,.xlsx,unilever,ssis_summary,2022-03,False,7.0
+Unilever\SSIS DAILY SALES SUMMARY REPORT MAY 2022.xlsx,.xlsx,unilever,ssis_summary,2022-05,False,7.0
+Unilever\SSIS DAILY SALES SUMMARY REPORT NOVEMBER 1 - 29 (1).xlsx,.xlsx,unilever,ssis_summary,,False,7.0
+"Unilever\SSIS MONTHLY SALES REPORT (FEB. 01-28, 2021).xlsx",.xlsx,unilever,ssis_summary,2021-02,False,5.0
+"Unilever\SSIS MONTHLY SALES SUMMARY REPORT (APRIL,2021).xlsx",.xlsx,unilever,ssis_summary,2021-04,False,6.0
+Unilever\SSIS MONTHLY SALES SUMMARY REPORT (AUGUST 2021).xlsx,.xlsx,unilever,ssis_summary,2021-08,False,6.0
+"Unilever\SSIS MONTHLY SALES SUMMARY REPORT (JAN. 01-31, 2021).xlsx",.xlsx,unilever,ssis_summary,2021-01,False,3.0
+Unilever\SSIS MONTHLY SALES SUMMARY REPORT (JULY 2021).xlsx,.xlsx,unilever,ssis_summary,2021-07,False,6.0
+"Unilever\SSIS MONTHLY SALES SUMMARY REPORT (JUNE,2021).xlsx",.xlsx,unilever,ssis_summary,2021-06,False,6.0
+"Unilever\SSIS MONTHLY SALES SUMMARY REPORT (MARCH 01-31,2021).xlsx",.xlsx,unilever,ssis_summary,2021-03,False,5.0
+"Unilever\SSIS MONTHLY SALES SUMMARY REPORT (MAY,2021).xlsx",.xlsx,unilever,ssis_summary,2021-05,False,6.0
+Unilever\SSIS MONTHLY SALES SUMMARY REPORT (SEPTEMBER 2021) (1).xlsx,.xlsx,unilever,ssis_summary,2021-09,False,6.0
+Unilever\SSIS SALES SUMMARY REPORT APRIL 2023.xlsx,.xlsx,unilever,ssis_summary,2023-04,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT APRIL 2024.xlsx,.xlsx,unilever,ssis_summary,2024-04,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT APRIL 2025.xlsx,.xlsx,unilever,ssis_summary,2025-04,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT AUGUST 2022.xlsx,.xlsx,unilever,ssis_summary,2022-08,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT AUGUST 2023.xlsx,.xlsx,unilever,ssis_summary,2023-08,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT AUGUST 2024.xlsx,.xlsx,unilever,ssis_summary,2024-08,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT AUGUST 2025.xlsx,.xlsx,unilever,ssis_summary,2025-08,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT DECEMBER 2021. (1).xlsx,.xlsx,unilever,ssis_summary,2021-12,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT DECEMBER 2022.xlsx,.xlsx,unilever,ssis_summary,2022-12,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT DECEMBER 2023.xlsx,.xlsx,unilever,ssis_summary,2023-12,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT DECEMBER 2024.xlsx,.xlsx,unilever,ssis_summary,2024-12,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT DECEMBER 2025.xlsx,.xlsx,unilever,ssis_summary,2025-12,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT FEBRUARY 2023.xlsx,.xlsx,unilever,ssis_summary,2023-02,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT FEBRUARY 2024.xlsx,.xlsx,unilever,ssis_summary,2024-02,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT FEBRUARY 2025.xlsx,.xlsx,unilever,ssis_summary,2025-02,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT JANUARY 2023.xlsx,.xlsx,unilever,ssis_summary,2023-01,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT JANUARY 2024.xlsx,.xlsx,unilever,ssis_summary,2024-01,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT JANUARY 2025 (2).xlsx,.xlsx,unilever,ssis_summary,2025-01,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT JULY 2022.xlsx,.xlsx,unilever,ssis_summary,2022-07,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT JULY 2023.xlsx,.xlsx,unilever,ssis_summary,2023-07,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT JULY 2024.xlsx,.xlsx,unilever,ssis_summary,2024-07,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT JULY 2025.xlsx,.xlsx,unilever,ssis_summary,2025-07,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT JUNE 2022.xlsx,.xlsx,unilever,ssis_summary,2022-06,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT JUNE 2023.xlsx,.xlsx,unilever,ssis_summary,2023-06,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT JUNE 2024.xlsx,.xlsx,unilever,ssis_summary,2024-06,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT JUNE 2025.xlsx,.xlsx,unilever,ssis_summary,2025-06,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT MARCH 2023.xlsx,.xlsx,unilever,ssis_summary,2023-03,False,8.0
+Unilever\SSIS SALES SUMMARY REPORT MARCH 2024.xlsx,.xlsx,unilever,ssis_summary,2024-03,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT MARCH 2025.xlsx,.xlsx,unilever,ssis_summary,2025-03,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT MAY 2023.xlsx,.xlsx,unilever,ssis_summary,2023-05,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT MAY 2024.xlsx,.xlsx,unilever,ssis_summary,2024-05,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT MAY 2025.xlsx,.xlsx,unilever,ssis_summary,2025-05,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT NOVEMBER 2022.xlsx,.xlsx,unilever,ssis_summary,2022-11,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT NOVEMBER 2023.xlsx,.xlsx,unilever,ssis_summary,2023-11,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT NOVEMBER 2024.xlsx,.xlsx,unilever,ssis_summary,2024-11,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT NOVEMBER 2025.xlsx,.xlsx,unilever,ssis_summary,2025-11,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT OCTOBER 2022.xlsx,.xlsx,unilever,ssis_summary,2022-10,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT OCTOBER 2023.xlsx,.xlsx,unilever,ssis_summary,2023-10,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT OCTOBER 2024 (2).xlsx,.xlsx,unilever,ssis_summary,2024-10,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT OCTOBER 2025.xlsx,.xlsx,unilever,ssis_summary,2025-10,False,9.0
+Unilever\SSIS SALES SUMMARY REPORT SEPTEMBER 2022.xlsx,.xlsx,unilever,ssis_summary,2022-09,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT SEPTEMBER 2023.xlsx,.xlsx,unilever,ssis_summary,2023-09,False,10.0
+Unilever\SSIS SALES SUMMARY REPORT SEPTEMBER 2024.xlsx,.xlsx,unilever,ssis_summary,2024-09,False,7.0
+Unilever\SSIS SALES SUMMARY REPORT SEPTEMBER 2025.xlsx,.xlsx,unilever,ssis_summary,2025-09,False,9.0
+Unilever\UnileverLaUnionSalesperSKU2023to2026.xls,.xls,unilever,unilever_sku,,False,
+SSIS\2021\SSIS DAILY NOVEMBER 1 - 29.xlsx,.xlsx,ambiguous,ssis_summary,2021-11,False,7.0
+"SSIS\2021\SSIS DAILY OCTOBER 1-30, 2021.xlsx",.xlsx,ambiguous,ssis_summary,2021-10,False,6.0
+SSIS\2021\SSIS DAILY SALES SUMMARY REPORT NOVEMBER 1 - 29 (3).xlsx,.xlsx,ambiguous,ssis_summary,2021-11,False,7.0
+SSIS\2021\SSIS DECEMBER 2021.xlsx,.xlsx,ambiguous,ssis_summary,2021-12,False,7.0
+SSIS\2021\SSIS MONTHLY AUGUST 2021.xlsx,.xlsx,ambiguous,ssis_summary,2021-08,False,6.0
+SSIS\2021\SSIS MONTHLY JANUARY-JUNE 2021.xlsx,.xlsx,ambiguous,ssis_summary,2021-01,False,6.0
+SSIS\2021\SSIS MONTHLY JULY 2021.xlsx,.xlsx,ambiguous,ssis_summary,2021-07,False,6.0
+SSIS\2021\SSIS MONTHLY JUNE 2021.xlsx,.xlsx,ambiguous,ssis_summary,2021-06,False,6.0
+SSIS\2021\SSIS MONTHLY MAY 2021.xlsx,.xlsx,ambiguous,ssis_summary,2021-05,False,6.0
+SSIS\2021\SSIS MONTHLY SALES SUMMARY REPORT (SEPTEMBER 2021) (2).xlsx,.xlsx,ambiguous,ssis_summary,2021-09,False,6.0
+SSIS\2022\SSIS AUGUST 2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-08,False,7.0
+SSIS\2022\SSIS DECEMBER 2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-12,False,7.0
+SSIS\2022\SSIS FEBRUARY.2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-02,False,7.0
+SSIS\2022\SSIS JANUARY.2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-01,False,7.0
+SSIS\2022\SSIS JULY 2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-07,False,7.0
+SSIS\2022\SSIS JUNE 2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-06,False,7.0
+SSIS\2022\SSIS MARCH.2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-03,False,7.0
+SSIS\2022\SSIS MAY 2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-05,False,7.0
+SSIS\2022\SSIS OCTOBER 2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-10,False,7.0
+SSIS\2022\SSIS REPORT APRIL 2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-04,False,7.0
+SSIS\2022\SSIS SEPTEMBER 2022.xlsx,.xlsx,ambiguous,ssis_summary,2022-09,False,7.0
+SSIS\2024\SSIS APRIL 2024.xlsx,.xlsx,ambiguous,ssis_summary,2024-04,False,7.0
+SSIS\2024\SSIS AUGUST 2024.xlsx,.xlsx,ambiguous,ssis_summary,2024-08,False,7.0
+SSIS\2024\SSIS DECEMBER 2024.xlsx,.xlsx,ambiguous,ssis_summary,2024-12,False,7.0
+SSIS\2024\SSIS JULY 2024.xlsx,.xlsx,ambiguous,ssis_summary,2024-07,False,7.0
+SSIS\2024\SSIS JUNE 2024.xlsx,.xlsx,ambiguous,ssis_summary,2024-06,False,7.0
+SSIS\2024\SSIS MAY 2024.xlsx,.xlsx,ambiguous,ssis_summary,2024-05,False,7.0
+SSIS\2024\SSIS NOVEMBER 2024.xlsx,.xlsx,ambiguous,ssis_summary,2024-11,False,7.0
+SSIS\2024\SSIS OCTOBER 2024.xlsx,.xlsx,ambiguous,ssis_summary,2024-10,False,7.0
+SSIS\2024\SSIS SEPTEMBER 2024.xlsx,.xlsx,ambiguous,ssis_summary,2024-09,False,7.0
+SSIS\2025\SSIS APRIL 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-04,False,9.0
+SSIS\2025\SSIS AUGUST 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-08,False,9.0
+SSIS\2025\SSIS DECEMBER 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-12,False,9.0
+SSIS\2025\SSIS FEBRUARY 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-02,False,9.0
+SSIS\2025\SSIS JANUARY 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-01,False,10.0
+SSIS\2025\SSIS JULY 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-07,False,9.0
+SSIS\2025\SSIS JUNE 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-06,False,9.0
+SSIS\2025\SSIS MARCH 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-03,False,9.0
+SSIS\2025\SSIS MAY 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-05,False,9.0
+SSIS\2025\SSIS NOVEMBER 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-11,False,9.0
+SSIS\2025\SSIS OCTOBER 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-10,False,9.0
+SSIS\2025\SSIS SEPTEMBER 2025.xlsx,.xlsx,ambiguous,ssis_summary,2025-09,False,9.0
+SSIS\2026\SSIS FEBRUARY 202.xlsx,.xlsx,ambiguous,ssis_summary,2026-02,False,9.0
+SSIS\2026\SSIS JANUARY 2026.xlsx,.xlsx,ambiguous,ssis_summary,2026-01,False,9.0
+SSIS\2026\SSIS MARCH 2026.xlsx,.xlsx,ambiguous,ssis_summary,2026-03,False,9.0
+Del Monte\DAILY REPORT - NOVEMBER 2025\2025 ILOCOS NOVEMBER SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-11,False,17.0
+Del Monte\DAILY REPORT - NOVEMBER 2025\2025 NOVEMBER RMR GS & BO.xlsx,.xlsx,delmonte,rmr_gs_bo,2025-11,False,6.0
+Del Monte\DAILY REPORT - NOVEMBER 2025\2025 PANG. NOVEMBER SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-11,False,20.0
+Del Monte\DAILY REPORT - OCTOBER 2025\2025 ILOCOS OCTOBER SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-10,False,23.0
+Del Monte\DAILY REPORT - OCTOBER 2025\2025 OCTOBER RMR GS & BO.xlsx,.xlsx,delmonte,rmr_gs_bo,2025-10,False,6.0
+Del Monte\DAILY REPORT - OCTOBER 2025\2025 PANG. OCTOBER SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-10,False,25.0
+Del Monte\MONTHLY REPORT - APRIL 2023\APRIL_2023_INVENTORY_SANSAN_PANGASINAN&ILOCOS.xlsx,.xlsx,delmonte,inventory_sign_off,2023-04,False,2.0
+Del Monte\MONTHLY REPORT - APRIL 2023\PANGASINAN&ILOCOS APRIL 1-APRIL 30 2023 SALE REGISTER.xlsx,.xlsx,delmonte,sales_register,2023-04,False,2.0
+Del Monte\MONTHLY REPORT - APRIL 2023\PANGASINAN&ILOCOS APRIL 1-APRIL 30 2023 SALE RETURN (1).xlsx,.xlsx,delmonte,sales_return,2023-04,False,2.0
+Del Monte\MONTHLY REPORT - APRIL 2023\PANGASINAN&ILOCOS APRIL 1-APRIL 30 2023 SALE RETURN.xlsx,.xlsx,delmonte,sales_return,2023-04,False,2.0
+Del Monte\MONTHLY REPORT - APRIL 2023\PANGASINAN&ILOCOS APRIL 1-APRIL 30 2023 SELL OUT.xlsx,.xlsx,delmonte,sell_out,2023-04,False,2.0
+Del Monte\MONTHLY REPORT - APRIL 2025\2025 APRIL INVENTORY.xlsx,.xlsx,delmonte,inventory_sign_off,2025-04,False,3.0
+Del Monte\MONTHLY REPORT - APRIL 2025\2025 APRIL PURCHASES.xlsx,.xlsx,delmonte,purchase_order,2025-04,False,2.0
+Del Monte\MONTHLY REPORT - APRIL 2025\2025 APRIL SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-04,False,3.0
+Del Monte\MONTHLY REPORT - APRIL 2025\2025 APRIL SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2025-04,False,4.0
+Del Monte\MONTHLY REPORT - APRIL 2025\2025 APRIL SELL OUT.xlsx,.xlsx,delmonte,sell_out,2025-04,False,2.0
+Del Monte\MONTHLY REPORT - AUGUST 2023\DELMONTE_INVENTORY SIGN OFF_PANGASINAN & ILOCOS _AUGUST 2023.xlsx,.xlsx,delmonte,inventory_sign_off,2023-08,False,4.0
+Del Monte\MONTHLY REPORT - AUGUST 2023\DELMONTE_SALES REGISTER_PANGASINAN & ILOCOS_AUGUST 2023.xlsx,.xlsx,delmonte,sales_register,2023-08,False,2.0
+Del Monte\MONTHLY REPORT - AUGUST 2023\DELMONTE_SALES RETURN_PANGASINAN & ILOCOS _AUGUST 2023.xlsx,.xlsx,delmonte,sales_return,2023-08,False,2.0
+Del Monte\MONTHLY REPORT - AUGUST 2023\DELMONTE_SELL OUT_PANGASINAN & ILOCOS _AUGUST 2023.xlsx,.xlsx,delmonte,sell_out,2023-08,False,2.0
+Del Monte\MONTHLY REPORT - AUGUST 2025\2025 AUGUST INVENTORY.xlsx,.xlsx,delmonte,inventory_sign_off,2025-08,False,3.0
+Del Monte\MONTHLY REPORT - AUGUST 2025\2025 AUGUST PURCHASES.xlsx,.xlsx,delmonte,purchase_order,2025-08,False,2.0
+Del Monte\MONTHLY REPORT - AUGUST 2025\2025 AUGUST SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-08,False,3.0
+Del Monte\MONTHLY REPORT - AUGUST 2025\2025 AUGUST SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2025-08,False,4.0
+Del Monte\MONTHLY REPORT - AUGUST 2025\2025 AUGUST SELL OUT.xlsx,.xlsx,delmonte,sell_out,2025-08,False,2.0
+Del Monte\MONTHLY REPORT - DECEMBER 2023\DECEMBER 2023 SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2023-12,False,2.0
+Del Monte\MONTHLY REPORT - DECEMBER 2023\DECEMBER 2023 SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2023-12,False,2.0
+Del Monte\MONTHLY REPORT - DECEMBER 2023\DECEMBER 2023_PURCHASE ORDER.xlsx,.xlsx,delmonte,purchase_order,2023-12,False,2.0
+Del Monte\MONTHLY REPORT - DECEMBER 2023\DECEMBER 2023_SIGN OFF INVENTORY.xlsx,.xlsx,delmonte,inventory_sign_off,2023-12,False,2.0
+Del Monte\MONTHLY REPORT - DECEMBER 2025\2025 DECEMBER INVENTORY.xlsx,.xlsx,delmonte,inventory_sign_off,2025-12,False,3.0
+Del Monte\MONTHLY REPORT - DECEMBER 2025\2025 DECEMBER SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-12,False,3.0
+Del Monte\MONTHLY REPORT - DECEMBER 2025\2025 DECEMBER SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2025-12,False,4.0
+Del Monte\MONTHLY REPORT - DECEMBER 2025\2025 DECEMBER SELL OUT.xlsx,.xlsx,delmonte,sell_out,2025-12,False,2.0
+Del Monte\MONTHLY REPORT - DECEMBER 2025\2025 DECMBER PURCHASES.xlsx,.xlsx,delmonte,purchase_order,2025-12,False,2.0
+Del Monte\MONTHLY REPORT - FEBRUARY 2023\FEBRUARY_2023_INVENTORY_SANSAN_ILOCOS.xlsx,.xlsx,delmonte,inventory_sign_off,2023-02,False,1.0
+Del Monte\MONTHLY REPORT - FEBRUARY 2023\PANGASINAN&ILOCOS FEBRUARY 1-FEBRUARY 28 2023 SALE REGISTER.xlsx,.xlsx,delmonte,sales_register,2023-02,False,2.0
+Del Monte\MONTHLY REPORT - FEBRUARY 2023\PANGASINAN&ILOCOS FEBRUARY 1-FEBRUARY 28 2023 SALE RETURN.xlsx,.xlsx,delmonte,sales_return,2023-02,False,2.0
+Del Monte\MONTHLY REPORT - FEBRUARY 2023\PANGASINAN&ILOCOS FEBRUARY 1-FEBRUARY 28 2023 SELL OUT.xlsx,.xlsx,delmonte,sell_out,2023-02,False,2.0
+Del Monte\MONTHLY REPORT - FEBRUARY 2024\2024 FEBRUARY INVENTORY SIGN OFF.xlsx,.xlsx,delmonte,inventory_sign_off,2024-02,False,2.0
+Del Monte\MONTHLY REPORT - FEBRUARY 2024\2024 FEBRUARY PURCHASES.xlsx,.xlsx,delmonte,purchase_order,2024-02,False,2.0
+Del Monte\MONTHLY REPORT - FEBRUARY 2024\2024 FEBRUARY SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2024-02,False,2.0
+Del Monte\MONTHLY REPORT - FEBRUARY 2024\2024 FEBRUARY SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2024-02,False,2.0
+Del Monte\MONTHLY REPORT - FEBRUARY 2024\2024 FEBRUARY SELL OUT.xlsx,.xlsx,delmonte,sell_out,2024-02,False,2.0
+Del Monte\MONTHLY REPORT - JANUARY 2023\JANUARY_2023_INVENTORY_SANSAN_PANGASINAN&ILOCOS.xlsx,.xlsx,delmonte,inventory_sign_off,2023-01,False,2.0
+Del Monte\MONTHLY REPORT - JANUARY 2023\PANGASINAN&ILOCOS JANUARY 1-JANUARY 31 2023 SALE REGISTER.xlsx,.xlsx,delmonte,sales_register,2023-01,False,2.0
+Del Monte\MONTHLY REPORT - JANUARY 2023\PANGASINAN&ILOCOS JANUARY 1-JANUARY 31 2023 SALE RETURN.xlsx,.xlsx,delmonte,sales_return,2023-01,False,2.0
+Del Monte\MONTHLY REPORT - JANUARY 2023\PANGASINAN&ILOCOS JANUARY 1-JANUARY 31 2023 SELL OUT.xlsx,.xlsx,delmonte,sell_out,2023-01,False,2.0
+Del Monte\MONTHLY REPORT - JANUARY 2024\2024 JANUARY INVENTORY SIGN OFF.xlsx,.xlsx,delmonte,inventory_sign_off,2024-01,False,2.0
+Del Monte\MONTHLY REPORT - JANUARY 2024\2024 JANUARY PURCHASES.xlsx,.xlsx,delmonte,purchase_order,2024-01,False,2.0
+Del Monte\MONTHLY REPORT - JANUARY 2024\2024 JANUARY SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2024-01,False,2.0
+Del Monte\MONTHLY REPORT - JANUARY 2024\2024 JANUARY SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2024-01,False,2.0
+Del Monte\MONTHLY REPORT - JANUARY 2024\2024 JANUARY SELL OUT.xlsx,.xlsx,delmonte,sell_out,2024-01,False,2.0
+Del Monte\MONTHLY REPORT - JUNE 2023\JUNE_2023_INVENTORY_SANSAN_PANGASINAN&ILOCOS.xlsx,.xlsx,delmonte,inventory_sign_off,2023-06,False,2.0
+Del Monte\MONTHLY REPORT - JUNE 2023\PANGASINAN&ILOCOS JUNE 1-JUNE 30 2023 SALE REGISTER.xlsx,.xlsx,delmonte,sales_register,2023-06,False,2.0
+Del Monte\MONTHLY REPORT - JUNE 2023\PANGASINAN&ILOCOS JUNE 1-JUNE 30 2023 SALE RETURN.xlsx,.xlsx,delmonte,sales_return,2023-06,False,2.0
+Del Monte\MONTHLY REPORT - JUNE 2023\PANGASINAN&ILOCOS JUNE 1-JUNE 30 2023 SELL OUT.xlsx,.xlsx,delmonte,sell_out,2023-06,False,2.0
+Del Monte\MONTHLY REPORT - JUNE 2025\2025 JUNE INVENTORY.xlsx,.xlsx,delmonte,inventory_sign_off,2025-06,False,3.0
+Del Monte\MONTHLY REPORT - JUNE 2025\2025 JUNE PURCHASES.xlsx,.xlsx,delmonte,purchase_order,2025-06,False,2.0
+Del Monte\MONTHLY REPORT - JUNE 2025\2025 JUNE SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-06,False,3.0
+Del Monte\MONTHLY REPORT - JUNE 2025\2025 JUNE SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2025-06,False,4.0
+Del Monte\MONTHLY REPORT - JUNE 2025\2025 JUNE SELL OUT.xlsx,.xlsx,delmonte,sell_out,2025-06,False,2.0
+Del Monte\MONTHLY REPORT - MARCH 2023\MARCH_2023_INVENTORY_SANSAN_PANGASINAN&ILOCOS.xlsx,.xlsx,delmonte,inventory_sign_off,2023-03,False,2.0
+Del Monte\MONTHLY REPORT - MARCH 2023\PANGASINAN&ILOCOS MARCH 1-MARCH 31 2023 SALE REGISTER.xlsx,.xlsx,delmonte,sales_register,2023-03,False,2.0
+Del Monte\MONTHLY REPORT - MARCH 2023\PANGASINAN&ILOCOS MARCH 1-MARCH 31 2023 SALE RETURN.xlsx,.xlsx,delmonte,sales_return,2023-03,False,2.0
+Del Monte\MONTHLY REPORT - MARCH 2023\PANGASINAN&ILOCOS MARCH 1-MARCH 31 2023 SELL OUT.xlsx,.xlsx,delmonte,sell_out,2023-03,False,2.0
+Del Monte\MONTHLY REPORT - MARCH 2025\2025 MARCH INVENTORY.xlsx,.xlsx,delmonte,inventory_sign_off,2025-03,False,3.0
+Del Monte\MONTHLY REPORT - MARCH 2025\2025 MARCH PURCHASES.xlsx,.xlsx,delmonte,purchase_order,2025-03,False,2.0
+Del Monte\MONTHLY REPORT - MARCH 2025\2025 MARCH SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-03,False,3.0
+Del Monte\MONTHLY REPORT - MARCH 2025\2025 MARCH SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2025-03,False,4.0
+Del Monte\MONTHLY REPORT - MARCH 2025\2025 MARCH SELL OUT.xlsx,.xlsx,delmonte,sell_out,2025-03,False,2.0
+Del Monte\MONTHLY REPORT - MAY 2023\MAY_2023_INVENTORY_SANSAN_PANGASINAN&ILOCOS.xlsx,.xlsx,delmonte,inventory_sign_off,2023-05,False,2.0
+Del Monte\MONTHLY REPORT - MAY 2023\PANGASINAN&ILOCOS MAY 1-MAY 31 2023 SALE REGISTER.xlsx,.xlsx,delmonte,sales_register,2023-05,False,2.0
+Del Monte\MONTHLY REPORT - MAY 2023\PANGASINAN&ILOCOS MAY 1-MAY 31 2023 SALE RETURN.xlsx,.xlsx,delmonte,sales_return,2023-05,False,2.0
+Del Monte\MONTHLY REPORT - MAY 2023\PANGASINAN&ILOCOS MAY 1-MAY 31 2023 SELL OUT.xlsx,.xlsx,delmonte,sell_out,2023-05,False,2.0
+Del Monte\MONTHLY REPORT - NOVEMBER 2023\NOVEMBER 2023 SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2023-11,False,2.0
+Del Monte\MONTHLY REPORT - NOVEMBER 2023\NOVEMBER 2023 SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2023-11,False,2.0
+Del Monte\MONTHLY REPORT - NOVEMBER 2023\NOVEMBER 2023_PURCHASE ORDER.xlsx,.xlsx,delmonte,purchase_order,2023-11,False,2.0
+Del Monte\MONTHLY REPORT - NOVEMBER 2023\NOVEMBER 2023_SELL OUT.xlsx,.xlsx,delmonte,sell_out,2023-11,False,2.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2023\SEPTEMBER 2023 SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2023-09,False,2.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2023\SEPTEMBER 2023 SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2023-09,False,2.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2023\SEPTEMBER 2023_PURCHASE ORDER.xlsx,.xlsx,delmonte,purchase_order,2023-09,False,2.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2023\SEPTEMBER 2023_SELL OUT.xlsx,.xlsx,delmonte,sell_out,2023-09,False,2.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2023\SEPTEMBER 2023_SIGN OFF INVENTORY.xlsx,.xlsx,delmonte,inventory_sign_off,2023-09,False,2.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2025\2025 SEPT. PURCHASES.xlsx,.xlsx,delmonte,purchase_order,2025-09,False,2.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2025\2025 SEPTEMBER INVENTORY.xlsx,.xlsx,delmonte,inventory_sign_off,2025-09,False,3.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2025\2025 SEPTEMBER SALES REGISTER.xlsx,.xlsx,delmonte,sales_register,2025-09,False,3.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2025\2025 SEPTEMBER SALES RETURN.xlsx,.xlsx,delmonte,sales_return,2025-09,False,4.0
+Del Monte\MONTHLY REPORT - SEPTEMBER 2025\2025 SEPTEMBER SELL OUT.xlsx,.xlsx,delmonte,sell_out,2025-09,False,2.0

@@ -32,30 +32,30 @@
 # truth for the pairing.
 
 sales:
-  unilever:
-    doc_type: ssis_summary   # T3 Option A CLOSED (2026-07) — Extract driver
-                              # (analytics/etl/extract/ssis_summary.py) exists and
-                              # is wired into driver.py's FAMILY_PARSERS. Confirmed
-                              # running against real data (2026-08): stages ~805
-                              # real sheets every run. See ARCHITECTURE.md §7.
-    system_of_record_role: raw_data
-    cross_check_roles: [invoice_reg, per_customer_summary]
-    # BLOCKED, do not "fix" this without new evidence: every profiled
-    # SSIS RAW_DATA sheet (checked ~10 months, Jan-Nov 2022 confirmed
-    # identical schema) has NO invoice/reference column of any kind.
-    # Columns are: Salesman, CALENDAR DAY, REASON CODE, OUTLET,
-    # OUTLET NAME, GSV, TPR + UW/DT Discount, Sale After TPR & UW, NIV,
-    # VAT, Total Sales Amt Inc. Tax, REMARKS. The grain looks like
-    # outlet + calendar_day (+ reason_code?), not invoice. Filling in
-    # "invoice_num" here would be inventing a key the source doesn't
-    # have - per ARCHITECTURE.md principle #1, this must be confirmed
-    # against a real file (or with Yuan) before transform_fact() can run
-    # for this fact/principal at all. Column map for this doc_type
-    # (config/column_maps/ssis_summary.yaml) only has the confirmed
-    # renames for this reason - do not extend it with a guessed key.
-    natural_key: null   # UNCONFIRMED - see note above. transform_fact()
-                         # raises loudly if this is used, rather than
-                         # silently deduping on a fabricated key.
+  # ─────────────────────────────────────────────────────────────────────
+  # EXCLUDED — sales.unilever has NO fact destination (removed 2026-09-09,
+  # Phase 1 re-check). The former entry declared
+  #   doc_type: ssis_summary, system_of_record_role: raw_data,
+  #   natural_key: null
+  # which was a dead declaration: transform_fact() refuses natural_key=null,
+  # AND Sales_Fact carries CHECK (principal = 'delmonte') (DEC-10) so it
+  # structurally cannot hold Unilever rows. Phase 0 follow-up confirmed
+  # (reports/PROJECT_STATE_2026-09.md §8): 0 real DB rows trace to
+  # ssis_summary; 95.6% of its 1.95M rows are product-less outlet×day×
+  # invoice sales VALUE with no SKU/article/item column of any kind
+  # (verified across ~10 months). It is deliberately NOT loaded.
+  #
+  # With no `unilever:` (or `both:`) key here, transform_driver's
+  # _doc_type_owners() gives ssis_summary NO owning (fact, principal), so
+  # its ~805 staged sheets classify cleanly as `demoted` ("never a fact's
+  # primary source") instead of `blocked` every run. ssis_summary stays a
+  # cross_check_doc_types entry on inventory / sell_out below.
+  #
+  # The Unilever SKU-level demand fact is sourced from `unilever_sku`
+  # (see sales_unilever_sku_demand below), NOT from ssis_summary.
+  #
+  # Del Monte invoice-grain sales continue below.
+  # ─────────────────────────────────────────────────────────────────────
   delmonte:
     doc_type: sales_register
     system_of_record_role: data
@@ -89,44 +89,78 @@ sales_unilever_sku_demand:
 
 sales_return:
   both:
-    doc_type: rmr_gs_bo
-    system_of_record_role: [gs, bo]    # GS + BO split IS the system of record
-    cross_check_roles: [one_pager]     # ONE PAGER == GS union BO, never loaded
-    # Fixed 2026-08 (Transform reconciliation, story #16): matched
-    # schema.sql's SalesReturn_Fact UNIQUE constraint at the time - the
-    # previous [return_slip_num] alone, plus a "falls back to invoice_num
-    # if blank" comment, described fallback semantics dedup_facts() never
-    # actually implements (it groups on the literal key columns as-is, no
-    # null-coalescing).
+    # SYSTEM-OF-RECORD CHANGED 2026-09-09 (Phase 1 re-check, Yuan approved):
+    # rmr_gs_bo -> sales_return.
     #
-    # Fixed AGAIN 2026-08 (pre-Supabase-creation review): invoice_num
-    # dropped. Confirmed against real rmr_gs_bo data that invoice_num
-    # never exists as a producible column at all for this doc_type
-    # (0/538 real rows) - schema.sql's SalesReturn_Fact.invoice_num was
-    # updated to match (dropped from its UNIQUE constraint too, same
-    # reasoning: Postgres UNIQUE treats NULL <> NULL, so a column that's
-    # always NULL was a silent no-op in the constraint, not real
-    # protection). Keep this file and schema.sql's natural key in sync -
-    # this exact class of drift (config says one key, DDL says another)
-    # is what DEC-07 was about.
-    natural_key: [return_slip_num, principal, region, return_type]
-    # RESOLVED (was flagged BLOCKED against stale evidence — see below):
-    # the ~500 __colN__ placeholders / header_confidence~0.001 / merged
-    # title text repeated every 8 columns was a real Extract-stage bug
-    # (profiling/detect.py::trim_grid couldn't tell a genuine trailing
-    # data column from a print-layout artifact repeating the workbook's
-    # title banner), but it's fixed — trim_grid now distinguishes them by
-    # scanning for a real gap before treating a column as phantom. Every
-    # RMR_GS_BO sheet (GS, BO, ONE_PAGER alike) now stages its real
-    # 11-column header (header_row_index=1, confidence=1.0) — verified
-    # directly against staging/_manifest.json. config/column_maps/rmr_gs_bo.yaml
-    # exists and is built from that real staged output, not a guess.
-    # NOTE for whoever reads this next: profiling/sheet_profiles/*.json
-    # (the discovery-pass artifacts, committed to git) were never
-    # regenerated after this fix, so they still show the old broken
-    # numbers — don't use them as evidence for this doc_type; use
-    # staging/_manifest.json (gitignored, run Extract locally to get it)
-    # or the fixed trim_grid/rmr_gs_bo.yaml themselves instead.
+    # Why: rmr_gs_bo is the RMR Good-Stock / Bad-Order export and exists for
+    # only 2 months of real data (2025 October, 2025 November — 12 sheets).
+    # The `sales_return` family is the fuller record: 68 staged sheets,
+    # 1,931 rows, contiguous 2023-01 → 2026-08, both regions, and it carries
+    # a real `Invoice Num` and `REFNBR` column that rmr_gs_bo lacks entirely.
+    # It is the honest system of record for SalesReturn_Fact.
+    #
+    # rmr_gs_bo drops to cross-check (never loaded) — see
+    # cross_check_doc_types below. Its 44 dedup conflicts stop mattering
+    # once it is no longer promoted.
+    doc_type: sales_return
+    system_of_record_role: [gs, bo, data]
+    # _sheet_role vocab for this family: gs (851 rows) / bo (309) /
+    # data (771, the pre-2025 single-sheet shape that never split GS/BO).
+    # All three carry real return rows and load. one_pager (GS ∪ BO,
+    # 2025 shape only) is the cross-check, never loaded.
+    cross_check_roles: [one_pager]
+    cross_check_doc_types: [rmr_gs_bo]
+    # rmr_gs_bo shares this fact's grain but is now a cross-check only:
+    # transform_driver demotes it (no owning fact) instead of promoting +
+    # deduping it. If a future reconciliation wants to compare the RMR
+    # Oct/Nov-2025 figures against sales_return for the same months, that
+    # is a cross-check report, not a second load path.
+    natural_key: [return_slip_num, principal, region, return_type, invoice_num]
+    # WIDENED 2026-09-11 (Phase 1 step 2b, Yuan approved): added invoice_num.
+    # Confirmed against all 20 real transform-stage conflicts (see
+    # reports/PHASE1_EXECUTION_PLAN_2026-09.md): 18 of 20 are the SAME
+    # return_slip_num genuinely reused across two different real returns —
+    # different invoice_num, different date, different amount every time,
+    # no exceptions found. invoice_num separates every one of those 18
+    # cleanly; it is real data (only 19/1931 rows null) and was already
+    # present on the fact, just not in the key.
+    #
+    # `region` is SITE level (pangasinan / ilocos) from Extract's _region
+    # provenance — NOT "Town Display" (the town, half-blank).
+    # column_maps/sales_return.yaml deliberately does not map `region`, so
+    # transform.backfill_provenance_fields() fills it from _region cleanly
+    # (contrast rmr_gs_bo.yaml, which maps region <- "Town Display" — a
+    # latent bug, now moot as rmr_gs_bo is cross-check).
+    #
+    # NOT YET FIXED AT LOAD (open, blocks Phase 1d for this fact):
+    # schema.sql's SalesReturn_Fact UNIQUE constraint is STILL
+    # (return_slip_num, principal, region, return_type) — 4 columns, no
+    # invoice_num. Widening this YAML key only changes what Transform's
+    # dedup_facts() reports as a conflict; it does NOT change the DB
+    # constraint load_to_supabase()'s ON CONFLICT clause targets. Passing
+    # this 5-column key to load_to_supabase against the current 4-column
+    # DB constraint will raise (no matching unique/exclusion constraint),
+    # not silently misload — but it means this fact cannot actually load
+    # correctly until migration 0011 adds a matching 5-column UNIQUE (or an
+    # expression index per the schema.sql comment's own proposal). Tracked
+    # as a Phase 1d blocker, not fixed in this (transform-only) step.
+    #
+    # A row with a NULL return_type (the pre-2025 `data` shape, which never
+    # populated it) makes the row UNRESOLVABLE under this key regardless of
+    # invoice_num — dedup_facts() (2026-09-11 fix) now quarantines such rows
+    # individually rather than grouping them, which independently matches
+    # Postgres' own NULL <> NULL UNIQUE semantics for the pre-2025 shape.
+    #
+    # DATA-QUALITY FLAGS, fixed at transform 2026-09-11:
+    #   - 7 real rows (of 11 staged incl. demo) had Return Type == "Return
+    #     Type" (an unstripped header row) — now excluded by
+    #     exclude_sales_return_header_rows(), same function that also drops
+    #     the "Good Stock" / "Bad Stock" section-marker rows (25 rows across
+    #     2 groups, mistakenly reported as conflicts before this fix — see
+    #     the Phase 1 report).
+    #   - Real rows with a genuinely null Return Slip # (4, after the
+    #     header/marker rows above are excluded) are quarantined
+    #     individually by dedup_facts(), never grouped together.
 
 purchase:
   both:
