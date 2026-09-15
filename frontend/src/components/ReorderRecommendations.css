@@ -24,11 +24,27 @@
   gap: 0.75rem;
 }
 
+.reorder-cycle-latest {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background-color: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
 .reorder-page-title {
   font-size: 2rem;
   font-weight: 700;
   color: var(--color-text);
   margin: 0 0 0.3rem 0;
+}
+
+.reorder-page-title .page-title-accent {
+  font-size: 2.1rem;
 }
 
 .reorder-page-subtitle {
@@ -162,255 +178,43 @@
 }
 
 /* Table */
-.reorder-table-wrapper {
-  background-color: var(--color-surface);
-  border-radius: 12px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid var(--color-border);
-}
-
+/* Table base styles live in index.css (.data-table-card / .data-table). */
 .reorder-table {
-  width: 100%;
-  min-width: 900px;
-  border-collapse: collapse;
-  font-size: 0.78rem;
+  min-width: 1000px;
 }
 
-.reorder-table thead {
-  border-bottom: 2px solid var(--color-surface-muted);
-}
+/* Row-level severity marker — see getUrgencyRowClass in the .jsx. Real
+   data here runs heavily CRITICAL, so a pill in one column isn't enough
+   to scan. Drawn as an inset shadow on the first cell: a border-left on a
+   <tr> is unreliable under border-collapse and shifts the row's content. */
+.reorder-row-critical td:first-child { box-shadow: inset 3px 0 0 var(--color-severity-critical); }
+.reorder-row-urgent td:first-child   { box-shadow: inset 3px 0 0 var(--color-severity-urgent); }
+.reorder-row-planned td:first-child  { box-shadow: inset 3px 0 0 var(--color-severity-planned); }
 
-.reorder-table th {
-  text-align: center;
-  padding: 0.8rem 0.4rem;
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--color-text-subtle);
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.reorder-table tbody tr {
-  border-bottom: 1px solid var(--color-surface-raised);
-  border-left: 3px solid transparent;
-  transition: background-color 0.15s;
-}
-
-.reorder-table tbody tr:hover {
-  background-color: var(--color-surface-raised);
-}
-
-/* Row-level severity stripe — see getUrgencyRowClass in the .jsx. Real
-   data here runs heavily CRITICAL (the KPI strip above can read "53
-   critical, 0 urgent"), so a badge alone in one column wasn't enough to
-   scan; a stripe down the whole row is visible without hunting for it. */
-.reorder-row-critical { border-left-color: var(--color-severity-critical); }
-.reorder-row-urgent   { border-left-color: var(--color-severity-urgent); }
-.reorder-row-planned  { border-left-color: var(--color-severity-planned); }
-
-.reorder-table td {
-  padding: 0.6rem 0.4rem;
-  color: var(--color-text-body);
-  vertical-align: middle;
-  text-align: center;
-}
-
-.reorder-sku-cell {
-  color: var(--color-info);
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.reorder-sku-cell:hover {
-  text-decoration: underline;
-}
-
-.reorder-product-cell {
-  font-weight: 500;
-  color: var(--color-text);
-}
-
+/* Current stock against the reorder point: below half = critical, below
+   ROP = low. Weight carries part of the signal so it isn't color-only. */
 .reorder-stock-cell {
   font-weight: 500;
-  white-space: nowrap;
 }
 
-.reorder-qty-cell {
-  font-weight: 700;
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
-.reorder-qty-compare {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.15rem;
-}
-
-.reorder-qty-main {
-  font-size: 0.9rem;
-}
-
-.reorder-qty-baseline {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-  font-size: 0.65rem;
+.reorder-stock-critical {
+  color: var(--color-severity-critical);
   font-weight: 600;
-  color: var(--color-success);
-  white-space: nowrap;
 }
 
-.reorder-qty-down-icon {
-  color: var(--color-success);
-}
-
-.th-sub {
-  display: block;
-  font-size: 0.55rem;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  color: var(--color-border-strong);
-  margin-top: 0.15rem;
+.reorder-stock-low {
+  color: var(--color-severity-urgent);
+  font-weight: 600;
 }
 
 /* Decision Log */
-.reorder-log-table td {
-  text-align: center;
-}
-
-.reorder-log-when {
-  white-space: nowrap;
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
-}
-
 .reorder-log-reason {
-  max-width: 260px;
-  text-align: left !important;
-  color: var(--color-text-body);
-  font-size: 0.75rem;
+  max-width: 320px;
+  font-size: 0.8rem;
   line-height: 1.4;
 }
 
-.reorder-log-user {
-  font-size: 0.75rem;
-  color: var(--color-info);
-  white-space: nowrap;
-}
-
-.reorder-log-empty {
-  padding: 2.5rem 1rem !important;
-  color: var(--color-text-subtle);
-  font-size: 0.85rem;
-  font-style: italic;
-}
-
-.reorder-no-results {
-  padding: 2.5rem 1rem !important;
-  color: var(--color-text-subtle);
-  font-size: 0.85rem;
-  font-style: italic;
-  text-align: center;
-}
-
-.reorder-grain-note {
-  margin: -0.5rem 0 0 0;
-  padding: 0.6rem 0.9rem;
-  background-color: var(--color-surface-raised);
-  border-radius: 8px;
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
-  line-height: 1.4;
-}
-
-.reorder-cost-cell {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* Urgency Badges — a real three-step SEVERITY scale (--color-severity-*),
-   not borrowed from tokens that mean something else. Before this,
-   CRITICAL reused --color-brand-accent (so a brand-colour change would
-   silently change what "critical" looks like) and URGENT reused the same
-   generic --color-warning-deep as dead-stock/low-stock elsewhere in the
-   app — two unrelated meanings sharing one colour. */
-.urgency-badge {
-  display: inline-block;
-  padding: 0.3rem 0.8rem;
-  border-radius: 4px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-  border: 1px solid transparent;
-}
-
-.badge-critical {
-  background-color: var(--color-severity-critical-bg);
-  color: var(--color-severity-critical);
-  border-color: var(--color-severity-critical-border);
-}
-
-.badge-urgent {
-  background-color: var(--color-severity-urgent-bg);
-  color: var(--color-severity-urgent);
-  border-color: var(--color-severity-urgent-border);
-}
-
-.badge-planned {
-  background-color: var(--color-severity-planned-bg);
-  color: var(--color-severity-planned);
-  border-color: var(--color-severity-planned-border);
-}
-
-/* Action Buttons */
-.action-buttons {
-  display: flex;
-  gap: 0.4rem;
-  justify-content: center;
-}
-
-.action-btn {
-  font-size: 0.7rem;
-  font-weight: 500;
-  padding: 0.3rem 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
-  outline: none;
-  white-space: nowrap;
-}
-
-.accept-btn {
-  background-color: #e6f4ea;
-  border: 1px solid #ceead6;
-  color: #137333;
-}
-
-.accept-btn:hover {
-  background-color: #d2ecd5;
-}
-
-.dismiss-btn {
-  background-color: #fce8e6;
-  border: 1px solid #fad2cf;
-  color: #c5221f;
-}
-
-.dismiss-btn:hover {
-  background-color: #f9d2cd;
-}
-
-/* Action Status */
+/* Action Status (row being saved, or already decided) */
 .action-status-container {
   display: flex;
   align-items: center;
@@ -433,25 +237,6 @@
   font-size: 0.75rem;
   color: var(--color-text-muted);
   font-style: italic;
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 0.3rem 0.8rem;
-  border-radius: 4px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-surface);
-}
-
-.status-accepted {
-  background-color: var(--color-success-ui);
-}
-
-.status-dismissed {
-  background-color: var(--color-brand-accent);
 }
 
 /* Responsive */

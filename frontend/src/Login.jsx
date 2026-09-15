@@ -58,7 +58,7 @@ const Login = () => {
 
       <div className="login-right">
         <div className="login-card">
-          <h2>Welcome back</h2>
+          <h2>Welcome <span className="page-title-accent">back</span></h2>
           <p className="subtitle">Sign in with your assigned account</p>
 
           <form onSubmit={handleSubmit} className="login-form">

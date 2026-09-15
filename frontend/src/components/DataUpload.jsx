@@ -75,9 +75,9 @@ const DataUpload = () => {
       <div className="du-content">
         {/* Page Header */}
         <div className="du-page-header">
-          <h2 className="du-page-title">Data Management</h2>
+          <h2 className="du-page-title">Data <span className="page-title-accent">management</span></h2>
           <p className="du-page-subtitle">
-            Upload sales, inventory, and bad order files to feed the SSM engine. Supported formats: Excel (.xlsx, .xls) and CSV (.csv). Clean, consistent data improves forecast accuracy and optimization results.
+            Upload sales and inventory files to feed the SSM engine. Supported formats: Excel (.xlsx, .xls) and CSV (.csv). Clean, consistent data improves forecast accuracy and optimization results.
           </p>
         </div>
 
@@ -121,15 +121,6 @@ const DataUpload = () => {
             </div>
             <h3 className="du-card-title">Inventory Log</h3>
             <p className="du-card-desc">Stock-in and stock-out records</p>
-          </div>
-
-          <div className="du-file-card">
-            <div className="du-card-header">
-              <span className="du-blue-dot"></span>
-              <span className="du-card-label">File 03</span>
-            </div>
-            <h3 className="du-card-title">Bad Order Log</h3>
-            <p className="du-card-desc">Damaged or expired stock</p>
           </div>
         </div>
 

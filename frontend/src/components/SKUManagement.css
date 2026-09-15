@@ -25,6 +25,10 @@
   margin: 0 0 0.3rem 0;
 }
 
+.sku-page-title .page-title-accent {
+  font-size: 2.1rem;
+}
+
 .sku-page-subtitle {
   color: var(--color-text-subtle);
   font-size: 0.85rem;
@@ -70,12 +74,21 @@
   border-top-color: var(--color-text);
 }
 
-.summary-active {
-  border-top-color: var(--color-success-ui);
+.summary-cat-a {
+  border-top-color: var(--color-abc-a);
 }
 
-.summary-inactive {
-  border-top-color: var(--color-brand-accent);
+/* A data gap to clean up, not an alert: amber, like the app's other
+   "missing data" markers. */
+.summary-no-brand {
+  border-top-color: var(--color-warning);
+}
+
+.summary-desc {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
 }
 
 .summary-label {
@@ -88,54 +101,11 @@
 }
 
 .summary-value {
+  display: block;
   font-size: 2.4rem;
   font-weight: 700;
+  line-height: 1.1;
   color: var(--color-text);
-}
-
-/* SKU Top Tabs */
-.sku-top-tabs {
-  display: flex;
-  align-items: center;
-  background-color: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 0.35rem;
-  margin-bottom: 1.5rem;
-  width: fit-content;
-}
-
-.sku-tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 1.2rem;
-  border: none;
-  background: transparent;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--color-slate-500);
-  text-transform: uppercase;
-  cursor: pointer;
-  border-radius: 8px;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  white-space: nowrap;
-}
-
-.sku-tab-btn:hover:not(.active) {
-  color: var(--color-slate-700);
-  background-color: var(--color-border);
-}
-
-.sku-tab-btn.active {
-  background-color: var(--color-surface);
-  color: #1e3a8a;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.sku-tab-icon {
-  margin-bottom: -2px;
 }
 
 .sku-grain-note {
@@ -296,11 +266,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.sku-row-supplier {
-  font-size: 0.7rem;
-  color: var(--color-slate-400);
 }
 
 .sku-row-right {
@@ -483,76 +448,9 @@
 
 
 /* Table */
-.sku-table-wrapper {
-  background-color: var(--color-surface);
-  border-radius: 12px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-}
-
+/* Table base styles live in index.css (.data-table-card / .data-table). */
 .sku-table {
-  width: 100%;
   min-width: 850px;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-.sku-table thead {
-  border-bottom: 2px solid var(--color-surface-muted);
-}
-
-.sku-table th {
-  text-align: center;
-  padding: 0.9rem 0.6rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--color-text-subtle);
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.sku-table tbody tr {
-  border-bottom: 1px solid var(--color-surface-raised);
-  transition: background-color 0.15s;
-}
-
-.sku-table tbody tr:hover {
-  background-color: var(--color-surface-raised);
-}
-
-.sku-table td {
-  text-align: center;
-  padding: 0.9rem 0.6rem;
-  color: var(--color-text-body);
-  vertical-align: middle;
-}
-
-.row-number {
-  color: var(--color-text-subtle);
-  font-size: 0.8rem;
-}
-
-.sku-code-cell {
-  color: var(--color-brand-accent);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.supplier-cell {
-  color: var(--color-info);
-}
-
-.product-cell {
-  font-weight: 500;
-  color: var(--color-text);
-}
-
-.reorder-cell {
-  text-align: center;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Category Badges */
@@ -560,10 +458,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -578,54 +476,8 @@
 }
 
 .cat-c {
-  background-color: var(--color-surface-raised);
+  background-color: var(--color-surface-sunken);
   color: var(--color-abc-deep);
-}
-
-/* Status Badges */
-.status-badge {
-  display: inline-block;
-  padding: 0.25rem 0.7rem;
-  border-radius: 20px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.status-active {
-  background-color: #22543d;
-  color: var(--color-surface);
-}
-
-.status-inactive {
-  background-color: var(--color-brand-hover);
-  color: var(--color-surface);
-}
-
-/* View Button */
-.view-btn {
-  background: none;
-  border: none;
-  color: var(--color-info);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 0.2rem 0;
-  transition: color 0.2s;
-}
-
-.view-btn:hover {
-  color: #2b6cb0;
-  text-decoration: underline;
-}
-
-/* No Results */
-.no-results {
-  text-align: center;
-  padding: 3rem 1rem !important;
-  color: var(--color-text-subtle);
-  font-style: italic;
 }
 
 /* Responsive */

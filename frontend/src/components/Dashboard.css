@@ -38,6 +38,7 @@
 
 .dashboard-title-row h2 {
   font-size: 1.75rem;
+  font-weight: 700;
   color: var(--color-text);
   margin: 0;
   display: flex;
@@ -45,10 +46,11 @@
   gap: 0.4rem;
 }
 
-.dashboard-title-row h2 span {
-  color: var(--color-brand-primary);
-  font-weight: 700;
-  font-size: 1.75rem;
+/* Color/family/weight for the accented word come from the shared
+   .page-title-accent utility (index.css); this just matches its size to
+   the rest of the heading. */
+.dashboard-title-row h2 .page-title-accent {
+  font-size: 1.85rem;
 }
 
 .dashboard-header p {
@@ -137,7 +139,7 @@
 }
 
 /* ABC chart: grow to fill its column instead of a fixed height,
-   so it always matches the tallest sibling (reorder or bad-orders). */
+   so it always matches the tallest sibling (reorder recs). */
 .secondary-grid .chart-widget {
   height: auto;
   flex: 1;
@@ -193,6 +195,64 @@
 @keyframes skeleton-shimmer {
   0% { background-position: 100% 50%; }
   100% { background-position: 0 50%; }
+}
+
+/* Wraps every section below the header, so the loaded page and the
+   skeleton share one layout. gap: inherit follows .dashboard-content's own
+   gap at every breakpoint instead of duplicating its values. */
+.dashboard-body {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  transition: opacity 0.2s ease;
+}
+
+/* Previous range's view, kept visible while the newly picked range loads.
+   Dimmed and non-interactive so nobody reads or acts on (e.g. follows a
+   reorder SKU link from) numbers that belong to the old range. */
+.dashboard-body.is-refreshing {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.dashboard-refreshing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: flex-start;
+  margin: -0.75rem 0 -0.5rem 0;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.dashboard-refreshing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-info);
+  animation: dashboard-refreshing-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dashboard-refreshing-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .skeleton-chart-body,
+  .dashboard-refreshing-dot {
+    animation: none;
+  }
+  .dashboard-body {
+    transition: none;
+  }
 }
 
 /* ── Empty — per-card note ─────────────────────────────────────────────── */

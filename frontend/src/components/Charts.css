@@ -427,6 +427,12 @@
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--color-info);
+  text-decoration: none;
+  width: fit-content;
+}
+
+.reorder-mini-sku:hover {
+  text-decoration: underline;
 }
 
 .reorder-mini-product {
@@ -435,6 +441,24 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.reorder-mini-view-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-info);
+  text-decoration: none;
+}
+
+.reorder-mini-view-all:hover {
+  text-decoration: underline;
 }
 
 /* Badge stacked above qty (rather than side by side) so the qty line has

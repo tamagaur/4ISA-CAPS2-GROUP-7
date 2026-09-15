@@ -2,7 +2,7 @@
 //
 // Every Recharts series in the app used to carry a hardcoded
 // `isAnimationActive={false}` (28 of them across Charts.jsx,
-// ABCClassification.jsx, BadOrders.jsx and SKUForecast.jsx), so charts
+// ABCClassification.jsx and SKUForecast.jsx), so charts
 // snapped into place with no transition — on first paint and on every
 // date/filter change alike. These helpers turn that back on with ONE set
 // of timings, so a future tweak is a single edit here rather than 28.

@@ -11,7 +11,7 @@
   gap: 1.5rem;
 }
 
-/* Page Header (Match BadOrders style) */
+/* Page Header */
 .audit-page-header {
   display: flex;
   justify-content: space-between;
@@ -32,11 +32,8 @@
   align-items: baseline;
 }
 
-.audit-page-title span {
-  color: var(--color-brand-primary);
-  font-weight: 600;
-  font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
+.audit-page-title .page-title-accent {
+  font-size: 2.1rem;
   margin-left: 0.4rem;
 }
 
@@ -136,7 +133,7 @@
   background-color: var(--color-surface-raised);
 }
 
-/* Table Section (Match BadOrders) */
+/* Table Section */
 .audit-table-wrapper {
   background-color: var(--color-surface);
   border-radius: 12px;

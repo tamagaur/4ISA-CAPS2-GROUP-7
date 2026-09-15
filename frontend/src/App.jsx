@@ -1,20 +1,24 @@
-import React, { useEffect } from 'react';
+import React, { lazy, useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Login from './Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import DashboardLayout from './components/DashboardLayout';
-import Dashboard from './components/Dashboard';
-import SKUManagement from './components/SKUManagement';
-import ABCClassification from './components/ABCClassification';
-import SKUForecast from './components/SKUForecast';
-import ReorderRecommendations from './components/ReorderRecommendations';
-import BadOrders from './components/BadOrders';
-import AuditLog from './components/AuditLog';
-import DataUpload from './components/DataUpload';
-import UserManagement from './components/UserManagement';
 import ToastProvider from './components/ToastProvider';
+import { pageLoaders } from './pageLoaders';
 import './App.css';
+
+// Pages load on demand; the Suspense boundary lives in DashboardLayout
+// around its <Outlet>, so the sidebar and top bar stay put while a page's
+// code arrives.
+const Dashboard = lazy(pageLoaders.dashboard);
+const SKUManagement = lazy(pageLoaders.skuManagement);
+const ABCClassification = lazy(pageLoaders.abc);
+const SKUForecast = lazy(pageLoaders.forecast);
+const ReorderRecommendations = lazy(pageLoaders.reorder);
+const AuditLog = lazy(pageLoaders.auditLog);
+const DataUpload = lazy(pageLoaders.upload);
+const UserManagement = lazy(pageLoaders.users);
 
 const routeTitles = {
   '/login': 'SAN2 | Login',
@@ -23,7 +27,6 @@ const routeTitles = {
   '/abc': 'SAN2 | ABC Classification',
   '/forecast': 'SAN2 | SKU Forecast',
   '/reorder': 'SAN2 | Reorder Recommendations',
-  '/bad-orders': 'SAN2 | Bad Orders',
   '/audit-log': 'SAN2 | Audit Log',
   '/upload': 'SAN2 | Data Management',
   '/users': 'SAN2 | User Management',
@@ -59,7 +62,6 @@ function App() {
           <Route path="abc" element={<ABCClassification />} />
           <Route path="forecast" element={<SKUForecast />} />
           <Route path="reorder" element={<ReorderRecommendations />} />
-          <Route path="bad-orders" element={<BadOrders />} />
           <Route path="audit-log" element={<AuditLog />} />
           <Route path="upload" element={<DataUpload />} />
           <Route

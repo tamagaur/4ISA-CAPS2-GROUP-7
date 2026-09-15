@@ -27,11 +27,8 @@
   align-items: baseline;
 }
 
-.user-mgmt-title span {
-  color: var(--color-brand-primary);
-  font-weight: 600;
-  font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
+.user-mgmt-title .page-title-accent {
+  font-size: 2.1rem;
   margin-left: 0.4rem;
 }
 
@@ -168,14 +165,16 @@
   letter-spacing: 0.04em;
 }
 
+/* Roles are identity, not alerts: admin was red, the color every other page
+   reserves for critical status. Indigo vs. slate still tells the two apart. */
 .user-mgmt-role-badge.role-admin {
-  background-color: var(--color-danger-bg);
-  color: var(--color-brand-primary);
+  background-color: #eef0ff;
+  color: #4338ca;
 }
 
 .user-mgmt-role-badge.role-staff {
-  background-color: #ebf8ff;
-  color: #2b6cb0;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
 }
 
 .user-mgmt-actions-col {

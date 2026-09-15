@@ -5,6 +5,7 @@ import './Topbar.css';
 
 const Topbar = ({
   toggleSidebar,
+  rightSlot,
   startMonth,
   startYear,
   endMonth,
@@ -44,6 +45,8 @@ const Topbar = ({
 
         {/* Date Filter removed and placed in page headers */}
       </div>
+
+      {rightSlot}
 
       {/* The topbar used to end with a second, bare "who am I" avatar here
           (no menu, no action — just initials in a circle) that duplicated

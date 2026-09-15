@@ -1,19 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   List, 
   Layers, 
-  TrendingUp, 
-  RotateCcw, 
-  AlertTriangle, 
+  TrendingUp,
+  RotateCcw,
   Upload,
   LogOut,
   X,
   ClipboardList,
   Users
 } from 'lucide-react';
-import { logout, getCurrentUser } from '../auth';
+import { logout, getCurrentUser, API_URL } from '../auth';
 import Modal from './Modal';
 import './Sidebar.css';
 
@@ -40,7 +39,6 @@ const navSections = [
       { name: 'SKU Management', icon: List, path: '/sku-management' },
       { name: 'ABC Classification', icon: Layers, path: '/abc' },
       { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
-      { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders' },
     ],
   },
   {
@@ -53,7 +51,26 @@ const navSections = [
   },
 ];
 
+const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SYS ONLINE', offline: 'SYS OFFLINE' };
+
 const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
+
+  // Real backend reachability, re-checked every minute.
+  const [apiStatus, setApiStatus] = useState('checking');
+  useEffect(() => {
+    let cancelled = false;
+    const check = () => {
+      fetch(`${API_URL}/health`)
+        .then((res) => { if (!cancelled) setApiStatus(res.ok ? 'online' : 'offline'); })
+        .catch(() => { if (!cancelled) setApiStatus('offline'); });
+    };
+    check();
+    const id = setInterval(check, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const currentUser = getCurrentUser();
@@ -143,19 +160,14 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
             </div>
           </div>
           
+          {/* Was a hardcoded green "SYS ONLINE" (shown even with the backend
+              down) next to the computer's real date, which disagreed with the
+              app's own "today" (Feb 2026). Now reflects GET /health. */}
           <div className="sidebar-status">
-            <div className="status-indicator">
+            <div className={`status-indicator status-${apiStatus}`} role="status">
               <span className="status-dot"></span>
-              <span className="status-text">SYS ONLINE</span>
+              <span className="status-text">{API_STATUS_LABEL[apiStatus]}</span>
             </div>
-            <span className="status-date">
-              {(() => {
-                const today = new Date();
-                const day = today.getDate().toString().padStart(2, '0');
-                const month = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][today.getMonth()];
-                return `${month}-${day}`;
-              })()}
-            </span>
           </div>
 
           <button className="logout-btn" onClick={() => setShowLogoutModal(true)}>

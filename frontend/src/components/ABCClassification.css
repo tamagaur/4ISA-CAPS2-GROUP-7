@@ -31,6 +31,10 @@
   margin: 0 0 0.3rem 0;
 }
 
+.abc-page-title .page-title-accent {
+  font-size: 2.1rem;
+}
+
 .abc-page-subtitle {
   color: var(--color-text-subtle);
   font-size: 0.85rem;
@@ -101,10 +105,19 @@
   flex-shrink: 0;
 }
 
+/* Badge + a fixed-width slot for the boundary icon, so rows with and
+   without the icon keep their badges in one straight column. */
 .abc-cat-cell-inner {
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: 24px 13px;
   align-items: center;
   gap: 0.35rem;
+  margin-left: calc(13px + 0.35rem); /* balances the icon slot so the badge sits centered */
+}
+
+.abc-boundary-slot {
+  display: inline-flex;
+  width: 13px;
 }
 
 .abc-boundary-icon {
@@ -699,90 +712,9 @@
 }
 
 /* Table */
-.abc-table-wrapper {
-  background-color: var(--color-surface);
-  border-radius: 12px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-}
-
+/* Table base styles live in index.css (.data-table-card / .data-table). */
 .abc-table {
-  width: 100%;
   min-width: 750px;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-.abc-table thead {
-  border-bottom: 2px solid var(--color-surface-muted);
-}
-
-.abc-table th {
-  text-align: center;
-  padding: 0.9rem 0.8rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--color-text-subtle);
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.abc-table tbody tr {
-  border-bottom: 1px solid var(--color-surface-raised);
-  transition: background-color 0.15s;
-}
-
-.abc-table tbody tr:hover {
-  background-color: var(--color-surface-raised);
-}
-
-.abc-table td {
-  padding: 0.85rem 0.8rem;
-  color: var(--color-text-body);
-  vertical-align: middle;
-  text-align: center;
-}
-
-.abc-row-num {
-  color: var(--color-text-subtle);
-  font-size: 0.8rem;
-}
-
-.abc-sku-cell {
-  color: var(--color-brand-accent);
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.abc-sku-cell:hover {
-  text-decoration: underline;
-}
-
-.abc-product-cell {
-  font-weight: 500;
-  color: var(--color-text);
-}
-
-.abc-brand-cell {
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-.abc-avg-cell {
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.abc-rev-cell {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  white-space: nowrap;
 }
 
 /* Category Badges */
@@ -790,10 +722,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -808,43 +740,8 @@
 }
 
 .abc-cat-c {
-  background-color: var(--color-surface-raised);
+  background-color: var(--color-surface-sunken);
   color: var(--color-abc-deep);
-}
-
-/* Status */
-.abc-status {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.abc-in-stock {
-  color: var(--color-success-ui);
-}
-
-/* Fixed 2026-09: was swapped with .abc-critical below (LOW was red,
-   CRITICAL was orange) — see STOCK_STATUS_COLORS in ABCClassification.jsx
-   for the full reasoning. Now uses the same --color-warning/--color-critical
-   tokens as the chart above, so the table and the chart can't disagree. */
-.abc-low {
-  color: var(--color-warning);
-}
-
-.abc-critical {
-  color: var(--color-critical);
-}
-
-.abc-no-data {
-  color: var(--color-text-subtle);
-}
-
-.abc-no-results {
-  text-align: center;
-  padding: 3rem 1rem !important;
-  color: var(--color-text-subtle);
-  font-style: italic;
 }
 
 /* Pagination */

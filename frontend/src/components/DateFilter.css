@@ -99,6 +99,15 @@
    A solid red button here competed visually with genuine alerts (a
    CRITICAL badge) elsewhere on the same screen; matches .refresh-btn's
    weight now instead of outranking it. */
+.date-single-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-right: 0.25rem;
+}
+
 .date-today-btn {
   display: flex;
   align-items: center;

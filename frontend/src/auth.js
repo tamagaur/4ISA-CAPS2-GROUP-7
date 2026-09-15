@@ -9,8 +9,9 @@
 // tool, worth revisiting if the dashboard ever embeds third-party scripts.
 
 import { logAction } from './utils/auditLogger';
+import { invalidateCache } from './api/cache';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'dsd_access_token';
 const ROLE_KEY = 'dsd_role';
 
@@ -91,6 +92,9 @@ export function setSession(accessToken, role) {
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(ROLE_KEY);
+  // Cached API responses belong to the session that fetched them — the next
+  // account to sign in on this tab must not be served them.
+  invalidateCache();
 }
 
 // FastAPI's `detail` is a plain string for our own HTTPExceptions (401 wrong

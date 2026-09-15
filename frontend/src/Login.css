@@ -105,6 +105,10 @@
   margin: 0 0 0.5rem 0;
 }
 
+.login-card h2 .page-title-accent {
+  font-size: 2.3rem;
+}
+
 .subtitle {
   color: var(--color-text-muted);
   font-size: 1.1rem;
@@ -223,7 +227,8 @@
 }
 
 .help-text {
-  color: var(--color-text-body);
+  /* Was --color-text-body (dark gray) on the navy login panel, barely readable. */
+  color: var(--color-nav-item);
   font-size: 0.9rem;
   margin-top: 2rem;
   position: absolute;

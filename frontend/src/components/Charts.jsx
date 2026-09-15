@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ComposedChart, BarChart, Bar, Cell, Line, LabelList,
   PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
-import { HelpCircle, RotateCcw } from 'lucide-react';
+import { HelpCircle, RotateCcw, ArrowRight } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
 import './Charts.css';
@@ -514,6 +515,7 @@ const CategoryStockTooltip = ({ active, payload, label }) => {
 
 const barLabelStyle = { fontSize: 10, fontWeight: 700, fill: '#ffffff' };
 const pendingReorderLabelStyle = { fontSize: 10, fill: CHART_COLORS.axisLabel };
+const MIN_LABEL_HEIGHT_PX = 14;
 
 // A segment under this fraction of its own bar's covered height renders no
 // inline label — Tier A/B's smallest slices used to overlap into an
@@ -537,6 +539,36 @@ function makeSegmentLabel(data) {
     return (
       <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="middle" style={barLabelStyle}>
         {value.toLocaleString()}
+      </text>
+    );
+  };
+}
+
+// Was position="top" in axis-gray text while the two stacked segments beside
+// it (makeSegmentLabel above) render centered-inside in bold white — same
+// chart, same kind of value (a SKU count), two different label styles side
+// by side, which is what read as "inconsistent formatting." This matches
+// that: bold white, centered inside the bar, whenever the bar is tall enough
+// to hold it. Falls back to the old above-the-bar style only when the bar is
+// too short to fit text inside without it overflowing (e.g. Tier C's
+// pending-reorder count of 14 next to a much taller in-stock/dead-stock
+// stack) — same "don't cram text into a sliver" reasoning MIN_LABEL_FRACTION
+// already applies to the stacked segments, just height-based here since this
+// bar isn't part of that stack.
+function makePendingReorderLabel() {
+  return ({ x, y, width, height, value }) => {
+    if (!value) return null;
+    const text = value.toLocaleString();
+    if (height >= MIN_LABEL_HEIGHT_PX) {
+      return (
+        <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="middle" style={barLabelStyle}>
+          {text}
+        </text>
+      );
+    }
+    return (
+      <text x={x + width / 2} y={y - 6} textAnchor="middle" style={pendingReorderLabelStyle}>
+        {text}
       </text>
     );
   };
@@ -629,7 +661,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
                   <LabelList dataKey="inStock" content={makeSegmentLabel(data)} />
                 </Bar>
                 <Bar dataKey="pendingReorderCount" name="Pending reorder" fill={STOCK_STATUS_COLORS.pendingReorder} radius={[3, 3, 0, 0]} {...chartAnim(2)}>
-                  <LabelList dataKey="pendingReorderCount" position="top" style={pendingReorderLabelStyle} formatter={(v) => v.toLocaleString()} />
+                  <LabelList dataKey="pendingReorderCount" content={makePendingReorderLabel()} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -852,7 +884,7 @@ const LP_PRIORITY_ROWS = [
     // co-equal trade-off weights in one multi-objective LP — none of them
     // is inherently more alarming than the others, so giving Cost the same
     // red used for genuine alerts elsewhere (Reorder Recs' CRITICAL badge,
-    // the Bad Order rate line) implied a severity that isn't there. Teal
+    // a rate line elsewhere in the app) implied a severity that isn't there. Teal
     // keeps it visually distinct from Service level (indigo) and Storage
     // (amber) without borrowing red's meaning.
     label: 'Cost',
@@ -953,7 +985,11 @@ export const ReorderRecommendationWidget = ({
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Reorder recommendations</h4>
-          <p>LP-optimized purchase quantities, Category A SKUs</p>
+          {/* GET /dashboard's reorder_preview sums every pending recommendation
+              across all planning cycles, while Reorder Recs shows one cycle at a
+              time (latest by default), so the two pages' counts differ. Said
+              here until the backend scopes the preview to the latest cycle. */}
+          <p>LP-optimized purchase quantities, Category A SKUs · all pending planning cycles</p>
         </div>
         {isModified && (
           <button type="button" className="reorder-card-reset" onClick={handleReset}>
@@ -1029,7 +1065,15 @@ export const ReorderRecommendationWidget = ({
             {sortedRows.map((r) => (
               <div className="reorder-mini-row" key={r.sku}>
                 <div className="reorder-mini-row-main">
-                  <span className="reorder-mini-sku">{r.sku}</span>
+                  {/* Was a plain <span> styled to look like a link (blue,
+                      same color as every other clickable SKU in the app)
+                      but had no click handler — a dead affordance. Now a
+                      real link to that SKU's own recommendation, which the
+                      Reorder Recs page opens in its detail modal on load
+                      (see the ?sku= handling in ReorderRecommendations.jsx). */}
+                  <Link to={`/reorder?sku=${encodeURIComponent(r.sku)}`} className="reorder-mini-sku">
+                    {r.sku}
+                  </Link>
                   <span className="reorder-mini-product">{r.product}</span>
                 </div>
                 <div className="reorder-mini-row-side">
@@ -1049,6 +1093,15 @@ export const ReorderRecommendationWidget = ({
               </div>
             ))}
           </div>
+
+          {/* This widget only ever shows a few rows (Dashboard is an
+              overview, not the working list) — this is its one connection
+              to the full Reorder Recs page, where the complete list,
+              Accept/Dismiss actions, and decision log actually live. */}
+          <Link to="/reorder" className="reorder-mini-view-all">
+            View all recommendations
+            <ArrowRight size={14} />
+          </Link>
         </>
       )}
     </div>

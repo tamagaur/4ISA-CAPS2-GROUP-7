@@ -1,9 +1,16 @@
-import React, { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import React, { Suspense, useEffect, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import { preloadPages } from '../pageLoaders';
+import { invalidateCache } from '../api/cache';
+import DataFreshness from './DataFreshness';
 import './DashboardLayout.css';
+
+const PageLoadingFallback = () => (
+  <p className="page-chunk-loading" role="status">Loading page…</p>
+);
 
 // "Today" is pinned to February 2026, not the machine's actual clock — the
 // app's own notion of "now" needs to stay fixed regardless of when it's
@@ -79,6 +86,13 @@ const startsWithSidebarOpen = () => !window.matchMedia('(max-width: 900px)').mat
 const DashboardLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(startsWithSidebarOpen);
 
+  // Warm every page's code in the background once someone is signed in, so
+  // only the first page they land on waits on a chunk download.
+  useEffect(() => {
+    const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1500));
+    idle(preloadPages);
+  }, []);
+
   const realWorldPeriod = getCurrentRealWorldPeriod();
   const defaultRange = getDefaultDateRange();
 
@@ -99,6 +113,17 @@ const DashboardLayout = () => {
   const [showNavConfirm, setShowNavConfirm] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Top-bar Refresh: drop every cached response and remount the current page
+  // so its effects fetch again. Remounting (rather than asking each page to
+  // refetch) keeps this in one place; a page's local picks, like ABC's
+  // month, reset to their defaults, the same as reloading the page.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const handleRefreshData = () => {
+    invalidateCache();
+    setRefreshKey((k) => k + 1);
+  };
 
   // Evaluates to true only when pending selection differs from applied period
   const isPending =
@@ -212,6 +237,7 @@ const DashboardLayout = () => {
       <div className="main-content">
         <Topbar
           toggleSidebar={toggleSidebar}
+          rightSlot={<DataFreshness navKey={`${location.pathname}#${refreshKey}`} onRefresh={handleRefreshData} />}
           startMonth={startMonth}
           startYear={startYear}
           endMonth={endMonth}
@@ -230,16 +256,18 @@ const DashboardLayout = () => {
           realWorldMonth={realWorldPeriod.month}
           realWorldYear={realWorldPeriod.year}
         />
-        <Outlet context={{
-          startMonth, startYear, endMonth, endYear,
-          pendingStartMonth, setPendingStartMonth,
-          pendingStartYear, setPendingStartYear,
-          pendingEndMonth, setPendingEndMonth,
-          pendingEndYear, setPendingEndYear,
-          isPending, isPendingRangeValid, isPendingRangeLongEnough, canApplyPendingPeriod,
-          handleApplyPeriod, handleResetToToday,
-          updatePeriodImmediately, realWorldPeriod,
-        }} />
+        <Suspense fallback={<PageLoadingFallback />}>
+          <Outlet key={refreshKey} context={{
+            startMonth, startYear, endMonth, endYear,
+            pendingStartMonth, setPendingStartMonth,
+            pendingStartYear, setPendingStartYear,
+            pendingEndMonth, setPendingEndMonth,
+            pendingEndYear, setPendingEndYear,
+            isPending, isPendingRangeValid, isPendingRangeLongEnough, canApplyPendingPeriod,
+            handleApplyPeriod, handleResetToToday,
+            updatePeriodImmediately, realWorldPeriod,
+          }} />
+        </Suspense>
       </div>
 
       {/* Nav Interception Confirmation Dialog */}

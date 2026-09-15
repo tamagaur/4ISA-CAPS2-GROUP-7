@@ -9,14 +9,12 @@ const initialFormState = {
   productName: '',
   sizeVal: '',
   sizeUnit: 'L',
-  unitPrice: '',
-  leadTimeDays: '',
-  notes: '',
 };
 
-const DEFAULT_BRANDS = [
-  'Unilever',
-];
+// Real brands come from the caller (SKUManagement passes every brand in
+// Product_Dimension). 'Unilever' used to sit here, but that's the principal,
+// not a brand — no SKU in the database has brand = 'Unilever'.
+const DEFAULT_BRANDS = [];
 
 // Every real Unilever sku_code in Product_Dimension is exactly 8 numeric
 // characters (2,098/2,098 verified), and backend/routers/sku.py enforces
@@ -71,13 +69,6 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
     }
   };
 
-  // Format unit price to 2 decimals on blur
-  const handleUnitPriceBlur = () => {
-    if (form.unitPrice && !isNaN(form.unitPrice)) {
-      setForm(prev => ({ ...prev, unitPrice: parseFloat(form.unitPrice).toFixed(2) }));
-    }
-  };
-
   // Was broken: referenced an undeclared `newErrors` and `skuRegex`, so every
   // submit threw ReferenceError and the form silently did nothing. Both are
   // declared properly now, and the format check matches the real data (8
@@ -95,16 +86,6 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
 
     if (!(form.brand || '').trim()) newErrors.brand = 'Brand is required';
     if (!(form.productName || '').trim()) newErrors.productName = 'Product Name is required';
-
-    // Both optional, but if given they have to be sane — the backend stores
-    // these as numerics, so a negative price or lead time would be accepted
-    // silently and then read as real data downstream.
-    if ((form.unitPrice || '').trim() && !(Number(form.unitPrice) > 0)) {
-      newErrors.unitPrice = 'Unit price must be greater than 0';
-    }
-    if ((form.leadTimeDays || '').trim() && !(Number(form.leadTimeDays) >= 0)) {
-      newErrors.leadTimeDays = 'Lead time cannot be negative';
-    }
 
     return newErrors;
   };
@@ -283,58 +264,13 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
                 </div>
               </div>
 
-              {/* Row 4: Unit Price */}
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">
-                    UNIT PRICE <span className="required">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    name="unitPrice"
-                    value={form.unitPrice}
-                    onChange={handleChange}
-                    onBlur={handleUnitPriceBlur}
-                    placeholder="0.00"
-                    min="0"
-                    step="0.01"
-                    className={`form-input ${errors.unitPrice ? 'input-error' : ''}`}
-                  />
-                  {errors.unitPrice && <span className="error-text">{errors.unitPrice}</span>}
-                </div>
-              </div>
-
-              {/* Row 5: Lead Time */}
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">LEAD TIME (DAYS)</label>
-                  <input
-                    type="number"
-                    name="leadTimeDays"
-                    value={form.leadTimeDays}
-                    onChange={handleChange}
-                    placeholder="e.g. 7"
-                    min="0"
-                    className={`form-input ${errors.leadTimeDays ? 'input-error' : ''}`}
-                  />
-                  {errors.leadTimeDays && <span className="error-text">{errors.leadTimeDays}</span>}
-                </div>
-              </div>
-
-              {/* Row 6: Notes */}
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">NOTES</label>
-                  <textarea
-                    name="notes"
-                    value={form.notes}
-                    onChange={handleChange}
-                    placeholder="Optional notes about this SKU..."
-                    rows="3"
-                    className="form-input form-textarea"
-                  ></textarea>
-                </div>
-              </div>
+              {/* Unit price, lead time and notes used to be fields here (unit
+                  price marked required), but POST /sku only writes code, name,
+                  pack size and brand, so whatever was typed was discarded. The
+                  Product_Dimension columns exist (migration 0002). */}
+              <p className="add-sku-unsaved-note">
+                Unit price, lead time and notes can&apos;t be recorded here yet: the system doesn&apos;t save these fields.
+              </p>
 
               {/* Actions */}
               <div className="modal-actions">
@@ -376,22 +312,7 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
                 <span className="summary-field-label">CATEGORY</span>
                 <span className="summary-field-val pending-category">Pending Auto-Classification</span>
               </div>
-              <div className="summary-field">
-                <span className="summary-field-label">UNIT PRICE</span>
-                <span className="summary-field-val">₱{parseFloat(form.unitPrice || 0).toFixed(2)}</span>
-              </div>
-              {form.leadTimeDays && (
-                <div className="summary-field">
-                  <span className="summary-field-label">LEAD TIME</span>
-                  <span className="summary-field-val">{form.leadTimeDays} days</span>
-                </div>
-              )}
-              {form.notes && (
-                <div className="summary-field full">
-                  <span className="summary-field-label">NOTES</span>
-                  <span className="summary-field-val notes-val">{form.notes}</span>
-                </div>
-              )}
+
             </div>
 
             {saveError && <p className="error-text" style={{ textAlign: 'center', marginTop: '0.5rem' }}>{saveError}</p>}

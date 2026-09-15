@@ -6,6 +6,7 @@ import { useToast } from './ToastProvider';
 import { listUsers, createUser, updateUser, deleteUser } from '../utils/usersApi';
 import { logAction } from '../utils/auditLogger';
 import { getCurrentUser } from '../auth';
+import { formatDate } from '../utils/formatDate';
 import './UserManagement.css';
 
 const getInitials = (name) => {
@@ -96,7 +97,7 @@ const UserManagement = () => {
       <div className="user-mgmt-content">
         <div className="user-mgmt-header">
           <div>
-            <h2 className="user-mgmt-title">User <span>management</span></h2>
+            <h2 className="user-mgmt-title">User <span className="page-title-accent">management</span></h2>
             <p className="user-mgmt-subtitle">
               Create, edit, and remove staff accounts. Only admins can access this page.
             </p>
@@ -151,7 +152,7 @@ const UserManagement = () => {
                       </span>
                     </td>
                     <td className="user-mgmt-date-cell">
-                      {new Date(user.created_at).toLocaleDateString()}
+                      {formatDate(user.created_at)}
                     </td>
                     <td className="user-mgmt-actions-col">
                       <button

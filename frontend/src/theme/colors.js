@@ -1,7 +1,7 @@
 // SAN2 Inventory DSS Design Tokens
 export const COLORS = {
   // Data Visualization Color System
-  critical: '#E5484D',       // Red: KPI negative deltas, critical reorders, bad order incidents
+  critical: '#E5484D',       // Red: KPI negative deltas, critical reorders
   warning: '#F5A623',        // Amber: Warnings, under investigation, low stock
   success: '#2E9E5B',        // Green: Good, resolved, positive trends, received units
   salesTrend: '#5B5FEF',     // Indigo: Sales trend / primary metric lines
@@ -42,7 +42,7 @@ export const STATUS_TIERS = {
 // salesSeries/stockSeries used to be their own slightly-off teal/amber
 // (#0D9488, #D97706) instead of the COLORS.dispatched/COLORS.warning used
 // everywhere else, so the SKU Forecast and Dashboard trend lines were a
-// visibly different shade from the same-meaning bars on Bad Orders and ABC
+// visibly different shade from the same-meaning bars on ABC
 // Classification. abcRamp is a fallback only (see ABC_TIER_COLORS in
 // Charts.jsx) — pointed at the real plum ramp so even the fallback can't
 // disagree with the ABC badges/tables that use COLORS.abcA/B/C directly.

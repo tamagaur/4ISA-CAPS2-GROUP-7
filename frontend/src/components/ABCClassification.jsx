@@ -15,6 +15,8 @@ import { COLORS, CHART_COLORS } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
 import { getABCClassification } from '../api/abc';
 import DateFilter from './DateFilter';
+import { formatMonth } from '../utils/formatDate';
+import { useBrandLookup } from '../utils/useBrandLookup';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
@@ -37,19 +39,8 @@ const MONTH_TO_NUM = {
 const toClassificationPeriod = (month, year) =>
   month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
-// Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
-const parseProductAndWeight = (product) => {
-  if (!product) return { name: '', weight: '' };
-  const weightRegex = /\b(\d+(?:\.\d+)?\s*(?:g|ml|l|kg|L|KG|ML|G))\b/;
-  const match = product.match(weightRegex);
-  if (match) {
-    const weight = `(${match[1]})`;
-    let name = product.replace(weightRegex, '').replace(/\s+/g, ' ').trim();
-    name = name.replace(/\(\s*\)/g, '').trim();
-    return { name, weight };
-  }
-  return { name: product, weight: '' };
-};
+// Product names render verbatim (see SKUManagement.jsx for why the old
+// pack-size split was removed).
 
 // Helper to format SKU to 5 digits (SKU-#####)
 const formatSKU = (sku) => {
@@ -85,9 +76,8 @@ const CLASS_DRILLDOWN_NOTE = {
   C: 'Long-tail SKUs sitting at LOW/CRITICAL stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don\u2019t go fully out of stock unnoticed.',
 };
 
-// Mirrors the colors already used for stock_status badges elsewhere on
-// this page (.abc-in-stock / .abc-low / .abc-critical in the CSS) so the
-// same status always reads as the same color across the whole view.
+// Chart colors for each stock_status; the table's status pills
+// (.pill-success / -warning / -critical in index.css) use the same hues.
 // NO DATA (gray) is its own status, not folded into CRITICAL — as of
 // 2025-12 Inventory_Fact_Real only covers a subset of classified
 // products (partial ETL load, more coverage expected), so "no record
@@ -104,7 +94,7 @@ const STOCK_STATUS_COLORS = {
   'IN STOCK': '#38a169',
   LOW: COLORS.warning,
   CRITICAL: COLORS.critical,
-  'NO DATA': '#a0aec0',
+  'NO DATA': '#667085',
 };
 
 const ClassAggregateTooltip = ({ active, payload }) => {
@@ -138,8 +128,20 @@ const ClassAggregateTooltip = ({ active, payload }) => {
 };
 
 const ABCClassification = () => {
-  const { endMonth, endYear } = useOutletContext() || {};
-  const requestedPeriod = toClassificationPeriod(endMonth, endYear);
+  // One classification run exists per month, and GET /abc only ever read
+  // the END of the shared date range — so this page used to make people
+  // pick a 6-month range whose start did nothing. It now keeps its own
+  // single month, seeded from the dashboard range's end month on mount,
+  // and never writes back to the shared range (same local-state pattern
+  // as SKUForecast.jsx's own picker).
+  const dashboardRange = useOutletContext() || {};
+  const [selectedMonth, setSelectedMonth] = useState(() => ({
+    month: dashboardRange.endMonth,
+    year: dashboardRange.endYear,
+  }));
+  const requestedPeriod = toClassificationPeriod(selectedMonth.month, selectedMonth.year);
+  const isCustomMonth =
+    selectedMonth.month !== dashboardRange.endMonth || selectedMonth.year !== dashboardRange.endYear;
 
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -202,6 +204,10 @@ const ABCClassification = () => {
     };
   }, [requestedPeriod]);
 
+  // GET /abc has no brand field; this was hardcoded 'Unilever' (the
+  // principal) on every row. Real brand comes from the product master.
+  const brandLookup = useBrandLookup();
+
   // Map API shape -> the row shape the rest of this page renders.
   const sourceData = useMemo(
     () =>
@@ -209,7 +215,7 @@ const ABCClassification = () => {
         id: item.sku_id,
         sku: item.sku_id,
         product: item.product_name || 'Unknown Product',
-        brand: 'Unilever',
+        brand: brandLookup?.get(String(item.sku_id)) ?? null,
         cat: item.tier,
         // revenue_share / cumulative_share come from the API as 0-1 fractions
         // (see analytics/classification/abc.py); everything downstream here
@@ -219,7 +225,7 @@ const ABCClassification = () => {
         nearBoundary: !!item.boundary_flag,
         status: item.stock_status,
       })),
-    [rawData]
+    [rawData, brandLookup]
   );
 
   // Handle click outside combobox to close dropdown
@@ -237,7 +243,7 @@ const ABCClassification = () => {
   const catBCount = sourceData.filter(d => d.cat === 'B').length;
   const catCCount = sourceData.filter(d => d.cat === 'C').length;
 
-  const brandsList = ['ALL', ...Array.from(new Set(sourceData.map(d => d.brand)))];
+  const brandsList = ['ALL', ...Array.from(new Set(sourceData.map(d => d.brand).filter(Boolean))).sort()];
 
   // Rank by revenue share for the Pareto chart's x-axis; cumulative_share
   // and boundary_flag already come straight from the backend.
@@ -295,7 +301,7 @@ const ABCClassification = () => {
       const matchesSearch = searchQuery === '' ||
         item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.brand.toLowerCase().includes(searchQuery.toLowerCase());
+        (item.brand || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCat = categoryFilter === 'ALL' || item.cat === categoryFilter;
       const matchesBrand = brandFilter === 'ALL' || item.brand === brandFilter;
       return matchesSearch && matchesCat && matchesBrand;
@@ -363,11 +369,11 @@ const ABCClassification = () => {
 
   const getStatusClass = (status) => {
     switch (status) {
-      case 'IN STOCK': return 'abc-status abc-in-stock';
-      case 'LOW': return 'abc-status abc-low';
-      case 'CRITICAL': return 'abc-status abc-critical';
-      case 'NO DATA': return 'abc-status abc-no-data';
-      default: return 'abc-status';
+      case 'IN STOCK': return 'pill pill-success';
+      case 'LOW': return 'pill pill-warning';
+      case 'CRITICAL': return 'pill pill-critical';
+      case 'NO DATA': return 'pill pill-neutral';
+      default: return 'pill pill-neutral';
     }
   };
 
@@ -387,12 +393,22 @@ const ABCClassification = () => {
   const header = (
     <div className="abc-page-header">
       <div className="abc-page-title-row">
-        <h2 className="abc-page-title">ABC Classification</h2>
-        <DateFilter />
+        <h2 className="abc-page-title">ABC <span className="page-title-accent">Classification</span></h2>
+        <DateFilter
+          singleMonth
+          localValue={{
+            startMonth: selectedMonth.month, startYear: selectedMonth.year,
+            endMonth: selectedMonth.month, endYear: selectedMonth.year,
+          }}
+          onLocalChange={(v) => setSelectedMonth({ month: v.endMonth, year: v.endYear })}
+          onReset={isCustomMonth
+            ? () => setSelectedMonth({ month: dashboardRange.endMonth, year: dashboardRange.endYear })
+            : undefined}
+        />
       </div>
       <p className="abc-page-subtitle">
         Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
-        {classificationPeriod && <> Period: {classificationPeriod}.</>}
+        {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}.</>}
         <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a SKU within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
       </p>
     </div>
@@ -596,8 +612,8 @@ const ABCClassification = () => {
                 <thead>
                   <tr>
                     <th>Status</th>
-                    <th>SKU Count</th>
-                    <th>% of Class {selectedClass}</th>
+                    <th className="table-num">SKU Count</th>
+                    <th className="table-num">% of Class {selectedClass}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -607,8 +623,8 @@ const ABCClassification = () => {
                         <span className="abc-drilldown-dot" style={{ backgroundColor: STOCK_STATUS_COLORS[row.status] }} />
                         {row.status}
                       </td>
-                      <td>{row.count}</td>
-                      <td>{row.pct.toFixed(0)}%</td>
+                      <td className="table-num">{row.count}</td>
+                      <td className="table-num">{row.pct.toFixed(0)}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -805,17 +821,17 @@ const ABCClassification = () => {
         )}
 
         {/* Table */}
-        <div className="abc-table-wrapper">
-          <table className="abc-table">
+        <div className="data-table-card">
+          <table className="data-table abc-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th>SKU</th>
-                <th>PRODUCT</th>
-                <th>BRAND</th>
-                <th>CAT</th>
-                <th>REV %</th>
-                <th>STATUS</th>
+                <th className="table-num col-fit">#</th>
+                <th className="col-fit">SKU</th>
+                <th>Product</th>
+                <th className="col-fit">Brand</th>
+                <th className="table-center col-fit">Cat</th>
+                <th className="table-num col-fit">Rev %</th>
+                <th className="col-fit">Stock status</th>
               </tr>
             </thead>
             <tbody>
@@ -825,43 +841,36 @@ const ABCClassification = () => {
                   id={`abc-row-${item.id}`}
                   className={highlightedSKUId === item.id ? 'highlighted-row-flash' : ''}
                 >
-                  <td className="abc-row-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
-                  <td className="abc-sku-cell">{formatSKU(item.sku)}</td>
-                  <td className="abc-product-cell">
-                    {(() => {
-                      const { name, weight } = parseProductAndWeight(item.product);
-                      return (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span className="abc-product-name">{name}</span>
-                          {weight && (
-                            <span className="abc-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
-                              {weight}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="abc-brand-cell">{item.brand}</td>
-                  <td>
+                  <td className="cell-rownum table-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
+                  <td className="cell-code">{formatSKU(item.sku)}</td>
+                  <td className="cell-product">{item.product}</td>
+                  <td className={item.brand ? 'cell-muted' : 'cell-empty'}>{item.brand || '—'}</td>
+                  <td className="table-center">
+                    {/* The warning icon always has a reserved slot, so badges
+                        stay in one straight column whether or not a row is
+                        near a tier boundary. */}
                     <span className="abc-cat-cell-inner">
                       <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
-                      {item.nearBoundary && (
-                        <AlertTriangle
-                          size={13}
-                          className="abc-boundary-icon"
-                          title={`Cumulative revenue ${item.cumulativePct.toFixed(1)}% — within ${BOUNDARY_TOLERANCE_PP}pp of a tier cutoff`}
-                        />
-                      )}
+                      <span className="abc-boundary-slot">
+                        {item.nearBoundary && (
+                          <AlertTriangle
+                            size={13}
+                            className="abc-boundary-icon"
+                            aria-label="Near a tier boundary"
+                          >
+                            <title>{`Cumulative revenue ${item.cumulativePct.toFixed(1)}% — within ${BOUNDARY_TOLERANCE_PP}pp of a tier cutoff`}</title>
+                          </AlertTriangle>
+                        )}
+                      </span>
                     </span>
                   </td>
-                  <td className="abc-rev-cell">{item.revPct.toFixed(1)}%</td>
+                  <td className="table-num cell-strong">{item.revPct.toFixed(1)}%</td>
                   <td><span className={getStatusClass(item.status)}>{item.status}</span></td>
                 </tr>
               ))}
               {filteredData.length === 0 && (
-                <tr>
-                  <td colSpan="7" className="abc-no-results">No data for this selection.</td>
+                <tr className="table-empty-row">
+                  <td colSpan="7">No data for this selection.</td>
                 </tr>
               )}
             </tbody>

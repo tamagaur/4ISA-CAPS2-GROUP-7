@@ -5,9 +5,9 @@ import './Toast.css';
 // App-wide toast notifications.
 //
 // Before this, every success/failure signal was local to whatever component
-// produced it: three separate copy-pasted "success" panels inside AddSKUModal,
-// EditSKUModal and ReportBadOrderModal (each with its own 1.5s auto-dismiss
-// timer), and nothing at all for actions that don't happen inside a modal —
+// produced it: separate copy-pasted "success" panels inside AddSKUModal
+// and EditSKUModal (each with its own 1.5s auto-dismiss timer), and
+// nothing at all for actions that don't happen inside a modal —
 // accepting a reorder recommendation, deleting a user. Confirmation therefore
 // disappeared with the modal that produced it, and the data-entry-heavy parts
 // of the app had no way to say "that worked" once the dialog closed.

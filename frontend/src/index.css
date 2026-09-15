@@ -1,5 +1,281 @@
+/* Table cell alignment shared by every data table: text columns are left-
+   aligned (each table's own th/td default), numbers right-aligned with
+   tabular digits so place values line up, badges/actions centered. The
+   `table` + element prefix outranks per-table `.x-table td` rules. */
+table th.table-num,
+table td.table-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+table th.table-center,
+table td.table-center {
+  text-align: center;
+}
+
+/* Screen-reader-only text (was defined in Dashboard.css, which only loads
+   with the Dashboard page, so other pages couldn't rely on it). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Shared data table ───────────────────────────────────────────────────
+   SKU Management, ABC Classification and Reorder Recs each carried their
+   own copy of the table CSS, and the copies had drifted: 0.85rem vs
+   0.78rem body text, three different cell paddings, SKU codes in brand
+   red on one page and link blue on another, stock status as a pill on one
+   page and bare colored text on the next. One definition now, so the
+   three tables read as the same product. Page CSS keeps only what is
+   genuinely page-specific (min-width, a column's special treatment). */
+.data-table-card {
+  /* Contains the absolutely-positioned .visually-hidden header labels;
+     without it they sit at the table's far right edge in page coordinates
+     and widen the whole page on a phone. */
+  position: relative;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  color: var(--color-text-body);
+}
+
+.data-table thead th {
+  background-color: #FAFAF8;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.7rem 1rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.data-table tbody td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid #EEF0F2;
+  vertical-align: middle;
+}
+
+/* Default alignment kept at low specificity (one class + one element) so
+   the table-num / table-center utilities above (table th.table-num) still
+   win. Written as `.data-table tbody td` it tied with them and, coming
+   later in the file, silently left-aligned every number column. */
+.data-table th,
+.data-table td {
+  text-align: left;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr {
+  transition: background-color 0.12s;
+}
+
+.data-table tbody tr:hover {
+  background-color: #FAFAF8;
+}
+
+/* Shrink-to-fit: a column that should only be as wide as its content,
+   so the free width goes to the product name instead of opening gaps
+   between short columns. */
+.data-table .col-fit {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.data-table .cell-rownum {
+  color: var(--color-slate-400);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* SKU codes: tabular digits so codes line up column-wide. */
+.data-table .cell-code {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+/* Clickable code: dotted underline instead of brand red. Red already
+   means "critical" in these tables (urgency pills, stock below ROP), so a
+   red link column read as one more alarm. */
+.data-table .cell-code-link {
+  color: var(--color-text);
+  cursor: pointer;
+  text-decoration: underline dotted var(--color-border-strong);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+  border-radius: 4px;
+}
+
+.data-table .cell-code-link:hover {
+  color: var(--color-brand-primary);
+  text-decoration: underline solid currentColor;
+}
+
+.data-table .cell-code-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Product names come from SSM's product master in all caps. They're
+   kept verbatim (planners search by them, and codes like 12X2X135ML
+   break under title-casing), but set slightly smaller with a touch of
+   tracking so a column of capitals doesn't shout. */
+.data-table .cell-product {
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.data-table .cell-muted {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.data-table .cell-empty {
+  color: var(--color-slate-400);
+}
+
+.data-table .cell-strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.data-table .table-empty-row td {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--color-text-subtle);
+  font-style: italic;
+}
+
+/* Status pills — one shape for every categorical status in a table
+   (stock status, urgency, decision). Soft tint + dot, no border, so a
+   column where most rows share one status doesn't become a wall of
+   outlined boxes. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+}
+
+.pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.pill-critical { background-color: var(--color-severity-critical-bg); color: var(--color-severity-critical); }
+.pill-warning  { background-color: var(--color-severity-urgent-bg);   color: var(--color-severity-urgent); }
+.pill-success  { background-color: #E7F5EC;                            color: #1E7A45; }
+.pill-planned  { background-color: var(--color-severity-planned-bg);  color: var(--color-severity-planned); }
+.pill-neutral  { background-color: var(--color-surface-sunken);       color: var(--color-text-muted); }
+
+/* Row actions. Quiet by default so a long list of rows doesn't turn
+   into a grid of colored buttons; the affirmative action gets the one
+   filled style. */
+.table-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.table-btn:hover {
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.table-btn:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.table-btn-primary {
+  background-color: var(--color-severity-planned);
+  border-color: var(--color-severity-planned);
+  color: #fff;
+}
+
+.table-btn-primary:hover {
+  background-color: #0B5F58;
+  border-color: #0B5F58;
+  color: #fff;
+}
+
+.table-btn-group {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+/* One shared accent style for the italicized word in every page title,
+   so "which word looks different" is answered the same way everywhere
+   instead of each page's CSS separately deciding color/weight/family.
+   Applied via <span className="page-title-accent"> in each page header. */
+.page-title-accent {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+}
+
 :root {
   --font-inter: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* Serif accent font — every page title's one accented word (e.g.
+     "Inventory *pulse*", "Audit *log*") uses this via .page-title-accent
+     below, instead of the plain color-only span every page used before,
+     or the two pages (Audit Log, User Management) that fell back to
+     system Georgia, which isn't loaded and renders differently per OS. */
+  --font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
 
   /* Data Visualization Color Tokens */
   --color-critical: #E5484D;
@@ -84,8 +360,8 @@
   --color-text: #1a202c;
   --color-text-heading: #2d3748;
   --color-text-body: #4a5568;         /* merged: was #4a5568 (58x) + #475569 (10x), 3/255 apart */
-  --color-text-muted: #718096;
-  --color-text-subtle: #a0aec0;
+  --color-text-muted: #556070;       /* was #718096 (3.7:1 on the page background, below WCAG AA 4.5:1); now 5.9:1 */
+  --color-text-subtle: #667085;      /* was #a0aec0 (2.1:1); now 4.6:1 — still the lighter of the two */
 
   /* Text — slate ramp. Genuinely distinct from the ramp above (12-15/255
      apart), so kept rather than merged; a future design pass could
@@ -157,7 +433,7 @@ html, body, #root, .App {
      2. Recharts' own series animation (theme/motion.js's chartAnim),
         which tweens bars/lines/areas from their old values to the new
         ones when `data` changes underneath a chart that stays mounted —
-        the SKU Forecast and Bad Orders case.
+        the SKU Forecast case.
 
    The widget rises a short distance only; a large travel distance reads
    as sluggish on a dashboard the user is scanning for numbers. */

@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import Modal from './Modal';
+import { formatMonth } from '../utils/formatDate';
 import { COLORS } from '../theme/colors';
 import './ReorderModal.css';
 
@@ -37,7 +38,7 @@ const ReorderModal = ({ isOpen, onClose, data }) => {
           <div>
             <h3 className="reorder-modal-title">Reorder: {data.product}</h3>
             <p className="reorder-modal-subtitle">
-              Order <strong>{data.orderQty}</strong> units — LP optimization breakdown for this SKU's recommended order.
+              Order <strong>{Number(data.orderQty ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> units — LP optimization breakdown for this SKU's recommended order.
             </p>
           </div>
           <button className="reorder-modal-close" onClick={onClose} aria-label="Close modal">
@@ -46,16 +47,12 @@ const ReorderModal = ({ isOpen, onClose, data }) => {
         </div>
 
         {/* Data Grid — only fields not already visible in the table row
-            (ROP, current stock, order qty, urgency stay in the row so the
-            two views don't just repeat each other). */}
+            (safety stock, ROP, current stock, order qty and urgency are all
+            columns there, so the two views don't repeat each other). */}
         <div className="reorder-modal-grid">
           <div className="reorder-grid-item">
-            <span className="reorder-grid-label">SAFETY STOCK</span>
-            <span className="reorder-grid-value">{data.safetyStock ?? '—'}</span>
-          </div>
-          <div className="reorder-grid-item">
             <span className="reorder-grid-label">PLANNING CYCLE</span>
-            <span className="reorder-grid-value">{data.planningCycleDate ?? '—'}</span>
+            <span className="reorder-grid-value">{formatMonth(data.planningCycleDate)}</span>
           </div>
         </div>
 

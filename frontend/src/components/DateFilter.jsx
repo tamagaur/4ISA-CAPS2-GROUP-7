@@ -71,9 +71,15 @@ const noop = () => {};
 //     own "go back to the dashboard's range" handler, since "reset to
 //     what" means something different per page in local mode (there is
 //     no single shared "Today" default to fall back to here).
-const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS }) => {
+// `singleMonth` (local mode only) shows one month + year instead of a range,
+// for pages that read a single period — ABC Classification ignores the start
+// of a range entirely. Not supported in shared mode: writing a one-month
+// range into DashboardLayout would push every other page below its 6-month
+// trend minimum.
+const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS, singleMonth = false }) => {
   const outlet = useOutletContext() || {};
   const isLocal = !!(localValue && onLocalChange);
+  const isSingleMonth = isLocal && singleMonth;
 
   const sm = (isLocal ? localValue.startMonth : outlet.pendingStartMonth) ?? 'Jan';
   const sy = (isLocal ? localValue.startYear : outlet.pendingStartYear) ?? '2026';
@@ -139,6 +145,68 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths =
     else (outlet.setPendingEndMonth || noop)(month);
   };
 
+  // Single-month mode keeps start === end so callers reading either field
+  // get the same period.
+  const handleSingleMonthChange = (month) => {
+    onLocalChange({ ...localValue, startMonth: month, endMonth: month });
+  };
+
+  const handleSingleYearChange = (year) => {
+    const month = (year === LATEST_YEAR && !LATEST_YEAR_MONTHS.includes(em))
+      ? LATEST_YEAR_MONTHS[LATEST_YEAR_MONTHS.length - 1]
+      : em;
+    onLocalChange({ ...localValue, startMonth: month, startYear: year, endMonth: month, endYear: year });
+  };
+
+  if (isSingleMonth) {
+    return (
+      <div className="dashboard-date-controls-wrapper">
+        <div className="dashboard-date-controls">
+          <span className="date-single-label">Month</span>
+          <div className="date-select-btn" style={{ position: 'relative' }}>
+            <Calendar size={14} />
+            {em}
+            <ChevronDown size={14} />
+            <select
+              aria-label="Month"
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+              value={em}
+              onChange={(e) => handleSingleMonthChange(e.target.value)}
+            >
+              {endMonthOptions.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div className="date-select-btn" style={{ position: 'relative' }}>
+            {ey}
+            <ChevronDown size={14} />
+            <select
+              aria-label="Year"
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+              value={ey}
+              onChange={(e) => handleSingleYearChange(e.target.value)}
+            >
+              {YEARS.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          {onReset && (
+            <button
+              className="date-today-btn"
+              onClick={onReset}
+              title="Go back to the month the dashboard's date range ends on"
+            >
+              <RotateCcw size={14} />
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard-date-controls-wrapper">
     <div className="dashboard-date-controls">
@@ -171,7 +239,7 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths =
         </select>
       </div>
 
-      <span style={{ color: '#a0aec0', fontSize: '0.85rem', margin: '0 4px' }}>to</span>
+      <span style={{ color: '#667085', fontSize: '0.85rem', margin: '0 4px' }}>to</span>
 
       <div className="date-select-btn" style={{ position: 'relative' }}>
         <Calendar size={14} />

@@ -218,8 +218,20 @@
   border-radius: 50%;
 }
 
-.status-date {
+.status-indicator.status-offline {
+  color: #fc8181;
+}
+
+.status-indicator.status-offline .status-dot {
+  background-color: #fc8181;
+}
+
+.status-indicator.status-checking {
   color: var(--color-nav-subheading);
+}
+
+.status-indicator.status-checking .status-dot {
+  background-color: var(--color-nav-subheading);
 }
 
 .privacy-btn {

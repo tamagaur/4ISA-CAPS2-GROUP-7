@@ -18,7 +18,7 @@ import { getForecast } from '../api/forecast';
 import DateFilter from './DateFilter';
 import './SKUForecast.css';
 
-// Unlike Dashboard/ABC Classification/Reorder Recs/Bad Orders, this page's
+// Unlike Dashboard/ABC Classification/Reorder Recs, this page's
 // date range is its OWN, local to this component — not the shared
 // cross-page one in DashboardLayout (see the localRange state below, and
 // DateFilter's "local mode"). It seeds from the dashboard's range once on
@@ -373,7 +373,7 @@ const SKUForecast = () => {
   // This page's OWN local date range (2026-09, see localRange above): actuals
   // are trimmed to [rangeStartPeriod, rangeEndPeriod] before the gap-fill
   // below runs, so a narrower pick shows a narrower trailing-history window —
-  // same "picker controls what's plotted" behavior Dashboard/ABC/Bad Orders
+  // same "picker controls what's plotted" behavior Dashboard/ABC
   // have with the shared range, just scoped to this one chart. The forecast
   // point is NOT filtered by range — GET /forecast always returns MA3's
   // single latest-real-month+1 forecast regardless of what range is picked
@@ -627,7 +627,7 @@ const SKUForecast = () => {
         <div className="forecast-header">
           <div className="header-text-group">
             <h2 className="forecast-title">
-              Demand <span>forecasted</span>
+              Demand <span className="page-title-accent">forecasted</span>
             </h2>
             <p className="forecast-subtitle">
               MA3 (3-month moving average) projection for Category A SKUs, from Forecast_Result
@@ -898,7 +898,7 @@ const SKUForecast = () => {
                     aria-label={`${isSelectedPinned ? 'Unpin' : 'Pin'} SKU ${selectedSKU.code}`}
                     aria-pressed={isSelectedPinned}
                   >
-                    <Star size={15} fill={isSelectedPinned ? '#F5A623' : 'none'} color={isSelectedPinned ? '#F5A623' : '#a0aec0'} />
+                    <Star size={15} fill={isSelectedPinned ? '#F5A623' : 'none'} color={isSelectedPinned ? '#F5A623' : '#667085'} />
                     <span className="pin-text">{isSelectedPinned ? 'Pinned' : 'Pin SKU'}</span>
                   </button>
                 </div>
@@ -1154,7 +1154,7 @@ const SKUForecast = () => {
                           dataKey="label"
                           axisLine={true}
                           tickLine={true}
-                          tick={{ fill: '#718096', fontSize: 11 }}
+                          tick={{ fill: '#556070', fontSize: 11 }}
                           tickFormatter={formatAxisPeriod}
                           tickMargin={10}
                           minTickGap={12}
@@ -1176,7 +1176,7 @@ const SKUForecast = () => {
                         <YAxis
                           axisLine={true}
                           tickLine={true}
-                          tick={{ fill: '#718096', fontSize: 11 }}
+                          tick={{ fill: '#556070', fontSize: 11 }}
                           tickFormatter={formatAxisQty}
                           width={56}
                           tickMargin={8}
@@ -1236,7 +1236,7 @@ const SKUForecast = () => {
 
                   {/* Chart legend — bottom-center, matching the
                       .custom-legend convention every other page's charts
-                      use (Dashboard/Bad Orders' Charts.jsx), so the legend
+                      use (Dashboard's Charts.jsx), so the legend
                       sits in the same spot on every graph app-wide instead
                       of this page being the one exception up at top-right.
                       Swatches are inline SVG so each one is an exact

@@ -137,3 +137,12 @@
   color: var(--color-text-subtle);
   cursor: not-allowed;
 }
+
+/* Shown inside the content area while a lazily loaded page's code arrives
+   (see App.jsx / pageLoaders.js); the sidebar and top bar stay rendered. */
+.page-chunk-loading {
+  margin: 0;
+  padding: 2rem 2.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-subtle);
+}
