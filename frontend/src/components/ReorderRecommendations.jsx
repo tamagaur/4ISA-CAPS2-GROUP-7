@@ -340,7 +340,7 @@ const ReorderRecommendations = () => {
             <tr>
               <th className="col-fit">SKU</th>
               <th className="col-fit">Brand</th>
-              <th>Product</th>
+              <th className="col-text col-product">Product</th>
               <th className="table-num col-fit">Safety stock</th>
               <th className="table-num col-fit">ROP</th>
               <th className="table-num col-fit">Current stock</th>
@@ -418,9 +418,9 @@ const ReorderRecommendations = () => {
           <tr>
             <th className="col-fit">When</th>
             <th className="col-fit">SKU</th>
-            <th>Product</th>
+            <th className="col-text col-product">Product</th>
             <th className="col-fit">Decision</th>
-            <th>Reason</th>
+            <th className="col-text col-reason">Reason</th>
             <th className="col-fit">Decided by</th>
           </tr>
         </thead>
@@ -442,7 +442,7 @@ const ReorderRecommendations = () => {
                     {entry.action}
                   </span>
                 </td>
-                <td className="reorder-log-reason">{entry.reason || <span className="cell-empty">—</span>}</td>
+                <td className="col-text reorder-log-reason">{entry.reason || <span className="cell-empty">—</span>}</td>
                 <td className="cell-muted">{entry.decidedBy}</td>
               </tr>
             ))

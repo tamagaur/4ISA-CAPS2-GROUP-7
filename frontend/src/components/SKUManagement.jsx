@@ -494,7 +494,7 @@ const SKUManagement = () => {
                     <th className="table-num col-fit">#</th>
                     <th className="col-fit">SKU code</th>
                     <th className="col-fit">Brand</th>
-                    <th>Product</th>
+                    <th className="col-text col-product">Product</th>
                     <th className="table-center col-fit">Cat</th>
                     <th className="table-num col-fit">Reorder pt</th>
                     <th className="table-center col-fit"><span className="visually-hidden">Actions</span></th>

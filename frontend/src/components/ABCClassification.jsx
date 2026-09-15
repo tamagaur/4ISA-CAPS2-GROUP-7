@@ -827,7 +827,7 @@ const ABCClassification = () => {
               <tr>
                 <th className="table-num col-fit">#</th>
                 <th className="col-fit">SKU</th>
-                <th>Product</th>
+                <th className="col-text col-product">Product</th>
                 <th className="col-fit">Brand</th>
                 <th className="table-center col-fit">Cat</th>
                 <th className="table-num col-fit">Rev %</th>

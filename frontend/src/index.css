@@ -74,13 +74,46 @@ table td.table-center {
   vertical-align: middle;
 }
 
-/* Default alignment kept at low specificity (one class + one element) so
-   the table-num / table-center utilities above (table th.table-num) still
-   win. Written as `.data-table tbody td` it tied with them and, coming
-   later in the file, silently left-aligned every number column. */
+/* Column alignment in the three data tables (SKU Management, ABC, Reorder).
+   Every column is centered — header label and cell content share one
+   axis — except long free text (product names, decision reasons), which
+   stays left so wrapped lines read naturally. The earlier scheme mixed
+   left (text), right (numbers) and center (badges) in one header row;
+   each column was technically consistent (measured: 0px header-to-cell
+   offset), but the header row read as ragged and values looked detached
+   from their labels. Numbers keep tabular digits, so centered values of
+   similar magnitude still stack evenly.
+
+   `.data-table th.table-num` (two classes + element) is needed to beat the
+   global `table td.table-num { text-align: right }` above, which other,
+   non-data tables still rely on. */
 .data-table th,
-.data-table td {
+.data-table td,
+.data-table th.table-num,
+.data-table td.table-num,
+.data-table th.table-center,
+.data-table td.table-center {
+  text-align: center;
+}
+
+.data-table .col-text,
+.data-table .cell-product {
   text-align: left;
+}
+
+/* Product column gets a fixed share of the table instead of all spare
+   width. With it absorbing everything, a 1,934px-wide table gave Product
+   1,498px and pushed every other column into a strip at the far right,
+   away from the start of its row. At a fixed share the remaining width
+   is spread across the other columns, so each value sits under its label.
+   min-width keeps names readable once the card starts scrolling sideways. */
+.data-table th.col-product {
+  width: 34%;
+  min-width: 220px;
+}
+
+.data-table th.col-reason {
+  min-width: 240px;
 }
 
 .data-table tbody tr:last-child td {
@@ -95,12 +128,26 @@ table td.table-center {
   background-color: #FAFAF8;
 }
 
-/* Shrink-to-fit: a column that should only be as wide as its content,
-   so the free width goes to the product name instead of opening gaps
-   between short columns. */
+/* Short columns never wrap. (They used to also carry `width: 1%` to
+   hand all spare width to Product; that is what stranded them at the far
+   right on wide screens — see .col-product above.) */
 .data-table .col-fit {
-  width: 1%;
   white-space: nowrap;
+}
+
+/* Phones/tablets: the card already scrolls sideways (overflow-x on
+   .data-table-card, min-width per table), so tighten cell padding to fit
+   more of each row on screen before scrolling kicks in. */
+@media (max-width: 768px) {
+  .data-table thead th {
+    padding: 0.6rem 0.65rem;
+  }
+  .data-table tbody td {
+    padding: 0.55rem 0.65rem;
+  }
+  .data-table th.col-product {
+    min-width: 180px;
+  }
 }
 
 .data-table .cell-rownum {
