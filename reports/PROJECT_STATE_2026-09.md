@@ -431,12 +431,117 @@ been made or will be made without Yuan's explicit go.
   for the first time — `Product_Dimension.category_path`/`brand` and their
   `*_source` columns are load-bearing and queryable, not ad hoc.
 
-## 11. Cutover incident, 2026-09-15 — IN PROGRESS, session paused mid-fix
+## 11. Cutover incident, 2026-09-15/16 — CLOSED, cutover complete
 
-**Status when this was written: public is consistent (verified, see below),
-but mid-cutover — NOT fully restored to the pre-incident backup, NOT yet
-cut over to the new load either.** Do not run `run_canonical_load.py`
-against `public` again until this section's "Next action" is done.
+**Status: cutover is complete.** `public` is live on the canonical
+`run_canonical_load.py` load, all 6 fact tables at full volume, all
+frozen 2026-09-11/14 targets matched exactly. `run_canonical_load.py`
+against `public` is safe to run again (it's the reproducible pipeline
+now, not a one-off).
+
+### Final counts, 2026-09-16
+
+| Table | Actual | Target | Status |
+|---|---|---|---|
+| `sales_fact` | 53,109 | 53,109 | ✅ |
+| `purchase_fact` | 2,762 | 2,762 | ✅ |
+| `salesreturn_fact` | 1,630 | 1,630 | ✅ (see below — was 865 mid-run, now fixed) |
+| `sellout_fact` | 7,660 | 7,660 | ✅ |
+| `inventory_fact` | 48,187 (20,905 DM + 27,282 UL) | 48,187 | ✅ |
+| `unilever_sku_demand_fact` | 44,575 | 44,575 | ✅ |
+| `product_dimension` | 17,619 | no fixed target | 0 duplicate-key groups (4-col and 3-col) |
+| `customer_dimension` / `salesman_dimension` / `supplier_dimension` | 23,712 / 33 / 2 | unchanged | untouched throughout |
+| `abc_classification` / `forecast_result` / `lp_recommendation` / `users` / `audit_log` | 23,223 / 132 / 430 / 2 / 46 | unchanged | untouched throughout |
+
+### `salesreturn_fact`'s MISMATCH — root cause, fix, and correction to the earlier estimate
+
+The full load initially landed 865 rows against an expected 1,630. Diagnosed
+(single-query breakdown of the 789 excluded rows' NULLs, no Python loops):
+all 789 (771 real, 18 demo) were excluded for exactly one reason —
+`return_type` was the only null column in every one of them.
+
+**Root cause: live-only schema drift, not a data or transform problem.**
+`public.SalesReturn_Fact.return_type` carried a `NOT NULL` constraint that
+neither `schema.sql` (line 278, declared nullable by design) nor any
+migration (0011 included) ever added — leftover from the table's original
+ad-hoc creation, masked forever after by `CREATE TABLE IF NOT EXISTS`
+never touching an already-existing table's column constraints.
+
+**Fixed** — migration `0015`
+(`analytics/db/migrations/0015_salesreturn_fact_return_type_drift_fix.sql`):
+`ALTER TABLE SalesReturn_Fact ALTER COLUMN return_type DROP NOT NULL`.
+Applied to `public`, verified via `information_schema.columns`.
+
+**Reloaded `salesreturn_fact` only** (not the full pipeline) after the fix:
+**actual = 1,630, exact match against the existing frozen target.** No
+target correction was needed — **this corrects an estimate made earlier in
+this same session**, which predicted 1,654 (1,900 transform rows − 246
+conflicting-group rows) using the conflicting-group count measured *before*
+the fix, on the smaller NOT-NULL-filtered set. Once the 789 previously-
+excluded rows re-entered the pipeline, they changed which rows collide:
+the real post-fix conflicting-group exclusion is 270 rows / 135 groups —
+matching the number already on record in migration 0011's own docstring
+(2026-09-11) — not 246. `1,900 − 270 = 1,630`, exactly the original
+target. The **1,630 target in `FACT_PLAN` (`scripts/run_canonical_load.py`)
+was correct all along** and needs no code change either.
+
+### Schema-drift sweep (one query — fresh `schema.sql`+migrations build vs.
+`public`'s live `information_schema.columns`, comparing `is_nullable` for
+every matching table/column)
+
+Found exactly 2 instances of this drift class, nothing else hiding:
+
+| Table.column | `public` | canonical (`schema.sql`+migrations) | Status |
+|---|---|---|---|
+| `salesreturn_fact.return_type` | was `NOT NULL` | nullable | **Fixed** — migration 0015 |
+| `product_dimension.manual_reorder_point` | exists, nullable | **not declared at all** | **Open** — live-only column, no `schema.sql` entry. Low priority (nothing currently reads/writes it outside ad-hoc use); needs a decision (add to `schema.sql`, or drop if truly unused) before it's closed. |
+
+### Bug tally, final
+
+| # | Bug | Status |
+|---|---|---|
+| 1 | Desynced identity sequences (9 tables) | Fixed, verified |
+| 2 | `Product_Dimension` `UNIQUE` constraint inert on NULL columns | Fixed — migration 0013 |
+| 3/4 | `_product_fk_spec("sku")`'s natural key included a column `run_category_brand_backfill()` mutates post-load | Fixed — migration 0014 + narrowed key + `conflict_index_where` |
+| 5 | `salesreturn_fact.return_type` live-only `NOT NULL` drift | Fixed — migration 0015 |
+
+### Visible changes (dashboard/backend-facing)
+
+| Change | Before | After |
+|---|---|---|
+| `salesreturn_fact` | 0 (pre-incident live) | 1,630 |
+| `bo_monitoring_view` | 0 | 136 rows |
+| `sellout_fact` / `inventory_fact` NaN defects | present (137 + 210 real rows, per §10) | 0 |
+| `product_dimension` fake `'False'`-category rows | — | **12 still present** (`product_key` 50186–50201, `category_path_source=NULL`) — pre-existing residue from before the item-40a fix existed; `product_dimension` is never reset by a load, so nothing in this cutover touches already-loaded rows. Open item, not regressed by this work. |
+| Backend `/dashboard`, `/recommendations` | — | **Not verified** — `backend/main.py` fails to import locally (`TypeError: Router.__init__() got an unexpected keyword argument 'on_startup'`, a FastAPI/Starlette version mismatch in this dev environment, unrelated to any DB work this phase). Needs checking in an environment with matching dependency versions, or a version pin fix — separate from this phase's scope. |
+
+### Remaining open items
+
+- `product_dimension.manual_reorder_point` — undeclared live-only column (schema-drift sweep above). Needs a decision, not urgent.
+- 12 leftover `'False'`-category `product_dimension` rows (pre-existing, item 40a predates them).
+- Backend local dev environment can't import `backend/main.py` (FastAPI/Starlette version mismatch) — `/dashboard`/`/recommendations` unverified against the fresh cutover data.
+- Item 37 (SOH upsert idempotency) and item 19 (already self-resolved by this cutover) — carried from §10, item 37 still open for a *repeatable* re-run scenario, not blocking.
+- `broken_state_20260914/` evidence dump and `ssm_precutover_diag`/`ssm_canonical` scratch schemas can be cleaned up now that the incident is fully closed — not yet done.
+- Phase 2 (ABC + D1–D4) can now build on the fresh, fully-loaded, reproducible cutover data.
+
+**Re-verified 2026-09-16 (session resumed after a spend-limit pause):**
+state is unchanged from the table below — no writes happened in between.
+
+| Check | Result |
+|---|---|
+| 6 fact tables (`sales_fact`, `purchase_fact`, `salesreturn_fact`, `sellout_fact`, `inventory_fact`, `unilever_sku_demand_fact`) | Still at the step-2 truncated sample (200/200/42/200/400/200) — **not** the canonical full load, **not** the old pre-incident live data either |
+| `product_dimension.category_path`, Unilever SKU-grain rows | 2,098/2,098 populated (0 NULL) — backfill ran to completion in step 2 |
+| `product_dimension` duplicate-key groups | 0 |
+| Migration 0014 partial index (`product_dimension_unilever_sku_key_idx`) | Present |
+| `product_dimension` unique constraint | `UNIQUE NULLS NOT DISTINCT (principal, grain, sku_code, category_path)` — migration 0013 in place |
+| Idle-in-transaction sessions on `public` | None (the stray scratch-only connection from last session is gone) |
+| Scratch schemas present | `ssm_step3_verify` (empty — the seed attempt never completed), `ssm_precutover_diag`, `ssm_canonical` |
+| Git: local vs `group7/kelvin-etl` | Local `e2b2e1a` is 1 commit ahead, clean fast-forward, nothing uncommitted except pre-existing unrelated `tools/forecast_viewer/*` edits and the untracked `broken_state_20260914/` evidence dump — **not pushed yet** |
+
+**Conclusion: cutover has NOT completed.** It partially ran (step 2 of the
+verification plan only) and then paused for bug-fixing. Bugs #1–#4 are
+fixed in code and applied to `public`'s schema/constraints; the actual
+full-volume load has not been re-run since the fixes landed.
 
 ### What happened, in order
 
