@@ -7,6 +7,8 @@ import EditSKUModal from './EditSKUModal';
 import { logAction } from '../utils/auditLogger';
 import { getSKUs, createSKU, updateSKU } from '../api/sku';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
+import Pagination from './Pagination';
+import PageJump from './PageJump';
 import './SKUManagement.css';
 
 // Product names render verbatim. A helper used to pull a pack size out onto
@@ -560,68 +562,16 @@ const SKUManagement = () => {
               </table>
             </div>
 
-            {/* Pagination — mirrors ABCClassification's controls so both SKU
-                tables page identically. */}
-            {filteredSKUs.length > 0 && (
-              <div className="sku-pagination-row">
-                <span className="sku-pagination-info">
-                  Showing {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, filteredSKUs.length)} of {filteredSKUs.length}
-                </span>
-
-                <div className="sku-pagination-controls">
-                  <button
-                    className="sku-pagination-btn"
-                    onClick={() => setCurrentPage(1)}
-                    disabled={safeCurrentPage === 1}
-                    aria-label="First page"
-                    title="First page"
-                  >
-                    «
-                  </button>
-                  <button
-                    className="sku-pagination-btn"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={safeCurrentPage === 1}
-                    aria-label="Previous page"
-                  >
-                    Prev
-                  </button>
-                  <span className="sku-pagination-page-label">
-                    Page {safeCurrentPage} of {totalPages}
-                  </span>
-                  <button
-                    className="sku-pagination-btn"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    aria-label="Next page"
-                  >
-                    Next
-                  </button>
-                  <button
-                    className="sku-pagination-btn"
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={safeCurrentPage === totalPages}
-                    aria-label="Last page"
-                    title="Last page"
-                  >
-                    »
-                  </button>
-                </div>
-
-                <div className="sku-pagination-size">
-                  <span>Rows per page:</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => setPageSize(Number(e.target.value))}
-                    aria-label="Rows per page"
-                  >
-                    {PAGE_SIZE_OPTIONS.map((size) => (
-                      <option key={size} value={size}>{size}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
+            <Pagination
+              currentPage={safeCurrentPage}
+              totalPages={totalPages}
+              totalItems={filteredSKUs.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              idPrefix="sku"
+            />
           </>
         )}
       </div>
