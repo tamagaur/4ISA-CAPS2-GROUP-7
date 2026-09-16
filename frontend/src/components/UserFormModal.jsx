@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import Modal from './Modal';
 import './UserFormModal.css';
 
 const emptyForm = { fullName: '', email: '', role: 'staff', password: '' };
@@ -77,13 +78,15 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit }) => {
     }
   };
 
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) onClose();
-  };
 
   return (
-    <div className="modal-overlay" onClick={handleOverlayClick}>
-      <div className="modal-card">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      label="User details"
+      overlayClassName="modal-overlay"
+      containerClassName="modal-card"
+    >
         <div className="modal-header">
           <div>
             <h3 className="modal-title">{isEdit ? 'Edit User' : 'Add New User'}</h3>
@@ -175,8 +178,7 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit }) => {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

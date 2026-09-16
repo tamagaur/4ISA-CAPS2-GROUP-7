@@ -1,13 +1,27 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ComposedChart, BarChart, Bar, Cell, Line, LabelList,
   PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
-import { HelpCircle, RotateCcw } from 'lucide-react';
+import { HelpCircle, RotateCcw, ArrowRight } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import './Charts.css';
+
+// X-axis tick + tooltip header for every period-keyed chart on this page:
+// "Jan · 2026" — short month, middle dot, full year. Was the raw 'YYYY-MM'
+// string with no formatting at all (e.g. "2025-08"). Accepts 'YYYY-MM' and
+// 'YYYY-MM-DD' alike — slicing only the first two '-'-separated segments
+// ignores any day part, so a forecast_date's day-of-month never leaks in.
+const AXIS_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const formatAxisPeriod = (period) => {
+  if (!period) return '';
+  const [year, num] = String(period).split('-');
+  return `${AXIS_MONTHS[Number(num) - 1] || num} · ${year}`;
+};
 
 // Custom tooltip: "Wk 7 — 5.2 weeks (2.2 above policy)". wk is the point's
 // 1-based position among the plotted (last-12) periods, not a calendar
@@ -78,7 +92,7 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -87,8 +101,8 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
                   label={{ value: 'Weeks of stock', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
                 />
                 <Tooltip content={<CoverTooltip policyTarget={policyTarget} />} />
-                <Area type="monotone" dataKey="base" stackId="cover" stroke="none" fill="transparent" isAnimationActive={false} />
-                <Area type="monotone" dataKey="excess" stackId="cover" fill={CHART_COLORS.stockSeries} fillOpacity={0.18} stroke="none" isAnimationActive={false} />
+                <Area type="monotone" dataKey="base" stackId="cover" stroke="none" fill="transparent" {...chartAnim()} />
+                <Area type="monotone" dataKey="excess" stackId="cover" fill={CHART_COLORS.stockSeries} fillOpacity={0.18} stroke="none" {...chartAnim()} />
                 <ReferenceLine
                   y={policyTarget}
                   stroke={STATUS_TIERS.loss}
@@ -103,7 +117,7 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
                   strokeWidth={2}
                   dot={false}
                   connectNulls={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -246,7 +260,7 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
             />
             <ReferenceLine x={0} stroke="#cbd5e0" />
             <Tooltip content={<AllocationTooltip />} />
-            <Bar dataKey="variancePesos" radius={[3, 3, 3, 3]} isAnimationActive={false}>
+            <Bar dataKey="variancePesos" radius={[3, 3, 3, 3]} {...chartAnim()}>
               {sortedRows.map((r) => (
                 <Cell key={r.sku} fill={r.variancePesos < 0 ? COLORS.critical : COLORS.warning} />
               ))}
@@ -266,7 +280,7 @@ const SalesStockTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   return (
     <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label}</p>
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(label)}</p>
       {payload.map((p) => (
         <p key={p.dataKey} style={{ margin: '0.1rem 0', color: p.color }}>
           {p.name}: {formatCompactPesos(p.value)}
@@ -318,7 +332,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -333,7 +347,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   stroke={CHART_COLORS.salesSeries}
                   strokeWidth={2}
                   dot={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
                 <Line
                   type="monotone"
@@ -342,7 +356,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   stroke={CHART_COLORS.stockSeries}
                   strokeWidth={2}
                   dot={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
                 <Line
                   type="monotone"
@@ -353,7 +367,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   strokeWidth={2.5}
                   dot={{ r: 3, fill: COLORS.forecast, strokeWidth: 0 }}
                   activeDot={{ r: 5 }}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -421,7 +435,7 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
                   innerRadius="60%"
                   outerRadius="85%"
                   paddingAngle={2}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 >
                   {data.map((d) => (
                     <Cell key={d.tier} fill={ABC_TIER_COLORS[d.tier] || CHART_COLORS.abcRamp[0]} />
@@ -501,6 +515,7 @@ const CategoryStockTooltip = ({ active, payload, label }) => {
 
 const barLabelStyle = { fontSize: 10, fontWeight: 700, fill: '#ffffff' };
 const pendingReorderLabelStyle = { fontSize: 10, fill: CHART_COLORS.axisLabel };
+const MIN_LABEL_HEIGHT_PX = 14;
 
 // A segment under this fraction of its own bar's covered height renders no
 // inline label — Tier A/B's smallest slices used to overlap into an
@@ -524,6 +539,36 @@ function makeSegmentLabel(data) {
     return (
       <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="middle" style={barLabelStyle}>
         {value.toLocaleString()}
+      </text>
+    );
+  };
+}
+
+// Was position="top" in axis-gray text while the two stacked segments beside
+// it (makeSegmentLabel above) render centered-inside in bold white — same
+// chart, same kind of value (a SKU count), two different label styles side
+// by side, which is what read as "inconsistent formatting." This matches
+// that: bold white, centered inside the bar, whenever the bar is tall enough
+// to hold it. Falls back to the old above-the-bar style only when the bar is
+// too short to fit text inside without it overflowing (e.g. Tier C's
+// pending-reorder count of 14 next to a much taller in-stock/dead-stock
+// stack) — same "don't cram text into a sliver" reasoning MIN_LABEL_FRACTION
+// already applies to the stacked segments, just height-based here since this
+// bar isn't part of that stack.
+function makePendingReorderLabel() {
+  return ({ x, y, width, height, value }) => {
+    if (!value) return null;
+    const text = value.toLocaleString();
+    if (height >= MIN_LABEL_HEIGHT_PX) {
+      return (
+        <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="middle" style={barLabelStyle}>
+          {text}
+        </text>
+      );
+    }
+    return (
+      <text x={x + width / 2} y={y - 6} textAnchor="middle" style={pendingReorderLabelStyle}>
+        {text}
       </text>
     );
   };
@@ -609,14 +654,14 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
                   label={{ value: 'SKUs', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
                 />
                 <Tooltip content={<CategoryStockTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }} />
-                <Bar dataKey="deadStock" name="Dead stock" stackId="mix" fill={STOCK_STATUS_COLORS.deadStock} isAnimationActive={false}>
+                <Bar dataKey="deadStock" name="Dead stock" stackId="mix" fill={STOCK_STATUS_COLORS.deadStock} {...chartAnim(0)}>
                   <LabelList dataKey="deadStock" content={makeSegmentLabel(data)} />
                 </Bar>
-                <Bar dataKey="inStock" name="In stock" stackId="mix" fill={STOCK_STATUS_COLORS.inStock} radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                <Bar dataKey="inStock" name="In stock" stackId="mix" fill={STOCK_STATUS_COLORS.inStock} radius={[3, 3, 0, 0]} {...chartAnim(1)}>
                   <LabelList dataKey="inStock" content={makeSegmentLabel(data)} />
                 </Bar>
-                <Bar dataKey="pendingReorderCount" name="Pending reorder" fill={STOCK_STATUS_COLORS.pendingReorder} radius={[3, 3, 0, 0]} isAnimationActive={false}>
-                  <LabelList dataKey="pendingReorderCount" position="top" style={pendingReorderLabelStyle} formatter={(v) => v.toLocaleString()} />
+                <Bar dataKey="pendingReorderCount" name="Pending reorder" fill={STOCK_STATUS_COLORS.pendingReorder} radius={[3, 3, 0, 0]} {...chartAnim(2)}>
+                  <LabelList dataKey="pendingReorderCount" content={makePendingReorderLabel()} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -646,7 +691,7 @@ const PortfolioForecastTooltip = ({ active, payload, label }) => {
   const row = payload[0].payload;
   return (
     <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label}</p>
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(label)}</p>
       {row.actual != null && (
         <p style={{ margin: '0.1rem 0', color: CHART_COLORS.salesSeries }}>Actual demand: {Math.round(row.actual).toLocaleString()} units</p>
       )}
@@ -755,7 +800,7 @@ export const PortfolioForecastWidget = ({
                     the END, silently dropping the label at the true first
                     point on a wide range (diagnosed for SKUForecast.jsx's
                     identical chart earlier — same fix, same cause). */}
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval="equidistantPreserveStart" />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval="equidistantPreserveStart" tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -764,8 +809,8 @@ export const PortfolioForecastWidget = ({
                   tickFormatter={(v) => `${Math.round(v / 1000)}k`}
                 />
                 <Tooltip content={<PortfolioForecastTooltip />} />
-                <Area type="monotone" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" isAnimationActive={false} />
-                <Area type="monotone" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} isAnimationActive={false} />
+                <Area type="monotone" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" {...chartAnim()} />
+                <Area type="monotone" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} {...chartAnim()} />
                 <Line
                   type="monotone"
                   dataKey="actual"
@@ -774,7 +819,7 @@ export const PortfolioForecastWidget = ({
                   strokeWidth={2}
                   dot={false}
                   connectNulls={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
                 <Line
                   type="monotone"
@@ -785,7 +830,7 @@ export const PortfolioForecastWidget = ({
                   strokeWidth={2}
                   dot={false}
                   connectNulls={false}
-                  isAnimationActive={false}
+                  {...chartAnim()}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -835,8 +880,15 @@ const URGENCY_STYLES = {
 const LP_PRIORITY_ROWS = [
   {
     key: 'cost',
+    // Was COLORS.critical (red). Cost, Service level, and Storage are three
+    // co-equal trade-off weights in one multi-objective LP — none of them
+    // is inherently more alarming than the others, so giving Cost the same
+    // red used for genuine alerts elsewhere (Reorder Recs' CRITICAL badge,
+    // a rate line elsewhere in the app) implied a severity that isn't there. Teal
+    // keeps it visually distinct from Service level (indigo) and Storage
+    // (amber) without borrowing red's meaning.
     label: 'Cost',
-    color: COLORS.critical,
+    color: COLORS.dispatched,
     blurb: 'Placeholder: how strongly the optimizer favours minimizing total purchase and holding cost when choosing order quantities.',
   },
   {
@@ -933,7 +985,11 @@ export const ReorderRecommendationWidget = ({
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Reorder recommendations</h4>
-          <p>LP-optimized purchase quantities, Category A SKUs</p>
+          {/* GET /dashboard's reorder_preview sums every pending recommendation
+              across all planning cycles, while Reorder Recs shows one cycle at a
+              time (latest by default), so the two pages' counts differ. Said
+              here until the backend scopes the preview to the latest cycle. */}
+          <p>LP-optimized purchase quantities, Category A SKUs · all pending planning cycles</p>
         </div>
         {isModified && (
           <button type="button" className="reorder-card-reset" onClick={handleReset}>
@@ -1009,7 +1065,15 @@ export const ReorderRecommendationWidget = ({
             {sortedRows.map((r) => (
               <div className="reorder-mini-row" key={r.sku}>
                 <div className="reorder-mini-row-main">
-                  <span className="reorder-mini-sku">{r.sku}</span>
+                  {/* Was a plain <span> styled to look like a link (blue,
+                      same color as every other clickable SKU in the app)
+                      but had no click handler — a dead affordance. Now a
+                      real link to that SKU's own recommendation, which the
+                      Reorder Recs page opens in its detail modal on load
+                      (see the ?sku= handling in ReorderRecommendations.jsx). */}
+                  <Link to={`/reorder?sku=${encodeURIComponent(r.sku)}`} className="reorder-mini-sku">
+                    {r.sku}
+                  </Link>
                   <span className="reorder-mini-product">{r.product}</span>
                 </div>
                 <div className="reorder-mini-row-side">
@@ -1029,6 +1093,15 @@ export const ReorderRecommendationWidget = ({
               </div>
             ))}
           </div>
+
+          {/* This widget only ever shows a few rows (Dashboard is an
+              overview, not the working list) — this is its one connection
+              to the full Reorder Recs page, where the complete list,
+              Accept/Dismiss actions, and decision log actually live. */}
+          <Link to="/reorder" className="reorder-mini-view-all">
+            View all recommendations
+            <ArrowRight size={14} />
+          </Link>
         </>
       )}
     </div>

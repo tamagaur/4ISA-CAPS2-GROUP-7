@@ -1,9 +1,8 @@
 .topbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background-color: #F7F9FC;
+  background-color: var(--color-surface-raised);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -18,7 +17,7 @@
 .sidebar-toggle-btn {
   background: none;
   border: none;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -29,11 +28,11 @@
 }
 
 .sidebar-toggle-btn:hover {
-  background-color: #e2e8f0;
+  background-color: var(--color-border);
 }
 
 .breadcrumb-path {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.9rem;
 }
 
@@ -47,9 +46,9 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  background-color: #f1f5f9;
-  color: #4a5568;
-  border: 1px solid #cbd5e0;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
+  border: 1px solid var(--color-border-strong);
   border-radius: 16px;
   padding: 0.35rem 0.8rem;
   font-size: 0.78rem;
@@ -59,15 +58,15 @@
 }
 
 .period-today-btn:hover:not(.is-today) {
-  background-color: #e2e8f0;
-  color: #1a202c;
-  border-color: #a0aec0;
+  background-color: var(--color-border);
+  color: var(--color-text);
+  border-color: var(--color-text-subtle);
 }
 
 .period-today-btn.is-today {
   opacity: 0.6;
   cursor: default;
-  border-color: #e2e8f0;
+  border-color: var(--color-border);
 }
 
 .period-apply-group {
@@ -80,7 +79,7 @@
 .pending-indicator-dot {
   width: 8px;
   height: 8px;
-  background-color: #F5A623;
+  background-color: var(--color-warning);
   border-radius: 50%;
   display: inline-block;
 }
@@ -89,8 +88,8 @@
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border: none;
   border-radius: 16px;
   padding: 0.35rem 0.85rem;
@@ -102,7 +101,7 @@
 }
 
 .period-apply-btn:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-brand-hover);
   transform: translateY(-1px);
 }
 

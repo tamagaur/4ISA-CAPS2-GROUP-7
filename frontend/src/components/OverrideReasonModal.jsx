@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, XOctagon } from 'lucide-react';
+import Modal from './Modal';
 import './OverrideReasonModal.css';
 
 // Story #82/#93: capturing a reason whenever a user dismisses the LP
@@ -18,13 +19,15 @@ const OverrideReasonModal = ({ isOpen, item, onCancel, onConfirm }) => {
 
   const isValid = reason.trim().length >= 8;
 
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) onCancel();
-  };
 
   return (
-    <div className="override-modal-overlay" onClick={handleOverlayClick}>
-      <div className="override-modal-card">
+    <Modal
+      isOpen={isOpen}
+      onClose={onCancel}
+      label="Dismiss recommendation"
+      overlayClassName="override-modal-overlay"
+      containerClassName="override-modal-card"
+    >
         <div className="override-modal-header">
           <div className="override-icon-wrap override-icon-dismiss">
             <XOctagon size={18} />
@@ -73,8 +76,7 @@ const OverrideReasonModal = ({ isOpen, item, onCancel, onConfirm }) => {
             Confirm dismiss
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

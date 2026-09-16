@@ -11,7 +11,7 @@
   gap: 1.5rem;
 }
 
-/* Page Header (Match BadOrders style) */
+/* Page Header */
 .audit-page-header {
   display: flex;
   justify-content: space-between;
@@ -26,22 +26,19 @@
 .audit-page-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
   display: flex;
   align-items: baseline;
 }
 
-.audit-page-title span {
-  color: #c53030;
-  font-weight: 600;
-  font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
+.audit-page-title .page-title-accent {
+  font-size: 2.1rem;
   margin-left: 0.4rem;
 }
 
 .audit-page-subtitle {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.85rem;
   margin: 0;
   line-height: 1.5;
@@ -53,11 +50,11 @@
   display: flex;
   align-items: flex-end;
   gap: 1.5rem;
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   padding: 1.5rem 2rem;
   border-radius: 12px;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.04), 0 6px 6px rgba(0, 0, 0, 0.02);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .audit-filter-group {
@@ -71,19 +68,19 @@
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: #718096;
+  color: var(--color-text-muted);
   text-transform: uppercase;
 }
 
 .audit-dropdown-select {
   appearance: none;
   -webkit-appearance: none;
-  background-color: #ffffff;
-  border: 1px solid #cbd5e1;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
   padding: 0.5rem 2rem 0.5rem 0.8rem;
   border-radius: 6px;
   font-size: 0.85rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
   transition: border-color 0.2s;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23718096' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
@@ -94,7 +91,7 @@
 
 .audit-dropdown-select:focus,
 .audit-dropdown-select:hover {
-  border-color: #a0aec0;
+  border-color: var(--color-text-subtle);
   outline: none;
 }
 
@@ -104,8 +101,8 @@
 }
 
 .audit-btn-primary {
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border: none;
   padding: 0.6rem 1.2rem;
   border-radius: 6px;
@@ -117,13 +114,13 @@
 }
 
 .audit-btn-primary:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-brand-hover);
 }
 
 .audit-btn-outline {
-  background-color: #ffffff;
-  color: #4a5568;
-  border: 1px solid #cbd5e1;
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
+  border: 1px solid var(--color-border-strong);
   padding: 0.6rem 1.2rem;
   border-radius: 6px;
   font-size: 0.85rem;
@@ -133,17 +130,17 @@
 }
 
 .audit-btn-outline:hover {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
-/* Table Section (Match BadOrders) */
+/* Table Section */
 .audit-table-wrapper {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .audit-table {
@@ -154,7 +151,7 @@
 }
 
 .audit-table thead {
-  border-bottom: 2px solid #edf2f7;
+  border-bottom: 2px solid var(--color-surface-muted);
 }
 
 .audit-table th {
@@ -163,24 +160,24 @@
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   white-space: nowrap;
   vertical-align: middle;
   text-transform: uppercase;
 }
 
 .audit-table tbody tr {
-  border-bottom: 1px solid #f7fafc;
+  border-bottom: 1px solid var(--color-surface-raised);
   transition: background-color 0.15s;
 }
 
 .audit-table tbody tr:hover {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .audit-table td {
   padding: 1rem 1.5rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   vertical-align: middle;
 }
 
@@ -211,17 +208,17 @@
 
 .audit-user-name {
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
 }
 
 .audit-user-handle {
   font-size: 0.75rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 /* Email Cell */
 .audit-email-cell a {
-  color: #3182ce;
+  color: var(--color-info);
   text-decoration: none;
   font-weight: 500;
 }
@@ -232,11 +229,11 @@
 
 .audit-action-cell {
   font-weight: 600;
-  color: #2d3748;
+  color: var(--color-text-heading);
 }
 
 .audit-timestamp-cell {
-  color: #718096;
+  color: var(--color-text-muted);
   font-size: 0.82rem;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -251,14 +248,14 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  color: #4a5568;
+  color: var(--color-text-body);
   line-height: 1.4;
 }
 
 .audit-desc-toggle {
   background: none;
   border: none;
-  color: #3182ce;
+  color: var(--color-info);
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.2rem 0;
@@ -275,7 +272,7 @@
 .audit-no-results {
   text-align: center;
   padding: 3rem 1rem !important;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-style: italic;
 }
 
@@ -285,25 +282,25 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.5rem;
-  border-top: 1px solid #edf2f7;
+  border-top: 1px solid var(--color-surface-muted);
 }
 
 .audit-page-nav {
   display: flex;
   align-items: center;
   background: none;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   padding: 0.4rem 0.8rem;
   border-radius: 6px;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .audit-page-nav:hover {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .audit-page-numbers {
@@ -318,18 +315,18 @@
   padding: 0.4rem 0.8rem;
   border-radius: 4px;
   font-size: 0.85rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
 }
 
 .audit-page-num.active {
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--color-border-strong);
   font-weight: 600;
-  background-color: #f8fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .audit-page-dots {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   margin: 0 0.2rem;
 }
 

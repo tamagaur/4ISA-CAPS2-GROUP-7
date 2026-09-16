@@ -19,12 +19,16 @@
 .du-page-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
 }
 
+.du-page-title .page-title-accent {
+  font-size: 2.1rem;
+}
+
 .du-page-subtitle {
-  color: #4a5568;
+  color: var(--color-text-body);
   font-size: 0.9rem;
   margin: 0;
   line-height: 1.6;
@@ -42,7 +46,7 @@
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: #718096;
+  color: var(--color-text-muted);
   text-transform: uppercase;
 }
 
@@ -53,9 +57,9 @@
 }
 
 .du-badge {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  color: #4a5568;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-body);
   padding: 0.4rem 1rem;
   border-radius: 8px;
   font-size: 0.8rem;
@@ -71,8 +75,8 @@
 }
 
 .du-file-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
@@ -96,7 +100,7 @@
 .du-blue-dot {
   width: 7px;
   height: 7px;
-  background-color: #c53030;
+  background-color: var(--color-brand-primary);
   border-radius: 50%;
   display: inline-block;
 }
@@ -105,27 +109,27 @@
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   text-transform: uppercase;
 }
 
 .du-card-title {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0;
 }
 
 .du-card-desc {
   font-size: 0.8rem;
-  color: #718096;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
 /* Dropzone */
 .du-dropzone {
-  background-color: #ffffff;
-  border: 2px dashed #cbd5e0;
+  background-color: var(--color-surface);
+  border: 2px dashed var(--color-border-strong);
   border-radius: 12px;
   padding: 3.5rem 2rem;
   display: flex;
@@ -139,54 +143,60 @@
 
 .du-dropzone:hover,
 .du-dropzone.drag-active {
-  border-color: #3182ce;
-  background-color: #f7fafc;
+  border-color: var(--color-info);
+  background-color: var(--color-surface-raised);
 }
 
 .du-icon-wrapper {
   width: 56px;
   height: 56px;
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   transition: color 0.2s, background-color 0.2s;
 }
 
 .du-dropzone:hover .du-icon-wrapper {
   background-color: #ebf8ff;
-  color: #3182ce;
+  color: var(--color-info);
 }
 
 .du-dropzone-text {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--color-text-heading);
   margin: 0;
 }
 
 .du-dropzone-subtext {
   font-size: 0.8rem;
-  color: #718096;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
+/* Not a brand-red fill: it stages files locally and goes no further (see
+   the banner above and handleFiles' comment in DataUpload.jsx) — a solid
+   brand button here reads as "commit this," which overstates what the
+   control does. Blue matches the dropzone's own hover accent, so the
+   whole zone reads as one "preview, not upload" affordance. */
 .du-select-btn {
-  background-color: #c53030;
-  color: #ffffff;
-  border: none;
+  background-color: var(--color-surface);
+  color: var(--color-info);
+  border: 1px solid var(--color-info);
   border-radius: 6px;
   padding: 0.6rem 1.4rem;
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .du-select-btn:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-info);
+  color: var(--color-surface);
 }
 
 /* Uploading Progress list */
@@ -198,8 +208,8 @@
 }
 
 .du-upload-item {
-  background-color: #ffffff;
-  border: 1px solid #edf2f7;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-muted);
   border-radius: 8px;
   padding: 0.8rem 1.2rem;
   display: flex;
@@ -219,7 +229,7 @@
 }
 
 .du-item-icon {
-  color: #3182ce;
+  color: var(--color-info);
   flex-shrink: 0;
 }
 
@@ -233,7 +243,7 @@
 .du-item-name {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--color-text-heading);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -241,7 +251,7 @@
 
 .du-item-size {
   font-size: 0.75rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .du-item-progress-container {
@@ -256,14 +266,14 @@
 .du-progress-bar {
   flex: 1;
   height: 6px;
-  background-color: #edf2f7;
+  background-color: var(--color-surface-muted);
   border-radius: 3px;
   overflow: hidden;
 }
 
 .du-progress-fill {
   height: 100%;
-  background-color: #38a169;
+  background-color: var(--color-success-ui);
   border-radius: 3px;
   transition: width 0.3s ease;
 }
@@ -271,11 +281,11 @@
 .du-item-status {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #38a169;
+  color: var(--color-success-ui);
 }
 
 .du-item-status.status-loading {
-  color: #3182ce;
+  color: var(--color-info);
 }
 
 /* Responsive styles */
@@ -300,4 +310,39 @@
   .du-dropzone {
     padding: 2.5rem 1.5rem;
   }
+}
+
+/* "Ingestion not connected" notice. Amber/informational rather than red —
+   nothing is broken, the feature simply isn't wired to a backend yet. */
+.du-preview-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem;
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--color-warning-text);
+}
+
+.du-preview-banner-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.du-preview-banner strong {
+  font-weight: 700;
+}
+
+.du-status-staged {
+  color: var(--color-warning-text);
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: 20px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
 }

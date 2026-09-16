@@ -1,3 +1,11 @@
+/* Stacks the picker row above its own validation message, independent of
+   whatever flex/grid layout the page places this component into. */
+.dashboard-date-controls-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
 .dashboard-date-controls {
   display: flex;
   align-items: center;
@@ -5,28 +13,60 @@
   flex-wrap: wrap;
 }
 
+/* Was 12px, 1px border, no icon — read as a thin, easy-to-miss caption
+   rather than a warning. Bumped size/weight, a stronger border, and an
+   icon so it's scannable at a glance instead of needing to be read
+   closely to register as "something's wrong." */
+.date-range-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  background-color: var(--color-danger-bg);
+  border: 1.5px solid var(--color-brand-primary);
+  border-radius: 8px;
+  color: var(--color-brand-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.45;
+  /* fit-content hugs the message on wide screens (no full-width blob for a
+     short sentence); max-width stops it from forcing the message onto one
+     un-wrapped line wider than a narrow viewport — without it, the longer
+     "too short" message could push the page into horizontal scroll on a
+     phone-width screen. */
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.date-range-error-icon {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
 .date-select-btn {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
   font-weight: 500;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .date-select-btn:hover {
-  background-color: #f7fafc;
-  border-color: #cbd5e0;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
 }
 
 .date-select-btn svg {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .date-save-btn {
@@ -39,7 +79,7 @@
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--color-surface);
   cursor: pointer;
   transition: background-color 0.2s, opacity 0.2s;
 }
@@ -49,47 +89,66 @@
 }
 
 .date-save-btn:disabled {
-  background-color: #e2e8f0;
-  color: #a0aec0;
+  background-color: var(--color-border);
+  color: var(--color-text-subtle);
   cursor: default;
+}
+
+/* Quiet outline, not a solid brand fill — "Today" is a reset/utility
+   action taken constantly while browsing, not a primary call to action.
+   A solid red button here competed visually with genuine alerts (a
+   CRITICAL badge) elsewhere on the same screen; matches .refresh-btn's
+   weight now instead of outranking it. */
+.date-single-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-right: 0.25rem;
 }
 
 .date-today-btn {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background-color: #e53e3e;
-  border: none;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--color-text-body);
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
 }
 
 .date-today-btn:hover {
-  background-color: #c53030;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+}
+
+.date-today-btn svg {
+  color: var(--color-brand-primary);
 }
 
 .refresh-btn {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 0.8rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #4a5568;
+  color: var(--color-text-body);
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   transition: all 0.2s;
 }
 
 .refresh-btn:hover {
-  background-color: #f7fafc;
-  border-color: #cbd5e0;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
 }

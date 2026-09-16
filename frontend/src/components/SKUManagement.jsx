@@ -1,25 +1,18 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Search, Clock, X, RotateCcw, Building, Tag, Layers, Filter, CheckCircle, XCircle, Package } from 'lucide-react';
+import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter } from 'lucide-react';
 import AddSKUModal from './AddSKUModal';
+import { useToast } from './ToastProvider';
 import ViewSKUModal from './ViewSKUModal';
 import EditSKUModal from './EditSKUModal';
 import { logAction } from '../utils/auditLogger';
 import { getSKUs, createSKU, updateSKU } from '../api/sku';
+import { formatUnits, exactUnits } from '../utils/formatNumber';
 import './SKUManagement.css';
 
-// Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
-const parseProductAndWeight = (product) => {
-  if (!product) return { name: '', weight: '' };
-  const weightRegex = /\b(\d+(?:\.\d+)?\s*(?:g|ml|l|kg|L|KG|ML|G))\b/;
-  const match = product.match(weightRegex);
-  if (match) {
-    const weight = `(${match[1]})`;
-    let name = product.replace(weightRegex, '').replace(/\s+/g, ' ').trim();
-    name = name.replace(/\(\s*\)/g, '').trim();
-    return { name, weight };
-  }
-  return { name: product, weight: '' };
-};
+// Product names render verbatim. A helper used to pull a pack size out onto
+// a second line, but its pattern only matched sizes after a space or
+// bracket ("…40(6+1)65G" split, "…12X2X135ML" didn't), so a few rows got
+// an odd "(65G)" line while most identical-looking names didn't.
 
 const SKUManagement = () => {
   const [rawItems, setRawItems] = useState([]);
@@ -50,8 +43,11 @@ const SKUManagement = () => {
       rawItems.map((item) => ({
         id: item.product_key,
         code: item.sku_id,
-        brand: 'Unilever',
-        supplier: 'Unilever Philippines',
+        // Real Product_Dimension.brand (SURF, DOVE, KNORR…; null for ~14% of
+        // SKUs). This used to be hardcoded 'Unilever' — the principal, not a
+        // brand — and because the edit flow sends brand back on save, any
+        // edit would have overwritten a real brand with 'Unilever'.
+        brand: item.brand || null,
         product: item.product_name || 'Unknown Product',
         cat: item.tier,
         leadTime: item.lead_time_days != null ? `${item.lead_time_days} days` : null,
@@ -72,12 +68,10 @@ const SKUManagement = () => {
   const [selectedSKU, setSelectedSKU] = useState(null);
   const [editingSKU, setEditingSKU] = useState(null);
 
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
-  const [supplierFilter, setSupplierFilter] = useState('All Suppliers');
   const [brandFilter, setBrandFilter] = useState('All Brands');
   const [categoryFilter, setCategoryFilter] = useState('All');
-
-  const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'DISABLED'
 
   // Combobox & Highlight State
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
@@ -105,43 +99,66 @@ const SKUManagement = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const suppliers = ['All Suppliers', ...new Set(skus.map(s => s.supplier))];
-  const brands = ['All Brands', ...new Set(skus.map(s => s.brand))];
+  const brands = ['All Brands', ...[...new Set(skus.map(s => s.brand).filter(Boolean))].sort()];
 
   const filteredSKUs = useMemo(() => {
     return skus.filter(sku => {
       const matchesSearch = searchQuery === '' ||
         sku.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sku.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sku.brand.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesSupplier = supplierFilter === 'All Suppliers' || sku.supplier === supplierFilter;
+        (sku.brand || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesBrand = brandFilter === 'All Brands' || sku.brand === brandFilter;
       const matchesCategory = categoryFilter === 'All' || sku.cat === categoryFilter;
-      const matchesStatus = activeTab === 'ALL' || sku.status === activeTab;
-      return matchesSearch && matchesSupplier && matchesBrand && matchesCategory && matchesStatus;
+      return matchesSearch && matchesBrand && matchesCategory;
     });
-  }, [skus, searchQuery, supplierFilter, brandFilter, categoryFilter, activeTab]);
+  }, [skus, searchQuery, brandFilter, categoryFilter]);
 
+  // Pagination. The SKU master runs 2,000+ rows and this page renders the
+  // whole table — unpaginated it built every row into the DOM at once, which
+  // is slow to render and impossible to scan. Mirrors the pagination
+  // ABCClassification.jsx already added over the same corpus, so the two
+  // SKU tables behave the same way.
+  const PAGE_SIZE_OPTIONS = [25, 50, 100];
+  const [pageSize, setPageSize] = useState(25);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSKUs.length / pageSize));
+  // Clamped rather than stored, so narrowing the filters while on a high page
+  // number can't strand the user on an empty page.
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  // Any filter/search change puts the user back on page 1 — staying on page 7
+  // of a result set that just shrank to 2 pages shows nothing.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, brandFilter, categoryFilter, pageSize]);
+
+  const pagedSKUs = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredSKUs.slice(start, start + pageSize);
+  }, [filteredSKUs, safeCurrentPage, pageSize]);
+
+  // Summary cards show counts that can actually vary and mean something. The
+  // old Active/Disabled pair (and matching tabs) could never change: every SKU
+  // is ACTIVE in Product_Dimension and PATCH /sku doesn't write status yet.
   const totalSKUs = skus.length;
-  const activeSKUs = skus.filter(s => s.status === 'ACTIVE').length;
-  const inactiveSKUs = skus.filter(s => s.status === 'DISABLED').length;
+  const categoryASKUs = skus.filter(s => s.cat === 'A').length;
+  const noBrandSKUs = skus.filter(s => !s.brand).length;
 
   const handleAddSKU = async (formData) => {
-    if (formData.brand !== 'Unilever') {
-      throw new Error(`Unrecognized brand "${formData.brand}"`);
-    }
+    // Only fields POST /sku actually stores (see backend/routers/sku.py's
+    // INSERT); unit price, lead time and notes have no column yet.
     const created = await createSKU({
       sku_code: formData.skuCode,
       principal: 'unilever',
       product_name: formData.productName,
       brand: formData.brand,
-      unit_price: parseFloat(formData.unitPrice) || null,
-      lead_time_days: formData.leadTimeDays ? parseInt(formData.leadTimeDays) : null,
-      notes: formData.notes || null,
     });
 
     await loadSKUs();
     logAction('Add SKU', `Added new SKU: ${created.sku_id} (${created.product_name})`);
+    // Outlives the modal's own success screen, which auto-dismisses after 1.5s.
+    toast.success(`SKU ${created.sku_id} created`);
   };
 
   const handleOpenViewModal = (sku) => {
@@ -174,19 +191,18 @@ const SKUManagement = () => {
     const changes = [];
     if (previousSKU) {
       if (previousSKU.product !== updatedSKU.product) changes.push(`Product Name: ${previousSKU.product} -> ${updatedSKU.product}`);
-      if (previousSKU.brand !== updatedSKU.brand) changes.push(`Brand: ${previousSKU.brand} -> ${updatedSKU.brand}`);
-      if (previousSKU.unitPrice !== updatedSKU.unitPrice) changes.push(`Unit Price: ${previousSKU.unitPrice} -> ${updatedSKU.unitPrice}`);
-      if (previousSKU.status !== updatedSKU.status) changes.push(`Status: ${previousSKU.status} -> ${updatedSKU.status}`);
+      if ((previousSKU.brand || '') !== (updatedSKU.brand || '')) changes.push(`Brand: ${previousSKU.brand || '—'} -> ${updatedSKU.brand || '—'}`);
     }
 
-    await updateSKU(updatedSKU.id, {
-      product_name: updatedSKU.product,
-      brand: updatedSKU.brand,
-      unit_price: updatedSKU.unitPrice,
-      lead_time_days: updatedSKU.leadTimeDays,
-      notes: updatedSKU.notes,
-      status: updatedSKU.status,
-    });
+    // PATCH /sku only persists product_name, pack_size and brand (unit price,
+    // lead time, status and notes have no column yet, so the edit form locks
+    // them). Brand is sent only when it actually changed, so saving an
+    // unrelated edit can never rewrite it.
+    const payload = { product_name: updatedSKU.product };
+    if (previousSKU && (previousSKU.brand || '') !== (updatedSKU.brand || '') && updatedSKU.brand) {
+      payload.brand = updatedSKU.brand;
+    }
+    await updateSKU(updatedSKU.id, payload);
 
     await loadSKUs();
     setSelectedSKU(updatedSKU);
@@ -196,6 +212,7 @@ const SKUManagement = () => {
       : `Updated SKU ${updatedSKU.code} (minor details)`;
 
     logAction('Edit SKU', details);
+    toast.success(`SKU ${updatedSKU.code} updated`);
   };
 
   // Handle selecting a combobox suggestion row
@@ -220,13 +237,11 @@ const SKUManagement = () => {
 
   const hasActiveFilters =
     searchQuery !== '' ||
-    supplierFilter !== 'All Suppliers' ||
     brandFilter !== 'All Brands' ||
     categoryFilter !== 'All';
 
   const handleClearFilters = () => {
     setSearchQuery('');
-    setSupplierFilter('All Suppliers');
     setBrandFilter('All Brands');
     setCategoryFilter('All');
   };
@@ -246,9 +261,9 @@ const SKUManagement = () => {
         {/* Page Header */}
         <div className="sku-page-header">
           <div>
-            <h2 className="sku-page-title">SKU Ledger</h2>
+            <h2 className="sku-page-title">SKU <span className="page-title-accent">Management</span></h2>
             <p className="sku-page-subtitle">
-              Add, edit, or deactivate products from the inventory system. The master record the forecasts draw from.
+              Add products or edit their name and brand. This is the master product list the forecasts draw from.
             </p>
           </div>
           <button className="add-sku-btn" onClick={() => setIsAddModalOpen(true)}>
@@ -257,44 +272,21 @@ const SKUManagement = () => {
           </button>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="sku-top-tabs">
-          <button
-            className={`sku-tab-btn ${activeTab === 'ALL' ? 'active' : ''}`}
-            onClick={() => setActiveTab('ALL')}
-          >
-            <Package size={16} color="#3b82f6" className="sku-tab-icon" />
-            All SKUs
-          </button>
-          <button
-            className={`sku-tab-btn ${activeTab === 'ACTIVE' ? 'active' : ''}`}
-            onClick={() => setActiveTab('ACTIVE')}
-          >
-            <CheckCircle size={16} color="#38a169" className="sku-tab-icon" />
-            Active SKUs
-          </button>
-          <button
-            className={`sku-tab-btn ${activeTab === 'DISABLED' ? 'active' : ''}`}
-            onClick={() => setActiveTab('DISABLED')}
-          >
-            <XCircle size={16} color="#e53e3e" className="sku-tab-icon" />
-            Disabled SKUs
-          </button>
-        </div>
-
         {/* Summary Cards */}
         <div className="sku-summary-grid">
           <div className="sku-summary-card summary-total">
             <span className="summary-label">TOTAL SKUS</span>
-            <span className="summary-value">{totalSKUs}</span>
+            <span className="summary-value">{totalSKUs.toLocaleString()}</span>
           </div>
-          <div className="sku-summary-card summary-active">
-            <span className="summary-label">ACTIVE</span>
-            <span className="summary-value">{activeSKUs}</span>
+          <div className="sku-summary-card summary-cat-a">
+            <span className="summary-label">CATEGORY A</span>
+            <span className="summary-value">{categoryASKUs.toLocaleString()}</span>
+            <span className="summary-desc">latest ABC classification</span>
           </div>
-          <div className="sku-summary-card summary-inactive">
-            <span className="summary-label">DISABLED</span>
-            <span className="summary-value">{inactiveSKUs}</span>
+          <div className="sku-summary-card summary-no-brand">
+            <span className="summary-label">NO BRAND RECORDED</span>
+            <span className="summary-value">{noBrandSKUs.toLocaleString()}</span>
+            <span className="summary-desc">brand missing in the product master</span>
           </div>
         </div>
 
@@ -349,11 +341,10 @@ const SKUManagement = () => {
                             >
                               <div className="sku-row-left">
                                 <span className="sku-row-code">{sku.code}</span>
-                                <span className="sku-row-brand">{sku.brand}</span>
+                                <span className="sku-row-brand">{sku.brand || '—'}</span>
                               </div>
                               <div className="sku-row-middle">
                                 <span className="sku-row-product">{sku.product}</span>
-                                <span className="sku-row-supplier">{sku.supplier}</span>
                               </div>
                               <div className="sku-row-right">
                                 <span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span>
@@ -373,7 +364,7 @@ const SKUManagement = () => {
                               <Clock size={12} />
                               <span>RECENTLY VIEWED</span>
                             </div>
-                            {recentlyViewedSKUs.map((sku) => (
+                            {recentlyViewedSKUs.map((saved) => skus.find((s) => s.id === saved.id) || saved).map((sku) => (
                               <div
                                 key={sku.id}
                                 className="sku-suggestion-row"
@@ -381,11 +372,10 @@ const SKUManagement = () => {
                               >
                                 <div className="sku-row-left">
                                   <span className="sku-row-code">{sku.code}</span>
-                                  <span className="sku-row-brand">{sku.brand}</span>
+                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
                                 </div>
                                 <div className="sku-row-middle">
                                   <span className="sku-row-product">{sku.product}</span>
-                                  <span className="sku-row-supplier">{sku.supplier}</span>
                                 </div>
                                 <div className="sku-row-right">
                                   <span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span>
@@ -406,11 +396,10 @@ const SKUManagement = () => {
                               >
                                 <div className="sku-row-left">
                                   <span className="sku-row-code">{sku.code}</span>
-                                  <span className="sku-row-brand">{sku.brand}</span>
+                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
                                 </div>
                                 <div className="sku-row-middle">
                                   <span className="sku-row-product">{sku.product}</span>
-                                  <span className="sku-row-supplier">{sku.supplier}</span>
                                 </div>
                                 <div className="sku-row-right">
                                   <span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span>
@@ -427,16 +416,6 @@ const SKUManagement = () => {
 
               {/* Filter Controls Row: Icon-Labeled Wrappers */}
               <div className="sku-filter-controls">
-                <div className="sku-filter-select-wrapper">
-                  <span className="sku-filter-icon-label"><Building size={12} /> Supplier:</span>
-                  <select
-                    value={supplierFilter}
-                    onChange={(e) => setSupplierFilter(e.target.value)}
-                  >
-                    {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-
                 <div className="sku-filter-select-wrapper">
                   <span className="sku-filter-icon-label"><Tag size={12} /> Brand:</span>
                   <select
@@ -478,15 +457,6 @@ const SKUManagement = () => {
                   </span>
                 )}
 
-                {supplierFilter !== 'All Suppliers' && (
-                  <span className="sku-active-chip">
-                    Supplier: {supplierFilter}
-                    <button className="sku-chip-remove" onClick={() => setSupplierFilter('All Suppliers')}>
-                      <X size={12} />
-                    </button>
-                  </span>
-                )}
-
                 {brandFilter !== 'All Brands' && (
                   <span className="sku-active-chip">
                     Brand: {brandFilter}
@@ -517,67 +487,64 @@ const SKUManagement = () => {
             )}
 
             {/* Table */}
-            <div className="sku-table-wrapper">
-              <table className="sku-table">
+            <div className="data-table-card">
+              <table className="data-table sku-table">
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>SKU CODE</th>
-                    <th>BRAND</th>
-                    <th>SUPPLIER</th>
-                    <th>PRODUCT</th>
-                    <th>CAT</th>
-                    <th>LEAD TIME (DAYS)</th>
-                    <th>REORDER PT</th>
-                    <th>STATUS</th>
-                    <th>ACTIONS</th>
+                    <th className="table-num col-fit">#</th>
+                    <th className="col-fit">SKU code</th>
+                    <th className="col-fit">Brand</th>
+                    <th className="col-text col-product">Product</th>
+                    <th className="table-center col-fit">Cat</th>
+                    <th className="table-num col-fit">Reorder pt</th>
+                    <th className="table-center col-fit"><span className="visually-hidden">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSKUs.map((sku, index) => (
+                  {pagedSKUs.map((sku, index) => (
                     <tr
                       key={sku.id}
                       id={`sku-row-${sku.id}`}
                       className={highlightedSKUId === sku.id ? 'highlighted-row-flash' : ''}
                     >
-                      <td className="row-number">{index + 1}</td>
-                      <td
-                        className="sku-code-cell"
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => handleOpenViewModal(sku)}
-                        title="Click to view full SKU details"
-                      >
-                        {sku.code}
-                      </td>
-                      <td>{sku.brand}</td>
-                      <td className="supplier-cell">{sku.supplier}</td>
-                      <td className="product-cell">
-                        {(() => {
-                          const { name, weight } = parseProductAndWeight(sku.product);
-                          return (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                              <span className="sku-product-name">{name}</span>
-                              {weight && (
-                                <span className="sku-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
-                                  {weight}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td><span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span></td>
-                      <td>{sku.leadTime || '—'}</td>
-                      <td className="reorder-cell">{sku.reorderPt != null ? sku.reorderPt.toLocaleString() : '—'}</td>
-                      <td>
-                        <span className={`status-badge ${sku.status === 'ACTIVE' ? 'status-active' : 'status-inactive'}`}>
-                          {sku.status}
+                      {/* Row number is position in the FULL filtered set, not
+                          within the page, so it stays stable across paging. */}
+                      <td className="cell-rownum table-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
+                      <td className="cell-code">
+                        <span
+                          className="cell-code-link"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleOpenViewModal(sku)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleOpenViewModal(sku);
+                            }
+                          }}
+                          title="View full SKU details"
+                        >
+                          {sku.code}
                         </span>
                       </td>
-                      <td>
+                      <td className={sku.brand ? 'cell-muted' : 'cell-empty'}>{sku.brand || '—'}</td>
+                      <td className="cell-product">{sku.product}</td>
+                      <td className="table-center">
+                        {sku.cat
+                          ? <span className={getCatClass(sku.cat)}>{sku.cat}</span>
+                          : <span className="cell-empty">—</span>}
+                      </td>
+                      <td
+                        className={`table-num ${sku.reorderPt != null ? 'cell-strong' : 'cell-empty'}`}
+                        title={exactUnits(sku.reorderPt)}
+                      >
+                        {formatUnits(sku.reorderPt)}
+                      </td>
+                      <td className="table-center">
                         <button
-                          className="view-btn"
+                          className="table-btn"
                           onClick={() => handleOpenViewModal(sku)}
+                          aria-label={`View SKU ${sku.code}`}
                         >
                           View
                         </button>
@@ -585,13 +552,76 @@ const SKUManagement = () => {
                     </tr>
                   ))}
                   {filteredSKUs.length === 0 && (
-                    <tr>
-                      <td colSpan="10" className="no-results">No data for this selection.</td>
+                    <tr className="table-empty-row">
+                      <td colSpan="7">No data for this selection.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination — mirrors ABCClassification's controls so both SKU
+                tables page identically. */}
+            {filteredSKUs.length > 0 && (
+              <div className="sku-pagination-row">
+                <span className="sku-pagination-info">
+                  Showing {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, filteredSKUs.length)} of {filteredSKUs.length}
+                </span>
+
+                <div className="sku-pagination-controls">
+                  <button
+                    className="sku-pagination-btn"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={safeCurrentPage === 1}
+                    aria-label="First page"
+                    title="First page"
+                  >
+                    «
+                  </button>
+                  <button
+                    className="sku-pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={safeCurrentPage === 1}
+                    aria-label="Previous page"
+                  >
+                    Prev
+                  </button>
+                  <span className="sku-pagination-page-label">
+                    Page {safeCurrentPage} of {totalPages}
+                  </span>
+                  <button
+                    className="sku-pagination-btn"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safeCurrentPage === totalPages}
+                    aria-label="Next page"
+                  >
+                    Next
+                  </button>
+                  <button
+                    className="sku-pagination-btn"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={safeCurrentPage === totalPages}
+                    aria-label="Last page"
+                    title="Last page"
+                  >
+                    »
+                  </button>
+                </div>
+
+                <div className="sku-pagination-size">
+                  <span>Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    aria-label="Rows per page"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>{size}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

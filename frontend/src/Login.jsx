@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login } from './auth';
+import { login, SESSION_EXPIRED_KEY } from './auth';
 import './Login.css';
 
 const Login = () => {
@@ -9,6 +9,22 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  // Explains an involuntary bounce back to this page. auth.js sets the flag
+  // immediately before redirecting on an expired/rejected token; without it
+  // the user just reappeared at the login screen mid-action with no reason
+  // given (the "Session expired" error apiFetch throws can never render,
+  // since the redirect has already started by the time it's caught).
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SESSION_EXPIRED_KEY)) {
+        setSessionExpired(true);
+        // One-shot: don't repeat the notice on a later voluntary visit.
+        sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+      }
+    } catch { /* storage unavailable — just skip the notice */ }
+  }, []);
 
   const navigate = useNavigate();
 
@@ -32,15 +48,25 @@ const Login = () => {
         <div className="logo-section">
           <img src="/logo.png" alt="SAN2 Corporation Logo" className="logo-image" />
           <p className="dashboard-title">Inventory Decision Support Dashboard</p>
+          <ul className="login-feature-list">
+            <li>Per-SKU demand forecasting</li>
+            <li>ABC-classified replenishment</li>
+            <li>Reorder recommendations</li>
+          </ul>
         </div>
       </div>
 
       <div className="login-right">
         <div className="login-card">
-          <h2>Welcome back</h2>
+          <h2>Welcome <span className="page-title-accent">back</span></h2>
           <p className="subtitle">Sign in with your assigned account</p>
 
           <form onSubmit={handleSubmit} className="login-form">
+            {sessionExpired && !error && (
+              <div className="session-expired-message" role="status">
+                Your session expired, so you were signed out. Please log in again.
+              </div>
+            )}
             {error && <div className="error-message" role="alert">{error}</div>}
             <div className="input-group">
               <input

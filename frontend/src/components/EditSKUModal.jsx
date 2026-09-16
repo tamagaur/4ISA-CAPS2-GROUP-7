@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowLeft, CheckCircle2, XCircle } from 'lucide-react';
+import Modal from './Modal';
 import './EditSKUModal.css';
 
 // Helper to format SKU Code (e.g. SKU-10234)
@@ -47,6 +48,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     status: 'ACTIVE'
   });
   const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   // Populate form state when sku prop changes
   useEffect(() => {
@@ -67,28 +69,14 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     }
   }, [sku, isOpen]);
 
-  // Listen for Escape key press to dismiss modal
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
-
+  // Escape-to-close, focus trapping and role="dialog" now come from the
+  // shared <Modal> shell below (this file's own keydown listener was one of
+  // only three such ad hoc implementations in the app).
   if (!isOpen || !sku) return null;
 
   const handleClose = () => {
     setStep('FORM');
     onClose();
-  };
-
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      handleClose();
-    }
   };
 
   const handleChange = (e) => {
@@ -123,20 +111,9 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     if (fullProduct !== (sku.product || '').trim()) {
       changes.push({ label: 'Product Name / Size', from: sku.product, to: fullProduct });
     }
-    if (form.brand.trim() !== (sku.brand || '').trim()) {
-      changes.push({ label: 'Brand', from: sku.brand, to: form.brand });
-    }
-    if (parseFloat(form.unitPrice) !== parseFloat(sku.unitPrice)) {
-      changes.push({ label: 'Unit Price', from: `₱${parseFloat(sku.unitPrice || 0).toFixed(2)}`, to: `₱${parseFloat(form.unitPrice || 0).toFixed(2)}` });
-    }
-    if ((form.leadTimeDays ? parseInt(form.leadTimeDays) : null) !== (sku.leadTimeDays ?? null)) {
-      changes.push({ label: 'Lead Time', from: sku.leadTimeDays != null ? `${sku.leadTimeDays} days` : '—', to: form.leadTimeDays ? `${form.leadTimeDays} days` : '—' });
-    }
-    if (form.status.toUpperCase() !== (sku.status || 'ACTIVE').toUpperCase()) {
-      changes.push({ label: 'Status', from: sku.status, to: form.status });
-    }
-    if ((form.notes || '') !== (sku.notes || '')) {
-      changes.push({ label: 'Notes', from: sku.notes || '—', to: form.notes || '—' });
+    // Brand can be set or changed but not cleared (PATCH /sku ignores null).
+    if (form.brand.trim() && form.brand.trim() !== (sku.brand || '').trim()) {
+      changes.push({ label: 'Brand', from: sku.brand || '—', to: form.brand.trim() });
     }
     return changes;
   };
@@ -145,25 +122,30 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
 
   // Confirm changes and save
   const handleConfirmChanges = async () => {
+    // Guard against a double-click firing two PATCH /sku/:id requests — see
+    // the matching guard in AddSKUModal's handleConfirmSave.
+    if (saving) return;
+
+    // Only product name and brand are stored by PATCH /sku; everything else
+    // keeps the SKU's current values.
     const updatedSKU = {
       ...sku,
       product: constructFullProduct(),
-      brand: form.brand,
-      unitPrice: parseFloat(form.unitPrice) || 0,
-      leadTimeDays: form.leadTimeDays ? parseInt(form.leadTimeDays) : null,
-      notes: form.notes,
-      status: form.status.toUpperCase()
+      brand: form.brand.trim() || sku.brand,
     };
 
     setSaveError('');
+    setSaving(true);
     try {
       if (onSave) {
         await onSave(updatedSKU);
       }
     } catch (err) {
       setSaveError(err.message || 'Failed to save changes');
+      setSaving(false);
       return;
     }
+    setSaving(false);
 
     setStep('SUCCESS');
 
@@ -173,8 +155,13 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
   };
 
   return (
-    <div className="edit-sku-modal-overlay" onClick={handleOverlayClick}>
-      <div className="edit-sku-modal-card">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      label={`Edit SKU ${sku.code}`}
+      overlayClassName="edit-sku-modal-overlay"
+      containerClassName="edit-sku-modal-card"
+    >
         {step === 'FORM' ? (
           /* STEP 1: EDIT SKU FORM */
           <>
@@ -182,7 +169,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
               <div>
                 <h3 className="edit-sku-modal-title">Edit SKU — {formatSKU(sku.code)}</h3>
                 <p className="edit-sku-modal-subtitle">
-                  Update the product information below. Changes will be reflected immediately.
+                  Update the product name or brand. Changes will be reflected immediately.
                 </p>
               </div>
               <button className="edit-sku-close-btn" onClick={handleClose} aria-label="Close modal">
@@ -246,32 +233,41 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                 <div className="edit-form-row">
                   <div className="edit-form-group">
                     <label className="edit-form-label">
-                      BRAND <span className="req-star">*</span>
+                      BRAND
                     </label>
                     <input
                       type="text"
                       name="brand"
                       value={form.brand}
                       onChange={handleChange}
-                      required
+                      placeholder="e.g. SURF"
                       className="edit-form-input"
                     />
                   </div>
                 </div>
 
+                {/* Product_Dimension has these columns (migration 0002), but
+                    PATCH /sku only writes product_name, pack_size and brand, so
+                    they're locked until the endpoint saves them. They used to be
+                    editable (unit price was even required) and reported as saved. */}
+                <p className="edit-form-unsaved-note">
+                  Unit price, lead time, status and notes can&apos;t be changed here yet: the system doesn&apos;t save
+                  these fields. They&apos;re shown for reference only.
+                </p>
+
                 {/* Row 4: Unit Price + Lead Time */}
                 <div className="edit-form-row two-col">
                   <div className="edit-form-group">
                     <label className="edit-form-label">
-                      UNIT PRICE <span className="req-star">*</span>
+                      UNIT PRICE
                     </label>
                     <input
                       type="number"
                       step="0.01"
                       name="unitPrice"
                       value={form.unitPrice}
-                      onChange={handleChange}
-                      required
+                      placeholder="—"
+                      disabled
                       className="edit-form-input"
                     />
                   </div>
@@ -284,7 +280,8 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                       type="number"
                       name="leadTimeDays"
                       value={form.leadTimeDays}
-                      onChange={handleChange}
+                      placeholder="—"
+                      disabled
                       className="edit-form-input"
                     />
                   </div>
@@ -294,12 +291,12 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                 <div className="edit-form-row two-col">
                   <div className="edit-form-group">
                     <label className="edit-form-label">
-                      STATUS <span className="req-star">*</span>
+                      STATUS
                     </label>
                     <select
                       name="status"
                       value={form.status}
-                      onChange={handleChange}
+                      disabled
                       className="edit-form-select"
                     >
                       <option value="ACTIVE">Active</option>
@@ -314,7 +311,8 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                   <textarea
                     name="notes"
                     value={form.notes}
-                    onChange={handleChange}
+                    placeholder="—"
+                    disabled
                     rows="3"
                     className="edit-form-input"
                   ></textarea>
@@ -371,8 +369,8 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
                 <ArrowLeft size={14} />
                 Back
               </button>
-              <button type="button" className="edit-sku-btn-confirm" onClick={handleConfirmChanges}>
-                Confirm Changes
+              <button type="button" className="edit-sku-btn-confirm" onClick={handleConfirmChanges} disabled={saving}>
+                {saving ? 'Saving…' : 'Confirm Changes'}
               </button>
             </div>
           </>
@@ -388,8 +386,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
             </p>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 };
 

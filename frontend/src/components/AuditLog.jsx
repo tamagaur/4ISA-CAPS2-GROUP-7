@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getAuditLog } from '../api/auditLog';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { formatDateTime } from '../utils/formatDate';
 import './AuditLog.css';
 
 const ExpandableText = ({ text, maxLength = 60 }) => {
@@ -41,15 +42,6 @@ const getAvatarColor = (name) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
-const formatTimestamp = (isoString) => {
-  const dateObj = new Date(isoString);
-  return dateObj.getFullYear() + '-' +
-    String(dateObj.getMonth() + 1).padStart(2, '0') + '-' +
-    String(dateObj.getDate()).padStart(2, '0') + ' ' +
-    String(dateObj.getHours()).padStart(2, '0') + ':' +
-    String(dateObj.getMinutes()).padStart(2, '0') + ':' +
-    String(dateObj.getSeconds()).padStart(2, '0');
-};
 
 const AuditLog = () => {
   const [logs, setLogs] = useState([]);
@@ -73,7 +65,7 @@ const AuditLog = () => {
           email: log.user_email,
           action: log.action,
           details: log.details,
-          formattedTimestamp: formatTimestamp(log.created_at),
+          formattedTimestamp: formatDateTime(log.created_at),
         }));
         setLogs(formatted);
       })
@@ -130,9 +122,9 @@ const AuditLog = () => {
       <div className="audit-content">
         <div className="audit-page-header">
           <div className="audit-header-left">
-            <h2 className="audit-page-title">Audit <span>log</span></h2>
+            <h2 className="audit-page-title">Audit <span className="page-title-accent">log</span></h2>
             <p className="audit-page-subtitle">
-              Monitor any changes made to your project, schema and content with audit logs.
+              Who did what, and when: sign-ins, SKU changes, and reorder decisions recorded in this system.
             </p>
           </div>
         </div>

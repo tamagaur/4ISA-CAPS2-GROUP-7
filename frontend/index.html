@@ -2,13 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Was a generic purple lightning-bolt SVG (a leftover template
+         placeholder, unrelated to SAN2) — now the actual "S" swoosh mark
+         cropped from the real logo (public/logo.png), matching the mark
+         used across the app itself. -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SAN2 Corporation - Login</title>
     <meta name="description" content="Log in to the SAN2 Corporation Inventory Decision Support Dashboard. Secure access for authorized personnel only." />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Fraunces: a warm serif used ONLY for the italic accent word in each
+         page's title (see --font-serif / .page-title-accent in index.css).
+         Inter alone made every heading read as the same weight/size as the
+         body copy with a color change — no real typographic hierarchy.
+         Fraunces' soft, slightly wonky italics pair well with the brand's
+         terracotta mark and give headings actual personality without
+         touching the UI/data font (Inter stays the only font for body
+         text, tables, labels and numbers). -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
   </head>
   <body>
     <div id="root"></div>

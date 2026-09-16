@@ -1,9 +1,15 @@
+/* This is the real page canvas everywhere in the app — every page's own
+   container (.dashboard, .forecast-page, .abc-page, etc.) is transparent
+   and shows this through. It used to be a hardcoded cool blue-grey
+   (#F7F9FC) that quietly overrode the warm --color-surface-raised token
+   set in index.css for exactly this purpose, so that token change never
+   actually became visible anywhere except the strip behind the topbar. */
 .dashboard-layout {
   display: flex;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background-color: #F7F9FC;
+  background-color: var(--color-surface-raised);
 }
 
 .main-content {
@@ -30,7 +36,7 @@
 }
 
 .period-nav-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   width: 90%;
   max-width: 420px;
@@ -46,7 +52,7 @@
 .period-nav-title {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -57,24 +63,47 @@
 .period-nav-body p {
   margin: 0;
   font-size: 0.88rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   line-height: 1.5;
+}
+
+/* Matches DateFilter.css's .date-range-error — same message family, same
+   treatment: bigger/bolder than the surrounding body text, a stronger
+   border, and an icon, rather than reading as a thin caption. */
+.period-nav-body p.period-nav-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background-color: var(--color-danger-bg);
+  border: 1.5px solid var(--color-brand-primary);
+  border-radius: 8px;
+  color: var(--color-brand-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.period-nav-error-icon {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
 }
 
 .period-nav-footer {
   display: flex;
   gap: 0.8rem;
   padding: 1rem 1.5rem 1.25rem 1.5rem;
-  background-color: #f8fafc;
-  border-top: 1px solid #edf2f7;
+  background-color: var(--color-surface-raised);
+  border-top: 1px solid var(--color-surface-muted);
 }
 
 .period-discard-btn {
   flex: 1;
   padding: 0.6rem;
-  border: 1px solid #cbd5e0;
-  background-color: #ffffff;
-  color: #4a5568;
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
   border-radius: 8px;
   font-size: 0.85rem;
   font-weight: 600;
@@ -83,15 +112,15 @@
 }
 
 .period-discard-btn:hover {
-  background-color: #edf2f7;
+  background-color: var(--color-surface-muted);
 }
 
 .period-save-btn {
   flex: 1;
   padding: 0.6rem;
   border: none;
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border-radius: 8px;
   font-size: 0.85rem;
   font-weight: 600;
@@ -99,6 +128,21 @@
   transition: background-color 0.2s;
 }
 
-.period-save-btn:hover {
-  background-color: #9b2c2c;
+.period-save-btn:hover:not(:disabled) {
+  background-color: var(--color-brand-hover);
+}
+
+.period-save-btn:disabled {
+  background-color: var(--color-border-strong);
+  color: var(--color-text-subtle);
+  cursor: not-allowed;
+}
+
+/* Shown inside the content area while a lazily loaded page's code arrives
+   (see App.jsx / pageLoaders.js); the sidebar and top bar stay rendered. */
+.page-chunk-loading {
+  margin: 0;
+  padding: 2rem 2.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-subtle);
 }

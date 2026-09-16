@@ -1,5 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import Modal from './Modal';
+import { formatMonth } from '../utils/formatDate';
 import { COLORS } from '../theme/colors';
 import './ReorderModal.css';
 
@@ -7,30 +9,36 @@ import './ReorderModal.css';
 // per DEC (w1=0.45 cost, w2=0.35 service level, w3=0.20 capacity), so the
 // weight split itself is real config (analytics/optimization/lp.py), not
 // per-SKU fabrication.
+//
+// Colors match the Dashboard's own cost/service level/storage priority
+// sliders (LP_PRIORITY_ROWS in Charts.jsx) one-for-one — these are the same
+// three LP weights shown two different ways (editable sliders there, a
+// static "why" breakdown here), so a SKU opened from Reorder Recs shouldn't
+// show a different color for "cost" than the Dashboard widget does.
 const OBJECTIVE_WEIGHTS = [
-  { key: 'cost', label: 'Cost minimization', weight: 45, color: COLORS.salesTrend },
-  { key: 'service', label: 'Service level ≥ 95%', weight: 35, color: COLORS.success },
-  { key: 'capacity', label: 'Warehouse capacity', weight: 20, color: COLORS.dispatched },
+  { key: 'cost', label: 'Cost minimization', weight: 45, color: COLORS.dispatched },
+  { key: 'service', label: 'Service level ≥ 95%', weight: 35, color: COLORS.salesTrend },
+  { key: 'capacity', label: 'Warehouse capacity', weight: 20, color: COLORS.warning },
 ];
 
 const ReorderModal = ({ isOpen, onClose, data }) => {
   if (!isOpen || !data) return null;
 
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
 
   return (
-    <div className="reorder-modal-overlay" onClick={handleOverlayClick}>
-      <div className="reorder-modal-card">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      label="Reorder details"
+      overlayClassName="reorder-modal-overlay"
+      containerClassName="reorder-modal-card"
+    >
         {/* Header */}
         <div className="reorder-modal-header">
           <div>
             <h3 className="reorder-modal-title">Reorder: {data.product}</h3>
             <p className="reorder-modal-subtitle">
-              LP optimization breakdown for this SKU's recommended order.
+              Order <strong>{Number(data.orderQty ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> units — LP optimization breakdown for this SKU's recommended order.
             </p>
           </div>
           <button className="reorder-modal-close" onClick={onClose} aria-label="Close modal">
@@ -38,31 +46,13 @@ const ReorderModal = ({ isOpen, onClose, data }) => {
           </button>
         </div>
 
-        {/* Data Grid */}
+        {/* Data Grid — only fields not already visible in the table row
+            (safety stock, ROP, current stock, order qty and urgency are all
+            columns there, so the two views don't repeat each other). */}
         <div className="reorder-modal-grid">
           <div className="reorder-grid-item">
-            <span className="reorder-grid-label">REORDER POINT (ROP)</span>
-            <span className="reorder-grid-value">{data.rop}</span>
-          </div>
-          <div className="reorder-grid-item">
-            <span className="reorder-grid-label">CURRENT STOCK</span>
-            <span className="reorder-grid-value">{data.stock}</span>
-          </div>
-          <div className="reorder-grid-item">
-            <span className="reorder-grid-label">OPTIMAL ORDER QTY</span>
-            <span className="reorder-grid-value">{data.orderQty}</span>
-          </div>
-          <div className="reorder-grid-item">
-            <span className="reorder-grid-label">URGENCY</span>
-            <span className="reorder-grid-value">{data.urgency}</span>
-          </div>
-          <div className="reorder-grid-item">
-            <span className="reorder-grid-label">SAFETY STOCK</span>
-            <span className="reorder-grid-value">{data.safetyStock ?? '—'}</span>
-          </div>
-          <div className="reorder-grid-item">
             <span className="reorder-grid-label">PLANNING CYCLE</span>
-            <span className="reorder-grid-value">{data.planningCycleDate ?? '—'}</span>
+            <span className="reorder-grid-value">{formatMonth(data.planningCycleDate)}</span>
           </div>
         </div>
 
@@ -100,8 +90,7 @@ const ReorderModal = ({ isOpen, onClose, data }) => {
             Constraints applied: service level ≥ 95%, supplier MOQ, and warehouse capacity headroom.
           </p>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

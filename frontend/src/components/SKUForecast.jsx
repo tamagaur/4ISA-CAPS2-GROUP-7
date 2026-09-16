@@ -12,12 +12,13 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
 import DateFilter from './DateFilter';
 import './SKUForecast.css';
 
-// Unlike Dashboard/ABC Classification/Reorder Recs/Bad Orders, this page's
+// Unlike Dashboard/ABC Classification/Reorder Recs, this page's
 // date range is its OWN, local to this component — not the shared
 // cross-page one in DashboardLayout (see the localRange state below, and
 // DateFilter's "local mode"). It seeds from the dashboard's range once on
@@ -33,6 +34,31 @@ const MONTH_TO_NUM = {
 const toPeriod = (month, year) =>
   month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
+// Inclusive month count between two 'YYYY-MM' periods (a === b -> 1). Only
+// meaningful when a <= b — callers check chronological order first.
+const monthsBetween = (a, b) => {
+  const [ay, am] = a.split('-').map(Number);
+  const [by, bm] = b.split('-').map(Number);
+  return (by * 12 + bm) - (ay * 12 + am) + 1;
+};
+
+// Same reasoning as DateFilter.jsx/DashboardLayout.jsx's MIN_RANGE_MONTHS:
+// below this, the chart this page exists to show renders as 1-2
+// disconnected dots rather than a readable trend.
+const MIN_RANGE_MONTHS = 6;
+
+// 'YYYY-MM' minus (count-1) months, inclusive — the start of a `count`-month
+// window ending at `period`. Used by the too-short fix button to widen a
+// range by pulling the start back, keeping the end (what the user actually
+// picked) untouched.
+const periodMinusMonths = (period, count) => {
+  const [y, m] = period.split('-').map(Number);
+  const total = y * 12 + (m - 1) - (count - 1);
+  const year = Math.floor(total / 12);
+  const monthIndex = ((total % 12) + 12) % 12;
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+};
+
 const NUM_TO_MONTH = Object.fromEntries(Object.entries(MONTH_TO_NUM).map(([m, n]) => [n, m]));
 // -> 'Mon YYYY'. Deliberately accepts BOTH shapes the API returns: actuals
 // carry a 'YYYY-MM' period string, while forecast_date is a full ISO date
@@ -45,14 +71,16 @@ const formatPeriod = (period) => {
   return `${NUM_TO_MONTH[num] || num} ${year}`;
 };
 
-// Compact X-axis tick: "Jan '23". The raw labels arrive in two different
+// X-axis tick + tooltip header: "Jan · 2026" — short month, middle dot,
+// full year (matches the same format used on the Dashboard's charts, see
+// Charts.jsx's formatAxisPeriod). The raw labels arrive in two different
 // shapes (actuals 'YYYY-MM', forecast 'YYYY-MM-DD'), which rendered as a
 // visibly inconsistent axis; this normalises both and keeps ticks short
 // enough to sit horizontally without overlapping.
 const formatAxisPeriod = (period) => {
   if (!period) return '';
   const [year, num] = period.split('-');
-  return `${NUM_TO_MONTH[num] || num} '${String(year).slice(-2)}`;
+  return `${NUM_TO_MONTH[num] || num} · ${year}`;
 };
 
 // Y-axis tick: 1.2M / 155k / 940. Monthly Unilever volumes run into the
@@ -68,15 +96,15 @@ const formatAxisQty = (value) => {
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     const hasActual = payload.some(p => p.dataKey === 'actual');
-    const displayPayload = hasActual 
-        ? payload.filter(p => p.dataKey !== 'forecast')
-        : payload;
+    const displayPayload = hasActual
+      ? payload.filter(p => p.dataKey !== 'forecast')
+      : payload;
 
     const qty = (v) => Math.round(v).toLocaleString();
 
     return (
       <div className="forecast-tooltip">
-        <p className="tooltip-label">{formatPeriod(label)}</p>
+        <p className="tooltip-label">{formatAxisPeriod(label)}</p>
         {displayPayload.map((entry, index) => {
           if (entry.dataKey === 'ci') {
             // Zero-width at the anchor point (see chartData) — that's the
@@ -182,7 +210,6 @@ const SKUForecast = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
-  const [selectedBrand, setSelectedBrand] = useState('ALL');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Selected SKU. Starts EMPTY — the page opens on a "pick a SKU" prompt
@@ -278,17 +305,15 @@ const SKUForecast = () => {
   const handleClearSelection = () => {
     setSelectedSKU(null);
     setSelectedCategory('ALL');
-    setSelectedBrand('ALL');
     setSearchQuery('');
     try {
       sessionStorage.removeItem(SELECTED_SKU_KEY);
     } catch { /* nothing to forget if storage is unavailable */ }
   };
 
-  // Unique Brands list
-  const brandsList = ['ALL', ...Array.from(new Set(sourceSKUs.map(s => s.brand)))];
-
-  // Filtering Logic
+  // Filtering Logic. No brand filter: every SKU here is Unilever (see the
+  // "Unilever only" scope badge above the picker) — brand is still matched
+  // on for SEARCH, since typing "unilever" shouldn't come back empty.
   const filteredSKUs = useMemo(() => {
     return sourceSKUs.filter(sku => {
       const matchesSearch = searchQuery === '' ||
@@ -296,12 +321,11 @@ const SKUForecast = () => {
         sku.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sku.brand.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCat = selectedCategory === 'ALL' || sku.cat === selectedCategory;
-      const matchesBrand = selectedBrand === 'ALL' || sku.brand === selectedBrand;
-      return matchesSearch && matchesCat && matchesBrand;
+      return matchesSearch && matchesCat;
     });
-  }, [sourceSKUs, searchQuery, selectedCategory, selectedBrand]);
+  }, [sourceSKUs, searchQuery, selectedCategory]);
 
-  const hasActiveFilterOrSearch = selectedCategory !== 'ALL' || selectedBrand !== 'ALL' || searchQuery.trim() !== '';
+  const hasActiveFilterOrSearch = selectedCategory !== 'ALL' || searchQuery.trim() !== '';
 
   const pinnedSKUObjects = sourceSKUs.filter(sku => pinnedSKUs.includes(sku.code));
   const recentSKUObjects = sourceSKUs.filter(sku => recentSKUs.includes(sku.code) && !pinnedSKUs.includes(sku.code));
@@ -349,7 +373,7 @@ const SKUForecast = () => {
   // This page's OWN local date range (2026-09, see localRange above): actuals
   // are trimmed to [rangeStartPeriod, rangeEndPeriod] before the gap-fill
   // below runs, so a narrower pick shows a narrower trailing-history window —
-  // same "picker controls what's plotted" behavior Dashboard/ABC/Bad Orders
+  // same "picker controls what's plotted" behavior Dashboard/ABC
   // have with the shared range, just scoped to this one chart. The forecast
   // point is NOT filtered by range — GET /forecast always returns MA3's
   // single latest-real-month+1 forecast regardless of what range is picked
@@ -373,6 +397,21 @@ const SKUForecast = () => {
     return { start: periods[0], end: periods[periods.length - 1] };
   }, [forecastResult]);
 
+  // MIN_RANGE_MONTHS (6) assumes the SKU HAS 6 months to show. Plenty of
+  // real SKUs in the corpus don't — coverage runs from 2023-01 to 2026-02
+  // but only ~1/3 of SKUs span the whole thing (see skuCoverage's own
+  // comment above), so a SKU with 2 real months was being told to pick a
+  // 6-month range it could never fill with real data — 4 of those months
+  // would just be empty padding. The effective floor is now whichever is
+  // SMALLER: the usual 6-month readability floor, or this SKU's own total
+  // real coverage — so a 2-month SKU only needs to select 2 months, not
+  // pad out to 6 for a rule that was never really about this SKU.
+  const effectiveMinMonths = useMemo(() => {
+    if (!skuCoverage) return MIN_RANGE_MONTHS;
+    const skuSpan = monthsBetween(skuCoverage.start, skuCoverage.end);
+    return Math.min(MIN_RANGE_MONTHS, skuSpan);
+  }, [skuCoverage]);
+
   // The month the STORED forecast targets ('YYYY-MM'), sliced off the API's
   // ISO date. The pipeline always writes exactly last-real-month + 1, which
   // across the whole corpus is 2026-03.
@@ -381,15 +420,32 @@ const SKUForecast = () => {
     return d ? String(d).slice(0, 7) : null;
   }, [forecastResult]);
 
-  // 'ok'      — picked range sits fully inside this SKU's history
-  // 'partial' — overlaps, but one/both ends fall outside it
-  // 'none'    — no overlap at all; nothing honest to plot
+  // 'invalid'   — the range itself is backwards (start after end), e.g.
+  //               start Dec 2024, end Jan 2024. Checked before anything
+  //               else, since asking "does this SKU have 6 months of data
+  //               in a backwards range" is meaningless.
+  // 'too-short' — chronologically fine, but under effectiveMinMonths — the
+  //               chart below would render as 1-2 disconnected dots.
+  //               Checked before coverage too: a 1-month pick that also
+  //               misses this SKU's history should say "too short," not
+  //               "no data," since widening it is the actual fix either way.
+  //               Uses effectiveMinMonths (SKU-aware), not the flat
+  //               MIN_RANGE_MONTHS, so a SKU with genuinely less than 6
+  //               months of real history isn't asked to select more than
+  //               it has (see effectiveMinMonths above).
+  // 'ok'        — picked range sits fully inside this SKU's history
+  // 'partial'   — overlaps, but one/both ends fall outside it
+  // 'none'      — no overlap at all; nothing honest to plot
   const rangeStatus = useMemo(() => {
+    if (rangeStartPeriod && rangeEndPeriod && rangeStartPeriod > rangeEndPeriod) return 'invalid';
+    if (rangeStartPeriod && rangeEndPeriod && monthsBetween(rangeStartPeriod, rangeEndPeriod) < effectiveMinMonths) {
+      return 'too-short';
+    }
     if (!skuCoverage || !rangeStartPeriod || !rangeEndPeriod) return 'ok';
     if (rangeEndPeriod < skuCoverage.start || rangeStartPeriod > skuCoverage.end) return 'none';
     if (rangeStartPeriod < skuCoverage.start || rangeEndPeriod > skuCoverage.end) return 'partial';
     return 'ok';
-  }, [skuCoverage, rangeStartPeriod, rangeEndPeriod]);
+  }, [skuCoverage, rangeStartPeriod, rangeEndPeriod, effectiveMinMonths]);
 
   // Snap this page's local range to exactly the months this SKU has data for.
   const applySkuCoverageRange = () => {
@@ -486,7 +542,7 @@ const SKUForecast = () => {
       let currentPeriod = sortedActuals[0].period;
       const endPeriod = sortedActuals[sortedActuals.length - 1].period;
       let actualIndex = 0;
-      
+
       while (currentPeriod <= endPeriod) {
         if (actualIndex < sortedActuals.length && sortedActuals[actualIndex].period === currentPeriod) {
           actualPoints.push({
@@ -500,7 +556,7 @@ const SKUForecast = () => {
             actual: 0,
           });
         }
-        
+
         const [yearStr, monthStr] = currentPeriod.split('-');
         let year = parseInt(yearStr, 10);
         let month = parseInt(monthStr, 10);
@@ -534,12 +590,12 @@ const SKUForecast = () => {
 
     const forecastPoints = derivedForecast
       ? [{
-          label: derivedForecast.period,
-          forecast: derivedForecast.value,
-          ci: derivedForecast.confidenceLower != null && derivedForecast.confidenceUpper != null
-            ? [derivedForecast.confidenceLower, derivedForecast.confidenceUpper]
-            : undefined,
-        }]
+        label: derivedForecast.period,
+        forecast: derivedForecast.value,
+        ci: derivedForecast.confidenceLower != null && derivedForecast.confidenceUpper != null
+          ? [derivedForecast.confidenceLower, derivedForecast.confidenceUpper]
+          : undefined,
+      }]
       : [];
     return [...actualPoints, ...forecastPoints];
   }, [forecastResult, rangeStartPeriod, rangeEndPeriod, derivedForecast]);
@@ -571,7 +627,7 @@ const SKUForecast = () => {
         <div className="forecast-header">
           <div className="header-text-group">
             <h2 className="forecast-title">
-              Demand <span>forecasted</span>
+              Demand <span className="page-title-accent">forecasted</span>
             </h2>
             <p className="forecast-subtitle">
               MA3 (3-month moving average) projection for Category A SKUs, from Forecast_Result
@@ -583,6 +639,7 @@ const SKUForecast = () => {
               localValue={localRange}
               onLocalChange={setLocalRange}
               onReset={isCustomRange ? resetToDashboardRange : undefined}
+              minMonths={effectiveMinMonths}
             />
             <button
               className="browse-all-skus-btn"
@@ -599,6 +656,12 @@ const SKUForecast = () => {
         <div className="forecast-selection">
           <div className="selection-top-bar">
             <label className="selection-label">SELECT SKU TO FORECAST</label>
+            {/* Replaces the old Brand dropdown, which had exactly one real
+                option: this is a Unilever-only system (see the backend
+                routers' hardcoded principal filter). Stated as fixed scope
+                rather than offered as a choice, so nobody goes hunting for
+                brands that were never in the data. */}
+            <span className="forecast-scope-badge">Unilever only</span>
           </div>
 
           {/* Controls Bar: Filters & Search Combobox */}
@@ -622,23 +685,7 @@ const SKUForecast = () => {
                 </select>
               </div>
 
-              <div className="filter-dropdown-wrapper">
-                <span className="filter-icon-label">Brand:</span>
-                <select
-                  className="filter-select"
-                  value={selectedBrand}
-                  onChange={(e) => {
-                    setSelectedBrand(e.target.value);
-                    setIsDropdownOpen(true);
-                  }}
-                >
-                  {brandsList.map(b => (
-                    <option key={b} value={b}>{b === 'ALL' ? 'All Brands' : b}</option>
-                  ))}
-                </select>
-              </div>
-
-              {(selectedCategory !== 'ALL' || selectedBrand !== 'ALL' || searchQuery !== '' || selectedSKU) && (
+              {(selectedCategory !== 'ALL' || searchQuery !== '' || selectedSKU) && (
                 <button
                   className="clear-filters-btn"
                   onClick={handleClearSelection}
@@ -692,6 +739,8 @@ const SKUForecast = () => {
                               className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                               onClick={(e) => togglePinSKU(sku.code, e)}
                               title={pinnedSKUs.includes(sku.code) ? "Unpin SKU" : "Pin SKU to top"}
+                              aria-label={`${pinnedSKUs.includes(sku.code) ? 'Unpin' : 'Pin'} SKU ${sku.code}`}
+                              aria-pressed={pinnedSKUs.includes(sku.code)}
                             >
                               <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
                             </button>
@@ -727,6 +776,8 @@ const SKUForecast = () => {
                                 className="star-pin-btn pinned"
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Unpin SKU"
+                                aria-label={`Unpin SKU ${sku.code}`}
+                                aria-pressed={true}
                               >
                                 <Star size={15} fill="#F5A623" />
                               </button>
@@ -758,6 +809,8 @@ const SKUForecast = () => {
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Pin SKU"
+                                aria-label={`Pin SKU ${sku.code}`}
+                                aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
                                 <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
                               </button>
@@ -788,6 +841,8 @@ const SKUForecast = () => {
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Pin SKU"
+                                aria-label={`Pin SKU ${sku.code}`}
+                                aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
                                 <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
                               </button>
@@ -840,8 +895,10 @@ const SKUForecast = () => {
                     className={`card-star-btn ${isSelectedPinned ? 'pinned' : ''}`}
                     onClick={(e) => togglePinSKU(selectedSKU.code, e)}
                     title={isSelectedPinned ? "Unpin SKU" : "Pin SKU to top of search"}
+                    aria-label={`${isSelectedPinned ? 'Unpin' : 'Pin'} SKU ${selectedSKU.code}`}
+                    aria-pressed={isSelectedPinned}
                   >
-                    <Star size={15} fill={isSelectedPinned ? '#F5A623' : 'none'} color={isSelectedPinned ? '#F5A623' : '#a0aec0'} />
+                    <Star size={15} fill={isSelectedPinned ? '#F5A623' : 'none'} color={isSelectedPinned ? '#F5A623' : '#667085'} />
                     <span className="pin-text">{isSelectedPinned ? 'Pinned' : 'Pin SKU'}</span>
                   </button>
                 </div>
@@ -857,7 +914,14 @@ const SKUForecast = () => {
             </div>
 
             {/* Chart Section */}
-            <div className="forecast-chart-container">
+            {/* Keyed on the selected SKU so switching products replays the
+                container's entrance animation (index.css's chartWidgetEnter)
+                — a clear "this is a different product now" signal. The key
+                deliberately excludes the date range: a range tweak keeps the
+                same chart mounted and lets Recharts tween between the old
+                and new values, which reads better than a re-fade for what is
+                the same product's data. */}
+            <div className="forecast-chart-container" key={selectedSKU?.code || 'none'}>
               {forecastLoading && <p className="forecast-subtitle">Loading forecast…</p>}
               {forecastError && <p className="forecast-subtitle">Error: {forecastError}</p>}
 
@@ -865,6 +929,70 @@ const SKUForecast = () => {
                 <p className="forecast-subtitle">
                   No MA3 forecast has been generated for {selectedSKU.code} yet.
                 </p>
+              )}
+
+              {/* Start after end (e.g. Dec 2024 - Jan 2024) — DateFilter
+                  already shows an inline warning the instant this happens,
+                  but this page still has to refuse to render a chart for a
+                  backwards range rather than silently treating it as empty.
+                  Offers a one-click fix (swap the two dates) since, unlike
+                  the 'none' case below, there's no ambiguity about what the
+                  user actually meant. */}
+              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'invalid' && (
+                <div className="forecast-range-error">
+                  <span className="forecast-range-error-title">Invalid date range</span>
+                  <p className="forecast-range-error-body">
+                    Your start date (<strong>{formatPeriod(rangeStartPeriod)}</strong>) is after your end date
+                    (<strong>{formatPeriod(rangeEndPeriod)}</strong>). Pick a start date on or before the end date
+                    to see this SKU&apos;s demand history and forecast.
+                  </p>
+                  <button
+                    className="forecast-range-fix-btn"
+                    onClick={() => setLocalRange({
+                      startMonth: localRange.endMonth, startYear: localRange.endYear,
+                      endMonth: localRange.startMonth, endYear: localRange.startYear,
+                    })}
+                  >
+                    Swap dates ({formatPeriod(rangeEndPeriod)} – {formatPeriod(rangeStartPeriod)})
+                  </button>
+                </div>
+              )}
+
+              {/* Chronologically fine but too narrow to read as a trend —
+                  floor is effectiveMinMonths, not a flat MIN_RANGE_MONTHS,
+                  so a SKU with less than 6 months of real history (common —
+                  see skuCoverage's comment above) only has to select as
+                  many months as it actually has, not pad out to 6. Fix
+                  button widens to exactly that floor, ending at whatever
+                  end date the user already picked, rather than resetting
+                  the whole selection. */}
+              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'too-short' && (
+                <div className="forecast-range-error">
+                  <span className="forecast-range-error-title">
+                    Range too short — {monthsBetween(rangeStartPeriod, rangeEndPeriod)} month
+                    {monthsBetween(rangeStartPeriod, rangeEndPeriod) === 1 ? '' : 's'} selected
+                  </span>
+                  <p className="forecast-range-error-body">
+                    <strong>{formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}</strong> isn&apos;t
+                    enough points for a readable trend. Select at least <strong>{effectiveMinMonths} month{effectiveMinMonths === 1 ? '' : 's'}</strong>
+                    {effectiveMinMonths < MIN_RANGE_MONTHS
+                      ? ` — this SKU only has ${effectiveMinMonths} month${effectiveMinMonths === 1 ? '' : 's'} of real history, so that's this SKU's full available range.`
+                      : '.'}
+                  </p>
+                  <button
+                    className="forecast-range-fix-btn"
+                    onClick={() => {
+                      const widerStart = periodMinusMonths(rangeEndPeriod, effectiveMinMonths);
+                      const [wy, wm] = widerStart.split('-');
+                      setLocalRange({
+                        startMonth: NUM_TO_MONTH[wm], startYear: wy,
+                        endMonth: localRange.endMonth, endYear: localRange.endYear,
+                      });
+                    }}
+                  >
+                    Use last {effectiveMinMonths} month{effectiveMinMonths === 1 ? '' : 's'} (ending {formatPeriod(rangeEndPeriod)})
+                  </button>
+                </div>
               )}
 
               {/* No overlap at all between the picked range and this SKU's
@@ -888,7 +1016,7 @@ const SKUForecast = () => {
                 </div>
               )}
 
-              {!forecastLoading && !forecastError && forecastResult && rangeStatus !== 'none' && (
+              {!forecastLoading && !forecastError && forecastResult && (rangeStatus === 'ok' || rangeStatus === 'partial') && (
                 <>
                   {/* Headline Forecast Stat Row — the number this whole page
                       exists to produce (next period's forecast) plus how it
@@ -930,9 +1058,8 @@ const SKUForecast = () => {
                         <span className="forecast-stat-value forecast-stat-value-neutral">—</span>
                       ) : (
                         <span
-                          className={`forecast-stat-value forecast-trend-chip ${
-                            forecastTrendPct > 0.5 ? 'trend-up' : forecastTrendPct < -0.5 ? 'trend-down' : 'trend-flat'
-                          }`}
+                          className={`forecast-stat-value forecast-trend-chip ${forecastTrendPct > 0.5 ? 'trend-up' : forecastTrendPct < -0.5 ? 'trend-down' : 'trend-flat'
+                            }`}
                         >
                           {forecastTrendPct > 0.5 ? (
                             <ArrowUp size={16} className="forecast-trend-icon" />
@@ -1015,12 +1142,108 @@ const SKUForecast = () => {
                     </p>
                   )}
 
-                  {/* Chart Legend — swatches are inline SVG so each one is an
-                      exact miniature of the mark it stands for (solid stroke,
-                      dashed stroke, filled band). The previous CSS-only
-                      version faked the dash with a background gradient and
-                      stacked a dot on top via ::after, which rendered as a
-                      lumpy bowtie at this size. */}
+                  {/* Chart */}
+                  <div className="chart-wrapper">
+                    {/* height 420 + bottom margin 32: the X tick row sits
+                        INSIDE the SVG, so with bottom:0 the month labels were
+                        being clipped off the bottom edge on load. */}
+                    <ResponsiveContainer width="100%" height={420}>
+                      <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 8, bottom: 32 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                        <XAxis
+                          dataKey="label"
+                          axisLine={true}
+                          tickLine={true}
+                          tick={{ fill: '#556070', fontSize: 11 }}
+                          tickFormatter={formatAxisPeriod}
+                          tickMargin={10}
+                          minTickGap={12}
+                          // Recharts' default tick-skip anchors from the END
+                          // of the axis (interval="preserveEnd") — harmless
+                          // at the old fixed ~12-point series, but with a
+                          // range picker now able to span ~39 months
+                          // (Jan 2023 - Mar 2026), that default silently
+                          // dropped the label at the true first month,
+                          // reading as "the chart starts later than I
+                          // picked" even though the plotted line itself
+                          // was always correct (verified: chartData's
+                          // first point is genuinely the picked start
+                          // month). preserveStart guarantees the first
+                          // tick is always shown; equidistant keeps the
+                          // rest evenly spaced instead of clumping.
+                          interval="equidistantPreserveStart"
+                        />
+                        <YAxis
+                          axisLine={true}
+                          tickLine={true}
+                          tick={{ fill: '#556070', fontSize: 11 }}
+                          tickFormatter={formatAxisQty}
+                          width={56}
+                          tickMargin={8}
+                        />
+                        <Tooltip content={<CustomTooltip />} />
+
+                        {/* Drawn before the lines so the band sits behind
+                            them. A faint stroke gives the cone a readable
+                            edge — the pale fill alone washed out against the
+                            white card at this opacity. */}
+                        <Area
+                          type="monotone"
+                          dataKey="ci"
+                          stroke={COLORS.forecast}
+                          strokeOpacity={0.35}
+                          strokeWidth={1}
+                          fill={COLORS.forecast}
+                          fillOpacity={0.16}
+                          name="Confidence interval"
+                          {...chartAnim()}
+                          connectNulls={false}
+                        />
+
+                        {/* Teal, not the old indigo: indigo sat too close to
+                            the forecast's violet to tell apart in a small
+                            legend swatch. Teal-vs-violet is also exactly how
+                            the Dashboard's portfolio forecast already
+                            separates actual from forecast, so the two pages
+                            now agree. */}
+                        <Line
+                          type="monotone"
+                          dataKey="actual"
+                          stroke={CHART_COLORS.salesSeries}
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: CHART_COLORS.salesSeries, strokeWidth: 0 }}
+                          activeDot={{ r: 6 }}
+                          name="Actual Sales"
+                          {...chartAnim()}
+                          connectNulls
+                        />
+
+                        <Line
+                          type="monotone"
+                          dataKey="forecast"
+                          stroke={COLORS.forecast}
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          dot={{ r: 4, fill: COLORS.forecast, strokeWidth: 0 }}
+                          activeDot={{ r: 6 }}
+                          name="Forecast"
+                          {...chartAnim()}
+                          connectNulls
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Chart legend — bottom-center, matching the
+                      .custom-legend convention every other page's charts
+                      use (Dashboard's Charts.jsx), so the legend
+                      sits in the same spot on every graph app-wide instead
+                      of this page being the one exception up at top-right.
+                      Swatches are inline SVG so each one is an exact
+                      miniature of the mark it stands for (solid stroke,
+                      dashed stroke, filled band) — a CSS-only swatch faking
+                      the dash via a background gradient rendered as a lumpy
+                      bowtie at this size. */}
                   <div className="chart-legend">
                     {chartData.some((pt) => pt.actual != null) && (
                       <div className="legend-item">
@@ -1048,98 +1271,6 @@ const SKUForecast = () => {
                         <span className="legend-label">Confidence Interval</span>
                       </div>
                     )}
-                  </div>
-
-                  {/* Chart */}
-                  <div className="chart-wrapper">
-                    {/* height 420 + bottom margin 32: the X tick row sits
-                        INSIDE the SVG, so with bottom:0 the month labels were
-                        being clipped off the bottom edge on load. */}
-                    <ResponsiveContainer width="100%" height={420}>
-                      <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 8, bottom: 32 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={COLORS.gridline} />
-                        <XAxis
-                          dataKey="label"
-                          axisLine={true}
-                          tickLine={true}
-                          tick={{ fill: '#718096', fontSize: 11 }}
-                          tickFormatter={formatAxisPeriod}
-                          tickMargin={10}
-                          minTickGap={12}
-                          // Recharts' default tick-skip anchors from the END
-                          // of the axis (interval="preserveEnd") — harmless
-                          // at the old fixed ~12-point series, but with a
-                          // range picker now able to span ~39 months
-                          // (Jan 2023 - Mar 2026), that default silently
-                          // dropped the label at the true first month,
-                          // reading as "the chart starts later than I
-                          // picked" even though the plotted line itself
-                          // was always correct (verified: chartData's
-                          // first point is genuinely the picked start
-                          // month). preserveStart guarantees the first
-                          // tick is always shown; equidistant keeps the
-                          // rest evenly spaced instead of clumping.
-                          interval="equidistantPreserveStart"
-                        />
-                        <YAxis
-                          axisLine={true}
-                          tickLine={true}
-                          tick={{ fill: '#718096', fontSize: 11 }}
-                          tickFormatter={formatAxisQty}
-                          width={56}
-                          tickMargin={8}
-                        />
-                        <Tooltip content={<CustomTooltip />} />
-
-                        {/* Drawn before the lines so the band sits behind
-                            them. A faint stroke gives the cone a readable
-                            edge — the pale fill alone washed out against the
-                            white card at this opacity. */}
-                        <Area
-                          type="monotone"
-                          dataKey="ci"
-                          stroke={COLORS.forecast}
-                          strokeOpacity={0.35}
-                          strokeWidth={1}
-                          fill={COLORS.forecast}
-                          fillOpacity={0.16}
-                          name="Confidence interval"
-                          isAnimationActive={false}
-                          connectNulls={false}
-                        />
-
-                        {/* Teal, not the old indigo: indigo sat too close to
-                            the forecast's violet to tell apart in a small
-                            legend swatch. Teal-vs-violet is also exactly how
-                            the Dashboard's portfolio forecast already
-                            separates actual from forecast, so the two pages
-                            now agree. */}
-                        <Line
-                          type="monotone"
-                          dataKey="actual"
-                          stroke={CHART_COLORS.salesSeries}
-                          strokeWidth={2}
-                          dot={{ r: 3, fill: CHART_COLORS.salesSeries, strokeWidth: 0 }}
-                          activeDot={{ r: 6 }}
-                          name="Actual Sales"
-                          isAnimationActive={false}
-                          connectNulls
-                        />
-
-                        <Line
-                          type="monotone"
-                          dataKey="forecast"
-                          stroke={COLORS.forecast}
-                          strokeWidth={2}
-                          strokeDasharray="5 5"
-                          dot={{ r: 4, fill: COLORS.forecast, strokeWidth: 0 }}
-                          activeDot={{ r: 6 }}
-                          name="Forecast"
-                          isAnimationActive={false}
-                          connectNulls
-                        />
-                      </ComposedChart>
-                    </ResponsiveContainer>
                   </div>
                 </>
               )}
