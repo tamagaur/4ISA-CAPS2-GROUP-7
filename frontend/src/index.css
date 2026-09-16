@@ -304,6 +304,177 @@ table td.table-center {
   gap: 0.4rem;
 }
 
+/* ── Shared table pagination bar ─────────────────────────────────────────
+   SKU Management, ABC Classification and Audit Log each had their own
+   pagination markup. SKU Management and ABC Classification had already
+   converged on an identical shape by one copying the other; Audit Log had
+   independently built a different one (Previous/Next text links + a full
+   row of page-number buttons, no "Showing X–Y of Z" count, no rows-per-
+   page control, a fixed 10-per-page). components/Pagination.jsx now
+   renders this markup for all three, so there is exactly one pagination
+   bar in the app, not three that happen to agree today. */
+.table-pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  background-color: var(--color-surface);
+  border-radius: 12px;
+  padding: 0.7rem 1.2rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  border: 1px solid var(--color-border);
+}
+
+.table-pagination-info {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.table-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.table-pagination-btn {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--color-text-body);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.table-pagination-btn:hover:not(:disabled) {
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+}
+
+.table-pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.table-pagination-page-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  padding: 0 0.3rem;
+}
+
+.table-pagination-size {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.table-pagination-size select {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  cursor: pointer;
+  outline: none;
+}
+
+@media (max-width: 768px) {
+  .table-pagination-row {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .table-pagination-controls {
+    justify-content: center;
+  }
+}
+
+/* "Go to page" input — shared by every paginated table (see
+   components/PageJump.jsx). Sits inline with each page's existing
+   Prev/Next pagination bar. */
+.page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.page-jump-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.page-jump-input {
+  width: 3.2rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  text-align: center;
+  /* Hide the native up/down spinners: at 3 characters wide they crowd out
+     the digits rather than helping anyone reach page 214. */
+  -moz-appearance: textfield;
+}
+
+.page-jump-input::-webkit-outer-spin-button,
+.page-jump-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.page-jump-input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 3px rgba(197, 48, 48, 0.1);
+}
+
+.page-jump-btn {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.page-jump-btn:hover:not(:disabled) {
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.page-jump-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 640px) {
+  .page-jump-label {
+    display: none;
+  }
+}
+
 /* One shared accent style for the italicized word in every page title,
    so "which word looks different" is answered the same way everywhere
    instead of each page's CSS separately deciding color/weight/family.

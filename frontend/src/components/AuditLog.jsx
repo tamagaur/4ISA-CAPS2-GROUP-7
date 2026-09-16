@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getAuditLog } from '../api/auditLog';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatDateTime } from '../utils/formatDate';
+import Pagination from './Pagination';
 import './AuditLog.css';
 
 const ExpandableText = ({ text, maxLength = 60 }) => {
@@ -50,7 +50,10 @@ const AuditLog = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [actionFilter, setActionFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
-  const logsPerPage = 10;
+  // Same options/default as SKU Management and ABC Classification's
+  // tables (was a fixed 10-per-page with no way to change it).
+  const PAGE_SIZE_OPTIONS = [25, 50, 100];
+  const [logsPerPage, setLogsPerPage] = useState(25);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,18 +106,16 @@ const AuditLog = () => {
     }
   }, [totalPages, currentPage]);
 
-  const handleNextPage = () => {
-    setCurrentPage(prev => Math.min(prev + 1, totalPages));
-  };
-
-  const handlePrevPage = () => {
-    setCurrentPage(prev => Math.max(prev - 1, 1));
-  };
+  // Any filter/page-size change puts the user back on page 1 — staying on
+  // page 7 of a result set that just shrank to 2 pages shows nothing.
+  // Mirrors SKU Management/ABC Classification's own reset effect.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [actionFilter, userFilter, logsPerPage]);
 
   const handleClearFilters = () => {
     setActionFilter('');
     setUserFilter('');
-    setCurrentPage(1);
   };
 
   return (
@@ -217,42 +218,16 @@ const AuditLog = () => {
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="audit-pagination">
-            <button
-              className="audit-page-nav"
-              onClick={handlePrevPage}
-              disabled={currentPage === 1}
-              style={{ opacity: currentPage === 1 ? 0.5 : 1, cursor: currentPage === 1 ? 'default' : 'pointer' }}
-            >
-              <ChevronLeft size={16} style={{ marginRight: '4px' }} />
-              Previous
-            </button>
-
-            <div className="audit-page-numbers">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(num => (
-                <button
-                  key={num}
-                  className={`audit-page-num ${currentPage === num ? 'active' : ''}`}
-                  onClick={() => setCurrentPage(num)}
-                >
-                  {num}
-                </button>
-              ))}
-            </div>
-
-            <button
-              className="audit-page-nav"
-              onClick={handleNextPage}
-              disabled={currentPage === totalPages}
-              style={{ opacity: currentPage === totalPages ? 0.5 : 1, cursor: currentPage === totalPages ? 'default' : 'pointer' }}
-            >
-              Next
-              <ChevronRight size={16} style={{ marginLeft: '4px' }} />
-            </button>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredLogs.length}
+          pageSize={logsPerPage}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setLogsPerPage}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          idPrefix="audit"
+        />
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ import { getABCClassification } from '../api/abc';
 import DateFilter from './DateFilter';
 import { formatMonth } from '../utils/formatDate';
 import { useBrandLookup } from '../utils/useBrandLookup';
+import Pagination from './Pagination';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
@@ -877,64 +878,16 @@ const ABCClassification = () => {
           </table>
         </div>
 
-        {/* Pagination — table can run 600+ rows; only PAGE_SIZE_OPTIONS
-            rows render at once, so the DOM/scroll stays manageable. */}
-        {filteredData.length > 0 && (
-          <div className="abc-pagination-row">
-            <span className="abc-pagination-info">
-              Showing {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, filteredData.length)} of {filteredData.length}
-            </span>
-
-            <div className="abc-pagination-controls">
-              <button
-                className="abc-pagination-btn"
-                onClick={() => setCurrentPage(1)}
-                disabled={safeCurrentPage === 1}
-                aria-label="First page"
-                title="First page"
-              >
-                «
-              </button>
-              <button
-                className="abc-pagination-btn"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={safeCurrentPage === 1}
-                aria-label="Previous page"
-              >
-                Prev
-              </button>
-              <span className="abc-pagination-page-label">
-                Page {safeCurrentPage} of {totalPages}
-              </span>
-              <button
-                className="abc-pagination-btn"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={safeCurrentPage === totalPages}
-                aria-label="Next page"
-              >
-                Next
-              </button>
-              <button
-                className="abc-pagination-btn"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={safeCurrentPage === totalPages}
-                aria-label="Last page"
-                title="Last page"
-              >
-                »
-              </button>
-            </div>
-
-            <div className="abc-pagination-size">
-              <span>Rows per page:</span>
-              <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
-                {PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>{size}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={safeCurrentPage}
+          totalPages={totalPages}
+          totalItems={filteredData.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          idPrefix="abc"
+        />
       </div>
     </div>
   );
