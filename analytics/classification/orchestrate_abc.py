@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
+from uuid import uuid4
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, create_engine, select
@@ -62,9 +63,10 @@ from analytics.config import get_settings
 class AbcRunReport:
     principal: str
     classification_period: str
-    input_rows: int                 # distinct product_keys with usable revenue
+    input_rows: int                 # distinct product_keys actually classified (positive revenue)
     excluded_null_revenue: int      # product_keys with NULL net_amount, excluded not zeroed
     excluded_negative_revenue: list  # product_keys with negative summed revenue — needs a human look, not auto-fixed
+    excluded_zero_revenue: int = 0   # product_keys with net_amount == 0 this period ("inactive", not Tier C — 2026-09-17)
     tier_counts: dict = field(default_factory=dict)   # {'A': n, 'B': n, 'C': n}
     near_boundary_count: int = 0    # backlog #43: SKUs flagged as close to a tier cutoff
     rows_upserted: int = 0
@@ -77,7 +79,7 @@ def _fetch_unilever_sku_revenue(engine: Engine, period: str) -> tuple[pd.DataFra
     needed here — just select and join to the dimension for product_key).
     Returns (df with columns [sku_id, total_revenue], null_revenue_count)."""
     metadata = MetaData()
-    demand = Table("unilever_sku_demand_fact", metadata, autoload_with=engine)
+    demand = Table("unilever_sku_demand_fact_real", metadata, autoload_with=engine)
     with engine.connect() as conn:
         rows = conn.execute(
             select(demand.c.product_key, demand.c.net_amount)
@@ -133,7 +135,7 @@ def _fetch_delmonte_category_revenue(engine: Engine, period: str) -> tuple[pd.Da
     product_key. Sum across regions before handing to classify_abc(),
     which requires exactly one row per sku_id."""
     metadata = MetaData()
-    sellout = Table("sellout_fact", metadata, autoload_with=engine)
+    sellout = Table("sellout_fact_real", metadata, autoload_with=engine)
     with engine.connect() as conn:
         rows = conn.execute(
             select(sellout.c.product_key, sellout.c.net_amount)
@@ -173,16 +175,40 @@ def _split_negative_revenue(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
     zeroed or dropped without a trace."""
     negative_mask = df["total_revenue"] < 0
     negative_ids = df.loc[negative_mask, "sku_id"].tolist()
-    # Clamp negative revenue to 0.0 so they fall into Category C instead of being dropped
+    # Clamp negative revenue to 0.0 - these rows then flow into
+    # _split_zero_revenue() below and are excluded as "inactive", same
+    # treatment as a genuine zero-sale product (2026-09-17: no longer
+    # fabricated into Tier C, see _split_zero_revenue()'s docstring).
     df.loc[negative_mask, "total_revenue"] = 0.0
     return df, negative_ids
 
 
+def _split_zero_revenue(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
+    """"Present" for ABC purposes means net_amount > 0 for that period
+    (2026-09-17, Yuan). A product with zero revenue that period —
+    whether a genuine zero-sale month or a negative row clamped to 0 by
+    _split_negative_revenue() above — is not a Tier C SKU: Tier C is
+    for products that ARE selling, just at low volume. Fabricating a
+    tier for a product that had no sales at all would misrepresent it
+    as "least important but active" rather than "inactive this period".
+
+    These rows are excluded from classify_abc()'s input entirely (no
+    tier, no upsert) rather than given a fabricated tier value - the
+    same "flag, never drop silently" precedent as the null/negative
+    exclusions, just reported as a distinct count rather than coerced
+    into any tier."""
+    zero_mask = df["total_revenue"] == 0
+    zero_ids = df.loc[zero_mask, "sku_id"].tolist()
+    return df.loc[~zero_mask].copy(), zero_ids
+
+
 def _upsert_abc_classification(
     engine: Engine, tiered_df: pd.DataFrame, principal: str, classification_period: str,
+    method: str = "single", run_id: str | None = None,
 ) -> int:
     if tiered_df.empty:
         return 0
+    run_id = run_id or f"{method}_{uuid4().hex[:12]}"
     metadata = MetaData()
     abc_table = Table("abc_classification", metadata, autoload_with=engine)
     records = [
@@ -190,6 +216,8 @@ def _upsert_abc_classification(
             "product_key": int(row.sku_id),
             "principal": principal,
             "classification_period": classification_period,
+            "method": method,
+            "run_id": run_id,
             "tier": row.tier,
             "revenue_share": None if pd.isna(row.revenue_share) else float(row.revenue_share),
             "cumulative_share": None if pd.isna(row.cumulative_share) else float(row.cumulative_share),
@@ -200,8 +228,9 @@ def _upsert_abc_classification(
     with engine.begin() as conn:
         stmt = pg_insert(abc_table).values(records)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["product_key", "classification_period"],
+            index_elements=["product_key", "classification_period", "method"],
             set_={
+                "run_id": stmt.excluded.run_id,
                 "tier": stmt.excluded.tier,
                 "revenue_share": stmt.excluded.revenue_share,
                 "cumulative_share": stmt.excluded.cumulative_share,
@@ -213,7 +242,10 @@ def _upsert_abc_classification(
     return len(records)
 
 
-def run_abc_for_principal(engine: Engine, principal: str, classification_period: str) -> AbcRunReport:
+def run_abc_for_principal(
+    engine: Engine, principal: str, classification_period: str,
+    method: str = "single", run_id: str | None = None,
+) -> AbcRunReport:
     if principal == "unilever":
         revenue_df, null_count = _fetch_unilever_sku_revenue(engine, classification_period)
     elif principal == "delmonte":
@@ -221,7 +253,8 @@ def run_abc_for_principal(engine: Engine, principal: str, classification_period:
     else:
         raise ValueError(f"Unknown principal '{principal}' — expected 'unilever' or 'delmonte'.")
 
-    clean_df, negative_ids = _split_negative_revenue(revenue_df)
+    clamped_df, negative_ids = _split_negative_revenue(revenue_df)
+    clean_df, zero_ids = _split_zero_revenue(clamped_df)
 
     if clean_df.empty:
         return AbcRunReport(
@@ -230,10 +263,11 @@ def run_abc_for_principal(engine: Engine, principal: str, classification_period:
             input_rows=0,
             excluded_null_revenue=null_count,
             excluded_negative_revenue=negative_ids,
+            excluded_zero_revenue=len(zero_ids),
         )
 
     tiered = classify_abc(clean_df)
-    rows_upserted = _upsert_abc_classification(engine, tiered, principal, classification_period)
+    rows_upserted = _upsert_abc_classification(engine, tiered, principal, classification_period, method, run_id)
 
     tier_counts = tiered["tier"].value_counts().to_dict()
     near_boundary_count = int(tiered["boundary_flag"].sum())
@@ -243,6 +277,7 @@ def run_abc_for_principal(engine: Engine, principal: str, classification_period:
         input_rows=len(clean_df),
         excluded_null_revenue=null_count,
         excluded_negative_revenue=negative_ids,
+        excluded_zero_revenue=len(zero_ids),
         tier_counts=tier_counts,
         near_boundary_count=near_boundary_count,
         rows_upserted=rows_upserted,
@@ -294,6 +329,8 @@ def _print_report(report: AbcRunReport) -> None:
         print(f"  Excluded (NULL revenue, not zeroed): {report.excluded_null_revenue}")
     if report.excluded_negative_revenue:
         print(f"  Excluded (negative revenue, needs a human look): {report.excluded_negative_revenue}")
+    if report.excluded_zero_revenue:
+        print(f"  Excluded (zero revenue, inactive this period): {report.excluded_zero_revenue}")
 
 
 if __name__ == "__main__":

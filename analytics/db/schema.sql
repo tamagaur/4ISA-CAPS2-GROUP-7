@@ -477,17 +477,23 @@ CREATE INDEX IF NOT EXISTS ix_unilever_sku_demand_product ON Unilever_SKU_Demand
 -- change, CREATE TABLE IF NOT EXISTS will NOT retroactively add the
 -- column - run this once by hand first:
 --   ALTER TABLE ABC_Classification ADD COLUMN IF NOT EXISTS boundary_flag BOOLEAN NOT NULL DEFAULT FALSE;
+-- method/run_id added by migration 0017 (2026-09-17, ABC Phase 2 re-check):
+-- 'single' = that month's revenue, 't3m' = trailing 3 months including that
+-- month. Natural key widened to (product_key, classification_period, method)
+-- since both bases legitimately coexist for the same product/period.
 CREATE TABLE IF NOT EXISTS ABC_Classification (
     classification_key      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     product_key                BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
     principal                    TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
     classification_period          TEXT NOT NULL,   -- 'YYYY-MM'
+    method                           TEXT NOT NULL DEFAULT 'single' CHECK (method IN ('single', 't3m')),
+    run_id                            TEXT NOT NULL DEFAULT 'legacy_pre_0017',  -- audit tag for the orchestration run that wrote this row, not part of the natural key
     tier                             TEXT NOT NULL CHECK (tier IN ('A', 'B', 'C')),
     revenue_share                     NUMERIC(7,4),  -- this item's share of period revenue
     cumulative_share                   NUMERIC(7,4), -- running total used for the 80/95 cut points
     boundary_flag                       BOOLEAN NOT NULL DEFAULT FALSE,  -- backlog #43; margin (analytics/classification/abc.py BOUNDARY_MARGIN) unconfirmed vs manuscript Sec.3.6
     computed_at                          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (product_key, classification_period)
+    UNIQUE (product_key, classification_period, method)
 );
 
 CREATE INDEX IF NOT EXISTS ix_abc_classification_tier ON ABC_Classification (tier, classification_period);
