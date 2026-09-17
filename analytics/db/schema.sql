@@ -125,18 +125,14 @@ CREATE TABLE IF NOT EXISTS Product_Dimension (
     -- NULLS NOT DISTINCT (migration 0013, 2026-09-15 incident fix — see
     -- that migration's own comment): sku_code IS NULL for every
     -- category-grain row (both principals) and category_path IS NULL for
-    -- every UNILEVER SKU-grain row, by design — NOT true table-wide:
-    -- Del Monte SKU-grain rows can and do carry a real category_path
-    -- (252 sku_codes legitimately span multiple category_path values in
-    -- the pre-incident backup — corrected 2026-09-15, this comment
-    -- previously claimed it was NULL for every SKU-grain row without
-    -- checking Del Monte). A plain UNIQUE constraint treats NULL as never
-    -- equal to NULL, so it never actually enforced uniqueness for
-    -- Unilever's real rows — confirmed directly: a repeat INSERT for an
-    -- already-existing SKU succeeded as a brand new duplicate row instead
-    -- of being rejected/skipped. NULLS NOT DISTINCT (PG15+) makes two
-    -- NULLs compare equal for THIS constraint only — every other NULL
-    -- comparison in the database is unaffected.
+    -- every SKU-grain row (both principals — see migration 0016 correction
+    -- below). A plain UNIQUE constraint treats NULL as never equal to
+    -- NULL, so it never actually enforced uniqueness for Unilever's real
+    -- rows — confirmed directly: a repeat INSERT for an already-existing
+    -- SKU succeeded as a brand new duplicate row instead of being
+    -- rejected/skipped. NULLS NOT DISTINCT (PG15+) makes two NULLs compare
+    -- equal for THIS constraint only — every other NULL comparison in the
+    -- database is unaffected.
     --
     -- migration 0014 (2026-09-15, root cause #4): this table-wide
     -- constraint alone is still not enough for Unilever specifically —
@@ -148,8 +144,18 @@ CREATE TABLE IF NOT EXISTS Product_Dimension (
     -- keyed on (principal, grain, sku_code) only, is what
     -- scripts/run_canonical_load.py's _product_fk_spec("sku") actually
     -- resolves/inserts against for Unilever now — see that migration.
-    -- Not widened table-wide: Del Monte's multi-category sku_codes above
-    -- would violate a 3-column key.
+    --
+    -- migration 0016 (2026-09-17, column-gap audit) CORRECTS 0014's
+    -- premise: Del Monte sku_codes do NOT "legitimately span multiple
+    -- category_path values." That category_path was a self-admitted
+    -- "fake category" heuristic (scripts/generate_synthetic_dm.py:31-44,
+    -- an ad-hoc, non-canonical, pre-canonical-load-era script), not real
+    -- source data — no Del Monte source ties an individual SKU to a
+    -- category. Migration 0016 deduped the 291 resulting extra rows,
+    -- nulled the heuristic category_path values, and added a table-wide
+    -- partial unique index on (principal, sku_code), so category_path is
+    -- now NULL for every SKU-grain row, both principals, same as Unilever
+    -- always was.
     UNIQUE NULLS NOT DISTINCT (principal, grain, sku_code, category_path)
 );
 
@@ -158,6 +164,14 @@ CREATE TABLE IF NOT EXISTS Product_Dimension (
 CREATE UNIQUE INDEX IF NOT EXISTS product_dimension_unilever_sku_key_idx
     ON Product_Dimension (principal, grain, sku_code)
     WHERE principal = 'unilever' AND grain = 'sku';
+
+-- migration 0016 — table-wide (both principals) now that Del Monte's
+-- sku-grain duplicates are deduped and their category_path values (never
+-- real to begin with) are nulled. Partial on sku_code IS NOT NULL so
+-- grain='category' rows (sku_code always NULL) stay excluded.
+CREATE UNIQUE INDEX IF NOT EXISTS product_dimension_sku_key_idx
+    ON Product_Dimension (principal, sku_code)
+    WHERE sku_code IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS Customer_Dimension (
     customer_key    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

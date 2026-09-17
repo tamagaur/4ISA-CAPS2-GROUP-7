@@ -132,6 +132,13 @@ def create_backup(engine, out_dir: Path | None = None) -> Path:
             for c in df.columns:
                 if c in pk_cols:
                     continue
+                if pd.api.types.is_bool_dtype(df[c]):
+                    # bool is numeric under pandas (is_numeric_dtype(bool)==True) and
+                    # pd.to_numeric/.sum() happily coerces it locally, but Postgres's
+                    # sum() has no bool overload - found 2026-09-17 when verify_restore's
+                    # raw SQL SUM("is_demo") crashed with UndefinedFunction. Skip bool
+                    # columns so the checksum column is always SQL-SUM-able.
+                    continue
                 if pd.api.types.is_numeric_dtype(df[c]) or df[c].apply(
                     lambda v: isinstance(v, (int, float))
                 ).any():
