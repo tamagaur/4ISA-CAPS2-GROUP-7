@@ -125,18 +125,14 @@ CREATE TABLE IF NOT EXISTS Product_Dimension (
     -- NULLS NOT DISTINCT (migration 0013, 2026-09-15 incident fix — see
     -- that migration's own comment): sku_code IS NULL for every
     -- category-grain row (both principals) and category_path IS NULL for
-    -- every UNILEVER SKU-grain row, by design — NOT true table-wide:
-    -- Del Monte SKU-grain rows can and do carry a real category_path
-    -- (252 sku_codes legitimately span multiple category_path values in
-    -- the pre-incident backup — corrected 2026-09-15, this comment
-    -- previously claimed it was NULL for every SKU-grain row without
-    -- checking Del Monte). A plain UNIQUE constraint treats NULL as never
-    -- equal to NULL, so it never actually enforced uniqueness for
-    -- Unilever's real rows — confirmed directly: a repeat INSERT for an
-    -- already-existing SKU succeeded as a brand new duplicate row instead
-    -- of being rejected/skipped. NULLS NOT DISTINCT (PG15+) makes two
-    -- NULLs compare equal for THIS constraint only — every other NULL
-    -- comparison in the database is unaffected.
+    -- every SKU-grain row (both principals — see migration 0016 correction
+    -- below). A plain UNIQUE constraint treats NULL as never equal to
+    -- NULL, so it never actually enforced uniqueness for Unilever's real
+    -- rows — confirmed directly: a repeat INSERT for an already-existing
+    -- SKU succeeded as a brand new duplicate row instead of being
+    -- rejected/skipped. NULLS NOT DISTINCT (PG15+) makes two NULLs compare
+    -- equal for THIS constraint only — every other NULL comparison in the
+    -- database is unaffected.
     --
     -- migration 0014 (2026-09-15, root cause #4): this table-wide
     -- constraint alone is still not enough for Unilever specifically —
@@ -148,8 +144,18 @@ CREATE TABLE IF NOT EXISTS Product_Dimension (
     -- keyed on (principal, grain, sku_code) only, is what
     -- scripts/run_canonical_load.py's _product_fk_spec("sku") actually
     -- resolves/inserts against for Unilever now — see that migration.
-    -- Not widened table-wide: Del Monte's multi-category sku_codes above
-    -- would violate a 3-column key.
+    --
+    -- migration 0016 (2026-09-17, column-gap audit) CORRECTS 0014's
+    -- premise: Del Monte sku_codes do NOT "legitimately span multiple
+    -- category_path values." That category_path was a self-admitted
+    -- "fake category" heuristic (scripts/generate_synthetic_dm.py:31-44,
+    -- an ad-hoc, non-canonical, pre-canonical-load-era script), not real
+    -- source data — no Del Monte source ties an individual SKU to a
+    -- category. Migration 0016 deduped the 291 resulting extra rows,
+    -- nulled the heuristic category_path values, and added a table-wide
+    -- partial unique index on (principal, sku_code), so category_path is
+    -- now NULL for every SKU-grain row, both principals, same as Unilever
+    -- always was.
     UNIQUE NULLS NOT DISTINCT (principal, grain, sku_code, category_path)
 );
 
@@ -158,6 +164,14 @@ CREATE TABLE IF NOT EXISTS Product_Dimension (
 CREATE UNIQUE INDEX IF NOT EXISTS product_dimension_unilever_sku_key_idx
     ON Product_Dimension (principal, grain, sku_code)
     WHERE principal = 'unilever' AND grain = 'sku';
+
+-- migration 0016 — table-wide (both principals) now that Del Monte's
+-- sku-grain duplicates are deduped and their category_path values (never
+-- real to begin with) are nulled. Partial on sku_code IS NOT NULL so
+-- grain='category' rows (sku_code always NULL) stay excluded.
+CREATE UNIQUE INDEX IF NOT EXISTS product_dimension_sku_key_idx
+    ON Product_Dimension (principal, sku_code)
+    WHERE sku_code IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS Customer_Dimension (
     customer_key    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -477,20 +491,69 @@ CREATE INDEX IF NOT EXISTS ix_unilever_sku_demand_product ON Unilever_SKU_Demand
 -- change, CREATE TABLE IF NOT EXISTS will NOT retroactively add the
 -- column - run this once by hand first:
 --   ALTER TABLE ABC_Classification ADD COLUMN IF NOT EXISTS boundary_flag BOOLEAN NOT NULL DEFAULT FALSE;
+-- method/run_id added by migration 0017 (2026-09-17, ABC Phase 2 re-check):
+-- 'single' = that month's revenue, 't3m' = trailing 3 months including that
+-- month. Natural key widened to (product_key, classification_period, method)
+-- since both bases legitimately coexist for the same product/period.
 CREATE TABLE IF NOT EXISTS ABC_Classification (
     classification_key      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     product_key                BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
     principal                    TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
     classification_period          TEXT NOT NULL,   -- 'YYYY-MM'
+    method                           TEXT NOT NULL DEFAULT 'single' CHECK (method IN ('single', 't3m')),
+    run_id                            TEXT NOT NULL DEFAULT 'legacy_pre_0017',  -- audit tag for the orchestration run that wrote this row, not part of the natural key
     tier                             TEXT NOT NULL CHECK (tier IN ('A', 'B', 'C')),
     revenue_share                     NUMERIC(7,4),  -- this item's share of period revenue
     cumulative_share                   NUMERIC(7,4), -- running total used for the 80/95 cut points
     boundary_flag                       BOOLEAN NOT NULL DEFAULT FALSE,  -- backlog #43; margin (analytics/classification/abc.py BOUNDARY_MARGIN) unconfirmed vs manuscript Sec.3.6
     computed_at                          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (product_key, classification_period)
+    UNIQUE (product_key, classification_period, method)
 );
 
 CREATE INDEX IF NOT EXISTS ix_abc_classification_tier ON ABC_Classification (tier, classification_period);
+
+-- sku_traits / sku_segment added by migration 0018 (2026-09-17, Phase 2
+-- binning Round 1 — reports/BINNING_ROUND1_2026-09.md). BINS ONLY: no
+-- model runs, no MASE, no model assignment written here — that is Phase 3.
+-- sku_traits is computed once per (product_key, cohort_period); sku_segment
+-- holds one row per (product_key, cohort_period, abc_method, scheme) so
+-- later schemes (trend_v1, volatility_v1, newness_v1, combined_v1) add rows
+-- here without touching sku_traits or the schema again.
+CREATE TABLE IF NOT EXISTS sku_traits (
+    trait_key               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    run_id                   TEXT NOT NULL,
+    principal                 TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
+    product_key                BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
+    cohort_period                TEXT NOT NULL,
+    history_months                INT NOT NULL,   -- months with quantity_sold > 0
+    first_sale_period               TEXT,
+    longest_run                      INT NOT NULL,
+    trend                              TEXT NOT NULL CHECK (trend IN ('up', 'down', 'none')),  -- Mann-Kendall, p < 0.05
+    cv                                  NUMERIC,
+    restart_flag                        BOOLEAN NOT NULL DEFAULT FALSE,
+    stability_group                      TEXT NOT NULL CHECK (stability_group IN ('all_38', 'at_least_30', 'churn')),
+    revenue_share_2026_02                 NUMERIC(7,4),
+    computed_at                            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (product_key, cohort_period)
+);
+
+CREATE TABLE IF NOT EXISTS sku_segment (
+    segment_key              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    run_id                     TEXT NOT NULL,
+    principal                   TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
+    product_key                  BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
+    sku_code                       TEXT,
+    cohort_period                    TEXT NOT NULL,
+    abc_method                        TEXT NOT NULL DEFAULT 'single' CHECK (abc_method IN ('single', 't3m')),
+    scheme                              TEXT NOT NULL,
+    bin                                  TEXT NOT NULL,
+    bin_reason                            TEXT NOT NULL,
+    computed_at                            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (product_key, cohort_period, abc_method, scheme)
+);
+
+CREATE INDEX IF NOT EXISTS ix_sku_segment_scheme_bin ON sku_segment (scheme, bin);
+CREATE INDEX IF NOT EXISTS ix_sku_traits_cohort ON sku_traits (cohort_period, principal);
 
 -- Category A only (MAPE < 20% gate, per README pipeline diagram) -
 -- Unilever SKU grain, since SARIMA per DEC-03 only runs where real

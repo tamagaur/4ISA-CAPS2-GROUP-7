@@ -30,14 +30,29 @@
 
 BEGIN;
 
+-- FIXED 2026-09-17 (same bug class found and fixed in migration 0013 while
+-- doing the column-gap audit's scratch dry-run — see that migration's
+-- comment for the full repro): the pg_class join below was unscoped by
+-- schema, so on a server with other product_dimension-named tables in
+-- other schemas (ssm_canonical / ssm_precutover_diag, always present per
+-- reports/PROJECT_STATE_2026-09.md), it could resolve check_name from a
+-- DIFFERENT schema's constraint while the unqualified DROP/ADD below still
+-- (correctly) target the current schema's table via search_path — a
+-- confusing but not immediately-breaking version of the same defect for
+-- THIS migration specifically (the unconditional ADD at the end self-heals
+-- the current schema either way), but still wrong to leave since it can
+-- spuriously touch/attempt to drop an unrelated schema's constraint.
+-- Same fix as 0013: 'product_dimension'::regclass resolves via search_path
+-- to the one table actually in scope. Safe to edit in place for the same
+-- reason as 0013 (idempotent, public's own result is unaffected).
+
 DO $$
 DECLARE
     check_name TEXT;
 BEGIN
     SELECT con.conname INTO check_name
     FROM pg_constraint con
-    JOIN pg_class rel ON rel.oid = con.conrelid
-    WHERE rel.relname = 'product_dimension'
+    WHERE con.conrelid = 'product_dimension'::regclass
       AND con.contype = 'c'
       AND pg_get_constraintdef(con.oid) ILIKE '%category_path_source%';
 
