@@ -147,10 +147,18 @@
   position: relative;
 }
 
+/* flex:none + an explicit height, overriding chart-container's flex:1 —
+   this widget's card is now auto-height (see Dashboard.css's
+   .chart-duo-abc .chart-widget), so there's no fixed ancestor height left
+   for flex:1 to grow into. Recharts' ResponsiveContainer needs a real
+   pixel height from its parent to render at all, so the donut gets its
+   own fixed height regardless of the card around it. */
 .donut-container {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: none;
+  height: 180px;
 }
 
 .donut-center-label {
@@ -338,6 +346,63 @@
   font-size: 0.95rem;
 }
 
+/* ── Stock status by ABC tier — horizontal composition bars ───────────── */
+.tier-stock-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.tier-stock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tier-stock-label {
+  flex: 0 0 auto;
+  width: 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-body);
+}
+
+.tier-stock-track {
+  flex: 1 1 auto;
+  height: 18px;
+  border-radius: 5px;
+  overflow: hidden;
+  display: flex;
+  background: var(--color-surface-sunken);
+}
+
+.tier-stock-track span {
+  height: 100%;
+}
+
+/* Grow-in on mount, staggered per tier — durations/delay come from
+   Charts.jsx as CSS custom properties (the same CHART_ANIM_DURATION/
+   STAGGER constants the Recharts widgets on this page use), so this bar
+   sweeps in the same way the rest of the dashboard's charts do. */
+@keyframes tier-bar-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.tier-stock-track.is-animated span {
+  transform-origin: left;
+  animation: tier-bar-grow var(--tier-anim-duration, 700ms) ease-out both;
+  animation-delay: var(--tier-anim-delay, 0ms);
+}
+
+.tier-stock-empty {
+  font-size: 0.7rem;
+  color: var(--color-text-subtle);
+  padding-left: 0.5rem;
+  align-self: center;
+}
+
 /* ── Reorder recommendation widget — compact dashboard-card version ───── */
 .reorder-mini-summary {
   display: flex;
@@ -348,16 +413,25 @@
   border-bottom: 1px solid var(--color-surface-sunken);
 }
 
+/* Boxed like a stat tile rather than plain text — this card is scanned,
+   not read, so "3 critical" needs to register as one glanceable unit. */
 .reorder-mini-chip {
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.6rem 0.5rem;
+  border-radius: 8px;
+  background: var(--color-surface-sunken);
+  min-width: 0;
 }
 
 .reorder-mini-value {
   font-size: 1.2rem;
   font-weight: 700;
   color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .reorder-mini-label {
@@ -370,15 +444,14 @@
 
 /* flex:1 + min-height:0 is what makes this scroll rather than stretch the
    card: it takes whatever vertical space the summary and sliders above it
-   leave over, then scrolls its own overflow inside that. */
+   leave over, then scrolls its own overflow inside that. overflow-x for
+   the table itself — SKU/Product/Urgency/Qty doesn't reflow at narrow
+   widths, so it scrolls sideways in its own box instead of the page. */
 .reorder-mini-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
   flex: 1;
   min-height: 4.5rem;
   overflow-y: auto;
-  padding-right: 0.4rem;
+  overflow-x: auto;
   margin-top: 0.9rem;
   border-top: 1px solid var(--color-surface-sunken);
 }
@@ -387,6 +460,7 @@
    crowd the qty column at this card width. */
 .reorder-mini-list::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 .reorder-mini-list::-webkit-scrollbar-track {
@@ -402,45 +476,63 @@
   background-color: var(--color-text-subtle);
 }
 
-.reorder-mini-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--color-surface-sunken);
+.reorder-table {
+  width: 100%;
+  min-width: 340px;
+  border-collapse: collapse;
 }
 
-.reorder-mini-row:last-child {
+.reorder-table th {
+  text-align: left;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  padding: 0.5rem 0.4rem;
+  border-bottom: 1px solid var(--color-surface-sunken);
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+}
+
+.reorder-table td {
+  padding: 0.5rem 0.4rem;
+  border-bottom: 1px solid var(--color-surface-sunken);
+  font-size: 0.78rem;
+  color: var(--color-text);
+  vertical-align: middle;
+}
+
+.reorder-table tr:last-child td {
   border-bottom: none;
 }
 
-.reorder-mini-row-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-  flex: 1;
+.reorder-table-product {
+  max-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reorder-table-qty {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .reorder-mini-sku {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--color-info);
   text-decoration: none;
-  width: fit-content;
+  white-space: nowrap;
 }
 
 .reorder-mini-sku:hover {
   text-decoration: underline;
-}
-
-.reorder-mini-product {
-  font-size: 0.8rem;
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .reorder-mini-view-all {
@@ -461,18 +553,6 @@
   text-decoration: underline;
 }
 
-/* Badge stacked above qty (rather than side by side) so the qty line has
-   room to spell out "units" in full without crowding the card's right
-   edge or forcing the badge further right than it needs to be. */
-.reorder-mini-row-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.3rem;
-  flex-shrink: 0;
-  margin-right: 0.2rem;
-}
-
 .urgency-badge-mini {
   display: inline-block;
   padding: 0.22rem 0.55rem;
@@ -484,13 +564,6 @@
   white-space: nowrap;
 }
 
-.reorder-mini-qty {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
 .reorder-priorities {
   display: flex;
   flex-direction: column;
@@ -499,9 +572,10 @@
 
 .reorder-priorities-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: 0.25rem 0.5rem;
 }
 
 .reorder-priorities-title {
@@ -513,43 +587,6 @@
 .reorder-priorities-caption {
   font-size: 0.65rem;
   color: var(--color-text-subtle);
-  white-space: nowrap;
-}
-
-/* Top-right of the whole card (chart-header), not just the priorities
-   section — only rendered once the user actually drags a slider away from
-   the solver's real weights (see ReorderRecommendationWidget's isModified). */
-.reorder-card-reset {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  background-color: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--color-text-body);
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background-color 0.15s, border-color 0.15s;
-}
-
-.reorder-card-reset:hover {
-  background-color: var(--color-surface-muted);
-  border-color: var(--color-border-strong);
-}
-
-.reorder-priorities-note {
-  margin: 0.1rem 0 0 0;
-  font-size: 0.65rem;
-  line-height: 1.4;
-  color: var(--color-warning-text);
-  background-color: var(--color-warning-bg);
-  border: 1px solid var(--color-warning-border);
-  border-radius: 6px;
-  padding: 0.35rem 0.5rem;
 }
 
 .reorder-priority-row {
@@ -570,7 +607,7 @@
   gap: 0.45rem;
   font-size: 0.8rem;
   color: var(--color-text);
-  cursor: pointer;
+  min-width: 0;
 }
 
 .reorder-priority-swatch {
@@ -649,79 +686,22 @@
   visibility: visible;
 }
 
-/* ── Draggable weight slider ────────────────────────────────────────────
-   Native range input so keyboard/screen-reader support comes for free.
-   --slider-accent (the priority's colour) and --slider-pct (its current
-   value) are set inline per row, letting one rule paint the filled portion
-   of every track without a per-priority class. */
-.reorder-priority-slider {
-  -webkit-appearance: none;
-  appearance: none;
+/* ── Read-only weight bar ────────────────────────────────────────────────
+   Replaces what used to be a draggable range input. This value can't be
+   changed (see ReorderRecommendationWidget's solverPct comment for why),
+   so it's a plain filled track now, not a control — no thumb, no
+   focus/hover states, nothing that implies it responds to input. */
+.reorder-priority-bar {
   width: 100%;
-  height: 14px;
-  margin: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.reorder-priority-slider:focus {
-  outline: none;
-}
-
-.reorder-priority-slider::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--slider-accent) 45%, var(--color-surface)) 0 var(--slider-pct),
-    var(--color-surface-muted) var(--slider-pct) 100%
-  );
-}
-
-.reorder-priority-slider::-moz-range-track {
-  height: 4px;
-  border-radius: 2px;
+  height: 6px;
+  border-radius: 3px;
   background: var(--color-surface-muted);
+  overflow: hidden;
 }
 
-.reorder-priority-slider::-moz-range-progress {
-  height: 4px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--slider-accent) 45%, var(--color-surface));
-}
-
-.reorder-priority-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  margin-top: -5px; /* centres the 14px thumb on the 4px track */
-  border: none;
-  border-radius: 50%;
-  background: var(--slider-accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  transition: transform 0.12s ease;
-}
-
-.reorder-priority-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border: none;
-  border-radius: 50%;
-  background: var(--slider-accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-}
-
-.reorder-priority-slider:hover::-webkit-slider-thumb,
-.reorder-priority-slider:active::-webkit-slider-thumb {
-  transform: scale(1.15);
-}
-
-.reorder-priority-slider:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--slider-accent) 30%, transparent);
-}
-
-.reorder-priority-slider:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--slider-accent) 30%, transparent);
+.reorder-priority-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
 }
 
