@@ -10,16 +10,39 @@ portfolio_forecast, reorder_preview. Response shape is additive only —
 every original key (principal, period, inventory, recommendations,
 forecast, cover_series) is unchanged.
 
-UNILEVER ONLY (2026-09 pass): Del Monte has been dropped from this app's
-scope. Every query in this file is hardcoded to `principal = 'unilever'`
-(or reads a table that only ever held Unilever rows to begin with) — there
-is no more `?principal=` query param, no "all principals" blend, and no
-per-principal split anywhere in the response. Del Monte's rows are
-untouched in Supabase; this file simply never reads them. `SellOut_Fact`/
-`SellOut_Fact_Real` and `Sales_Fact`/`Sales_Fact_Real` are Del Monte-only
-at the schema level (see analytics/db/schema.sql's CHECK constraints) and
-are no longer queried here at all — not filtered, removed, since a filtered
-query against them would only ever return zero rows.
+BOTH PRINCIPALS (2026-09-17): `?principal=` is back (see
+backend/principals.py), reversing the 2026-09 Unilever-only pass — omit it
+or pass 'all' for both, 'unilever'/'delmonte' for one.
+
+Two different mechanisms are in play, and the difference matters:
+  - A straight WHERE filter, where both principals share one table
+    (Inventory_Fact_Real, Purchase_Fact_Real, ABC_Classification,
+    Product_Dimension).
+  - A SOURCE DISPATCH, where they don't: sales reads
+    Unilever_SKU_Demand_Fact_Real for Unilever and SellOut_Fact_Real for
+    Del Monte. Sales_Fact is deliberately NOT used — it is Del Monte-only
+    INVOICE grain (DEC-10) with no per-period demand-comparable shape.
+
+Under 'all', per-period figures are combined by _combine_principal_sums:
+a period reports a total only when BOTH principals have a real value for
+it, never one side's number presented as the whole portfolio. Unilever's
+demand runs to 2026-02 and Del Monte's sellout to 2025-12, so 'all' is
+legitimately null for the months where only one side exists.
+
+Known per-principal source gaps, live as of 2026-09-17 (real gaps, not
+filter artefacts): Del Monte has 0% unit_cost_per_case and 0%
+stock_status, so soh_value and the dead-stock split are Unilever-only;
+Purchase_Fact_Real holds Del Monte rows ONLY, so `received` is null for
+Unilever; and ABC_Classification/Forecast_Result/LP_Recommendation have
+no Del Monte rows at all yet.
+
+Fixed 2026-09-17: migration 0017 added ABC_Classification.method
+('single'/'t3m') so both classification bases can coexist per
+(product_key, classification_period) — every ABC_Classification query in
+this file (safety_stock_rate, abc_mix, tier_stock) had no method filter,
+so each product_key was double-counted the moment t3m rows landed in
+public (abc_mix's revenue_share summing past 100% was the visible
+symptom). All three now filter to method = 'single', the deployed basis.
 
 Honest-null policy (matches the frontend's null-handling contract — a null
 value means "cannot honestly compute this", never a guess or a fabricated

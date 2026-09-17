@@ -57,6 +57,11 @@ to (product_key, classification_period, method), and a 't3m' run is now
 live alongside 'single' (25,437 + 23,223 rows). Every read here MUST pin
 method='single' or each SKU comes back twice and revenue_share sums to
 ~200%.
+
+The method fix here was also made independently upstream in e6a7a13
+(same five sites, same verified 0.9986-vs-1.9973 evidence); this version
+supersedes it only by ALSO pinning method in the MAX(classification_period)
+lookups, which that commit left unfiltered.
 """
 from __future__ import annotations
 
