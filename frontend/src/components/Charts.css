@@ -347,11 +347,18 @@
 }
 
 /* ── Stock status by ABC tier — horizontal composition bars ───────────── */
+/* Fixed at the same height as .donut-container (180px) — its sibling in
+   this row — and space-between instead of a fixed gap so the three rows
+   spread out to fill that height exactly, whatever it is. That's what
+   makes this widget's legend land at the same vertical level as the ABC
+   donut's legend: both "chart body" blocks are the same height, so
+   centering each within the (height-matched) card puts both legends at
+   an identical offset from the top. */
 .tier-stock-bars {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  margin-top: 0.5rem;
+  justify-content: space-between;
+  height: 180px;
 }
 
 .tier-stock-row {
@@ -363,15 +370,18 @@
 .tier-stock-label {
   flex: 0 0 auto;
   width: 1rem;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--color-text-body);
 }
 
+/* Thicker — was 18px, leaving most of the row's own height as dead space
+   once .tier-stock-bars filled the donut's 180px. 40px lets three rows
+   plus their gaps actually use that height instead of floating in it. */
 .tier-stock-track {
   flex: 1 1 auto;
-  height: 18px;
-  border-radius: 5px;
+  height: 40px;
+  border-radius: 6px;
   overflow: hidden;
   display: flex;
   background: var(--color-surface-sunken);
