@@ -12,8 +12,12 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { getABCClassification } from '../api/abc';
 import DateFilter from './DateFilter';
+import { formatMonth } from '../utils/formatDate';
+import { useBrandLookup } from '../utils/useBrandLookup';
+import Pagination from './Pagination';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
@@ -36,19 +40,8 @@ const MONTH_TO_NUM = {
 const toClassificationPeriod = (month, year) =>
   month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
-// Helper to extract product name and weight (supports decimals like 1.5L, 2.5kg)
-const parseProductAndWeight = (product) => {
-  if (!product) return { name: '', weight: '' };
-  const weightRegex = /\b(\d+(?:\.\d+)?\s*(?:g|ml|l|kg|L|KG|ML|G))\b/;
-  const match = product.match(weightRegex);
-  if (match) {
-    const weight = `(${match[1]})`;
-    let name = product.replace(weightRegex, '').replace(/\s+/g, ' ').trim();
-    name = name.replace(/\(\s*\)/g, '').trim();
-    return { name, weight };
-  }
-  return { name: product, weight: '' };
-};
+// Product names render verbatim (see SKUManagement.jsx for why the old
+// pack-size split was removed).
 
 // Helper to format SKU to 5 digits (SKU-#####)
 const formatSKU = (sku) => {
@@ -84,18 +77,25 @@ const CLASS_DRILLDOWN_NOTE = {
   C: 'Long-tail SKUs sitting at LOW/CRITICAL stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don\u2019t go fully out of stock unnoticed.',
 };
 
-// Mirrors the colors already used for stock_status badges elsewhere on
-// this page (.abc-in-stock / .abc-low / .abc-critical in the CSS) so the
-// same status always reads as the same color across the whole view.
+// Chart colors for each stock_status; the table's status pills
+// (.pill-success / -warning / -critical in index.css) use the same hues.
 // NO DATA (gray) is its own status, not folded into CRITICAL — as of
 // 2025-12 Inventory_Fact_Real only covers a subset of classified
 // products (partial ETL load, more coverage expected), so "no record
 // yet" and "confirmed zero stock" are kept visibly distinct.
+//
+// Fixed 2026-09: LOW and CRITICAL were swapped (LOW was red, CRITICAL was
+// orange) — a real severity-inversion bug, not a style choice. Red draws
+// the eye harder than orange, so at a glance LOW read as the more urgent
+// state and CRITICAL read as the calmer one, backwards from reality. Now
+// pulled from theme/colors.js's own tokens instead of ad-hoc hex, which
+// were already documented for exactly this ("Amber: ...low stock" /
+// "Red: ...critical reorders") but weren't being used.
 const STOCK_STATUS_COLORS = {
   'IN STOCK': '#38a169',
-  LOW: '#e53e3e',
-  CRITICAL: '#dd6b20',
-  'NO DATA': '#a0aec0',
+  LOW: COLORS.warning,
+  CRITICAL: COLORS.critical,
+  'NO DATA': '#667085',
 };
 
 const ClassAggregateTooltip = ({ active, payload }) => {
@@ -129,8 +129,20 @@ const ClassAggregateTooltip = ({ active, payload }) => {
 };
 
 const ABCClassification = () => {
-  const { endMonth, endYear } = useOutletContext() || {};
-  const requestedPeriod = toClassificationPeriod(endMonth, endYear);
+  // One classification run exists per month, and GET /abc only ever read
+  // the END of the shared date range — so this page used to make people
+  // pick a 6-month range whose start did nothing. It now keeps its own
+  // single month, seeded from the dashboard range's end month on mount,
+  // and never writes back to the shared range (same local-state pattern
+  // as SKUForecast.jsx's own picker).
+  const dashboardRange = useOutletContext() || {};
+  const [selectedMonth, setSelectedMonth] = useState(() => ({
+    month: dashboardRange.endMonth,
+    year: dashboardRange.endYear,
+  }));
+  const requestedPeriod = toClassificationPeriod(selectedMonth.month, selectedMonth.year);
+  const isCustomMonth =
+    selectedMonth.month !== dashboardRange.endMonth || selectedMonth.year !== dashboardRange.endYear;
 
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -151,9 +163,11 @@ const ABCClassification = () => {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Which class's stock-status drill-down is showing below the chart.
-  // Defaults to 'C' (same as the old hardcoded behavior) but now the
-  // user can click any class's bar — or the tab buttons — to swap it.
-  const [selectedClass, setSelectedClass] = useState('C');
+  // Defaults to 'A' — Category A is the highest-value tier (top 20% of
+  // SKUs, ~80% of revenue) and the one a reviewer most wants to see on
+  // first load, not the long-tail Class C. Still swappable via any
+  // class's bar or the tab buttons.
+  const [selectedClass, setSelectedClass] = useState('A');
 
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
   const [highlightedSKUId, setHighlightedSKUId] = useState(null);
@@ -191,6 +205,10 @@ const ABCClassification = () => {
     };
   }, [requestedPeriod]);
 
+  // GET /abc has no brand field; this was hardcoded 'Unilever' (the
+  // principal) on every row. Real brand comes from the product master.
+  const brandLookup = useBrandLookup();
+
   // Map API shape -> the row shape the rest of this page renders.
   const sourceData = useMemo(
     () =>
@@ -198,7 +216,7 @@ const ABCClassification = () => {
         id: item.sku_id,
         sku: item.sku_id,
         product: item.product_name || 'Unknown Product',
-        brand: 'Unilever',
+        brand: brandLookup?.get(String(item.sku_id)) ?? null,
         cat: item.tier,
         // revenue_share / cumulative_share come from the API as 0-1 fractions
         // (see analytics/classification/abc.py); everything downstream here
@@ -208,7 +226,7 @@ const ABCClassification = () => {
         nearBoundary: !!item.boundary_flag,
         status: item.stock_status,
       })),
-    [rawData]
+    [rawData, brandLookup]
   );
 
   // Handle click outside combobox to close dropdown
@@ -226,7 +244,7 @@ const ABCClassification = () => {
   const catBCount = sourceData.filter(d => d.cat === 'B').length;
   const catCCount = sourceData.filter(d => d.cat === 'C').length;
 
-  const brandsList = ['ALL', ...Array.from(new Set(sourceData.map(d => d.brand)))];
+  const brandsList = ['ALL', ...Array.from(new Set(sourceData.map(d => d.brand).filter(Boolean))).sort()];
 
   // Rank by revenue share for the Pareto chart's x-axis; cumulative_share
   // and boundary_flag already come straight from the backend.
@@ -284,7 +302,7 @@ const ABCClassification = () => {
       const matchesSearch = searchQuery === '' ||
         item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.brand.toLowerCase().includes(searchQuery.toLowerCase());
+        (item.brand || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCat = categoryFilter === 'ALL' || item.cat === categoryFilter;
       const matchesBrand = brandFilter === 'ALL' || item.brand === brandFilter;
       return matchesSearch && matchesCat && matchesBrand;
@@ -352,11 +370,11 @@ const ABCClassification = () => {
 
   const getStatusClass = (status) => {
     switch (status) {
-      case 'IN STOCK': return 'abc-status abc-in-stock';
-      case 'LOW': return 'abc-status abc-low';
-      case 'CRITICAL': return 'abc-status abc-critical';
-      case 'NO DATA': return 'abc-status abc-no-data';
-      default: return 'abc-status';
+      case 'IN STOCK': return 'pill pill-success';
+      case 'LOW': return 'pill pill-warning';
+      case 'CRITICAL': return 'pill pill-critical';
+      case 'NO DATA': return 'pill pill-neutral';
+      default: return 'pill pill-neutral';
     }
   };
 
@@ -369,11 +387,40 @@ const ABCClassification = () => {
     }
   };
 
+  // Rendered in every state (loading, error, loaded) rather than only on
+  // success — the date picker lives in this header, so blanking the page
+  // while refetching removed the control the user had just changed. Same
+  // fix as Dashboard.jsx's `header`.
+  const header = (
+    <div className="abc-page-header">
+      <div className="abc-page-title-row">
+        <h2 className="abc-page-title">ABC <span className="page-title-accent">Classification</span></h2>
+        <DateFilter
+          singleMonth
+          localValue={{
+            startMonth: selectedMonth.month, startYear: selectedMonth.year,
+            endMonth: selectedMonth.month, endYear: selectedMonth.year,
+          }}
+          onLocalChange={(v) => setSelectedMonth({ month: v.endMonth, year: v.endYear })}
+          onReset={isCustomMonth
+            ? () => setSelectedMonth({ month: dashboardRange.endMonth, year: dashboardRange.endYear })
+            : undefined}
+        />
+      </div>
+      <p className="abc-page-subtitle">
+        Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
+        {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}.</>}
+        <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a SKU within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
+      </p>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="abc-page">
         <div className="abc-content">
-          <p className="abc-page-subtitle">Loading ABC classification data…</p>
+          {header}
+          <p className="abc-page-subtitle" role="status">Loading ABC classification data…</p>
         </div>
       </div>
     );
@@ -383,7 +430,8 @@ const ABCClassification = () => {
     return (
       <div className="abc-page">
         <div className="abc-content">
-          <p className="abc-page-subtitle">Failed to load ABC classification data: {error}</p>
+          {header}
+          <p className="abc-page-subtitle" role="alert">Failed to load ABC classification data: {error}</p>
         </div>
       </div>
     );
@@ -393,17 +441,7 @@ const ABCClassification = () => {
     <div className="abc-page">
       <div className="abc-content">
         {/* Page Header */}
-        <div className="abc-page-header">
-          <div className="abc-page-title-row">
-            <h2 className="abc-page-title">ABC Classification</h2>
-            <DateFilter />
-          </div>
-          <p className="abc-page-subtitle">
-            Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
-            {classificationPeriod && <> Period: {classificationPeriod}.</>}
-            <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a SKU within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
-          </p>
-        </div>
+        {header}
 
         {/* Summary Cards */}
         <div className="abc-summary-grid">
@@ -445,13 +483,9 @@ const ABCClassification = () => {
             <div className="abc-pareto-container abc-analysis-chart">
               <div className="abc-pareto-header">
                 <h3 className="abc-pareto-title">
-                  {panel.label ? `${panel.label} — Revenue Share vs. Stock Status Mix, by Class` : 'Revenue Share vs. Stock Status Mix, by Class'}
+                  {panel.label ? `${panel.label} — Stock Status Mix, by Class` : 'Stock Status Mix, by Class'}
                 </h3>
                 <div className="abc-pareto-legend">
-                  <div className="abc-pareto-legend-item">
-                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: COLORS.abcA }} />
-                    <span>Revenue share</span>
-                  </div>
                   <div className="abc-pareto-legend-item">
                     <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['IN STOCK'] }} />
                     <span>In stock</span>
@@ -461,7 +495,7 @@ const ABCClassification = () => {
                     <span>Low</span>
                   </div>
                   <div className="abc-pareto-legend-item">
-                    <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.CRITICAL }} />
+                    <span className="abc-pareto-legend-swatch abc-pareto-legend-swatch--critical" />
                     <span>Critical</span>
                   </div>
                   <div className="abc-pareto-legend-item">
@@ -473,6 +507,19 @@ const ABCClassification = () => {
               <div className="abc-pareto-chart-wrapper">
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={panel.classAggregates} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
+                    {/* Colorblind safety: CRITICAL and IN STOCK sit right next
+                        to each other in this stack, and red/green is the one
+                        hue pair ~8% of men (red-green deficiency) can't
+                        reliably tell apart. A hatch pattern gives CRITICAL a
+                        texture cue that doesn't depend on hue at all, and the
+                        white segment borders below mean no boundary in the
+                        stack relies on color contrast alone. */}
+                    <defs>
+                      <pattern id="criticalHatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
+                        <rect width="7" height="7" fill={STOCK_STATUS_COLORS.CRITICAL} />
+                        <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,255,255,0.6)" strokeWidth="3" />
+                      </pattern>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
                     <XAxis
                       dataKey="label"
@@ -489,51 +536,40 @@ const ABCClassification = () => {
                       tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                     />
                     <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
-                    {/* Bar 1 of the pair: revenue share, one solid bar per class.
-                        Clicking any class's bar — either this one or the
-                        stock-mix bar below — drives the drill-down panel. */}
-                    <Bar
-                      dataKey="revenueTotal"
-                      radius={[6, 6, 0, 0]}
-                      barSize={54}
-                      isAnimationActive={false}
-                      onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)}
-                      style={{ cursor: 'pointer' }}
-                    >
+                    {/* Was a two-bar-per-class combo: this stock-status stack
+                        next to a separate solid "revenue share" bar on the
+                        SAME 0-100% axis. Dropped the revenue-share bar
+                        (2026-09) — it mixed two different kinds of
+                        percentage on one axis (per-class stock composition
+                        vs. share-of-portfolio-revenue), which invited a
+                        false comparison, and it duplicated what the 4 KPI
+                        cards above already say ("Top 20% · 80% of
+                        revenue"). This chart now has one job: stock-status
+                        composition, stacked to 100%. NO DATA sits at the
+                        base since it's usually the largest segment right
+                        now (partial inventory load) — putting it first
+                        keeps the rounded top corner on whichever real
+                        status segment is on top. Each stacked segment is
+                        clickable and outlines the whole column for
+                        whichever class is selected. */}
+                    <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={54} {...chartAnim(0)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
-                        <Cell
-                          key={entry.cat}
-                          fill={COLORS[`abc${entry.cat}`]}
-                          stroke={entry.cat === selectedClass ? '#1a202c' : 'none'}
-                          strokeWidth={entry.cat === selectedClass ? 2 : 0}
-                        />
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
                       ))}
                     </Bar>
-                    {/* Bar 2 of the pair: stock-status mix, stacked to 100%.
-                        NO DATA sits at the base since it's usually the
-                        largest segment right now (partial inventory load)
-                        — putting it first keeps the rounded top corner on
-                        whichever real status segment is on top. Each
-                        stacked segment is also clickable and outlines the
-                        whole column for whichever class is selected. */}
-                    <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                    <Bar dataKey="criticalPct" stackId="stockMix" fill="url(#criticalHatch)" barSize={54} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
-                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
                       ))}
                     </Bar>
-                    <Bar dataKey="criticalPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.CRITICAL} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                    <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
-                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
                       ))}
                     </Bar>
-                    <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                    <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                       {panel.classAggregates.map((entry) => (
-                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
-                      ))}
-                    </Bar>
-                    <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} isAnimationActive={false} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
-                      {panel.classAggregates.map((entry) => (
-                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : 'none'} strokeWidth={entry.cat === selectedClass ? 2 : 0} />
+                        <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -577,8 +613,8 @@ const ABCClassification = () => {
                 <thead>
                   <tr>
                     <th>Status</th>
-                    <th>SKU Count</th>
-                    <th>% of Class {selectedClass}</th>
+                    <th className="table-num">SKU Count</th>
+                    <th className="table-num">% of Class {selectedClass}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -588,8 +624,8 @@ const ABCClassification = () => {
                         <span className="abc-drilldown-dot" style={{ backgroundColor: STOCK_STATUS_COLORS[row.status] }} />
                         {row.status}
                       </td>
-                      <td>{row.count}</td>
-                      <td>{row.pct.toFixed(0)}%</td>
+                      <td className="table-num">{row.count}</td>
+                      <td className="table-num">{row.pct.toFixed(0)}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -786,17 +822,17 @@ const ABCClassification = () => {
         )}
 
         {/* Table */}
-        <div className="abc-table-wrapper">
-          <table className="abc-table">
+        <div className="data-table-card">
+          <table className="data-table abc-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th>SKU</th>
-                <th>PRODUCT</th>
-                <th>BRAND</th>
-                <th>CAT</th>
-                <th>REV %</th>
-                <th>STATUS</th>
+                <th className="table-num col-fit">#</th>
+                <th className="col-fit">SKU</th>
+                <th className="col-text col-product">Product</th>
+                <th className="col-fit">Brand</th>
+                <th className="table-center col-fit">Cat</th>
+                <th className="table-num col-fit">Rev %</th>
+                <th className="col-fit">Stock status</th>
               </tr>
             </thead>
             <tbody>
@@ -806,103 +842,52 @@ const ABCClassification = () => {
                   id={`abc-row-${item.id}`}
                   className={highlightedSKUId === item.id ? 'highlighted-row-flash' : ''}
                 >
-                  <td className="abc-row-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
-                  <td className="abc-sku-cell">{formatSKU(item.sku)}</td>
-                  <td className="abc-product-cell">
-                    {(() => {
-                      const { name, weight } = parseProductAndWeight(item.product);
-                      return (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span className="abc-product-name">{name}</span>
-                          {weight && (
-                            <span className="abc-product-weight" style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.2rem' }}>
-                              {weight}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="abc-brand-cell">{item.brand}</td>
-                  <td>
+                  <td className="cell-rownum table-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
+                  <td className="cell-code">{formatSKU(item.sku)}</td>
+                  <td className="cell-product">{item.product}</td>
+                  <td className={item.brand ? 'cell-muted' : 'cell-empty'}>{item.brand || '—'}</td>
+                  <td className="table-center">
+                    {/* The warning icon always has a reserved slot, so badges
+                        stay in one straight column whether or not a row is
+                        near a tier boundary. */}
                     <span className="abc-cat-cell-inner">
                       <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
-                      {item.nearBoundary && (
-                        <AlertTriangle
-                          size={13}
-                          className="abc-boundary-icon"
-                          title={`Cumulative revenue ${item.cumulativePct.toFixed(1)}% — within ${BOUNDARY_TOLERANCE_PP}pp of a tier cutoff`}
-                        />
-                      )}
+                      <span className="abc-boundary-slot">
+                        {item.nearBoundary && (
+                          <AlertTriangle
+                            size={13}
+                            className="abc-boundary-icon"
+                            aria-label="Near a tier boundary"
+                          >
+                            <title>{`Cumulative revenue ${item.cumulativePct.toFixed(1)}% — within ${BOUNDARY_TOLERANCE_PP}pp of a tier cutoff`}</title>
+                          </AlertTriangle>
+                        )}
+                      </span>
                     </span>
                   </td>
-                  <td className="abc-rev-cell">{item.revPct.toFixed(1)}%</td>
+                  <td className="table-num cell-strong">{item.revPct.toFixed(1)}%</td>
                   <td><span className={getStatusClass(item.status)}>{item.status}</span></td>
                 </tr>
               ))}
               {filteredData.length === 0 && (
-                <tr>
-                  <td colSpan="7" className="abc-no-results">No data for this selection.</td>
+                <tr className="table-empty-row">
+                  <td colSpan="7">No data for this selection.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination — table can run 600+ rows; only PAGE_SIZE_OPTIONS
-            rows render at once, so the DOM/scroll stays manageable. */}
-        {filteredData.length > 0 && (
-          <div className="abc-pagination-row">
-            <span className="abc-pagination-info">
-              Showing {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, filteredData.length)} of {filteredData.length}
-            </span>
-
-            <div className="abc-pagination-controls">
-              <button
-                className="abc-pagination-btn"
-                onClick={() => setCurrentPage(1)}
-                disabled={safeCurrentPage === 1}
-                title="First page"
-              >
-                «
-              </button>
-              <button
-                className="abc-pagination-btn"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={safeCurrentPage === 1}
-              >
-                Prev
-              </button>
-              <span className="abc-pagination-page-label">
-                Page {safeCurrentPage} of {totalPages}
-              </span>
-              <button
-                className="abc-pagination-btn"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={safeCurrentPage === totalPages}
-              >
-                Next
-              </button>
-              <button
-                className="abc-pagination-btn"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={safeCurrentPage === totalPages}
-                title="Last page"
-              >
-                »
-              </button>
-            </div>
-
-            <div className="abc-pagination-size">
-              <span>Rows per page:</span>
-              <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
-                {PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>{size}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={safeCurrentPage}
+          totalPages={totalPages}
+          totalItems={filteredData.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          idPrefix="abc"
+        />
       </div>
     </div>
   );

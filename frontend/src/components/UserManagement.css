@@ -21,22 +21,19 @@
 .user-mgmt-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
   display: flex;
   align-items: baseline;
 }
 
-.user-mgmt-title span {
-  color: #c53030;
-  font-weight: 600;
-  font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
+.user-mgmt-title .page-title-accent {
+  font-size: 2.1rem;
   margin-left: 0.4rem;
 }
 
 .user-mgmt-subtitle {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.85rem;
   margin: 0;
   max-width: 600px;
@@ -47,8 +44,8 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border: none;
   padding: 0.6rem 1.2rem;
   border-radius: 8px;
@@ -60,7 +57,7 @@
 }
 
 .user-mgmt-add-btn:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-brand-hover);
 }
 
 /* Error banner */
@@ -68,9 +65,9 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background-color: #fff5f5;
-  border: 1px solid #feb2b2;
-  color: #c53030;
+  background-color: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-brand-primary);
   font-size: 0.85rem;
   padding: 0.8rem 1.2rem;
   border-radius: 8px;
@@ -78,12 +75,12 @@
 
 /* Table */
 .user-mgmt-table-wrapper {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .user-mgmt-table {
@@ -94,7 +91,7 @@
 }
 
 .user-mgmt-table thead {
-  border-bottom: 2px solid #edf2f7;
+  border-bottom: 2px solid var(--color-surface-muted);
 }
 
 .user-mgmt-table th {
@@ -103,23 +100,23 @@
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   white-space: nowrap;
   text-transform: uppercase;
 }
 
 .user-mgmt-table tbody tr {
-  border-bottom: 1px solid #f7fafc;
+  border-bottom: 1px solid var(--color-surface-raised);
   transition: background-color 0.15s;
 }
 
 .user-mgmt-table tbody tr:hover {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
 }
 
 .user-mgmt-table td {
   padding: 1rem 1.5rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   vertical-align: middle;
 }
 
@@ -144,15 +141,15 @@
 
 .user-mgmt-name {
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
 }
 
 .user-mgmt-email-cell {
-  color: #4a5568;
+  color: var(--color-text-body);
 }
 
 .user-mgmt-date-cell {
-  color: #718096;
+  color: var(--color-text-muted);
   font-size: 0.82rem;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -168,14 +165,16 @@
   letter-spacing: 0.04em;
 }
 
+/* Roles are identity, not alerts: admin was red, the color every other page
+   reserves for critical status. Indigo vs. slate still tells the two apart. */
 .user-mgmt-role-badge.role-admin {
-  background-color: #fff5f5;
-  color: #c53030;
+  background-color: #eef0ff;
+  color: #4338ca;
 }
 
 .user-mgmt-role-badge.role-staff {
-  background-color: #ebf8ff;
-  color: #2b6cb0;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
 }
 
 .user-mgmt-actions-col {
@@ -190,23 +189,23 @@
   width: 30px;
   height: 30px;
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background-color: #ffffff;
-  color: #4a5568;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
   cursor: pointer;
   margin-left: 0.5rem;
   transition: all 0.15s;
 }
 
 .user-mgmt-icon-btn:hover {
-  background-color: #f7fafc;
-  border-color: #cbd5e1;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
 }
 
 .user-mgmt-icon-btn.danger:hover:not(:disabled) {
-  background-color: #fff5f5;
-  border-color: #feb2b2;
-  color: #c53030;
+  background-color: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-brand-primary);
 }
 
 .user-mgmt-icon-btn:disabled {
@@ -217,7 +216,7 @@
 .user-mgmt-empty {
   text-align: center;
   padding: 3rem 1rem !important;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-style: italic;
 }
 
@@ -243,7 +242,7 @@
 }
 
 .user-mgmt-confirm-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 16px;
   padding: 2rem;
   width: 100%;
@@ -256,8 +255,8 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background-color: #fff5f5;
-  color: #c53030;
+  background-color: var(--color-danger-bg);
+  color: var(--color-brand-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -267,19 +266,19 @@
 .user-mgmt-confirm-title {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.6rem 0;
 }
 
 .user-mgmt-confirm-body {
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--color-slate-500);
   line-height: 1.5;
   margin: 0 0 1rem 0;
 }
 
 .user-mgmt-confirm-body strong {
-  color: #1e293b;
+  color: var(--color-slate-800);
 }
 
 .user-mgmt-confirm-actions {
@@ -290,8 +289,8 @@
 }
 
 .user-mgmt-confirm-delete-btn {
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border: none;
   padding: 0.6rem 1.5rem;
   border-radius: 8px;
@@ -302,16 +301,16 @@
 }
 
 .user-mgmt-confirm-delete-btn:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-brand-hover);
 }
 
 .btn-cancel {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  color: #2d3748;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-heading);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -321,14 +320,14 @@
 }
 
 .btn-cancel:hover {
-  background-color: #f8fafc;
-  border-color: #cbd5e1;
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
 }
 
 .form-api-error {
-  background-color: #fff5f5;
-  border: 1px solid #feb2b2;
-  color: #c53030;
+  background-color: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-brand-primary);
   font-size: 0.8rem;
   padding: 0.6rem 0.8rem;
   border-radius: 8px;

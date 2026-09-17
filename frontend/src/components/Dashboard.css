@@ -21,29 +21,40 @@
   gap: 0.5rem;
 }
 
+/* flex-wrap was missing here — at narrow widths "Inventory pulse" and the
+   date picker were forced onto one row with nowrap, so the picker's 4
+   dropdowns got squeezed into a ~160px sliver that visually overlapped the
+   title text (confirmed at 375px: selects rendered, but overlapping the
+   heading enough to block clicks on them). ABC Classification/Reorder Recs
+   already had this and never had the problem — matching their pattern here
+   rather than inventing a new one. */
 .dashboard-title-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .dashboard-title-row h2 {
   font-size: 1.75rem;
-  color: #1a202c;
+  font-weight: 700;
+  color: var(--color-text);
   margin: 0;
   display: flex;
   align-items: baseline;
   gap: 0.4rem;
 }
 
-.dashboard-title-row h2 span {
-  color: #c53030;
-  font-weight: 700;
-  font-size: 1.75rem;
+/* Color/family/weight for the accented word come from the shared
+   .page-title-accent utility (index.css); this just matches its size to
+   the rest of the heading. */
+.dashboard-title-row h2 .page-title-accent {
+  font-size: 1.85rem;
 }
 
 .dashboard-header p {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.8rem;
   margin: 0;
 }
@@ -128,7 +139,7 @@
 }
 
 /* ABC chart: grow to fill its column instead of a fixed height,
-   so it always matches the tallest sibling (reorder or bad-orders). */
+   so it always matches the tallest sibling (reorder recs). */
 .secondary-grid .chart-widget {
   height: auto;
   flex: 1;
@@ -142,7 +153,7 @@
 }
 
 .skeleton-line {
-  background: linear-gradient(90deg, #edf2f7 25%, #e2e8f0 37%, #edf2f7 63%);
+  background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 37%, var(--color-surface-muted) 63%);
   background-size: 400% 100%;
   animation: skeleton-shimmer 1.4s ease infinite;
   border-radius: 6px;
@@ -176,7 +187,7 @@
   min-height: 180px;
   margin-top: 1.25rem;
   border-radius: 8px;
-  background: linear-gradient(90deg, #edf2f7 25%, #e2e8f0 37%, #edf2f7 63%);
+  background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 37%, var(--color-surface-muted) 63%);
   background-size: 400% 100%;
   animation: skeleton-shimmer 1.4s ease infinite;
 }
@@ -186,20 +197,78 @@
   100% { background-position: 0 50%; }
 }
 
+/* Wraps every section below the header, so the loaded page and the
+   skeleton share one layout. gap: inherit follows .dashboard-content's own
+   gap at every breakpoint instead of duplicating its values. */
+.dashboard-body {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  transition: opacity 0.2s ease;
+}
+
+/* Previous range's view, kept visible while the newly picked range loads.
+   Dimmed and non-interactive so nobody reads or acts on (e.g. follows a
+   reorder SKU link from) numbers that belong to the old range. */
+.dashboard-body.is-refreshing {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.dashboard-refreshing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: flex-start;
+  margin: -0.75rem 0 -0.5rem 0;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.dashboard-refreshing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-info);
+  animation: dashboard-refreshing-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dashboard-refreshing-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .skeleton-chart-body,
+  .dashboard-refreshing-dot {
+    animation: none;
+  }
+  .dashboard-body {
+    transition: none;
+  }
+}
+
 /* ── Empty — per-card note ─────────────────────────────────────────────── */
 .dashboard-empty-note {
   margin: auto;
   padding: 2rem;
   text-align: center;
   font-size: 0.85rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .dashboard-chart-footnote {
   margin: 0;
   text-align: center;
   font-size: 0.75rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 /* ── Error — whole-dashboard state ────────────────────────────────────── */
@@ -209,21 +278,21 @@
   align-items: center;
   gap: 1rem;
   padding: 4rem 2rem;
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .dashboard-error-state p {
   margin: 0;
   font-size: 0.95rem;
-  color: #4a5568;
+  color: var(--color-text-body);
   font-weight: 600;
 }
 
 .dashboard-retry-btn {
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   border: none;
   border-radius: 8px;
   padding: 0.6rem 1.5rem;
@@ -234,7 +303,7 @@
 }
 
 .dashboard-retry-btn:hover {
-  background-color: #9b2c2c;
+  background-color: var(--color-brand-hover);
 }
 
 /* ── Responsive ────────────────────────────────────────────────────────── */

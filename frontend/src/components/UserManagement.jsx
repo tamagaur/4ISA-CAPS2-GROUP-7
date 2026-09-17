@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import UserFormModal from './UserFormModal';
+import Modal from './Modal';
+import { useToast } from './ToastProvider';
 import { listUsers, createUser, updateUser, deleteUser } from '../utils/usersApi';
 import { logAction } from '../utils/auditLogger';
 import { getCurrentUser } from '../auth';
+import { formatDate } from '../utils/formatDate';
 import './UserManagement.css';
 
 const getInitials = (name) => {
@@ -24,6 +27,7 @@ const getAvatarColor = (name) => {
 };
 
 const UserManagement = () => {
+  const toast = useToast();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -65,9 +69,11 @@ const UserManagement = () => {
     if (editingUser) {
       await updateUser(editingUser.user_id, values);
       logAction('Edit User', `Updated ${values.email} (${values.role})`);
+      toast.success(`${values.email} updated`);
     } else {
       await createUser(values);
       logAction('Add User', `Created ${values.email} (${values.role})`);
+      toast.success(`${values.email} added`);
     }
     await loadUsers();
   };
@@ -78,6 +84,7 @@ const UserManagement = () => {
     try {
       await deleteUser(deletingUser.user_id);
       logAction('Delete User', `Removed ${deletingUser.email}`);
+      toast.success(`${deletingUser.email} removed`);
       setDeletingUser(null);
       await loadUsers();
     } catch (err) {
@@ -90,7 +97,7 @@ const UserManagement = () => {
       <div className="user-mgmt-content">
         <div className="user-mgmt-header">
           <div>
-            <h2 className="user-mgmt-title">User <span>management</span></h2>
+            <h2 className="user-mgmt-title">User <span className="page-title-accent">management</span></h2>
             <p className="user-mgmt-subtitle">
               Create, edit, and remove staff accounts. Only admins can access this page.
             </p>
@@ -145,7 +152,7 @@ const UserManagement = () => {
                       </span>
                     </td>
                     <td className="user-mgmt-date-cell">
-                      {new Date(user.created_at).toLocaleDateString()}
+                      {formatDate(user.created_at)}
                     </td>
                     <td className="user-mgmt-actions-col">
                       <button
@@ -189,8 +196,13 @@ const UserManagement = () => {
       />
 
       {deletingUser && (
-        <div className="user-mgmt-modal-overlay" onClick={() => setDeletingUser(null)}>
-          <div className="user-mgmt-confirm-card" onClick={(e) => e.stopPropagation()}>
+        <Modal
+          isOpen={!!deletingUser}
+          onClose={() => setDeletingUser(null)}
+          label="Delete user confirmation"
+          overlayClassName="user-mgmt-modal-overlay"
+          containerClassName="user-mgmt-confirm-card"
+        >
             <div className="user-mgmt-confirm-icon">
               <AlertTriangle size={20} />
             </div>
@@ -208,8 +220,7 @@ const UserManagement = () => {
                 Delete User
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

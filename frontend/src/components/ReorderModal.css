@@ -21,7 +21,7 @@
 
 /* Modal Card */
 .reorder-modal-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 2rem;
   width: 100%;
@@ -48,13 +48,13 @@
 .reorder-modal-title {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
 }
 
 .reorder-modal-subtitle {
   font-size: 0.75rem;
-  color: #718096;
+  color: var(--color-text-muted);
   margin: 0;
   line-height: 1.4;
 }
@@ -62,7 +62,7 @@
 .reorder-modal-close {
   background: none;
   border: none;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   cursor: pointer;
   padding: 0.2rem;
   border-radius: 6px;
@@ -74,8 +74,8 @@
 }
 
 .reorder-modal-close:hover {
-  color: #1a202c;
-  background-color: #f7fafc;
+  color: var(--color-text);
+  background-color: var(--color-surface-raised);
 }
 
 /* Data Grid */
@@ -97,23 +97,23 @@
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   text-transform: uppercase;
 }
 
 .reorder-grid-value {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #1a202c;
+  color: var(--color-text);
 }
 
 /* Footer Note */
 .reorder-modal-footer-note {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
   padding: 1rem 1.2rem;
   border-radius: 8px;
   font-size: 0.72rem;
-  color: #718096;
+  color: var(--color-text-muted);
   line-height: 1.5;
 }
 
@@ -130,7 +130,7 @@
 .reorder-section-title {
   font-size: 0.8rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.6rem 0;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -138,8 +138,8 @@
 
 /* Baseline Comparison */
 .reorder-compare-section {
-  background-color: #f7fafc;
-  border: 1px solid #edf2f7;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-surface-muted);
   border-radius: 10px;
   padding: 1.1rem 1.2rem;
   margin-bottom: 1.5rem;
@@ -151,8 +151,8 @@
 
 .reorder-savings-badge {
   display: inline-block;
-  background-color: #f0fff4;
-  color: #2E9E5B;
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
   border: 1px solid #c6f6d5;
   padding: 0.25rem 0.7rem;
   border-radius: 20px;
@@ -172,7 +172,7 @@
 
 .reorder-why-intro {
   font-size: 0.75rem;
-  color: #718096;
+  color: var(--color-text-muted);
   margin: 0 0 0.9rem 0;
 }
 
@@ -216,21 +216,21 @@
 .reorder-weight-legend-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #4a5568;
+  color: var(--color-text-body);
 }
 
 .reorder-weight-legend-pct {
   font-size: 0.75rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
 }
 
 .reorder-why-note {
-  background-color: #f7fafc;
+  background-color: var(--color-surface-raised);
   padding: 0.85rem 1rem;
   border-radius: 8px;
   font-size: 0.72rem;
-  color: #718096;
+  color: var(--color-text-muted);
   line-height: 1.5;
   margin: 0;
 }

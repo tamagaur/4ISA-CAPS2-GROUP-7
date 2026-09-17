@@ -1,0 +1,98 @@
+/* Toast notifications — see ToastProvider.jsx for why these exist.
+   Bottom-right so they never cover the page header / date filter, and
+   above every modal overlay (z-index 1100) so a toast raised by a dialog
+   action is still visible while that dialog is open. */
+.toast-region {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  /* The region spans the corner but must not swallow clicks on the page
+     underneath it; individual toasts re-enable pointer events. */
+  pointer-events: none;
+  max-width: min(380px, calc(100vw - 2.5rem));
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid;
+  background-color: var(--color-surface);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.18), 0 4px 10px -4px rgba(0, 0, 0, 0.1);
+  font-size: 0.83rem;
+  line-height: 1.45;
+  animation: toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.toast-message {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.toast-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0.15rem;
+  margin: -0.15rem -0.2rem 0 0;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.55;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: opacity 0.15s ease;
+}
+
+.toast-dismiss:hover {
+  opacity: 1;
+}
+
+.toast-success {
+  border-color: #9ae6b4;
+  background-color: var(--color-success-bg);
+  color: #22543d;
+}
+
+.toast-error {
+  border-color: var(--color-danger-border);
+  background-color: var(--color-danger-bg);
+  color: #822727;
+}
+
+.toast-info {
+  border-color: #bfdbfe;
+  background-color: #eff6ff;
+  color: #1e40af;
+}
+
+@media (max-width: 640px) {
+  .toast-region {
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    max-width: none;
+  }
+}

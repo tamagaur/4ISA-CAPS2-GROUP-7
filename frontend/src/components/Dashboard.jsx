@@ -7,7 +7,7 @@ import {
   PortfolioForecastWidget, ReorderRecommendationWidget,
   formatCompactPesos,
 } from './Charts';
-import { getDashboardData } from '../api/dashboard';
+import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { Package, Wallet, ShieldAlert, Clock } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
@@ -38,56 +38,122 @@ const MONTH_TO_NUM = {
 const toPeriod = (month, year) =>
   month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
+// Same outer structure and card classes as the loaded page below, so every
+// block lands at its final size — nothing jumps when the real data replaces
+// it. Replaces a lone "Loading dashboard data…" line that left the page
+// blank for the whole /dashboard request (measured 5.4–7.1s).
+const DashboardSkeleton = () => (
+  <div className="dashboard-body" aria-hidden="true">
+    <div className="dashboard-section">
+      <div className="kpi-grid">
+        {[0, 1, 2, 3].map((i) => (
+          <div className="kpi-card skeleton-card" key={i}>
+            <div className="skeleton-line skeleton-line-title" />
+            <div className="skeleton-line skeleton-line-value" />
+            <div className="skeleton-line skeleton-line-subtext" />
+          </div>
+        ))}
+      </div>
+    </div>
+    <div className="dashboard-section">
+      <div className="chart-primary">
+        <div className="chart-widget skeleton-card">
+          <div className="skeleton-line skeleton-line-title" />
+          <div className="skeleton-chart-body" />
+        </div>
+      </div>
+    </div>
+    {['chart-duo chart-duo-abc', 'chart-duo chart-duo-tall'].map((rowClass) => (
+      <div className="dashboard-section" key={rowClass}>
+        <div className={rowClass}>
+          {[0, 1].map((i) => (
+            <div className="chart-widget skeleton-card" key={i}>
+              <div className="skeleton-line skeleton-line-title" />
+              <div className="skeleton-chart-body" />
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 const Dashboard = () => {
   const { startMonth, startYear, endMonth, endYear } = useOutletContext() || {};
   const period = toPeriod(endMonth, endYear);
   const startPeriod = toPeriod(startMonth, startYear);
+  const requestKey = `${period ?? ''}|${startPeriod ?? ''}`;
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // `loaded` remembers WHICH range its data belongs to. When the range
+  // changes, the previous range's view stays on screen (dimmed, labeled
+  // "Updating") until the new one arrives, instead of blanking the page
+  // for the whole request. Seeded from the response cache, so revisiting a
+  // range already fetched this session renders on the first frame.
+  const [loaded, setLoaded] = useState(() => {
+    const cached = peekDashboardData({ period, startPeriod });
+    return cached ? { key: requestKey, data: cached } : null;
+  });
+  const [error, setError] = useState(null); // { key, message }
+  const loadedKey = loaded?.key;
 
   useEffect(() => {
+    if (loadedKey === requestKey) return undefined;
     let cancelled = false;
-    setLoading(true);
     setError(null);
     getDashboardData({ period, startPeriod })
       .then((res) => {
-        if (cancelled) return;
-        setData(res);
+        if (!cancelled) setLoaded({ key: requestKey, data: res });
       })
       .catch((err) => {
-        if (cancelled) return;
-        setError(err.message || 'Failed to load dashboard data');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setError({ key: requestKey, message: err.message || 'Failed to load dashboard data' });
       });
     return () => {
       cancelled = true;
     };
-  }, [period, startPeriod]);
+  }, [requestKey, loadedKey, period, startPeriod]);
 
-  if (loading) {
+  const isRefreshing = Boolean(loaded) && loaded.key !== requestKey;
+  const currentError = error?.key === requestKey ? error.message : null;
+
+  // Header is rendered in every state — loading, error and loaded — rather
+  // than only on success. The date picker lives inside it, so blanking the
+  // whole page on load meant the control the user had just changed
+  // disappeared underneath them on every single refetch, and an error left
+  // them with no way to pick a different range to recover.
+  const header = (
+    <div className="dashboard-header">
+      <div className="dashboard-title-row">
+        <h2>Inventory <span className="page-title-accent">pulse</span></h2>
+        <DateFilter />
+      </div>
+      <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
+    </div>
+  );
+
+  if (currentError) {
     return (
       <div className="dashboard">
         <div className="dashboard-content">
-          <p className="dashboard-empty-note">Loading dashboard data…</p>
+          {header}
+          <p className="dashboard-empty-note" role="alert">Failed to load dashboard data: {currentError}</p>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (!loaded) {
     return (
       <div className="dashboard">
         <div className="dashboard-content">
-          <p className="dashboard-empty-note">Failed to load dashboard data: {error}</p>
+          {header}
+          <p className="visually-hidden" role="status">Loading dashboard data…</p>
+          <DashboardSkeleton />
         </div>
       </div>
     );
   }
 
+  const { data } = loaded;
   const kpis = data.kpis || {};
   const weeksOfCover = kpis.weeks_of_cover || {};
   const policyWeeks = data.inventory?.policy_weeks ?? 3;
@@ -154,14 +220,16 @@ const Dashboard = () => {
   return (
     <div className="dashboard">
       <div className="dashboard-content">
-        <div className="dashboard-header">
-          <div className="dashboard-title-row">
-            <h2>Inventory <span>pulse</span></h2>
-            <DateFilter />
-          </div>
-          <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
-        </div>
+        {header}
 
+        {isRefreshing && (
+          <p className="dashboard-refreshing" role="status">
+            <span className="dashboard-refreshing-dot" aria-hidden="true" />
+            Updating to {startMonth} {startYear} – {endMonth} {endYear}…
+          </p>
+        )}
+
+        <div className={`dashboard-body${isRefreshing ? ' is-refreshing' : ''}`} aria-busy={isRefreshing}>
         {/* ── 4 KPI cards ────────────────────────────────────────────── */}
         <div className="dashboard-section">
           <div className="kpi-grid">
@@ -230,6 +298,7 @@ const Dashboard = () => {
               weights={reorderPreview.lp_weights}
             />
           </div>
+        </div>
         </div>
       </div>
     </div>

@@ -13,18 +13,6 @@
 // PLACEHOLDER — awaiting historical accept-vs-offer records:
 //   benchmark
 
-// Real reason codes from SSM's return records — replaces the earlier
-// invented Expiry / Transport Damage / Storage Issue / Supplier Defect
-// labels everywhere bad-order reasons are shown.
-export const BAD_ORDER_REASONS = [
-  'Packaging Defect (Torn/Deformed/Broken)',
-  'Order cancelled by customer',
-  'Overlanded/Shortlanded',
-  'Good – Full Return',
-  'Stock not available',
-  'Stock Recall',
-];
-
 // One LP solver run per cycle covers every principal at once — the header
 // status line is a fact about the run, not about whichever principal is
 // currently toggled, so it doesn't vary with the filter. solvedAt is NOT

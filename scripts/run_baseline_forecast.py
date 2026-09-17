@@ -783,12 +783,12 @@ CONFIDENCE_Z = 1.645
 
 def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float | None]:
     """forecast_value +/- CONFIDENCE_Z * rmse, using the SKU's OWN real
-    holdout RMSE from evaluate_baseline (rec["ma3_rmse"] in run_review_report
-    — already computed for the MASE gate, just never written to
-    Forecast_Result before now). None/None (not a fabricated band) when rmse
-    itself is None/NaN, e.g. a 1-point holdout. Lower is floored at 0 — real
-    demand can't be negative, and an unclipped band can dip below zero for a
-    small forecast_value with a wide rmse."""
+    holdout RMSE from evaluate_baseline (rec["ma3_rmse"], already computed
+    for the MASE gate and previously discarded rather than written to
+    Forecast_Result). None/None — never a fabricated band — when rmse is
+    itself None/NaN, e.g. a 1-point holdout. The lower bound is floored at
+    0: real demand can't be negative, and an unclipped band dips below zero
+    for a small forecast_value with a wide rmse."""
     rmse = _f(rmse)
     if rmse is None:
         return None, None
@@ -804,11 +804,11 @@ def _write_forecast_result(cur, df):
       status='ok'                -> forecast_value = MA3 one-step-ahead, refit on
                                     the SKU's FULL real series; MA3's holdout
                                     mape/mase in the columns; confidence_lower/
-                                    upper = forecast_value +/- CONFIDENCE_Z *
-                                    the SKU's own real holdout RMSE (see
-                                    _confidence_band — None/None if that RMSE
-                                    is itself None); ALL THREE methods'
-                                    metrics + oracle/rule picks in model_params.
+                                    upper = forecast_value +/- CONFIDENCE_Z * the
+                                    SKU's own holdout RMSE (see _confidence_band;
+                                    None/None if that RMSE is undefined); ALL
+                                    THREE methods' metrics + oracle/rule picks
+                                    in model_params.
       status='insufficient_data' -> forecast_value = trailing average of the real
                                     observed months, provisional=true, mape/mase
                                     NULL, mase_gate_passed null. LP fallback spec.
@@ -906,7 +906,6 @@ def _write_forecast_result(cur, df):
 
             if status == "ok":
                 f_val = max(0.0, one_step(DEPLOYED_METHOD, series))
-                ci_lower, ci_upper = _confidence_band(f_val, r["ma3_rmse"])
                 mp = {
                     **base_mp,
                     "method": DEPLOYED_METHOD,
@@ -930,6 +929,7 @@ def _write_forecast_result(cur, df):
                     "provisional": False,
                     "lp_input_method": "ma3_one_step",
                 }
+                ci_lower, ci_upper = _confidence_band(f_val, r["ma3_rmse"])
                 cur.execute(upsert, (
                     p_key, planning_date, float(f_val), ci_lower, ci_upper,
                     _clean_metric(r["ma3_mape"], 100.0), _clean_metric(r["ma3_mase"]),

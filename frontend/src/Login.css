@@ -5,10 +5,15 @@
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* Left Side - Branding */
+/* Left Side - Branding. Was flex:6 against the card's flex:4 — at a wide
+   viewport that left the logo floating in a large, otherwise-empty white
+   field. Evened to a 1:1 split and given the same warm-tinted ground the
+   rest of the app's page background now uses (--color-surface-raised),
+   rather than pure white, so this doesn't read as a colder, separate
+   product from the app behind it. */
 .login-left {
-  flex: 6;
-  background-color: #ffffff;
+  flex: 1;
+  background-color: var(--color-surface-raised);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -23,8 +28,8 @@
 }
 
 .logo-image {
-  width: 700px;
-  max-width: 90%;
+  width: 520px;
+  max-width: 72%;
   height: auto;
   animation: pulse 3s infinite ease-in-out;
 }
@@ -32,13 +37,46 @@
 .dashboard-title {
   color: #8c98a4;
   font-size: 1.1rem;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
 
-/* Right Side - Login */
+/* Names three concrete things the system does, so the panel reads as
+   "here's what you're signing into" rather than a logo on empty space.
+   Deliberately plain text, not icon cards — this is a login screen, not a
+   marketing page, so the restraint is the point. */
+.login-feature-list {
+  list-style: none;
+  margin: 1.75rem 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.login-feature-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--color-text-body);
+  font-size: 0.92rem;
+}
+
+.login-feature-list li::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-brand-primary);
+  flex-shrink: 0;
+}
+
+/* Right Side - Login — same navy as the app sidebar (--color-nav-bg),
+   now that the sidebar uses it too; this used to be the only place that
+   colour appeared. */
 .login-right {
-  flex: 4;
-  background-color: #1C2230;
+  flex: 1;
+  background-color: var(--color-nav-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -48,7 +86,7 @@
 }
 
 .login-card {
-  background: #ffffff;
+  background: var(--color-surface);
   border-radius: 16px;
   padding: 3.5rem 4rem;
   width: 100%;
@@ -61,14 +99,18 @@
 }
 
 .login-card h2 {
-  color: #1a202c;
+  color: var(--color-text);
   font-size: 2.2rem;
   font-weight: 700;
   margin: 0 0 0.5rem 0;
 }
 
+.login-card h2 .page-title-accent {
+  font-size: 2.3rem;
+}
+
 .subtitle {
-  color: #718096;
+  color: var(--color-text-muted);
   font-size: 1.1rem;
   margin: 0 0 2.5rem 0;
 }
@@ -88,11 +130,11 @@
 .input-group input {
   width: 100%;
   padding: 1.2rem 1.5rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   font-size: 1.1rem;
-  color: #2d3748;
-  background-color: #f7fafc;
+  color: var(--color-text-heading);
+  background-color: var(--color-surface-raised);
   transition: all 0.2s ease;
   box-sizing: border-box;
   font-family: inherit;
@@ -100,13 +142,13 @@
 
 .input-group input:focus {
   outline: none;
-  border-color: #cbd5e0;
-  background-color: #ffffff;
+  border-color: var(--color-border-strong);
+  background-color: var(--color-surface);
   box-shadow: 0 0 0 3px rgba(226, 232, 240, 0.5);
 }
 
 .input-group input::placeholder {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
 }
 
 .password-group input {
@@ -120,7 +162,7 @@
   transform: translateY(-50%);
   background: none;
   border: none;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   cursor: pointer;
   padding: 0;
   display: flex;
@@ -130,7 +172,7 @@
 }
 
 .toggle-password:hover {
-  color: #4a5568;
+  color: var(--color-text-body);
 }
 
 .toggle-password svg {
@@ -139,7 +181,7 @@
 }
 
 .submit-btn {
-  background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+  background: linear-gradient(135deg, var(--color-brand-accent) 0%, var(--color-brand-primary) 100%);
   color: white;
   border: none;
   border-radius: 10px;
@@ -167,9 +209,9 @@
 }
 
 .error-message {
-  color: #c53030;
-  background-color: #fff5f5;
-  border: 1px solid #feb2b2;
+  color: var(--color-brand-primary);
+  background-color: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
   border-radius: 10px;
   padding: 0.75rem 1rem;
   font-size: 0.95rem;
@@ -179,13 +221,14 @@
 }
 
 .auth-notice {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.9rem;
   margin: 2rem 0 0 0;
 }
 
 .help-text {
-  color: #4a5568;
+  /* Was --color-text-body (dark gray) on the navy login panel, barely readable. */
+  color: var(--color-nav-item);
   font-size: 0.9rem;
   margin-top: 2rem;
   position: absolute;
@@ -223,4 +266,19 @@
     position: static;
     margin-top: 1.5rem;
   }
+}
+
+/* Explains an involuntary sign-out (expired/rejected token). Deliberately
+   informational blue rather than .error-message's red — the user didn't do
+   anything wrong, their session simply timed out. */
+.session-expired-message {
+  color: #1e40af;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
 }

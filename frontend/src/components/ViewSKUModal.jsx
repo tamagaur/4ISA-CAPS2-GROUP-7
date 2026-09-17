@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { X } from 'lucide-react';
+import Modal from './Modal';
 import './ViewSKUModal.css';
 
 // Helper to format SKU Code (e.g. SKU-10234)
@@ -31,26 +32,10 @@ const getCatClass = (cat) => {
 };
 
 const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
-  // Listen for Escape key press to dismiss modal
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
+  // Escape-to-close now comes from the shared <Modal> shell below, along
+  // with focus trapping and role="dialog".
   if (!isOpen || !sku) return null;
 
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
 
   // Helper to format currency
   const formatCurrency = (val) => {
@@ -61,8 +46,13 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
   };
 
   return (
-    <div className="view-sku-modal-overlay" onClick={handleOverlayClick}>
-      <div className="view-sku-modal-card">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      label="SKU details"
+      overlayClassName="view-sku-modal-overlay"
+      containerClassName="view-sku-modal-card"
+    >
         {/* Header */}
         <div className="view-sku-modal-header">
           <h3 className="view-sku-product-title">{sku.product}</h3>
@@ -187,8 +177,7 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
             Edit SKU
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

@@ -24,15 +24,31 @@
   gap: 0.75rem;
 }
 
+.reorder-cycle-latest {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background-color: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
 .reorder-page-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   margin: 0 0 0.3rem 0;
 }
 
+.reorder-page-title .page-title-accent {
+  font-size: 2.1rem;
+}
+
 .reorder-page-subtitle {
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   font-size: 0.85rem;
   margin: 0;
   letter-spacing: 0.02em;
@@ -46,9 +62,9 @@
   gap: 0.4rem;
   margin-bottom: 0.2rem;
   padding: 0.3rem;
-  background-color: #f8fafc;
+  background-color: var(--color-surface-raised);
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   width: fit-content;
   max-width: 100%;
 }
@@ -73,19 +89,19 @@
 
 .reorder-tab-btn:hover:not(.active) {
   color: #1d4ed8;
-  background-color: #e2e8f0;
+  background-color: var(--color-border);
 }
 
 .reorder-tab-btn.active {
-  background-color: #ffffff;
-  border-color: #e2e8f0;
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
   color: #1e3a8a;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .reorder-tab-count {
-  background-color: #c53030;
-  color: #ffffff;
+  background-color: var(--color-brand-primary);
+  color: var(--color-surface);
   font-size: 0.65rem;
   font-weight: 700;
   padding: 0.1rem 0.4rem;
@@ -101,33 +117,36 @@
 }
 
 .reorder-summary-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 12px;
   padding: 1.2rem 1.5rem;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
 }
 
-/* Colored borders top and left */
+/* Colored borders top and left — same severity tokens as the urgency
+   badges below, so "critical" means the same colour everywhere on this
+   page instead of the card borrowing brand-accent and the badge borrowing
+   a separate, unrelated red. */
 .card-red {
-  border-left: 3px solid #e53e3e;
-  border-top: 3px solid #e53e3e;
+  border-left: 3px solid var(--color-severity-critical);
+  border-top: 3px solid var(--color-severity-critical);
 }
 .card-yellow {
-  border-left: 3px solid #d69e2e;
-  border-top: 3px solid #d69e2e;
+  border-left: 3px solid var(--color-severity-urgent);
+  border-top: 3px solid var(--color-severity-urgent);
 }
 .card-blue {
-  border-left: 3px solid #3182ce;
-  border-top: 3px solid #3182ce;
+  border-left: 3px solid var(--color-info);
+  border-top: 3px solid var(--color-info);
 }
 .card-green {
-  border-left: 3px solid #38a169;
-  border-top: 3px solid #38a169;
+  border-left: 3px solid var(--color-success-ui);
+  border-top: 3px solid var(--color-success-ui);
 }
 
 .card-content {
@@ -140,7 +159,7 @@
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   text-transform: uppercase;
   margin-bottom: 0.2rem;
 }
@@ -148,266 +167,54 @@
 .reorder-card-value {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--color-text);
   line-height: 1.1;
 }
 
 .reorder-card-desc {
   font-size: 0.75rem;
-  color: #a0aec0;
+  color: var(--color-text-subtle);
   margin-top: 0.3rem;
 }
 
 /* Table */
-.reorder-table-wrapper {
-  background-color: #ffffff;
-  border-radius: 12px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
-}
-
+/* Table base styles live in index.css (.data-table-card / .data-table). */
 .reorder-table {
-  width: 100%;
-  min-width: 900px;
-  border-collapse: collapse;
-  font-size: 0.78rem;
+  min-width: 1000px;
 }
 
-.reorder-table thead {
-  border-bottom: 2px solid #edf2f7;
-}
+/* Row-level severity marker — see getUrgencyRowClass in the .jsx. Real
+   data here runs heavily CRITICAL, so a pill in one column isn't enough
+   to scan. Drawn as an inset shadow on the first cell: a border-left on a
+   <tr> is unreliable under border-collapse and shifts the row's content. */
+.reorder-row-critical td:first-child { box-shadow: inset 3px 0 0 var(--color-severity-critical); }
+.reorder-row-urgent td:first-child   { box-shadow: inset 3px 0 0 var(--color-severity-urgent); }
+.reorder-row-planned td:first-child  { box-shadow: inset 3px 0 0 var(--color-severity-planned); }
 
-.reorder-table th {
-  text-align: center;
-  padding: 0.8rem 0.4rem;
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: #a0aec0;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.reorder-table tbody tr {
-  border-bottom: 1px solid #f7fafc;
-  transition: background-color 0.15s;
-}
-
-.reorder-table tbody tr:hover {
-  background-color: #f7fafc;
-}
-
-.reorder-table td {
-  padding: 0.6rem 0.4rem;
-  color: #4a5568;
-  vertical-align: middle;
-  text-align: center;
-}
-
-.reorder-sku-cell {
-  color: #3182ce;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.reorder-sku-cell:hover {
-  text-decoration: underline;
-}
-
-.reorder-product-cell {
-  font-weight: 500;
-  color: #1a202c;
-}
-
+/* Current stock against the reorder point: below half = critical, below
+   ROP = low. Weight carries part of the signal so it isn't color-only. */
 .reorder-stock-cell {
   font-weight: 500;
-  white-space: nowrap;
 }
 
-.reorder-qty-cell {
-  font-weight: 700;
-  color: #1a202c;
-  white-space: nowrap;
-}
-
-.reorder-qty-compare {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.15rem;
-}
-
-.reorder-qty-main {
-  font-size: 0.9rem;
-}
-
-.reorder-qty-baseline {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-  font-size: 0.65rem;
+.reorder-stock-critical {
+  color: var(--color-severity-critical);
   font-weight: 600;
-  color: #2E9E5B;
-  white-space: nowrap;
 }
 
-.reorder-qty-down-icon {
-  color: #2E9E5B;
-}
-
-.th-sub {
-  display: block;
-  font-size: 0.55rem;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  color: #cbd5e1;
-  margin-top: 0.15rem;
+.reorder-stock-low {
+  color: var(--color-severity-urgent);
+  font-weight: 600;
 }
 
 /* Decision Log */
-.reorder-log-table td {
-  text-align: center;
-}
-
-.reorder-log-when {
-  white-space: nowrap;
-  font-size: 0.72rem;
-  color: #718096;
-}
-
 .reorder-log-reason {
-  max-width: 260px;
-  text-align: left !important;
-  color: #4a5568;
-  font-size: 0.75rem;
+  max-width: 320px;
+  font-size: 0.8rem;
   line-height: 1.4;
 }
 
-.reorder-log-user {
-  font-size: 0.75rem;
-  color: #3182ce;
-  white-space: nowrap;
-}
-
-.reorder-log-empty {
-  padding: 2.5rem 1rem !important;
-  color: #a0aec0;
-  font-size: 0.85rem;
-  font-style: italic;
-}
-
-.reorder-no-results {
-  padding: 2.5rem 1rem !important;
-  color: #a0aec0;
-  font-size: 0.85rem;
-  font-style: italic;
-  text-align: center;
-}
-
-.reorder-grain-note {
-  margin: -0.5rem 0 0 0;
-  padding: 0.6rem 0.9rem;
-  background-color: #f7fafc;
-  border-radius: 8px;
-  font-size: 0.72rem;
-  color: #718096;
-  line-height: 1.4;
-}
-
-.reorder-cost-cell {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* Urgency Badges */
-.urgency-badge {
-  display: inline-block;
-  padding: 0.3rem 0.8rem;
-  border-radius: 4px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-}
-
-.badge-critical {
-  background-color: #fff5f5;
-  color: #e53e3e;
-}
-
-.badge-urgent {
-  background-color: #fffff0;
-  color: #d69e2e;
-}
-
-.badge-planned {
-  background-color: #f0fff4;
-  color: #38a169;
-}
-
-/* Action Buttons */
-.details-btn {
-  background: transparent;
-  border: 1px solid #e53e3e;
-  color: #e53e3e;
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.3rem 0.8rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-  display: inline-block;
-}
-
-.details-btn:hover {
-  background-color: #fff5f5;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 0.4rem;
-  justify-content: center;
-}
-
-.action-btn {
-  font-size: 0.7rem;
-  font-weight: 500;
-  padding: 0.3rem 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
-  outline: none;
-  white-space: nowrap;
-}
-
-.accept-btn {
-  background-color: #e6f4ea;
-  border: 1px solid #ceead6;
-  color: #137333;
-}
-
-.accept-btn:hover {
-  background-color: #d2ecd5;
-}
-
-.dismiss-btn {
-  background-color: #fce8e6;
-  border: 1px solid #fad2cf;
-  color: #c5221f;
-}
-
-.dismiss-btn:hover {
-  background-color: #f9d2cd;
-}
-
-/* Action Status */
+/* Action Status (row being saved, or already decided) */
 .action-status-container {
   display: flex;
   align-items: center;
@@ -418,7 +225,7 @@
 
 .spinner-icon {
   animation: spin 1s linear infinite;
-  color: #3182ce;
+  color: var(--color-info);
 }
 
 @keyframes spin {
@@ -428,27 +235,8 @@
 
 .loading-text {
   font-size: 0.75rem;
-  color: #718096;
+  color: var(--color-text-muted);
   font-style: italic;
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 0.3rem 0.8rem;
-  border-radius: 4px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #ffffff;
-}
-
-.status-accepted {
-  background-color: #38a169;
-}
-
-.status-dismissed {
-  background-color: #e53e3e;
 }
 
 /* Responsive */
@@ -468,3 +256,94 @@
 }
 
 
+
+/* Accept confirmation. Deliberately lighter than OverrideReasonModal's
+   dismiss flow (no typed justification) — accepting the LP's own
+   recommendation is the expected path, it just shouldn't be a single
+   unguarded click when the adjacent Dismiss button demands a written
+   reason. Mirrors UserManagement's confirm-card shape. */
+.reorder-accept-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 1rem;
+}
+
+.reorder-accept-card {
+  background-color: var(--color-surface);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.6rem;
+  text-align: center;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.25);
+}
+
+.reorder-accept-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 0.9rem auto;
+  border-radius: 50%;
+  background-color: var(--color-success-bg);
+  color: var(--color-success-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reorder-accept-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.reorder-accept-body {
+  margin: 0 0 1.3rem 0;
+  font-size: 0.85rem;
+  color: var(--color-text-body);
+  line-height: 1.5;
+}
+
+.reorder-accept-actions {
+  display: flex;
+  gap: 0.7rem;
+}
+
+.reorder-accept-cancel,
+.reorder-accept-confirm {
+  flex: 1;
+  padding: 0.6rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.reorder-accept-cancel {
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
+}
+
+.reorder-accept-cancel:hover {
+  background-color: var(--color-surface-muted);
+}
+
+.reorder-accept-confirm {
+  border: none;
+  background-color: var(--color-success-deep);
+  color: var(--color-surface);
+}
+
+.reorder-accept-confirm:hover {
+  background-color: #276749;
+}

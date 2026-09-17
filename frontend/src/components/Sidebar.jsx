@@ -1,19 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   List, 
   Layers, 
-  TrendingUp, 
-  RotateCcw, 
-  AlertTriangle, 
+  TrendingUp,
+  RotateCcw,
   Upload,
   LogOut,
   X,
   ClipboardList,
   Users
 } from 'lucide-react';
-import { logout, getCurrentUser } from '../auth';
+import { logout, getCurrentUser, API_URL } from '../auth';
+import Modal from './Modal';
 import './Sidebar.css';
 
 // Initials for the bottom-profile avatar, e.g. "Audrey Bugayong" -> "AB".
@@ -39,7 +39,6 @@ const navSections = [
       { name: 'SKU Management', icon: List, path: '/sku-management' },
       { name: 'ABC Classification', icon: Layers, path: '/abc' },
       { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
-      { name: 'Bad Orders', icon: AlertTriangle, path: '/bad-orders' },
     ],
   },
   {
@@ -52,7 +51,26 @@ const navSections = [
   },
 ];
 
+const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SYS ONLINE', offline: 'SYS OFFLINE' };
+
 const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
+
+  // Real backend reachability, re-checked every minute.
+  const [apiStatus, setApiStatus] = useState('checking');
+  useEffect(() => {
+    let cancelled = false;
+    const check = () => {
+      fetch(`${API_URL}/health`)
+        .then((res) => { if (!cancelled) setApiStatus(res.ok ? 'online' : 'offline'); })
+        .catch(() => { if (!cancelled) setApiStatus('offline'); });
+    };
+    check();
+    const id = setInterval(check, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const currentUser = getCurrentUser();
@@ -88,17 +106,15 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
       <aside className={`sidebar ${isOpen ? '' : 'sidebar-hidden'}`}>
-        {/* Top Profile */}
+        {/* App identity — the real SAN2 logo (cropped to its own content
+            bounding box in public/logo-navbar.png; the source logo.png is a
+            1920x1080 canvas with the mark filling only the middle ~627px,
+            so using it uncropped here left the sidebar version tiny with
+            huge dead padding above/below it) instead of a text lockup that
+            just repeated the company name reworded. The "who am I" identity
+            still lives only in .sidebar-bottom, unchanged. */}
         <div className="sidebar-profile-top">
-          <div className="avatar red-avatar">S</div>
-          <div className="profile-info">
-            <span className="profile-name">San San</span>
-            <span className="profile-role">Marketing</span>
-          </div>
-        </div>
-
-        <div className="sidebar-version">
-          <span className="version-text">INVENTORY DSS - v2.0</span>
+          <img src="/logo-navbar.png" alt="SAN2 Corporation" className="sidebar-logo" />
         </div>
 
         {/* Navigation */}
@@ -144,19 +160,14 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
             </div>
           </div>
           
+          {/* Was a hardcoded green "SYS ONLINE" (shown even with the backend
+              down) next to the computer's real date, which disagreed with the
+              app's own "today" (Feb 2026). Now reflects GET /health. */}
           <div className="sidebar-status">
-            <div className="status-indicator">
+            <div className={`status-indicator status-${apiStatus}`} role="status">
               <span className="status-dot"></span>
-              <span className="status-text">SYS ONLINE</span>
+              <span className="status-text">{API_STATUS_LABEL[apiStatus]}</span>
             </div>
-            <span className="status-date">
-              {(() => {
-                const today = new Date();
-                const day = today.getDate().toString().padStart(2, '0');
-                const month = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][today.getMonth()];
-                return `${month}-${day}`;
-              })()}
-            </span>
           </div>
 
           <button className="logout-btn" onClick={() => setShowLogoutModal(true)}>
@@ -168,14 +179,19 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
 
       {/* Logout Confirmation Modal Popup */}
       {showLogoutModal && (
-        <div className="logout-modal-overlay" onClick={() => setShowLogoutModal(false)}>
-          <div className="logout-modal-card" onClick={(e) => e.stopPropagation()}>
+        <Modal
+          isOpen={showLogoutModal}
+          onClose={() => setShowLogoutModal(false)}
+          label="Log out confirmation"
+          overlayClassName="logout-modal-overlay"
+          containerClassName="logout-modal-card"
+        >
             <div className="logout-modal-header">
               <div className="logout-modal-icon-wrap">
-                <LogOut size={20} color="#c53030" />
+                <LogOut size={20} color="var(--color-brand-primary)" />
               </div>
               <h3 className="logout-modal-title">Log Out Confirmation</h3>
-              <button className="logout-modal-close" onClick={() => setShowLogoutModal(false)}>
+              <button className="logout-modal-close" onClick={() => setShowLogoutModal(false)} aria-label="Close">
                 <X size={18} />
               </button>
             </div>
@@ -190,8 +206,7 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
                 Log Out
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );
