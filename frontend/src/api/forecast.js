@@ -1,10 +1,16 @@
 import { apiFetch } from '../auth';
 import { cachedRequest } from './cache';
+import { appendPrincipal } from '../principals';
 
-// Unilever-only (2026-09): no more principal param — the backend always
-// resolves sku_id against Unilever now.
-export function getForecast(skuId) {
-  const path = `/forecast/${encodeURIComponent(skuId)}`;
+// principal ('all' | 'unilever' | 'delmonte') restored 2026-09-17 — see
+// src/principals.js. It scopes which principal's product the sku_code
+// resolves to: sku_code is NOT unique across principals in
+// product_dimension, so an unscoped lookup could match either one's row.
+export function getForecast(skuId, { principal } = {}) {
+  const query = new URLSearchParams();
+  appendPrincipal(query, principal);
+  const qs = query.toString();
+  const path = `/forecast/${encodeURIComponent(skuId)}${qs ? `?${qs}` : ''}`;
 
   return cachedRequest(path, async () => {
     const res = await apiFetch(path);

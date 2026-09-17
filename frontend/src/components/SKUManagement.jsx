@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter } from 'lucide-react';
 import AddSKUModal from './AddSKUModal';
 import { useToast } from './ToastProvider';
@@ -17,6 +18,9 @@ import './SKUManagement.css';
 // an odd "(65G)" line while most identical-looking names didn't.
 
 const SKUManagement = () => {
+  // Shared principal scope (Topbar's segmented control) — the SKU list
+  // reloads whenever it changes, via loadSKUs' effect dep below.
+  const { principal } = useOutletContext() || {};
   const [rawItems, setRawItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -24,7 +28,7 @@ const SKUManagement = () => {
   const loadSKUs = () => {
     setLoading(true);
     setError(null);
-    return getSKUs({})
+    return getSKUs({ principal })
       .then((res) => {
         setRawItems(res.items || []);
       })
@@ -37,7 +41,7 @@ const SKUManagement = () => {
   useEffect(() => {
     loadSKUs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [principal]);
 
   // Map API shape -> the row shape the rest of this page renders.
   const skus = useMemo(

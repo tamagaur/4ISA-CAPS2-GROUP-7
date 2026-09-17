@@ -6,6 +6,7 @@ import Topbar from './Topbar';
 import { preloadPages } from '../pageLoaders';
 import { invalidateCache } from '../api/cache';
 import DataFreshness from './DataFreshness';
+import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal } from '../principals';
 import './DashboardLayout.css';
 
 const PageLoadingFallback = () => (
@@ -107,6 +108,22 @@ const DashboardLayout = () => {
   const [pendingStartYear, setPendingStartYear] = useState(startYear);
   const [pendingEndMonth, setPendingEndMonth] = useState(endMonth);
   const [pendingEndYear, setPendingEndYear] = useState(endYear);
+
+  // Principal scope ('all' | 'unilever' | 'delmonte'), shared by every
+  // page the same way the date range is. Read back from localStorage on
+  // mount, but validated first — a stale or hand-edited value would
+  // otherwise be sent straight to the backend, which 400s on anything
+  // outside its allowlist.
+  const [principal, setPrincipalState] = useState(() => {
+    const stored = localStorage.getItem(PRINCIPAL_STORAGE_KEY);
+    return isValidPrincipal(stored) ? stored : DEFAULT_PRINCIPAL;
+  });
+
+  const setPrincipal = (next) => {
+    if (!isValidPrincipal(next)) return;
+    setPrincipalState(next);
+    localStorage.setItem(PRINCIPAL_STORAGE_KEY, next);
+  };
 
   // Navigation Interception State
   const [navTarget, setNavTarget] = useState(null);
@@ -255,6 +272,8 @@ const DashboardLayout = () => {
           handleResetToToday={handleResetToToday}
           realWorldMonth={realWorldPeriod.month}
           realWorldYear={realWorldPeriod.year}
+          principal={principal}
+          setPrincipal={setPrincipal}
         />
         <Suspense fallback={<PageLoadingFallback />}>
           <Outlet key={refreshKey} context={{
@@ -266,6 +285,7 @@ const DashboardLayout = () => {
             isPending, isPendingRangeValid, isPendingRangeLongEnough, canApplyPendingPeriod,
             handleApplyPeriod, handleResetToToday,
             updatePeriodImmediately, realWorldPeriod,
+            principal, setPrincipal,
           }} />
         </Suspense>
       </div>

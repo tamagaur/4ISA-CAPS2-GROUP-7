@@ -146,6 +146,8 @@ const SKUForecast = () => {
   // up on the NEXT visit without this page's own pick ever leaking to
   // any other page in the meantime.
   const dashboardRange = useOutletContext() || {};
+  // Shared principal scope (Topbar's segmented control).
+  const { principal } = dashboardRange;
   const [localRange, setLocalRange] = useState(() => ({
     startMonth: dashboardRange.startMonth,
     startYear: dashboardRange.startYear,
@@ -181,7 +183,7 @@ const SKUForecast = () => {
     let cancelled = false;
     setListLoading(true);
     setListError(null);
-    getABCClassification({})
+    getABCClassification({ principal })
       .then((res) => {
         if (cancelled) return;
         setRawItems(res.items || []);
@@ -194,7 +196,7 @@ const SKUForecast = () => {
         if (!cancelled) setListLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [principal]);
 
   // Map ABC classification rows -> the SKU-picker shape this page renders.
   const sourceSKUs = useMemo(
@@ -351,7 +353,7 @@ const SKUForecast = () => {
     let cancelled = false;
     setForecastLoading(true);
     setForecastError(null);
-    getForecast(selectedSKU.code)
+    getForecast(selectedSKU.code, { principal })
       .then((res) => {
         if (cancelled) return;
         setForecastResult(res);
@@ -364,7 +366,7 @@ const SKUForecast = () => {
         if (!cancelled) setForecastLoading(false);
       });
     return () => { cancelled = true; };
-  }, [selectedSKU]);
+  }, [selectedSKU, principal]);
 
   // Combine real trailing actuals + real forecast horizon into one chart
   // series. It now dynamically fills missing months between the first and last

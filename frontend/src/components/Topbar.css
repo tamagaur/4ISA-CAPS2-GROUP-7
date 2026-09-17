@@ -112,3 +112,94 @@
     padding: 0.85rem 1rem;
   }
 }
+
+/* ── Principal filter ─────────────────────────────────────────────────
+   Restored 2026-09-17 with the Del Monte scope (removed in c4be61c).
+   Styles are the pre-removal ones verbatim, so the control looks the
+   same as it did before rather than being a second, slightly-off
+   reimplementation. The segmented control and the native select are a
+   responsive pair — exactly one is visible at any width (see the
+   640px breakpoint below). */
+.principal-filter {
+  display: flex;
+  align-items: center;
+}
+
+.principal-segmented {
+  display: flex;
+  background-color: #f1f5f9;
+  border-radius: 20px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.principal-segment {
+  border: none;
+  background: none;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4a5568;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.principal-segment:hover {
+  color: #1a202c;
+}
+
+.principal-segment.active {
+  background-color: #ffffff;
+  color: #c53030;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.principal-dropdown {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .principal-segmented {
+    display: none;
+  }
+  .principal-dropdown {
+    display: block;
+  }
+}
+
+.dropdown-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #f1f5f9;
+  border: none;
+  border-radius: 20px;
+  padding: 0.4rem 2rem 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  color: #4a5568;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.2s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5568' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 12px;
+}
+
+.dropdown-select:hover {
+  background-color: #e2e8f0;
+}
+
+.period-selector-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dropdown-select.dropdown-pending {
+  border: 1.5px solid #c53030;
+  background-color: #fff5f5;
+  box-shadow: 0 0 0 2px rgba(197, 48, 48, 0.12);
+}

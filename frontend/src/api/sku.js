@@ -1,11 +1,15 @@
 import { apiFetch } from '../auth';
 import { cachedRequest, invalidateCache } from './cache';
+import { appendPrincipal } from '../principals';
 
-// Unilever-only (2026-09): no more principal param — the backend always
-// scopes to Unilever now.
-export function getSKUs({ status } = {}) {
+// principal ('all' | 'unilever' | 'delmonte') restored 2026-09-17 — see
+// src/principals.js. Both principals have real product_dimension rows, so
+// every scope returns data here; note they differ in grain (DEC-03), so an
+// 'all' list mixes SKU- and category-grain rows by design.
+export function getSKUs({ status, principal } = {}) {
   const query = new URLSearchParams();
   if (status) query.append('status', status);
+  appendPrincipal(query, principal);
   const path = `/sku?${query.toString()}`;
 
   return cachedRequest(path, async () => {

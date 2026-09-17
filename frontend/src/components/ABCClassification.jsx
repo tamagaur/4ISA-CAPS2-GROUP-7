@@ -136,6 +136,9 @@ const ABCClassification = () => {
   // and never writes back to the shared range (same local-state pattern
   // as SKUForecast.jsx's own picker).
   const dashboardRange = useOutletContext() || {};
+  // Shared principal scope (Topbar's segmented control). Refetches on
+  // change via this page's load effect deps.
+  const { principal } = dashboardRange;
   const [selectedMonth, setSelectedMonth] = useState(() => ({
     month: dashboardRange.endMonth,
     year: dashboardRange.endYear,
@@ -187,7 +190,7 @@ const ABCClassification = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getABCClassification({ classification_period: requestedPeriod })
+    getABCClassification({ classification_period: requestedPeriod, principal })
       .then((res) => {
         if (cancelled) return;
         setRawData(res.items || []);
@@ -203,7 +206,7 @@ const ABCClassification = () => {
     return () => {
       cancelled = true;
     };
-  }, [requestedPeriod]);
+  }, [requestedPeriod, principal]);
 
   // GET /abc has no brand field; this was hardcoded 'Unilever' (the
   // principal) on every row. Real brand comes from the product master.
