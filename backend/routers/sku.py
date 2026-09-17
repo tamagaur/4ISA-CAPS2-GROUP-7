@@ -8,6 +8,11 @@ applied (unit_price/lead_time_days/status/notes on Product_Dimension).
 current_stock, reorder_point, and tier are read-only derived fields (latest
 Inventory_Fact_Real period, latest pending LP_Recommendation, latest
 ABC_Classification period respectively) — never written here.
+
+Fixed 2026-09-17: the tier subquery had no ABC_Classification.method
+filter, so once migration 0017's t3m rows landed in public every product
+joined to two tier rows (one per method), duplicating list rows. Filtered
+to method = 'single', the deployed basis.
 """
 from __future__ import annotations
 
@@ -52,6 +57,7 @@ _SELECT_ONE = """
         SELECT product_key, tier
         FROM abc_classification
         WHERE classification_period = (SELECT MAX(classification_period) FROM abc_classification)
+          AND method = 'single'
     ) abc ON abc.product_key = pd.product_key
 """
 

@@ -44,6 +44,12 @@ hardcoded to `ac.principal = 'unilever'`, including the latest-period
 lookup (ABC_Classification carries both principals, so an unfiltered
 MAX(classification_period) could resolve to a period Unilever has no
 rows for at all).
+
+Fixed 2026-09-17: migration 0017 added `method` ('single'/'t3m') so both
+classification bases can coexist per (product_key, classification_period)
+— this endpoint's query had no `method` filter, so every SKU was returned
+twice (once per method) the moment t3m rows landed in public. Filtered to
+`ac.method = 'single'`, the deployed basis, until Phase 3 says otherwise.
 """
 from __future__ import annotations
 
@@ -116,7 +122,7 @@ def get_abc(
             WHERE status = 'pending'
             ORDER BY product_key, planning_cycle_date DESC
         ) rop ON rop.product_key = ac.product_key
-        WHERE ac.classification_period = :period AND ac.principal = 'unilever'
+        WHERE ac.classification_period = :period AND ac.principal = 'unilever' AND ac.method = 'single'
         ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST
     """
     params: dict = {"period": period}

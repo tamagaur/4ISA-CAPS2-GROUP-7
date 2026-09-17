@@ -21,6 +21,14 @@ at the schema level (see analytics/db/schema.sql's CHECK constraints) and
 are no longer queried here at all — not filtered, removed, since a filtered
 query against them would only ever return zero rows.
 
+Fixed 2026-09-17: migration 0017 added ABC_Classification.method
+('single'/'t3m') so both classification bases can coexist per
+(product_key, classification_period) — every ABC_Classification query in
+this file (safety_stock_rate, abc_mix, tier_stock) had no method filter,
+so each product_key was double-counted the moment t3m rows landed in
+public (abc_mix's revenue_share summing past 100% was the visible
+symptom). All three now filter to method = 'single', the deployed basis.
+
 Honest-null policy (matches the frontend's null-handling contract — a null
 value means "cannot honestly compute this", never a guess or a fabricated
 zero):
@@ -629,6 +637,7 @@ def get_dashboard(
                     ORDER BY product_key, planning_cycle_date DESC
                 ) rop ON rop.product_key = ac.product_key
                 WHERE ac.classification_period = :period AND ac.tier = 'A' AND ac.principal = 'unilever'
+                  AND ac.method = 'single'
             """),
             {"period": abc_period},
         ).mappings().all()
@@ -684,7 +693,7 @@ def get_dashboard(
             text("""
                 SELECT tier, COUNT(*) AS cnt, SUM(revenue_share) AS rev_share_sum
                 FROM ABC_Classification
-                WHERE classification_period = :period AND principal = 'unilever'
+                WHERE classification_period = :period AND principal = 'unilever' AND method = 'single'
                 GROUP BY tier
             """),
             {"period": abc_period},
@@ -719,6 +728,7 @@ def get_dashboard(
                     GROUP BY product_key
                 ) inv ON inv.product_key = ac.product_key
                 WHERE ac.classification_period = :period AND ac.principal = 'unilever'
+                  AND ac.method = 'single'
             """),
             {"period": abc_period},
         ).mappings().all()
@@ -743,7 +753,7 @@ def get_dashboard(
                 SELECT ac.tier, COUNT(DISTINCT lr.product_key) AS cnt
                 FROM ABC_Classification ac
                 JOIN LP_Recommendation lr ON lr.product_key = ac.product_key AND lr.status = 'pending'
-                WHERE ac.classification_period = :period AND ac.principal = 'unilever'
+                WHERE ac.classification_period = :period AND ac.principal = 'unilever' AND ac.method = 'single'
                 GROUP BY ac.tier
             """),
             {"period": abc_period},
