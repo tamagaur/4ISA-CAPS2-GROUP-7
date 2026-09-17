@@ -512,6 +512,49 @@ CREATE TABLE IF NOT EXISTS ABC_Classification (
 
 CREATE INDEX IF NOT EXISTS ix_abc_classification_tier ON ABC_Classification (tier, classification_period);
 
+-- sku_traits / sku_segment added by migration 0018 (2026-09-17, Phase 2
+-- binning Round 1 — reports/BINNING_ROUND1_2026-09.md). BINS ONLY: no
+-- model runs, no MASE, no model assignment written here — that is Phase 3.
+-- sku_traits is computed once per (product_key, cohort_period); sku_segment
+-- holds one row per (product_key, cohort_period, abc_method, scheme) so
+-- later schemes (trend_v1, volatility_v1, newness_v1, combined_v1) add rows
+-- here without touching sku_traits or the schema again.
+CREATE TABLE IF NOT EXISTS sku_traits (
+    trait_key               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    run_id                   TEXT NOT NULL,
+    principal                 TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
+    product_key                BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
+    cohort_period                TEXT NOT NULL,
+    history_months                INT NOT NULL,   -- months with quantity_sold > 0
+    first_sale_period               TEXT,
+    longest_run                      INT NOT NULL,
+    trend                              TEXT NOT NULL CHECK (trend IN ('up', 'down', 'none')),  -- Mann-Kendall, p < 0.05
+    cv                                  NUMERIC,
+    restart_flag                        BOOLEAN NOT NULL DEFAULT FALSE,
+    stability_group                      TEXT NOT NULL CHECK (stability_group IN ('all_38', 'at_least_30', 'churn')),
+    revenue_share_2026_02                 NUMERIC(7,4),
+    computed_at                            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (product_key, cohort_period)
+);
+
+CREATE TABLE IF NOT EXISTS sku_segment (
+    segment_key              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    run_id                     TEXT NOT NULL,
+    principal                   TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
+    product_key                  BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
+    sku_code                       TEXT,
+    cohort_period                    TEXT NOT NULL,
+    abc_method                        TEXT NOT NULL DEFAULT 'single' CHECK (abc_method IN ('single', 't3m')),
+    scheme                              TEXT NOT NULL,
+    bin                                  TEXT NOT NULL,
+    bin_reason                            TEXT NOT NULL,
+    computed_at                            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (product_key, cohort_period, abc_method, scheme)
+);
+
+CREATE INDEX IF NOT EXISTS ix_sku_segment_scheme_bin ON sku_segment (scheme, bin);
+CREATE INDEX IF NOT EXISTS ix_sku_traits_cohort ON sku_traits (cohort_period, principal);
+
 -- Category A only (MAPE < 20% gate, per README pipeline diagram) -
 -- Unilever SKU grain, since SARIMA per DEC-03 only runs where real
 -- per-SKU demand exists.
