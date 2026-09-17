@@ -2,25 +2,29 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from backend.deps import TokenPayload, get_current_user, get_db
+from backend.principals import PrincipalQuery, principal_clause
 
 router = APIRouter(prefix="/bo-monitoring", tags=["bo-monitoring"])
 
 _WEEKDAY_NAMES = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"}
 
-# Unilever-only (2026-09) — see backend/routers/dashboard.py's module
-# docstring for the full reasoning. No more ?principal= param.
-_PRINCIPAL_FILTER = "AND principal = 'unilever'"
+# Both principals again (2026-09-17): the per-request scope comes from
+# ?principal= (backend/principals.py) instead of a module-level literal.
+# salesreturn_fact has 0 rows for either principal (the BO path is dead
+# upstream), so every scope returns empty until that source is loaded —
+# unchanged by this edit, just no longer masked by a Unilever filter.
 
 
 @router.get("")
 def get_bo_monitoring(
     from_date: str = Query(None, alias="from"),
     to_date: str = Query(None, alias="to"),
+    principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    principal_filter = _PRINCIPAL_FILTER
-    params = {}
+    principal_filter, params = principal_clause(principal, "principal")
+    params = dict(params)
 
     period_filter = ""
     if from_date and to_date:

@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
+from backend.principals import PrincipalQuery, principal_clause
 from backend.schemas.sku import SKUCreate, SKUItem, SKUListResponse, SKUUpdate
 
 router = APIRouter(prefix="/sku", tags=["sku"])
@@ -51,9 +52,17 @@ _SELECT_ONE = """
     LEFT JOIN (
         SELECT product_key, tier
         FROM abc_classification
-        WHERE classification_period = (SELECT MAX(classification_period) FROM abc_classification)
+        WHERE method = 'single'
+          AND classification_period = (
+              SELECT MAX(classification_period) FROM abc_classification WHERE method = 'single'
+          )
     ) abc ON abc.product_key = pd.product_key
 """
+# method='single' is load-bearing in BOTH places above (migration 0017):
+# a 't3m' run is live alongside 'single', so without it this subquery
+# returns two tier rows per product_key and the LEFT JOIN fans out —
+# silently DUPLICATING every row in the SKU list. Pinned in the inner
+# MAX() too, so the period resolved is one 'single' actually has.
 
 
 def _to_item(r) -> SKUItem:
@@ -77,13 +86,20 @@ def _to_item(r) -> SKUItem:
 @router.get("", response_model=SKUListResponse)
 def get_skus(
     status: str | None = Query(None, description="Filter to 'ACTIVE' or 'DISABLED'. Omit for both."),
+    principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> SKUListResponse:
-    # Unilever-only (2026-09) — see backend/routers/dashboard.py's module
-    # docstring for the full reasoning.
-    query = _SELECT_ONE + " WHERE pd.principal = 'unilever'"
-    params: dict = {}
+    # Both principals again (2026-09-17) — see backend/principals.py.
+    # Unlike the ABC/forecast endpoints, Del Monte DOES have real rows
+    # here (15,127 sku-grain + 182 category-grain product_dimension rows),
+    # so ?principal=delmonte returns genuine data rather than an empty
+    # list. Note the two principals differ in grain (DEC-03), so an
+    # unfiltered 'all' list legitimately mixes SKU- and category-grain
+    # rows — that's the real shape of the product master, not a defect.
+    scope_sql, scope_params = principal_clause(principal, "pd.principal")
+    query = _SELECT_ONE + " WHERE 1=1" + scope_sql
+    params: dict = {**scope_params}
     if status:
         query += " AND pd.status = :status"
         params["status"] = status

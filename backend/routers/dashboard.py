@@ -217,6 +217,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
+from backend.principals import PrincipalQuery, normalize_principal
 from backend.routers.recommendations import _SELECT_ONE as _RECOMMENDATION_SELECT_ONE
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 
@@ -260,17 +261,68 @@ _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON = (
 _URGENCY_RANK = {"CRITICAL": 0, "URGENT": 1, "PLANNED": 2}
 
 
-def _latest_sales_period(db: Session) -> str | None:
-    """The most recent real 'YYYY-MM' in Unilever_SKU_Demand_Fact_Real —
-    the anchor _last_12_periods() uses. None only if the table is
-    completely empty."""
-    row = db.execute(text(
-        "SELECT MAX(calendar_month) AS p FROM Unilever_SKU_Demand_Fact_Real"
-    )).mappings().first()
-    return row["p"] if row else None
+def _scope_label(principal: str) -> str:
+    """Human wording for blocked_reason strings, so a null explains WHICH
+    scope produced it ('...for delmonte' vs a bare '...for unilever' that
+    used to be hardcoded and would now be a lie under another scope)."""
+    return "all principals" if principal == "all" else principal
 
 
-def _resolve_sales_anchor(db: Session, end_override: str | None) -> str:
+def _combine_principal_sums(
+    periods: list[str],
+    unilever: dict[str, float | None],
+    delmonte: dict[str, float | None],
+    principal: str,
+) -> dict[str, float | None]:
+    """Combines two independently-sourced per-principal period dicts.
+
+    Restored verbatim from the pre-2026-09 Del Monte implementation
+    (commit c4be61c^) — the rule it encodes is the reason it exists:
+
+    principal='unilever'/'delmonte': pass that source straight through.
+    principal='all': a period's combined value requires BOTH sides to be
+    real (non-None) — if either principal has no honest figure for a
+    period, the 'all' total for that period is None too, NOT the other
+    side's number treated as if it were the whole portfolio. Silently
+    summing whichever side happens to have data would misrepresent a
+    partial total as complete (the exact fabrication this app's
+    honest-null convention exists to prevent)."""
+    if principal == "unilever":
+        return dict(unilever)
+    if principal == "delmonte":
+        return dict(delmonte)
+    combined: dict[str, float | None] = {}
+    for period in periods:
+        u, d = unilever.get(period), delmonte.get(period)
+        combined[period] = (u + d) if (u is not None and d is not None) else None
+    return combined
+
+
+def _latest_sales_period(db: Session, principal: str = "all") -> str | None:
+    """The most recent real 'YYYY-MM' of sales for `principal` — the anchor
+    _last_12_periods() uses. The two principals have DIFFERENT source
+    tables (DEC-03/DEC-10), so this is a source dispatch, not a filter:
+    Unilever_SKU_Demand_Fact_Real for Unilever, SellOut_Fact_Real for Del
+    Monte. Under 'all' the anchor is the later of the two, so a scope that
+    includes Unilever never silently rewinds to Del Monte's shorter
+    coverage (real through 2026-02 vs 2025-12 as of 2026-09-17)."""
+    candidates: list[str] = []
+    if principal in ("all", "unilever"):
+        row = db.execute(text(
+            "SELECT MAX(calendar_month) AS p FROM Unilever_SKU_Demand_Fact_Real"
+        )).mappings().first()
+        if row and row["p"]:
+            candidates.append(row["p"])
+    if principal in ("all", "delmonte"):
+        row = db.execute(text(
+            "SELECT MAX(_period) AS p FROM SellOut_Fact_Real"
+        )).mappings().first()
+        if row and row["p"]:
+            candidates.append(row["p"])
+    return max(candidates) if candidates else None
+
+
+def _resolve_sales_anchor(db: Session, end_override: str | None, principal: str = "all") -> str:
     """The 'YYYY-MM' to treat as the sales/stock trend's END: end_override
     (the date-range picker's applied end month/year) if given, else the
     most recent real sales period (_latest_sales_period), else today's
@@ -281,14 +333,14 @@ def _resolve_sales_anchor(db: Session, end_override: str | None) -> str:
     Falls back to today's date only if _latest_sales_period finds no sales
     data anywhere yet — never silently defaults to "today" over a real
     anchor that exists."""
-    anchor = end_override or _latest_sales_period(db)
+    anchor = end_override or _latest_sales_period(db, principal)
     if anchor:
         return anchor
     today = datetime.date.today()
     return f"{today.year:04d}-{today.month:02d}"
 
 
-def _last_12_periods(db: Session, anchor_override: str | None = None) -> list[str]:
+def _last_12_periods(db: Session, anchor_override: str | None = None, principal: str = "all") -> list[str]:
     """Last 12 calendar months as 'YYYY-MM', oldest first, ENDING AT
     _resolve_sales_anchor's result (real sales data, not today's wall-clock
     date, unless anchor_override or a real anchor is unavailable — see that
@@ -306,7 +358,7 @@ def _last_12_periods(db: Session, anchor_override: str | None = None) -> list[st
     (see get_dashboard: an applied start uses _month_range instead, the
     picker's actual full width) — this function's job is purely "no start
     given yet, what's a reasonable single-anchor default."""
-    anchor = _resolve_sales_anchor(db, anchor_override)
+    anchor = _resolve_sales_anchor(db, anchor_override, principal)
     today = datetime.date(int(anchor[:4]), int(anchor[5:7]), 1)
     periods = []
     for i in range(11, -1, -1):
@@ -366,17 +418,36 @@ def _query_period_sums(db: Session, sql: str, periods: list[str]) -> dict[str, f
     return result
 
 
-def _sales_by_period(db: Session, periods: list[str]) -> dict[str, float | None]:
-    """SUM(net_amount) per period from Unilever_SKU_Demand_Fact_Real
-    (product-mart demand fact — deliberately NOT Sales_Fact, which is
-    Del Monte-only invoice grain with no per-period demand-comparable
-    shape, and not SellOut_Fact_Real, which is also Del Monte-only)."""
-    return _query_period_sums(db, """
-        SELECT calendar_month AS period, SUM(net_amount) AS total
-        FROM Unilever_SKU_Demand_Fact_Real
-        WHERE calendar_month = ANY(:periods)
-        GROUP BY calendar_month
-    """, periods)
+def _sales_by_period(
+    db: Session, periods: list[str], principal: str = "unilever"
+) -> dict[str, float | None]:
+    """SUM(net_amount) per period, from each principal's own product-mart
+    demand fact: Unilever_SKU_Demand_Fact_Real for Unilever,
+    SellOut_Fact_Real for Del Monte.
+
+    Del Monte deliberately reads SellOut_Fact_Real and NOT Sales_Fact —
+    Sales_Fact is Del Monte-only INVOICE grain (DEC-10) with no
+    per-period demand-comparable shape. That choice is inherited from the
+    pre-2026-09 implementation, not re-litigated here."""
+    unilever = (
+        _query_period_sums(db, """
+            SELECT calendar_month AS period, SUM(net_amount) AS total
+            FROM Unilever_SKU_Demand_Fact_Real
+            WHERE calendar_month = ANY(:periods)
+            GROUP BY calendar_month
+        """, periods)
+        if principal in ("all", "unilever") else {p: None for p in periods}
+    )
+    delmonte = (
+        _query_period_sums(db, """
+            SELECT _period AS period, SUM(net_amount) AS total
+            FROM SellOut_Fact_Real
+            WHERE _period = ANY(:periods)
+            GROUP BY _period
+        """, periods)
+        if principal in ("all", "delmonte") else {p: None for p in periods}
+    )
+    return _combine_principal_sums(periods, unilever, delmonte, principal)
 
 
 # SUPPLIER-ALLOCATION PROXY — see sales_vs_stock[].received's docstring
@@ -386,53 +457,97 @@ def _sales_by_period(db: Session, periods: list[str]) -> dict[str, float | None]
 # drop the "(proxy for allocation)" wording at the two frontend call sites
 # that reference it (frontend/src/components/Charts.jsx's
 # SalesVsStockWidget), and nothing else in this file needs to change.
-def _received_by_period(db: Session, periods: list[str]) -> dict[str, float | None]:
-    """SUM(Purchase_Fact_Real.net_amount) per period, Unilever rows only —
-    Purchase_Fact carries both principals in one table (Purchase_Fact.
-    principal), so this is a straight WHERE filter, not a source swap."""
-    return _query_period_sums(db, """
-        SELECT _period AS period, SUM(net_amount) AS total
-        FROM Purchase_Fact_Real
-        WHERE principal = 'unilever' AND _period = ANY(:periods)
-        GROUP BY _period
-    """, periods)
+def _received_by_period(
+    db: Session, periods: list[str], principal: str = "unilever"
+) -> dict[str, float | None]:
+    """SUM(Purchase_Fact_Real.net_amount) per period. Unlike sales/soh,
+    both principals live in ONE table here (Purchase_Fact.principal), so
+    this is a straight WHERE filter rather than a source swap — but the
+    combine rule under 'all' is identical (both sides real, or null).
+
+    LIVE CAVEAT (2026-09-17): purchase_fact_real holds 499 Del Monte rows
+    and ZERO Unilever rows, so the Unilever side of this is null for every
+    period today. That is a genuine source gap, not a filter mistake — and
+    it means 'all' is null here too, by the both-sides-real rule."""
+    unilever = (
+        _query_period_sums(db, """
+            SELECT _period AS period, SUM(net_amount) AS total
+            FROM Purchase_Fact_Real
+            WHERE principal = 'unilever' AND _period = ANY(:periods)
+            GROUP BY _period
+        """, periods)
+        if principal in ("all", "unilever") else {p: None for p in periods}
+    )
+    delmonte = (
+        _query_period_sums(db, """
+            SELECT _period AS period, SUM(net_amount) AS total
+            FROM Purchase_Fact_Real
+            WHERE principal = 'delmonte' AND _period = ANY(:periods)
+            GROUP BY _period
+        """, periods)
+        if principal in ("all", "delmonte") else {p: None for p in periods}
+    )
+    return _combine_principal_sums(periods, unilever, delmonte, principal)
 
 
-def _latest_inventory_period(db: Session) -> str | None:
-    """Latest Inventory_Fact_Real._period among UNILEVER rows only —
+def _latest_inventory_period(db: Session, principal: str = "unilever") -> str | None:
+    """Latest Inventory_Fact_Real._period within the selected scope.
     Inventory_Fact_Real carries both principals, so an unfiltered MAX
-    could resolve to a period Unilever has no rows for at all."""
-    row = db.execute(text(
-        "SELECT MAX(_period) AS p FROM Inventory_Fact_Real WHERE principal = 'unilever'"
-    )).mappings().first()
+    could resolve to a period the selected principal has no rows for at
+    all — hence the scope is applied here, not just at the row query."""
+    sql = "SELECT MAX(_period) AS p FROM Inventory_Fact_Real"
+    params: dict = {}
+    if principal != "all":
+        sql += " WHERE principal = :principal"
+        params["principal"] = principal
+    row = db.execute(text(sql), params).mappings().first()
     return row["p"] if row else None
 
 
-def _soh_value_by_period(db: Session, periods: list[str]) -> dict[str, float | None]:
+def _soh_value_by_period(
+    db: Session, periods: list[str], principal: str = "unilever"
+) -> dict[str, float | None]:
     """Peso stock-on-hand valuation per Inventory_Fact_Real period — see
-    kpis.soh_value's docstring section for the unit-confirmation evidence."""
+    kpis.soh_value's docstring section for the unit-confirmation evidence.
+
+    LIVE CAVEAT (2026-09-17): unit_cost_per_case is 100% populated for
+    Unilever and 0% populated for Del Monte, so the Del Monte side of this
+    product is null everywhere today. `principal` is interpolated (not
+    bound) because it is already validated against a fixed allowlist by
+    normalize_principal() at the endpoint boundary — it can only ever be
+    the literal 'unilever' or 'delmonte' by the time it reaches here."""
     if not UNILEVER_SOH_UNIT_CONFIRMED:
         # Structurally blocked — every period stays None.
         return {p: None for p in periods}
-    return _query_period_sums(db, """
+    scope = "" if principal == "all" else f" AND principal = '{principal}'"
+    return _query_period_sums(db, f"""
         SELECT _period AS period, SUM(quantity_on_hand * unit_cost_per_case) AS total
         FROM Inventory_Fact_Real
-        WHERE principal = 'unilever' AND _period = ANY(:periods)
+        WHERE _period = ANY(:periods){scope}
         GROUP BY _period
     """, periods)
 
 
-def _latest_abc_period(db: Session) -> str | None:
-    """Latest ABC_Classification.classification_period among UNILEVER rows
-    only — ABC_Classification carries both principals, so an unfiltered
-    MAX could resolve to a period Unilever has no rows for at all."""
-    row = db.execute(text(
-        "SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE principal = 'unilever'"
-    )).mappings().first()
+def _latest_abc_period(db: Session, principal: str = "unilever") -> str | None:
+    """Latest ABC_Classification.classification_period within the selected
+    scope. ABC_Classification carries both principals, so an unfiltered MAX
+    could resolve to a period the selected principal has no rows for.
+
+    method='single' is REQUIRED (migration 0017): a 't3m' run is live
+    alongside 'single', and an unpinned MAX can resolve to a period only
+    t3m produced — which would then read back zero 'single' rows."""
+    sql = "SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE method = 'single'"
+    params: dict = {}
+    if principal != "all":
+        sql += " AND principal = :principal"
+        params["principal"] = principal
+    row = db.execute(text(sql), params).mappings().first()
     return row["p"] if row else None
 
 
-def _nearest_abc_period_at_or_before(db: Session, period: str) -> str | None:
+def _nearest_abc_period_at_or_before(
+    db: Session, period: str, principal: str = "unilever"
+) -> str | None:
     """Latest UNILEVER classification_period <= `period`, or None if the
     ETL hasn't produced any ABC run that old yet. The classification batch
     runs roughly monthly and lags the sales data it's derived from, so the
@@ -444,13 +559,15 @@ def _nearest_abc_period_at_or_before(db: Session, period: str) -> str | None:
     replaced) keeps kpis.safety_stock_rate/abc_mix/tier_stock populated
     for that common case, while still going genuinely blocked if `period`
     predates every ABC run that exists."""
-    row = db.execute(
-        text(
-            "SELECT MAX(classification_period) AS p FROM ABC_Classification "
-            "WHERE principal = 'unilever' AND classification_period <= :period"
-        ),
-        {"period": period},
-    ).mappings().first()
+    sql = (
+        "SELECT MAX(classification_period) AS p FROM ABC_Classification "
+        "WHERE method = 'single' AND classification_period <= :period"
+    )
+    params: dict = {"period": period}
+    if principal != "all":
+        sql += " AND principal = :principal"
+        params["principal"] = principal
+    row = db.execute(text(sql), params).mappings().first()
     return row["p"] if row else None
 
 
@@ -508,13 +625,22 @@ def get_dashboard(
             "back to the fixed trailing-12 window) if omitted."
         ),
     ),
+    principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
-    # Unilever-only (2026-09): every query below is hardcoded to this
-    # filter rather than taking a ?principal= param — see this module's
-    # docstring for the full reasoning.
-    principal_filter = "AND pd.principal = 'unilever'"
+    # Both principals again (2026-09-17) — see backend/principals.py.
+    # normalize_principal() maps None/'all' -> None and validates the rest;
+    # this file's helpers take the literal string 'all' rather than None,
+    # so it is re-widened to 'all' here and passed down explicitly.
+    scope = normalize_principal(principal) or "all"
+    principal_filter = "" if scope == "all" else f"AND pd.principal = '{scope}'"
+    # Same scope expressed against ABC_Classification's own alias. Paired
+    # with method='single' at every ABC read: migration 0017 put a live
+    # 't3m' run alongside 'single', so an unpinned query returns each SKU
+    # TWICE — doubling counts and summing revenue_share past 100%.
+    abc_scope = "" if scope == "all" else f"AND ac.principal = '{scope}'"
+    abc_scope_bare = "" if scope == "all" else f"AND principal = '{scope}'"
 
     # ---- ORIGINAL FIELDS (unchanged) ----------------------------------
 
@@ -549,11 +675,11 @@ def get_dashboard(
     # ---- kpis.sales / sales_vs_stock.sales ----------------------------
 
     periods = (
-        _month_range(start_period, _resolve_sales_anchor(db, period))
+        _month_range(start_period, _resolve_sales_anchor(db, period, scope))
         if start_period is not None
-        else _last_12_periods(db, period)
+        else _last_12_periods(db, period, scope)
     )
-    sales_by_period = _sales_by_period(db, periods)
+    sales_by_period = _sales_by_period(db, periods, scope)
     # Walk backward from the picker's applied end month to the nearest
     # period WITHIN the selected range that actually has a real sales row,
     # rather than requiring an exact match on the range's literal end —
@@ -569,23 +695,27 @@ def get_dashboard(
     sales = sales_by_period[current_period]
     sales_blocked_reason = (
         None if sales is not None
-        else f"No Unilever_SKU_Demand_Fact_Real rows anywhere from {periods[0]} through {periods[-1]} yet."
+        else (
+            f"No sales rows for {_scope_label(scope)} "
+            f"(Unilever_SKU_Demand_Fact_Real / SellOut_Fact_Real) "
+            f"anywhere from {periods[0]} through {periods[-1]} yet."
+        )
     )
 
     # ---- kpis.soh_value / sales_vs_stock.stock_on_hand ----------------
 
-    inventory_period = _latest_inventory_period(db)
+    inventory_period = _latest_inventory_period(db, scope)
     soh_periods = periods if inventory_period is None else sorted(set(periods) | {inventory_period})
-    soh_by_period = _soh_value_by_period(db, soh_periods)
+    soh_by_period = _soh_value_by_period(db, soh_periods, scope)
     soh_value = soh_by_period.get(inventory_period) if inventory_period is not None else None
     if inventory_period is None:
-        soh_value_blocked_reason = "Inventory_Fact_Real has no rows for unilever at all."
+        soh_value_blocked_reason = f"Inventory_Fact_Real has no rows for {_scope_label(scope)} at all."
     elif not UNILEVER_SOH_UNIT_CONFIRMED:
         soh_value_blocked_reason = _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON
     elif soh_value is None:
         soh_value_blocked_reason = (
             f"No Inventory_Fact_Real rows with quantity_on_hand x unit_cost_per_case "
-            f"populated for unilever in {inventory_period}."
+            f"populated for {_scope_label(scope)} in {inventory_period}."
         )
     else:
         soh_value_blocked_reason = None
@@ -603,14 +733,14 @@ def get_dashboard(
     # tier_stock below — all three go empty/null together only if
     # ABC_Classification genuinely has no run that old.
     abc_period = (
-        _nearest_abc_period_at_or_before(db, period) if period is not None
-        else _latest_abc_period(db)
+        _nearest_abc_period_at_or_before(db, period, scope) if period is not None
+        else _latest_abc_period(db, scope)
     )
     safety_stock_rate = None
-    safety_stock_rate_blocked_reason = "ABC_Classification has no rows for unilever yet."
+    safety_stock_rate_blocked_reason = f"ABC_Classification has no rows for {_scope_label(scope)} yet."
     if abc_period is not None:
         ss_rows = db.execute(
-            text("""
+            text(f"""
                 SELECT
                     ac.product_key,
                     inv.current_stock AS current_stock,
@@ -628,7 +758,8 @@ def get_dashboard(
                     WHERE status = 'pending'
                     ORDER BY product_key, planning_cycle_date DESC
                 ) rop ON rop.product_key = ac.product_key
-                WHERE ac.classification_period = :period AND ac.tier = 'A' AND ac.principal = 'unilever'
+                WHERE ac.classification_period = :period AND ac.tier = 'A'
+                      AND ac.method = 'single' {abc_scope}
             """),
             {"period": abc_period},
         ).mappings().all()
@@ -664,7 +795,7 @@ def get_dashboard(
 
     # ---- sales_vs_stock series -------------------------------------------
 
-    received_by_period = _received_by_period(db, periods)
+    received_by_period = _received_by_period(db, periods, scope)
 
     sales_vs_stock = [
         {
@@ -681,10 +812,10 @@ def get_dashboard(
     abc_mix: list[dict] = []
     if abc_period is not None:
         mix_rows = db.execute(
-            text("""
+            text(f"""
                 SELECT tier, COUNT(*) AS cnt, SUM(revenue_share) AS rev_share_sum
                 FROM ABC_Classification
-                WHERE classification_period = :period AND principal = 'unilever'
+                WHERE classification_period = :period AND method = 'single' {abc_scope_bare}
                 GROUP BY tier
             """),
             {"period": abc_period},
@@ -703,7 +834,7 @@ def get_dashboard(
     tier_stock: list[dict] = []
     if abc_period is not None:
         ts_rows = db.execute(
-            text("""
+            text(f"""
                 SELECT
                     ac.tier,
                     inv.any_active AS any_active,
@@ -718,7 +849,7 @@ def get_dashboard(
                     WHERE _period = (SELECT MAX(_period) FROM Inventory_Fact_Real)
                     GROUP BY product_key
                 ) inv ON inv.product_key = ac.product_key
-                WHERE ac.classification_period = :period AND ac.principal = 'unilever'
+                WHERE ac.classification_period = :period AND ac.method = 'single' {abc_scope}
             """),
             {"period": abc_period},
         ).mappings().all()
@@ -739,11 +870,11 @@ def get_dashboard(
                 b["no_data"] += 1
 
         pending_rows = db.execute(
-            text("""
+            text(f"""
                 SELECT ac.tier, COUNT(DISTINCT lr.product_key) AS cnt
                 FROM ABC_Classification ac
                 JOIN LP_Recommendation lr ON lr.product_key = ac.product_key AND lr.status = 'pending'
-                WHERE ac.classification_period = :period AND ac.principal = 'unilever'
+                WHERE ac.classification_period = :period AND ac.method = 'single' {abc_scope}
                 GROUP BY ac.tier
             """),
             {"period": abc_period},
@@ -847,7 +978,7 @@ def get_dashboard(
 
     # ---- reorder_preview -------------------------------------------------
 
-    rp_query = _RECOMMENDATION_SELECT_ONE + " WHERE lr.status = 'pending' AND pd.principal = 'unilever'"
+    rp_query = _RECOMMENDATION_SELECT_ONE + f" WHERE lr.status = 'pending' {principal_filter}"
     rp_rows = db.execute(text(rp_query)).mappings().all()
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
     rp_items_sorted = sorted(rp_items, key=lambda it: _URGENCY_RANK.get(it.urgency, 99))

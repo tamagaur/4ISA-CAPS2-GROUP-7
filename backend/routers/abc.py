@@ -38,12 +38,25 @@ legitimately have no match here yet. current_stock is now left NULL
 when there's no match, and stock_status reports "NO DATA" instead of
 silently fabricating CRITICAL.
 
-UNILEVER ONLY (2026-09): Del Monte has been dropped from this app's
-scope — there is no more `?principal=` query param, and every query is
-hardcoded to `ac.principal = 'unilever'`, including the latest-period
-lookup (ABC_Classification carries both principals, so an unfiltered
-MAX(classification_period) could resolve to a period Unilever has no
-rows for at all).
+BOTH PRINCIPALS (2026-09-17): `?principal=` is back (see
+backend/principals.py) after the 2026-09 Unilever-only period — Del Monte
+is in scope again. Omit it (or pass 'all') for both. The latest-period
+lookup is filtered by the SAME principal as the row query on purpose:
+ABC_Classification carries both principals, so an unfiltered
+MAX(classification_period) can resolve to a period the selected principal
+has no rows for at all, rendering an empty page that looks like a bug.
+
+NOTE: Del Monte currently has ZERO abc_classification rows live (the old
+synthetic periods were purged in 0737434), so ?principal=delmonte
+honestly returns an empty result today. That is the correct answer, not a
+gap to paper over — it resolves itself once ABC is run for Del Monte at
+category grain (DEC-03).
+
+METHOD FILTER (migration 0017): abc_classification's natural key widened
+to (product_key, classification_period, method), and a 't3m' run is now
+live alongside 'single' (25,437 + 23,223 rows). Every read here MUST pin
+method='single' or each SKU comes back twice and revenue_share sums to
+~200%.
 """
 from __future__ import annotations
 
@@ -52,6 +65,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
+from backend.principals import PrincipalQuery, principal_clause
 from backend.schemas.abc import ABCItem, ABCResponse, TierSummary
 
 router = APIRouter(prefix="/abc", tags=["abc"])
@@ -79,14 +93,25 @@ def _stock_status(current_stock: float | None, reorder_point: float | None) -> s
 @router.get("", response_model=ABCResponse)
 def get_abc(
     classification_period: str | None = Query(None, description="'YYYY-MM'. Omit to use the latest period present."),
+    principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> ABCResponse:
+    # Built once and reused by BOTH the period lookup and the row query —
+    # resolving the latest period under a different scope than the rows
+    # are read under is exactly how an empty page gets rendered for a
+    # principal that does have data.
+    scope_sql, scope_params = principal_clause(principal, "principal")
+
     period = classification_period
     if period is None:
-        row = db.execute(text(
-            "SELECT MAX(classification_period) AS p FROM abc_classification WHERE principal = 'unilever'"
-        )).mappings().first()
+        row = db.execute(
+            text(
+                "SELECT MAX(classification_period) AS p FROM abc_classification "
+                "WHERE method = 'single'" + scope_sql
+            ),
+            scope_params,
+        ).mappings().first()
         period = row["p"] if row else None
         if period is None:
             return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[])
@@ -116,10 +141,12 @@ def get_abc(
             WHERE status = 'pending'
             ORDER BY product_key, planning_cycle_date DESC
         ) rop ON rop.product_key = ac.product_key
-        WHERE ac.classification_period = :period AND ac.principal = 'unilever'
-        ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST
+        WHERE ac.classification_period = :period AND ac.method = 'single'
     """
-    params: dict = {"period": period}
+    query += principal_clause(principal, "ac.principal")[0]
+    query += " ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST"
+
+    params: dict = {"period": period, **scope_params}
 
     rows = db.execute(text(query), params).mappings().all()
     items = [
