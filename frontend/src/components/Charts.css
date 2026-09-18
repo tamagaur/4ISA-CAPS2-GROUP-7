@@ -400,9 +400,16 @@
   to { transform: scaleX(1); }
 }
 
+/* Identical twin, swapped in by [data-enter-cycle="1"] so the sweep can
+   restart on a filter change — see index.css's replay note. */
+@keyframes tier-bar-grow-b {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 .tier-stock-track.is-animated span {
   transform-origin: left;
-  animation: tier-bar-grow var(--tier-anim-duration, 700ms) ease-out both;
+  animation: var(--anim-tier-bar, tier-bar-grow) var(--tier-anim-duration, 700ms) ease-out both;
   animation-delay: var(--tier-anim-delay, 0ms);
 }
 
@@ -862,19 +869,21 @@
    fully formed. Cards inside one row are staggered by position, which
    makes a row read as one coordinated build.
 
-   This runs on MOUNT only. React keeps these elements across a data
-   change (the date picker, the principal toggle), so the card does not
-   re-animate underneath someone reading it — the Recharts series handle
-   that case themselves via chartAnim(), which animates on both mount and
-   data change. That division is deliberate: the card frame is "the page
-   arrived", the series is "the numbers changed".
+   This runs on mount AND on every applied filter change: the page wraps
+   its cards in useEntranceReplay()'s data-enter-cycle, which swaps the
+   animation-name for an identical twin and so restarts the build. The
+   replay is keyed on the data that is on screen, not on the control, so
+   the rebuild plays when the new numbers land rather than while the
+   request is still in flight. The Recharts series still animate their own
+   values via chartAnim() — the card frame says "this view reloaded", the
+   series says "these numbers changed".
 
    --enter-delay lets a caller stagger explicitly; the nth-child rules
    below are the default for any row that doesn't set it. */
 /* chart-card-enter keyframe lives in index.css — see note there. */
 
 .chart-widget {
-  animation: chart-card-enter 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
   animation-delay: var(--enter-delay, 0ms);
 }
 
@@ -894,10 +903,16 @@
   to { transform: scaleX(1); }
 }
 
+/* Identical twin — see the tier-bar-grow-b note above. */
+@keyframes bar-grow-x-b {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 .policy-bar-track span,
 .abc-share-track span {
   transform-origin: left;
-  animation: bar-grow-x 620ms ease-out both;
+  animation: var(--anim-bar-grow-x, bar-grow-x) 620ms ease-out both;
   animation-delay: 260ms;
 }
 

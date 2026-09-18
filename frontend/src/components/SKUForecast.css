@@ -875,10 +875,13 @@
 
 /* Entrance — shares chart-card-enter with the dashboard and ABC cards.
    The container is keyed on the selected SKU in the JSX, so picking a
-   different SKU remounts it and the chart builds again, which is the
-   behaviour wanted here: a new SKU is a new view, not a data tweak. */
+   different SKU remounts it and the chart builds again. The principal
+   scope and this page's own date range don't remount anything, so they
+   replay the same build through data-enter-cycle instead (see
+   theme/useEntranceReplay.js) — every filter on the page rebuilds the
+   card, whichever route it takes to get there. */
 .forecast-chart-container {
-  animation: chart-card-enter 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {

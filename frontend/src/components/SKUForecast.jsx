@@ -13,6 +13,8 @@ import {
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
+import { useEntranceReplay } from '../theme/useEntranceReplay';
+import RefreshingNote from './RefreshingNote';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
 import { useBrandLookup } from '../utils/useBrandLookup';
@@ -389,6 +391,46 @@ const SKUForecast = () => {
   // hasn't produced output for this SKU.
   const [forecastResult, setForecastResult] = useState(null);
   const [forecastLoading, setForecastLoading] = useState(false);
+  // Which request produced the forecast currently in state. forecastResult
+  // is NOT cleared when the selection changes, so during a SKU switch it
+  // still holds the PREVIOUS SKU's series — fine while a blanket
+  // !forecastLoading guard hid everything, but not once a refetch keeps the
+  // view. Without this, switching SKU would paint the old product's chart
+  // under the new product's name. Kept as an object so a SKU code
+  // containing the separator can't collide.
+  const [forecastFor, setForecastFor] = useState(null); // { sku, principal }
+
+  // Which of the two loading states the card is in. Same SKU, new scope
+  // (principal or range) -> the series on screen is still this SKU's, so
+  // keep it and mark it stale. Different SKU -> forecastResult still holds
+  // the PREVIOUS product's series, so there is nothing honest to show yet
+  // and the card waits.
+  const showingThisSKU = Boolean(
+    forecastFor && selectedSKU && forecastFor.sku === selectedSKU.code
+  );
+  const isForecastRefreshing = forecastLoading && showingThisSKU;
+  const isForecastColdLoad = forecastLoading && !showingThisSKU;
+
+  // Rebuild the chart card on any filter that changes what it plots: the
+  // SKU, the principal scope, and this page's own date range. The SKU is in
+  // here as well as on the container's `key` below — the key handles the
+  // remount, this handles the other two, and a signature covering only some
+  // of them would animate inconsistently depending on which control was
+  // touched.
+  //
+  // Unlike the dashboard this is keyed on the CONTROLS, not on an arrival:
+  // the range is sliced client-side from forecastResult with no request at
+  // all, so there is no response landing to wait for.
+  //
+  // MUST stay below the state it reads. This block sat directly under
+  // rangeEndPeriod, ~250 lines above selectedSKU/forecastLoading/
+  // forecastFor — `const` bindings are in the temporal dead zone until
+  // their declaration runs, so every render threw ReferenceError and the
+  // route rendered nothing at all. It is still far above every early
+  // return, so hook order is unaffected.
+  const enterCycle = useEntranceReplay(
+    `${selectedSKU?.code ?? ''}|${principal ?? ''}|${rangeStartPeriod ?? ''}|${rangeEndPeriod ?? ''}`
+  );
   const [forecastError, setForecastError] = useState(null);
 
   useEffect(() => {
@@ -403,6 +445,7 @@ const SKUForecast = () => {
       .then((res) => {
         if (cancelled) return;
         setForecastResult(res);
+        setForecastFor({ sku: selectedSKU.code, principal });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -670,7 +713,7 @@ const SKUForecast = () => {
 
   return (
     <div className="forecast-page">
-      <div className="forecast-content">
+      <div className="forecast-content" data-enter-cycle={enterCycle}>
         {/* Header */}
         <div className="forecast-header">
           <div className="header-text-group">
@@ -982,11 +1025,24 @@ const SKUForecast = () => {
                 same chart mounted and lets Recharts tween between the old
                 and new values, which reads better than a re-fade for what is
                 the same product's data. */}
-            <div className="forecast-chart-container" key={selectedSKU?.code || 'none'}>
-              {forecastLoading && <p className="forecast-subtitle">Loading forecast…</p>}
+            {/* No .is-refreshing here, unlike the dashboard and ABC. This
+                element carries the entrance animation itself, and an
+                animation with fill-mode `both` holds its own `to { opacity:
+                1 }` over any value the cascade supplies — the dim would
+                silently never render. It is also not needed: what the dim
+                buys elsewhere is pointer-events off over stale reorder and
+                SKU links, and this card holds a chart, not navigation. The
+                note above states the staleness on its own. */}
+            <div
+              className="forecast-chart-container"
+              key={selectedSKU?.code || 'none'}
+              aria-busy={isForecastRefreshing}
+            >
+              {isForecastColdLoad && <p className="forecast-subtitle">Loading forecast…</p>}
+              {isForecastRefreshing && <RefreshingNote>Updating {selectedSKU.code}…</RefreshingNote>}
               {forecastError && <p className="forecast-subtitle">Error: {forecastError}</p>}
 
-              {!forecastLoading && !forecastError && forecastResult && forecastResult.forecast.length === 0 && (
+              {!isForecastColdLoad && !forecastError && forecastResult && forecastResult.forecast.length === 0 && (
                 <p className="forecast-subtitle">
                   No MA3 forecast has been generated for {selectedSKU.code} yet.
                 </p>
@@ -999,7 +1055,7 @@ const SKUForecast = () => {
                   Offers a one-click fix (swap the two dates) since, unlike
                   the 'none' case below, there's no ambiguity about what the
                   user actually meant. */}
-              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'invalid' && (
+              {!isForecastColdLoad && !forecastError && forecastResult && rangeStatus === 'invalid' && (
                 <div className="forecast-range-error">
                   <span className="forecast-range-error-title">Invalid date range</span>
                   <p className="forecast-range-error-body">
@@ -1027,7 +1083,7 @@ const SKUForecast = () => {
                   button widens to exactly that floor, ending at whatever
                   end date the user already picked, rather than resetting
                   the whole selection. */}
-              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'too-short' && (
+              {!isForecastColdLoad && !forecastError && forecastResult && rangeStatus === 'too-short' && (
                 <div className="forecast-range-error">
                   <span className="forecast-range-error-title">
                     Range too short — {monthsBetween(rangeStartPeriod, rangeEndPeriod)} month
@@ -1059,7 +1115,7 @@ const SKUForecast = () => {
               {/* No overlap at all between the picked range and this SKU's
                   history — a chart here would be an empty grid, so state the
                   problem and offer the fix instead of rendering nothing. */}
-              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'none' && (
+              {!isForecastColdLoad && !forecastError && forecastResult && rangeStatus === 'none' && (
                 <div className="forecast-range-error">
                   <span className="forecast-range-error-title">
                     No data for {selectedSKU.code} in the selected range
@@ -1077,7 +1133,7 @@ const SKUForecast = () => {
                 </div>
               )}
 
-              {!forecastLoading && !forecastError && forecastResult && (rangeStatus === 'ok' || rangeStatus === 'partial') && (
+              {!isForecastColdLoad && !forecastError && forecastResult && (rangeStatus === 'ok' || rangeStatus === 'partial') && (
                 <>
                   {/* Headline Forecast Stat Row — the number this whole page
                       exists to produce (next period's forecast) plus how it

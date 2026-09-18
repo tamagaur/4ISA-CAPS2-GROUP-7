@@ -650,14 +650,17 @@ html, body, #root, .App {
    series carried isAnimationActive={false} — see theme/motion.js). Two
    layers now work together:
 
-     1. This CSS fade+rise, which plays when a chart WIDGET mounts — i.e.
-        when the page opens, and again after a date/filter change on
-        Dashboard and ABC Classification, where the loading state
-        unmounts the charts and remounts them with fresh data.
+     1. This CSS fade+rise, which plays when a chart WIDGET mounts — when
+        the page opens, and again on every applied filter change. ABC
+        Classification gets the replay for free because its loading state
+        unmounts the charts; the Dashboard and SKU Forecast keep theirs
+        mounted, so they drive it through useEntranceReplay() and the
+        data-enter-cycle swap documented further down this file.
      2. Recharts' own series animation (theme/motion.js's chartAnim),
         which tweens bars/lines/areas from their old values to the new
-        ones when `data` changes underneath a chart that stays mounted —
-        the SKU Forecast case.
+        ones when `data` changes underneath a chart that stays mounted.
+        The two layers stack rather than compete: the frame says the view
+        reloaded, the series says the numbers moved.
 
    The widget rises a short distance only; a large travel distance reads
    as sluggish on a dashboard the user is scanning for numbers. */
@@ -676,7 +679,7 @@ html, body, #root, .App {
 .abc-pareto-chart-wrapper,
 .bo-chart-wrapper,
 .forecast-chart-container {
-  animation: chartWidgetEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: var(--anim-chart-widget, chartWidgetEnter) 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Dashboard shows several widgets at once; a small per-position delay
@@ -722,5 +725,169 @@ html, body, #root, .App {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* ── Entrance replay on filter change (2026-09-18) ────────────────────────
+   Every entrance animation above is named through a custom property with
+   the original name as its fallback, so a stylesheet that is loaded on a
+   page with no replay wrapper behaves exactly as it did before.
+
+   useEntranceReplay() flips `data-enter-cycle` between 0 and 1 whenever a
+   page's data changes. A CSS animation only restarts when its
+   animation-name actually changes, so cycle 1 swaps in a set of twins
+   that are byte-identical to the originals — the swap itself is the
+   restart, and the visual result is the same build either way. Custom
+   properties inherit, so the attribute on one wrapper reaches every card
+   and bar below it.
+
+   Keyframes are global to the document once any loaded stylesheet defines
+   them, but the `-b` twins live beside their originals in each file so a
+   route that never imports Charts.css can't reference a bar keyframe that
+   isn't there — the same trap that sent chart-card-enter to index.css. */
+[data-enter-cycle="1"] {
+  --anim-chart-widget: chartWidgetEnter-b;
+  --anim-card-enter: chart-card-enter-b;
+  --anim-bar-grow-x: bar-grow-x-b;
+  --anim-tier-bar: tier-bar-grow-b;
+}
+
+@keyframes chartWidgetEnter-b {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes chart-card-enter-b {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Shared loading vocabulary (2026-09-18) ───────────────────────────────
+   These lived in Dashboard.css, which only the dashboard imports, so ABC
+   Classification and SKU Forecast each invented their own loading state:
+   ABC replaced its whole page with a header and one line of text on every
+   filter change, SKU Forecast dropped a bare line inside the card. Three
+   pages, three different answers to the same question.
+
+   One answer now, applied everywhere:
+
+     - Cold load, nothing on screen yet -> a skeleton in the shape of the
+       real thing, so nothing jumps when the data replaces it.
+     - Refetch, previous view still valid -> KEEP it, mark it stale, and
+       let useEntranceReplay's rebuild announce the new numbers when they
+       land. Blanking a page someone is already reading to prove a request
+       is in flight costs them the context they had and gains nothing.
+
+   The dim on a stale view is deliberately light. It only has to say "not
+   current yet"; at the 0.5 this started life with, a dashboard mid-refetch
+   read as disabled or broken. pointer-events stays off regardless of how
+   light the dim is — that is the part that actually matters, since a stale
+   reorder link navigates to a SKU chosen under the old filter. */
+.is-refreshing {
+  opacity: 0.75;
+  pointer-events: none;
+  transition: opacity 160ms ease-out;
+}
+
+.view-refreshing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: flex-start;
+  margin: -0.75rem 0 -0.5rem 0;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.view-refreshing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-info);
+  animation: view-refreshing-pulse 1s ease-in-out infinite;
+}
+
+@keyframes view-refreshing-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* Skeleton primitives — moved here from Dashboard.css so ABC can use the
+   same blocks rather than growing a second set that drifts from these. */
+.skeleton-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-line {
+  background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 37%, var(--color-surface-muted) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+
+.skeleton-line-title {
+  width: 40%;
+  height: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.skeleton-line-value {
+  width: 60%;
+  height: 2.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.skeleton-line-subtext {
+  width: 50%;
+  height: 0.75rem;
+}
+
+.skeleton-line-row {
+  width: 100%;
+  height: 2.5rem;
+  margin-top: 1rem;
+}
+
+.skeleton-chart-body {
+  flex: 1;
+  min-height: 180px;
+  margin-top: 1.25rem;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 37%, var(--color-surface-muted) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .skeleton-chart-body,
+  .view-refreshing-dot {
+    animation: none;
+  }
+  .is-refreshing {
+    transition: none;
   }
 }

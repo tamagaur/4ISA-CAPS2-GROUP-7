@@ -9,6 +9,8 @@ import {
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { getSegmentSummary } from '../api/segment';
+import { useEntranceReplay } from '../theme/useEntranceReplay';
+import RefreshingNote from './RefreshingNote';
 import { Package, Wallet, Clock, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
@@ -97,7 +99,17 @@ const Dashboard = () => {
   const { startMonth, startYear, endMonth, endYear, principal } = useOutletContext() || {};
   const period = toPeriod(endMonth, endYear);
   const startPeriod = toPeriod(startMonth, startYear);
-  const requestKey = `${period ?? ''}|${startPeriod ?? ''}`;
+  // Every input the request varies on, principal included. It was
+  // `period|startPeriod` only, which silently broke the principal filter
+  // on this page: the fetch effect below early-returns when
+  // loadedKey === requestKey, and switching principal leaves both periods
+  // untouched, so the request was never issued and the dashboard kept
+  // showing the previous principal's numbers. Nothing remounted it
+  // either — DashboardLayout's <Outlet key={refreshKey}> only changes on
+  // the Topbar's Refresh. The segmentation panel below refetches on
+  // [principal] with no such guard, so the page rendered one principal's
+  // diagnostic beside another principal's KPIs.
+  const requestKey = `${period ?? ''}|${startPeriod ?? ''}|${principal ?? ''}`;
 
   // `loaded` remembers WHICH range its data belongs to. When the range
   // changes, the previous range's view stays on screen (dimmed, labeled
@@ -142,6 +154,14 @@ const Dashboard = () => {
   }, [requestKey, loadedKey, period, startPeriod, principal]);
 
   const isRefreshing = Boolean(loaded) && loaded.key !== requestKey;
+
+  // Rebuild the cards whenever a different response lands — a date range
+  // or principal change, not a re-render. Keyed on the loaded data's own
+  // key rather than requestKey so the build plays with the new numbers
+  // already in place, instead of animating the outgoing view while the
+  // request is still in flight. Must sit above the early returns below:
+  // hooks cannot be called conditionally.
+  const enterCycle = useEntranceReplay(loaded?.key ?? '');
   const currentError = error?.key === requestKey ? error.message : null;
 
   // Header is rendered in every state — loading, error and loaded — rather
@@ -266,13 +286,16 @@ const Dashboard = () => {
         {header}
 
         {isRefreshing && (
-          <p className="dashboard-refreshing" role="status">
-            <span className="dashboard-refreshing-dot" aria-hidden="true" />
+          <RefreshingNote>
             Updating to {startMonth} {startYear} – {endMonth} {endYear}…
-          </p>
+          </RefreshingNote>
         )}
 
-        <div className={`dashboard-body${isRefreshing ? ' is-refreshing' : ''}`} aria-busy={isRefreshing}>
+        <div
+          className={`dashboard-body${isRefreshing ? ' is-refreshing' : ''}`}
+          aria-busy={isRefreshing}
+          data-enter-cycle={enterCycle}
+        >
           {/* Hero strip — the five figures that answer "what is happening
               right now": money in, money parked, service risk, cover vs the
               policy this project exists to replace, and work waiting. */}

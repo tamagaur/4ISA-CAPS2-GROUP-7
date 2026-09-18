@@ -11,6 +11,19 @@
   gap: 1.5rem;
 }
 
+/* Everything below the header. Wrapped so a refetch can mark the previous
+   classification stale without also dimming and freezing the header — the
+   date picker lives there, and disabling the control someone just used to
+   trigger the refetch is the one thing the stale state must not do.
+   Repeats .abc-content's column+gap because these sections are now one of
+   its children rather than several, and would otherwise lose their
+   spacing. */
+.abc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 /* Page Header */
 .abc-page-header {
   margin-bottom: 0.25rem;
@@ -795,7 +808,7 @@
    changing the month leaves the cards in place and lets the Recharts
    series animate the data change instead. */
 .abc-pareto-container {
-  animation: chart-card-enter 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
 }
 
 .abc-analysis-chart { animation-delay: 60ms; }
