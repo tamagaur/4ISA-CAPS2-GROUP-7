@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
@@ -28,6 +28,10 @@ const formatSKU = (sku) => {
 
 
 const ReorderRecommendations = () => {
+  // Shared principal scope (Topbar's segmented control). lp_recommendation
+  // has no Del Monte rows yet, so 'delmonte' renders this page's normal
+  // empty state rather than an error.
+  const { principal } = useOutletContext() || {};
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -55,7 +59,7 @@ const ReorderRecommendations = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getRecommendations({ status: 'pending' })
+    getRecommendations({ status: 'pending', principal })
       .then((res) => {
         if (cancelled) return;
         setRawItems(res.items || []);
@@ -70,7 +74,7 @@ const ReorderRecommendations = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [principal]);
 
   // GET /recommendations has no brand field; this was hardcoded 'Unilever'
   // (the principal) on every row. Real brand comes from the product master,

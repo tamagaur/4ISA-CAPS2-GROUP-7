@@ -24,23 +24,20 @@ Column mapping to the existing Inventory_Fact schema (analytics/db/schema.sql):
   stock_value                                   -> valuation        (exists: migrations/0004_add_valuation.sql;
                                                                        NOT yet in schema.sql's CREATE TABLE baseline —
                                                                        known drift, not this module's problem to fix)
-  last_purchase_price_gsv_per_cs                -> NO HOME. There is no `cost` column anywhere in
-                                                     Inventory_Fact (checked schema.sql's CREATE TABLE, every
-                                                     migration under analytics/db/migrations/, and
-                                                     backend/routers/dashboard.py, which explicitly documents
-                                                     "a cost column that doesn't exist"). Del Monte's own
+  last_purchase_price_gsv_per_cs                -> unit_cost_per_case (schema.sql R11, added 2026-08 — this
+                                                     docstring's claim of "NO HOME" was stale, predating R11.
+                                                     scratch/run_ssis_soh_load.py:74 already had this exact
+                                                     mapping; it was never carried into this module, so every
+                                                     canonical load left Inventory_Fact.unit_cost_per_case NULL
+                                                     for all 27,282 Unilever rows — found and fixed 2026-09-16
+                                                     diagnosing a dashboard KPI/PR4 regression, see
+                                                     reports/PROJECT_STATE_2026-09.md SS11). Del Monte's own
                                                      inventory_sign_off.yaml maps a raw "Cost" header to a
-                                                     canonical "cost" column, but that column has exactly the
-                                                     same fate — nowhere in Inventory_Fact for it to land, so
-                                                     there is no live Del Monte convention to match, only the
-                                                     same absence repeated. Kept in this module's output as an
-                                                     informational column (last_purchase_price_gsv_per_cs) for
-                                                     visibility, NOT renamed to "cost", NOT loaded — this module
-                                                     does not write to Inventory_Fact or add a column to it (no
-                                                     migration is written here, per this turn's instructions).
-                                                     The header's own text ("GSV/CS") already answers the
-                                                     per-case-vs-per-unit question without guessing: it is
-                                                     GSV PER CASE, not per piece/unit.
+                                                     canonical "cost" column instead — a different unit (extended
+                                                     peso total, not a per-case price), kept separate per R10/R11's
+                                                     own reasoning below. The header's own text ("GSV/CS") already
+                                                     answers the per-case-vs-per-unit question without guessing:
+                                                     it is GSV PER CASE, not per piece/unit.
   snapshot_date, _period                        -> snapshot_date, _period (both already real per R5 — no
                                                      _snapshot_date_from_period() synthetic-first-of-month
                                                      fabrication needed here, unlike Del Monte's inventory_sign_off)
@@ -50,8 +47,13 @@ Column mapping to the existing Inventory_Fact schema (analytics/db/schema.sql):
   source)
 
 Columns with confirmed NO home in Inventory_Fact (reported, not added):
-  Blocked Stock (CS/PC), Status, PO Qty, Open SO Quantity,
-  Balance Quantity, Batch, PACK SIZE
+  Blocked Stock (CS/PC), PO Qty, Open SO Quantity, Balance Quantity,
+  Batch, PACK SIZE
+  Status -> stock_status (schema.sql R12) — fixed 2026-09-16, same class as
+  unit_cost_per_case above. Blocked Stock (CS/PC) still has nowhere to
+  land in terms of NEED, not schema — blocked_qty_cases/blocked_qty_pieces
+  do exist (R12) but are confirmed genuinely empty at source (0/27,321
+  non-null), so there is nothing to carry regardless of the column existing.
   See NO_HOME_COLUMNS_REPORT below for the per-column downstream-need
   assessment this module's report prints.
 """
@@ -80,10 +82,9 @@ NO_HOME_COLUMNS_REPORT = {
         "exists for it; flagging for a schema decision, not adding one here."
     ),
     "status": (
-        "NEEDED DOWNSTREAM — paired with Blocked Stock as the dead-stock "
-        "signal (e.g. Status='Active' vs a discontinued/inactive value). "
-        "Not carried into the Inventory_Fact-shaped output; kept in the raw "
-        "staged data (staging/ssis_soh/) if needed before a schema change."
+        "FIXED 2026-09-16 — now carried into the Inventory_Fact-shaped "
+        "output as stock_status (schema.sql R12). Previously dropped; see "
+        "module docstring."
     ),
     "po_qty_raw": (
         "Not needed for Inventory_Fact itself (open purchase orders are a "
@@ -226,11 +227,19 @@ def transform_ssis_soh(
         "quantity_on_hand": df["stock_qty_cases"],
         "quantity_pieces": df["stock_qty_pieces"],
         "valuation": df["stock_value"],
-        # Informational only — NOT a home in Inventory_Fact, see module
-        # docstring. Carried through so the report's NaN/negative check
-        # below has real numbers to check, and so this isn't silently lost
-        # before a schema decision is made.
-        "last_purchase_price_gsv_per_cs": df["last_purchase_price_gsv_per_cs"],
+        # unit_cost_per_case (schema.sql R11) — fixed 2026-09-16, see module
+        # docstring above. Was carried through under the raw source name
+        # (last_purchase_price_gsv_per_cs) and silently projected out by
+        # run_canonical_load.py's column-projection step because nothing
+        # named it into its real schema home.
+        "unit_cost_per_case": df["last_purchase_price_gsv_per_cs"],
+        # stock_status (schema.sql R12) — fixed 2026-09-16, same class/same
+        # fix as unit_cost_per_case above. scratch/run_ssis_soh_load.py:77
+        # already mapped raw "status" -> stock_status; never carried into
+        # this module. blocked_qty_cases/blocked_qty_pieces (also R12) are
+        # NOT fixed here — confirmed genuinely empty at source (0/27,321
+        # non-null in staging/ssis_soh), nothing to carry.
+        "stock_status": df["status"],
         "is_demo": False,
         "_src_file": df["_src_file"],
         "_src_sheet": df["_src_sheet"],

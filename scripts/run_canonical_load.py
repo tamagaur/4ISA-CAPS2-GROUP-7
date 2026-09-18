@@ -205,11 +205,22 @@ def _product_fk_spec(grain: str) -> DimensionFKSpec:
         # this spec is never invoked for Del Monte): the backup shows 0 of
         # 2,098 Unilever SKU-grain rows share a sku_code, so sku_code alone
         # already uniquely identifies the row. Del Monte's product_dimension
-        # rows (loaded outside this codepath, pre-canonical-load era) are a
-        # DIFFERENT story - 252 Del Monte sku_codes legitimately span
-        # multiple category_path values there, so this narrowed key would be
-        # actively wrong if ever reused for Del Monte. Matching partial
-        # unique index: migration 0014, scoped to
+        # rows (loaded outside this codepath, pre-canonical-load era) used
+        # to have 252 sku_codes spanning multiple category_path values -
+        # CORRECTED 2026-09-17 (column-gap audit, migration 0016): those
+        # extra category_path values were never real. They came from
+        # scripts/generate_synthetic_dm.py:31-44, an ad-hoc script whose own
+        # docstring calls category_path a "fake category" guessed from a
+        # keyword heuristic on the SKU description - no Del Monte source
+        # ties an individual SKU to a category at all. Migration 0016
+        # deduped those 291 rows and nulled the fake category_path values,
+        # so Del Monte's sku-grain rows are no longer a different story:
+        # sku_code alone uniquely identifies them too now (see the new
+        # table-wide partial index, migration 0016). This spec still isn't
+        # invoked for Del Monte (still loaded outside this codepath), but
+        # the constraint it used to be safely narrower than no longer holds
+        # a real distinction. Matching partial unique index for the
+        # Unilever-only case below: migration 0014, scoped to
         # principal='unilever' AND grain='sku' - conflict_index_where below
         # must repeat that predicate verbatim for Postgres to infer it.
         return DimensionFKSpec(
@@ -411,7 +422,8 @@ FACT_PLAN: list[FactPlanItem] = [
     ),
     FactPlanItem(
         "inventory", "delmonte", "inventory_fact", "quantity_on_hand",
-        dimension_fks=[],  # inventory_sign_off SKUs join via sku_code text match downstream, not this FK path
+        dimension_fks=[],  # DM sku-grain product_key is resolved post-load by
+        # resolve_delmonte_inventory_product_key() (added 2026-09-17), not this FK path
         # rows re-measured 2026-09-14 (was 21159): 254 rows across
         # unresolved conflicting groups (114 combined conflict groups)
         # excluded by _drop_conflicting_group_rows(). 21159 - 254 = 20905.
@@ -426,7 +438,14 @@ FACT_PLAN: list[FactPlanItem] = [
         # value. This did not change the row COUNT here - quantity_on_hand/
         # sku_code (the natural key) were unaffected - only the two
         # valuation columns' values for those 9 rows.)
-        expected_rows=20905, expected_conflicts=0, expected_quarantined=188,
+        # Re-measured again 2026-09-17 (column-gap audit item 3): 20905 -> 20898
+        # (-7). INVENTORY_SIGN_OFF_FOOTER_CHECKS (analytics/etl/transform.py) gained
+        # a new check excluding 7 section-header artifact rows (sku_description_raw
+        # a bare category label like "KIKKOMAN"/"QUICK N EASY", no real SKU, no
+        # quantity data) that previously loaded as fake inventory rows - all 7 from
+        # one file/sheet (AUGUST 2023, "ACTUAL 090423"). Confirmed via direct
+        # re-run: exactly 7 fewer rows, nothing else changed.
+        expected_rows=20898, expected_conflicts=0, expected_quarantined=188,
     ),
 ]
 
@@ -973,6 +992,308 @@ def run_category_brand_backfill(engine: Engine, schema: str, dry_run: bool) -> d
     return tally
 
 
+def resolve_delmonte_sku_dimension(engine: Engine, schema: str, dry_run: bool) -> dict[str, int]:
+    """Runs after run_category_brand_backfill, before
+    resolve_delmonte_inventory_product_key (step 8a.5 — new canonical step,
+    2026-09-17 column-gap audit item 3 precursor).
+
+    Builds/refreshes delmonte sku-grain Product_Dimension rows from the ONE
+    real Del Monte source that carries sku_code + description:
+    inventory_sign_off's sku_description_raw, split by
+    analytics.etl.transform.split_sku_description() — confirmed via recon
+    to be the only DM doc_type with this data (sell_out has no sku_code
+    column at all — column_maps/sell_out.yaml:15; sales_register/
+    sales_return are invoice-grain only, no SKU column). That split already
+    runs inside the "inventory"/delmonte FactPlanItem's own transform_fact()
+    call (_run_one_fact) but its product_name output is discarded there —
+    Inventory_Fact has no product_name column. Recomputed here directly
+    (same transform_fact() call, same staged parquet) rather than threading
+    it through _run_one_fact's return value, keeping this self-contained
+    like run_category_brand_backfill.
+
+    category_path = NULL, no heuristic — migration 0016 corrected the prior
+    generate_synthetic_dm.py-era rows, which used a self-admitted "fake
+    category" keyword guess; no real DM source ties an individual SKU to a
+    category at all (confirmed: category only exists at SellOut_Fact's
+    region x period x category grain).
+
+    Upsert key: (principal, sku_code) — migration 0016's new partial unique
+    index. product_key is preserved across re-runs (ON CONFLICT DO UPDATE,
+    not DO NOTHING) so downstream FKs (inventory backfill, any future
+    fact) never see a product_key change. Conflicting product_name text for
+    the same sku_code across snapshot months (rare — 1 case found in real
+    data, a punctuation-only difference) resolves by most-recent `_period`
+    wins, logged per occurrence.
+
+    The 7 section-header artifact rows (sku_description_raw = a bare
+    category label like "KIKKOMAN", "QUICK N EASY" — no real SKU) never
+    reach here: excluded upstream by INVENTORY_SIGN_OFF_FOOTER_CHECKS'
+    all_null=[quantity_on_hand, cases, product_name] check
+    (analytics/etl/transform.py)."""
+    raw = pd.concat(
+        [pd.read_parquet(f) for f in sorted((STAGING_DIR / "inventory_sign_off").glob("*.parquet"))],
+        ignore_index=True,
+    )
+    principal_df = raw[raw["_principal"] == "delmonte"] if "_principal" in raw.columns else raw
+    deduped_df, _ = transform_fact(principal_df, "inventory", "delmonte", DEFAULT_CONFIG_DIR, amount_col="quantity_on_hand")
+    real = deduped_df[deduped_df["is_demo"] != True]  # noqa: E712
+    named = real.dropna(subset=["sku_code", "product_name"]).copy()
+
+    if dry_run:
+        print(f"\n[Product_Dimension delmonte sku-grain build] DRY RUN: "
+              f"{named['sku_code'].nunique()} distinct real sku_codes with a real "
+              f"product_name found in staged inventory_sign_off data — nothing written.")
+        return {"upserted": 0, "conflicts_logged": 0}
+
+    # Most-recent-_period wins for a sku_code with 2+ distinct product_name
+    # values across months — sort ascending so groupby.last() picks the
+    # latest period's text.
+    named = named.sort_values("_period")
+    conflicts_logged = 0
+    for sku, grp in named.groupby("sku_code"):
+        names = grp["product_name"].unique()
+        if len(names) > 1:
+            conflicts_logged += 1
+            log.info(
+                "  %s: %d distinct product_name values across periods %s — "
+                "using most recent (%r)", sku, len(names), list(grp["_period"].unique()), names[-1],
+            )
+    resolved = named.groupby("sku_code", as_index=False).last()[["sku_code", "product_name"]]
+
+    with engine.begin() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        for row in resolved.itertuples(index=False):
+            conn.execute(text("""
+                INSERT INTO product_dimension (principal, grain, sku_code, category_path, product_name, status)
+                VALUES ('delmonte', 'sku', :sku_code, NULL, :product_name, 'ACTIVE')
+                ON CONFLICT (principal, sku_code) WHERE sku_code IS NOT NULL
+                DO UPDATE SET product_name = EXCLUDED.product_name
+            """), {"sku_code": row.sku_code, "product_name": row.product_name})
+
+    print(f"\n[Product_Dimension delmonte sku-grain build]")
+    print(f"  upserted:        {len(resolved)}  (expected 597, matching 5,164/5,171 real "
+          f"inventory rows getting a real sku_code+product_name)")
+    print(f"  conflicts logged: {conflicts_logged}  (expected 1 — punctuation-only, not a real "
+          f"data disagreement)")
+    return {"upserted": len(resolved), "conflicts_logged": conflicts_logged}
+
+
+def resolve_delmonte_inventory_product_key(engine: Engine, schema: str, dry_run: bool) -> dict[str, int]:
+    """Runs after run_category_brand_backfill (step 8b). Fixes the 100%-null
+    Inventory_Fact.product_key for principal='delmonte' found by the 2026-09
+    column-gap audit (reports/COLUMN_GAP_AUDIT_2026-09.md) —
+    scripts/run_canonical_load.py:413-414's FactPlanItem for delmonte
+    inventory sets dimension_fks=[] with a comment promising a "downstream
+    sku_code text match" that was never actually implemented anywhere in
+    this repo (confirmed by grep — the comment was the only hit).
+
+    A plain post-load UPDATE, not _product_fk_spec("sku")/dimension_fks,
+    on purpose: Del Monte's product_dimension rows aren't governed by that
+    generic FK-resolution natural key at all here (they're loaded outside
+    this codepath, pre-canonical-load era — see _product_fk_spec's own
+    comment), and inventory_fact rows carry no category_path to match
+    against even if they were. A plain equality join on sku_code alone is
+    what's needed, and migration 0016 (dedup + the new partial unique index
+    on (principal, sku_code) WHERE sku_code IS NOT NULL) is what makes that
+    join safe — before that migration, a sku_code could match 2-3 rows.
+
+    Idempotent: re-running only touches rows still NULL. Unilever is never
+    touched (WHERE f.principal = 'delmonte' scopes every row this UPDATE can
+    see) — asserted explicitly below, not just relied on via the WHERE
+    clause, per Yuan's instruction."""
+    if dry_run:
+        print("\n[Inventory_Fact.product_key delmonte backfill] DRY RUN: "
+              "skipped (see run_category_brand_backfill's dry-run note above — "
+              "same reasoning: product_dimension/inventory_fact aren't populated "
+              "for real on a dry run, so there's nothing meaningful to resolve).")
+        return {"resolved": 0, "still_null": 0, "unilever_touched": 0}
+
+    with engine.connect() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        before_unilever_null = conn.execute(text(
+            "SELECT count(*) FROM inventory_fact WHERE principal = 'unilever' AND product_key IS NULL"
+        )).scalar()
+
+    with engine.begin() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        result = conn.execute(text("""
+            UPDATE inventory_fact f
+            SET product_key = pd.product_key
+            FROM product_dimension pd
+            WHERE f.principal = 'delmonte'
+              AND f.product_key IS NULL
+              AND pd.principal = 'delmonte'
+              AND pd.grain = 'sku'
+              AND pd.sku_code = f.sku_code
+        """))
+        resolved = result.rowcount or 0
+
+    with engine.connect() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        still_null = conn.execute(text(
+            "SELECT count(*) FROM inventory_fact WHERE principal = 'delmonte' AND product_key IS NULL"
+        )).scalar()
+        after_unilever_null = conn.execute(text(
+            "SELECT count(*) FROM inventory_fact WHERE principal = 'unilever' AND product_key IS NULL"
+        )).scalar()
+
+    unilever_touched = after_unilever_null - before_unilever_null
+    print(f"\n[Inventory_Fact.product_key delmonte backfill]")
+    print(f"  resolved:   {resolved}  (expected 3,792 against the frozen full-volume load)")
+    print(f"  still null: {still_null}  (expected 1,379 — genuinely unmatched sku_codes, "
+          f"flagged for the client, not fabricated)")
+    print(f"  unilever rows changed: {unilever_touched}"
+          + ("  <<< MISMATCH — expected 0" if unilever_touched != 0 else "  (expected 0, OK)"))
+    if unilever_touched != 0:
+        raise RuntimeError(
+            f"resolve_delmonte_inventory_product_key touched {unilever_touched} Unilever "
+            f"inventory_fact rows — expected 0. Aborting before this reaches public."
+        )
+    return {"resolved": resolved, "still_null": still_null, "unilever_touched": unilever_touched}
+
+
+def resolve_unilever_inventory_product_key(engine: Engine, schema: str, dry_run: bool) -> dict[str, int]:
+    """Runs after the ssis_soh/unilever inventory load (step 7). Fixes the
+    100%-null Inventory_Fact.product_key for principal='unilever' on a
+    fresh canonical rebuild — found by the 2026-09-17 column-gap audit
+    Part B: transform_ssis_soh()'s output dataframe has no product_key
+    column at all (confirmed: 13 columns, none named product_key), so
+    every canonical rebuild leaves this column entirely unresolved for
+    Unilever, same shape of gap as the Del Monte one fixed earlier this
+    session, just never noticed because `public` was populated by a
+    separate, non-canonical one-time script.
+
+    Provenance of `public`'s already-resolved values (recon, not fixed
+    here): `scratch/run_ssis_soh_load.py:46-59` does the join this
+    function reproduces, but as a raw one-time INSERT directly into
+    `inventory_fact`, bypassing `run_canonical_load.py`/FACT_PLAN
+    entirely — never run through this canonical pipeline. `public`'s
+    Unilever `product_dimension` rows come in two distinct, disjoint
+    product_key ranges: 1-1808 (1,807 demand SKUs, from
+    `sales_unilever_sku_demand`'s `_product_fk_spec("sku")` — the only
+    canonical creator of Unilever product_dimension rows) and 50723-51013
+    (291 SOH-only "Article Nos" with no demand history — DEC-22,
+    ARCHITECTURE.md:92). The 291-row batch's actual INSERT script is not
+    in this repo (`analytics/etl/transform_ssis_soh.py:250-292`'s R8 step
+    only ever wrote `product_dimension_candidates_r8.csv`, "PREPARED
+    ONLY — not inserted" per its own script's print statement,
+    `scratch/run_ssis_soh_transform.py:70`; grepped `scratch/append_sql.py`
+    and `scratch/execute_sql.py` plus their git history for the actual
+    INSERT — no hits). The high key range (starting at 50723) tells us
+    roughly when it ran relative to other inserts: after ~50,722 other
+    product_key values had already been consumed elsewhere (the bulk of
+    that churn being Del Monte's now-deduped generate_synthetic_dm.py-era
+    rows) — not from a fresh table.
+
+    CORRECTED 2026-09-18: an earlier version of this function was a plain
+    join only, and left the 291 SOH-only rows permanently unresolved on a
+    fresh rebuild (24,528/27,282) — treating "don't invent product_key
+    values" as "don't create the dimension rows at all", which was the
+    wrong conclusion. `product_key` is a GENERATED ALWAYS AS IDENTITY
+    column; nothing requires a fresh build's identity sequence to produce
+    `public`'s exact historical values (1-1808, 50723-51013) — only the
+    *sku_code* has to match, which is what every downstream join actually
+    keys on. Fix: this function now UPSERTS the 291 SOH-only products
+    first, from the real SOH source itself (Article No -> sku_code,
+    already renamed at Extract; Article Description -> product_name;
+    CATEGORY DESC -> category_path if present, else NULL) — the exact
+    (sku_code, product_name, category) triples DEC-22's R8 step already
+    computed and would have inserted, had its INSERT ever been committed
+    (see `product_dimension_candidates_r8.csv`,
+    `analytics/etl/transform_ssis_soh.py:250-292`). ON CONFLICT (principal,
+    grain, sku_code) — migration 0014's Unilever-only partial index —
+    DO NOTHING: on `public`, all 291 already exist, so this upsert is a
+    true no-op (their historical product_key values are untouched); on a
+    fresh scratch schema, it creates exactly 291 new rows with whatever
+    keys the sequence assigns, which is fine because everything downstream
+    (inventory_fact backfill, category/brand backfill) joins on sku_code,
+    never on the numeric key value."""
+    with engine.connect() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        before_delmonte_null = conn.execute(text(
+            "SELECT count(*) FROM inventory_fact WHERE principal = 'delmonte' AND product_key IS NULL"
+        )).scalar()
+        before_dim_count = conn.execute(text(
+            "SELECT count(*) FROM product_dimension WHERE principal = 'unilever' AND grain = 'sku'"
+        )).scalar()
+
+    if dry_run:
+        print("\n[Inventory_Fact.product_key unilever backfill] DRY RUN: skipped "
+              "(product_dimension/inventory_fact aren't populated for real on a dry run).")
+        return {"resolved": 0, "still_null": 0, "new_dimension_rows": 0, "delmonte_touched": 0}
+
+    # No is_demo column at this raw staging stage — transform_ssis_soh.py
+    # sets it as a constant False for every row later (its own line 243);
+    # there is no synthetic ssis_soh variant, so every raw row here is real.
+    raw = pd.concat(
+        [pd.read_parquet(f) for f in sorted((STAGING_DIR / "ssis_soh").glob("*.parquet"))],
+        ignore_index=True,
+    )
+    named = raw.dropna(subset=["sku_code"]).sort_values("_period") if "_period" in raw.columns else raw.dropna(subset=["sku_code"])
+    latest = named.groupby("sku_code", as_index=False).last()
+    soh_products = latest[["sku_code", "article_description", "category_desc"]].rename(
+        columns={"article_description": "product_name", "category_desc": "category_path"}
+    )
+
+    with engine.begin() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        for row in soh_products.itertuples(index=False):
+            conn.execute(text("""
+                INSERT INTO product_dimension (principal, grain, sku_code, category_path, product_name, status)
+                VALUES ('unilever', 'sku', :sku_code, :category_path, :product_name, 'ACTIVE')
+                ON CONFLICT (principal, grain, sku_code) WHERE principal = 'unilever' AND grain = 'sku'
+                DO NOTHING
+            """), {
+                "sku_code": row.sku_code,
+                "product_name": row.product_name if pd.notna(row.product_name) else None,
+                "category_path": row.category_path if pd.notna(row.category_path) else None,
+            })
+        after_dim_count = conn.execute(text(
+            "SELECT count(*) FROM product_dimension WHERE principal = 'unilever' AND grain = 'sku'"
+        )).scalar()
+    new_dimension_rows = after_dim_count - before_dim_count
+
+    with engine.begin() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        result = conn.execute(text("""
+            UPDATE inventory_fact f
+            SET product_key = pd.product_key
+            FROM product_dimension pd
+            WHERE f.principal = 'unilever'
+              AND f.product_key IS NULL
+              AND pd.principal = 'unilever'
+              AND pd.grain = 'sku'
+              AND pd.sku_code = f.sku_code
+        """))
+        resolved = result.rowcount or 0
+
+    with engine.connect() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        still_null = conn.execute(text(
+            "SELECT count(*) FROM inventory_fact WHERE principal = 'unilever' AND product_key IS NULL"
+        )).scalar()
+        after_delmonte_null = conn.execute(text(
+            "SELECT count(*) FROM inventory_fact WHERE principal = 'delmonte' AND product_key IS NULL"
+        )).scalar()
+
+    delmonte_touched = after_delmonte_null - before_delmonte_null
+    print(f"\n[Inventory_Fact.product_key unilever backfill]")
+    print(f"  new dimension rows: {new_dimension_rows}  (expect 291 on a fresh build, 0 on public)")
+    print(f"  resolved:   {resolved}  (expected 27,282)"
+          + ("" if resolved == 27282 else "  <<< check"))
+    print(f"  still null: {still_null}  (expected 0)"
+          + ("" if still_null == 0 else "  <<< MISMATCH"))
+    print(f"  delmonte rows changed: {delmonte_touched}"
+          + ("  <<< MISMATCH — expected 0" if delmonte_touched != 0 else "  (expected 0, OK)"))
+    if delmonte_touched != 0:
+        raise RuntimeError(
+            f"resolve_unilever_inventory_product_key touched {delmonte_touched} Del Monte "
+            f"inventory_fact rows — expected 0. Aborting before this reaches public."
+        )
+    return {"resolved": resolved, "still_null": still_null, "new_dimension_rows": new_dimension_rows, "delmonte_touched": delmonte_touched}
+    return {"resolved": resolved, "still_null": still_null, "delmonte_touched": delmonte_touched}
+
+
 # ---------------------------------------------------------------------------
 # Scratch schema creation
 # ---------------------------------------------------------------------------
@@ -1340,10 +1661,28 @@ def main() -> int:
         print(f"\n[inventory_fact (ssis_soh/unilever)]")
         print(f"  rows: expected 27282 / actual {soh_load.rows_attempted}"
               + ("" if soh_load.rows_attempted == 27282 else "  <<< MISMATCH"))
+        # 2026-09-17 column-gap audit Part B: transform_ssis_soh()'s output
+        # has no product_key column at all, so this join-based backfill runs
+        # right after the SOH load, same shape as the delmonte backfill
+        # below. Must run before category/brand backfill only in the sense
+        # that ordering doesn't matter here (unlike delmonte's dependency on
+        # the new sku-dimension-build step) — placed here to stay next to
+        # the fact load it fixes.
+        uni_fk_result = resolve_unilever_inventory_product_key(engine, args.schema, args.dry_run)
         # backfill's raw SQL needs the RAW engine + its own SET LOCAL (see
         # module docstring's SCHEMA SCOPING note) — schema_translate_map
         # does not apply to text() SQL.
         tally = run_category_brand_backfill(engine, args.schema, args.dry_run)
+        # Step 8a.5 (2026-09-17, column-gap audit item 3 precursor): must run
+        # AFTER migration 0016 has landed (dedup + the new (principal,
+        # sku_code) partial unique index — ensure_scratch_schema() already
+        # applies every migrations/*.sql file before any FACT_PLAN fact
+        # loads run) and BEFORE the product_key backfill below, which reads
+        # the rows this step creates/refreshes.
+        dm_dim_result = resolve_delmonte_sku_dimension(engine, args.schema, args.dry_run)
+        # Step 8b: must run AFTER the category/brand backfill and the new
+        # dimension-build step above.
+        inv_fk_result = resolve_delmonte_inventory_product_key(engine, args.schema, args.dry_run)
     except Exception:
         if args.target_public:
             # No scratch schema to drop - and _drop_scratch_schema() must
@@ -1371,6 +1710,9 @@ def main() -> int:
     for r in results:
         print(f"  {r.label}: {r.actual_rows} rows" + ("  MISMATCH" if r.mismatch else ""))
     print(f"  category_path_source split: {tally}")
+    print(f"  delmonte sku-grain product_dimension build: {dm_dim_result}")
+    print(f"  delmonte inventory_fact.product_key backfill: {inv_fk_result}")
+    print(f"  unilever inventory_fact.product_key backfill: {uni_fk_result}")
     print(f"\n{'DRY RUN — nothing written.' if args.dry_run else 'Load complete.'}")
     if args.target_public:
         print("Cutover load into 'public' complete. Next: step 3 verification "

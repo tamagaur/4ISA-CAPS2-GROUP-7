@@ -1125,6 +1125,22 @@ INVENTORY_SIGN_OFF_FOOTER_CHECKS = [
     # only cases/packages/pieces - unlike the remaining 15 unmatched rows
     # below, safe to treat as pure junk.
     FooterRowCheck(column="sku_description_raw", token="#REF!", mode="eq"),
+    # 7 section-header rows (2026-09-17, column-gap audit's DM product_dimension
+    # recon): sku_description_raw is a bare category label ("QUICK N EASY",
+    # "KIKKOMAN", "CONTADINA", "MR. MILK YOGHURT", "VINA MILK", "PROMO PACK",
+    # "NEW PRODUCTS"), all from ONE file/sheet (AUGUST 2023 inventory sign-off,
+    # "ACTUAL 090423"). _SKU_CODE_RE requires "CODE<space>NAME" and correctly
+    # refuses to split a single all-caps token with no trailing name, so these
+    # land in sku_code with product_name=NULL. Deliberately NOT a plain
+    # all_null=[quantity_on_hand, cases] check: that sheet has 209 OTHER real
+    # rows (real product names, real `pieces` counts) that also have
+    # quantity_on_hand/cases both null - this file reports pieces, not
+    # quantity_on_hand, for that sheet, and an all_null check on just those two
+    # columns would have silently dropped all 209 of them (verified before
+    # writing this: exactly 210 rows match quantity_on_hand+cases null, 209 of
+    # which have real product_name text). Joint on all THREE columns instead -
+    # verified exact: 7 rows match all-three-null, no more, no less.
+    FooterRowCheck(all_null=["quantity_on_hand", "cases", "product_name"]),
     # NOT included, deliberately - 15 real rows remain "unmatched" after
     # the two checks above (12 with sku_description_raw=NULL, 1
     # "DESCRIPTION" - an unstripped-header-style artifact, 2 "WH/Stock" /

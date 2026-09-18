@@ -31,6 +31,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
+from backend.principals import PrincipalQuery, principal_clause
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
@@ -82,13 +83,17 @@ def get_recommendations(
     status: str | None = Query(None, description="Filter to 'pending' | 'accepted' | 'dismissed'. Omit for all."),
     from_date: str | None = Query(None, alias="from", description="'YYYY-MM-DD'. The shared date-range picker's applied start. Must be given with 'to' or not at all — filters on lr.planning_cycle_date."),
     to_date: str | None = Query(None, alias="to", description="'YYYY-MM-DD'. The shared date-range picker's applied end. Must be given with 'from' or not at all."),
+    principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> RecommendationsResponse:
-    # Unilever-only (2026-09) — see backend/routers/dashboard.py's module
-    # docstring for the full reasoning.
-    query = _SELECT_ONE + " WHERE pd.principal = 'unilever'"
-    params: dict = {}
+    # Both principals again (2026-09-17) — see backend/principals.py.
+    # lp_recommendation currently holds 430 Unilever rows and ZERO Del
+    # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte
+    # honestly returns an empty list until the LP is run for Del Monte.
+    scope_sql, scope_params = principal_clause(principal, "pd.principal")
+    query = _SELECT_ONE + " WHERE 1=1" + scope_sql
+    params: dict = {**scope_params}
     if status:
         query += " AND lr.status = :status"
         params["status"] = status

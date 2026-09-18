@@ -36,14 +36,45 @@
 
 BEGIN;
 
+-- FIXED 2026-09-17 (found while doing the item-1/item-3 scratch dry-run for
+-- the column-gap audit, unrelated to that work's actual scope): both
+-- lookups below used to join pg_class ON relname = 'product_dimension'
+-- with NO schema/namespace qualification - on a server where other
+-- schemas also have a table literally named product_dimension (this
+-- project always has at least ssm_canonical / ssm_precutover_diag lying
+-- around per reports/PROJECT_STATE_2026-09.md), that query matches EVERY
+-- schema's product_dimension at once. Reproduced directly: applying this
+-- migration to a brand-new scratch schema while ssm_canonical's
+-- product_dimension still carried an old-style (non-NULLS-NOT-DISTINCT)
+-- constraint made check_name resolve to a name that also existed (same
+-- auto-generated name, different table) on the NEW schema - the
+-- unqualified `ALTER TABLE Product_Dimension DROP CONSTRAINT %I` then
+-- dropped the brand-new schema's own just-created NULLS NOT DISTINCT
+-- constraint instead, and the ADD branch's own unscoped EXISTS check found
+-- some OTHER schema's NND constraint and concluded (wrongly) that this
+-- schema didn't need one added. Net effect: every from-scratch scratch
+-- build silently ended up with NO unique constraint at all on
+-- product_dimension - never caught before because no prior full rebuild
+-- had exercised the grain='category' insert path this deep in one run.
+-- Fix: 'product_dimension'::regclass resolves via search_path to the ONE
+-- table actually in scope for this session (the schema
+-- ensure_scratch_schema() set via SET LOCAL search_path just before this
+-- file runs), never another schema's table of the same name. Safe to edit
+-- this already-applied-to-public migration in place (not a new migration
+-- number): public's own constraint was already correct NND before and
+-- after this fix (this bug only manifests when 2+ product_dimension
+-- tables coexist across schemas, which was never public's situation), and
+-- the DO block's logic is idempotent either way - this changes future
+-- re-applications to fresh scratch schemas, not anything that already
+-- happened to public.
+
 DO $$
 DECLARE
     check_name TEXT;
 BEGIN
     SELECT con.conname INTO check_name
     FROM pg_constraint con
-    JOIN pg_class rel ON rel.oid = con.conrelid
-    WHERE rel.relname = 'product_dimension'
+    WHERE con.conrelid = 'product_dimension'::regclass
       AND con.contype = 'u'
       AND pg_get_constraintdef(con.oid) LIKE 'UNIQUE (principal, grain, sku_code, category_path)%'
       AND pg_get_constraintdef(con.oid) NOT LIKE '%NULLS NOT DISTINCT%';
@@ -54,8 +85,7 @@ BEGIN
 
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint con
-        JOIN pg_class rel ON rel.oid = con.conrelid
-        WHERE rel.relname = 'product_dimension'
+        WHERE con.conrelid = 'product_dimension'::regclass
           AND con.contype = 'u'
           AND pg_get_constraintdef(con.oid) LIKE '%NULLS NOT DISTINCT%'
     ) THEN

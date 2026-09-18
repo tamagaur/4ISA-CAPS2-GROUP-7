@@ -1,16 +1,22 @@
 import { apiFetch } from '../auth';
 import { cachedRequest, peekCache } from './cache';
+import { appendPrincipal } from '../principals';
 
 // This is the ONLY place this shape is defined — components must never
 // import it directly, only call getDashboardData(), so swapping the
 // backend implementation later stays a one-file change.
 //
-// Unilever-only (2026-09): no more principal param — the backend always
-// scopes to Unilever now.
-function dashboardPath({ period, startPeriod } = {}) {
-  const periodParam = period ? `?period=${period}` : '';
-  const startPeriodParam = startPeriod ? `${periodParam ? '&' : '?'}start_period=${startPeriod}` : '';
-  return `/dashboard${periodParam}${startPeriodParam}`;
+// principal ('all' | 'unilever' | 'delmonte') restored 2026-09-17 — see
+// src/principals.js. It's part of the path (not a header) so the response
+// cache keys each scope separately and switching principals can't serve
+// another scope's numbers.
+function dashboardPath({ period, startPeriod, principal } = {}) {
+  const query = new URLSearchParams();
+  if (period) query.append('period', period);
+  if (startPeriod) query.append('start_period', startPeriod);
+  appendPrincipal(query, principal);
+  const qs = query.toString();
+  return `/dashboard${qs ? `?${qs}` : ''}`;
 }
 
 export function getDashboardData(args = {}, { force = false } = {}) {

@@ -424,7 +424,7 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
       {!hasData ? (
         <p className="dashboard-empty-note">{emptyReason || 'No ABC classification available'}</p>
       ) : (
-        <>
+        <div className="chart-widget-body">
           <div className="chart-container donut-container" style={{ position: 'relative' }}>
             <ResponsiveContainer width="99%" height="100%">
               <PieChart>
@@ -457,7 +457,7 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
               </li>
             ))}
           </ul>
-        </>
+        </div>
       )}
     </div>
   );
@@ -512,7 +512,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
       {!hasData ? (
         <p className="dashboard-empty-note">{emptyReason || 'No stock status data available'}</p>
       ) : (
-        <>
+        <div className="chart-widget-body">
           <div className="tier-stock-bars">
             {data.map((row, index) => {
               const inStock = row.inStock || 0;
@@ -578,7 +578,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
               Pending reorder
             </li>
           </ul>
-        </>
+        </div>
       )}
     </div>
   );

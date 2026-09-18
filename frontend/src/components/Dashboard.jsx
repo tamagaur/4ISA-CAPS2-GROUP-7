@@ -79,7 +79,7 @@ const DashboardSkeleton = () => (
 );
 
 const Dashboard = () => {
-  const { startMonth, startYear, endMonth, endYear } = useOutletContext() || {};
+  const { startMonth, startYear, endMonth, endYear, principal } = useOutletContext() || {};
   const period = toPeriod(endMonth, endYear);
   const startPeriod = toPeriod(startMonth, startYear);
   const requestKey = `${period ?? ''}|${startPeriod ?? ''}`;
@@ -90,7 +90,7 @@ const Dashboard = () => {
   // for the whole request. Seeded from the response cache, so revisiting a
   // range already fetched this session renders on the first frame.
   const [loaded, setLoaded] = useState(() => {
-    const cached = peekDashboardData({ period, startPeriod });
+    const cached = peekDashboardData({ period, startPeriod, principal });
     return cached ? { key: requestKey, data: cached } : null;
   });
   const [error, setError] = useState(null); // { key, message }
@@ -100,7 +100,7 @@ const Dashboard = () => {
     if (loadedKey === requestKey) return undefined;
     let cancelled = false;
     setError(null);
-    getDashboardData({ period, startPeriod })
+    getDashboardData({ period, startPeriod, principal })
       .then((res) => {
         if (!cancelled) setLoaded({ key: requestKey, data: res });
       })
@@ -110,7 +110,7 @@ const Dashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [requestKey, loadedKey, period, startPeriod]);
+  }, [requestKey, loadedKey, period, startPeriod, principal]);
 
   const isRefreshing = Boolean(loaded) && loaded.key !== requestKey;
   const currentError = error?.key === requestKey ? error.message : null;

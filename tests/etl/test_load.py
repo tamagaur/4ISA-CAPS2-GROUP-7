@@ -31,7 +31,7 @@ import json
 
 import pandas as pd
 import pytest
-from sqlalchemy import Column, MetaData, Numeric, String, Table
+from sqlalchemy import Column, MetaData, Numeric, String, Table, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -150,7 +150,19 @@ def test_resolve_dimension_fk_raises_before_touching_engine():
 def test_dimension_insert_sql_shape_is_on_conflict_do_nothing():
     """Confirms the lookup-or-insert pattern (DEC-09) compiles to the
     correct Postgres SQL without needing a live connection - existing
-    dimension rows are matched, never duplicated or overwritten."""
+    dimension rows are matched, never duplicated or overwritten.
+
+    Corrected 2026-09-17 (column-gap audit, migration 0016): this used to
+    assert a plain `ON CONFLICT (principal, sku_code)`, which never matched
+    any real constraint on product_dimension (the real 2026-09-15-era
+    constraint was 4-column and included category_path; a bare 2-column
+    (principal, sku_code) index didn't exist at all until now). Migration
+    0016 added `product_dimension_sku_key_idx`, a PARTIAL unique index on
+    (principal, sku_code) WHERE sku_code IS NOT NULL - a real ON CONFLICT
+    targeting it must repeat that WHERE predicate verbatim (index_where)
+    for Postgres to infer the index as the conflict target, same as
+    _product_fk_spec("sku")'s conflict_index_where does for the existing
+    Unilever-only partial index (migration 0014)."""
     metadata = MetaData()
     product_dimension = Table(
         "product_dimension", metadata,
@@ -159,9 +171,13 @@ def test_dimension_insert_sql_shape_is_on_conflict_do_nothing():
         Column("sku_code", String),
     )
     stmt = pg_insert(product_dimension).values([{"principal": "unilever", "sku_code": "111"}])
-    stmt = stmt.on_conflict_do_nothing(index_elements=["principal", "sku_code"])
+    stmt = stmt.on_conflict_do_nothing(
+        index_elements=["principal", "sku_code"],
+        index_where=text("sku_code IS NOT NULL"),
+    )
     compiled = str(stmt.compile(dialect=postgresql.dialect()))
-    assert "ON CONFLICT (principal, sku_code) DO NOTHING" in compiled
+    assert "ON CONFLICT (principal, sku_code)" in compiled
+    assert "WHERE sku_code IS NOT NULL DO NOTHING" in compiled
     assert "INSERT INTO product_dimension" in compiled
 
 

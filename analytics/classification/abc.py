@@ -107,7 +107,10 @@ def classify_abc(revenue_df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=OUTPUT_COLUMNS)
 
     out = revenue_df[["sku_id", "total_revenue"]].copy()
-    out = out.sort_values("total_revenue", ascending=False, kind="mergesort").reset_index(drop=True)
+    # sku_id ASC tiebreak makes ranking deterministic when two SKUs tie on
+    # revenue (the fetch queries carry no ORDER BY of their own, so ties
+    # would otherwise depend on incidental DB return order).
+    out = out.sort_values(["total_revenue", "sku_id"], ascending=[False, True], kind="mergesort").reset_index(drop=True)
 
     grand_total = out["total_revenue"].sum()
     if grand_total == 0:

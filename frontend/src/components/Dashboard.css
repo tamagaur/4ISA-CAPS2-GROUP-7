@@ -412,3 +412,17 @@
 .chart-duo-abc .chart-widget {
   height: auto;
 }
+
+/* .chart-widget-body wraps everything below the header in both widgets in
+   this row (the donut+legend, and the tier bars+legend). flex:1 lets it
+   claim whatever height .chart-duo's align-items: stretch adds beyond
+   this card's own content, and justify-content: center spends that extra
+   space evenly above and below the content instead of leaving it all
+   stacked underneath as one dead gap. */
+.chart-duo-abc .chart-widget-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+}

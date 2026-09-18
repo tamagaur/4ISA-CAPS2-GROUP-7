@@ -102,21 +102,6 @@
   text-transform: uppercase;
 }
 
-/* Same pill language as .forecast-cat-badge, in a neutral slate rather
-   than the category badges' magenta or the page's red CTA — this states a
-   fixed fact about the data, so it must not read as a control to click
-   (which is exactly how the Brand dropdown it replaced did read). */
-.forecast-scope-badge {
-  padding: 0.2rem 0.6rem;
-  border-radius: 20px;
-  background-color: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-body);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
 .forecast-range-note {
   margin: 0 0 0.75rem 0;
   padding: 0.6rem 0.9rem;
@@ -559,7 +544,8 @@
 }
 
 /* Brand sits inline after the product name rather than on its own line —
-   one row saved, and "Unilever" is low-value now the app is Unilever-only. */
+   one row saved, and it's a low-value line when the principal scope is
+   already set in the Topbar. */
 .sku-brand-name {
   font-size: 0.75rem;
   color: var(--color-text-subtle);

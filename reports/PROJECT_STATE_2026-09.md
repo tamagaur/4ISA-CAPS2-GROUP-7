@@ -693,3 +693,34 @@ classifier, not a data-safety concern.
 5. `ssm_step3_verify` scratch schema and `broken_state_20260914/` evidence
    dump can be cleaned up once the incident is fully closed and folded
    into this report — not yet, kept for now.
+
+## 12. Column-gap audit — CLOSED (2026-09-17/18)
+
+Commits `cccd038` (Del Monte product_dimension dedup + inventory
+product_key fix), `196e01d` (Unilever SOH `unit_cost_per_case`/
+`stock_status` mapping fix). Pushed to `group7/kelvin-etl`,
+`e2710c4..c8a6c4c`. Full findings, per-column classification, and
+evidence: `reports/COLUMN_GAP_AUDIT_2026-09.md`.
+
+## 13. ABC Phase 2 — CLOSED (2026-09-18)
+
+Commit `d3eb3ec`. Tier A as of 2026-02: **132 single-period**, **143
+trailing-3-month**, **119 overlap** between the two bases.
+
+## 14. Open items carried forward (logged only, not worked)
+
+1. Demo DM inventory now references legacy synthetic DM product rows —
+   don't delete those rows unless the demo rows go too.
+2. Del Monte has no SKU-level sales source (sell-out is category-grain
+   only; sales register/return carry no SKU column) — adviser ruling
+   needed on the ABC basis for Del Monte.
+3. Verify `transform_ssis_soh`'s `unit_cost_per_case`/`stock_status`
+   output (commit `196e01d`) matches `public`'s existing values — not yet
+   diffed.
+4. Pre-existing `tests/backend/*`, `tests/forecasting/test_sarima.py`
+   collection errors (FastAPI/Starlette version mismatch in this dev
+   environment) — unrelated to this work.
+5. Duplicate migration `0002` (`0002_add_boundary_flag.sql` and
+   `0002_add_sku_management_fields.sql`) — cosmetic, not yet resolved.
+6. `net_amount` is gross, not net of returns — a manuscript limitation,
+   not a pipeline defect.
