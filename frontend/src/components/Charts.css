@@ -715,3 +715,111 @@
   border-radius: 3px;
 }
 
+
+/* ── ABC donut: revenue centre + paired share bars (2026-09-18) ────────── */
+.donut-center-secondary {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-top: 0.2rem;
+}
+
+.abc-share-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.abc-share-row {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  grid-template-areas: "label track" "label values";
+  column-gap: 0.6rem;
+  row-gap: 0.15rem;
+  align-items: center;
+}
+
+.abc-share-label {
+  grid-area: label;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.abc-share-track {
+  grid-area: track;
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+}
+
+.abc-share-track span {
+  height: 100%;
+}
+
+.abc-share-values {
+  grid-area: values;
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Policy comparison (LP safety stock vs 3-week rule) ────────────────── */
+.policy-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.5rem 0 0.75rem;
+}
+
+.policy-bar-row {
+  display: grid;
+  grid-template-columns: 12rem 1fr 8rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.policy-bar-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.policy-bar-track {
+  height: 22px;
+  border-radius: 6px;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+.policy-bar-track span {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+}
+
+.policy-bar-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .policy-bar-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+  .policy-bar-value {
+    text-align: left;
+  }
+  .abc-share-row {
+    grid-template-columns: 1fr;
+    grid-template-areas: "label" "track" "values";
+  }
+}

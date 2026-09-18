@@ -15,8 +15,16 @@ import { COLORS, CHART_COLORS } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
+import { useBrandLookup } from '../utils/useBrandLookup';
 import DateFilter from './DateFilter';
+import SkuDiagnosticsPanel from './SkuDiagnosticsPanel';
 import './SKUForecast.css';
+
+// Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
+// presentation attributes can't take a CSS var()). It used to be the
+// amber data colour, which means "watch" everywhere else in the app.
+const PIN_COLOR = '#C74E3D';
+const PIN_IDLE_COLOR = '#667085';
 
 // Unlike Dashboard/ABC Classification/Reorder Recs, this page's
 // date range is its OWN, local to this component — not the shared
@@ -198,50 +206,83 @@ const SKUForecast = () => {
     return () => { cancelled = true; };
   }, [principal]);
 
+  // GET /abc has no brand field; this used to print 'Unilever' (the
+  // principal) as every SKU's brand. Real brand comes from the product
+  // master, same lookup ABC Classification and Reorder Recs use.
+  const brandLookup = useBrandLookup();
+
   // Map ABC classification rows -> the SKU-picker shape this page renders.
+  // revenueShare is kept for the default selection below.
   const sourceSKUs = useMemo(
     () =>
       rawItems.map((item) => ({
         code: item.sku_id,
         name: item.product_name || 'Unknown Product',
-        brand: 'Unilever',
+        brand: brandLookup?.get(String(item.sku_id)) ?? '',
         cat: item.tier,
+        revenueShare: item.revenue_share ?? null,
       })),
-    [rawItems]
+    [rawItems, brandLookup]
   );
+
+  // The SKU the page opens on when nothing has been picked or remembered:
+  // the highest-revenue Category A SKU in the list. The page used to open
+  // blank behind a "pick a SKU" prompt, so the first thing a client saw
+  // was an empty chart slot. Picked explicitly by revenue_share (not by
+  // list order) so it can't depend on how the backend happens to sort.
+  const defaultSKU = useMemo(() => {
+    let best = null;
+    sourceSKUs.forEach((sku) => {
+      if (sku.cat !== 'A') return;
+      if (!best || (sku.revenueShare ?? -1) > (best.revenueShare ?? -1)) best = sku;
+    });
+    return best;
+  }, [sourceSKUs]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Selected SKU. Starts EMPTY — the page opens on a "pick a SKU" prompt
-  // rather than auto-picking the first row of the list, which showed a chart
-  // for an arbitrary SKU nobody asked for and read as if it were meaningful.
+  // Selected SKU. Opens on the remembered choice if there is one, else on
+  // defaultSKU (the top Category A SKU by revenue) — never blank. An
+  // auto-pick is labelled as such in the selected-SKU card so it can't be
+  // mistaken for something the user chose.
   //
   // The choice is remembered in sessionStorage rather than component state
   // because this is a route-level component: navigating to another page and
   // back remounts it, which would otherwise wipe the selection mid-session.
   // sessionStorage (not localStorage) matches "until the end of the session"
-  // exactly — closing the tab starts clean again.
+  // exactly — closing the tab starts clean again. Only explicit picks are
+  // remembered; the auto-pick is recomputed from live data each visit.
   const SELECTED_SKU_KEY = 'san2_selected_forecast_sku';
   const [selectedSKU, setSelectedSKU] = useState(null);
+  const [isAutoSelected, setIsAutoSelected] = useState(false);
 
   // Restore the remembered SKU once the list has loaded — and only if that
   // code still exists in it, so a stale/renamed code can't leave the page
-  // requesting a SKU that's no longer classified.
+  // requesting a SKU that's no longer classified. Falls back to defaultSKU.
   useEffect(() => {
     if (sourceSKUs.length === 0) return;
     setSelectedSKU((prev) => {
-      if (prev) return sourceSKUs.some((s) => s.code === prev.code) ? prev : null;
+      if (prev && sourceSKUs.some((s) => s.code === prev.code)) {
+        // Same SKU, refreshed row (brand may have arrived late).
+        return sourceSKUs.find((s) => s.code === prev.code);
+      }
       let saved = null;
       try {
         saved = sessionStorage.getItem(SELECTED_SKU_KEY);
       } catch {
-        saved = null; // private mode / storage blocked — just start empty
+        saved = null; // private mode / storage blocked — fall through to the default
       }
-      return saved ? sourceSKUs.find((s) => s.code === saved) || null : null;
+      const remembered = saved ? sourceSKUs.find((s) => s.code === saved) : null;
+      if (remembered) {
+        setIsAutoSelected(false);
+        return remembered;
+      }
+      setIsAutoSelected(Boolean(defaultSKU));
+      return defaultSKU;
     });
-  }, [sourceSKUs]);
+  }, [sourceSKUs, defaultSKU]);
 
   // Persistent Pinned SKUs
   const [pinnedSKUs, setPinnedSKUs] = useState(() => {
@@ -290,6 +331,7 @@ const SKUForecast = () => {
   // Select SKU handler
   const handleSelectSKU = (sku) => {
     setSelectedSKU(sku);
+    setIsAutoSelected(false);
     setIsDropdownOpen(false);
     try {
       sessionStorage.setItem(SELECTED_SKU_KEY, sku.code);
@@ -301,11 +343,13 @@ const SKUForecast = () => {
     localStorage.setItem('san2_recent_forecast_skus', JSON.stringify(updatedRecent));
   };
 
-  // Clear — drops the SKU selection AND the search/filter state, returning
-  // the page to the same empty "pick a SKU" prompt it opens on. Also forgets
-  // the remembered selection so navigating away and back stays cleared.
+  // Clear — drops the search/filter state and returns the page to the same
+  // default it opens on (the top Category A SKU), rather than to a blank
+  // slot. Also forgets the remembered selection so navigating away and
+  // back lands on the default too.
   const handleClearSelection = () => {
-    setSelectedSKU(null);
+    setSelectedSKU(defaultSKU);
+    setIsAutoSelected(Boolean(defaultSKU));
     setSelectedCategory('ALL');
     setSearchQuery('');
     try {
@@ -688,7 +732,7 @@ const SKUForecast = () => {
                 </select>
               </div>
 
-              {(selectedCategory !== 'ALL' || searchQuery !== '' || selectedSKU) && (
+              {(selectedCategory !== 'ALL' || searchQuery !== '' || (selectedSKU && !isAutoSelected)) && (
                 <button
                   className="clear-filters-btn"
                   onClick={handleClearSelection}
@@ -745,7 +789,7 @@ const SKUForecast = () => {
                               aria-label={`${pinnedSKUs.includes(sku.code) ? 'Unpin' : 'Pin'} SKU ${sku.code}`}
                               aria-pressed={pinnedSKUs.includes(sku.code)}
                             >
-                              <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
+                              <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                             </button>
                             <div className="result-code-group">
                               <span className="result-sku-code">{sku.code}</span>
@@ -766,7 +810,7 @@ const SKUForecast = () => {
                       {pinnedSKUObjects.length > 0 && (
                         <div className="combobox-section">
                           <div className="section-header-title">
-                            <Star size={12} fill="#F5A623" color="#F5A623" />
+                            <Star size={12} fill={PIN_COLOR} color={PIN_COLOR} />
                             <span>PINNED SKUS</span>
                           </div>
                           {pinnedSKUObjects.map(sku => (
@@ -782,7 +826,7 @@ const SKUForecast = () => {
                                 aria-label={`Unpin SKU ${sku.code}`}
                                 aria-pressed={true}
                               >
-                                <Star size={15} fill="#F5A623" />
+                                <Star size={15} fill={PIN_COLOR} />
                               </button>
                               <div className="result-code-group">
                                 <span className="result-sku-code">{sku.code}</span>
@@ -815,7 +859,7 @@ const SKUForecast = () => {
                                 aria-label={`Pin SKU ${sku.code}`}
                                 aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
-                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
+                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
                               <div className="result-code-group">
                                 <span className="result-sku-code">{sku.code}</span>
@@ -847,7 +891,7 @@ const SKUForecast = () => {
                                 aria-label={`Pin SKU ${sku.code}`}
                                 aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
-                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
+                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
                               <div className="result-code-group">
                                 <span className="result-sku-code">{sku.code}</span>
@@ -870,19 +914,21 @@ const SKUForecast = () => {
         {listLoading && <p className="forecast-subtitle">Loading SKU list…</p>}
         {listError && <p className="forecast-subtitle">Error: {listError}</p>}
 
-        {/* Nothing picked yet — the page deliberately opens here instead of
-            auto-selecting a SKU, so the first chart a user sees is always one
-            they actually asked for. Occupies the chart's slot so the layout
-            doesn't jump once a selection is made. */}
+        {/* Only reachable when the list itself is empty (no classified SKUs
+            for this principal) — otherwise the page auto-selects defaultSKU
+            and renders its forecast straight away. */}
         {!selectedSKU && !listLoading && !listError && (
           <div className="forecast-empty-state">
             <div className="forecast-empty-icon">
               <Search size={28} strokeWidth={1.6} />
             </div>
-            <h3 className="forecast-empty-title">Select a SKU to see its forecast</h3>
+            <h3 className="forecast-empty-title">
+              {sourceSKUs.length === 0 ? 'No classified SKUs for this principal' : 'Select a SKU to see its forecast'}
+            </h3>
             <p className="forecast-empty-body">
-              Search by SKU code, product name, or brand above — or pick one from your pinned and
-              recently viewed SKUs. The demand history and MA3 forecast will appear here.
+              {sourceSKUs.length === 0
+                ? 'GET /abc returned no rows for the selected principal, so there is nothing to forecast yet.'
+                : 'Search by SKU code, product name, or brand above — or pick one from your pinned and recently viewed SKUs.'}
             </p>
           </div>
         )}
@@ -901,20 +947,32 @@ const SKUForecast = () => {
                     aria-label={`${isSelectedPinned ? 'Unpin' : 'Pin'} SKU ${selectedSKU.code}`}
                     aria-pressed={isSelectedPinned}
                   >
-                    <Star size={15} fill={isSelectedPinned ? '#F5A623' : 'none'} color={isSelectedPinned ? '#F5A623' : '#667085'} />
+                    <Star size={15} fill={isSelectedPinned ? PIN_COLOR : 'none'} color={isSelectedPinned ? PIN_COLOR : PIN_IDLE_COLOR} />
                     <span className="pin-text">{isSelectedPinned ? 'Pinned' : 'Pin SKU'}</span>
                   </button>
                 </div>
                 <span className="sku-code-value">{selectedSKU.code}</span>
                 <div className="sku-meta-row">
                   <span className="sku-product-name">{selectedSKU.name}</span>
-                  <span className="sku-brand-name">{selectedSKU.brand}</span>
+                  {selectedSKU.brand && <span className="sku-brand-name">{selectedSKU.brand}</span>}
                 </div>
+                {isAutoSelected && (
+                  <span className="sku-auto-note">
+                    Auto-selected: the top Category A SKU by revenue share
+                    {selectedSKU.revenueShare != null ? ` (${(selectedSKU.revenueShare * 100).toFixed(2)}%)` : ''}.
+                    Search above to change it.
+                  </span>
+                )}
               </div>
               <div className="sku-info-right">
                 <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Category {selectedSKU.cat}</span>
               </div>
             </div>
+
+            {/* Why this SKU behaves this way — the Phase-2 diagnostic layer,
+                placed between the identity card and the chart so it reads
+                as part of the SKU's story, not a footnote under the graph. */}
+            <SkuDiagnosticsPanel skuId={selectedSKU.code} principal={principal} />
 
             {/* Chart Section */}
             {/* Keyed on the selected SKU so switching products replays the

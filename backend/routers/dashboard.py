@@ -230,6 +230,39 @@ zero):
     the schema to re-solve the LP against (see
     frontend/src/components/Charts.jsx's ReorderRecommendationWidget for
     the display side of this same note).
+
+  NARRATIVE-BAND FIELDS (2026-09-18) — the Dashboard now reads as four
+  bands, each headed by a takeaway sentence GENERATED from these fields
+  (never hardcoded; a null here becomes an honest "not available" line):
+
+  abc_revenue
+    — {period, total, blocked_reason}. SUM(net_amount) for the resolved
+    abc_period, from the same per-principal demand facts kpis.sales reads
+    (_sales_by_period) — the same net_amount basis
+    analytics/classification/orchestrate_abc.py classifies on, so the
+    donut's centre figure is the revenue the ring's shares are shares OF.
+    Null under 'all' unless both principals have a real figure (the
+    both-sides-real rule), or when no ABC run exists.
+  safety_stock_exposure
+    — {tier_a_count, comparable_count, below_count, below_revenue_share,
+    blocked_reason}. Same rows and same "both figures or excluded" rule as
+    kpis.safety_stock_rate, plus each product's revenue_share, so "N of M
+    measurable Category A SKUs are below safety stock, X% of revenue" is
+    one query, not two that could disagree. below_revenue_share is the sum
+    of revenue_share over the below-SS products (a share of the WHOLE
+    period's revenue, not of Tier A's).
+  policy_comparison
+    — {cycle_date, sku_count, lp_safety_stock_units, rule_safety_stock_units,
+    rule_weeks, blocked_reason}. Sums, over the latest pending planning
+    cycle, the LP's ss_i against what SSM's blanket rule would hold:
+    POLICY_WEEKS x (that product's own Forecast_Result.forecast_value for
+    the same month / AVG_WEEKS_PER_MONTH). Both sides are on the demand
+    series' unit (pieces), so they are directly comparable; deliberately
+    NOT converted to pesos — no per-piece cost exists (unit_cost_per_case
+    is per case and pack_size is unreliable, see recommendations.py).
+    Products with no forecast for the cycle month are excluded from BOTH
+    sums, never from one. Null with blocked_reason when no cycle or no
+    comparable product exists.
 """
 from __future__ import annotations
 
@@ -761,11 +794,14 @@ def get_dashboard(
     )
     safety_stock_rate = None
     safety_stock_rate_blocked_reason = f"ABC_Classification has no rows for {_scope_label(scope)} yet."
+    ss_rows: list = []
+    comparable: list = []
     if abc_period is not None:
         ss_rows = db.execute(
             text(f"""
                 SELECT
                     ac.product_key,
+                    ac.revenue_share AS revenue_share,
                     inv.current_stock AS current_stock,
                     rop.ss_i AS ss_i
                 FROM ABC_Classification ac
@@ -799,6 +835,28 @@ def get_dashboard(
                 "No Category A product has both an inventory figure and a pending "
                 "LP_Recommendation to compare (LP_Recommendation may be empty)."
             )
+
+    # ---- safety_stock_exposure (band 2 headline) --------------------------
+    # Same `comparable` rows as the rate above, so the headline and the KPI
+    # card can never disagree about which products were measurable.
+    if abc_period is not None and comparable:
+        below = [r for r in comparable if float(r["current_stock"]) < float(r["ss_i"])]
+        below_share = sum(float(r.get("revenue_share") or 0) for r in below)
+        safety_stock_exposure = {
+            "tier_a_count": len(ss_rows),
+            "comparable_count": len(comparable),
+            "below_count": len(below),
+            "below_revenue_share": round(below_share, 4),
+            "blocked_reason": None,
+        }
+    else:
+        safety_stock_exposure = {
+            "tier_a_count": len(ss_rows) if abc_period is not None else 0,
+            "comparable_count": 0,
+            "below_count": None,
+            "below_revenue_share": None,
+            "blocked_reason": safety_stock_rate_blocked_reason,
+        }
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring
@@ -851,6 +909,23 @@ def get_dashboard(
             }
             for r in sorted(mix_rows, key=lambda r: r["tier"])
         ]
+
+    # ---- abc_revenue (donut centre) -------------------------------------
+    # The revenue the ring's shares are shares of — same per-principal
+    # source and both-sides-real rule as kpis.sales, for the ABC period.
+    if abc_period is None:
+        abc_revenue = {"period": None, "total": None,
+                       "blocked_reason": f"ABC_Classification has no rows for {_scope_label(scope)} yet."}
+    else:
+        abc_total = _sales_by_period(db, [abc_period], scope).get(abc_period)
+        abc_revenue = {
+            "period": abc_period,
+            "total": _to_float(abc_total),
+            "blocked_reason": (
+                None if abc_total is not None
+                else f"No sales rows for {_scope_label(scope)} in {abc_period} to total."
+            ),
+        }
 
     # ---- tier_stock ----------------------------------------------------
 
@@ -1010,6 +1085,9 @@ def get_dashboard(
         "rows": [item.model_dump() for item in rp_items_sorted[:5]],
         "critical_count": sum(1 for it in rp_items if it.urgency == "CRITICAL"),
         "urgent_count": sum(1 for it in rp_items if it.urgency == "URGENT"),
+        # Products with no Inventory_Fact_Real row at the latest snapshot —
+        # reported as their own count, never folded into critical.
+        "no_data_count": sum(1 for it in rp_items if it.urgency == "NO DATA"),
         "total_order_qty": round(sum(it.q_i for it in rp_items), 2) if rp_items else 0,
         "lp_weights": {
             "cost": LP_WEIGHT_COST,
@@ -1017,6 +1095,52 @@ def get_dashboard(
             "storage": LP_WEIGHT_STORAGE,
         },
     }
+
+    # ---- policy_comparison (band 4: LP safety stock vs the 3-week rule) --
+    # One row per product in the latest pending cycle that ALSO has a
+    # Forecast_Result for that same month (fr.forecast_date =
+    # lr.planning_cycle_date); products missing the forecast drop out of
+    # both sums. Both sides are in the demand series' unit — see the
+    # docstring section above for why this stays in units, not pesos.
+    policy_rows = db.execute(
+        text(f"""
+            SELECT lr.planning_cycle_date, lr.ss_i, fr.forecast_value
+            FROM LP_Recommendation lr
+            JOIN Product_Dimension pd ON pd.product_key = lr.product_key
+            JOIN Forecast_Result fr
+              ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
+            WHERE lr.status = 'pending'
+              AND lr.planning_cycle_date = (
+                  SELECT MAX(planning_cycle_date) FROM LP_Recommendation WHERE status = 'pending'
+              )
+              {principal_filter}
+        """)
+    ).mappings().all()
+    policy_rows = [r for r in policy_rows if r["forecast_value"] is not None and r["ss_i"] is not None]
+    if policy_rows:
+        cycle = policy_rows[0]["planning_cycle_date"]
+        lp_units = sum(float(r["ss_i"]) for r in policy_rows)
+        rule_units = sum(POLICY_WEEKS * float(r["forecast_value"]) / AVG_WEEKS_PER_MONTH for r in policy_rows)
+        policy_comparison = {
+            "cycle_date": cycle.isoformat() if hasattr(cycle, "isoformat") else str(cycle),
+            "sku_count": len(policy_rows),
+            "lp_safety_stock_units": round(lp_units, 2),
+            "rule_safety_stock_units": round(rule_units, 2),
+            "rule_weeks": POLICY_WEEKS,
+            "blocked_reason": None,
+        }
+    else:
+        policy_comparison = {
+            "cycle_date": None,
+            "sku_count": 0,
+            "lp_safety_stock_units": None,
+            "rule_safety_stock_units": None,
+            "rule_weeks": POLICY_WEEKS,
+            "blocked_reason": (
+                f"No pending LP_Recommendation for {_scope_label(scope)} has a Forecast_Result "
+                "for its own planning-cycle month, so the two policies can't be compared."
+            ),
+        }
 
     return {
         "principal": "unilever",
@@ -1039,6 +1163,9 @@ def get_dashboard(
         },
         "sales_vs_stock": sales_vs_stock,
         "abc_mix": abc_mix,
+        "abc_revenue": abc_revenue,
+        "safety_stock_exposure": safety_stock_exposure,
+        "policy_comparison": policy_comparison,
         "tier_stock": tier_stock,
         "portfolio_forecast": portfolio_forecast,
         "reorder_preview": reorder_preview,

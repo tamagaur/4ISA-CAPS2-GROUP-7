@@ -426,3 +426,144 @@
   justify-content: center;
   gap: 0.75rem;
 }
+
+/* ── Narrative bands (2026-09-18) ─────────────────────────────────────────
+   The page reads top-to-bottom as four labelled bands, each opened by a
+   takeaway sentence GENERATED from the response (see Dashboard.jsx's
+   *Headline builders) — the headline is the finding, the widgets under it
+   are the evidence. Replaces the old KPI-row / hero / duo / duo grid, so
+   the .chart-duo* rules above are no longer used by this page (kept for
+   the skeleton's sake and any future reuse). */
+.dashboard-band {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-top: 0.25rem;
+}
+
+.dashboard-band + .dashboard-band {
+  border-top: 1px solid var(--color-border);
+  padding-top: 1.5rem;
+}
+
+.band-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.band-kicker {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.band-headline {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-text);
+  max-width: 64rem;
+}
+
+.band-reason {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+  max-width: 64rem;
+}
+
+/* Two KPI cards beside one chart card: the KPIs are the numbers, the
+   chart is where they come from. */
+.band-row {
+  display: grid;
+  gap: 1.25rem;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.band-row-triple {
+  grid-template-columns: 1fr 1fr 1.6fr;
+}
+
+.band-row .chart-widget {
+  height: auto;
+  min-width: 0;
+}
+
+.band-row .chart-widget-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.chart-primary-tall .chart-widget {
+  height: 400px;
+}
+
+/* The reorder card stacks a summary row, three weight bars and a
+   scrollable list; it needs a fixed height for the list to scroll inside. */
+.band-reorder .chart-widget {
+  height: 480px;
+}
+
+.band-footnote {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.band-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+  color: var(--color-info);
+  text-decoration: none;
+}
+
+.band-link:hover {
+  text-decoration: underline;
+}
+
+.skeleton-line-headline {
+  width: 70%;
+  height: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 1100px) {
+  .band-row-triple {
+    grid-template-columns: 1fr 1fr;
+  }
+  .band-row-triple > .chart-widget {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .band-row-triple {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Keep the tall slot's empty state compact and its phone height sane —
+   these must come after .chart-primary-tall .chart-widget above. */
+.chart-primary-tall .chart-widget-empty {
+  height: 140px;
+}
+
+@media (max-width: 768px) {
+  .chart-primary-tall .chart-widget {
+    height: 320px;
+  }
+  .chart-primary-tall .chart-widget-empty {
+    height: 140px;
+  }
+}

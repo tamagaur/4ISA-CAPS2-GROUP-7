@@ -11,7 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { COLORS, CHART_COLORS } from '../theme/colors';
+import { COLORS, CHART_COLORS, SEMANTIC } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
 import { getABCClassification } from '../api/abc';
 import DateFilter from './DateFilter';
@@ -72,30 +72,38 @@ const CLASS_ARCHETYPE = {
 // Copy for the drill-down panel's footer note, one per class — swapped
 // in based on whichever class the user has clicked in the chart above.
 const CLASS_DRILLDOWN_NOTE = {
-  A: 'Top-value SKUs sitting at LOW/CRITICAL stock are the highest-priority reorders — a stockout here has the biggest revenue impact.',
-  B: 'Mid-value SKUs at LOW/CRITICAL stock are worth a proactive reorder check before they slip toward a stockout.',
-  C: 'Long-tail SKUs sitting at LOW/CRITICAL stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don\u2019t go fully out of stock unnoticed.',
+  A: 'Top-value SKUs below their reorder point or out of stock are the highest-priority reorders — a stockout here has the biggest revenue impact.',
+  B: 'Mid-value SKUs below their reorder point are worth a proactive reorder check before they slip toward a stockout.',
+  C: 'Long-tail SKUs below their reorder point are the lowest-priority reorders by revenue, but still worth a periodic check so they don\u2019t go fully out of stock unnoticed.',
 };
 
-// Chart colors for each stock_status; the table's status pills
-// (.pill-success / -warning / -critical in index.css) use the same hues.
-// NO DATA (gray) is its own status, not folded into CRITICAL — as of
-// 2025-12 Inventory_Fact_Real only covers a subset of classified
-// products (partial ETL load, more coverage expected), so "no record
-// yet" and "confirmed zero stock" are kept visibly distinct.
-//
-// Fixed 2026-09: LOW and CRITICAL were swapped (LOW was red, CRITICAL was
-// orange) — a real severity-inversion bug, not a style choice. Red draws
-// the eye harder than orange, so at a glance LOW read as the more urgent
-// state and CRITICAL read as the calmer one, backwards from reality. Now
-// pulled from theme/colors.js's own tokens instead of ad-hoc hex, which
-// were already documented for exactly this ("Amber: ...low stock" /
-// "Red: ...critical reorders") but weren't being used.
+// GET /abc's stock_status values are a COVER-vs-REORDER-POINT test
+// (backend/routers/abc.py's _stock_status): current stock against the
+// SKU's own reorder point from its pending LP recommendation (a flat 100
+// units when it has none). They are NOT the warehouse's Active/Inactive
+// flag — that is what the Dashboard's "Active / dead stock by ABC tier
+// (warehouse status)" widget shows. Both used to say "In stock", and a
+// client could see Category A mostly green on the Dashboard and "IN STOCK:
+// 0 SKUs" here for the same month. The backend strings are unchanged; the
+// labels below say what each one actually means.
+const STATUS_LABELS = {
+  'IN STOCK': 'Above reorder point',
+  LOW: 'Below reorder point',
+  CRITICAL: 'Out of stock',
+  'NO DATA': 'No stock record',
+};
+const statusLabel = (status) => STATUS_LABELS[status] || status;
+
+// Colours follow the app-wide SEMANTIC rule (theme/colors.js): green =
+// healthy (above ROP), amber = watch (below ROP), red = act now (out of
+// stock), slate = no data. NO DATA is its own status, not folded into
+// CRITICAL — Inventory_Fact_Real only covers a subset of classified
+// products, so "no record yet" and "confirmed zero stock" stay distinct.
 const STOCK_STATUS_COLORS = {
-  'IN STOCK': '#38a169',
-  LOW: COLORS.warning,
-  CRITICAL: COLORS.critical,
-  'NO DATA': '#667085',
+  'IN STOCK': SEMANTIC.healthy,
+  LOW: SEMANTIC.watch,
+  CRITICAL: SEMANTIC.act,
+  'NO DATA': SEMANTIC.noData,
 };
 
 const ClassAggregateTooltip = ({ active, payload }) => {
@@ -108,16 +116,16 @@ const ClassAggregateTooltip = ({ active, payload }) => {
           Revenue share: {point.revenueTotal.toFixed(1)}%
         </p>
         <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS['IN STOCK'] }}>
-          In stock: {point.inStockPct.toFixed(0)}%
+          {statusLabel('IN STOCK')}: {point.inStockPct.toFixed(0)}%
         </p>
         <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS.LOW }}>
-          Low: {point.lowPct.toFixed(0)}%
+          {statusLabel('LOW')}: {point.lowPct.toFixed(0)}%
         </p>
         <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS.CRITICAL }}>
-          Critical: {point.criticalPct.toFixed(0)}%
+          {statusLabel('CRITICAL')}: {point.criticalPct.toFixed(0)}%
         </p>
         <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS['NO DATA'] }}>
-          No data: {point.noDataPct.toFixed(0)}%
+          {statusLabel('NO DATA')}: {point.noDataPct.toFixed(0)}%
         </p>
         <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.axisLabel }}>
           {point.skuCount} {point.skuCount === 1 ? 'item' : 'items'} ({point.skuSharePct.toFixed(0)}% of total)
@@ -485,25 +493,32 @@ const ABCClassification = () => {
           <div className="abc-analysis-row" key="single">
             <div className="abc-pareto-container abc-analysis-chart">
               <div className="abc-pareto-header">
-                <h3 className="abc-pareto-title">
-                  {panel.label ? `${panel.label} — Stock Status Mix, by Class` : 'Stock Status Mix, by Class'}
-                </h3>
+                <div className="abc-pareto-title-group">
+                  <h3 className="abc-pareto-title">
+                    {panel.label ? `${panel.label} — Cover vs reorder point, by class` : 'Cover vs reorder point, by class'}
+                  </h3>
+                  <p className="abc-pareto-subtitle">
+                    Compares each SKU&apos;s current stock with its own reorder point (from its pending LP
+                    recommendation; 100 units when it has none) — not the warehouse&apos;s Active/Inactive flag,
+                    which is what the Dashboard&apos;s warehouse-status chart shows.
+                  </p>
+                </div>
                 <div className="abc-pareto-legend">
                   <div className="abc-pareto-legend-item">
                     <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['IN STOCK'] }} />
-                    <span>In stock</span>
+                    <span>{statusLabel('IN STOCK')}</span>
                   </div>
                   <div className="abc-pareto-legend-item">
                     <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.LOW }} />
-                    <span>Low</span>
+                    <span>{statusLabel('LOW')}</span>
                   </div>
                   <div className="abc-pareto-legend-item">
                     <span className="abc-pareto-legend-swatch abc-pareto-legend-swatch--critical" />
-                    <span>Critical</span>
+                    <span>{statusLabel('CRITICAL')}</span>
                   </div>
                   <div className="abc-pareto-legend-item">
                     <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['NO DATA'] }} />
-                    <span>No data</span>
+                    <span>{statusLabel('NO DATA')}</span>
                   </div>
                 </div>
               </div>
@@ -578,7 +593,7 @@ const ABCClassification = () => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <p className="abc-drilldown-hint">Click a class's bar above to drill into its stock status.</p>
+              <p className="abc-drilldown-hint">Click a class's bar above to drill into its cover vs reorder point.</p>
               <div className="abc-class-summary-row">
                 {panel.classAggregates.map((entry) => (
                   <div key={entry.cat} className="abc-class-summary-item">
@@ -594,7 +609,7 @@ const ABCClassification = () => {
             <div className="abc-pareto-container abc-analysis-drilldown">
               <div className="abc-pareto-header">
                 <h3 className="abc-pareto-title">
-                  {panel.label ? `${panel.label} — Drill-down · Class ${selectedClass} Stock Status` : `Drill-down · Class ${selectedClass} Stock Status`}
+                  {panel.label ? `${panel.label} — Drill-down · Class ${selectedClass} cover vs reorder point` : `Drill-down · Class ${selectedClass} cover vs reorder point`}
                 </h3>
               </div>
               {/* Tab buttons — same class-switching as clicking the chart,
@@ -625,7 +640,7 @@ const ABCClassification = () => {
                     <tr key={row.status}>
                       <td>
                         <span className="abc-drilldown-dot" style={{ backgroundColor: STOCK_STATUS_COLORS[row.status] }} />
-                        {row.status}
+                        {statusLabel(row.status)}
                       </td>
                       <td className="table-num">{row.count}</td>
                       <td className="table-num">{row.pct.toFixed(0)}%</td>
@@ -835,7 +850,7 @@ const ABCClassification = () => {
                 <th className="col-fit">Brand</th>
                 <th className="table-center col-fit">Cat</th>
                 <th className="table-num col-fit">Rev %</th>
-                <th className="col-fit">Stock status</th>
+                <th className="col-fit">Cover vs ROP</th>
               </tr>
             </thead>
             <tbody>
@@ -869,7 +884,7 @@ const ABCClassification = () => {
                     </span>
                   </td>
                   <td className="table-num cell-strong">{item.revPct.toFixed(1)}%</td>
-                  <td><span className={getStatusClass(item.status)}>{item.status}</span></td>
+                  <td><span className={getStatusClass(item.status)} title={`stock_status: ${item.status}`}>{statusLabel(item.status)}</span></td>
                 </tr>
               ))}
               {filteredData.length === 0 && (

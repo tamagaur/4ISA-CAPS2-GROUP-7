@@ -95,6 +95,7 @@ class FakeSession:
         gated_forecast_rows: list | None = None,
         portfolio_actual: dict | None = None,
         reco_preview_rows: list | None = None,
+        policy_rows: list | None = None,
     ):
         self.recommendation_count = recommendation_count
         self.forecast_total = forecast_total
@@ -118,10 +119,19 @@ class FakeSession:
         self.gated_forecast_rows = gated_forecast_rows or []
         self.portfolio_actual = portfolio_actual or {}
         self.reco_preview_rows = reco_preview_rows or []
+        # policy_comparison rows: [{planning_cycle_date, ss_i, forecast_value}]
+        self.policy_rows = policy_rows or []
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
+
+        # Checked FIRST: recommendations._SELECT_ONE (reused verbatim by
+        # reorder_preview) now embeds its own SUM(quantity_on_hand *
+        # unit_cost_per_case) subquery, which the SOH matcher below would
+        # otherwise claim.
+        if "FROM lp_recommendation lr" in sql and "WHERE lr.status = 'pending'" in sql:
+            return FakeResult(self.reco_preview_rows)
 
         if "COUNT(*) AS product_count" in sql:
             return FakeResult([{"product_count": self.recommendation_count}])
@@ -176,7 +186,14 @@ class FakeSession:
         if "rop.ss_i AS ss_i" in sql:
             period = params["period"]
             rows = [r for r in self.abc_rows if r["period"] == period and r["tier"] == "A"]
-            return FakeResult([{"product_key": r["product_key"], "current_stock": r["current_stock"], "ss_i": r["ss_i"]} for r in rows])
+            return FakeResult([
+                {"product_key": r["product_key"], "revenue_share": r.get("revenue_share"),
+                 "current_stock": r["current_stock"], "ss_i": r["ss_i"]}
+                for r in rows
+            ])
+
+        if "fr.forecast_date = lr.planning_cycle_date" in sql:
+            return FakeResult(self.policy_rows)
 
         if "SUM(revenue_share) AS rev_share_sum" in sql:
             period = params["period"]
@@ -209,9 +226,6 @@ class FakeSession:
             for r in rows:
                 by_tier.setdefault(r["tier"], set()).add(r["product_key"])
             return FakeResult([{"tier": t, "cnt": len(keys)} for t, keys in by_tier.items()])
-
-        if "FROM lp_recommendation lr" in sql and "WHERE lr.status = 'pending'" in sql:
-            return FakeResult(self.reco_preview_rows)
 
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -691,7 +705,7 @@ def test_reorder_preview_empty_when_no_pending_recommendations():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     preview = resp.json()["reorder_preview"]
     assert preview == {
-        "rows": [], "critical_count": 0, "urgent_count": 0, "total_order_qty": 0,
+        "rows": [], "critical_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
         "lp_weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
     }
 
@@ -707,3 +721,102 @@ def test_reorder_preview_lp_weights_always_present_and_matches_solver_constants(
     weights = resp.json()["reorder_preview"]["lp_weights"]
     assert weights == {"cost": 0.45, "service_level": 0.35, "storage": 0.2}
     assert pytest.approx(sum(weights.values())) == 1.0
+
+
+# ---- narrative-band fields (2026-09-18) ---------------------------------
+
+def _abc_row(product_key, tier, period, revenue_share, current_stock=None, ss_i=None):
+    return {"product_key": product_key, "tier": tier, "period": period, "revenue_share": revenue_share,
+            "current_stock": current_stock, "ss_i": ss_i}
+
+
+def test_abc_revenue_totals_the_abc_periods_sales():
+    session = FakeSession(
+        latest_abc_period="2024-02",
+        abc_rows=[_abc_row(1, "A", "2024-02", 0.6)],
+        sales={"2024-02": 27_914_343.91},
+    )
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    body = resp.json()["abc_revenue"]
+    assert body["period"] == "2024-02"
+    assert body["total"] == pytest.approx(27_914_343.91)
+    assert body["blocked_reason"] is None
+
+
+def test_abc_revenue_blocked_when_no_sales_for_abc_period():
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=[_abc_row(1, "A", "2024-02", 0.6)], sales={})
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    body = resp.json()["abc_revenue"]
+    assert body["total"] is None
+    assert "2024-02" in body["blocked_reason"]
+
+
+def test_safety_stock_exposure_counts_below_and_sums_their_revenue_share():
+    rows = [
+        _abc_row(1, "A", "2024-02", 0.30, current_stock=10, ss_i=50),   # below
+        _abc_row(2, "A", "2024-02", 0.20, current_stock=80, ss_i=50),   # at/above
+        _abc_row(3, "A", "2024-02", 0.10, current_stock=None, ss_i=50), # not measurable
+        _abc_row(4, "B", "2024-02", 0.05, current_stock=0, ss_i=1),     # not tier A
+    ]
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    exp = resp.json()["safety_stock_exposure"]
+    assert exp["tier_a_count"] == 3
+    assert exp["comparable_count"] == 2
+    assert exp["below_count"] == 1
+    assert exp["below_revenue_share"] == pytest.approx(0.30)
+    assert exp["blocked_reason"] is None
+
+
+def test_safety_stock_exposure_blocked_when_nothing_measurable():
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=[_abc_row(1, "A", "2024-02", 0.6)])
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    exp = resp.json()["safety_stock_exposure"]
+    assert exp["below_count"] is None
+    assert exp["blocked_reason"]
+
+
+def test_policy_comparison_sums_lp_ss_against_three_week_rule():
+    session = FakeSession(policy_rows=[
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "forecast_value": 100.0},
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 10.0, "forecast_value": 50.0},
+    ])
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    pc = resp.json()["policy_comparison"]
+    assert pc["cycle_date"] == "2024-03-01"
+    assert pc["sku_count"] == 2
+    assert pc["lp_safety_stock_units"] == pytest.approx(50.0)
+    assert pc["rule_safety_stock_units"] == pytest.approx(3 * 150.0 / AVG_WEEKS_PER_MONTH, rel=1e-4)
+    assert pc["rule_weeks"] == 3
+    assert pc["blocked_reason"] is None
+
+
+def test_policy_comparison_blocked_when_no_comparable_rows():
+    session = FakeSession(policy_rows=[])
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    pc = resp.json()["policy_comparison"]
+    assert pc["lp_safety_stock_units"] is None
+    assert pc["rule_safety_stock_units"] is None
+    assert pc["blocked_reason"]
+
+
+def test_reorder_preview_no_stock_row_is_no_data_not_critical():
+    """A product with no Inventory_Fact_Real row used to COALESCE to 0 and
+    read as CRITICAL — a fabricated alert. It must now be 'NO DATA'."""
+    rows = [_reco_row(1, urgency_stock=None, rop_i=100), _reco_row(2, urgency_stock=0, rop_i=100)]
+    session = FakeSession(reco_preview_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    preview = resp.json()["reorder_preview"]
+    by_key = {r["recommendation_key"]: r for r in preview["rows"]}
+    assert by_key[1]["urgency"] == "NO DATA"
+    assert by_key[1]["current_stock"] is None
+    assert by_key[2]["urgency"] == "CRITICAL"
+    assert preview["critical_count"] == 1
+    assert preview["no_data_count"] == 1

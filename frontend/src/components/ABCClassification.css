@@ -769,3 +769,22 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Chart title + one-line definition (2026-09-18): says in plain language
+   what "cover vs reorder point" measures, so it can't be read as the
+   Dashboard's warehouse Active/Inactive chart. */
+.abc-pareto-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1 1 22rem;
+}
+
+.abc-pareto-subtitle {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-subtle);
+  line-height: 1.45;
+  max-width: 40rem;
+}

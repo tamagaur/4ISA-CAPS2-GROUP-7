@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
-import { Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown } from 'lucide-react';
+import {
+  Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown, ChevronRight, CheckCheck,
+} from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
 import Modal from './Modal';
@@ -25,7 +27,26 @@ const formatSKU = (sku) => {
   return sku;
 };
 
+// ── Impact ranking (2026-09-18) ──────────────────────────────────────────
+// Live, the latest cycle was 248 of 250 rows CRITICAL and 0 URGENT — a
+// severity that never varies carries no information, so the list is now
+// ordered by business impact: GET /recommendations' priority_score
+// (revenue share x units below the reorder point — a ranking index, not
+// pesos; see backend/routers/recommendations.py for the unit caveat).
+// The top ACT_NOW_COUNT are "Act now"; everything else is collapsed under
+// "Review later". Rows the backend could not rank (no revenue share, or no
+// stock record) sort to the bottom and are marked unranked — never
+// ranked as if their score were zero.
+const ACT_NOW_COUNT = 20;
+const URGENCY_RANK = { CRITICAL: 0, URGENT: 1, PLANNED: 2, 'NO DATA': 3 };
 
+// Fire at most this many PATCHes at once during a bulk accept — there is
+// no bulk endpoint, so this is N sequential-ish writes against Supabase.
+const BULK_CONCURRENCY = 5;
+
+const COVER_BASIS_NOTE =
+  'Stock at cost (₱) ÷ average daily sales value (₱/day, last 3 sales months) — the same peso basis the Dashboard’s '
+  + 'weeks of cover uses, because stock is counted in cases and demand in pieces. Understates cover by the margin.';
 
 const ReorderRecommendations = () => {
   // Shared principal scope (Topbar's segmented control). lp_recommendation
@@ -49,10 +70,13 @@ const ReorderRecommendations = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('RECOMMENDATIONS');
+  const [showReviewLater, setShowReviewLater] = useState(false);
 
   // Pending override awaiting a reason (Dismiss only — Accept logs immediately).
   const [pendingOverride, setPendingOverride] = useState(null); // { item, action }
   const [pendingAccept, setPendingAccept] = useState(null); // the item awaiting Accept confirmation
+  const [pendingBulk, setPendingBulk] = useState(null); // { rows } awaiting bulk-accept confirmation
+  const [bulkRunning, setBulkRunning] = useState(false);
   const [decisionLog, setDecisionLog] = useState([]);
 
   useEffect(() => {
@@ -92,11 +116,16 @@ const ReorderRecommendations = () => {
         sku: item.sku_id,
         product: item.product_name || 'Unknown Product',
         rop: item.rop_i,
-        stock: item.current_stock,
+        stock: item.current_stock, // null = no inventory row at the latest snapshot
         orderQty: item.q_i,
         safetyStock: item.ss_i,
         urgency: item.urgency,
         planningCycleDate: item.planning_cycle_date,
+        revenueShare: item.revenue_share,
+        priorityScore: item.priority_score,
+        stockoutGap: item.stockout_gap,
+        daysOfCover: item.days_of_cover,
+        coverReason: item.cover_blocked_reason,
         actionStatus: item.status === 'pending' ? null : item.status.toUpperCase(),
         loadingAction: null,
       })),
@@ -127,6 +156,27 @@ const ReorderRecommendations = () => {
     [localData, selectedCycle]
   );
 
+  // Ranked by priority_score (desc); unranked rows last, then by urgency,
+  // then by ROP so the order is stable. Rank numbers are assigned here so
+  // an accepted/dismissed row keeps its position (and number) instead of
+  // reshuffling the list under the planner mid-session.
+  const rankedRows = useMemo(() => {
+    const score = (r) => (r.priorityScore == null ? -1 : r.priorityScore);
+    const sorted = [...cycleRows].sort(
+      (a, b) =>
+        score(b) - score(a)
+        || (URGENCY_RANK[a.urgency] ?? 9) - (URGENCY_RANK[b.urgency] ?? 9)
+        || (b.rop ?? 0) - (a.rop ?? 0)
+    );
+    let rank = 0;
+    return sorted.map((r) => ({ ...r, rank: r.priorityScore == null ? null : ++rank }));
+  }, [cycleRows]);
+
+  const actNowRows = rankedRows.slice(0, ACT_NOW_COUNT);
+  const reviewLaterRows = rankedRows.slice(ACT_NOW_COUNT);
+  const visibleRows = showReviewLater ? rankedRows : actNowRows;
+  const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction);
+
   // Deep link from the Dashboard's reorder widget (?sku=...): switch to the
   // most recent cycle holding that SKU, then open its detail modal — the
   // same modal a click on the table's SKU cell opens. deepLinkHandled stops
@@ -141,6 +191,7 @@ const ReorderRecommendations = () => {
     if (match) {
       deepLinkHandled.current = true;
       setSelectedCycle(match.planningCycleDate);
+      setShowReviewLater(true); // the linked SKU may sit below the top 20
       handleOpenDetails(match);
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
@@ -150,11 +201,10 @@ const ReorderRecommendations = () => {
     }
   }, [localData, searchParams, setSearchParams]);
 
-  const criticalCount = cycleRows.filter(item => item.urgency === 'CRITICAL').length;
-  const urgentCount = cycleRows.filter(item => item.urgency === 'URGENT').length;
+  const actNowPending = actNowRows.filter((r) => !r.actionStatus).length;
+  const noStockRecordCount = cycleRows.filter((r) => r.stock == null).length;
   // Summed in whole units, so the card equals the sum of the table's rows.
   const totalOrderQty = cycleRows.reduce((sum, item) => sum + (wholeUnits(item.orderQty) || 0), 0);
-  const totalStock = cycleRows.reduce((sum, item) => sum + (item.stock || 0), 0);
 
   const handleOpenDetails = (item) => {
     setSelectedItem(item);
@@ -180,7 +230,9 @@ const ReorderRecommendations = () => {
     logAction(`Reorder Recommendation ${action === 'ACCEPTED' ? 'Accepted' : 'Dismissed'}`, `SKU ${item.sku}: ${reason}`);
   };
 
-  const applyAction = async (id, actionType) => {
+  // Writes one decision. Returns true on success. `silent` skips the
+  // per-row toast so a bulk accept can report once at the end.
+  const applyAction = async (id, actionType, { silent = false } = {}) => {
     setLocalData(prev => prev.map(item =>
       item.id === id ? { ...item, loadingAction: actionType } : item
     ));
@@ -192,15 +244,19 @@ const ReorderRecommendations = () => {
       ));
       // The row itself only changes to a small status pill, which is easy to
       // miss in a long table — the toast is the actual confirmation.
-      toast.success(
-        actionType === 'ACCEPTED' ? 'Reorder accepted' : 'Recommendation dismissed'
-      );
+      if (!silent) {
+        toast.success(actionType === 'ACCEPTED' ? 'Reorder accepted' : 'Recommendation dismissed');
+      }
+      return true;
     } catch (err) {
       setLocalData(prev => prev.map(item =>
         item.id === id ? { ...item, loadingAction: null } : item
       ));
-      setError(err.message || 'Failed to update recommendation');
-      toast.error(err.message || 'Failed to update recommendation');
+      if (!silent) {
+        setError(err.message || 'Failed to update recommendation');
+        toast.error(err.message || 'Failed to update recommendation');
+      }
+      return false;
     }
   };
 
@@ -235,31 +291,49 @@ const ReorderRecommendations = () => {
     setPendingOverride(null);
   };
 
+  // Bulk accept — every pending row currently in view (the Act-now list,
+  // or the whole cycle once Review later is expanded). Runs in small
+  // batches; each success is logged individually so the decision log and
+  // audit log read the same as if the rows had been accepted one by one.
+  const handleConfirmBulk = async () => {
+    const rows = pendingBulk?.rows || [];
+    setPendingBulk(null);
+    if (rows.length === 0) return;
+    setBulkRunning(true);
+    let accepted = 0;
+    let failed = 0;
+    for (let i = 0; i < rows.length; i += BULK_CONCURRENCY) {
+      const batch = rows.slice(i, i + BULK_CONCURRENCY);
+      const results = await Promise.all(batch.map((r) => applyAction(r.id, 'ACCEPTED', { silent: true })));
+      results.forEach((ok, idx) => {
+        if (ok) {
+          accepted += 1;
+          logDecision(batch[idx], 'ACCEPTED', `Accepted in bulk ("Accept all in view", ${formatMonth(selectedCycle)} cycle).`);
+        } else {
+          failed += 1;
+        }
+      });
+    }
+    setBulkRunning(false);
+    if (failed === 0) {
+      toast.success(`${accepted} reorder${accepted === 1 ? '' : 's'} accepted`);
+    } else {
+      toast.error(`${accepted} accepted, ${failed} failed — the failed rows are still pending`);
+    }
+  };
+
   const getUrgencyBadge = (urgency) => {
     switch (urgency) {
       case 'CRITICAL': return 'pill pill-critical';
       case 'URGENT': return 'pill pill-warning';
       case 'PLANNED': return 'pill pill-planned';
-      default: return 'pill pill-neutral';
-    }
-  };
-
-  // Left-edge severity stripe on the row itself, not just the badge cell —
-  // when most rows share one urgency (real data here runs heavily
-  // CRITICAL), a stripe down the whole row is scannable at a glance
-  // without hunting for the badge column.
-  const getUrgencyRowClass = (urgency) => {
-    switch (urgency) {
-      case 'CRITICAL': return 'reorder-row-critical';
-      case 'URGENT': return 'reorder-row-urgent';
-      case 'PLANNED': return 'reorder-row-planned';
-      default: return '';
+      default: return 'pill pill-neutral'; // 'NO DATA' — no stock record, no verdict
     }
   };
 
   const getLogActionBadge = (action) => {
     switch (action) {
-      case 'ACCEPTED': return 'pill pill-success';
+      case 'ACCEPTED': return 'pill pill-planned';
       case 'DISMISSED': return 'pill pill-neutral';
       default: return 'pill pill-neutral';
     }
@@ -291,6 +365,7 @@ const ReorderRecommendations = () => {
           className="table-btn table-btn-primary"
           onClick={() => handleAction(item, 'ACCEPTED')}
           aria-label={`Accept reorder for SKU ${item.sku}`}
+          disabled={bulkRunning}
         >
           Accept
         </button>
@@ -298,6 +373,7 @@ const ReorderRecommendations = () => {
           className="table-btn"
           onClick={() => handleAction(item, 'DISMISSED')}
           aria-label={`Dismiss reorder for SKU ${item.sku}`}
+          disabled={bulkRunning}
         >
           Dismiss
         </button>
@@ -305,30 +381,106 @@ const ReorderRecommendations = () => {
     );
   };
 
+  const renderRow = (item) => {
+    const brand = brandLookup?.get(String(item.sku));
+    const stockKnown = item.stock != null;
+    return (
+      <tr key={item.id}>
+        <td className="table-num reorder-rank">
+          {item.rank != null ? (
+            `#${item.rank}`
+          ) : (
+            <span className="cell-empty" title={stockKnown ? 'Unranked — no revenue share recorded for this SKU' : 'Unranked — no stock record, so the gap below the reorder point is unknown'}>
+              —
+            </span>
+          )}
+        </td>
+        <td className="cell-code">
+          <span
+            className="cell-code-link"
+            role="button"
+            tabIndex={0}
+            onClick={() => handleOpenDetails(item)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleOpenDetails(item);
+              }
+            }}
+            title="View recommendation details"
+          >
+            {formatSKU(item.sku)}
+          </span>
+        </td>
+        <td className={brand ? 'cell-muted' : 'cell-empty'}>{brand || '—'}</td>
+        <td className="cell-product">{item.product}</td>
+        <td className="table-num" title="Share of period revenue at this SKU's latest ABC classification">
+          {item.revenueShare != null ? `${(item.revenueShare * 100).toFixed(2)}%` : <span className="cell-empty">—</span>}
+        </td>
+        {/* ROP = forecast + safety stock, so the buffer sits right
+            before it; it used to be visible only inside the modal. */}
+        <td className="table-num" title={exactUnits(item.safetyStock)}>{formatUnits(item.safetyStock)}</td>
+        <td className="table-num" title={exactUnits(item.rop)}>{formatUnits(item.rop)}</td>
+        <td
+          className={`table-num reorder-stock-cell ${
+            !stockKnown
+              ? ''
+              : item.stock < item.rop * 0.5
+                ? 'reorder-stock-critical'
+                : item.stock < item.rop
+                  ? 'reorder-stock-low'
+                  : ''
+          }`}
+        >
+          {stockKnown
+            ? formatUnits(item.stock)
+            : <span className="cell-empty" title="No inventory record for this SKU at the latest snapshot">—</span>}
+        </td>
+        <td className="table-num" title={item.daysOfCover != null ? COVER_BASIS_NOTE : (item.coverReason || COVER_BASIS_NOTE)}>
+          {item.daysOfCover != null ? item.daysOfCover.toFixed(1) : <span className="cell-empty">—</span>}
+        </td>
+        <td className="table-num cell-strong" title={exactUnits(item.orderQty)}>{formatUnits(item.orderQty)}</td>
+        <td>
+          <span className={getUrgencyBadge(item.urgency)}>
+            {item.urgency}
+          </span>
+        </td>
+        <td className="table-center">
+          {renderActionColumn(item)}
+        </td>
+      </tr>
+    );
+  };
+
+  const COLUMN_COUNT = 12;
+
   const renderRecommendationsTab = () => (
     <>
-      {/* Summary Cards */}
+      {/* Summary Cards — coloured by the app-wide SEMANTIC rule: red = act
+          now, amber = watch, slate = no data, indigo = model output. */}
       <div className="reorder-summary-grid">
-        <div className="reorder-summary-card card-red">
+        <div className="reorder-summary-card card-act">
           <div className="card-content">
-            <span className="reorder-card-label">CRITICAL SKUS</span>
-            <span className="reorder-card-value">{criticalCount}</span>
+            <span className="reorder-card-label">ACT NOW</span>
+            <span className="reorder-card-value">{actNowPending}</span>
+            <span className="reorder-card-desc">top {ACT_NOW_COUNT} by revenue at risk, still pending</span>
           </div>
         </div>
-        <div className="reorder-summary-card card-yellow">
+        <div className="reorder-summary-card card-watch">
           <div className="card-content">
-            <span className="reorder-card-label">URGENT SKUS</span>
-            <span className="reorder-card-value">{urgentCount}</span>
+            <span className="reorder-card-label">REVIEW LATER</span>
+            <span className="reorder-card-value">{reviewLaterRows.length}</span>
+            <span className="reorder-card-desc">lower revenue at risk</span>
           </div>
         </div>
-        <div className="reorder-summary-card card-green">
+        <div className="reorder-summary-card card-nodata">
           <div className="card-content">
-            <span className="reorder-card-label">CURRENT STOCK</span>
-            <span className="reorder-card-value">{totalStock.toLocaleString()}</span>
-            <span className="reorder-card-desc">on hand across list</span>
+            <span className="reorder-card-label">NO STOCK RECORD</span>
+            <span className="reorder-card-value">{noStockRecordCount}</span>
+            <span className="reorder-card-desc">not in the latest inventory snapshot</span>
           </div>
         </div>
-        <div className="reorder-summary-card card-blue">
+        <div className="reorder-summary-card card-recommendation">
           <div className="card-content">
             <span className="reorder-card-label">TOTAL ORDER QTY</span>
             <span className="reorder-card-value">{totalOrderQty.toLocaleString()}</span>
@@ -337,76 +489,70 @@ const ReorderRecommendations = () => {
         </div>
       </div>
 
+      <div className="reorder-table-toolbar">
+        <p className="reorder-table-note">
+          Ranked by revenue share × units below the reorder point. Cover is in days on a peso basis
+          (stock at cost ÷ daily sales value).
+        </p>
+        <button
+          className="reorder-bulk-btn"
+          onClick={() => setPendingBulk({ rows: bulkTargets })}
+          disabled={bulkTargets.length === 0 || bulkRunning}
+          title={bulkTargets.length === 0 ? 'No pending rows in view' : undefined}
+        >
+          {bulkRunning ? <Loader2 className="spinner-icon" size={14} /> : <CheckCheck size={14} />}
+          Accept all in view ({bulkTargets.length})
+        </button>
+      </div>
+
       {/* Table */}
       <div className="data-table-card">
         <table className="data-table reorder-table">
           <thead>
             <tr>
+              <th className="table-num col-fit">#</th>
               <th className="col-fit">SKU</th>
               <th className="col-fit">Brand</th>
               <th className="col-text col-product">Product</th>
+              <th className="table-num col-fit">Rev share</th>
               <th className="table-num col-fit">Safety stock</th>
               <th className="table-num col-fit">ROP</th>
               <th className="table-num col-fit">Current stock</th>
+              <th className="table-num col-fit" title={COVER_BASIS_NOTE}>Cover (days)</th>
               <th className="table-num col-fit">LP qty</th>
               <th className="col-fit">Urgency</th>
               <th className="table-center col-fit"><span className="visually-hidden">Action</span></th>
             </tr>
           </thead>
           <tbody>
-            {cycleRows.map((item) => {
-              const brand = brandLookup?.get(String(item.sku));
-              return (
-                <tr key={item.id} className={getUrgencyRowClass(item.urgency)}>
-                  <td className="cell-code">
-                    <span
-                      className="cell-code-link"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleOpenDetails(item)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleOpenDetails(item);
-                        }
-                      }}
-                      title="View recommendation details"
-                    >
-                      {formatSKU(item.sku)}
-                    </span>
-                  </td>
-                  <td className={brand ? 'cell-muted' : 'cell-empty'}>{brand || '—'}</td>
-                  <td className="cell-product">{item.product}</td>
-                  {/* ROP = forecast + safety stock, so the buffer sits right
-                      before it; it used to be visible only inside the modal. */}
-                  <td className="table-num" title={exactUnits(item.safetyStock)}>{formatUnits(item.safetyStock)}</td>
-                  <td className="table-num" title={exactUnits(item.rop)}>{formatUnits(item.rop)}</td>
-                  <td
-                    className={`table-num reorder-stock-cell ${
-                      item.stock < item.rop * 0.5
-                        ? 'reorder-stock-critical'
-                        : item.stock < item.rop
-                          ? 'reorder-stock-low'
-                          : ''
-                    }`}
+            {actNowRows.length > 0 && (
+              <tr className="reorder-group-row reorder-group-act">
+                <td colSpan={COLUMN_COUNT}>
+                  Act now — top {Math.min(ACT_NOW_COUNT, actNowRows.length)} by revenue at risk
+                </td>
+              </tr>
+            )}
+            {actNowRows.map(renderRow)}
+            {reviewLaterRows.length > 0 && (
+              <tr className="reorder-group-row reorder-group-later">
+                <td colSpan={COLUMN_COUNT}>
+                  <button
+                    type="button"
+                    className="reorder-group-toggle"
+                    onClick={() => setShowReviewLater((v) => !v)}
+                    aria-expanded={showReviewLater}
                   >
-                    {formatUnits(item.stock)}
-                  </td>
-                  <td className="table-num cell-strong" title={exactUnits(item.orderQty)}>{formatUnits(item.orderQty)}</td>
-                  <td>
-                    <span className={getUrgencyBadge(item.urgency)}>
-                      {item.urgency}
-                    </span>
-                  </td>
-                  <td className="table-center">
-                    {renderActionColumn(item)}
-                  </td>
-                </tr>
-              );
-            })}
+                    {showReviewLater ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    Review later — {reviewLaterRows.length} more
+                    {showReviewLater ? '' : ' (collapsed)'}
+                  </button>
+                </td>
+              </tr>
+            )}
+            {showReviewLater && reviewLaterRows.map(renderRow)}
             {cycleRows.length === 0 && (
               <tr className="table-empty-row">
-                <td colSpan="9">No pending recommendations for this planning cycle.</td>
+                <td colSpan={COLUMN_COUNT}>No pending recommendations for this planning cycle.</td>
               </tr>
             )}
           </tbody>
@@ -456,6 +602,8 @@ const ReorderRecommendations = () => {
     </div>
   );
 
+  const bulkQty = (pendingBulk?.rows || []).reduce((sum, r) => sum + (wholeUnits(r.orderQty) || 0), 0);
+
   return (
     <div className="reorder-page">
       <div className="reorder-content">
@@ -477,7 +625,7 @@ const ReorderRecommendations = () => {
                     aria-label="Planning cycle"
                     style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
                     value={selectedCycle || ''}
-                    onChange={(e) => setSelectedCycle(e.target.value)}
+                    onChange={(e) => { setSelectedCycle(e.target.value); setShowReviewLater(false); }}
                   >
                     {cycles.map((c, i) => (
                       <option key={c.date} value={c.date}>
@@ -518,10 +666,14 @@ const ReorderRecommendations = () => {
         {!loading && !error && (activeTab === 'RECOMMENDATIONS' ? renderRecommendationsTab() : renderDecisionLogTab())}
       </div>
 
+      {/* Resolve the row through rankedRows so a modal opened from a
+          Dashboard deep link (which selects from the unranked localData)
+          still shows its impact rank once the cycle's rows are ranked. */}
       <ReorderModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        data={selectedItem}
+        data={selectedItem ? (rankedRows.find((r) => r.id === selectedItem.id) || selectedItem) : null}
+        principal={principal}
       />
 
       <OverrideReasonModal
@@ -554,6 +706,36 @@ const ReorderRecommendations = () => {
             </button>
             <button className="reorder-accept-confirm" onClick={handleConfirmAccept}>
               Accept Reorder
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {pendingBulk && (
+        <Modal
+          isOpen={Boolean(pendingBulk)}
+          onClose={() => setPendingBulk(null)}
+          label="Confirm bulk acceptance"
+          overlayClassName="reorder-accept-overlay"
+          containerClassName="reorder-accept-card"
+        >
+          <div className="reorder-accept-icon">
+            <CheckCheck size={20} />
+          </div>
+          <h3 className="reorder-accept-title">Accept all {pendingBulk.rows.length} in view?</h3>
+          <p className="reorder-accept-body">
+            This accepts every pending recommendation currently shown
+            {showReviewLater ? ' (Act now and Review later)' : ' in the Act-now list'} for the{' '}
+            <strong>{formatMonth(selectedCycle)}</strong> cycle — <strong>{bulkQty.toLocaleString()}</strong> units
+            across <strong>{pendingBulk.rows.length}</strong> SKUs, at the LP-recommended quantities. Each one is
+            logged individually.
+          </p>
+          <div className="reorder-accept-actions">
+            <button className="reorder-accept-cancel" onClick={() => setPendingBulk(null)}>
+              Cancel
+            </button>
+            <button className="reorder-accept-confirm" onClick={handleConfirmBulk}>
+              Accept {pendingBulk.rows.length} reorders
             </button>
           </div>
         </Modal>

@@ -856,3 +856,19 @@
     display: none;
   }
 }
+/* Auto-selected note under the SKU name (2026-09-18): the page opens on
+   the top Category A SKU by revenue instead of blank, and says so. */
+.sku-auto-note {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+/* Trend chip: direction only, carried by the arrow. Was indigo/amber —
+   amber means "watch" app-wide and a falling forecast isn't a verdict. */
+.forecast-trend-chip.trend-up,
+.forecast-trend-chip.trend-down {
+  color: var(--color-text);
+  background-color: var(--color-surface-sunken);
+}

@@ -250,7 +250,7 @@ table td.table-center {
 
 .pill-critical { background-color: var(--color-severity-critical-bg); color: var(--color-severity-critical); }
 .pill-warning  { background-color: var(--color-severity-urgent-bg);   color: var(--color-severity-urgent); }
-.pill-success  { background-color: #E7F5EC;                            color: #1E7A45; }
+.pill-success  { background-color: #E7F5EC;                            color: #1E7A45; } /* healthy / above threshold only */
 .pill-planned  { background-color: var(--color-severity-planned-bg);  color: var(--color-severity-planned); }
 .pill-neutral  { background-color: var(--color-surface-sunken);       color: var(--color-text-muted); }
 
@@ -287,15 +287,18 @@ table td.table-center {
   outline-offset: 2px;
 }
 
+/* Brand chrome for the affirmative action. It used to borrow the PLANNED
+   severity teal — a data colour on a button, which the colour rule in
+   theme/colors.js now forbids. */
 .table-btn-primary {
-  background-color: var(--color-severity-planned);
-  border-color: var(--color-severity-planned);
+  background-color: var(--color-brand-primary);
+  border-color: var(--color-brand-primary);
   color: #fff;
 }
 
 .table-btn-primary:hover {
-  background-color: #0B5F58;
-  border-color: #0B5F58;
+  background-color: var(--color-brand-hover);
+  border-color: var(--color-brand-hover);
   color: #fff;
 }
 
@@ -479,11 +482,14 @@ table td.table-center {
    so "which word looks different" is answered the same way everywhere
    instead of each page's CSS separately deciding color/weight/family.
    Applied via <span className="page-title-accent"> in each page header. */
+/* Ink navy (the brand pairing's other half — see --color-nav-bg), NOT the
+   terracotta: red was doing triple duty as CRITICAL, brand accent and this
+   accent word, so every page title opened on an alarm colour. */
 .page-title-accent {
   font-family: var(--font-serif);
   font-style: italic;
   font-weight: 600;
-  color: var(--color-brand-primary);
+  color: var(--color-nav-bg);
 }
 
 :root {
