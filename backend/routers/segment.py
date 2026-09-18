@@ -37,7 +37,14 @@ from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import PrincipalQuery, principal_clause
-from backend.schemas.segment import SegmentResponse, SkuSegmentRow, SkuTraits
+from backend.schemas.segment import (
+    SegmentResponse,
+    SegmentSummary,
+    SkuSegmentRow,
+    SkuTraits,
+    TrendBucket,
+    VolatilityBucket,
+)
 
 router = APIRouter(prefix="/segment", tags=["segment"])
 
@@ -142,4 +149,94 @@ def get_segment(
         ),
         traits=traits,
         segments=segments,
+    )
+
+
+# Declared BEFORE the "" route would shadow it? No — FastAPI matches the
+# literal path first, so order here is for readability only.
+@router.get("/summary", response_model=SegmentSummary)
+def get_segment_summary(
+    principal: str | None = PrincipalQuery,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+) -> SegmentSummary:
+    """Cohort rollup of sku_traits for the dashboard's diagnostic panel.
+
+    Answers "why is this portfolio hard to forecast" at portfolio grain:
+    how many SKUs sit in each volatility band and which way their demand
+    trends. Both come straight from sku_traits (cv, trend) — the same
+    columns GET /segment returns per SKU, so the panel and the per-SKU
+    drill-down can never disagree.
+
+    Banding uses this module's cv_band() rather than SQL CASE, so the
+    thresholds exist in exactly one place.
+
+    Scoped to the LATEST cohort_period only. Mixing cohorts would sum two
+    different runs' populations into one bar. An empty cohort for the
+    requested principal returns analyzed_count=0 with a reason, never an
+    empty chart that reads as "no volatility".
+    """
+    scope_sql, scope_params = principal_clause(principal, "st.principal")
+    rows = db.execute(
+        text(
+            """
+            SELECT st.cv, st.trend, st.revenue_share_2026_02 AS revenue_share
+            FROM sku_traits st
+            WHERE st.cohort_period = (
+                SELECT MAX(cohort_period) FROM sku_traits st2
+                WHERE TRUE
+            )
+            """
+            + scope_sql
+        ),
+        scope_params,
+    ).mappings().all()
+
+    cohort = db.execute(text("SELECT MAX(cohort_period) AS p FROM sku_traits")).scalar()
+
+    if not rows:
+        return SegmentSummary(
+            cohort_period=cohort,
+            analyzed_count=0,
+            blocked_reason=(
+                "No segmentation rows for this scope — the run covers one cohort "
+                f"(Unilever Tier A as of {cohort}) so far."
+                if cohort else "The segmentation run has not been executed yet."
+            ),
+        )
+
+    vol: dict[str, dict] = {}
+    for r in rows:
+        band = cv_band(_to_float(r["cv"])) or "unknown"
+        entry = vol.setdefault(band, {"sku_count": 0, "revenue_share": 0.0, "any_share": False})
+        entry["sku_count"] += 1
+        share = _to_float(r["revenue_share"])
+        if share is not None:
+            entry["revenue_share"] += share
+            entry["any_share"] = True
+
+    trends: dict[str, int] = {}
+    for r in rows:
+        trends[r["trend"] or "none"] = trends.get(r["trend"] or "none", 0) + 1
+
+    band_order = {"high": 0, "medium": 1, "low": 2, "unknown": 3}
+    trend_order = {"up": 0, "none": 1, "down": 2}
+
+    return SegmentSummary(
+        cohort_period=cohort,
+        analyzed_count=len(rows),
+        volatility=[
+            VolatilityBucket(
+                band=b,
+                sku_count=v["sku_count"],
+                # Left null, not 0.0, when no SKU in the band carried a share —
+                # "not recorded" and "0% of revenue" are different facts.
+                revenue_share=round(v["revenue_share"], 4) if v["any_share"] else None,
+            )
+            for b, v in sorted(vol.items(), key=lambda kv: band_order.get(kv[0], 9))
+        ],
+        trend=[
+            TrendBucket(trend=t, sku_count=n)
+            for t, n in sorted(trends.items(), key=lambda kv: trend_order.get(kv[0], 9))
+        ],
     )

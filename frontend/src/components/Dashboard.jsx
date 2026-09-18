@@ -5,11 +5,11 @@ import DateFilter from './DateFilter';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
-  formatCompactPesos,
+  DemandVolatilityWidget, formatCompactPesos,
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
-import { formatMonth } from '../utils/formatDate';
-import { Package, Wallet, ShieldAlert, Clock, ArrowRight, Layers, Boxes, AlertTriangle, Percent } from 'lucide-react';
+import { getSegmentSummary } from '../api/segment';
+import { Package, Wallet, Clock, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -22,14 +22,6 @@ function kpiDisplay(value, blockedReason, formatter, normalContext) {
   if (blockedReason) return { value: '—', contextLine: blockedReason };
   return { value: formatter(value), contextLine: normalContext };
 }
-
-const formatPercent = (v) => `${Math.round(v * 100)}%`;
-const formatUnitsCompact = (v) => {
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `${(abs / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M`;
-  if (abs >= 1_000) return `${Math.round(abs / 1_000)}k`;
-  return `${Math.round(abs)}`;
-};
 
 // GET /dashboard's sales/stock window ends at a single 'YYYY-MM' `period`
 // anchor (a fixed trailing 12 months, same "picker's end maps onto the
@@ -59,71 +51,18 @@ const safetyStockMetricType = (rate) => {
   return 'healthy';
 };
 
-// ── Band headlines — generated from the response, never hardcoded ──────
-// Each returns { text, reason }: `text` is the takeaway sentence, `reason`
-// an optional second line explaining what could not be computed. When a
-// band's data is missing the text says so, in place of a number.
-
-function moneyHeadline({ sohValue, sohReason, abcMix, abcRevenue }) {
-  const tierA = abcMix.find((t) => t.tier === 'A');
-  const totalSkus = abcMix.reduce((sum, t) => sum + t.count, 0);
-  const abcPart = tierA && totalSkus
-    ? `Category A — ${tierA.count} of ${totalSkus.toLocaleString()} SKUs (${Math.round((tierA.count / totalSkus) * 100)}%) — earns ${Math.round(tierA.sharePct)}% of revenue`
-      + (abcRevenue?.total != null ? ` (${formatCompactPesos(abcRevenue.total)} in ${formatMonth(abcRevenue.period)})` : '')
-    : null;
-  if (sohValue != null && abcPart) return { text: `${formatCompactPesos(sohValue)} in stock — ${abcPart}.`, reason: null };
-  if (sohValue != null) return { text: `${formatCompactPesos(sohValue)} in stock; no ABC classification to show where it sits.`, reason: null };
-  if (abcPart) return { text: `${abcPart}; stock value is not available.`, reason: sohReason };
-  return { text: 'Stock value and ABC mix are not available for this selection.', reason: sohReason };
-}
-
-function riskHeadline(exposure) {
-  if (!exposure || exposure.below_count == null) {
-    return { text: 'Safety-stock exposure cannot be measured yet.', reason: exposure?.blocked_reason || null };
-  }
-  const share = exposure.below_revenue_share != null ? ` — ${Math.round(exposure.below_revenue_share * 100)}% of revenue exposed` : '';
-  const unmeasured = exposure.tier_a_count - exposure.comparable_count;
-  return {
-    text: `${exposure.below_count} of ${exposure.comparable_count} measurable Category A SKUs sit below safety stock${share}.`,
-    reason: unmeasured > 0
-      ? `${unmeasured} Category A SKU${unmeasured === 1 ? '' : 's'} could not be measured (no stock record or no pending recommendation) and are excluded, not counted as failing.`
-      : null,
-  };
-}
-
-function actionHeadline({ productCount, preview }) {
-  if (!productCount) return { text: 'No pending reorder recommendations.', reason: null };
-  const parts = [`${preview.critical_count ?? 0} critical`, `${preview.urgent_count ?? 0} urgent`];
-  if (preview.no_data_count) parts.push(`${preview.no_data_count} with no stock record`);
-  return {
-    text: `${productCount.toLocaleString()} pending recommendations across all planning cycles — ${parts.join(', ')}.`,
-    reason: null,
-  };
-}
-
-function savingsHeadline(pc) {
-  if (!pc || pc.lp_safety_stock_units == null || pc.rule_safety_stock_units == null) {
-    return { text: 'The LP policy cannot be compared with the 3-week rule yet.', reason: pc?.blocked_reason || null };
-  }
-  const diff = pc.rule_safety_stock_units - pc.lp_safety_stock_units;
-  const pctDiff = pc.rule_safety_stock_units > 0 ? Math.round((Math.abs(diff) / pc.rule_safety_stock_units) * 100) : null;
-  const direction = diff >= 0 ? 'less' : 'more';
-  return {
-    text: `LP safety stock totals ${formatUnitsCompact(pc.lp_safety_stock_units)} units across ${pc.sku_count} SKUs vs ${formatUnitsCompact(pc.rule_safety_stock_units)} under the blanket ${pc.rule_weeks}-week rule`
-      + (pctDiff != null ? ` — ${pctDiff}% ${direction} buffer stock for the ${formatMonth(pc.cycle_date)} cycle.` : '.'),
-    reason: 'Demand units, not pesos — no per-piece cost is recorded, so the peso value of the difference is not computed.',
-  };
-}
-
-const Band = ({ index, kicker, headline, children }) => (
-  <section className="dashboard-band" aria-labelledby={`band-${index}`}>
-    <header className="band-header">
-      <span className="band-kicker">{index} · {kicker}</span>
-      <h3 className="band-headline" id={`band-${index}`}>{headline.text}</h3>
-      {headline.reason && <p className="band-reason">{headline.reason}</p>}
-    </header>
+// One continuous page: no numbered sections, no per-section explanation.
+// Each widget is tagged with the kind of analytics it answers, so the four
+// types are demonstrable at a glance without a paragraph above each one.
+//   Descriptive — what happened
+//   Diagnostic  — why it happened
+//   Predictive  — what happens next
+//   Prescriptive— what to do about it
+const Slot = ({ kind, children }) => (
+  <div className="dash-slot" data-kind={kind}>
+    <span className="dash-kind">{kind}</span>
     {children}
-  </section>
+  </div>
 );
 
 // Same outer structure and card classes as the loaded page below, so every
@@ -132,39 +71,24 @@ const Band = ({ index, kicker, headline, children }) => (
 // blank for the whole /dashboard request (measured 5.4–7.1s).
 const DashboardSkeleton = () => (
   <div className="dashboard-body" aria-hidden="true">
-    {[0, 1, 2, 3].map((i) => (
-      <section className="dashboard-band" key={i}>
-        <header className="band-header">
+    <div className="kpi-strip kpi-strip-hero">
+      {[0, 1, 2, 3, 4].map((k) => (
+        <div className="kpi-card skeleton-card" key={k}>
           <div className="skeleton-line skeleton-line-title" />
-          <div className="skeleton-line skeleton-line-headline" />
-        </header>
-        {i < 2 ? (
-          <>
-            <div className="kpi-strip">
-              {[0, 1, 2, 3].map((k) => (
-                <div className="kpi-card skeleton-card" key={k}>
-                  <div className="skeleton-line skeleton-line-title" />
-                  <div className="skeleton-line skeleton-line-value" />
-                  <div className="skeleton-line skeleton-line-subtext" />
-                </div>
-              ))}
-            </div>
-            <div className={`band-charts ${i === 0 ? 'band-charts-money' : 'band-charts-risk'}`}>
-              {[0, 1].map((k) => (
-                <div className="chart-widget skeleton-card" key={k}>
-                  <div className="skeleton-line skeleton-line-title" />
-                  <div className="skeleton-chart-body" />
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="chart-widget skeleton-card">
+          <div className="skeleton-line skeleton-line-value" />
+          <div className="skeleton-line skeleton-line-subtext" />
+        </div>
+      ))}
+    </div>
+    {['dash-row-wide-narrow', 'dash-row-narrow-wide', 'dash-row-even', 'dash-row-single'].map((rowClass) => (
+      <div className={`dash-row ${rowClass}`} key={rowClass}>
+        {(rowClass === 'dash-row-single' ? [0] : [0, 1]).map((k) => (
+          <div className="chart-widget skeleton-card" key={k}>
             <div className="skeleton-line skeleton-line-title" />
             <div className="skeleton-chart-body" />
           </div>
-        )}
-      </section>
+        ))}
+      </div>
     ))}
   </div>
 );
@@ -186,6 +110,20 @@ const Dashboard = () => {
   });
   const [error, setError] = useState(null); // { key, message }
   const loadedKey = loaded?.key;
+
+  // Segmentation summary (the diagnostic panel) is its own request: it is
+  // cohort-scoped, not range-scoped, so it must NOT refetch when the date
+  // picker moves — only when the principal does. A failure here leaves the
+  // panel in its honest "no segmentation data" state and never blocks the
+  // rest of the dashboard.
+  const [segmentSummary, setSegmentSummary] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    getSegmentSummary({ principal })
+      .then((res) => { if (!cancelled) setSegmentSummary(res); })
+      .catch(() => { if (!cancelled) setSegmentSummary(null); });
+    return () => { cancelled = true; };
+  }, [principal]);
 
   useEffect(() => {
     if (loadedKey === requestKey) return undefined;
@@ -251,9 +189,6 @@ const Dashboard = () => {
 
   const sales = kpiDisplay(kpis.sales, kpis.sales_blocked_reason, formatCompactPesos, "This period's total sales");
   const sohValue = kpiDisplay(kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos, 'Stock-on-hand valuation');
-  const safetyStockRate = kpiDisplay(
-    kpis.safety_stock_rate, kpis.safety_stock_rate_blocked_reason, formatPercent, 'Share of Category A SKUs at/above safety stock'
-  );
 
   const weeksOfCoverValue = weeksOfCover.value ?? null;
   const weeksOfCoverReason = weeksOfCover.blocked_reason ?? null;
@@ -307,49 +242,23 @@ const Dashboard = () => {
     orderQty: r.q_i,
   }));
 
-  // Strip figures for bands 1 and 2. Every one comes from a field the
-  // band's headline is already built from, so a card and its headline can
-  // never disagree; a missing field renders "—" with the reason, never 0.
-  const tierA = abcMix.find((t) => t.tier === 'A');
-  const totalSkus = abcMix.reduce((sum, t) => sum + t.count, 0);
-  const noAbcReason = tierA ? null : 'No ABC classification for this selection';
-  const catAShare = kpiDisplay(
-    tierA ? tierA.sharePct : null, noAbcReason,
-    (v) => `${Math.round(v)}%`, 'Share of revenue earned by Category A'
-  );
-  const catASkuPct = tierA && totalSkus ? Math.round((tierA.count / totalSkus) * 100) : null;
-  const catASkus = kpiDisplay(
-    tierA ? tierA.count : null, noAbcReason,
-    (v) => `${v.toLocaleString()} of ${totalSkus.toLocaleString()}`,
-    catASkuPct != null ? `${catASkuPct}% of all classified SKUs` : ''
-  );
+  // Hero-strip figures. Each reads the same backend field the widget
+  // below it is drawn from, so a card and its chart can never disagree; a
+  // missing field renders "—" with the reason, never 0.
 
   const exposure = data.safety_stock_exposure || {};
   const exposureReason = exposure.blocked_reason || 'Safety-stock exposure cannot be measured yet';
-  // One fact, three cards (at/above %, below count, revenue exposed) — they
-  // share the same health tier so the band can't show mixed verdicts.
+  // Health tier for the safety-stock card, from the same rate the
+  // exposure figures are derived from.
   const ssTier = safetyStockMetricType(kpis.safety_stock_rate ?? null);
   const belowSs = kpiDisplay(
     exposure.below_count ?? null, exposure.below_count == null ? exposureReason : null,
     (v) => `${v.toLocaleString()} of ${(exposure.comparable_count ?? 0).toLocaleString()}`,
     'Measurable Category A SKUs below their safety stock'
   );
-  const revenueExposed = kpiDisplay(
-    exposure.below_revenue_share ?? null, exposure.below_revenue_share == null ? exposureReason : null,
-    formatPercent, 'Revenue share of the SKUs below safety stock'
-  );
 
-  const headlines = {
-    money: moneyHeadline({
-      sohValue: kpis.soh_value ?? null,
-      sohReason: kpis.soh_value_blocked_reason,
-      abcMix,
-      abcRevenue: data.abc_revenue,
-    }),
-    risk: riskHeadline(data.safety_stock_exposure),
-    action: actionHeadline({ productCount: data.recommendations?.product_count ?? 0, preview: reorderPreview }),
-    savings: savingsHeadline(data.policy_comparison),
-  };
+  // Pending action count — the "what to do" figure in the hero strip.
+  const pendingCount = data.recommendations?.product_count ?? 0;
 
   return (
     <div className="dashboard">
@@ -364,75 +273,61 @@ const Dashboard = () => {
         )}
 
         <div className={`dashboard-body${isRefreshing ? ' is-refreshing' : ''}`} aria-busy={isRefreshing}>
-          {/* ── 1. Where our money is ─────────────────────────────────── */}
-          <Band index={1} kicker="Where our money is" headline={headlines.money}>
-            <div className="kpi-strip">
-              <KPICard
-                title="Sales"
-                value={sales.value}
-                contextLine={sales.contextLine}
-                icon={<Wallet size={20} />}
-              />
-              <KPICard
-                title="Stock on hand value"
-                value={sohValue.value}
-                contextLine={sohValue.contextLine}
-                icon={<Package size={20} />}
-              />
-              <KPICard
-                title="Category A share of revenue"
-                value={catAShare.value}
-                contextLine={catAShare.contextLine}
-                icon={<Layers size={20} />}
-              />
-              <KPICard
-                title="Category A SKUs"
-                value={catASkus.value}
-                contextLine={catASkus.contextLine}
-                icon={<Boxes size={20} />}
-              />
-            </div>
-            <div className="band-charts band-charts-money">
-              <SalesVsStockWidget data={salesVsStock} />
-              <ABCDonutWidget data={abcMix} revenue={data.abc_revenue} />
-            </div>
-          </Band>
+          {/* Hero strip — the five figures that answer "what is happening
+              right now": money in, money parked, service risk, cover vs the
+              policy this project exists to replace, and work waiting. */}
+          <div className="kpi-strip kpi-strip-hero">
+            <KPICard
+              title="Sales"
+              value={sales.value}
+              contextLine={sales.contextLine}
+              icon={<Wallet size={20} />}
+            />
+            <KPICard
+              title="Stock on hand value"
+              value={sohValue.value}
+              contextLine={sohValue.contextLine}
+              icon={<Package size={20} />}
+            />
+            <KPICard
+              title="Below safety stock"
+              value={belowSs.value}
+              metricType={belowSs.value === '—' ? undefined : ssTier}
+              contextLine={belowSs.contextLine}
+              icon={<AlertTriangle size={20} />}
+            />
+            <KPICard
+              title="Weeks of cover"
+              value={weeksOfCoverDisplay.value}
+              metricType={weeksOfCoverMetricType}
+              isOverTarget={weeksOfCoverIsOverTarget}
+              contextLine={weeksOfCoverDisplay.contextLine}
+              icon={<Clock size={20} />}
+            />
+            <KPICard
+              title="Pending reorder actions"
+              value={pendingCount.toLocaleString()}
+              metricType="recommendation"
+              contextLine="LP recommendations awaiting a decision"
+              icon={<ClipboardList size={20} />}
+            />
+          </div>
 
-          {/* ── 2. What's at risk ─────────────────────────────────────── */}
-          <Band index={2} kicker="What's at risk" headline={headlines.risk}>
-            <div className="kpi-strip">
-              <KPICard
-                title="SKUs at or above safety stock"
-                value={safetyStockRate.value}
-                metricType={ssTier}
-                contextLine={safetyStockRate.contextLine}
-                icon={<ShieldAlert size={20} />}
-              />
-              <KPICard
-                title="Below safety stock"
-                value={belowSs.value}
-                metricType={belowSs.value === '—' ? undefined : ssTier}
-                contextLine={belowSs.contextLine}
-                icon={<AlertTriangle size={20} />}
-              />
-              <KPICard
-                title="Revenue exposed"
-                value={revenueExposed.value}
-                metricType={revenueExposed.value === '—' ? undefined : ssTier}
-                contextLine={revenueExposed.contextLine}
-                icon={<Percent size={20} />}
-              />
-              <KPICard
-                title="Weeks of cover"
-                value={weeksOfCoverDisplay.value}
-                metricType={weeksOfCoverMetricType}
-                isOverTarget={weeksOfCoverIsOverTarget}
-                contextLine={weeksOfCoverDisplay.contextLine}
-                icon={<Clock size={20} />}
-              />
-            </div>
-            <div className="band-charts band-charts-risk">
-              <CategoryStockBarWidget data={tierStock} />
+          {/* DESCRIPTIVE — what happened */}
+          <div className="dash-row dash-row-wide-narrow">
+            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} /></Slot>
+            <Slot kind="Descriptive"><ABCDonutWidget data={abcMix} revenue={data.abc_revenue} /></Slot>
+          </div>
+
+          {/* DESCRIPTIVE + DIAGNOSTIC — the state, then why it looks that way */}
+          <div className="dash-row dash-row-narrow-wide">
+            <Slot kind="Descriptive"><CategoryStockBarWidget data={tierStock} /></Slot>
+            <Slot kind="Diagnostic"><DemandVolatilityWidget summary={segmentSummary} /></Slot>
+          </div>
+
+          {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
+          <div className="dash-row dash-row-even">
+            <Slot kind="Predictive">
               <PortfolioForecastWidget
                 series={portfolioSeries}
                 gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
@@ -440,12 +335,8 @@ const Dashboard = () => {
                 scopeLabel={portfolioForecast.scope_label}
                 emptyReason={portfolioForecast.scope_label}
               />
-            </div>
-          </Band>
-
-          {/* ── 3. What to do ─────────────────────────────────────────── */}
-          <Band index={3} kicker="What to do" headline={headlines.action}>
-            <div className="band-reorder">
+            </Slot>
+            <Slot kind="Prescriptive">
               <ReorderRecommendationWidget
                 rows={reorderRows}
                 criticalCount={reorderPreview.critical_count ?? 0}
@@ -453,18 +344,19 @@ const Dashboard = () => {
                 totalOrderQty={reorderPreview.total_order_qty ?? 0}
                 weights={reorderPreview.lp_weights}
               />
-            </div>
-            <p className="band-footnote">
-              Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as
-              &ldquo;Act now&rdquo;.{' '}
-              <Link to="/reorder" className="band-link">Open Reorder Recs <ArrowRight size={12} /></Link>
-            </p>
-          </Band>
+            </Slot>
+          </div>
 
-          {/* ── 4. What it saves ──────────────────────────────────────── */}
-          <Band index={4} kicker="What it saves" headline={headlines.savings}>
-            <PolicyComparisonWidget comparison={data.policy_comparison} />
-          </Band>
+          {/* PRESCRIPTIVE — the policy question this project exists to answer */}
+          <div className="dash-row dash-row-single">
+            <Slot kind="Prescriptive"><PolicyComparisonWidget comparison={data.policy_comparison} /></Slot>
+          </div>
+
+          <p className="dash-footnote">
+            Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as
+            &ldquo;Act now&rdquo;.{' '}
+            <Link to="/reorder" className="band-link">Open Reorder Recs <ArrowRight size={12} /></Link>
+          </p>
         </div>
       </div>
     </div>

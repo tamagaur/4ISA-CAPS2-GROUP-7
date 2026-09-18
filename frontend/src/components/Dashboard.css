@@ -427,63 +427,14 @@
   gap: 0.75rem;
 }
 
-/* ── Narrative bands (2026-09-18) ─────────────────────────────────────────
-   The page reads top-to-bottom as four labelled bands, each opened by a
-   takeaway sentence GENERATED from the response (see Dashboard.jsx's
-   *Headline builders) — the headline is the finding, the widgets under it
-   are the evidence. Replaces the old KPI-row / hero / duo / duo grid, so
-   the .chart-duo* rules above are no longer used by this page (kept for
-   the skeleton's sake and any future reuse). */
-.dashboard-band {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding-top: 0.25rem;
-}
-
-.dashboard-band + .dashboard-band {
-  border-top: 1px solid var(--color-border);
-  padding-top: 1.5rem;
-}
-
-.band-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.band-kicker {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-text-subtle);
-}
-
-.band-headline {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 700;
-  line-height: 1.35;
-  color: var(--color-text);
-  max-width: 64rem;
-}
-
-.band-reason {
-  margin: 0;
-  font-size: 0.78rem;
-  color: var(--color-text-muted);
-  line-height: 1.45;
-  max-width: 64rem;
-}
-
-/* ── Strip + evidence (2026-09-18 layout redo) ────────────────────────────
-   Each band opens with its figures in a compact strip, then the charts
-   that back them on their own row. The earlier layout put two KPI cards
-   in ONE grid beside a tall chart with align-items: stretch, so cards
-   holding ~77px of content were pulled to 315–360px — 238–283px of dead
-   space per card, measured. Figures and evidence never share a row now,
-   so a card is only ever as tall as the tallest card of its own kind. */
+/* ── Continuous dashboard (2026-09-18) ───────────────────────────────────
+   One uninterrupted page: no numbered sections, no dividers, no paragraph
+   of explanation above each block. The hero strip carries the five figures
+   that answer "what is happening right now"; every row below is evidence,
+   each tagged with the kind of analytics it answers so all four
+   (descriptive / diagnostic / predictive / prescriptive) are demonstrable
+   without prose. Replaces the banded layout whose per-band headline +
+   reason repeated on screen what the widgets already showed. */
 .kpi-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -491,7 +442,12 @@
   align-items: stretch;
 }
 
-.band-charts {
+/* Five across: the hero row is the only place that needs a fifth column. */
+.kpi-strip-hero {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.dash-row {
   display: grid;
   gap: 1.25rem;
   align-items: stretch;
@@ -499,23 +455,49 @@
 }
 
 /* Trend chart wide, donut narrow — the donut needs no horizontal room. */
-.band-charts-money {
-  grid-template-columns: 1.7fr 1fr;
+.dash-row-wide-narrow { grid-template-columns: 1.7fr 1fr; }
+/* Three thin tier bars narrow, the diagnostic bars wide. */
+.dash-row-narrow-wide { grid-template-columns: 1fr 1.4fr; }
+.dash-row-even        { grid-template-columns: 1fr 1fr; }
+.dash-row-single      { grid-template-columns: 1fr; }
+
+/* The slot owns the type tag; the widget inside keeps its own card chrome,
+   so tagging costs no extra box. */
+.dash-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-/* Three thin tier bars narrow, forecast chart wide. */
-.band-charts-risk {
-  grid-template-columns: 1fr 1.7fr;
+/* Analytics-type tag. Deliberately quiet — it labels the widget for a
+   reviewer without competing with the widget's own title. */
+.dash-kind {
+  align-self: flex-start;
+  margin-bottom: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
-.band-charts .chart-widget {
+.dash-slot > .chart-widget {
+  flex: 1;
   height: 360px;
   min-width: 0;
 }
 
-/* Widgets whose body is a handful of flex rows (donut + bars, tier bars)
-   centre that body in the height the chart beside them sets. */
-.band-charts .chart-widget-body {
+.dash-row-single .dash-slot > .chart-widget {
+  height: auto;
+}
+
+/* Widgets whose body is a handful of flex rows (donut, tier bars, the
+   volatility bands) centre that body in the height their row sets. */
+.dash-row .chart-widget-body {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -523,13 +505,7 @@
   gap: 0.75rem;
 }
 
-/* The reorder card stacks a summary row, three weight bars and a
-   scrollable list; it needs a fixed height for the list to scroll inside. */
-.band-reorder .chart-widget {
-  height: 480px;
-}
-
-.band-footnote {
+.dash-footnote {
   margin: 0;
   font-size: 0.78rem;
   color: var(--color-text-muted);
@@ -548,37 +524,39 @@
   text-decoration: underline;
 }
 
-.skeleton-line-headline {
-  width: 70%;
-  height: 1.1rem;
-  margin-bottom: 0.5rem;
+@media (max-width: 1280px) {
+  .kpi-strip-hero {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1100px) {
-  .kpi-strip {
+  .kpi-strip,
+  .kpi-strip-hero {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .band-charts-money,
-  .band-charts-risk {
+  .dash-row-wide-narrow,
+  .dash-row-narrow-wide,
+  .dash-row-even {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .band-charts .chart-widget {
+  .dash-slot > .chart-widget {
     height: 320px;
   }
 }
 
 @media (max-width: 480px) {
-  .kpi-strip {
+  .kpi-strip,
+  .kpi-strip-hero {
     grid-template-columns: 1fr;
   }
 }
 
-/* Empty state stays compact at every width — placed after every height
-   rule above so source order wins. */
-.band-charts .chart-widget-empty {
+/* Empty state stays compact at every width — after every height rule. */
+.dash-slot > .chart-widget-empty {
   height: 140px;
   min-height: 140px;
 }

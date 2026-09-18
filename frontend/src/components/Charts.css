@@ -823,3 +823,35 @@
     grid-template-areas: "label" "track" "values";
   }
 }
+
+/* ── Diagnostic widget (DemandVolatilityWidget) ───────────────────────────
+   Reuses .policy-bars/.policy-bar-* for the band bars; only the trend chip
+   row and the revenue-share suffix are new. */
+.volatility-rev {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.volatility-trend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.volatility-trend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  font-size: 0.75rem;
+  color: var(--color-text-body);
+}
+
+.volatility-trend-arrow {
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+}

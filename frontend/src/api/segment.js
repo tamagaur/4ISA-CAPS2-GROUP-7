@@ -24,3 +24,20 @@ export function getSegment(skuId, { principal } = {}) {
     return res.json();
   });
 }
+
+// GET /segment/summary — the same sku_traits columns rolled up to cohort
+// grain, for the dashboard's diagnostic panel. Returns analyzed_count=0
+// with a blocked_reason (not an empty chart) when the requested principal
+// has no segmentation rows — the run covers one cohort so far.
+export function getSegmentSummary({ principal } = {}) {
+  const query = new URLSearchParams();
+  appendPrincipal(query, principal);
+  const qs = query.toString();
+  const path = `/segment/summary${qs ? `?${qs}` : ''}`;
+
+  return cachedRequest(path, async () => {
+    const res = await apiFetch(path);
+    if (!res.ok) throw new Error('Failed to fetch segmentation summary');
+    return res.json();
+  });
+}

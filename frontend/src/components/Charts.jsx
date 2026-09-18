@@ -1124,3 +1124,99 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
     </div>
   );
 };
+
+// ── Diagnostic: why this portfolio is hard to forecast ───────────────────
+// The dashboard's only "why did it happen" widget. Reads GET /segment/
+// summary, which rolls up the SAME sku_traits columns (cv, trend) that the
+// per-SKU panel on SKU Forecast shows, so the portfolio view and the
+// drill-down can never disagree.
+//
+// Volatility bands are a display convention over the coefficient of
+// variation of monthly demand, defined once in backend/routers/segment.py
+// (cv < 0.5 steady, < 1.0 variable, else erratic) — never re-derived here.
+// Colour follows the app's semantic rule: erratic is the "act" red because
+// it is the band that explains missed forecasts, steady is healthy green.
+const VOLATILITY_META = {
+  high: { label: 'Erratic', color: SEMANTIC.act, hint: 'CV ≥ 1.0 — month-to-month demand swings wildly' },
+  medium: { label: 'Variable', color: SEMANTIC.watch, hint: 'CV 0.5–1.0 — noticeable swings' },
+  low: { label: 'Steady', color: SEMANTIC.healthy, hint: 'CV < 0.5 — predictable month to month' },
+  unknown: { label: 'Not measured', color: SEMANTIC.noData, hint: 'No CV recorded for these SKUs' },
+};
+
+const TREND_META = {
+  up: { label: 'Rising', arrow: '↗' },
+  none: { label: 'No clear trend', arrow: '→' },
+  down: { label: 'Falling', arrow: '↘' },
+};
+
+export const DemandVolatilityWidget = ({ summary, emptyReason }) => {
+  const s = summary || {};
+  const buckets = s.volatility || [];
+  const hasData = (s.analyzed_count ?? 0) > 0 && buckets.length > 0;
+  const total = buckets.reduce((sum, b) => sum + (b.sku_count || 0), 0);
+
+  return (
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>Why demand is hard to forecast</h4>
+          <p>
+            How steady each Category A SKU&apos;s monthly demand is (coefficient of variation) and which way
+            it trends — the measured reasons behind the forecast accuracy above.
+          </p>
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || s.blocked_reason || 'No segmentation data for this scope'}</p>
+      ) : (
+        <div className="chart-widget-body">
+          <div className="policy-bars">
+            {buckets.map((b) => {
+              const meta = VOLATILITY_META[b.band] || VOLATILITY_META.unknown;
+              const pct = total > 0 ? (b.sku_count / total) * 100 : 0;
+              const revPct = b.revenue_share != null ? Math.round(b.revenue_share * 100) : null;
+              return (
+                <div className="policy-bar-row" key={b.band} title={meta.hint}>
+                  <span className="policy-bar-label">{meta.label}</span>
+                  <div
+                    className="policy-bar-track"
+                    role="img"
+                    aria-label={`${meta.label}: ${b.sku_count} SKUs`}
+                  >
+                    <span style={{ width: `${pct}%`, backgroundColor: meta.color }} />
+                  </div>
+                  <span className="policy-bar-value">
+                    {b.sku_count} SKUs
+                    {/* Revenue share is what makes the band actionable: 60
+                        erratic SKUs matter differently if they carry 25% of
+                        revenue than if they carry 2%. Omitted, not zeroed,
+                        when no SKU in the band recorded a share. */}
+                    {revPct != null && <span className="volatility-rev"> · {revPct}% rev</span>}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="volatility-trend-row">
+            {(s.trend || []).map((t) => {
+              const meta = TREND_META[t.trend] || { label: t.trend, arrow: '·' };
+              return (
+                <span className="volatility-trend-chip" key={t.trend}>
+                  <span className="volatility-trend-arrow" aria-hidden="true">{meta.arrow}</span>
+                  <strong>{t.sku_count}</strong> {meta.label}
+                </span>
+              );
+            })}
+          </div>
+
+          <p className="dashboard-chart-footnote">
+            {s.analyzed_count} Category A SKUs in the {formatMonth(s.cohort_period)} cohort · trend from
+            Mann-Kendall (p &lt; 0.05). Open a SKU on SKU Forecast for its own reason.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
