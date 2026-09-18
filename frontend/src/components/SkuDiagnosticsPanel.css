@@ -181,3 +181,48 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Entrance ─────────────────────────────────────────────────────────────
+   The card shares the app-wide build (chart-card-enter, defined in
+   index.css so every route has it). Callers key this component on the SKU
+   code, so picking a different product remounts it and the build replays;
+   a principal or range change instead replays it through the page's
+   data-enter-cycle wrapper, same as the chart below it.
+
+   The tiles and the quoted bin reason carry their own short stagger. They
+   need no replay plumbing: they only exist in the loaded branch, so they
+   mount at the moment the GET /segment response lands and animate then —
+   which is the point worth marking, since the card itself is on screen
+   showing "Loading diagnostics…" well before the numbers arrive. */
+.sku-diag {
+  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+}
+
+@keyframes sku-diag-item-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sku-diag-tile,
+.sku-diag-reason {
+  animation: sku-diag-item-enter 380ms ease-out both;
+}
+
+.sku-diag-tile:nth-child(1) { animation-delay: 60ms; }
+.sku-diag-tile:nth-child(2) { animation-delay: 130ms; }
+.sku-diag-tile:nth-child(3) { animation-delay: 200ms; }
+.sku-diag-reason { animation-delay: 260ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sku-diag,
+  .sku-diag-tile,
+  .sku-diag-reason {
+    animation: none;
+  }
+}

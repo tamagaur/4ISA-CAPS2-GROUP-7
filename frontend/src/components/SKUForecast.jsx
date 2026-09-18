@@ -28,6 +28,18 @@ import './SKUForecast.css';
 const PIN_COLOR = '#C74E3D';
 const PIN_IDLE_COLOR = '#667085';
 
+// The SKU picked this session, held at module scope rather than in
+// component state or sessionStorage.
+//
+// This is a route-level component, so navigating to another page and back
+// remounts it — component state alone would drop the selection on every
+// tab switch. sessionStorage is the other obvious home and is wrong in the
+// opposite direction: it survives a page reload, and a reload is exactly
+// when this page should go back to asking the user to pick a SKU. A module
+// variable lives as long as the loaded JS context does, which is precisely
+// "until the tab is refreshed or closed".
+let rememberedSKUCode = null;
+
 // Unlike Dashboard/ABC Classification/Reorder Recs, this page's
 // date range is its OWN, local to this component — not the shared
 // cross-page one in DashboardLayout (see the localRange state below, and
@@ -214,7 +226,6 @@ const SKUForecast = () => {
   const brandLookup = useBrandLookup();
 
   // Map ABC classification rows -> the SKU-picker shape this page renders.
-  // revenueShare is kept for the default selection below.
   const sourceSKUs = useMemo(
     () =>
       rawItems.map((item) => ({
@@ -222,71 +233,42 @@ const SKUForecast = () => {
         name: item.product_name || 'Unknown Product',
         brand: brandLookup?.get(String(item.sku_id)) ?? '',
         cat: item.tier,
-        revenueShare: item.revenue_share ?? null,
       })),
     [rawItems, brandLookup]
   );
-
-  // The SKU the page opens on when nothing has been picked or remembered:
-  // the highest-revenue Category A SKU in the list. The page used to open
-  // blank behind a "pick a SKU" prompt, so the first thing a client saw
-  // was an empty chart slot. Picked explicitly by revenue_share (not by
-  // list order) so it can't depend on how the backend happens to sort.
-  const defaultSKU = useMemo(() => {
-    let best = null;
-    sourceSKUs.forEach((sku) => {
-      if (sku.cat !== 'A') return;
-      if (!best || (sku.revenueShare ?? -1) > (best.revenueShare ?? -1)) best = sku;
-    });
-    return best;
-  }, [sourceSKUs]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Selected SKU. Opens on the remembered choice if there is one, else on
-  // defaultSKU (the top Category A SKU by revenue) — never blank. An
-  // auto-pick is labelled as such in the selected-SKU card so it can't be
-  // mistaken for something the user chose.
-  //
-  // The choice is remembered in sessionStorage rather than component state
-  // because this is a route-level component: navigating to another page and
-  // back remounts it, which would otherwise wipe the selection mid-session.
-  // sessionStorage (not localStorage) matches "until the end of the session"
-  // exactly — closing the tab starts clean again. Only explicit picks are
-  // remembered; the auto-pick is recomputed from live data each visit.
-  const SELECTED_SKU_KEY = 'san2_selected_forecast_sku';
+  // Selected SKU. The page opens with NOTHING selected: no chart, no
+  // diagnostics, just the prompt to pick one. It used to auto-select the
+  // top Category A SKU by revenue, which meant the first thing a user saw
+  // was a forecast for a product they hadn't asked about — easy to read as
+  // "this is my data" when it was only a placeholder.
   const [selectedSKU, setSelectedSKU] = useState(null);
-  const [isAutoSelected, setIsAutoSelected] = useState(false);
 
-  // Restore the remembered SKU once the list has loaded — and only if that
-  // code still exists in it, so a stale/renamed code can't leave the page
-  // requesting a SKU that's no longer classified. Falls back to defaultSKU.
+  // Re-attach the selection to the freshly loaded list. Covers two cases
+  // with one read: restoring the module-remembered pick after a route
+  // remount, and refreshing the already-selected row so a late-arriving
+  // brand shows up. A code that isn't in the list (a different principal's
+  // scope, or no longer classified) clears the selection rather than
+  // leaving the page requesting a SKU that isn't there — rememberedSKUCode
+  // is deliberately left alone so switching the scope back restores it.
   useEffect(() => {
     if (sourceSKUs.length === 0) return;
     setSelectedSKU((prev) => {
-      if (prev && sourceSKUs.some((s) => s.code === prev.code)) {
-        // Same SKU, refreshed row (brand may have arrived late).
-        return sourceSKUs.find((s) => s.code === prev.code);
-      }
-      let saved = null;
-      try {
-        saved = sessionStorage.getItem(SELECTED_SKU_KEY);
-      } catch {
-        saved = null; // private mode / storage blocked — fall through to the default
-      }
-      const remembered = saved ? sourceSKUs.find((s) => s.code === saved) : null;
-      if (remembered) {
-        setIsAutoSelected(false);
-        return remembered;
-      }
-      setIsAutoSelected(Boolean(defaultSKU));
-      return defaultSKU;
+      const code = prev?.code ?? rememberedSKUCode;
+      if (!code) return null;
+      return sourceSKUs.find((s) => s.code === code) ?? null;
     });
-  }, [sourceSKUs, defaultSKU]);
+  }, [sourceSKUs]);
 
-  // Persistent Pinned SKUs
+  // Pinned SKUs. localStorage, NOT sessionStorage or the module-scoped
+  // selection above: a pin is an explicit "keep this at the top for me"
+  // that stays until the user unpins it, so it has to outlive a refresh,
+  // a closed tab and a logout. auth.js's clearSession() only removes the
+  // token and role keys, so signing out leaves this untouched by design.
   const [pinnedSKUs, setPinnedSKUs] = useState(() => {
     try {
       const saved = localStorage.getItem('san2_pinned_skus');
@@ -327,36 +309,36 @@ const SKUForecast = () => {
       updated = [...pinnedSKUs, code];
     }
     setPinnedSKUs(updated);
-    localStorage.setItem('san2_pinned_skus', JSON.stringify(updated));
+    // Guarded like the read above — in private mode a throw here would
+    // take the click handler down with it and the pin would not toggle.
+    try {
+      localStorage.setItem('san2_pinned_skus', JSON.stringify(updated));
+    } catch { /* storage unavailable — the pin still holds for this view */ }
   };
 
   // Select SKU handler
   const handleSelectSKU = (sku) => {
     setSelectedSKU(sku);
-    setIsAutoSelected(false);
+    rememberedSKUCode = sku.code;
     setIsDropdownOpen(false);
-    try {
-      sessionStorage.setItem(SELECTED_SKU_KEY, sku.code);
-    } catch { /* storage unavailable — selection still works for this view */ }
 
     // Update recent SKUs history (prepend, deduplicate, keep last 5)
     const updatedRecent = [sku.code, ...recentSKUs.filter(c => c !== sku.code)].slice(0, 5);
     setRecentSKUs(updatedRecent);
-    localStorage.setItem('san2_recent_forecast_skus', JSON.stringify(updatedRecent));
+    try {
+      localStorage.setItem('san2_recent_forecast_skus', JSON.stringify(updatedRecent));
+    } catch { /* storage unavailable — the list still holds for this view */ }
   };
 
-  // Clear — drops the search/filter state and returns the page to the same
-  // default it opens on (the top Category A SKU), rather than to a blank
-  // slot. Also forgets the remembered selection so navigating away and
-  // back lands on the default too.
+  // Clear — drops the selection and the search/filter state, returning the
+  // page to the prompt it opens on. Also forgets the remembered pick, so
+  // navigating away and back stays on the prompt rather than restoring the
+  // SKU the user just cleared.
   const handleClearSelection = () => {
-    setSelectedSKU(defaultSKU);
-    setIsAutoSelected(Boolean(defaultSKU));
+    setSelectedSKU(null);
+    rememberedSKUCode = null;
     setSelectedCategory('ALL');
     setSearchQuery('');
-    try {
-      sessionStorage.removeItem(SELECTED_SKU_KEY);
-    } catch { /* nothing to forget if storage is unavailable */ }
   };
 
   // Filtering Logic. No brand filter: which principal's SKUs appear here is
@@ -775,7 +757,7 @@ const SKUForecast = () => {
                 </select>
               </div>
 
-              {(selectedCategory !== 'ALL' || searchQuery !== '' || (selectedSKU && !isAutoSelected)) && (
+              {(selectedCategory !== 'ALL' || searchQuery !== '' || selectedSKU) && (
                 <button
                   className="clear-filters-btn"
                   onClick={handleClearSelection}
@@ -957,16 +939,18 @@ const SKUForecast = () => {
         {listLoading && <p className="forecast-subtitle">Loading SKU list…</p>}
         {listError && <p className="forecast-subtitle">Error: {listError}</p>}
 
-        {/* Only reachable when the list itself is empty (no classified SKUs
-            for this principal) — otherwise the page auto-selects defaultSKU
-            and renders its forecast straight away. */}
+        {/* The page's resting state until the user picks a SKU — nothing is
+            auto-selected, so this is what a fresh visit (or a refresh)
+            shows. Also covers the genuinely empty list. */}
         {!selectedSKU && !listLoading && !listError && (
           <div className="forecast-empty-state">
             <div className="forecast-empty-icon">
               <Search size={28} strokeWidth={1.6} />
             </div>
             <h3 className="forecast-empty-title">
-              {sourceSKUs.length === 0 ? 'No classified SKUs for this principal' : 'Select a SKU to see its forecast'}
+              {sourceSKUs.length === 0
+                ? 'No classified SKUs for this principal'
+                : 'Select or search a SKU to display forecast'}
             </h3>
             <p className="forecast-empty-body">
               {sourceSKUs.length === 0
@@ -999,13 +983,6 @@ const SKUForecast = () => {
                   <span className="sku-product-name">{selectedSKU.name}</span>
                   {selectedSKU.brand && <span className="sku-brand-name">{selectedSKU.brand}</span>}
                 </div>
-                {isAutoSelected && (
-                  <span className="sku-auto-note">
-                    Auto-selected: the top Category A SKU by revenue share
-                    {selectedSKU.revenueShare != null ? ` (${(selectedSKU.revenueShare * 100).toFixed(2)}%)` : ''}.
-                    Search above to change it.
-                  </span>
-                )}
               </div>
               <div className="sku-info-right">
                 <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Category {selectedSKU.cat}</span>
@@ -1014,8 +991,16 @@ const SKUForecast = () => {
 
             {/* Why this SKU behaves this way — the Phase-2 diagnostic layer,
                 placed between the identity card and the chart so it reads
-                as part of the SKU's story, not a footnote under the graph. */}
-            <SkuDiagnosticsPanel skuId={selectedSKU.code} principal={principal} />
+                as part of the SKU's story, not a footnote under the graph.
+                Keyed on the SKU for the same reason the chart below is:
+                the remount replays the card's entrance, so switching
+                products visibly rebuilds the explanation instead of
+                silently swapping the words inside a static box. */}
+            <SkuDiagnosticsPanel
+              key={selectedSKU.code}
+              skuId={selectedSKU.code}
+              principal={principal}
+            />
 
             {/* Chart Section */}
             {/* Keyed on the selected SKU so switching products replays the

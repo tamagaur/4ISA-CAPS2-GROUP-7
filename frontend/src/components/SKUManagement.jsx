@@ -16,6 +16,13 @@ import './SKUManagement.css';
 // bracket ("…40(6+1)65G" split, "…12X2X135ML" didn't), so a few rows got
 // an odd "(65G)" line while most identical-looking names didn't.
 
+// Brand filter sentinels. <select> values are strings, so "no brand" needs a
+// literal that cannot collide with a real brand — hence the underscores.
+// Both are excluded before the brand list is handed to AddSKUModal, which
+// offers it as values to ASSIGN; neither is a brand anyone can pick.
+const ALL_BRANDS = 'All Brands';
+const NO_BRAND = '__NO_BRAND__';
+
 const SKUManagement = () => {
   // Shared principal scope (Topbar's segmented control) — the SKU list
   // reloads whenever it changes, via loadSKUs' effect dep below.
@@ -48,11 +55,19 @@ const SKUManagement = () => {
       rawItems.map((item) => ({
         id: item.product_key,
         code: item.sku_id,
-        // Real Product_Dimension.brand (SURF, DOVE, KNORR…; null for ~14% of
-        // SKUs). This used to be hardcoded 'Unilever' — the principal, not a
-        // brand — and because the edit flow sends brand back on save, any
-        // edit would have overwritten a real brand with 'Unilever'.
-        brand: item.brand || null,
+        // Real Product_Dimension.brand. This used to be hardcoded 'Unilever'
+        // — the principal, not a brand — and because the edit flow sends
+        // brand back on save, any edit would have overwritten a real brand
+        // with 'Unilever'.
+        //
+        // Trimmed, so a whitespace-padded value doesn't become its own entry
+        // in the filter list alongside the clean one. Internal spacing is
+        // left alone: 'False  (10)' really is stored with two spaces, and
+        // collapsing it here would render a value that matches no row.
+        //
+        // Coverage is per principal, not uniform: every Unilever SKU has a
+        // brand, while Del Monte has almost none (see the no-brand card).
+        brand: (item.brand || '').trim() || null,
         product: item.product_name || 'Unknown Product',
         cat: item.tier,
         leadTime: item.lead_time_days != null ? `${item.lead_time_days} days` : null,
@@ -75,7 +90,7 @@ const SKUManagement = () => {
 
   const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
-  const [brandFilter, setBrandFilter] = useState('All Brands');
+  const [brandFilter, setBrandFilter] = useState(ALL_BRANDS);
   const [categoryFilter, setCategoryFilter] = useState('All');
 
   // Combobox & Highlight State
@@ -104,7 +119,36 @@ const SKUManagement = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const brands = ['All Brands', ...[...new Set(skus.map(s => s.brand).filter(Boolean))].sort()];
+  // Distinct brands for the filter, sorted case-insensitively so the list
+  // reads alphabetically instead of putting every lowercase entry after Z.
+  //
+  // A "(No brand)" entry is offered whenever the loaded scope actually has
+  // rows without one, because the summary card counts those rows and they
+  // were otherwise unreachable — the card claimed thousands were missing a
+  // brand and no filter could show you which.
+  //
+  // Values are deliberately NOT screened for plausibility. The column
+  // currently holds Del Monte category names ('DAIRY', 'KETCHUPS') and 12
+  // corrupt 'False (n)' entries from a bad cell in the source sheet.
+  // Dropping them here would hide a data defect while the same values stayed
+  // visible in the table and the edit modal, with no way left to find them.
+  const brands = useMemo(() => {
+    const distinct = [...new Set(skus.map(s => s.brand).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const hasUnbranded = skus.some(s => !s.brand);
+    return [ALL_BRANDS, ...(hasUnbranded ? [NO_BRAND] : []), ...distinct];
+  }, [skus]);
+
+  // Drop a brand selection that the currently loaded scope has no option
+  // for. Switching principal swaps the whole brand list, so a filter left
+  // on e.g. REXONA (Unilever) under Del Monte would sit in a <select> whose
+  // options no longer contain it — the control renders blank while the
+  // table silently shows nothing. Guarded on a non-empty list so a failed
+  // or in-flight reload never clears a valid selection.
+  useEffect(() => {
+    if (skus.length === 0) return;
+    if (!brands.includes(brandFilter)) setBrandFilter(ALL_BRANDS);
+  }, [brands, brandFilter, skus.length]);
 
   const filteredSKUs = useMemo(() => {
     return skus.filter(sku => {
@@ -112,7 +156,9 @@ const SKUManagement = () => {
         sku.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sku.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (sku.brand || '').toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesBrand = brandFilter === 'All Brands' || sku.brand === brandFilter;
+      const matchesBrand =
+        brandFilter === ALL_BRANDS ||
+        (brandFilter === NO_BRAND ? !sku.brand : sku.brand === brandFilter);
       const matchesCategory = categoryFilter === 'All' || sku.cat === categoryFilter;
       return matchesSearch && matchesBrand && matchesCategory;
     });
@@ -242,12 +288,12 @@ const SKUManagement = () => {
 
   const hasActiveFilters =
     searchQuery !== '' ||
-    brandFilter !== 'All Brands' ||
+    brandFilter !== ALL_BRANDS ||
     categoryFilter !== 'All';
 
   const handleClearFilters = () => {
     setSearchQuery('');
-    setBrandFilter('All Brands');
+    setBrandFilter(ALL_BRANDS);
     setCategoryFilter('All');
   };
 
@@ -427,7 +473,9 @@ const SKUManagement = () => {
                     value={brandFilter}
                     onChange={(e) => setBrandFilter(e.target.value)}
                   >
-                    {brands.map(b => <option key={b} value={b}>{b}</option>)}
+                    {brands.map(b => (
+                      <option key={b} value={b}>{b === NO_BRAND ? '(No brand)' : b}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -462,10 +510,10 @@ const SKUManagement = () => {
                   </span>
                 )}
 
-                {brandFilter !== 'All Brands' && (
+                {brandFilter !== ALL_BRANDS && (
                   <span className="sku-active-chip">
-                    Brand: {brandFilter}
-                    <button className="sku-chip-remove" onClick={() => setBrandFilter('All Brands')}>
+                    Brand: {brandFilter === NO_BRAND ? '(No brand)' : brandFilter}
+                    <button className="sku-chip-remove" onClick={() => setBrandFilter(ALL_BRANDS)}>
                       <X size={12} />
                     </button>
                   </span>
@@ -583,7 +631,7 @@ const SKUManagement = () => {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddSKU}
-        brands={brands.filter(b => b !== 'All Brands')}
+        brands={brands.filter(b => b !== ALL_BRANDS && b !== NO_BRAND)}
       />
 
       <ViewSKUModal

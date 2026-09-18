@@ -6,24 +6,21 @@
 // the backend validates against (backend/principals.py's VALID_PRINCIPALS).
 export const PRINCIPALS = [
   { key: 'all', label: 'All principals' },
-  { key: 'unilever', label: 'Unilever' },
   { key: 'delmonte', label: 'Del Monte' },
+  { key: 'unilever', label: 'Unilever' },
 ];
 
 export const PRINCIPAL_KEYS = PRINCIPALS.map((p) => p.key);
 
-// Default scope on first load.
+// Default scope on first load: 'all'.
 //
-// Deliberately 'unilever', NOT 'all'. Under 'all' the backend applies its
-// honest-null rule (backend/routers/dashboard.py's
-// _combine_principal_sums): a period only reports a combined figure when
-// BOTH principals have real data for it. Unilever's demand runs through
-// 2026-02 while Del Monte's sellout stops at 2025-12, so an 'all' default
-// would open the app on a mostly-blank dashboard that reads as broken
-// rather than as "these two datasets don't overlap yet". Opening on a
-// scope with complete data makes the gap something the user discovers by
-// choosing 'All principals', instead of the first thing they see.
-export const DEFAULT_PRINCIPAL = 'unilever';
+// Note: under 'all' the backend applies its honest-null rule
+// (backend/routers/dashboard.py's _combine_principal_sums) — a period only
+// reports a combined figure when BOTH principals have real data for it.
+// Unilever's demand runs through 2026-02 while Del Monte's sellout stops
+// at 2025-12, so periods in that gap will show as blank under 'all' rather
+// than falling back to a single principal's data.
+export const DEFAULT_PRINCIPAL = 'all';
 
 export const PRINCIPAL_STORAGE_KEY = 'san2_principal';
 
