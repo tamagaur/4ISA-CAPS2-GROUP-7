@@ -158,7 +158,41 @@ def build_lp_model(
     service_level = pulp.lpSum(variables[sku.sku_id] for sku in skus) / total_rop
     storage_cost = pulp.lpSum(sku.storage_cost_per_unit * variables[sku.sku_id] for sku in skus)
 
-    problem += w1 * total_cost - w2 * service_level + w3 * storage_cost, "objective"
+    # ── Objective normalization (added 2026-09; see CHANGE LOG) ────────────
+    # The three terms are measured in incommensurate units: TC and SC are
+    # pesos (each Q_i carries a coefficient of ~1e1-1e2), while SL is a
+    # dimensionless ratio whose per-unit coefficient is 1/total_rop (~1e-8
+    # on real data). Weighting raw terms therefore compared a peso against
+    # a ratio: the cost coefficients outweighed the service coefficient by
+    # ~9 orders of magnitude, every objective coefficient stayed positive,
+    # and CBC drove every Q_i to its lower bound. That is exactly what the
+    # live 2026-03 cycle shows — Q_i == ROP_i on 227 of 251 rows (90%) —
+    # i.e. w1/w2/w3 had no influence on the solution at all.
+    #
+    # Each term is now divided by its own value at the reference point
+    # Q_i = ROP_i (the minimum feasible solution, given constraint 3), so
+    # all three read 1.0 there and the weights trade like-for-like: a 1%
+    # rise in normalized cost is directly comparable to a 1% rise in
+    # normalized service. This rescales the objective ONLY — the feasible
+    # region, the constraints and the reported Q_i units are unchanged,
+    # and an LP objective is invariant to positive scaling of its terms.
+    tc_ref = sum(sku.procurement_cost_per_unit * sku.rop for sku in skus)
+    sc_ref = sum(sku.storage_cost_per_unit * sku.rop for sku in skus)
+    # SL at the reference point is total_rop/total_rop = 1.0 by construction.
+
+    # A zero reference means that term is identically zero across the whole
+    # feasible region (every unit cost is 0), so it cannot be normalized and
+    # contributes nothing. Falling back to 1.0 leaves it at its raw value
+    # (still zero) rather than dividing by zero — never silently dropped.
+    tc_scale = tc_ref if tc_ref > 0 else 1.0
+    sc_scale = sc_ref if sc_ref > 0 else 1.0
+
+    problem += (
+        w1 * (total_cost / tc_scale)
+        - w2 * service_level
+        + w3 * (storage_cost / sc_scale),
+        "objective",
+    )
 
     # Constraint 1 — warehouse capacity
     problem += (
