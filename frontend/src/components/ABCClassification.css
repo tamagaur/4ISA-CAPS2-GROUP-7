@@ -11,6 +11,19 @@
   gap: 1.5rem;
 }
 
+/* Everything below the header. Wrapped so a refetch can mark the previous
+   classification stale without also dimming and freezing the header — the
+   date picker lives there, and disabling the control someone just used to
+   trigger the refetch is the one thing the stale state must not do.
+   Repeats .abc-content's column+gap because these sections are now one of
+   its children rather than several, and would otherwise lose their
+   spacing. */
+.abc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 /* Page Header */
 .abc-page-header {
   margin-bottom: 0.25rem;
@@ -767,5 +780,42 @@
 @media (max-width: 640px) {
   .abc-summary-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Chart title + one-line definition (2026-09-18): says in plain language
+   what "cover vs reorder point" measures, so it can't be read as the
+   Dashboard's warehouse Active/Inactive chart. */
+.abc-pareto-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1 1 22rem;
+}
+
+.abc-pareto-subtitle {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-subtle);
+  line-height: 1.45;
+  max-width: 40rem;
+}
+
+/* Entrance — same keyframe and timing the dashboard's cards use
+   (chart-card-enter, defined in Charts.css, which this page already
+   imports). Runs on MOUNT, so switching to this tab builds the view;
+   changing the month leaves the cards in place and lets the Recharts
+   series animate the data change instead. */
+.abc-pareto-container {
+  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+}
+
+.abc-analysis-chart { animation-delay: 60ms; }
+.abc-analysis-drilldown { animation-delay: 130ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .abc-pareto-container {
+    animation: none;
   }
 }

@@ -254,3 +254,12 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Phase-2 diagnostics block inside the modal (SkuDiagnosticsPanel, compact). */
+.reorder-diag-section {
+  margin-bottom: 1.5rem;
+}
+
+.reorder-modal-card {
+  max-width: 640px;
+}

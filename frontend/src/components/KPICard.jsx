@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
-import { STATUS_TIERS } from '../theme/colors';
+import { STATUS_TIERS, SEMANTIC } from '../theme/colors';
 import './KPICard.css';
 
 // "colour marks what is genuinely wrong" — the caller supplies raw facts
@@ -10,12 +10,12 @@ import './KPICard.css';
 // instead of re-implemented ad hoc per card in Dashboard.jsx.
 //
 // metricType:
-//   'danger'          — an explicit "too little" signal that must match
-//                       the chart layer's shortfall red exactly (e.g. the
-//                       dashboard's Stockout risk card, which is the same
-//                       condition as the allocation chart's red bars) —
-//                       bypasses the loss tier's softer amber on purpose.
-//   'loss'           — any amount is bad; colour by direction ('worse'/
+//   'danger'          — an explicit "act now" signal (red) — e.g. a share
+//                       of Category A SKUs at safety stock that's fallen
+//                       below the act threshold, or cover under policy.
+//   'watch'           — below target but not critical (amber).
+//   'healthy'         — an explicit "fine" signal (green).
+//   'loss'            — any amount is bad; colour by direction ('worse'/
 //                       'better') only, never by the amount itself.
 //   'gap'             — the raw amount is normal; only exceeding a target
 //                       is bad, so colour comes from isOverTarget instead
@@ -23,8 +23,15 @@ import './KPICard.css';
 //                       amount and colour are allowed to agree.
 //   'recommendation'  — model output, not a health metric. Always the
 //                       neutral 'action' tier, never red or green.
+//   'neutral' / none  — a plain figure (a sales total, a stock value) or a
+//                       blocked card with nothing to judge: slate, the
+//                       "no verdict" colour. Cards used to fall back to the
+//                       indigo 'recommendation' tier here, which dressed a
+//                       plain number up as model output.
 function tierFor(metricType, direction, isOverTarget) {
   if (metricType === 'danger') return 'danger';
+  if (metricType === 'watch') return 'loss';
+  if (metricType === 'healthy') return 'healthy';
   if (metricType === 'recommendation') return 'action';
   if (metricType === 'gap') return isOverTarget ? 'loss' : 'healthy';
   if (direction === 'worse') return 'loss';
@@ -32,19 +39,17 @@ function tierFor(metricType, direction, isOverTarget) {
   return 'diagnostic';
 }
 
-// Card accent colours — separate from STATUS_TIERS so most KPI card chrome
-// avoids red (red is normally reserved for chart-layer alerts: data viz
-// only). 'danger' is the deliberate exception — a card whose condition IS
-// exactly a chart's red-bar condition should look like it, not be softened.
-// Border and icon use these accents; the small delta-line text keeps
-// STATUS_TIERS colours because directional text is a different semantic
-// register from the card's decorative chrome.
+// Card accent colours — the SEMANTIC tokens directly, so a card's border
+// is the same pixel value as the chart segment or pill that means the same
+// thing (a red card = red bars = red pill = "act now"). Border and icon use
+// these; the small delta-line text keeps STATUS_TIERS colours because
+// directional text is a different register from the card's chrome.
 const CARD_ACCENT_COLORS = {
-  danger:     '#E5484D', // same red as the allocation chart's shortfall bars
-  loss:       '#D97706', // amber  — caution signal without chart-alert red
-  healthy:    '#059669', // emerald
-  diagnostic: '#64748B', // slate  — no inherent direction
-  action:     '#4F46E5', // indigo — model output / recommendation
+  danger:     SEMANTIC.act,
+  loss:       SEMANTIC.watch,
+  healthy:    SEMANTIC.healthy,
+  diagnostic: SEMANTIC.noData,
+  action:     SEMANTIC.recommendation,
 };
 
 // contextLine: always-muted supporting line (raw values, no arrow) —

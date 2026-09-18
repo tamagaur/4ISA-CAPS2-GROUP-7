@@ -1,8 +1,9 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import Modal from './Modal';
+import SkuDiagnosticsPanel from './SkuDiagnosticsPanel';
 import { formatMonth } from '../utils/formatDate';
-import { COLORS } from '../theme/colors';
+import { CHART_COLORS } from '../theme/colors';
 import './ReorderModal.css';
 
 // Story #80: "why was this recommended" — LP objective weights are fixed
@@ -11,19 +12,21 @@ import './ReorderModal.css';
 // per-SKU fabrication.
 //
 // Colors match the Dashboard's own cost/service level/storage priority
-// sliders (LP_PRIORITY_ROWS in Charts.jsx) one-for-one — these are the same
-// three LP weights shown two different ways (editable sliders there, a
-// static "why" breakdown here), so a SKU opened from Reorder Recs shouldn't
-// show a different color for "cost" than the Dashboard widget does.
+// bars (LP_PRIORITY_ROWS in Charts.jsx) one-for-one via
+// CHART_COLORS.lpWeights — three categorical hues, none of them a status
+// colour (Storage used to be amber, which reads as "watch" everywhere
+// else in the app).
 const OBJECTIVE_WEIGHTS = [
-  { key: 'cost', label: 'Cost minimization', weight: 45, color: COLORS.dispatched },
-  { key: 'service', label: 'Service level ≥ 95%', weight: 35, color: COLORS.salesTrend },
-  { key: 'capacity', label: 'Warehouse capacity', weight: 20, color: COLORS.warning },
+  { key: 'cost', label: 'Cost minimization', weight: 45, color: CHART_COLORS.lpWeights.cost },
+  { key: 'service', label: 'Service level ≥ 95%', weight: 35, color: CHART_COLORS.lpWeights.service_level },
+  { key: 'capacity', label: 'Warehouse capacity', weight: 20, color: CHART_COLORS.lpWeights.storage },
 ];
 
-const ReorderModal = ({ isOpen, onClose, data }) => {
-  if (!isOpen || !data) return null;
+const COVER_BASIS_NOTE =
+  'Stock at cost (₱) ÷ average daily sales value (₱/day, last 3 sales months). Peso basis because stock is in cases and demand in pieces.';
 
+const ReorderModal = ({ isOpen, onClose, data, principal }) => {
+  if (!isOpen || !data) return null;
 
   return (
     <Modal
@@ -46,14 +49,40 @@ const ReorderModal = ({ isOpen, onClose, data }) => {
           </button>
         </div>
 
-        {/* Data Grid — only fields not already visible in the table row
-            (safety stock, ROP, current stock, order qty and urgency are all
-            columns there, so the two views don't repeat each other). */}
+        {/* Data Grid — fields not already visible in the table row, plus
+            the two ranking inputs so the "why is this #3" question is
+            answerable here. */}
         <div className="reorder-modal-grid">
           <div className="reorder-grid-item">
             <span className="reorder-grid-label">PLANNING CYCLE</span>
             <span className="reorder-grid-value">{formatMonth(data.planningCycleDate)}</span>
           </div>
+          <div className="reorder-grid-item">
+            <span className="reorder-grid-label">IMPACT RANK</span>
+            <span className="reorder-grid-value">
+              {data.rank != null ? `#${data.rank} in cycle` : 'Unranked'}
+            </span>
+          </div>
+          <div className="reorder-grid-item">
+            <span className="reorder-grid-label">REVENUE SHARE</span>
+            <span className="reorder-grid-value">
+              {data.revenueShare != null ? `${(data.revenueShare * 100).toFixed(2)}%` : '—'}
+            </span>
+          </div>
+          <div className="reorder-grid-item" title={data.daysOfCover != null ? COVER_BASIS_NOTE : (data.coverReason || COVER_BASIS_NOTE)}>
+            <span className="reorder-grid-label">COVER (DAYS, ₱ BASIS)</span>
+            <span className="reorder-grid-value">
+              {data.daysOfCover != null ? data.daysOfCover.toFixed(1) : '—'}
+            </span>
+          </div>
+        </div>
+
+        {/* Why this SKU behaves this way — Phase-2 diagnostics (sku_traits /
+            sku_segment). Ahead of the LP weights on purpose: the weights
+            are the same for every SKU, this is the part that is about
+            THIS one. */}
+        <div className="reorder-diag-section">
+          <SkuDiagnosticsPanel skuId={data.sku} principal={principal} compact />
         </div>
 
         {/* Why this recommendation — Story #80 */}

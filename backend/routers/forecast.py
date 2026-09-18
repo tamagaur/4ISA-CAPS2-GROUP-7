@@ -27,6 +27,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
+from backend.principals import PrincipalQuery, principal_clause
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
@@ -35,19 +36,25 @@ router = APIRouter(prefix="/forecast", tags=["forecast"])
 @router.get("/{sku_id}", response_model=ForecastResponse)
 def get_forecast(
     sku_id: str,
+    principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> ForecastResponse:
+    # Both principals again (2026-09-17) — see backend/principals.py.
+    # Scoping the sku_code lookup matters because sku_code is NOT unique
+    # across principals in product_dimension; without a scope the same
+    # code could resolve to either principal's product row.
+    scope_sql, scope_params = principal_clause(principal, "principal")
     product_row = db.execute(
-        text("""
-            SELECT product_key, product_name
-            FROM Product_Dimension
-            WHERE principal = 'unilever' AND sku_code = :sku_id
-        """),
-        {"sku_id": sku_id},
+        text(
+            "SELECT product_key, product_name FROM Product_Dimension "
+            "WHERE sku_code = :sku_id" + scope_sql
+        ),
+        {"sku_id": sku_id, **scope_params},
     ).mappings().first()
     if product_row is None:
-        raise HTTPException(status_code=404, detail=f"No unilever product found for '{sku_id}'")
+        scope_label = principal or "any principal"
+        raise HTTPException(status_code=404, detail=f"No product found for '{sku_id}' ({scope_label})")
 
     product_key = product_row["product_key"]
 

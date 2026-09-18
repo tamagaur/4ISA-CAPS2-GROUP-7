@@ -9,3 +9,4 @@ CLOSE,CLOSEUP,"'CLOSE UP GREEN...' — ORAL CARE, same product as CLOSEUP, just 
 CREAM,CREAMSILK,"'CREAM SILK RO ULTREBORN...' — HAIR CARE, same product as CREAMSILK, just a space in the source; 76 rows"
 DR.KAUFMAN,DR.KAUFMANN,"'DR.KAUFMAN BARSOAP...' vs 'DR.KAUFMANN BARSOAP...' — same product line, single/double-N spelling variant; 2 rows"
 BABY,DOVE,"'BABY DOVE BAR RICH MOISTURE...' / 'BABY DOVE HAIR-TOE...' — sub-line of DOVE, first token 'BABY' is a qualifier not a brand; 2nd-token evidence, 19 rows. Approved by Yuan 2026-09-18."
+BF,BESTFOODS,"'BF MYMGC DOY+CANNEDGDS 12(1+1)470ML' — Best Foods mayonnaise, same brand as BESTFOODS; abbreviation, 1 row"

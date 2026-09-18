@@ -95,6 +95,7 @@ class FakeSession:
         gated_forecast_rows: list | None = None,
         portfolio_actual: dict | None = None,
         reco_preview_rows: list | None = None,
+        policy_rows: list | None = None,
     ):
         self.recommendation_count = recommendation_count
         self.forecast_total = forecast_total
@@ -102,6 +103,12 @@ class FakeSession:
         self.latest_sales_period = latest_sales_period
         self.received = received or {}
         self.sales = sales or {}
+        # Del Monte side of the restored per-principal split. These
+        # fixtures are Unilever-only by construction, so Del Monte has no
+        # sales anywhere — which is also what the live DB looks like for
+        # most periods. Tests that care about Del Monte set these.
+        self.delmonte_latest_sales_period = None
+        self.delmonte_sales = {}
         self.latest_inventory_period = latest_inventory_period
         self.soh = soh or {}
         self.latest_abc_period = latest_abc_period
@@ -112,10 +119,19 @@ class FakeSession:
         self.gated_forecast_rows = gated_forecast_rows or []
         self.portfolio_actual = portfolio_actual or {}
         self.reco_preview_rows = reco_preview_rows or []
+        # policy_comparison rows: [{planning_cycle_date, ss_i, forecast_value}]
+        self.policy_rows = policy_rows or []
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
+
+        # Checked FIRST: recommendations._SELECT_ONE (reused verbatim by
+        # reorder_preview) now embeds its own SUM(quantity_on_hand *
+        # unit_cost_per_case) subquery, which the SOH matcher below would
+        # otherwise claim.
+        if "FROM lp_recommendation lr" in sql and "WHERE lr.status = 'pending'" in sql:
+            return FakeResult(self.reco_preview_rows)
 
         if "COUNT(*) AS product_count" in sql:
             return FakeResult([{"product_count": self.recommendation_count}])
@@ -125,6 +141,16 @@ class FakeSession:
 
         if sql.strip() == "SELECT MAX(calendar_month) AS p FROM Unilever_SKU_Demand_Fact_Real":
             return FakeResult([{"p": self.latest_sales_period}])
+
+        if "MAX(_period) AS p FROM SellOut_Fact_Real" in sql:
+            return FakeResult([{"p": self.delmonte_latest_sales_period}])
+
+        if "FROM SellOut_Fact_Real" in sql and "SUM(net_amount)" in sql:
+            periods = params["periods"]
+            return FakeResult([
+                {"period": p, "total": v}
+                for p, v in self.delmonte_sales.items() if p in periods and v is not None
+            ])
 
         if "FROM Purchase_Fact_Real" in sql:
             periods = params["periods"]
@@ -138,7 +164,7 @@ class FakeSession:
                 {"period": p, "total": v} for p, v in self.sales.items() if p in periods and v is not None
             ])
 
-        if sql.strip() == "SELECT MAX(_period) AS p FROM Inventory_Fact_Real WHERE principal = 'unilever'":
+        if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult([{"p": self.latest_inventory_period}])
 
         if "SUM(quantity_on_hand * unit_cost_per_case)" in sql:
@@ -147,13 +173,27 @@ class FakeSession:
                 {"period": p, "total": v} for p, v in self.soh.items() if p in periods and v is not None
             ])
 
-        if sql.strip() == "SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE principal = 'unilever'":
+        if "MAX(classification_period) AS p FROM ABC_Classification" in sql and "<=" not in sql:
             return FakeResult([{"p": self.latest_abc_period}])
+
+        if "MAX(classification_period) AS p FROM ABC_Classification" in sql and "<=" in sql:
+            # _nearest_abc_period_at_or_before: latest fixture period at or
+            # before the requested one, mirroring the real MAX(...) <= :period.
+            target = params["period"]
+            candidates = sorted({r["period"] for r in self.abc_rows if r["period"] <= target})
+            return FakeResult([{"p": candidates[-1] if candidates else None}])
 
         if "rop.ss_i AS ss_i" in sql:
             period = params["period"]
             rows = [r for r in self.abc_rows if r["period"] == period and r["tier"] == "A"]
-            return FakeResult([{"product_key": r["product_key"], "current_stock": r["current_stock"], "ss_i": r["ss_i"]} for r in rows])
+            return FakeResult([
+                {"product_key": r["product_key"], "revenue_share": r.get("revenue_share"),
+                 "current_stock": r["current_stock"], "ss_i": r["ss_i"]}
+                for r in rows
+            ])
+
+        if "fr.forecast_date = lr.planning_cycle_date" in sql:
+            return FakeResult(self.policy_rows)
 
         if "SUM(revenue_share) AS rev_share_sum" in sql:
             period = params["period"]
@@ -187,9 +227,6 @@ class FakeSession:
                 by_tier.setdefault(r["tier"], set()).add(r["product_key"])
             return FakeResult([{"tier": t, "cnt": len(keys)} for t, keys in by_tier.items()])
 
-        if "FROM lp_recommendation lr" in sql and "WHERE lr.status = 'pending'" in sql:
-            return FakeResult(self.reco_preview_rows)
-
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
     def close(self):
@@ -212,14 +249,14 @@ def test_requires_auth():
     session = FakeSession()
     app.dependency_overrides[get_db] = lambda: session
     with TestClient(app) as c:
-        resp = c.get("/dashboard")
+        resp = c.get("/dashboard?principal=unilever")
     assert resp.status_code == 401
 
 
 def test_original_fields_unchanged():
     session = FakeSession(recommendation_count=5, forecast_total=10, forecast_unreliable=3)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["principal"] == "unilever"
@@ -236,7 +273,7 @@ def test_kpis_sales_real_when_present_for_current_period():
     current = _periods()[-1]
     session = FakeSession(sales={current: 1000.0})
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     kpis = resp.json()["kpis"]
     assert kpis["sales"] == 1000.0
     assert kpis["sales_blocked_reason"] is None
@@ -245,7 +282,7 @@ def test_kpis_sales_real_when_present_for_current_period():
 def test_kpis_sales_null_when_no_current_period_data():
     session = FakeSession(sales={})
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     kpis = resp.json()["kpis"]
     assert kpis["sales"] is None
     assert "Unilever_SKU_Demand_Fact_Real" in kpis["sales_blocked_reason"]
@@ -256,7 +293,7 @@ def test_kpis_sales_null_when_no_current_period_data():
 def test_kpis_soh_value_real_when_present():
     session = FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 2000.0})
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     kpis = resp.json()["kpis"]
     assert kpis["soh_value"] == 2000.0
     assert kpis["soh_value_blocked_reason"] is None
@@ -265,7 +302,7 @@ def test_kpis_soh_value_real_when_present():
 def test_kpis_soh_value_null_when_inventory_fact_real_empty():
     session = FakeSession(latest_inventory_period=None)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     kpis = resp.json()["kpis"]
     assert kpis["soh_value"] is None
     assert kpis["soh_value_blocked_reason"] == "Inventory_Fact_Real has no rows for unilever at all."
@@ -284,7 +321,7 @@ def test_kpis_safety_stock_rate_computed_from_comparable_products_only():
     ]
     session = FakeSession(latest_abc_period="2024-02", abc_rows=abc_rows)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     kpis = resp.json()["kpis"]
     # 1 of 2 comparable Category A products (product 1) has current_stock >= ss_i.
     assert kpis["safety_stock_rate"] == pytest.approx(0.5)
@@ -297,7 +334,7 @@ def test_kpis_safety_stock_rate_null_when_lp_recommendation_empty():
     ]
     session = FakeSession(latest_abc_period="2024-02", abc_rows=abc_rows)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     kpis = resp.json()["kpis"]
     assert kpis["safety_stock_rate"] is None
     assert "LP_Recommendation" in kpis["safety_stock_rate_blocked_reason"]
@@ -306,7 +343,7 @@ def test_kpis_safety_stock_rate_null_when_lp_recommendation_empty():
 def test_kpis_safety_stock_rate_null_when_no_abc_classification_at_all():
     session = FakeSession(latest_abc_period=None)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     kpis = resp.json()["kpis"]
     assert kpis["safety_stock_rate"] is None
     assert kpis["safety_stock_rate_blocked_reason"] == "ABC_Classification has no rows for unilever yet."
@@ -324,7 +361,7 @@ def test_kpis_weeks_of_cover_real_value():
         soh={"2024-02": 100.0},  # -> 100/10 = 10.0 weeks
     )
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     wc = resp.json()["kpis"]["weeks_of_cover"]
     assert wc["value"] == pytest.approx(10.0)
     assert wc["blocked_reason"] is None
@@ -339,7 +376,7 @@ def test_kpis_weeks_of_cover_null_when_weekly_demand_is_zero():
         soh={"2024-02": 100.0},
     )
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     wc = resp.json()["kpis"]["weeks_of_cover"]
     assert wc["value"] is None
     assert "zero" in wc["blocked_reason"]
@@ -348,7 +385,7 @@ def test_kpis_weeks_of_cover_null_when_weekly_demand_is_zero():
 def test_kpis_weeks_of_cover_null_when_no_inventory_data_at_all():
     session = FakeSession(latest_inventory_period=None)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     wc = resp.json()["kpis"]["weeks_of_cover"]
     assert wc["value"] is None
     assert wc["blocked_reason"] == "Inventory_Fact_Real has no rows for unilever at all."
@@ -360,7 +397,7 @@ def test_sales_vs_stock_has_12_points_with_nulls_for_missing_periods():
     current = _periods()[-1]
     session = FakeSession(sales={current: 100.0})
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     series = resp.json()["sales_vs_stock"]
     assert len(series) == 12
     assert series[-1] == {"period": current, "sales": 100.0, "stock_on_hand": None, "received": None}
@@ -374,7 +411,7 @@ def test_sales_vs_stock_anchors_to_latest_real_sales_period_not_today():
     line chart to render anything at all."""
     session = FakeSession(latest_sales_period="2023-06")
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     series = resp.json()["sales_vs_stock"]
     periods_in_series = [pt["period"] for pt in series]
     assert periods_in_series[-1] == "2023-06"
@@ -388,7 +425,7 @@ def test_sales_vs_stock_period_query_param_overrides_latest_sales_period_anchor(
     GET /abc's own latest-period default."""
     session = FakeSession(latest_sales_period="2024-02")
     with make_client(session) as c:
-        resp = c.get("/dashboard?period=2023-06", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever&period=2023-06", headers={"Authorization": f"Bearer {user_token()}"})
     periods_in_series = [pt["period"] for pt in resp.json()["sales_vs_stock"]]
     assert periods_in_series[-1] == "2023-06"
     assert periods_in_series[0] == "2022-07"
@@ -397,7 +434,7 @@ def test_sales_vs_stock_period_query_param_overrides_latest_sales_period_anchor(
 def test_sales_vs_stock_period_query_param_rejects_malformed_value():
     session = FakeSession()
     with make_client(session) as c:
-        resp = c.get("/dashboard?period=not-a-period", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever&period=not-a-period", headers={"Authorization": f"Bearer {user_token()}"})
     assert resp.status_code == 422
 
 
@@ -436,7 +473,7 @@ def test_sales_vs_stock_start_period_without_explicit_end_uses_resolved_anchor()
     to, rather than requiring the frontend to always send both."""
     session = FakeSession(latest_sales_period="2023-08")
     with make_client(session) as c:
-        resp = c.get("/dashboard?start_period=2023-05", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever&start_period=2023-05", headers={"Authorization": f"Bearer {user_token()}"})
     periods_in_series = [pt["period"] for pt in resp.json()["sales_vs_stock"]]
     assert periods_in_series == ["2023-05", "2023-06", "2023-07", "2023-08"]
 
@@ -459,7 +496,7 @@ def test_sales_vs_stock_start_period_after_end_period_is_swapped_not_empty():
 def test_sales_vs_stock_falls_back_to_today_only_when_no_sales_data_exists():
     session = FakeSession(latest_sales_period=None)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     series = resp.json()["sales_vs_stock"]
     today = datetime.date.today()
     assert series[-1]["period"] == f"{today.year:04d}-{today.month:02d}"
@@ -471,7 +508,7 @@ def test_sales_vs_stock_received_real_when_present():
     current = _periods()[-1]
     session = FakeSession(received={current: 700.0})
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     series = resp.json()["sales_vs_stock"]
     assert series[-1]["received"] == 700.0
 
@@ -481,7 +518,7 @@ def test_sales_vs_stock_received_null_gap_when_purchase_fact_has_no_rows():
     (null), never a fabricated 0."""
     session = FakeSession(received={})
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     series = resp.json()["sales_vs_stock"]
     assert series[-1]["received"] is None
 
@@ -496,7 +533,7 @@ def test_abc_mix_counts_and_revenue_share_pct():
     ]
     session = FakeSession(latest_abc_period="2024-02", abc_rows=abc_rows)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     mix = {m["tier"]: m for m in resp.json()["abc_mix"]}
     assert mix["A"]["count"] == 2
     assert mix["A"]["revenue_share_pct"] == pytest.approx(80.0)
@@ -507,7 +544,7 @@ def test_abc_mix_counts_and_revenue_share_pct():
 def test_abc_mix_empty_when_no_classification_rows_exist():
     session = FakeSession(latest_abc_period=None)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     assert resp.json()["abc_mix"] == []
 
 
@@ -527,7 +564,7 @@ def test_abc_mix_period_query_param_overrides_latest_abc_period_anchor():
     ]
     session = FakeSession(latest_abc_period="2024-02", abc_rows=abc_rows)
     with make_client(session) as c:
-        resp = c.get("/dashboard?period=2023-06", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever&period=2023-06", headers={"Authorization": f"Bearer {user_token()}"})
     mix = resp.json()["abc_mix"]
     assert [m["tier"] for m in mix] == ["A"]
     assert mix[0]["revenue_share_pct"] == pytest.approx(50.0)
@@ -553,7 +590,7 @@ def test_tier_stock_dead_stock_from_stock_status_including_no_data_bucket():
         tier_pending_reorder_rows=tier_pending_reorder_rows,
     )
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     tier_a = next(t for t in resp.json()["tier_stock"] if t["tier"] == "A")
     assert tier_a == {"tier": "A", "in_stock": 1, "dead_stock": 2, "no_data": 1, "pending_reorder_count": 2}
 
@@ -564,7 +601,7 @@ def test_tier_stock_pending_reorder_count_is_zero_not_null_when_no_pending_rows(
     ]
     session = FakeSession(latest_abc_period="2024-02", tier_stock_rows=tier_stock_rows)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     tier_b = next(t for t in resp.json()["tier_stock"] if t["tier"] == "B")
     assert tier_b["pending_reorder_count"] == 0
 
@@ -585,7 +622,7 @@ def test_portfolio_forecast_scope_label_and_series():
         portfolio_actual={"2024-01": 90.0, "2024-02": 95.0},
     )
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     pf = resp.json()["portfolio_forecast"]
     assert pf["gated_sku_count"] == 2
     assert pf["avg_mape"] == pytest.approx(12.5)
@@ -601,7 +638,7 @@ def test_portfolio_forecast_scope_label_and_series():
 def test_portfolio_forecast_empty_when_nothing_passes_the_gate():
     session = FakeSession(latest_forecast_date=datetime.date(2024, 3, 1), gated_forecast_rows=[])
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     pf = resp.json()["portfolio_forecast"]
     assert pf == {
         "series": [],
@@ -614,7 +651,7 @@ def test_portfolio_forecast_empty_when_nothing_passes_the_gate():
 def test_portfolio_forecast_empty_when_forecast_result_has_no_rows_at_all():
     session = FakeSession(latest_forecast_date=None)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     pf = resp.json()["portfolio_forecast"]
     assert pf["series"] == []
     assert pf["gated_sku_count"] == 0
@@ -653,7 +690,7 @@ def test_reorder_preview_top5_sorted_by_urgency_full_set_counts():
     ]
     session = FakeSession(reco_preview_rows=rows)
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     preview = resp.json()["reorder_preview"]
     assert len(preview["rows"]) == 5
     assert all(r["urgency"] == "CRITICAL" for r in preview["rows"])
@@ -665,10 +702,10 @@ def test_reorder_preview_top5_sorted_by_urgency_full_set_counts():
 def test_reorder_preview_empty_when_no_pending_recommendations():
     session = FakeSession(reco_preview_rows=[])
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     preview = resp.json()["reorder_preview"]
     assert preview == {
-        "rows": [], "critical_count": 0, "urgent_count": 0, "total_order_qty": 0,
+        "rows": [], "critical_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
         "lp_weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
     }
 
@@ -680,7 +717,106 @@ def test_reorder_preview_lp_weights_always_present_and_matches_solver_constants(
     not derived from rows."""
     session = FakeSession(reco_preview_rows=[])
     with make_client(session) as c:
-        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     weights = resp.json()["reorder_preview"]["lp_weights"]
     assert weights == {"cost": 0.45, "service_level": 0.35, "storage": 0.2}
     assert pytest.approx(sum(weights.values())) == 1.0
+
+
+# ---- narrative-band fields (2026-09-18) ---------------------------------
+
+def _abc_row(product_key, tier, period, revenue_share, current_stock=None, ss_i=None):
+    return {"product_key": product_key, "tier": tier, "period": period, "revenue_share": revenue_share,
+            "current_stock": current_stock, "ss_i": ss_i}
+
+
+def test_abc_revenue_totals_the_abc_periods_sales():
+    session = FakeSession(
+        latest_abc_period="2024-02",
+        abc_rows=[_abc_row(1, "A", "2024-02", 0.6)],
+        sales={"2024-02": 27_914_343.91},
+    )
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    body = resp.json()["abc_revenue"]
+    assert body["period"] == "2024-02"
+    assert body["total"] == pytest.approx(27_914_343.91)
+    assert body["blocked_reason"] is None
+
+
+def test_abc_revenue_blocked_when_no_sales_for_abc_period():
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=[_abc_row(1, "A", "2024-02", 0.6)], sales={})
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    body = resp.json()["abc_revenue"]
+    assert body["total"] is None
+    assert "2024-02" in body["blocked_reason"]
+
+
+def test_safety_stock_exposure_counts_below_and_sums_their_revenue_share():
+    rows = [
+        _abc_row(1, "A", "2024-02", 0.30, current_stock=10, ss_i=50),   # below
+        _abc_row(2, "A", "2024-02", 0.20, current_stock=80, ss_i=50),   # at/above
+        _abc_row(3, "A", "2024-02", 0.10, current_stock=None, ss_i=50), # not measurable
+        _abc_row(4, "B", "2024-02", 0.05, current_stock=0, ss_i=1),     # not tier A
+    ]
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    exp = resp.json()["safety_stock_exposure"]
+    assert exp["tier_a_count"] == 3
+    assert exp["comparable_count"] == 2
+    assert exp["below_count"] == 1
+    assert exp["below_revenue_share"] == pytest.approx(0.30)
+    assert exp["blocked_reason"] is None
+
+
+def test_safety_stock_exposure_blocked_when_nothing_measurable():
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=[_abc_row(1, "A", "2024-02", 0.6)])
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    exp = resp.json()["safety_stock_exposure"]
+    assert exp["below_count"] is None
+    assert exp["blocked_reason"]
+
+
+def test_policy_comparison_sums_lp_ss_against_three_week_rule():
+    session = FakeSession(policy_rows=[
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "forecast_value": 100.0},
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 10.0, "forecast_value": 50.0},
+    ])
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    pc = resp.json()["policy_comparison"]
+    assert pc["cycle_date"] == "2024-03-01"
+    assert pc["sku_count"] == 2
+    assert pc["lp_safety_stock_units"] == pytest.approx(50.0)
+    assert pc["rule_safety_stock_units"] == pytest.approx(3 * 150.0 / AVG_WEEKS_PER_MONTH, rel=1e-4)
+    assert pc["rule_weeks"] == 3
+    assert pc["blocked_reason"] is None
+
+
+def test_policy_comparison_blocked_when_no_comparable_rows():
+    session = FakeSession(policy_rows=[])
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    pc = resp.json()["policy_comparison"]
+    assert pc["lp_safety_stock_units"] is None
+    assert pc["rule_safety_stock_units"] is None
+    assert pc["blocked_reason"]
+
+
+def test_reorder_preview_no_stock_row_is_no_data_not_critical():
+    """A product with no Inventory_Fact_Real row used to COALESCE to 0 and
+    read as CRITICAL — a fabricated alert. It must now be 'NO DATA'."""
+    rows = [_reco_row(1, urgency_stock=None, rop_i=100), _reco_row(2, urgency_stock=0, rop_i=100)]
+    session = FakeSession(reco_preview_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    preview = resp.json()["reorder_preview"]
+    by_key = {r["recommendation_key"]: r for r in preview["rows"]}
+    assert by_key[1]["urgency"] == "NO DATA"
+    assert by_key[1]["current_stock"] is None
+    assert by_key[2]["urgency"] == "CRITICAL"
+    assert preview["critical_count"] == 1
+    assert preview["no_data_count"] == 1

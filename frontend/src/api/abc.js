@@ -1,11 +1,15 @@
 import { apiFetch } from '../auth';
 import { cachedRequest } from './cache';
+import { appendPrincipal } from '../principals';
 
-// Unilever-only (2026-09): no more principal param — the backend always
-// scopes to Unilever now.
-export function getABCClassification({ classification_period } = {}) {
+// principal ('all' | 'unilever' | 'delmonte') restored 2026-09-17 — see
+// src/principals.js. NOTE: Del Monte has no abc_classification rows yet,
+// so 'delmonte' legitimately returns an empty result until ABC is run for
+// it at category grain; that's an honest empty, not a failed request.
+export function getABCClassification({ classification_period, principal } = {}) {
   const query = new URLSearchParams();
   if (classification_period) query.append('classification_period', classification_period);
+  appendPrincipal(query, principal);
   const path = `/abc?${query.toString()}`;
 
   return cachedRequest(path, async () => {

@@ -128,25 +128,25 @@
   overflow: hidden;
 }
 
-/* Colored borders top and left — same severity tokens as the urgency
-   badges below, so "critical" means the same colour everywhere on this
-   page instead of the card borrowing brand-accent and the badge borrowing
-   a separate, unrelated red. */
-.card-red {
-  border-left: 3px solid var(--color-severity-critical);
-  border-top: 3px solid var(--color-severity-critical);
+/* Colored borders top and left, by the app-wide SEMANTIC rule
+   (theme/colors.js): red = act now, amber = watch, slate = no data,
+   indigo = model output. The old card-green "CURRENT STOCK" card wore the
+   healthy green for what was just a quantity. */
+.card-act {
+  border-left: 3px solid var(--color-critical);
+  border-top: 3px solid var(--color-critical);
 }
-.card-yellow {
-  border-left: 3px solid var(--color-severity-urgent);
-  border-top: 3px solid var(--color-severity-urgent);
+.card-watch {
+  border-left: 3px solid var(--color-warning);
+  border-top: 3px solid var(--color-warning);
 }
-.card-blue {
-  border-left: 3px solid var(--color-info);
-  border-top: 3px solid var(--color-info);
+.card-nodata {
+  border-left: 3px solid var(--color-slate-500);
+  border-top: 3px solid var(--color-slate-500);
 }
-.card-green {
-  border-left: 3px solid var(--color-success-ui);
-  border-top: 3px solid var(--color-success-ui);
+.card-recommendation {
+  border-left: 3px solid var(--color-sales-trend);
+  border-top: 3px solid var(--color-sales-trend);
 }
 
 .card-content {
@@ -179,17 +179,100 @@
 
 /* Table */
 /* Table base styles live in index.css (.data-table-card / .data-table). */
+
+/* The per-row severity stripe is gone (2026-09-18): with 248 of 250 rows
+   CRITICAL it striped the whole table red and said nothing. Position in
+   the ranked list now carries urgency; the pill keeps the LP state. */
 .reorder-table {
-  min-width: 1000px;
+  min-width: 1180px;
 }
 
-/* Row-level severity marker — see getUrgencyRowClass in the .jsx. Real
-   data here runs heavily CRITICAL, so a pill in one column isn't enough
-   to scan. Drawn as an inset shadow on the first cell: a border-left on a
-   <tr> is unreliable under border-collapse and shifts the row's content. */
-.reorder-row-critical td:first-child { box-shadow: inset 3px 0 0 var(--color-severity-critical); }
-.reorder-row-urgent td:first-child   { box-shadow: inset 3px 0 0 var(--color-severity-urgent); }
-.reorder-row-planned td:first-child  { box-shadow: inset 3px 0 0 var(--color-severity-planned); }
+.reorder-rank {
+  font-weight: 700;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Group header rows: "Act now" and the collapsible "Review later". */
+.data-table .reorder-group-row td {
+  padding: 0.45rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  background-color: var(--color-surface-raised);
+  color: var(--color-text-body);
+}
+
+.data-table .reorder-group-act td {
+  box-shadow: inset 3px 0 0 var(--color-critical);
+}
+
+.data-table .reorder-group-later td {
+  box-shadow: inset 3px 0 0 var(--color-warning);
+}
+
+.reorder-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.reorder-group-toggle:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.reorder-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: -0.5rem;
+}
+
+.reorder-table-note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+/* Bulk accept is a primary action button — brand chrome, not a data colour. */
+.reorder-bulk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-brand-primary);
+  background-color: var(--color-brand-primary);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.reorder-bulk-btn:hover:not(:disabled) {
+  background-color: var(--color-brand-hover);
+  border-color: var(--color-brand-hover);
+}
+
+.reorder-bulk-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* Current stock against the reorder point: below half = critical, below
    ROP = low. Weight carries part of the signal so it isn't color-only. */
@@ -291,8 +374,10 @@
   height: 44px;
   margin: 0 auto 0.9rem auto;
   border-radius: 50%;
-  background-color: var(--color-success-bg);
-  color: var(--color-success-deep);
+  /* Neutral, not the healthy green — a confirmation prompt is chrome,
+     and green is reserved for "above threshold" data states. */
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -340,10 +425,10 @@
 
 .reorder-accept-confirm {
   border: none;
-  background-color: var(--color-success-deep);
+  background-color: var(--color-brand-primary);
   color: var(--color-surface);
 }
 
 .reorder-accept-confirm:hover {
-  background-color: #276749;
+  background-color: var(--color-brand-hover);
 }

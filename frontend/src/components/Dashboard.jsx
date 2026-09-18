@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, Link } from 'react-router-dom';
 import KPICard from './KPICard';
 import DateFilter from './DateFilter';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
-  PortfolioForecastWidget, ReorderRecommendationWidget,
-  formatCompactPesos,
+  PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
+  DemandVolatilityWidget, formatCompactPesos,
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
-import { Package, Wallet, ShieldAlert, Clock } from 'lucide-react';
+import { getSegmentSummary } from '../api/segment';
+import { useEntranceReplay } from '../theme/useEntranceReplay';
+import RefreshingNote from './RefreshingNote';
+import { Package, Wallet, Clock, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -21,8 +24,6 @@ function kpiDisplay(value, blockedReason, formatter, normalContext) {
   if (blockedReason) return { value: '—', contextLine: blockedReason };
   return { value: formatter(value), contextLine: normalContext };
 }
-
-const formatPercent = (v) => `${Math.round(v * 100)}%`;
 
 // GET /dashboard's sales/stock window ends at a single 'YYYY-MM' `period`
 // anchor (a fixed trailing 12 months, same "picker's end maps onto the
@@ -38,51 +39,77 @@ const MONTH_TO_NUM = {
 const toPeriod = (month, year) =>
   month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
+// "Share of Category A SKUs at/above safety stock" — display thresholds
+// for the card's colour, not a pipeline rule: below 60% is an act-now
+// signal (red), below 90% a watch (amber), otherwise healthy. The 9% live
+// figure used to render in the neutral indigo every card wore, which read
+// as "fine" for a number that plainly isn't.
+const SAFETY_STOCK_WATCH = 0.9;
+const SAFETY_STOCK_ACT = 0.6;
+const safetyStockMetricType = (rate) => {
+  if (rate == null) return undefined; // blocked: slate, no verdict
+  if (rate < SAFETY_STOCK_ACT) return 'danger';
+  if (rate < SAFETY_STOCK_WATCH) return 'watch';
+  return 'healthy';
+};
+
+// One continuous page: no numbered sections, no per-section explanation.
+// Each widget is tagged with the kind of analytics it answers, so the four
+// types are demonstrable at a glance without a paragraph above each one.
+//   Descriptive — what happened
+//   Diagnostic  — why it happened
+//   Predictive  — what happens next
+//   Prescriptive— what to do about it
+const Slot = ({ kind, children }) => (
+  <div className="dash-slot" data-kind={kind}>
+    <span className="dash-kind">{kind}</span>
+    {children}
+  </div>
+);
+
 // Same outer structure and card classes as the loaded page below, so every
 // block lands at its final size — nothing jumps when the real data replaces
 // it. Replaces a lone "Loading dashboard data…" line that left the page
 // blank for the whole /dashboard request (measured 5.4–7.1s).
 const DashboardSkeleton = () => (
   <div className="dashboard-body" aria-hidden="true">
-    <div className="dashboard-section">
-      <div className="kpi-grid">
-        {[0, 1, 2, 3].map((i) => (
-          <div className="kpi-card skeleton-card" key={i}>
+    <div className="kpi-strip kpi-strip-hero">
+      {[0, 1, 2, 3, 4].map((k) => (
+        <div className="kpi-card skeleton-card" key={k}>
+          <div className="skeleton-line skeleton-line-title" />
+          <div className="skeleton-line skeleton-line-value" />
+          <div className="skeleton-line skeleton-line-subtext" />
+        </div>
+      ))}
+    </div>
+    {['dash-row-wide-narrow', 'dash-row-narrow-wide', 'dash-row-even', 'dash-row-single'].map((rowClass) => (
+      <div className={`dash-row ${rowClass}`} key={rowClass}>
+        {(rowClass === 'dash-row-single' ? [0] : [0, 1]).map((k) => (
+          <div className="chart-widget skeleton-card" key={k}>
             <div className="skeleton-line skeleton-line-title" />
-            <div className="skeleton-line skeleton-line-value" />
-            <div className="skeleton-line skeleton-line-subtext" />
+            <div className="skeleton-chart-body" />
           </div>
         ))}
-      </div>
-    </div>
-    <div className="dashboard-section">
-      <div className="chart-primary">
-        <div className="chart-widget skeleton-card">
-          <div className="skeleton-line skeleton-line-title" />
-          <div className="skeleton-chart-body" />
-        </div>
-      </div>
-    </div>
-    {['chart-duo chart-duo-abc', 'chart-duo chart-duo-tall'].map((rowClass) => (
-      <div className="dashboard-section" key={rowClass}>
-        <div className={rowClass}>
-          {[0, 1].map((i) => (
-            <div className="chart-widget skeleton-card" key={i}>
-              <div className="skeleton-line skeleton-line-title" />
-              <div className="skeleton-chart-body" />
-            </div>
-          ))}
-        </div>
       </div>
     ))}
   </div>
 );
 
 const Dashboard = () => {
-  const { startMonth, startYear, endMonth, endYear } = useOutletContext() || {};
+  const { startMonth, startYear, endMonth, endYear, principal } = useOutletContext() || {};
   const period = toPeriod(endMonth, endYear);
   const startPeriod = toPeriod(startMonth, startYear);
-  const requestKey = `${period ?? ''}|${startPeriod ?? ''}`;
+  // Every input the request varies on, principal included. It was
+  // `period|startPeriod` only, which silently broke the principal filter
+  // on this page: the fetch effect below early-returns when
+  // loadedKey === requestKey, and switching principal leaves both periods
+  // untouched, so the request was never issued and the dashboard kept
+  // showing the previous principal's numbers. Nothing remounted it
+  // either — DashboardLayout's <Outlet key={refreshKey}> only changes on
+  // the Topbar's Refresh. The segmentation panel below refetches on
+  // [principal] with no such guard, so the page rendered one principal's
+  // diagnostic beside another principal's KPIs.
+  const requestKey = `${period ?? ''}|${startPeriod ?? ''}|${principal ?? ''}`;
 
   // `loaded` remembers WHICH range its data belongs to. When the range
   // changes, the previous range's view stays on screen (dimmed, labeled
@@ -90,17 +117,31 @@ const Dashboard = () => {
   // for the whole request. Seeded from the response cache, so revisiting a
   // range already fetched this session renders on the first frame.
   const [loaded, setLoaded] = useState(() => {
-    const cached = peekDashboardData({ period, startPeriod });
+    const cached = peekDashboardData({ period, startPeriod, principal });
     return cached ? { key: requestKey, data: cached } : null;
   });
   const [error, setError] = useState(null); // { key, message }
   const loadedKey = loaded?.key;
 
+  // Segmentation summary (the diagnostic panel) is its own request: it is
+  // cohort-scoped, not range-scoped, so it must NOT refetch when the date
+  // picker moves — only when the principal does. A failure here leaves the
+  // panel in its honest "no segmentation data" state and never blocks the
+  // rest of the dashboard.
+  const [segmentSummary, setSegmentSummary] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    getSegmentSummary({ principal })
+      .then((res) => { if (!cancelled) setSegmentSummary(res); })
+      .catch(() => { if (!cancelled) setSegmentSummary(null); });
+    return () => { cancelled = true; };
+  }, [principal]);
+
   useEffect(() => {
     if (loadedKey === requestKey) return undefined;
     let cancelled = false;
     setError(null);
-    getDashboardData({ period, startPeriod })
+    getDashboardData({ period, startPeriod, principal })
       .then((res) => {
         if (!cancelled) setLoaded({ key: requestKey, data: res });
       })
@@ -110,9 +151,17 @@ const Dashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [requestKey, loadedKey, period, startPeriod]);
+  }, [requestKey, loadedKey, period, startPeriod, principal]);
 
   const isRefreshing = Boolean(loaded) && loaded.key !== requestKey;
+
+  // Rebuild the cards whenever a different response lands — a date range
+  // or principal change, not a re-render. Keyed on the loaded data's own
+  // key rather than requestKey so the build plays with the new numbers
+  // already in place, instead of animating the outgoing view while the
+  // request is still in flight. Must sit above the early returns below:
+  // hooks cannot be called conditionally.
+  const enterCycle = useEntranceReplay(loaded?.key ?? '');
   const currentError = error?.key === requestKey ? error.message : null;
 
   // Header is rendered in every state — loading, error and loaded — rather
@@ -160,23 +209,19 @@ const Dashboard = () => {
 
   const sales = kpiDisplay(kpis.sales, kpis.sales_blocked_reason, formatCompactPesos, "This period's total sales");
   const sohValue = kpiDisplay(kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos, 'Stock-on-hand valuation');
-  const safetyStockRate = kpiDisplay(
-    kpis.safety_stock_rate, kpis.safety_stock_rate_blocked_reason, formatPercent, 'Share of Category A SKUs at/above safety stock'
-  );
 
   const weeksOfCoverValue = weeksOfCover.value ?? null;
   const weeksOfCoverReason = weeksOfCover.blocked_reason ?? null;
   const weeksOfCoverDisplay = kpiDisplay(
     weeksOfCoverValue, weeksOfCoverReason, (v) => `${v.toFixed(1)} wks`, "vs. SSM's 3-week policy"
   );
-  // Below policy is a stockout-risk signal (KPICard's 'danger' tier is
-  // documented for exactly this "too little" case); at/above policy reads
-  // as excess tied-up capital via the 'gap' tier's isOverTarget branch.
-  // Blocked (no value to judge) falls back to the same neutral 'action'
-  // tier the other three cards already use in their own blocked state —
-  // never a colored verdict on data that isn't there.
+  // Below policy is a stockout-risk signal (red, 'danger'); above policy
+  // reads as excess tied-up capital via the 'gap' tier's isOverTarget
+  // branch (amber); exactly at policy is healthy. Blocked (no value to
+  // judge) gets no metricType at all, which KPICard renders in slate —
+  // never a coloured verdict on data that isn't there.
   const weeksOfCoverMetricType =
-    weeksOfCoverValue === null ? 'recommendation' : weeksOfCoverValue < policyWeeks ? 'danger' : 'gap';
+    weeksOfCoverValue === null ? undefined : weeksOfCoverValue < policyWeeks ? 'danger' : 'gap';
   const weeksOfCoverIsOverTarget = weeksOfCoverValue !== null && weeksOfCoverValue > policyWeeks;
 
   const salesVsStock = (data.sales_vs_stock || []).map((pt) => ({
@@ -217,42 +262,62 @@ const Dashboard = () => {
     orderQty: r.q_i,
   }));
 
+  // Hero-strip figures. Each reads the same backend field the widget
+  // below it is drawn from, so a card and its chart can never disagree; a
+  // missing field renders "—" with the reason, never 0.
+
+  const exposure = data.safety_stock_exposure || {};
+  const exposureReason = exposure.blocked_reason || 'Safety-stock exposure cannot be measured yet';
+  // Health tier for the safety-stock card, from the same rate the
+  // exposure figures are derived from.
+  const ssTier = safetyStockMetricType(kpis.safety_stock_rate ?? null);
+  const belowSs = kpiDisplay(
+    exposure.below_count ?? null, exposure.below_count == null ? exposureReason : null,
+    (v) => `${v.toLocaleString()} of ${(exposure.comparable_count ?? 0).toLocaleString()}`,
+    'Measurable Category A SKUs below their safety stock'
+  );
+
+  // Pending action count — the "what to do" figure in the hero strip.
+  const pendingCount = data.recommendations?.product_count ?? 0;
+
   return (
     <div className="dashboard">
       <div className="dashboard-content">
         {header}
 
         {isRefreshing && (
-          <p className="dashboard-refreshing" role="status">
-            <span className="dashboard-refreshing-dot" aria-hidden="true" />
+          <RefreshingNote>
             Updating to {startMonth} {startYear} – {endMonth} {endYear}…
-          </p>
+          </RefreshingNote>
         )}
 
-        <div className={`dashboard-body${isRefreshing ? ' is-refreshing' : ''}`} aria-busy={isRefreshing}>
-        {/* ── 4 KPI cards ────────────────────────────────────────────── */}
-        <div className="dashboard-section">
-          <div className="kpi-grid">
+        <div
+          className={`dashboard-body${isRefreshing ? ' is-refreshing' : ''}`}
+          aria-busy={isRefreshing}
+          data-enter-cycle={enterCycle}
+        >
+          {/* Hero strip — the five figures that answer "what is happening
+              right now": money in, money parked, service risk, cover vs the
+              policy this project exists to replace, and work waiting. */}
+          <div className="kpi-strip kpi-strip-hero">
             <KPICard
               title="Sales"
               value={sales.value}
-              metricType="recommendation"
               contextLine={sales.contextLine}
               icon={<Wallet size={20} />}
             />
             <KPICard
               title="Stock on hand value"
               value={sohValue.value}
-              metricType="recommendation"
               contextLine={sohValue.contextLine}
               icon={<Package size={20} />}
             />
             <KPICard
-              title="SKUs at or above safety stock"
-              value={safetyStockRate.value}
-              metricType="recommendation"
-              contextLine={safetyStockRate.contextLine}
-              icon={<ShieldAlert size={20} />}
+              title="Below safety stock"
+              value={belowSs.value}
+              metricType={belowSs.value === '—' ? undefined : ssTier}
+              contextLine={belowSs.contextLine}
+              icon={<AlertTriangle size={20} />}
             />
             <KPICard
               title="Weeks of cover"
@@ -262,43 +327,59 @@ const Dashboard = () => {
               contextLine={weeksOfCoverDisplay.contextLine}
               icon={<Clock size={20} />}
             />
-          </div>
-        </div>
-
-        {/* ── Sales vs. Stock on Hand — hero chart ──────────────────────── */}
-        <div className="dashboard-section">
-          <div className="chart-primary">
-            <SalesVsStockWidget data={salesVsStock} />
-          </div>
-        </div>
-
-        {/* ── ABC donut + category stock matrix ─────────────────────────── */}
-        <div className="dashboard-section">
-          <div className="chart-duo chart-duo-abc">
-            <ABCDonutWidget data={abcMix} />
-            <CategoryStockBarWidget data={tierStock} />
-          </div>
-        </div>
-
-        {/* ── Portfolio-level aggregate forecast + reorder recommendations ── */}
-        <div className="dashboard-section">
-          <div className="chart-duo chart-duo-tall">
-            <PortfolioForecastWidget
-              series={portfolioSeries}
-              gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
-              avgMape={portfolioForecast.avg_mape}
-              scopeLabel={portfolioForecast.scope_label}
-              emptyReason={portfolioForecast.scope_label}
-            />
-            <ReorderRecommendationWidget
-              rows={reorderRows}
-              criticalCount={reorderPreview.critical_count ?? 0}
-              urgentCount={reorderPreview.urgent_count ?? 0}
-              totalOrderQty={reorderPreview.total_order_qty ?? 0}
-              weights={reorderPreview.lp_weights}
+            <KPICard
+              title="Pending reorder actions"
+              value={pendingCount.toLocaleString()}
+              metricType="recommendation"
+              contextLine="LP recommendations awaiting a decision"
+              icon={<ClipboardList size={20} />}
             />
           </div>
-        </div>
+
+          {/* DESCRIPTIVE — what happened */}
+          <div className="dash-row dash-row-wide-narrow">
+            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} /></Slot>
+            <Slot kind="Descriptive"><ABCDonutWidget data={abcMix} revenue={data.abc_revenue} /></Slot>
+          </div>
+
+          {/* DESCRIPTIVE + DIAGNOSTIC — the state, then why it looks that way */}
+          <div className="dash-row dash-row-narrow-wide">
+            <Slot kind="Descriptive"><CategoryStockBarWidget data={tierStock} /></Slot>
+            <Slot kind="Diagnostic"><DemandVolatilityWidget summary={segmentSummary} /></Slot>
+          </div>
+
+          {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
+          <div className="dash-row dash-row-even">
+            <Slot kind="Predictive">
+              <PortfolioForecastWidget
+                series={portfolioSeries}
+                gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
+                avgMape={portfolioForecast.avg_mape}
+                scopeLabel={portfolioForecast.scope_label}
+                emptyReason={portfolioForecast.scope_label}
+              />
+            </Slot>
+            <Slot kind="Prescriptive">
+              <ReorderRecommendationWidget
+                rows={reorderRows}
+                criticalCount={reorderPreview.critical_count ?? 0}
+                urgentCount={reorderPreview.urgent_count ?? 0}
+                totalOrderQty={reorderPreview.total_order_qty ?? 0}
+                weights={reorderPreview.lp_weights}
+              />
+            </Slot>
+          </div>
+
+          {/* PRESCRIPTIVE — the policy question this project exists to answer */}
+          <div className="dash-row dash-row-single">
+            <Slot kind="Prescriptive"><PolicyComparisonWidget comparison={data.policy_comparison} /></Slot>
+          </div>
+
+          <p className="dash-footnote">
+            Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as
+            &ldquo;Act now&rdquo;.{' '}
+            <Link to="/reorder" className="band-link">Open Reorder Recs <ArrowRight size={12} /></Link>
+          </p>
         </div>
       </div>
     </div>

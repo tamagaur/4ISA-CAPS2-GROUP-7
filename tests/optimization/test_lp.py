@@ -98,3 +98,45 @@ def test_build_lp_model_requires_ceiling_for_every_principal():
 def test_build_lp_model_rejects_empty_sku_list():
     with pytest.raises(ValueError):
         build_lp_model([], warehouse_capacity=100, supplier_ceilings={})
+
+
+def test_objective_weights_actually_change_the_solution():
+    """Regression: w1/w2/w3 must influence the solve.
+
+    Before the 2026-09 normalization fix, the objective mixed raw pesos
+    (TC, SC — per-unit coefficients ~1e1) with a dimensionless ratio
+    (SL — per-unit coefficient 1/total_rop, ~1e-8 on real data). The cost
+    terms outweighed service by ~9 orders of magnitude, so every objective
+    coefficient stayed positive and CBC pinned every Q_i to its ROP lower
+    bound NO MATTER WHAT the weights were. The live 2026-03 cycle showed
+    exactly that: Q_i == ROP_i on 227 of 251 rows.
+
+    This pins the property that broke: two very different weightings must
+    produce two different plans. (It deliberately does NOT assert that
+    spare capacity is always spent — with the terms now commensurate,
+    "buy exactly ROP" is a legitimate answer when service isn't worth its
+    cost. What must never happen again is the weights being ignored.)
+    """
+    skus = [
+        SKUInput("CHEAP", "unilever", rop=54_000.0,
+                 procurement_cost_per_unit=18.0, storage_cost_per_unit=0.9),
+        SKUInput("MID", "unilever", rop=150_000.0,
+                 procurement_cost_per_unit=30.0, storage_cost_per_unit=1.5),
+        SKUInput("PRICEY", "unilever", rop=21_000.0,
+                 procurement_cost_per_unit=95.0, storage_cost_per_unit=4.75),
+    ]
+    total_rop = sum(s.rop for s in skus)
+    capacity = total_rop * 1.4  # real headroom above the hard ROP floor
+    kwargs = dict(warehouse_capacity=capacity,
+                  supplier_ceilings={"unilever": capacity})
+
+    cost_first = solve_lp(build_lp_model(skus, weights=(0.90, 0.05, 0.05), **kwargs))
+    service_first = solve_lp(build_lp_model(skus, weights=(0.05, 0.90, 0.05), **kwargs))
+    assert cost_first is not None and service_first is not None
+
+    # Cost-dominant: buy the minimum the hard constraint allows.
+    assert sum(cost_first.values()) == pytest.approx(total_rop)
+    # Service-dominant: spend the available headroom instead.
+    assert sum(service_first.values()) > total_rop
+    # The two plans must differ — that is the whole point.
+    assert cost_first != service_first

@@ -13,10 +13,32 @@ import {
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
+import { useEntranceReplay } from '../theme/useEntranceReplay';
+import RefreshingNote from './RefreshingNote';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
+import { useBrandLookup } from '../utils/useBrandLookup';
 import DateFilter from './DateFilter';
+import SkuDiagnosticsPanel from './SkuDiagnosticsPanel';
 import './SKUForecast.css';
+
+// Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
+// presentation attributes can't take a CSS var()). It used to be the
+// amber data colour, which means "watch" everywhere else in the app.
+const PIN_COLOR = '#C74E3D';
+const PIN_IDLE_COLOR = '#667085';
+
+// The SKU picked this session, held at module scope rather than in
+// component state or sessionStorage.
+//
+// This is a route-level component, so navigating to another page and back
+// remounts it — component state alone would drop the selection on every
+// tab switch. sessionStorage is the other obvious home and is wrong in the
+// opposite direction: it survives a page reload, and a reload is exactly
+// when this page should go back to asking the user to pick a SKU. A module
+// variable lives as long as the loaded JS context does, which is precisely
+// "until the tab is refreshed or closed".
+let rememberedSKUCode = null;
 
 // Unlike Dashboard/ABC Classification/Reorder Recs, this page's
 // date range is its OWN, local to this component — not the shared
@@ -146,6 +168,8 @@ const SKUForecast = () => {
   // up on the NEXT visit without this page's own pick ever leaking to
   // any other page in the meantime.
   const dashboardRange = useOutletContext() || {};
+  // Shared principal scope (Topbar's segmented control).
+  const { principal } = dashboardRange;
   const [localRange, setLocalRange] = useState(() => ({
     startMonth: dashboardRange.startMonth,
     startYear: dashboardRange.startYear,
@@ -181,7 +205,7 @@ const SKUForecast = () => {
     let cancelled = false;
     setListLoading(true);
     setListError(null);
-    getABCClassification({})
+    getABCClassification({ principal })
       .then((res) => {
         if (cancelled) return;
         setRawItems(res.items || []);
@@ -194,7 +218,12 @@ const SKUForecast = () => {
         if (!cancelled) setListLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [principal]);
+
+  // GET /abc has no brand field; this used to print 'Unilever' (the
+  // principal) as every SKU's brand. Real brand comes from the product
+  // master, same lookup ABC Classification and Reorder Recs use.
+  const brandLookup = useBrandLookup();
 
   // Map ABC classification rows -> the SKU-picker shape this page renders.
   const sourceSKUs = useMemo(
@@ -202,46 +231,44 @@ const SKUForecast = () => {
       rawItems.map((item) => ({
         code: item.sku_id,
         name: item.product_name || 'Unknown Product',
-        brand: 'Unilever',
+        brand: brandLookup?.get(String(item.sku_id)) ?? '',
         cat: item.tier,
       })),
-    [rawItems]
+    [rawItems, brandLookup]
   );
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Selected SKU. Starts EMPTY — the page opens on a "pick a SKU" prompt
-  // rather than auto-picking the first row of the list, which showed a chart
-  // for an arbitrary SKU nobody asked for and read as if it were meaningful.
-  //
-  // The choice is remembered in sessionStorage rather than component state
-  // because this is a route-level component: navigating to another page and
-  // back remounts it, which would otherwise wipe the selection mid-session.
-  // sessionStorage (not localStorage) matches "until the end of the session"
-  // exactly — closing the tab starts clean again.
-  const SELECTED_SKU_KEY = 'san2_selected_forecast_sku';
+  // Selected SKU. The page opens with NOTHING selected: no chart, no
+  // diagnostics, just the prompt to pick one. It used to auto-select the
+  // top Category A SKU by revenue, which meant the first thing a user saw
+  // was a forecast for a product they hadn't asked about — easy to read as
+  // "this is my data" when it was only a placeholder.
   const [selectedSKU, setSelectedSKU] = useState(null);
 
-  // Restore the remembered SKU once the list has loaded — and only if that
-  // code still exists in it, so a stale/renamed code can't leave the page
-  // requesting a SKU that's no longer classified.
+  // Re-attach the selection to the freshly loaded list. Covers two cases
+  // with one read: restoring the module-remembered pick after a route
+  // remount, and refreshing the already-selected row so a late-arriving
+  // brand shows up. A code that isn't in the list (a different principal's
+  // scope, or no longer classified) clears the selection rather than
+  // leaving the page requesting a SKU that isn't there — rememberedSKUCode
+  // is deliberately left alone so switching the scope back restores it.
   useEffect(() => {
     if (sourceSKUs.length === 0) return;
     setSelectedSKU((prev) => {
-      if (prev) return sourceSKUs.some((s) => s.code === prev.code) ? prev : null;
-      let saved = null;
-      try {
-        saved = sessionStorage.getItem(SELECTED_SKU_KEY);
-      } catch {
-        saved = null; // private mode / storage blocked — just start empty
-      }
-      return saved ? sourceSKUs.find((s) => s.code === saved) || null : null;
+      const code = prev?.code ?? rememberedSKUCode;
+      if (!code) return null;
+      return sourceSKUs.find((s) => s.code === code) ?? null;
     });
   }, [sourceSKUs]);
 
-  // Persistent Pinned SKUs
+  // Pinned SKUs. localStorage, NOT sessionStorage or the module-scoped
+  // selection above: a pin is an explicit "keep this at the top for me"
+  // that stays until the user unpins it, so it has to outlive a refresh,
+  // a closed tab and a logout. auth.js's clearSession() only removes the
+  // token and role keys, so signing out leaves this untouched by design.
   const [pinnedSKUs, setPinnedSKUs] = useState(() => {
     try {
       const saved = localStorage.getItem('san2_pinned_skus');
@@ -282,38 +309,43 @@ const SKUForecast = () => {
       updated = [...pinnedSKUs, code];
     }
     setPinnedSKUs(updated);
-    localStorage.setItem('san2_pinned_skus', JSON.stringify(updated));
+    // Guarded like the read above — in private mode a throw here would
+    // take the click handler down with it and the pin would not toggle.
+    try {
+      localStorage.setItem('san2_pinned_skus', JSON.stringify(updated));
+    } catch { /* storage unavailable — the pin still holds for this view */ }
   };
 
   // Select SKU handler
   const handleSelectSKU = (sku) => {
     setSelectedSKU(sku);
+    rememberedSKUCode = sku.code;
     setIsDropdownOpen(false);
-    try {
-      sessionStorage.setItem(SELECTED_SKU_KEY, sku.code);
-    } catch { /* storage unavailable — selection still works for this view */ }
 
     // Update recent SKUs history (prepend, deduplicate, keep last 5)
     const updatedRecent = [sku.code, ...recentSKUs.filter(c => c !== sku.code)].slice(0, 5);
     setRecentSKUs(updatedRecent);
-    localStorage.setItem('san2_recent_forecast_skus', JSON.stringify(updatedRecent));
+    try {
+      localStorage.setItem('san2_recent_forecast_skus', JSON.stringify(updatedRecent));
+    } catch { /* storage unavailable — the list still holds for this view */ }
   };
 
-  // Clear — drops the SKU selection AND the search/filter state, returning
-  // the page to the same empty "pick a SKU" prompt it opens on. Also forgets
-  // the remembered selection so navigating away and back stays cleared.
+  // Clear — drops the selection and the search/filter state, returning the
+  // page to the prompt it opens on. Also forgets the remembered pick, so
+  // navigating away and back stays on the prompt rather than restoring the
+  // SKU the user just cleared.
   const handleClearSelection = () => {
     setSelectedSKU(null);
+    rememberedSKUCode = null;
     setSelectedCategory('ALL');
     setSearchQuery('');
-    try {
-      sessionStorage.removeItem(SELECTED_SKU_KEY);
-    } catch { /* nothing to forget if storage is unavailable */ }
   };
 
-  // Filtering Logic. No brand filter: every SKU here is Unilever (see the
-  // "Unilever only" scope badge above the picker) — brand is still matched
-  // on for SEARCH, since typing "unilever" shouldn't come back empty.
+  // Filtering Logic. No brand filter: which principal's SKUs appear here is
+  // the Topbar's principal scope, not a per-page control, so a brand
+  // dropdown would be a second, competing filter over the same axis. Brand
+  // is still matched on for SEARCH, so typing a principal's name doesn't
+  // come back empty.
   const filteredSKUs = useMemo(() => {
     return sourceSKUs.filter(sku => {
       const matchesSearch = searchQuery === '' ||
@@ -341,6 +373,46 @@ const SKUForecast = () => {
   // hasn't produced output for this SKU.
   const [forecastResult, setForecastResult] = useState(null);
   const [forecastLoading, setForecastLoading] = useState(false);
+  // Which request produced the forecast currently in state. forecastResult
+  // is NOT cleared when the selection changes, so during a SKU switch it
+  // still holds the PREVIOUS SKU's series — fine while a blanket
+  // !forecastLoading guard hid everything, but not once a refetch keeps the
+  // view. Without this, switching SKU would paint the old product's chart
+  // under the new product's name. Kept as an object so a SKU code
+  // containing the separator can't collide.
+  const [forecastFor, setForecastFor] = useState(null); // { sku, principal }
+
+  // Which of the two loading states the card is in. Same SKU, new scope
+  // (principal or range) -> the series on screen is still this SKU's, so
+  // keep it and mark it stale. Different SKU -> forecastResult still holds
+  // the PREVIOUS product's series, so there is nothing honest to show yet
+  // and the card waits.
+  const showingThisSKU = Boolean(
+    forecastFor && selectedSKU && forecastFor.sku === selectedSKU.code
+  );
+  const isForecastRefreshing = forecastLoading && showingThisSKU;
+  const isForecastColdLoad = forecastLoading && !showingThisSKU;
+
+  // Rebuild the chart card on any filter that changes what it plots: the
+  // SKU, the principal scope, and this page's own date range. The SKU is in
+  // here as well as on the container's `key` below — the key handles the
+  // remount, this handles the other two, and a signature covering only some
+  // of them would animate inconsistently depending on which control was
+  // touched.
+  //
+  // Unlike the dashboard this is keyed on the CONTROLS, not on an arrival:
+  // the range is sliced client-side from forecastResult with no request at
+  // all, so there is no response landing to wait for.
+  //
+  // MUST stay below the state it reads. This block sat directly under
+  // rangeEndPeriod, ~250 lines above selectedSKU/forecastLoading/
+  // forecastFor — `const` bindings are in the temporal dead zone until
+  // their declaration runs, so every render threw ReferenceError and the
+  // route rendered nothing at all. It is still far above every early
+  // return, so hook order is unaffected.
+  const enterCycle = useEntranceReplay(
+    `${selectedSKU?.code ?? ''}|${principal ?? ''}|${rangeStartPeriod ?? ''}|${rangeEndPeriod ?? ''}`
+  );
   const [forecastError, setForecastError] = useState(null);
 
   useEffect(() => {
@@ -351,10 +423,11 @@ const SKUForecast = () => {
     let cancelled = false;
     setForecastLoading(true);
     setForecastError(null);
-    getForecast(selectedSKU.code)
+    getForecast(selectedSKU.code, { principal })
       .then((res) => {
         if (cancelled) return;
         setForecastResult(res);
+        setForecastFor({ sku: selectedSKU.code, principal });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -364,7 +437,7 @@ const SKUForecast = () => {
         if (!cancelled) setForecastLoading(false);
       });
     return () => { cancelled = true; };
-  }, [selectedSKU]);
+  }, [selectedSKU, principal]);
 
   // Combine real trailing actuals + real forecast horizon into one chart
   // series. It now dynamically fills missing months between the first and last
@@ -622,7 +695,7 @@ const SKUForecast = () => {
 
   return (
     <div className="forecast-page">
-      <div className="forecast-content">
+      <div className="forecast-content" data-enter-cycle={enterCycle}>
         {/* Header */}
         <div className="forecast-header">
           <div className="header-text-group">
@@ -656,12 +729,11 @@ const SKUForecast = () => {
         <div className="forecast-selection">
           <div className="selection-top-bar">
             <label className="selection-label">SELECT SKU TO FORECAST</label>
-            {/* Replaces the old Brand dropdown, which had exactly one real
-                option: this is a Unilever-only system (see the backend
-                routers' hardcoded principal filter). Stated as fixed scope
-                rather than offered as a choice, so nobody goes hunting for
-                brands that were never in the data. */}
-            <span className="forecast-scope-badge">Unilever only</span>
+            {/* The "Unilever only" scope badge that used to sit here was
+                removed 2026-09-17: the app is no longer Unilever-only, and
+                scope is now the Topbar's principal filter, which this page
+                already follows. A fixed badge would have contradicted the
+                control the user just set. */}
           </div>
 
           {/* Controls Bar: Filters & Search Combobox */}
@@ -742,7 +814,7 @@ const SKUForecast = () => {
                               aria-label={`${pinnedSKUs.includes(sku.code) ? 'Unpin' : 'Pin'} SKU ${sku.code}`}
                               aria-pressed={pinnedSKUs.includes(sku.code)}
                             >
-                              <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
+                              <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                             </button>
                             <div className="result-code-group">
                               <span className="result-sku-code">{sku.code}</span>
@@ -763,7 +835,7 @@ const SKUForecast = () => {
                       {pinnedSKUObjects.length > 0 && (
                         <div className="combobox-section">
                           <div className="section-header-title">
-                            <Star size={12} fill="#F5A623" color="#F5A623" />
+                            <Star size={12} fill={PIN_COLOR} color={PIN_COLOR} />
                             <span>PINNED SKUS</span>
                           </div>
                           {pinnedSKUObjects.map(sku => (
@@ -779,7 +851,7 @@ const SKUForecast = () => {
                                 aria-label={`Unpin SKU ${sku.code}`}
                                 aria-pressed={true}
                               >
-                                <Star size={15} fill="#F5A623" />
+                                <Star size={15} fill={PIN_COLOR} />
                               </button>
                               <div className="result-code-group">
                                 <span className="result-sku-code">{sku.code}</span>
@@ -812,7 +884,7 @@ const SKUForecast = () => {
                                 aria-label={`Pin SKU ${sku.code}`}
                                 aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
-                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
+                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
                               <div className="result-code-group">
                                 <span className="result-sku-code">{sku.code}</span>
@@ -844,7 +916,7 @@ const SKUForecast = () => {
                                 aria-label={`Pin SKU ${sku.code}`}
                                 aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
-                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? '#F5A623' : 'none'} />
+                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
                               <div className="result-code-group">
                                 <span className="result-sku-code">{sku.code}</span>
@@ -867,19 +939,23 @@ const SKUForecast = () => {
         {listLoading && <p className="forecast-subtitle">Loading SKU list…</p>}
         {listError && <p className="forecast-subtitle">Error: {listError}</p>}
 
-        {/* Nothing picked yet — the page deliberately opens here instead of
-            auto-selecting a SKU, so the first chart a user sees is always one
-            they actually asked for. Occupies the chart's slot so the layout
-            doesn't jump once a selection is made. */}
+        {/* The page's resting state until the user picks a SKU — nothing is
+            auto-selected, so this is what a fresh visit (or a refresh)
+            shows. Also covers the genuinely empty list. */}
         {!selectedSKU && !listLoading && !listError && (
           <div className="forecast-empty-state">
             <div className="forecast-empty-icon">
               <Search size={28} strokeWidth={1.6} />
             </div>
-            <h3 className="forecast-empty-title">Select a SKU to see its forecast</h3>
+            <h3 className="forecast-empty-title">
+              {sourceSKUs.length === 0
+                ? 'No classified SKUs for this principal'
+                : 'Select or search a SKU to display forecast'}
+            </h3>
             <p className="forecast-empty-body">
-              Search by SKU code, product name, or brand above — or pick one from your pinned and
-              recently viewed SKUs. The demand history and MA3 forecast will appear here.
+              {sourceSKUs.length === 0
+                ? 'GET /abc returned no rows for the selected principal, so there is nothing to forecast yet.'
+                : 'Search by SKU code, product name, or brand above — or pick one from your pinned and recently viewed SKUs.'}
             </p>
           </div>
         )}
@@ -898,20 +974,33 @@ const SKUForecast = () => {
                     aria-label={`${isSelectedPinned ? 'Unpin' : 'Pin'} SKU ${selectedSKU.code}`}
                     aria-pressed={isSelectedPinned}
                   >
-                    <Star size={15} fill={isSelectedPinned ? '#F5A623' : 'none'} color={isSelectedPinned ? '#F5A623' : '#667085'} />
+                    <Star size={15} fill={isSelectedPinned ? PIN_COLOR : 'none'} color={isSelectedPinned ? PIN_COLOR : PIN_IDLE_COLOR} />
                     <span className="pin-text">{isSelectedPinned ? 'Pinned' : 'Pin SKU'}</span>
                   </button>
                 </div>
                 <span className="sku-code-value">{selectedSKU.code}</span>
                 <div className="sku-meta-row">
                   <span className="sku-product-name">{selectedSKU.name}</span>
-                  <span className="sku-brand-name">{selectedSKU.brand}</span>
+                  {selectedSKU.brand && <span className="sku-brand-name">{selectedSKU.brand}</span>}
                 </div>
               </div>
               <div className="sku-info-right">
                 <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Category {selectedSKU.cat}</span>
               </div>
             </div>
+
+            {/* Why this SKU behaves this way — the Phase-2 diagnostic layer,
+                placed between the identity card and the chart so it reads
+                as part of the SKU's story, not a footnote under the graph.
+                Keyed on the SKU for the same reason the chart below is:
+                the remount replays the card's entrance, so switching
+                products visibly rebuilds the explanation instead of
+                silently swapping the words inside a static box. */}
+            <SkuDiagnosticsPanel
+              key={selectedSKU.code}
+              skuId={selectedSKU.code}
+              principal={principal}
+            />
 
             {/* Chart Section */}
             {/* Keyed on the selected SKU so switching products replays the
@@ -921,11 +1010,24 @@ const SKUForecast = () => {
                 same chart mounted and lets Recharts tween between the old
                 and new values, which reads better than a re-fade for what is
                 the same product's data. */}
-            <div className="forecast-chart-container" key={selectedSKU?.code || 'none'}>
-              {forecastLoading && <p className="forecast-subtitle">Loading forecast…</p>}
+            {/* No .is-refreshing here, unlike the dashboard and ABC. This
+                element carries the entrance animation itself, and an
+                animation with fill-mode `both` holds its own `to { opacity:
+                1 }` over any value the cascade supplies — the dim would
+                silently never render. It is also not needed: what the dim
+                buys elsewhere is pointer-events off over stale reorder and
+                SKU links, and this card holds a chart, not navigation. The
+                note above states the staleness on its own. */}
+            <div
+              className="forecast-chart-container"
+              key={selectedSKU?.code || 'none'}
+              aria-busy={isForecastRefreshing}
+            >
+              {isForecastColdLoad && <p className="forecast-subtitle">Loading forecast…</p>}
+              {isForecastRefreshing && <RefreshingNote>Updating {selectedSKU.code}…</RefreshingNote>}
               {forecastError && <p className="forecast-subtitle">Error: {forecastError}</p>}
 
-              {!forecastLoading && !forecastError && forecastResult && forecastResult.forecast.length === 0 && (
+              {!isForecastColdLoad && !forecastError && forecastResult && forecastResult.forecast.length === 0 && (
                 <p className="forecast-subtitle">
                   No MA3 forecast has been generated for {selectedSKU.code} yet.
                 </p>
@@ -938,7 +1040,7 @@ const SKUForecast = () => {
                   Offers a one-click fix (swap the two dates) since, unlike
                   the 'none' case below, there's no ambiguity about what the
                   user actually meant. */}
-              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'invalid' && (
+              {!isForecastColdLoad && !forecastError && forecastResult && rangeStatus === 'invalid' && (
                 <div className="forecast-range-error">
                   <span className="forecast-range-error-title">Invalid date range</span>
                   <p className="forecast-range-error-body">
@@ -966,7 +1068,7 @@ const SKUForecast = () => {
                   button widens to exactly that floor, ending at whatever
                   end date the user already picked, rather than resetting
                   the whole selection. */}
-              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'too-short' && (
+              {!isForecastColdLoad && !forecastError && forecastResult && rangeStatus === 'too-short' && (
                 <div className="forecast-range-error">
                   <span className="forecast-range-error-title">
                     Range too short — {monthsBetween(rangeStartPeriod, rangeEndPeriod)} month
@@ -998,7 +1100,7 @@ const SKUForecast = () => {
               {/* No overlap at all between the picked range and this SKU's
                   history — a chart here would be an empty grid, so state the
                   problem and offer the fix instead of rendering nothing. */}
-              {!forecastLoading && !forecastError && forecastResult && rangeStatus === 'none' && (
+              {!isForecastColdLoad && !forecastError && forecastResult && rangeStatus === 'none' && (
                 <div className="forecast-range-error">
                   <span className="forecast-range-error-title">
                     No data for {selectedSKU.code} in the selected range
@@ -1016,7 +1118,7 @@ const SKUForecast = () => {
                 </div>
               )}
 
-              {!forecastLoading && !forecastError && forecastResult && (rangeStatus === 'ok' || rangeStatus === 'partial') && (
+              {!isForecastColdLoad && !forecastError && forecastResult && (rangeStatus === 'ok' || rangeStatus === 'partial') && (
                 <>
                   {/* Headline Forecast Stat Row — the number this whole page
                       exists to produce (next period's forecast) plus how it

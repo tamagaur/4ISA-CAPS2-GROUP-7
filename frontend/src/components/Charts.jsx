@@ -1,14 +1,15 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ComposedChart, BarChart, Bar, Cell, Line, LabelList,
+  ComposedChart, BarChart, Bar, Cell, Line,
   PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
-import { HelpCircle, RotateCcw, ArrowRight } from 'lucide-react';
-import { CHART_COLORS, STATUS_TIERS, COLORS } from '../theme/colors';
-import { chartAnim } from '../theme/motion';
+import { HelpCircle, ArrowRight } from 'lucide-react';
+import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
+import { formatMonth } from '../utils/formatDate';
+import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
 import './Charts.css';
 
 // X-axis tick + tooltip header for every period-keyed chart on this page:
@@ -311,6 +312,13 @@ const RECEIVED_LABEL = 'Fixed Allocation';
 // two series, so it's a dashed Line, not a constant.
 export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
   const hasData = data.length > 0;
+  // A legend entry with no drawn series is a phantom. Live,
+  // Purchase_Fact_Real holds Del Monte rows only, so `received` is null
+  // for every Unilever period: the "Fixed Allocation" line never drew a
+  // single point while its legend swatch still claimed a series existed.
+  // The Line and its legend entry now appear together, only when at least
+  // one real point exists — and the subtitle says which case it is.
+  const hasReceived = data.some((pt) => pt.received != null);
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
@@ -318,8 +326,10 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
         <div className="chart-title-area">
           <h4>Sales vs Stock on Hand</h4>
           <p>
-            Monthly revenue and stock-on-hand valuation, in pesos. Received quantities stand in
-            for the supplier allocation schedule, which SSM has not yet provided.
+            Monthly revenue and stock-on-hand valuation, in pesos.
+            {hasReceived
+              ? ' Received quantities stand in for the supplier allocation schedule, which SSM has not yet provided.'
+              : ' No purchase records exist for this scope, so no received/allocation line is drawn.'}
           </p>
         </div>
       </div>
@@ -358,17 +368,19 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   dot={false}
                   {...chartAnim()}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="received"
-                  name={RECEIVED_LABEL}
-                  stroke={COLORS.forecast}
-                  strokeDasharray="7 5"
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: COLORS.forecast, strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                  {...chartAnim()}
-                />
+                {hasReceived && (
+                  <Line
+                    type="monotone"
+                    dataKey="received"
+                    name={RECEIVED_LABEL}
+                    stroke={COLORS.forecast}
+                    strokeDasharray="7 5"
+                    strokeWidth={2.5}
+                    dot={{ r: 3, fill: COLORS.forecast, strokeWidth: 0 }}
+                    activeDot={{ r: 5 }}
+                    {...chartAnim()}
+                  />
+                )}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -381,10 +393,12 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
               <span className="legend-line" style={{ borderTopColor: CHART_COLORS.stockSeries }} />
               Stock on hand
             </li>
-            <li className="legend-item">
-              <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
-              {RECEIVED_LABEL}
-            </li>
+            {hasReceived && (
+              <li className="legend-item">
+                <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
+                {RECEIVED_LABEL}
+              </li>
+            )}
           </ul>
         </>
       )}
@@ -406,25 +420,38 @@ const ABCDonutTooltip = ({ active, payload }) => {
 };
 
 // ABC classification donut — `data` is [{ tier: 'A'|'B'|'C', count, sharePct }].
-// Center label shows the total SKU count across all tiers so the chart
-// still reads at a glance without hovering any slice.
-export const ABCDonutWidget = ({ data = [], emptyReason }) => {
+// The RING encodes revenue share, so the centre now states the revenue
+// those shares are shares of (GET /dashboard's abc_revenue — the same
+// net_amount basis the classification ran on) with the SKU count as a
+// smaller second line. It used to print "710 SKUs" in the middle of a ring
+// that was 80% Tier A by revenue — two units in one graphic, and Tier A is
+// only ~19% of SKUs. The paired bars underneath put that Pareto contrast in
+// one glance: the same three tiers as share of revenue vs share of SKUs.
+// `revenue` is {period, total, blocked_reason}; a null total falls back to
+// the SKU count in the centre with the reason in its tooltip, never a
+// stand-in figure.
+export const ABCDonutWidget = ({ data = [], revenue, emptyReason }) => {
   const hasData = data.length > 0;
   const total = data.reduce((sum, d) => sum + d.count, 0);
+  const revenueTotal = revenue?.total ?? null;
+  const sharePairs = [
+    { key: 'sharePct', label: 'Share of revenue', value: (d) => d.sharePct },
+    { key: 'skuPct', label: 'Share of SKUs', value: (d) => (total > 0 ? (d.count / total) * 100 : 0) },
+  ];
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>ABC classification</h4>
-          <p>Products by revenue contribution</p>
+          <p>Ring: each tier's share of revenue. Bars: that share next to the tier's share of the SKU count.</p>
         </div>
       </div>
 
       {!hasData ? (
         <p className="dashboard-empty-note">{emptyReason || 'No ABC classification available'}</p>
       ) : (
-        <>
+        <div className="chart-widget-body">
           <div className="chart-container donut-container" style={{ position: 'relative' }}>
             <ResponsiveContainer width="99%" height="100%">
               <PieChart>
@@ -445,242 +472,191 @@ export const ABCDonutWidget = ({ data = [], emptyReason }) => {
               </PieChart>
             </ResponsiveContainer>
             <div className="donut-center-label">
-              <span className="donut-center-value">{total}</span>
-              <span className="donut-center-caption">SKUs</span>
+              {revenueTotal != null ? (
+                <>
+                  <span className="donut-center-value">{formatCompactPesos(revenueTotal)}</span>
+                  <span className="donut-center-caption">revenue · {formatMonth(revenue.period)}</span>
+                  <span className="donut-center-secondary">{total.toLocaleString()} SKUs</span>
+                </>
+              ) : (
+                <>
+                  <span className="donut-center-value">{total.toLocaleString()}</span>
+                  <span className="donut-center-caption">SKUs</span>
+                  <span className="donut-center-secondary" title={revenue?.blocked_reason || 'Revenue total not available'}>
+                    revenue n/a
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <ul className="custom-legend">
             {data.map((d) => (
               <li className="legend-item" key={d.tier}>
                 <span className="legend-color" style={{ backgroundColor: ABC_TIER_COLORS[d.tier] || CHART_COLORS.abcRamp[0] }} />
-                Tier {d.tier} ({d.sharePct.toFixed(0)}%)
+                Tier {d.tier}
               </li>
             ))}
           </ul>
-        </>
+          <div className="abc-share-pair" role="img" aria-label="Share of revenue versus share of SKUs, by tier">
+            {sharePairs.map((pair) => (
+              <div className="abc-share-row" key={pair.key}>
+                <span className="abc-share-label">{pair.label}</span>
+                <div className="abc-share-track">
+                  {data.map((d) => {
+                    const v = pair.value(d);
+                    return (
+                      <span
+                        key={d.tier}
+                        style={{ width: `${v}%`, backgroundColor: ABC_TIER_COLORS[d.tier] || CHART_COLORS.abcRamp[0] }}
+                        title={`Tier ${d.tier}: ${v.toFixed(0)}% ${pair.key === 'skuPct' ? `of SKUs (${d.count})` : 'of revenue'}`}
+                      />
+                    );
+                  })}
+                </div>
+                <span className="abc-share-values">
+                  {data.map((d) => `${d.tier} ${pair.value(d).toFixed(0)}%`).join(' · ')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
 };
 
-// In-stock reads as the neutral, "normal" state — a calm teal. Dead stock
-// (Inventory_Fact_Real.stock_status = 'Inactive') is the one that should
-// draw the eye, but it's a watch-list condition rather than a critical
-// alert, so it gets amber rather than this dashboard's one reserved alert
-// red (the reorder card's CRITICAL badge). No_data gets the neutral
-// "we don't know" slate STATUS_TIERS already uses for "no inherent
-// direction" — a product with no Inventory_Fact_Real row that
-// period, or a NULL stock_status, lands here (see GET /dashboard's
-// tier_stock docstring), never folded into either real bucket.
-const STOCK_STATUS_COLORS = {
-  inStock: CHART_COLORS.salesSeries,
-  deadStock: COLORS.warning,
-  noData: STATUS_TIERS.diagnostic,
-  // Indigo — this dashboard's own token for "a recommendation the system
-  // is outputting" (STATUS_TIERS.action), reused here since
-  // pendingReorderCount IS that: a count of LP_Recommendation rows, not a
-  // stock status. Deliberately distinct from the stock-status colors so
-  // the two bars never read as the same kind of thing.
-  pendingReorder: STATUS_TIERS.action,
+// Horizontal per-tier composition bar, coloured by the app-wide SEMANTIC
+// rule: Active = healthy (green), dead stock = watch (amber), pending
+// reorder = a recommendation (indigo), never a health state. Pending
+// reorder used to be amber — the same amber the ABC page used for "low
+// stock" and Reorder Recs used for "urgent", three meanings on one hue.
+const WAREHOUSE_STATUS_COLORS = {
+  active: SEMANTIC.healthy,
+  deadStock: SEMANTIC.watch,
+  pendingReorder: SEMANTIC.recommendation,
 };
 
-const CategoryStockTooltip = ({ active, payload, label }) => {
-  if (!active || !payload || !payload.length) return null;
-  const row = payload[0].payload || {};
-  const inStock = row.inStock || 0;
-  const deadStock = row.deadStock || 0;
-  const noData = row.noData || 0;
-  const pendingReorderCount = row.pendingReorderCount || 0;
-  const covered = inStock + deadStock;
-  const total = covered + noData;
-  const pct = (v) => (covered > 0 ? `${Math.round((v / covered) * 100)}%` : '—');
-  return (
-    <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>Tier {label}</p>
-      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.inStock }}>
-        In stock: {inStock.toLocaleString()} ({pct(inStock)})
-      </p>
-      <p style={{ margin: '0.1rem 0', color: STOCK_STATUS_COLORS.deadStock }}>
-        Dead stock: {deadStock.toLocaleString()} ({pct(deadStock)})
-      </p>
-      <p style={{ margin: '0.1rem 0 0 0', color: STOCK_STATUS_COLORS.noData }}>
-        No inventory data: {noData.toLocaleString()} of {total.toLocaleString()} products
-      </p>
-      <p style={{ margin: '0.3rem 0 0 0', paddingTop: '0.3rem', borderTop: '1px solid #f1f5f9', color: STOCK_STATUS_COLORS.pendingReorder, fontWeight: 600 }}>
-        Pending reorder: {pendingReorderCount.toLocaleString()} products
-      </p>
-    </div>
-  );
-};
-
-const barLabelStyle = { fontSize: 10, fontWeight: 700, fill: '#ffffff' };
-const pendingReorderLabelStyle = { fontSize: 10, fill: CHART_COLORS.axisLabel };
-const MIN_LABEL_HEIGHT_PX = 14;
-
-// A segment under this fraction of its own bar's covered height renders no
-// inline label — Tier A/B's smallest slices used to overlap into an
-// unreadable smear; the exact figure is still available on hover via
-// CategoryStockTooltip.
-const MIN_LABEL_FRACTION = 0.04;
-
-// Per-segment LabelList content renderer: `data[index]` is that bar's own
-// row (recharts renders one rect per data item in array order, so `index`
-// lines up directly — no separate lookup key needed), used to compute this
-// segment's share of ITS OWN bar (in_stock+dead_stock only — no_data is
-// not part of the stack, see CategoryStockBarWidget below) rather than a
-// global threshold, so a small tier isn't penalized differently than a
-// large one.
-function makeSegmentLabel(data) {
-  return ({ x, y, width, height, value, index }) => {
-    if (!value) return null;
-    const row = data[index] || {};
-    const covered = (row.inStock || 0) + (row.deadStock || 0);
-    if (covered <= 0 || value / covered < MIN_LABEL_FRACTION) return null;
-    return (
-      <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="middle" style={barLabelStyle}>
-        {value.toLocaleString()}
-      </text>
-    );
-  };
-}
-
-// Was position="top" in axis-gray text while the two stacked segments beside
-// it (makeSegmentLabel above) render centered-inside in bold white — same
-// chart, same kind of value (a SKU count), two different label styles side
-// by side, which is what read as "inconsistent formatting." This matches
-// that: bold white, centered inside the bar, whenever the bar is tall enough
-// to hold it. Falls back to the old above-the-bar style only when the bar is
-// too short to fit text inside without it overflowing (e.g. Tier C's
-// pending-reorder count of 14 next to a much taller in-stock/dead-stock
-// stack) — same "don't cram text into a sliver" reasoning MIN_LABEL_FRACTION
-// already applies to the stacked segments, just height-based here since this
-// bar isn't part of that stack.
-function makePendingReorderLabel() {
-  return ({ x, y, width, height, value }) => {
-    if (!value) return null;
-    const text = value.toLocaleString();
-    if (height >= MIN_LABEL_HEIGHT_PX) {
-      return (
-        <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="middle" style={barLabelStyle}>
-          {text}
-        </text>
-      );
-    }
-    return (
-      <text x={x + width / 2} y={y - 6} textAnchor="middle" style={pendingReorderLabelStyle}>
-        {text}
-      </text>
-    );
-  };
-}
-
-// Custom two-line X-axis tick: "Tier A" plus a muted coverage caption
-// ("inventory data for 499 of 1,492") — no_data is deliberately kept OUT
-// of the stacked bar (a product with no Inventory_Fact_Real row that
-// period would otherwise crush the two segments that actually carry a
-// decision-relevant signal) but must stay visible somewhere on the
-// chart, not be silently dropped.
-function makeCategoryStockTick(data) {
-  return ({ x, y, payload }) => {
-    const row = data.find((d) => d.tier === payload.value) || {};
-    const covered = (row.inStock || 0) + (row.deadStock || 0);
-    const total = covered + (row.noData || 0);
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} dy={14} textAnchor="middle" fontSize={11} fontWeight={700} fill={CHART_COLORS.axisLabel}>
-          Tier {payload.value}
-        </text>
-        <text x={0} y={0} dy={28} textAnchor="middle" fontSize={9} fill={CHART_COLORS.axisLabel}>
-          inventory data for {covered.toLocaleString()} of {total.toLocaleString()}
-        </text>
-      </g>
-    );
-  };
-}
-
-// Paired bar chart per ABC tier — `data` is
+// Paired-fraction bar per ABC tier — `data` is
 // [{ tier: 'A'|'B'|'C', inStock, deadStock, noData, pendingReorderCount }],
-// from GET /dashboard's tier_stock. Two bars per tier: a stacked bar (dead
-// stock beneath in-stock, from Inventory_Fact_Real.stock_status at the
-// latest inventory period — a real, Unilever-only "is this product
-// moving" signal, NOT the reorder-point-derived in_stock/low/critical
-// split GET /abc uses) next to a single plain bar for that tier's pending
-// reorder count (COUNT(DISTINCT product_key) with a pending
-// LP_Recommendation row — a different source table, deliberately chosen
-// so this bar doesn't restate the ABC donut's own count/revenue-share
-// view under a different name). Y-axis is "SKUs" for both — both are
-// product counts. No allocation bar: no supplier allocation table exists
-// anywhere in the schema (see GET /dashboard's kpis.weeks_of_cover
-// docstring), and the proxy SalesVsStockWidget uses instead
-// (Purchase_Fact_Real) has no product key to break down by ABC tier at
-// all — there is nothing honest to plot in its place.
+// from GET /dashboard's tier_stock. Each row is one bar, its three segments
+// sized as a share of that tier's own (inStock + deadStock +
+// pendingReorderCount) — a composition view ("what's this tier made of"),
+// not an absolute-count comparison across tiers, so a small tier's bar
+// isn't visually dwarfed by a large one. no_data isn't part of the bar
+// (mixing it in would crush the two segments that actually carry a
+// decision-relevant signal) but its real count is still in the row's
+// title tooltip, never silently dropped. No allocation segment: no
+// supplier allocation table exists anywhere in the schema (see GET
+// /dashboard's kpis.weeks_of_cover docstring), and the proxy
+// SalesVsStockWidget uses instead (Purchase_Fact_Real) has no product key
+// to break down by ABC tier at all — there is nothing honest to plot here.
+//
+// LABELS (2026-09-18): this widget and the ABC page's "Cover vs reorder
+// point" both used to say "In stock" while measuring different things —
+// this one reads Inventory_Fact_Real.stock_status (the warehouse's own
+// Active/Inactive flag), the ABC page compares current stock with each
+// SKU's reorder point. Category A showed as mostly green here and as "IN
+// STOCK: 0 SKUs" there, a flat contradiction. Both are now named for what
+// they measure. Legend entries appear only for segments that actually have
+// a non-zero count somewhere in the data — live, no ABC-classified product
+// is flagged Inactive, so a "Dead stock" swatch was pointing at nothing.
 export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
   const hasData = data.length > 0;
+  const hasDead = data.some((row) => (row.deadStock || 0) > 0);
+  const hasPending = data.some((row) => (row.pendingReorderCount || 0) > 0);
+  // Same "off entirely, not just shorter" reduced-motion rule motion.js's
+  // chartAnim() uses for the Recharts-based widgets — this one is plain
+  // CSS (no Recharts here), so it's applied by hand rather than picked up
+  // for free.
+  const disableAnim = prefersReducedMotion();
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Stock status by ABC tier</h4>
-          <p>Dead/in-stock mix vs. pending reorders, by classification tier</p>
+          <h4>Active / dead stock by ABC tier (warehouse status)</h4>
+          <p>
+            Counts each tier&apos;s products by the warehouse&apos;s own Active/Inactive flag on the latest
+            stock snapshot — not by whether stock covers the reorder point (that is the ABC page&apos;s
+            &ldquo;Cover vs reorder point&rdquo;).
+          </p>
         </div>
       </div>
 
       {!hasData ? (
         <p className="dashboard-empty-note">{emptyReason || 'No stock status data available'}</p>
       ) : (
-        <>
-          <div className="chart-container">
-            <ResponsiveContainer width="99%" height="100%">
-              <BarChart
-                data={data}
-                margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
-                barGap={4}
-                barCategoryGap="30%"
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                <XAxis
-                  dataKey="tier"
-                  axisLine={false}
-                  tickLine={false}
-                  height={44}
-                  tick={makeCategoryStockTick(data)}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
-                  tickFormatter={(v) => Math.round(v).toLocaleString()}
-                  label={{ value: 'SKUs', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
-                />
-                <Tooltip content={<CategoryStockTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }} />
-                <Bar dataKey="deadStock" name="Dead stock" stackId="mix" fill={STOCK_STATUS_COLORS.deadStock} {...chartAnim(0)}>
-                  <LabelList dataKey="deadStock" content={makeSegmentLabel(data)} />
-                </Bar>
-                <Bar dataKey="inStock" name="In stock" stackId="mix" fill={STOCK_STATUS_COLORS.inStock} radius={[3, 3, 0, 0]} {...chartAnim(1)}>
-                  <LabelList dataKey="inStock" content={makeSegmentLabel(data)} />
-                </Bar>
-                <Bar dataKey="pendingReorderCount" name="Pending reorder" fill={STOCK_STATUS_COLORS.pendingReorder} radius={[3, 3, 0, 0]} {...chartAnim(2)}>
-                  <LabelList dataKey="pendingReorderCount" content={makePendingReorderLabel()} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="chart-widget-body">
+          <div className="tier-stock-bars">
+            {data.map((row, index) => {
+              const inStock = row.inStock || 0;
+              const deadStock = row.deadStock || 0;
+              const pendingReorderCount = row.pendingReorderCount || 0;
+              const noData = row.noData || 0;
+              const total = inStock + deadStock + pendingReorderCount;
+              // Floor at a visible width for any segment that's genuinely
+              // non-zero — a real 2-unit dead-stock count on an 800-unit
+              // tier is <1% and renders as a literal 0px sliver otherwise,
+              // indistinguishable from "actually zero." A truly-zero count
+              // stays at 0% — this never invents a value, it only keeps a
+              // real one from being visually erased. Exact figures are
+              // still in this row's title tooltip regardless.
+              const MIN_VISIBLE_PCT = 1.5;
+              const pct = (v) => {
+                if (total <= 0 || v <= 0) return 0;
+                return Math.max((v / total) * 100, MIN_VISIBLE_PCT);
+              };
+              const title =
+                `Tier ${row.tier} — active: ${inStock.toLocaleString()}, ` +
+                `dead stock (Inactive): ${deadStock.toLocaleString()}, pending reorder: ${pendingReorderCount.toLocaleString()}` +
+                (noData ? `, no inventory record: ${noData.toLocaleString()}` : '');
+              // Each row's bar sweeps in staggered by tier — same duration/
+              // easing/stagger constants the Recharts widgets on this page
+              // use (CHART_ANIM_DURATION/STAGGER), just applied as CSS
+              // custom properties instead of Recharts animation props.
+              const animStyle = disableAnim
+                ? undefined
+                : {
+                    '--tier-anim-duration': `${CHART_ANIM_DURATION}ms`,
+                    '--tier-anim-delay': `${index * CHART_ANIM_STAGGER}ms`,
+                  };
+              return (
+                <div className="tier-stock-row" key={row.tier} title={title}>
+                  <span className="tier-stock-label">{row.tier}</span>
+                  <div className={`tier-stock-track${disableAnim ? '' : ' is-animated'}`} style={animStyle}>
+                    {total <= 0 ? (
+                      <span className="tier-stock-empty">No data</span>
+                    ) : (
+                      <>
+                        <span style={{ width: `${pct(inStock)}%`, backgroundColor: WAREHOUSE_STATUS_COLORS.active }} />
+                        <span style={{ width: `${pct(deadStock)}%`, backgroundColor: WAREHOUSE_STATUS_COLORS.deadStock }} />
+                        <span style={{ width: `${pct(pendingReorderCount)}%`, backgroundColor: WAREHOUSE_STATUS_COLORS.pendingReorder }} />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <ul className="custom-legend">
             <li className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.inStock, borderRadius: '3px' }} />
-              In stock
+              <span className="legend-color" style={{ backgroundColor: WAREHOUSE_STATUS_COLORS.active, borderRadius: '3px' }} />
+              Active (warehouse status)
             </li>
-            <li className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.deadStock, borderRadius: '3px' }} />
-              Dead stock
-            </li>
-            <li className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: STOCK_STATUS_COLORS.pendingReorder, borderRadius: '3px' }} />
-              Pending reorder
-            </li>
+            {hasDead && (
+              <li className="legend-item">
+                <span className="legend-color" style={{ backgroundColor: WAREHOUSE_STATUS_COLORS.deadStock, borderRadius: '3px' }} />
+                Dead stock (warehouse status)
+              </li>
+            )}
+            {hasPending && (
+              <li className="legend-item">
+                <span className="legend-color" style={{ backgroundColor: WAREHOUSE_STATUS_COLORS.pendingReorder, borderRadius: '3px' }} />
+                Pending reorder
+              </li>
+            )}
           </ul>
-        </>
+        </div>
       )}
     </div>
   );
@@ -855,10 +831,15 @@ export const PortfolioForecastWidget = ({
   );
 };
 
+// One neutral pill style for every urgency tier — this card reads urgency
+// from the row's position (most-urgent first, see sortedRows below) and its
+// text, not from color, so CRITICAL/URGENT/PLANNED share the same chip look
+// instead of a red/amber/green ramp.
+const NEUTRAL_URGENCY_STYLE = { bg: 'var(--color-surface-sunken)', color: 'var(--color-text-muted)' };
 const URGENCY_STYLES = {
-  CRITICAL: { bg: '#fff5f5', color: '#e53e3e' },
-  URGENT: { bg: '#fffff0', color: '#d69e2e' },
-  PLANNED: { bg: '#f0fff4', color: '#38a169' },
+  CRITICAL: NEUTRAL_URGENCY_STYLE,
+  URGENT: NEUTRAL_URGENCY_STYLE,
+  PLANNED: NEUTRAL_URGENCY_STYLE,
 };
 
 // Keys match GET /dashboard's reorder_preview.lp_weights exactly (backend/
@@ -888,19 +869,19 @@ const LP_PRIORITY_ROWS = [
     // keeps it visually distinct from Service level (indigo) and Storage
     // (amber) without borrowing red's meaning.
     label: 'Cost',
-    color: COLORS.dispatched,
+    color: CHART_COLORS.lpWeights.cost,
     blurb: 'Placeholder: how strongly the optimizer favours minimizing total purchase and holding cost when choosing order quantities.',
   },
   {
     key: 'service_level',
     label: 'Service level',
-    color: COLORS.salesTrend,
+    color: CHART_COLORS.lpWeights.service_level,
     blurb: 'Placeholder: how strongly the optimizer favours avoiding stockouts, so demand can be met from stock on hand.',
   },
   {
     key: 'storage',
     label: 'Storage',
-    color: COLORS.warning,
+    color: CHART_COLORS.lpWeights.storage,
     blurb: 'Placeholder: how strongly the optimizer favours keeping within warehouse space and limiting spoilage risk.',
   },
 ];
@@ -937,36 +918,20 @@ export const ReorderRecommendationWidget = ({
 }) => {
   const hasData = rows.length > 0;
 
-  // The solver's real weights as whole percents — both the sliders' seed
-  // and the baseline the "not re-solved" note compares against.
+  // The solver's real weights as whole percents. Read-only: GET /dashboard's
+  // reorder_preview.lp_weights docstring is explicit that this is "a
+  // read-only display value, not an adjustable control" — there's no
+  // warehouse-capacity/supplier-ceiling/storage-cost data anywhere in the
+  // schema to legitimately re-solve the LP against, and pulp (the solver)
+  // is a batch dependency this always-on API/dashboard never loads. This
+  // used to back a set of what-if sliders; removed rather than left
+  // decorative, since a control that visibly moves but never changes the
+  // list below it reads as broken, not as a deliberate design choice.
   const solverPct = useMemo(() => {
     const read = (key) =>
       typeof weights?.[key] === 'number' ? Math.round(weights[key] * 100) : LP_DEFAULT_PCT[key];
     return { cost: read('cost'), service_level: read('service_level'), storage: read('storage') };
   }, [weights]);
-
-  const [draftPct, setDraftPct] = useState(solverPct);
-
-  // Re-seed if the API's weights change (e.g. a new date range loads a
-  // different planning cycle) — but only when the user hasn't dragged yet,
-  // so a background refetch can't yank a slider out from under them.
-  const [touched, setTouched] = useState(false);
-  useEffect(() => {
-    if (!touched) setDraftPct(solverPct);
-  }, [solverPct, touched]);
-
-  const isModified = LP_PRIORITY_ROWS.some((p) => draftPct[p.key] !== solverPct[p.key]);
-  const draftTotal = LP_PRIORITY_ROWS.reduce((sum, p) => sum + draftPct[p.key], 0);
-
-  const handleSlide = (key, value) => {
-    setTouched(true);
-    setDraftPct((prev) => ({ ...prev, [key]: Number(value) }));
-  };
-
-  const handleReset = () => {
-    setTouched(false);
-    setDraftPct(solverPct);
-  };
 
   // Most-urgent first so the critical SKUs are what's visible before the
   // list is scrolled; ties break on the larger order quantity.
@@ -991,12 +956,6 @@ export const ReorderRecommendationWidget = ({
               here until the backend scopes the preview to the latest cycle. */}
           <p>LP-optimized purchase quantities, Category A SKUs · all pending planning cycles</p>
         </div>
-        {isModified && (
-          <button type="button" className="reorder-card-reset" onClick={handleReset}>
-            <RotateCcw size={12} />
-            Reset
-          </button>
-        )}
       </div>
 
       {!hasData ? (
@@ -1004,12 +963,18 @@ export const ReorderRecommendationWidget = ({
       ) : (
         <>
           <div className="reorder-mini-summary">
+            {/* Only the two counts that carry real urgency get colored —
+                Critical in this dashboard's one reserved alert red, Urgent
+                in the same amber used for "watch this" elsewhere (e.g.
+                STOCK_STATUS_COLORS.deadStock). Total order qty stays
+                neutral: it's a quantity, not a severity, so coloring it
+                would imply a good/bad judgment that doesn't exist. */}
             <div className="reorder-mini-chip">
-              <span className="reorder-mini-value" style={{ color: URGENCY_STYLES.CRITICAL.color }}>{criticalCount}</span>
+              <span className="reorder-mini-value" style={{ color: SEMANTIC.act }}>{criticalCount}</span>
               <span className="reorder-mini-label">Critical</span>
             </div>
             <div className="reorder-mini-chip">
-              <span className="reorder-mini-value" style={{ color: URGENCY_STYLES.URGENT.color }}>{urgentCount}</span>
+              <span className="reorder-mini-value" style={{ color: SEMANTIC.watch }}>{urgentCount}</span>
               <span className="reorder-mini-label">Urgent</span>
             </div>
             <div className="reorder-mini-chip">
@@ -1020,78 +985,76 @@ export const ReorderRecommendationWidget = ({
 
           <div className="reorder-priorities">
             <div className="reorder-priorities-header">
-              <span className="reorder-priorities-title">Optimization priorities</span>
-              <span className="reorder-priorities-caption">Weights used for these recommendations</span>
+              <span className="reorder-priorities-title">How this was optimized</span>
+              <span className="reorder-priorities-caption">Weights the solver used for these recommendations</span>
             </div>
 
+            {/* Read-only bar per weight — was a draggable slider, but
+                GET /dashboard's reorder_preview.lp_weights docstring is
+                explicit that this value is "read-only display... not an
+                adjustable control" (see backend/routers/dashboard.py),
+                so this now matches what the data actually is: a fact
+                about how the solver ran, not a live control. */}
             {LP_PRIORITY_ROWS.map((p) => (
               <div className="reorder-priority-row" key={p.key}>
                 <div className="reorder-priority-row-top">
-                  <label className="reorder-priority-label" htmlFor={`lp-weight-${p.key}`}>
+                  <span className="reorder-priority-label">
                     <span className="reorder-priority-swatch" style={{ backgroundColor: p.color }} />
                     {p.label}
-                  </label>
+                  </span>
                   <PriorityInfo text={p.blurb} />
-                  <span className="reorder-priority-pct">{draftPct[p.key]}%</span>
+                  <span className="reorder-priority-pct">{solverPct[p.key]}%</span>
                 </div>
-                <input
-                  id={`lp-weight-${p.key}`}
-                  className="reorder-priority-slider"
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={draftPct[p.key]}
-                  onChange={(e) => handleSlide(p.key, e.target.value)}
-                  style={{ '--slider-accent': p.color, '--slider-pct': `${draftPct[p.key]}%` }}
-                />
+                <div className="reorder-priority-bar" role="img" aria-label={`${p.label}: ${solverPct[p.key]}%`}>
+                  <span style={{ width: `${solverPct[p.key]}%`, backgroundColor: p.color }} />
+                </div>
               </div>
             ))}
-
-            {/* Honest about what the sliders do and don't do: they're a
-                what-if, and the list below is still the solver's real
-                output. Also surfaces when the three stop summing to 100%,
-                since the LP's weights are shares of one whole. */}
-            {isModified && (
-              <p className="reorder-priorities-note">
-                What-if only — recommendations below still use the solver&apos;s actual weights
-                ({solverPct.cost}/{solverPct.service_level}/{solverPct.storage}).
-                {draftTotal !== 100 && ` Weights total ${draftTotal}%, not 100%.`}
-              </p>
-            )}
           </div>
 
           <div className="reorder-mini-list">
-            {sortedRows.map((r) => (
-              <div className="reorder-mini-row" key={r.sku}>
-                <div className="reorder-mini-row-main">
-                  {/* Was a plain <span> styled to look like a link (blue,
-                      same color as every other clickable SKU in the app)
-                      but had no click handler — a dead affordance. Now a
-                      real link to that SKU's own recommendation, which the
-                      Reorder Recs page opens in its detail modal on load
-                      (see the ?sku= handling in ReorderRecommendations.jsx). */}
-                  <Link to={`/reorder?sku=${encodeURIComponent(r.sku)}`} className="reorder-mini-sku">
-                    {r.sku}
-                  </Link>
-                  <span className="reorder-mini-product">{r.product}</span>
-                </div>
-                <div className="reorder-mini-row-side">
-                  <span
-                    className="urgency-badge-mini"
-                    style={{
-                      backgroundColor: URGENCY_STYLES[r.urgency]?.bg,
-                      color: URGENCY_STYLES[r.urgency]?.color,
-                    }}
-                  >
-                    {r.urgency}
-                  </span>
-                  <span className="reorder-mini-qty">
-                    {Number(r.orderQty ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} units
-                  </span>
-                </div>
-              </div>
-            ))}
+            <table className="reorder-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Product</th>
+                  <th>Urgency</th>
+                  <th>Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRows.map((r) => (
+                  <tr key={r.sku}>
+                    <td>
+                      {/* Was a plain <span> styled to look like a link (blue,
+                          same color as every other clickable SKU in the app)
+                          but had no click handler — a dead affordance. Now a
+                          real link to that SKU's own recommendation, which the
+                          Reorder Recs page opens in its detail modal on load
+                          (see the ?sku= handling in ReorderRecommendations.jsx). */}
+                      <Link to={`/reorder?sku=${encodeURIComponent(r.sku)}`} className="reorder-mini-sku">
+                        {r.sku}
+                      </Link>
+                    </td>
+                    <td className="reorder-table-product">{r.product}</td>
+                    <td>
+                      <span
+                        className="urgency-badge-mini"
+                        style={{
+                          backgroundColor: URGENCY_STYLES[r.urgency]?.bg,
+                          color: URGENCY_STYLES[r.urgency]?.color,
+                        }}
+                      >
+                        {r.urgency}
+                      </span>
+                    </td>
+                    <td className="reorder-table-qty">
+                      {Number(r.orderQty ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {/* This widget only ever shows a few rows (Dashboard is an
@@ -1103,6 +1066,156 @@ export const ReorderRecommendationWidget = ({
             <ArrowRight size={14} />
           </Link>
         </>
+      )}
+    </div>
+  );
+};
+
+// LP safety stock vs SSM's blanket 3-week rule — GET /dashboard's
+// policy_comparison. Two bars on one scale, in the demand series' unit
+// (pieces): what the LP's per-SKU safety stock (SS_i) sums to across the
+// latest planning cycle, and what holding three weeks of each SKU's own
+// forecast would sum to. Units, not pesos — no per-piece cost exists to
+// value the difference honestly (backend/routers/dashboard.py's
+// policy_comparison docstring). The rule bar is slate (a baseline, no
+// verdict) and the LP bar indigo (a model output), per the SEMANTIC rule.
+export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
+  const c = comparison || {};
+  const hasData = c.lp_safety_stock_units != null && c.rule_safety_stock_units != null;
+  const max = hasData ? Math.max(c.lp_safety_stock_units, c.rule_safety_stock_units, 1) : 1;
+  const rows = [
+    { key: 'rule', label: `Blanket ${c.rule_weeks ?? 3}-week rule`, value: c.rule_safety_stock_units, color: SEMANTIC.noData },
+    { key: 'lp', label: 'LP safety stock (SS\u1d62)', value: c.lp_safety_stock_units, color: SEMANTIC.recommendation },
+  ];
+
+  return (
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>Safety stock: LP policy vs the blanket 3-week rule</h4>
+          <p>
+            Total buffer stock each policy would hold across the latest planning cycle, in demand units.
+            Rule = 3 weeks of each SKU&apos;s own MA3 forecast; LP = the per-SKU safety stock the optimizer solved for.
+          </p>
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || c.blocked_reason || 'Policy comparison not available'}</p>
+      ) : (
+        <div className="chart-widget-body">
+          <div className="policy-bars">
+            {rows.map((r) => (
+              <div className="policy-bar-row" key={r.key}>
+                <span className="policy-bar-label">{r.label}</span>
+                <div className="policy-bar-track" role="img" aria-label={`${r.label}: ${Math.round(r.value).toLocaleString()} units`}>
+                  <span style={{ width: `${(r.value / max) * 100}%`, backgroundColor: r.color }} />
+                </div>
+                <span className="policy-bar-value">{Math.round(r.value).toLocaleString()} units</span>
+              </div>
+            ))}
+          </div>
+          <p className="dashboard-chart-footnote">
+            {c.sku_count} SKUs in the {formatMonth(c.cycle_date)} cycle with a forecast for that month; units of the
+            demand series (pieces). Not converted to pesos — no per-piece cost is recorded.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Diagnostic: why this portfolio is hard to forecast ───────────────────
+// The dashboard's only "why did it happen" widget. Reads GET /segment/
+// summary, which rolls up the SAME sku_traits columns (cv, trend) that the
+// per-SKU panel on SKU Forecast shows, so the portfolio view and the
+// drill-down can never disagree.
+//
+// Volatility bands are a display convention over the coefficient of
+// variation of monthly demand, defined once in backend/routers/segment.py
+// (cv < 0.5 steady, < 1.0 variable, else erratic) — never re-derived here.
+// Colour follows the app's semantic rule: erratic is the "act" red because
+// it is the band that explains missed forecasts, steady is healthy green.
+const VOLATILITY_META = {
+  high: { label: 'Erratic', color: SEMANTIC.act, hint: 'CV ≥ 1.0 — month-to-month demand swings wildly' },
+  medium: { label: 'Variable', color: SEMANTIC.watch, hint: 'CV 0.5–1.0 — noticeable swings' },
+  low: { label: 'Steady', color: SEMANTIC.healthy, hint: 'CV < 0.5 — predictable month to month' },
+  unknown: { label: 'Not measured', color: SEMANTIC.noData, hint: 'No CV recorded for these SKUs' },
+};
+
+const TREND_META = {
+  up: { label: 'Rising', arrow: '↗' },
+  none: { label: 'No clear trend', arrow: '→' },
+  down: { label: 'Falling', arrow: '↘' },
+};
+
+export const DemandVolatilityWidget = ({ summary, emptyReason }) => {
+  const s = summary || {};
+  const buckets = s.volatility || [];
+  const hasData = (s.analyzed_count ?? 0) > 0 && buckets.length > 0;
+  const total = buckets.reduce((sum, b) => sum + (b.sku_count || 0), 0);
+
+  return (
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>Why demand is hard to forecast</h4>
+          <p>
+            How steady each Category A SKU&apos;s monthly demand is (coefficient of variation) and which way
+            it trends — the measured reasons behind the forecast accuracy above.
+          </p>
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || s.blocked_reason || 'No segmentation data for this scope'}</p>
+      ) : (
+        <div className="chart-widget-body">
+          <div className="policy-bars">
+            {buckets.map((b) => {
+              const meta = VOLATILITY_META[b.band] || VOLATILITY_META.unknown;
+              const pct = total > 0 ? (b.sku_count / total) * 100 : 0;
+              const revPct = b.revenue_share != null ? Math.round(b.revenue_share * 100) : null;
+              return (
+                <div className="policy-bar-row" key={b.band} title={meta.hint}>
+                  <span className="policy-bar-label">{meta.label}</span>
+                  <div
+                    className="policy-bar-track"
+                    role="img"
+                    aria-label={`${meta.label}: ${b.sku_count} SKUs`}
+                  >
+                    <span style={{ width: `${pct}%`, backgroundColor: meta.color }} />
+                  </div>
+                  <span className="policy-bar-value">
+                    {b.sku_count} SKUs
+                    {/* Revenue share is what makes the band actionable: 60
+                        erratic SKUs matter differently if they carry 25% of
+                        revenue than if they carry 2%. Omitted, not zeroed,
+                        when no SKU in the band recorded a share. */}
+                    {revPct != null && <span className="volatility-rev"> · {revPct}% rev</span>}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="volatility-trend-row">
+            {(s.trend || []).map((t) => {
+              const meta = TREND_META[t.trend] || { label: t.trend, arrow: '·' };
+              return (
+                <span className="volatility-trend-chip" key={t.trend}>
+                  <span className="volatility-trend-arrow" aria-hidden="true">{meta.arrow}</span>
+                  <strong>{t.sku_count}</strong> {meta.label}
+                </span>
+              );
+            })}
+          </div>
+
+          <p className="dashboard-chart-footnote">
+            {s.analyzed_count} Category A SKUs in the {formatMonth(s.cohort_period)} cohort · trend from
+            Mann-Kendall (p &lt; 0.05). Open a SKU on SKU Forecast for its own reason.
+          </p>
+        </div>
       )}
     </div>
   );

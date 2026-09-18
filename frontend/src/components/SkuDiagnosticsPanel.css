@@ -1,0 +1,228 @@
+/* "Why this SKU behaves this way" — shared by SKU Forecast (full card) and
+   the Reorder detail modal (compact). Deliberately a bordered, tinted card
+   with a heading of its own, not a footnote: it is the only place in the
+   app that explains a SKU rather than measures it. */
+.sku-diag {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-abc-a);
+  border-radius: 12px;
+  padding: 1.1rem 1.5rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.sku-diag-compact {
+  padding: 0.9rem 1.1rem 1rem;
+  gap: 0.75rem;
+  background-color: var(--color-surface-raised);
+}
+
+.sku-diag-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.sku-diag-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.sku-diag-compact .sku-diag-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sku-diag-cohort {
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface-sunken);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.sku-diag-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.sku-diag-tile {
+  --tile-accent: var(--color-slate-500);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--tile-accent);
+  min-width: 0;
+}
+
+.sku-diag-compact .sku-diag-tile {
+  background-color: var(--color-surface);
+}
+
+.sku-diag-tile-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.sku-diag-tile-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.sku-diag-trend-icon {
+  flex-shrink: 0;
+  color: var(--color-text-body);
+}
+
+.sku-diag-tile-desc {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.sku-diag-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sku-diag-reason {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  background-color: var(--color-abc-a-bg);
+  border: 1px solid var(--color-abc-c);
+}
+
+.sku-diag-reason-icon {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  color: var(--color-abc-a);
+}
+
+.sku-diag-reason-bin {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-abc-a);
+}
+
+.sku-diag-reason-scheme {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--color-text-subtle);
+}
+
+.sku-diag-reason-text {
+  margin: 0.2rem 0 0 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text);
+  line-height: 1.45;
+}
+
+.sku-diag-note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.sku-diag-unanalyzed {
+  border-left-color: var(--color-slate-400);
+}
+
+.sku-diag-empty-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-body);
+}
+
+@media (max-width: 720px) {
+  .sku-diag-tiles {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Entrance ─────────────────────────────────────────────────────────────
+   The card shares the app-wide build (chart-card-enter, defined in
+   index.css so every route has it). Callers key this component on the SKU
+   code, so picking a different product remounts it and the build replays;
+   a principal or range change instead replays it through the page's
+   data-enter-cycle wrapper, same as the chart below it.
+
+   The tiles and the quoted bin reason carry their own short stagger. They
+   need no replay plumbing: they only exist in the loaded branch, so they
+   mount at the moment the GET /segment response lands and animate then —
+   which is the point worth marking, since the card itself is on screen
+   showing "Loading diagnostics…" well before the numbers arrive. */
+.sku-diag {
+  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+}
+
+@keyframes sku-diag-item-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sku-diag-tile,
+.sku-diag-reason {
+  animation: sku-diag-item-enter 380ms ease-out both;
+}
+
+.sku-diag-tile:nth-child(1) { animation-delay: 60ms; }
+.sku-diag-tile:nth-child(2) { animation-delay: 130ms; }
+.sku-diag-tile:nth-child(3) { animation-delay: 200ms; }
+.sku-diag-reason { animation-delay: 260ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sku-diag,
+  .sku-diag-tile,
+  .sku-diag-reason {
+    animation: none;
+  }
+}

@@ -21,7 +21,10 @@ export function useBrandLookup() {
         if (cancelled) return;
         const map = new Map();
         (res.items || []).forEach((item) => {
-          if (item.sku_id && item.brand) map.set(String(item.sku_id), item.brand);
+          // Trimmed to match SKU Management's own normalization, so the same
+          // brand doesn't render padded on one page and clean on another.
+          const brand = (item.brand || '').trim();
+          if (item.sku_id && brand) map.set(String(item.sku_id), brand);
         });
         setBrands(map);
       })

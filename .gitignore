@@ -91,3 +91,13 @@ scratch/
 # above. The backup TOOL is tracked (scripts/backup_live_db.py); its output
 # is not.
 backups/
+
+# Manuscript chapter drafts — personal work-in-progress writing, not project
+# code. The submitted manuscript (3ISA_7_CP-1_Manuscript.pdf) is now ignored as requested.
+# these are the working drafts that churn between versions.
+Chapter *.docx
+
+# Specific ignored files requested
+3ISA_7_CP-1_Manuscript.pdf
+DATABASE_SCHEMA.xlsx
+

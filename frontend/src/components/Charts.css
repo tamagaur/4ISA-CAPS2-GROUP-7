@@ -147,10 +147,18 @@
   position: relative;
 }
 
+/* flex:none + an explicit height, overriding chart-container's flex:1 —
+   this widget's card is now auto-height (see Dashboard.css's
+   .chart-duo-abc .chart-widget), so there's no fixed ancestor height left
+   for flex:1 to grow into. Recharts' ResponsiveContainer needs a real
+   pixel height from its parent to render at all, so the donut gets its
+   own fixed height regardless of the card around it. */
 .donut-container {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: none;
+  height: 180px;
 }
 
 .donut-center-label {
@@ -338,6 +346,80 @@
   font-size: 0.95rem;
 }
 
+/* ── Stock status by ABC tier — horizontal composition bars ───────────── */
+/* Fixed at the same height as .donut-container (180px) — its sibling in
+   this row — and space-between instead of a fixed gap so the three rows
+   spread out to fill that height exactly, whatever it is. That's what
+   makes this widget's legend land at the same vertical level as the ABC
+   donut's legend: both "chart body" blocks are the same height, so
+   centering each within the (height-matched) card puts both legends at
+   an identical offset from the top. */
+.tier-stock-bars {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 180px;
+}
+
+.tier-stock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tier-stock-label {
+  flex: 0 0 auto;
+  width: 1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-body);
+}
+
+/* Thicker — was 18px, leaving most of the row's own height as dead space
+   once .tier-stock-bars filled the donut's 180px. 40px lets three rows
+   plus their gaps actually use that height instead of floating in it. */
+.tier-stock-track {
+  flex: 1 1 auto;
+  height: 40px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  background: var(--color-surface-sunken);
+}
+
+.tier-stock-track span {
+  height: 100%;
+}
+
+/* Grow-in on mount, staggered per tier — durations/delay come from
+   Charts.jsx as CSS custom properties (the same CHART_ANIM_DURATION/
+   STAGGER constants the Recharts widgets on this page use), so this bar
+   sweeps in the same way the rest of the dashboard's charts do. */
+@keyframes tier-bar-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Identical twin, swapped in by [data-enter-cycle="1"] so the sweep can
+   restart on a filter change — see index.css's replay note. */
+@keyframes tier-bar-grow-b {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.tier-stock-track.is-animated span {
+  transform-origin: left;
+  animation: var(--anim-tier-bar, tier-bar-grow) var(--tier-anim-duration, 700ms) ease-out both;
+  animation-delay: var(--tier-anim-delay, 0ms);
+}
+
+.tier-stock-empty {
+  font-size: 0.7rem;
+  color: var(--color-text-subtle);
+  padding-left: 0.5rem;
+  align-self: center;
+}
+
 /* ── Reorder recommendation widget — compact dashboard-card version ───── */
 .reorder-mini-summary {
   display: flex;
@@ -348,16 +430,25 @@
   border-bottom: 1px solid var(--color-surface-sunken);
 }
 
+/* Boxed like a stat tile rather than plain text — this card is scanned,
+   not read, so "3 critical" needs to register as one glanceable unit. */
 .reorder-mini-chip {
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.6rem 0.5rem;
+  border-radius: 8px;
+  background: var(--color-surface-sunken);
+  min-width: 0;
 }
 
 .reorder-mini-value {
   font-size: 1.2rem;
   font-weight: 700;
   color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .reorder-mini-label {
@@ -370,15 +461,14 @@
 
 /* flex:1 + min-height:0 is what makes this scroll rather than stretch the
    card: it takes whatever vertical space the summary and sliders above it
-   leave over, then scrolls its own overflow inside that. */
+   leave over, then scrolls its own overflow inside that. overflow-x for
+   the table itself — SKU/Product/Urgency/Qty doesn't reflow at narrow
+   widths, so it scrolls sideways in its own box instead of the page. */
 .reorder-mini-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
   flex: 1;
   min-height: 4.5rem;
   overflow-y: auto;
-  padding-right: 0.4rem;
+  overflow-x: auto;
   margin-top: 0.9rem;
   border-top: 1px solid var(--color-surface-sunken);
 }
@@ -387,6 +477,7 @@
    crowd the qty column at this card width. */
 .reorder-mini-list::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 .reorder-mini-list::-webkit-scrollbar-track {
@@ -402,45 +493,63 @@
   background-color: var(--color-text-subtle);
 }
 
-.reorder-mini-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--color-surface-sunken);
+.reorder-table {
+  width: 100%;
+  min-width: 340px;
+  border-collapse: collapse;
 }
 
-.reorder-mini-row:last-child {
+.reorder-table th {
+  text-align: left;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  padding: 0.5rem 0.4rem;
+  border-bottom: 1px solid var(--color-surface-sunken);
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+}
+
+.reorder-table td {
+  padding: 0.5rem 0.4rem;
+  border-bottom: 1px solid var(--color-surface-sunken);
+  font-size: 0.78rem;
+  color: var(--color-text);
+  vertical-align: middle;
+}
+
+.reorder-table tr:last-child td {
   border-bottom: none;
 }
 
-.reorder-mini-row-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-  flex: 1;
+.reorder-table-product {
+  max-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reorder-table-qty {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .reorder-mini-sku {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--color-info);
   text-decoration: none;
-  width: fit-content;
+  white-space: nowrap;
 }
 
 .reorder-mini-sku:hover {
   text-decoration: underline;
-}
-
-.reorder-mini-product {
-  font-size: 0.8rem;
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .reorder-mini-view-all {
@@ -461,18 +570,6 @@
   text-decoration: underline;
 }
 
-/* Badge stacked above qty (rather than side by side) so the qty line has
-   room to spell out "units" in full without crowding the card's right
-   edge or forcing the badge further right than it needs to be. */
-.reorder-mini-row-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.3rem;
-  flex-shrink: 0;
-  margin-right: 0.2rem;
-}
-
 .urgency-badge-mini {
   display: inline-block;
   padding: 0.22rem 0.55rem;
@@ -484,13 +581,6 @@
   white-space: nowrap;
 }
 
-.reorder-mini-qty {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
 .reorder-priorities {
   display: flex;
   flex-direction: column;
@@ -499,9 +589,10 @@
 
 .reorder-priorities-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: 0.25rem 0.5rem;
 }
 
 .reorder-priorities-title {
@@ -513,43 +604,6 @@
 .reorder-priorities-caption {
   font-size: 0.65rem;
   color: var(--color-text-subtle);
-  white-space: nowrap;
-}
-
-/* Top-right of the whole card (chart-header), not just the priorities
-   section — only rendered once the user actually drags a slider away from
-   the solver's real weights (see ReorderRecommendationWidget's isModified). */
-.reorder-card-reset {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  background-color: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--color-text-body);
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background-color 0.15s, border-color 0.15s;
-}
-
-.reorder-card-reset:hover {
-  background-color: var(--color-surface-muted);
-  border-color: var(--color-border-strong);
-}
-
-.reorder-priorities-note {
-  margin: 0.1rem 0 0 0;
-  font-size: 0.65rem;
-  line-height: 1.4;
-  color: var(--color-warning-text);
-  background-color: var(--color-warning-bg);
-  border: 1px solid var(--color-warning-border);
-  border-radius: 6px;
-  padding: 0.35rem 0.5rem;
 }
 
 .reorder-priority-row {
@@ -570,7 +624,7 @@
   gap: 0.45rem;
   font-size: 0.8rem;
   color: var(--color-text);
-  cursor: pointer;
+  min-width: 0;
 }
 
 .reorder-priority-swatch {
@@ -649,79 +703,227 @@
   visibility: visible;
 }
 
-/* ── Draggable weight slider ────────────────────────────────────────────
-   Native range input so keyboard/screen-reader support comes for free.
-   --slider-accent (the priority's colour) and --slider-pct (its current
-   value) are set inline per row, letting one rule paint the filled portion
-   of every track without a per-priority class. */
-.reorder-priority-slider {
-  -webkit-appearance: none;
-  appearance: none;
+/* ── Read-only weight bar ────────────────────────────────────────────────
+   Replaces what used to be a draggable range input. This value can't be
+   changed (see ReorderRecommendationWidget's solverPct comment for why),
+   so it's a plain filled track now, not a control — no thumb, no
+   focus/hover states, nothing that implies it responds to input. */
+.reorder-priority-bar {
   width: 100%;
-  height: 14px;
-  margin: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.reorder-priority-slider:focus {
-  outline: none;
-}
-
-.reorder-priority-slider::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--slider-accent) 45%, var(--color-surface)) 0 var(--slider-pct),
-    var(--color-surface-muted) var(--slider-pct) 100%
-  );
-}
-
-.reorder-priority-slider::-moz-range-track {
-  height: 4px;
-  border-radius: 2px;
+  height: 6px;
+  border-radius: 3px;
   background: var(--color-surface-muted);
+  overflow: hidden;
 }
 
-.reorder-priority-slider::-moz-range-progress {
-  height: 4px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--slider-accent) 45%, var(--color-surface));
+.reorder-priority-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
 }
 
-.reorder-priority-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  margin-top: -5px; /* centres the 14px thumb on the 4px track */
-  border: none;
-  border-radius: 50%;
-  background: var(--slider-accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  transition: transform 0.12s ease;
+
+/* ── ABC donut: revenue centre + paired share bars (2026-09-18) ────────── */
+.donut-center-secondary {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-top: 0.2rem;
 }
 
-.reorder-priority-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border: none;
-  border-radius: 50%;
-  background: var(--slider-accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+.abc-share-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
 }
 
-.reorder-priority-slider:hover::-webkit-slider-thumb,
-.reorder-priority-slider:active::-webkit-slider-thumb {
-  transform: scale(1.15);
+.abc-share-row {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  grid-template-areas: "label track" "label values";
+  column-gap: 0.6rem;
+  row-gap: 0.15rem;
+  align-items: center;
 }
 
-.reorder-priority-slider:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--slider-accent) 30%, transparent);
+.abc-share-label {
+  grid-area: label;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-body);
 }
 
-.reorder-priority-slider:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--slider-accent) 30%, transparent);
+.abc-share-track {
+  grid-area: track;
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
 }
 
+.abc-share-track span {
+  height: 100%;
+}
+
+.abc-share-values {
+  grid-area: values;
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Policy comparison (LP safety stock vs 3-week rule) ────────────────── */
+.policy-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.5rem 0 0.75rem;
+}
+
+.policy-bar-row {
+  display: grid;
+  grid-template-columns: 12rem 1fr 8rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.policy-bar-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.policy-bar-track {
+  height: 22px;
+  border-radius: 6px;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+.policy-bar-track span {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+}
+
+.policy-bar-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .policy-bar-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+  .policy-bar-value {
+    text-align: left;
+  }
+  .abc-share-row {
+    grid-template-columns: 1fr;
+    grid-template-areas: "label" "track" "values";
+  }
+}
+
+/* ── Diagnostic widget (DemandVolatilityWidget) ───────────────────────────
+   Reuses .policy-bars/.policy-bar-* for the band bars; only the trend chip
+   row and the revenue-share suffix are new. */
+.volatility-rev {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.volatility-trend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.volatility-trend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  font-size: 0.75rem;
+  color: var(--color-text-body);
+}
+
+.volatility-trend-arrow {
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+
+/* ── Entrance animation (2026-09-18) ──────────────────────────────────────
+   Every chart card fades and lifts into place when its page mounts, so
+   navigating to a tab reads as the view building rather than snapping in
+   fully formed. Cards inside one row are staggered by position, which
+   makes a row read as one coordinated build.
+
+   This runs on mount AND on every applied filter change: the page wraps
+   its cards in useEntranceReplay()'s data-enter-cycle, which swaps the
+   animation-name for an identical twin and so restarts the build. The
+   replay is keyed on the data that is on screen, not on the control, so
+   the rebuild plays when the new numbers land rather than while the
+   request is still in flight. The Recharts series still animate their own
+   values via chartAnim() — the card frame says "this view reloaded", the
+   series says "these numbers changed".
+
+   --enter-delay lets a caller stagger explicitly; the nth-child rules
+   below are the default for any row that doesn't set it. */
+/* chart-card-enter keyframe lives in index.css — see note there. */
+
+.chart-widget {
+  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+/* --enter-delay is INHERITED, so the stagger is set on whatever wraps the
+   cards (.dash-slot on the dashboard, the grid cell elsewhere) rather than
+   on .chart-widget itself. Setting it here with :nth-child would win over
+   the inherited value and flatten every stagger to one number, because on
+   the dashboard each card is the 2nd child of its own slot. Wrappers set
+   it; this rule only consumes it. */
+
+/* Plain-CSS bar widgets (no Recharts): the policy comparison, the
+   diagnostic volatility bands, and the ABC share pair all sweep in the
+   same way the tier bars already did, so every bar on the dashboard
+   behaves alike. Delay clears the card's own entrance first. */
+@keyframes bar-grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Identical twin — see the tier-bar-grow-b note above. */
+@keyframes bar-grow-x-b {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.policy-bar-track span,
+.abc-share-track span {
+  transform-origin: left;
+  animation: var(--anim-bar-grow-x, bar-grow-x) 620ms ease-out both;
+  animation-delay: 260ms;
+}
+
+/* Reduced motion: switch entrances OFF entirely rather than shortening
+   them — large-area movement is exactly what the setting exists to
+   suppress. Matches motion.js's chartAnim(), which returns
+   isAnimationActive:false under the same condition. */
+@media (prefers-reduced-motion: reduce) {
+  .chart-widget,
+  .policy-bar-track span,
+  .abc-share-track span {
+    animation: none;
+  }
+}

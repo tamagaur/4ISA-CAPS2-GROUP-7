@@ -146,56 +146,8 @@
   min-height: 300px;
 }
 
-/* ── Loading — skeleton blocks ─────────────────────────────────────────── */
-.skeleton-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.skeleton-line {
-  background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 37%, var(--color-surface-muted) 63%);
-  background-size: 400% 100%;
-  animation: skeleton-shimmer 1.4s ease infinite;
-  border-radius: 6px;
-}
-
-.skeleton-line-title {
-  width: 40%;
-  height: 0.7rem;
-  margin-bottom: 1rem;
-}
-
-.skeleton-line-value {
-  width: 60%;
-  height: 2.2rem;
-  margin-bottom: 0.75rem;
-}
-
-.skeleton-line-subtext {
-  width: 50%;
-  height: 0.75rem;
-}
-
-.skeleton-line-row {
-  width: 100%;
-  height: 2.5rem;
-  margin-top: 1rem;
-}
-
-.skeleton-chart-body {
-  flex: 1;
-  min-height: 180px;
-  margin-top: 1.25rem;
-  border-radius: 8px;
-  background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 37%, var(--color-surface-muted) 63%);
-  background-size: 400% 100%;
-  animation: skeleton-shimmer 1.4s ease infinite;
-}
-
-@keyframes skeleton-shimmer {
-  0% { background-position: 100% 50%; }
-  100% { background-position: 0 50%; }
-}
+/* Skeleton blocks and the refreshing pill are shared vocabulary now —
+   see index.css. Only dashboard-specific loading rules remain here. */
 
 /* Wraps every section below the header, so the loaded page and the
    skeleton share one layout. gap: inherit follows .dashboard-content's own
@@ -207,49 +159,9 @@
   transition: opacity 0.2s ease;
 }
 
-/* Previous range's view, kept visible while the newly picked range loads.
-   Dimmed and non-interactive so nobody reads or acts on (e.g. follows a
-   reorder SKU link from) numbers that belong to the old range. */
-.dashboard-body.is-refreshing {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.dashboard-refreshing {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  align-self: flex-start;
-  margin: -0.75rem 0 -0.5rem 0;
-  padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-body);
-}
-
-.dashboard-refreshing-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-info);
-  animation: dashboard-refreshing-pulse 1s ease-in-out infinite;
-}
-
-@keyframes dashboard-refreshing-pulse {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
-}
 
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton-line,
-  .skeleton-chart-body,
-  .dashboard-refreshing-dot {
-    animation: none;
-  }
   .dashboard-body {
     transition: none;
   }
@@ -316,7 +228,7 @@
   .kpi-grid, .kpi-grid-5 {
     grid-template-columns: repeat(2, 1fr);
   }
-  .chart-duo, .chart-duo-abc {
+  .chart-duo {
     grid-template-columns: 1fr;
   }
   .secondary-grid {
@@ -324,6 +236,16 @@
   }
   .secondary-grid .chart-widget {
     min-height: 240px;
+  }
+}
+
+/* ABC row (donut + tier-stock bars) is much lighter than the other
+   chart-duo rows — no table, no sliders, just a small donut and three thin
+   bars — so it stays 2-up much further down than the 1280px cutoff those
+   heavier rows need. Below this it genuinely doesn't fit two abreast. */
+@media (max-width: 640px) {
+  .chart-duo-abc {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -384,4 +306,210 @@
   height: 140px;
   min-height: 140px;
   flex: none;
+}
+
+/* ── ABC row: size to content, then match each other ─────────────────────
+   Same "placed after every rule, including the responsive block, so
+   source order wins at every width" pattern as the empty-state override
+   above — .chart-duo-abc .chart-widget has the same specificity as
+   .chart-duo .chart-widget's 340/300/240px rules, so it has to come last
+   to win. Needed because CategoryStockBarWidget stopped being a Recharts
+   bar chart that filled a fixed height and became a handful of flex rows
+   (see Charts.jsx's tier-stock-bars) — locked to the old fixed height, it
+   left a large dead gap below the bars on every breakpoint, most visible
+   once the row stacks to full-width in portrait/narrow layouts. height:
+   auto alone would still leave align-self: start (removed) — .chart-duo's
+   own align-items: stretch is what makes both cards in the row match the
+   taller one's content height, instead of each just being its own size. */
+.chart-duo-abc .chart-widget {
+  height: auto;
+}
+
+/* .chart-widget-body wraps everything below the header in both widgets in
+   this row (the donut+legend, and the tier bars+legend). flex:1 lets it
+   claim whatever height .chart-duo's align-items: stretch adds beyond
+   this card's own content, and justify-content: center spends that extra
+   space evenly above and below the content instead of leaving it all
+   stacked underneath as one dead gap. */
+.chart-duo-abc .chart-widget-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+/* ── Continuous dashboard (2026-09-18) ───────────────────────────────────
+   One uninterrupted page: no numbered sections, no dividers, no paragraph
+   of explanation above each block. The hero strip carries the five figures
+   that answer "what is happening right now"; every row below is evidence,
+   each tagged with the kind of analytics it answers so all four
+   (descriptive / diagnostic / predictive / prescriptive) are demonstrable
+   without prose. Replaces the banded layout whose per-band headline +
+   reason repeated on screen what the widgets already showed. */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+/* Five across: the hero row is the only place that needs a fifth column. */
+.kpi-strip-hero {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.dash-row {
+  display: grid;
+  gap: 1.25rem;
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* Trend chart wide, donut narrow — the donut needs no horizontal room. */
+.dash-row-wide-narrow { grid-template-columns: 1.7fr 1fr; }
+/* Three thin tier bars narrow, the diagnostic bars wide. */
+.dash-row-narrow-wide { grid-template-columns: 1fr 1.4fr; }
+.dash-row-even        { grid-template-columns: 1fr 1fr; }
+.dash-row-single      { grid-template-columns: 1fr; }
+
+/* The slot owns the type tag; the widget inside keeps its own card chrome,
+   so tagging costs no extra box. */
+.dash-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Analytics-type tag. Deliberately quiet — it labels the widget for a
+   reviewer without competing with the widget's own title. */
+.dash-kind {
+  align-self: flex-start;
+  margin-bottom: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.dash-slot > .chart-widget {
+  flex: 1;
+  height: 360px;
+  min-width: 0;
+}
+
+.dash-row-single .dash-slot > .chart-widget {
+  height: auto;
+}
+
+/* Widgets whose body is a handful of flex rows (donut, tier bars, the
+   volatility bands) centre that body in the height their row sets. */
+.dash-row .chart-widget-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.dash-footnote {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.band-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+  color: var(--color-info);
+  text-decoration: none;
+}
+
+.band-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 1280px) {
+  .kpi-strip-hero {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .kpi-strip,
+  .kpi-strip-hero {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dash-row-wide-narrow,
+  .dash-row-narrow-wide,
+  .dash-row-even {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .dash-slot > .chart-widget {
+    height: 320px;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-strip,
+  .kpi-strip-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Empty state stays compact at every width — after every height rule. */
+.dash-slot > .chart-widget-empty {
+  height: 140px;
+  min-height: 140px;
+}
+
+/* Entrance stagger. --enter-delay inherits down to the .chart-widget
+   inside each slot (Charts.css consumes it); setting it on the slot is
+   what makes a row read as one build instead of both cards jumping
+   together. The hero strip's cards lead, so the page fills top-down. */
+.kpi-strip-hero .kpi-card:nth-child(1) { --enter-delay: 0ms; }
+.kpi-strip-hero .kpi-card:nth-child(2) { --enter-delay: 50ms; }
+.kpi-strip-hero .kpi-card:nth-child(3) { --enter-delay: 100ms; }
+.kpi-strip-hero .kpi-card:nth-child(4) { --enter-delay: 150ms; }
+.kpi-strip-hero .kpi-card:nth-child(5) { --enter-delay: 200ms; }
+
+.kpi-card {
+  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+/* Rows enter after the strip; the second card in a row trails the first.
+   Keyed on each row's own class rather than :nth-of-type, which counts
+   every sibling DIV — the hero strip is one, so nth-of-type(1) matched
+   the SECOND row and the last two cards fell through to 0ms, entering
+   before the rows above them. Row classes are stable and explicit. */
+.dash-row-wide-narrow .dash-slot:nth-child(1) { --enter-delay: 240ms; }
+.dash-row-wide-narrow .dash-slot:nth-child(2) { --enter-delay: 300ms; }
+.dash-row-narrow-wide .dash-slot:nth-child(1) { --enter-delay: 340ms; }
+.dash-row-narrow-wide .dash-slot:nth-child(2) { --enter-delay: 400ms; }
+.dash-row-even .dash-slot:nth-child(1)        { --enter-delay: 440ms; }
+.dash-row-even .dash-slot:nth-child(2)        { --enter-delay: 500ms; }
+.dash-row-single .dash-slot:nth-child(1)      { --enter-delay: 540ms; }
+
+/* The type tag rides in with its card rather than sitting there first. */
+.dash-slot .dash-kind {
+  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-card,
+  .dash-slot .dash-kind {
+    animation: none;
+  }
 }
