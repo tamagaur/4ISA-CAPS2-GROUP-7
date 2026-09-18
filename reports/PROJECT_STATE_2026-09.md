@@ -698,11 +698,10 @@ classifier, not a data-safety concern.
 
 `ssm_precutover_diag`, `ssm_col_gap_audit`, `ssm_canonical`,
 `ssm_sku_brand_fix`, `ssm_binning_phase2` dropped after verified public
-apply — DB 548MB → 140MB. `ssm_abc_phase2` dropped with them, which
-also removed `abc_classification_backup_20260917` (the pre-migration-0017
-backup). That backup no longer exists and is **not being rebuilt** —
-migration 0017 is already applied and confirmed working; the backup's
-only purpose (rollback safety for that migration) is moot now.
+apply — DB 548MB → 140MB. **Correction (2026-09-18 verification):
+`ssm_abc_phase2` was NOT dropped** — it still exists (64MB, 4 tables)
+and still holds `abc_classification_backup_20260917`, the
+pre-migration-0017 backup, intact.
 
 Commits `cccd038` (Del Monte product_dimension dedup + inventory
 product_key fix), `196e01d` (Unilever SOH `unit_cost_per_case`/
@@ -725,13 +724,16 @@ trailing-3-month**, **119 overlap** between the two bases.
 3. Verify `transform_ssis_soh`'s `unit_cost_per_case`/`stock_status`
    output (commit `196e01d`) matches `public`'s existing values — not yet
    diffed.
-4. Pre-existing `tests/backend/*`, `tests/forecasting/test_sarima.py`
-   collection errors (FastAPI/Starlette version mismatch in this dev
-   environment) — unrelated to this work.
+4. ~~Pre-existing `tests/forecasting/test_sarima.py` collection error~~
+   — **CLOSED 2026-09-18**: now passes 6/6. `tests/backend/*` collection
+   errors (FastAPI/Starlette version mismatch) remain, pre-existing,
+   unrelated to this work.
 5. Duplicate migration `0002` (`0002_add_boundary_flag.sql` and
    `0002_add_sku_management_fields.sql`) — cosmetic, not yet resolved.
 6. `net_amount` is gross, not net of returns — a manuscript limitation,
    not a pipeline defect.
+7. `tools/forecast_viewer/*` has uncommitted changes from 2026-09-16,
+   owner unknown, unrelated to Phase 1–2 work.
 
 ## 15. SKU Management / ABC page recon — 2026-09-18 (Audrey)
 
@@ -747,12 +749,16 @@ without `--quiet` and archive the log next time.
 
 Brand/category fixes (product_key 50186 'False' row, Del Monte's 99
 fake "brands", alias-table reapply without `COALESCE`, SOH mojibake
-normalization) — scratch-verified, public-apply SQL prepared, awaiting
-Yuan's execution. See chat log 2026-09-18 for the full recon tables.
+normalization) — applied to `public` and verified 2026-09-18. See chat
+log 2026-09-18 for the full recon tables.
+
+Audrey's original "12 'False' rows" claim — **CLOSED**: actual live
+count was 1 (product_key 50186), deleted 2026-09-18, verified 0
+remaining.
 
 ### Open items carried forward (this section)
-7. `abc.py:94`, `dashboard.py:438,457-458` take `MAX(classification_period)`
-   without a `method` filter — fine today because `single` and `t3m`
-   share the same latest period, but would silently pick the wrong
-   period for one method if the two ever diverge. Not fixed; no
-   observed divergence yet.
+~~7. `abc.py:94`, `dashboard.py:438,457-458` MAX(classification_period)
+without a `method` filter~~ — **CLOSED 2026-09-18**: verified all
+`MAX(classification_period)` lookups (`abc.py:114`,
+`dashboard.py:595,619-620`) now filter `method = 'single'`, fixed
+upstream before this check.
