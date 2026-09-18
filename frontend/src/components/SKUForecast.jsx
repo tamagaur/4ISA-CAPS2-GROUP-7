@@ -313,9 +313,11 @@ const SKUForecast = () => {
     } catch { /* nothing to forget if storage is unavailable */ }
   };
 
-  // Filtering Logic. No brand filter: every SKU here is Unilever (see the
-  // "Unilever only" scope badge above the picker) — brand is still matched
-  // on for SEARCH, since typing "unilever" shouldn't come back empty.
+  // Filtering Logic. No brand filter: which principal's SKUs appear here is
+  // the Topbar's principal scope, not a per-page control, so a brand
+  // dropdown would be a second, competing filter over the same axis. Brand
+  // is still matched on for SEARCH, so typing a principal's name doesn't
+  // come back empty.
   const filteredSKUs = useMemo(() => {
     return sourceSKUs.filter(sku => {
       const matchesSearch = searchQuery === '' ||
@@ -658,12 +660,11 @@ const SKUForecast = () => {
         <div className="forecast-selection">
           <div className="selection-top-bar">
             <label className="selection-label">SELECT SKU TO FORECAST</label>
-            {/* Replaces the old Brand dropdown, which had exactly one real
-                option: this is a Unilever-only system (see the backend
-                routers' hardcoded principal filter). Stated as fixed scope
-                rather than offered as a choice, so nobody goes hunting for
-                brands that were never in the data. */}
-            <span className="forecast-scope-badge">Unilever only</span>
+            {/* The "Unilever only" scope badge that used to sit here was
+                removed 2026-09-17: the app is no longer Unilever-only, and
+                scope is now the Topbar's principal filter, which this page
+                already follows. A fixed badge would have contradicted the
+                control the user just set. */}
           </div>
 
           {/* Controls Bar: Filters & Search Combobox */}
