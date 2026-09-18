@@ -9,7 +9,6 @@ import { logAction } from '../utils/auditLogger';
 import { getSKUs, createSKU, updateSKU } from '../api/sku';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
 import Pagination from './Pagination';
-import PageJump from './PageJump';
 import './SKUManagement.css';
 
 // Product names render verbatim. A helper used to pull a pack size out onto
