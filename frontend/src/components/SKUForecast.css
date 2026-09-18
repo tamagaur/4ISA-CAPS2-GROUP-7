@@ -872,3 +872,17 @@
   color: var(--color-text);
   background-color: var(--color-surface-sunken);
 }
+
+/* Entrance — shares chart-card-enter with the dashboard and ABC cards.
+   The container is keyed on the selected SKU in the JSX, so picking a
+   different SKU remounts it and the chart builds again, which is the
+   behaviour wanted here: a new SKU is a new view, not a data tweak. */
+.forecast-chart-container {
+  animation: chart-card-enter 460ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .forecast-chart-container {
+    animation: none;
+  }
+}

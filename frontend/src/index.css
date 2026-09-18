@@ -707,3 +707,20 @@ html, body, #root, .App {
     animation: none;
   }
 }
+
+/* ── Card entrance keyframe (2026-09-18) ─────────────────────────────────
+   Defined here, not in Charts.css, because ABCClassification.css and
+   SKUForecast.css use it too and those pages never import Charts.css —
+   with lazy-loaded routes, a direct visit to /abc would reference a
+   keyframe that is not in the document and silently skip the animation.
+   index.css is imported by main.jsx, so it is present on every route. */
+@keyframes chart-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

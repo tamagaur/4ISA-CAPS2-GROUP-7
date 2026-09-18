@@ -788,3 +788,21 @@
   line-height: 1.45;
   max-width: 40rem;
 }
+
+/* Entrance — same keyframe and timing the dashboard's cards use
+   (chart-card-enter, defined in Charts.css, which this page already
+   imports). Runs on MOUNT, so switching to this tab builds the view;
+   changing the month leaves the cards in place and lets the Recharts
+   series animate the data change instead. */
+.abc-pareto-container {
+  animation: chart-card-enter 460ms ease-out both;
+}
+
+.abc-analysis-chart { animation-delay: 60ms; }
+.abc-analysis-drilldown { animation-delay: 130ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .abc-pareto-container {
+    animation: none;
+  }
+}

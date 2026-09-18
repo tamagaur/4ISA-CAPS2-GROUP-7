@@ -560,3 +560,44 @@
   height: 140px;
   min-height: 140px;
 }
+
+/* Entrance stagger. --enter-delay inherits down to the .chart-widget
+   inside each slot (Charts.css consumes it); setting it on the slot is
+   what makes a row read as one build instead of both cards jumping
+   together. The hero strip's cards lead, so the page fills top-down. */
+.kpi-strip-hero .kpi-card:nth-child(1) { --enter-delay: 0ms; }
+.kpi-strip-hero .kpi-card:nth-child(2) { --enter-delay: 50ms; }
+.kpi-strip-hero .kpi-card:nth-child(3) { --enter-delay: 100ms; }
+.kpi-strip-hero .kpi-card:nth-child(4) { --enter-delay: 150ms; }
+.kpi-strip-hero .kpi-card:nth-child(5) { --enter-delay: 200ms; }
+
+.kpi-card {
+  animation: chart-card-enter 460ms ease-out both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+/* Rows enter after the strip; the second card in a row trails the first.
+   Keyed on each row's own class rather than :nth-of-type, which counts
+   every sibling DIV — the hero strip is one, so nth-of-type(1) matched
+   the SECOND row and the last two cards fell through to 0ms, entering
+   before the rows above them. Row classes are stable and explicit. */
+.dash-row-wide-narrow .dash-slot:nth-child(1) { --enter-delay: 240ms; }
+.dash-row-wide-narrow .dash-slot:nth-child(2) { --enter-delay: 300ms; }
+.dash-row-narrow-wide .dash-slot:nth-child(1) { --enter-delay: 340ms; }
+.dash-row-narrow-wide .dash-slot:nth-child(2) { --enter-delay: 400ms; }
+.dash-row-even .dash-slot:nth-child(1)        { --enter-delay: 440ms; }
+.dash-row-even .dash-slot:nth-child(2)        { --enter-delay: 500ms; }
+.dash-row-single .dash-slot:nth-child(1)      { --enter-delay: 540ms; }
+
+/* The type tag rides in with its card rather than sitting there first. */
+.dash-slot .dash-kind {
+  animation: chart-card-enter 460ms ease-out both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-card,
+  .dash-slot .dash-kind {
+    animation: none;
+  }
+}
