@@ -9,7 +9,7 @@ import {
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { formatMonth } from '../utils/formatDate';
-import { Package, Wallet, ShieldAlert, Clock, ArrowRight } from 'lucide-react';
+import { Package, Wallet, ShieldAlert, Clock, ArrowRight, Layers, Boxes, AlertTriangle, Percent } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -139,19 +139,25 @@ const DashboardSkeleton = () => (
           <div className="skeleton-line skeleton-line-headline" />
         </header>
         {i < 2 ? (
-          <div className="band-row band-row-triple">
-            {[0, 1].map((k) => (
-              <div className="kpi-card skeleton-card" key={k}>
-                <div className="skeleton-line skeleton-line-title" />
-                <div className="skeleton-line skeleton-line-value" />
-                <div className="skeleton-line skeleton-line-subtext" />
-              </div>
-            ))}
-            <div className="chart-widget skeleton-card">
-              <div className="skeleton-line skeleton-line-title" />
-              <div className="skeleton-chart-body" />
+          <>
+            <div className="kpi-strip">
+              {[0, 1, 2, 3].map((k) => (
+                <div className="kpi-card skeleton-card" key={k}>
+                  <div className="skeleton-line skeleton-line-title" />
+                  <div className="skeleton-line skeleton-line-value" />
+                  <div className="skeleton-line skeleton-line-subtext" />
+                </div>
+              ))}
             </div>
-          </div>
+            <div className={`band-charts ${i === 0 ? 'band-charts-money' : 'band-charts-risk'}`}>
+              {[0, 1].map((k) => (
+                <div className="chart-widget skeleton-card" key={k}>
+                  <div className="skeleton-line skeleton-line-title" />
+                  <div className="skeleton-chart-body" />
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
           <div className="chart-widget skeleton-card">
             <div className="skeleton-line skeleton-line-title" />
@@ -301,6 +307,38 @@ const Dashboard = () => {
     orderQty: r.q_i,
   }));
 
+  // Strip figures for bands 1 and 2. Every one comes from a field the
+  // band's headline is already built from, so a card and its headline can
+  // never disagree; a missing field renders "—" with the reason, never 0.
+  const tierA = abcMix.find((t) => t.tier === 'A');
+  const totalSkus = abcMix.reduce((sum, t) => sum + t.count, 0);
+  const noAbcReason = tierA ? null : 'No ABC classification for this selection';
+  const catAShare = kpiDisplay(
+    tierA ? tierA.sharePct : null, noAbcReason,
+    (v) => `${Math.round(v)}%`, 'Share of revenue earned by Category A'
+  );
+  const catASkuPct = tierA && totalSkus ? Math.round((tierA.count / totalSkus) * 100) : null;
+  const catASkus = kpiDisplay(
+    tierA ? tierA.count : null, noAbcReason,
+    (v) => `${v.toLocaleString()} of ${totalSkus.toLocaleString()}`,
+    catASkuPct != null ? `${catASkuPct}% of all classified SKUs` : ''
+  );
+
+  const exposure = data.safety_stock_exposure || {};
+  const exposureReason = exposure.blocked_reason || 'Safety-stock exposure cannot be measured yet';
+  // One fact, three cards (at/above %, below count, revenue exposed) — they
+  // share the same health tier so the band can't show mixed verdicts.
+  const ssTier = safetyStockMetricType(kpis.safety_stock_rate ?? null);
+  const belowSs = kpiDisplay(
+    exposure.below_count ?? null, exposure.below_count == null ? exposureReason : null,
+    (v) => `${v.toLocaleString()} of ${(exposure.comparable_count ?? 0).toLocaleString()}`,
+    'Measurable Category A SKUs below their safety stock'
+  );
+  const revenueExposed = kpiDisplay(
+    exposure.below_revenue_share ?? null, exposure.below_revenue_share == null ? exposureReason : null,
+    formatPercent, 'Revenue share of the SKUs below safety stock'
+  );
+
   const headlines = {
     money: moneyHeadline({
       sohValue: kpis.soh_value ?? null,
@@ -328,7 +366,7 @@ const Dashboard = () => {
         <div className={`dashboard-body${isRefreshing ? ' is-refreshing' : ''}`} aria-busy={isRefreshing}>
           {/* ── 1. Where our money is ─────────────────────────────────── */}
           <Band index={1} kicker="Where our money is" headline={headlines.money}>
-            <div className="band-row band-row-triple">
+            <div className="kpi-strip">
               <KPICard
                 title="Sales"
                 value={sales.value}
@@ -341,22 +379,48 @@ const Dashboard = () => {
                 contextLine={sohValue.contextLine}
                 icon={<Package size={20} />}
               />
-              <ABCDonutWidget data={abcMix} revenue={data.abc_revenue} />
+              <KPICard
+                title="Category A share of revenue"
+                value={catAShare.value}
+                contextLine={catAShare.contextLine}
+                icon={<Layers size={20} />}
+              />
+              <KPICard
+                title="Category A SKUs"
+                value={catASkus.value}
+                contextLine={catASkus.contextLine}
+                icon={<Boxes size={20} />}
+              />
             </div>
-            <div className="chart-primary">
+            <div className="band-charts band-charts-money">
               <SalesVsStockWidget data={salesVsStock} />
+              <ABCDonutWidget data={abcMix} revenue={data.abc_revenue} />
             </div>
           </Band>
 
           {/* ── 2. What's at risk ─────────────────────────────────────── */}
           <Band index={2} kicker="What's at risk" headline={headlines.risk}>
-            <div className="band-row band-row-triple">
+            <div className="kpi-strip">
               <KPICard
                 title="SKUs at or above safety stock"
                 value={safetyStockRate.value}
-                metricType={safetyStockMetricType(kpis.safety_stock_rate ?? null)}
+                metricType={ssTier}
                 contextLine={safetyStockRate.contextLine}
                 icon={<ShieldAlert size={20} />}
+              />
+              <KPICard
+                title="Below safety stock"
+                value={belowSs.value}
+                metricType={belowSs.value === '—' ? undefined : ssTier}
+                contextLine={belowSs.contextLine}
+                icon={<AlertTriangle size={20} />}
+              />
+              <KPICard
+                title="Revenue exposed"
+                value={revenueExposed.value}
+                metricType={revenueExposed.value === '—' ? undefined : ssTier}
+                contextLine={revenueExposed.contextLine}
+                icon={<Percent size={20} />}
               />
               <KPICard
                 title="Weeks of cover"
@@ -366,9 +430,9 @@ const Dashboard = () => {
                 contextLine={weeksOfCoverDisplay.contextLine}
                 icon={<Clock size={20} />}
               />
-              <CategoryStockBarWidget data={tierStock} />
             </div>
-            <div className="chart-primary chart-primary-tall">
+            <div className="band-charts band-charts-risk">
+              <CategoryStockBarWidget data={tierStock} />
               <PortfolioForecastWidget
                 series={portfolioSeries}
                 gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}

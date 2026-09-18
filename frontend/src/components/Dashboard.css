@@ -477,34 +477,50 @@
   max-width: 64rem;
 }
 
-/* Two KPI cards beside one chart card: the KPIs are the numbers, the
-   chart is where they come from. */
-.band-row {
+/* ── Strip + evidence (2026-09-18 layout redo) ────────────────────────────
+   Each band opens with its figures in a compact strip, then the charts
+   that back them on their own row. The earlier layout put two KPI cards
+   in ONE grid beside a tall chart with align-items: stretch, so cards
+   holding ~77px of content were pulled to 315–360px — 238–283px of dead
+   space per card, measured. Figures and evidence never share a row now,
+   so a card is only ever as tall as the tallest card of its own kind. */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.band-charts {
   display: grid;
   gap: 1.25rem;
   align-items: stretch;
   min-width: 0;
 }
 
-.band-row-triple {
-  grid-template-columns: 1fr 1fr 1.6fr;
+/* Trend chart wide, donut narrow — the donut needs no horizontal room. */
+.band-charts-money {
+  grid-template-columns: 1.7fr 1fr;
 }
 
-.band-row .chart-widget {
-  height: auto;
+/* Three thin tier bars narrow, forecast chart wide. */
+.band-charts-risk {
+  grid-template-columns: 1fr 1.7fr;
+}
+
+.band-charts .chart-widget {
+  height: 360px;
   min-width: 0;
 }
 
-.band-row .chart-widget-body {
+/* Widgets whose body is a handful of flex rows (donut + bars, tier bars)
+   centre that body in the height the chart beside them sets. */
+.band-charts .chart-widget-body {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 0.75rem;
-}
-
-.chart-primary-tall .chart-widget {
-  height: 400px;
 }
 
 /* The reorder card stacks a summary row, three weight bars and a
@@ -539,31 +555,30 @@
 }
 
 @media (max-width: 1100px) {
-  .band-row-triple {
-    grid-template-columns: 1fr 1fr;
+  .kpi-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .band-row-triple > .chart-widget {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 480px) {
-  .band-row-triple {
+  .band-charts-money,
+  .band-charts-risk {
     grid-template-columns: 1fr;
   }
 }
 
-/* Keep the tall slot's empty state compact and its phone height sane —
-   these must come after .chart-primary-tall .chart-widget above. */
-.chart-primary-tall .chart-widget-empty {
-  height: 140px;
-}
-
 @media (max-width: 768px) {
-  .chart-primary-tall .chart-widget {
+  .band-charts .chart-widget {
     height: 320px;
   }
-  .chart-primary-tall .chart-widget-empty {
-    height: 140px;
+}
+
+@media (max-width: 480px) {
+  .kpi-strip {
+    grid-template-columns: 1fr;
   }
+}
+
+/* Empty state stays compact at every width — placed after every height
+   rule above so source order wins. */
+.band-charts .chart-widget-empty {
+  height: 140px;
+  min-height: 140px;
 }
