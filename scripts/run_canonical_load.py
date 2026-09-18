@@ -857,6 +857,14 @@ def _load_soh_snapshot() -> pd.DataFrame:
     soh["sku_code"] = soh["sku_code"].astype(str).str.strip()
     soh["category_desc"] = soh["category_desc"].astype(str).str.strip().replace({"": None, "nan": None})
     soh = soh.dropna(subset=["category_desc"])
+    # Normalize mojibake/smart-quote apostrophes (U+FFFD, U+2019, U+2018) to
+    # ASCII "'" before anything tokenizes article_description — found
+    # 2026-09-18: 'LADY�S CHOICE...' (product_keys 120, 121) was
+    # producing a byte-distinct brand token the alias table couldn't
+    # reliably match. Source-level fix instead of another alias entry.
+    soh["article_description"] = soh["article_description"].astype(str).str.replace(
+        "[�’‘]", "'", regex=True
+    )
     return soh.sort_values("snapshot_date").groupby("sku_code").last().reset_index()
 
 

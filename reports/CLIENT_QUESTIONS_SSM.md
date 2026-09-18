@@ -100,6 +100,19 @@ column so we know what to look for going forward*
 
 ---
 
+## Separately — a brand we can't identify (heads-up, not blocking)
+
+Two Unilever SKUs are labeled **"KHM SACHET ARROZCALDO"** and **"KHM SACHET
+BEEFGOTO"** in your Stock-on-Hand data. We don't recognize "KHM" as a
+Unilever brand and don't want to guess.
+
+**Which brand does "KHM" belong to?**
+
+*→ the brand name, so we can label these two SKUs correctly instead of
+leaving them blank*
+
+---
+
 ### Why we're asking
 
 Your current rule — hold three weeks of safety stock for every product — ties up

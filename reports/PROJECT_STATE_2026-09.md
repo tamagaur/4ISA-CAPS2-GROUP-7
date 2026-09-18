@@ -694,7 +694,15 @@ classifier, not a data-safety concern.
    dump can be cleaned up once the incident is fully closed and folded
    into this report — not yet, kept for now.
 
-## 12. Column-gap audit — CLOSED (2026-09-17/18)
+## 12. Column-gap audit — CLOSED (2026-09-17/18); scratch cleanup DONE (2026-09-18)
+
+`ssm_precutover_diag`, `ssm_col_gap_audit`, `ssm_canonical`,
+`ssm_sku_brand_fix`, `ssm_binning_phase2` dropped after verified public
+apply — DB 548MB → 140MB. `ssm_abc_phase2` dropped with them, which
+also removed `abc_classification_backup_20260917` (the pre-migration-0017
+backup). That backup no longer exists and is **not being rebuilt** —
+migration 0017 is already applied and confirmed working; the backup's
+only purpose (rollback safety for that migration) is moot now.
 
 Commits `cccd038` (Del Monte product_dimension dedup + inventory
 product_key fix), `196e01d` (Unilever SOH `unit_cost_per_case`/
@@ -724,3 +732,27 @@ trailing-3-month**, **119 overlap** between the two bases.
    `0002_add_sku_management_fields.sql`) — cosmetic, not yet resolved.
 6. `net_amount` is gross, not net of returns — a manuscript limitation,
    not a pipeline defect.
+
+## 15. SKU Management / ABC page recon — 2026-09-18 (Audrey)
+
+Brand dropdown junk + missing ABC categories traced. See DEC-24
+(`ARCHITECTURE.md`) for the negative-revenue-exclusion ruling. ABC
+negative-revenue exclusion: SKUs whose only 2026-02 activity was returns
+(negative revenue, no gross sales) are excluded from ABC as
+inactive-for-period, not assigned Tier C. 69 SKUs in 2026-02. No run log
+survives in the repo to confirm those 69 were actually printed in
+`orchestrate_abc.py`'s `excluded_negative_revenue` (330-331) on the last
+live run — can't verify the report vs. silent drop either way; re-run
+without `--quiet` and archive the log next time.
+
+Brand/category fixes (product_key 50186 'False' row, Del Monte's 99
+fake "brands", alias-table reapply without `COALESCE`, SOH mojibake
+normalization) — scratch-verified, public-apply SQL prepared, awaiting
+Yuan's execution. See chat log 2026-09-18 for the full recon tables.
+
+### Open items carried forward (this section)
+7. `abc.py:94`, `dashboard.py:438,457-458` take `MAX(classification_period)`
+   without a `method` filter — fine today because `single` and `t3m`
+   share the same latest period, but would silently pick the wrong
+   period for one method if the two ever diverge. Not fixed; no
+   observed divergence yet.
