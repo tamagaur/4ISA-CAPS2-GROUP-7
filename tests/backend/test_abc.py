@@ -5,8 +5,11 @@ Backlog #40, #42, #43, #44. Uses a FakeSession (same pattern as
 tests/backend/test_auth.py's) so these never touch a real Supabase
 instance.
 
-UNILEVER ONLY (2026-09): GET /abc no longer accepts a ?principal= param —
-every query is hardcoded to principal='unilever' in the SQL text itself.
+BOTH PRINCIPALS (2026-09-17): GET /abc accepts ?principal= again — the
+earlier "UNILEVER ONLY" note this replaced was stale. FakeSession answers
+the inventory anchor from the :principal bind (inventory_period_by_scope),
+so an unscoped anchor resolves to the wrong period rather than quietly
+returning the same fixture for every scope.
 """
 from __future__ import annotations
 
@@ -42,15 +45,27 @@ class FakeResult:
 class FakeSession:
     """Matches only the query shapes backend/routers/abc.py actually issues."""
 
-    def __init__(self, rows, latest_period):
+    def __init__(self, rows, latest_period, inventory_period_by_scope=None):
         self.rows = rows
         self.latest_period = latest_period
+        # Keyed by the :principal bind so an UNSCOPED anchor resolves to a
+        # different period than a scoped one. None is the 'all' key, matching
+        # principal_clause's contract of emitting no bind at all.
+        self.inventory_period_by_scope = inventory_period_by_scope or {
+            None: "2026-03", "unilever": "2026-03", "delmonte": "2025-12",
+        }
+        self.calls: list[tuple[str, dict]] = []
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
+        self.calls.append((sql, dict(params)))
         if "MAX(classification_period)" in sql:
             return FakeResult([{"p": self.latest_period}])
+        if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
+            return FakeResult(
+                [{"p": self.inventory_period_by_scope.get(params.get("principal"))}]
+            )
         if "FROM abc_classification ac" in sql:
             period = params["period"]
             matched = [r for r in self.rows if r["_period"] == period]

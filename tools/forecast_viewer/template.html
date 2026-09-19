@@ -173,7 +173,6 @@ header.page .spacer { flex: 1; }
 .stat-badge.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
 .stat-badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
 .stat-badge.syn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 10%, var(--surface-2)); }
-.stat-badge.new { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 
 .switchrow { display: inline-flex; gap: 8px; margin-left: auto; }
 .dataswitch { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
@@ -488,14 +487,11 @@ function renderMain() {
 
   const synAvail = !!(base && base.synthetic);
   const synN = synAvail ? base.synthetic.split.synthetic_months : 0;
-  const synBlocked = base && base.synthetic_blocked_reason;
   const dataBtns = `<div class="switchrow">
     <div class="dataswitch" role="group" aria-label="training data">
       <button type="button" class="ds-btn${state.syn ? "" : " on"}" data-syn="0">Real data</button>
       <button type="button" class="ds-btn${state.syn ? " on" : ""}" data-syn="1" ${synAvail ? "" : "disabled"}
-        title="${synAvail ? `prepend ${synN} synthetic months (2021-22) to training`
-              : synBlocked ? base.synthetic_blocked_reason
-              : "no synthetic history for this SKU"}">+ Synthetic${synBlocked ? " 🆕" : ""}</button>
+        title="${synAvail ? `prepend ${synN} synthetic months (2021-22) to training` : "no synthetic history for this SKU"}">+ Synthetic</button>
     </div>
     <div class="dataswitch" role="group" aria-label="forecast horizon">
       <button type="button" class="ds-btn${state.h === 1 ? " on" : ""}" data-h="1">1 mo</button>
@@ -516,7 +512,6 @@ function renderMain() {
         <span class="stat-badge">sales window <b>${spanTxt}</b></span>
         ${s.split ? `<span class="stat-badge">train <b>${s.split.train_months}</b>+ · <b>${s.split.holdout_months}</b> monthly tests</span>` : ""}
         ${state.syn && synAvail ? `<span class="stat-badge syn">+ ${synN} synthetic training months (2021-22)</span>` : ""}
-        ${synBlocked ? `<span class="stat-badge new" title="${base.synthetic_blocked_reason}">new product — no synthetic offered</span>` : ""}
       </div>
     </div>
   </section>`;
@@ -827,11 +822,8 @@ document.getElementById("footer").innerHTML = `
   Backtest: <b>${DATA.params.backtest}</b> — this matches how the forecast is actually run
   (re-run before each order cycle), so these numbers are the realistic ones.
   MASE &lt; 1.0 = beats a naive forecast. SBA α = ${DATA.params.sba_alpha}, untuned.
-  <b>+ Synthetic</b> is offered on <b>${DATA.summary.with_synthetic}</b> SKUs whose real sales already
-  started at the 2023-01 data-window open (history plausibly cut off, not fabricated pre-launch).
-  It's withheld on <b>${DATA.summary.new_products_synthetic_blocked}</b> SKUs that are real launches
-  well after 2023-01 — prepending 2021-22 "sales" for those would fabricate demand before the
-  product existed.
+  <b>+ Synthetic</b> is offered on <b>${DATA.summary.with_synthetic}</b> SKUs that have synthetic
+  2021-22 months available — a diagnostic "what if we had more history" view, not written anywhere.
   <div class="disclaim">These numbers are <b>report-only</b>. Nothing here has been written to
   <span class="mono">Forecast_Result</span> — the live dashboard still shows the older SARIMA run.</div>`;
 

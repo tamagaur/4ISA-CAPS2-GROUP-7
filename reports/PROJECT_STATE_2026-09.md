@@ -762,3 +762,31 @@ without a `method` filter~~ — **CLOSED 2026-09-18**: verified all
 `MAX(classification_period)` lookups (`abc.py:114`,
 `dashboard.py:595,619-620`) now filter `method = 'single'`, fixed
 upstream before this check.
+
+## 16. `ssis_summary` — CLOSED as deliberately demoted (2026-09-19)
+
+Recurring audit noise, settled here so it stops being re-raised as an
+orphaned-data finding.
+
+`staging/ssis_summary/` holds **805 parquet files / 1,949,687 rows** and
+reaches **no fact table**. This is correct and intentional, not a gap.
+All 805 sheets are classified `demoted` by `transform_driver.py`, with
+the reason string the manifest emits verbatim:
+
+> `doc_type='ssis_summary' is never a fact's primary source (cross-check
+> only, if referenced at all)`
+
+Measured from `transform/_manifest.json` (2026-09-14 run): 805 of 805
+sheets demoted, 0 promoted, 0 conflict, 0 blocked.
+
+This follows the Phase 1 removal of `source_of_truth.yaml`'s
+`sales.unilever` entry as a dead mapping (2026-09-09, §8) — with no
+owning fact, the family has nothing to be promoted into. It is consistent
+with the family's known grain problem: 95.6% of rows are product-less
+outlet×day×invoice sales value, so there is no SKU grain to load.
+
+**Disposition:** extraction stays on (auditability — `extract/driver.py`
+keeps it as the 7th family per DEC-04). Demotion stays. Do not treat the
+1.95M staged rows as an unloaded backlog.
+
+Re-opening this requires a grain decision first, not a loader.

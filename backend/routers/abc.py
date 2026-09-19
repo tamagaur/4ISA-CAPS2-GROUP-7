@@ -70,7 +70,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
-from backend.principals import PrincipalQuery, principal_clause
+from backend.principals import (
+    PrincipalQuery,
+    latest_inventory_period,
+    principal_clause,
+)
 from backend.schemas.abc import ABCItem, ABCResponse, TierSummary
 
 router = APIRouter(prefix="/abc", tags=["abc"])
@@ -137,7 +141,7 @@ def get_abc(
         LEFT JOIN (
             SELECT product_key, SUM(quantity_on_hand) AS current_stock
             FROM inventory_fact_real
-            WHERE _period = (SELECT MAX(_period) FROM inventory_fact_real)
+            WHERE _period = :inv_period
             GROUP BY product_key
         ) inv ON inv.product_key = ac.product_key
         LEFT JOIN (
@@ -151,7 +155,11 @@ def get_abc(
     query += principal_clause(principal, "ac.principal")[0]
     query += " ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST"
 
-    params: dict = {"period": period, **scope_params}
+    params: dict = {
+        "period": period,
+        "inv_period": latest_inventory_period(db, principal),
+        **scope_params,
+    }
 
     rows = db.execute(text(query), params).mappings().all()
     items = [

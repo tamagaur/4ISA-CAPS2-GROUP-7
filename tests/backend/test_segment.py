@@ -139,3 +139,109 @@ def test_principal_scope_applies_to_product_lookup():
 @pytest.mark.parametrize("cv,band", [(None, None), (0.16, "low"), (0.49, "low"), (0.5, "medium"), (0.99, "medium"), (1.0, "high"), (6.16, "high")])
 def test_cv_band_thresholds(cv, band):
     assert cv_band(cv) == band
+
+
+# --------------------------------------------------------------------------
+# GET /segment/summary — added 2026-09-20 with the principal-scoping fix.
+# The endpoint had no coverage at all, and the existing FakeSession's
+# "FROM sku_traits" branch does params["product_key"], which KeyErrors on
+# the summary queries — hence a separate fake rather than overloading it.
+# --------------------------------------------------------------------------
+
+
+class FakeSummaryResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def mappings(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+    def scalar(self):
+        return self._rows[0]["p"] if self._rows else None
+
+
+class FakeSummarySession:
+    """Cohort rows keyed by principal, so an UNSCOPED MAX(cohort_period)
+    resolves to Unilever's cohort for a Del Monte request — exactly the
+    defect this endpoint carried."""
+
+    def __init__(self, traits_by_principal):
+        self.traits_by_principal = traits_by_principal
+        self.calls: list[tuple[str, dict]] = []
+
+    def execute(self, stmt, params=None):
+        sql = " ".join(str(stmt).split())
+        params = params or {}
+        self.calls.append((sql, dict(params)))
+        scope = params.get("principal")
+        if "MAX(cohort_period) AS p FROM sku_traits" in sql:
+            pool = (
+                [c for rows in self.traits_by_principal.values() for c, _ in rows]
+                if scope is None
+                else [c for c, _ in self.traits_by_principal.get(scope, [])]
+            )
+            return FakeSummaryResult([{"p": max(pool)}] if pool else [])
+        if "FROM sku_traits st" in sql:
+            rows = self.traits_by_principal.get(scope, []) if scope else [
+                r for v in self.traits_by_principal.values() for r in v
+            ]
+            return FakeSummaryResult([t for c, t in rows if c == params.get("cohort")])
+        raise AssertionError(f"Unexpected query in FakeSummarySession: {sql}")
+
+    def close(self):
+        pass
+
+
+SUMMARY_TRAITS = {
+    "unilever": [("2026-02", {"cv": 0.9, "trend": "up", "revenue_share": 0.045})],
+    # Live shape 2026-09-20: sku_traits holds zero Del Monte rows.
+    "delmonte": [],
+}
+
+
+def test_summary_unilever_reports_its_own_cohort():
+    session = FakeSummarySession(SUMMARY_TRAITS)
+    with make_client(session) as c:
+        body = c.get("/segment/summary?principal=unilever").json()
+    assert body["cohort_period"] == "2026-02"
+    assert body["analyzed_count"] == 1
+
+
+def test_summary_delmonte_cohort_is_null_not_borrowed():
+    """Unscoped, MAX(cohort_period) returned Unilever's 2026-02 for a Del
+    Monte request. Scoped, it is None."""
+    session = FakeSummarySession(SUMMARY_TRAITS)
+    with make_client(session) as c:
+        body = c.get("/segment/summary?principal=delmonte").json()
+    assert body["cohort_period"] is None
+    assert body["analyzed_count"] == 0
+
+
+def test_summary_delmonte_reason_does_not_claim_the_run_never_ran():
+    """The run HAS executed; it just does not cover Del Monte. Claiming
+    otherwise would be a false statement, not a missing one."""
+    session = FakeSummarySession(SUMMARY_TRAITS)
+    with make_client(session) as c:
+        reason = c.get("/segment/summary?principal=delmonte").json()["blocked_reason"]
+    assert "has not been executed" not in reason
+    assert "2026-02" in reason and "delmonte" in reason
+
+
+def test_summary_reports_never_run_only_when_truly_empty():
+    session = FakeSummarySession({"unilever": [], "delmonte": []})
+    with make_client(session) as c:
+        reason = c.get("/segment/summary?principal=delmonte").json()["blocked_reason"]
+    assert reason == "The segmentation run has not been executed yet."
+
+
+def test_summary_cohort_anchor_carries_the_principal_bind():
+    session = FakeSummarySession(SUMMARY_TRAITS)
+    with make_client(session) as c:
+        c.get("/segment/summary?principal=unilever")
+    anchors = [(s, p) for s, p in session.calls if "MAX(cohort_period)" in s]
+    assert anchors, "no cohort anchor was issued at all"
+    assert anchors[0][1].get("principal") == "unilever"
+    assert not any("WHERE TRUE" in s for s, _ in session.calls)

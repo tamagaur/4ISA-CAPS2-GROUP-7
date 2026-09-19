@@ -57,13 +57,6 @@ ABC_PERIOD = "2026-02"  # the real ABC period run_baseline_forecast.py resolves 
 TEST_H = 6        # rolling-origin test months (the last 6 real months)
 MIN_TRAIN = 12    # months of history required before the first test origin
 
-# A SKU whose first REAL sale is on/before this month is treated as an
-# established product whose history is merely cut off by where the real
-# data window opens (2023-01) - eligible for the "+ Synthetic" what-if.
-# A SKU whose first real sale is later is treated as a genuine new launch -
-# synthetic pre-launch "sales" would be fabricated, so it's not offered.
-NEW_PRODUCT_CUTOFF = "2023-02"
-
 
 def _theta_path(x, horizon):
     """Theta method, full-history, h-step-ahead. Falls back to naive if the
@@ -234,6 +227,7 @@ def main():
         SELECT abc.product_key, pd.sku_code, pd.product_name
         FROM ABC_Classification abc JOIN Product_Dimension pd ON pd.product_key = abc.product_key
         WHERE abc.principal = 'unilever' AND abc.classification_period = %s AND abc.tier = 'A'
+          AND abc.method = 'single'
         ORDER BY abc.product_key
         """,
         (ABC_PERIOD,),
@@ -298,27 +292,9 @@ def main():
             # ---- "+ synthetic" variant: same rolling backtest, but each
             # origin's TRAINING gets the synthetic 2021-22 months prepended.
             # Test origins stay real. Diagnostic only.
-            #
-            # Only offered for SKUs whose REAL sales already started at (or
-            # right at the open of) the real data window, 2023-01 -
-            # NEW_PRODUCT_CUTOFF. For those, the product plausibly existed
-            # before 2023 and its real history is simply cut off by where
-            # the dataset starts, so prepending synthetic pre-2023 months
-            # is a defensible "what if we had more real history" question.
-            # For a SKU whose first real sale is well AFTER the window
-            # opened (a genuine 2024/2025 launch), prepending 2021-22
-            # "sales" would fabricate demand before the product existed -
-            # nonsensical, so synthetic is not computed for it at all.
-            is_new_product = bool(rec["first_sale"]) and rec["first_sale"] > NEW_PRODUCT_CUTOFF
             s_all = series_of(pk, raw_all)
             prefix = s_all[s_all.index < s.index.min()]
-            bts = rolling_backtest(s, prefix=prefix) if (len(prefix) and not is_new_product) else None
-            if is_new_product:
-                rec["synthetic_blocked_reason"] = (
-                    f"first real sale {rec['first_sale']} — a real launch well after the "
-                    f"2023-01 data window opened. Prepending 2021-22 history would fabricate "
-                    f"sales before the product existed."
-                )
+            bts = rolling_backtest(s, prefix=prefix) if len(prefix) else None
             if bts is not None:
                 nz_all = s_all[s_all > 0]
                 rec["synthetic"] = {
@@ -363,8 +339,7 @@ def main():
         "summary": {"total": len(skus),
                     "ok": sum(1 for r in skus if r["status"] == "ok"),
                     "insufficient_data": sum(1 for r in skus if r["status"] == "insufficient_data"),
-                    "with_synthetic": sum(1 for r in skus if r.get("synthetic")),
-                    "new_products_synthetic_blocked": sum(1 for r in skus if r.get("synthetic_blocked_reason"))},
+                    "with_synthetic": sum(1 for r in skus if r.get("synthetic"))},
         "skus": skus,
     }
     data_str = json.dumps(payload, separators=(",", ":"), allow_nan=False)

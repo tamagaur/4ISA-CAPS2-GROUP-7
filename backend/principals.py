@@ -25,6 +25,8 @@ given metric MAY be combined stays with the caller.
 from __future__ import annotations
 
 from fastapi import HTTPException, Query, status
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 # The only two principals in the corpus (schema.sql ck_*_principal
 # constraints use these exact lowercase spellings).
@@ -74,3 +76,50 @@ def principal_clause(principal: str | None, column: str) -> tuple[str, dict[str,
     if normalized is None:
         return "", {}
     return f" AND {column} = :principal", {"principal": normalized}
+
+
+def latest_inventory_period(db: Session, principal: str | None) -> str | None:
+    """Latest Inventory_Fact_Real._period WITHIN the requested scope.
+
+    Lives here, not in a router, because four routers need it and
+    dashboard.py already imports from recommendations.py — a helper in
+    dashboard.py would make that a circular import at app start.
+
+    Scoping is load-bearing, not defensive. Measured 2026-09-20: the
+    unfiltered MAX resolves to 2026-03, which is Unilever's own max, so
+    Unilever reads correctly by coincidence while Del Monte (whose own
+    max is 2025-12) matches zero rows and reports NULL stock for all
+    15,308 of its SKUs.
+    """
+    scope_sql, scope_params = principal_clause(principal, "principal")
+    sql = "SELECT MAX(_period) AS p FROM Inventory_Fact_Real WHERE 1=1" + scope_sql
+    row = db.execute(text(sql), scope_params).mappings().first()
+    return row["p"] if row else None
+
+
+def latest_abc_period(
+    db: Session, principal: str | None, at_or_before: str | None = None
+) -> str | None:
+    """Latest ABC_Classification.classification_period within scope.
+
+    method='single' is REQUIRED (migration 0017): a 't3m' run is live
+    alongside 'single', so an unpinned MAX can resolve to a period only
+    t3m produced, which then reads back zero 'single' rows — and an
+    unpinned join fans out two tier rows per product_key.
+
+    `at_or_before` supports the dashboard's date picker, whose applied end
+    month routinely runs ahead of the latest ABC run; without it that
+    common case dead-ends instead of falling back to the nearest real run.
+    """
+    scope_sql, scope_params = principal_clause(principal, "principal")
+    sql = (
+        "SELECT MAX(classification_period) AS p FROM ABC_Classification "
+        "WHERE method = 'single'"
+    )
+    params: dict = {**scope_params}
+    if at_or_before is not None:
+        sql += " AND classification_period <= :at_or_before"
+        params["at_or_before"] = at_or_before
+    sql += scope_sql
+    row = db.execute(text(sql), params).mappings().first()
+    return row["p"] if row else None

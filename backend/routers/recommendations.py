@@ -75,7 +75,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
-from backend.principals import PrincipalQuery, principal_clause
+from backend.principals import (
+    PrincipalQuery,
+    latest_abc_period,
+    latest_inventory_period,
+    principal_clause,
+)
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
@@ -102,13 +107,13 @@ _SELECT_ONE = """
                SUM(quantity_on_hand) AS current_stock,
                SUM(quantity_on_hand * unit_cost_per_case) AS stock_value_pesos
         FROM inventory_fact_real
-        WHERE _period = (SELECT MAX(_period) FROM inventory_fact_real)
+        WHERE _period = :inv_period
         GROUP BY product_key
     ) inv ON inv.product_key = lr.product_key
     LEFT JOIN (
         SELECT DISTINCT ON (product_key) product_key, revenue_share
         FROM abc_classification
-        WHERE method = 'single'
+        WHERE method = 'single' AND classification_period = :abc_period
         ORDER BY product_key, classification_period DESC
     ) abc ON abc.product_key = lr.product_key
     LEFT JOIN (
@@ -202,7 +207,17 @@ def get_recommendations(
     # honestly returns an empty list until the LP is run for Del Monte.
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     query = _SELECT_ONE + " WHERE 1=1" + scope_sql
-    params: dict = {**scope_params}
+    # Both anchors resolve under the SAME scope as the rows. The ABC anchor
+    # replaces a per-product "latest classification_period" walk, which
+    # quietly mixed classification vintages: a SKU last classified months
+    # ago contributed a stale revenue_share alongside current ones. Pinned
+    # to one period, such a SKU now yields revenue_share None and therefore
+    # priority_score None — already null-guarded below.
+    params: dict = {
+        "inv_period": latest_inventory_period(db, principal),
+        "abc_period": latest_abc_period(db, principal),
+        **scope_params,
+    }
     if status:
         query += " AND lr.status = :status"
         params["status"] = status
@@ -248,7 +263,14 @@ def update_recommendation(
         raise HTTPException(status_code=404, detail="Recommendation not found")
     db.commit()
 
+    # Single row pinned by recommendation_key; scope left unfiltered (None
+    # = all), identical to today's behaviour — see sku.py's _one_row_params.
     row = db.execute(
-        text(_SELECT_ONE + " WHERE lr.recommendation_key = :key"), {"key": recommendation_key}
+        text(_SELECT_ONE + " WHERE lr.recommendation_key = :key"),
+        {
+            "key": recommendation_key,
+            "inv_period": latest_inventory_period(db, None),
+            "abc_period": latest_abc_period(db, None),
+        },
     ).mappings().first()
     return _to_item(row)

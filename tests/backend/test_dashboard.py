@@ -8,13 +8,13 @@ reorder_preview fields, not just their happy paths — a null with no test
 covering it is exactly how a silent fabrication regression would slip in
 unnoticed.
 
-UNILEVER ONLY (2026-09): dashboard.py no longer accepts a ?principal= param
-and every query is hardcoded to principal='unilever' in the SQL text
-itself, not a bound parameter — so FakeSession's matchers below don't
-filter by principal at all (there's nothing in `params` to filter on
-anymore). Confirming Del Monte data can't leak through is a live-database
-check (see the plan's verification section), not something a fixture-based
-unit test can meaningfully assert.
+BOTH PRINCIPALS (2026-09-17): dashboard.py accepts ?principal= again — the
+earlier "UNILEVER ONLY" note this replaced was stale. Scope reaches the SQL
+by f-string interpolation (allowlist-validated at dashboard.py:573), NOT as
+a bound param, so unlike tests/backend/test_sku.py the matchers below cannot
+key off `params["principal"]`; a scoping assertion here has to read the SQL
+text. That asymmetry is deliberate — do not "fix" it to match the other
+files, it would silently weaken the assertion.
 """
 from __future__ import annotations
 

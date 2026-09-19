@@ -36,7 +36,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
-from backend.principals import PrincipalQuery, principal_clause
+from backend.principals import (
+    PrincipalQuery,
+    normalize_principal,
+    principal_clause,
+)
 from backend.schemas.segment import (
     SegmentResponse,
     SegmentSummary,
@@ -176,23 +180,46 @@ def get_segment_summary(
     requested principal returns analyzed_count=0 with a reason, never an
     empty chart that reads as "no volatility".
     """
-    scope_sql, scope_params = principal_clause(principal, "st.principal")
+    # Resolve the cohort ONCE, in scope, and reuse it for the rows. The
+    # previous shape resolved the reported cohort_period and the rows it
+    # counted in two separate queries under two different scopes, so the
+    # header could name a period the rows did not come from.
+    scope_sql, scope_params = principal_clause(principal, "principal")
+    cohort = db.execute(
+        text("SELECT MAX(cohort_period) AS p FROM sku_traits WHERE 1=1" + scope_sql),
+        scope_params,
+    ).scalar()
+
+    if cohort is None:
+        # Nothing for this scope. Distinguish "no run at all" from "the run
+        # exists but does not cover you" — the unscoped query this replaced
+        # returned Unilever's cohort for a Del Monte request, which made the
+        # message accidentally informative; going silent here would have
+        # replaced it with a claim that is simply false.
+        global_cohort = db.execute(
+            text("SELECT MAX(cohort_period) AS p FROM sku_traits")
+        ).scalar()
+        return SegmentSummary(
+            cohort_period=None,
+            analyzed_count=0,
+            blocked_reason=(
+                f"The segmentation run's only cohort (Unilever Tier A as of "
+                f"{global_cohort}) does not include {normalize_principal(principal)}."
+                if global_cohort else "The segmentation run has not been executed yet."
+            ),
+        )
+
     rows = db.execute(
         text(
             """
             SELECT st.cv, st.trend, st.revenue_share_2026_02 AS revenue_share
             FROM sku_traits st
-            WHERE st.cohort_period = (
-                SELECT MAX(cohort_period) FROM sku_traits st2
-                WHERE TRUE
-            )
+            WHERE st.cohort_period = :cohort
             """
-            + scope_sql
+            + principal_clause(principal, "st.principal")[0]
         ),
-        scope_params,
+        {"cohort": cohort, **scope_params},
     ).mappings().all()
-
-    cohort = db.execute(text("SELECT MAX(cohort_period) AS p FROM sku_traits")).scalar()
 
     if not rows:
         return SegmentSummary(
@@ -201,7 +228,6 @@ def get_segment_summary(
             blocked_reason=(
                 "No segmentation rows for this scope — the run covers one cohort "
                 f"(Unilever Tier A as of {cohort}) so far."
-                if cohort else "The segmentation run has not been executed yet."
             ),
         )
 
