@@ -24,86 +24,87 @@ No downstream rework needed. Del Monte's 6 mixed periods are logged in Open Item
 
 ## 1. Tier A/B/C counts per period, both methods
 
-79,724 rows per method (2,098 Unilever SKUs × 38 periods). Full table:
+**Corrected 2026-09-20.** This table originally reported the PRE-FIX build, in which zero-revenue SKUs were zero-filled into Tier C, giving 2,098 classified rows for every period. The deployed fix recorded in the post-approval section below excludes those SKUs instead, so Tier C and the row totals changed while **Tier A did not** (max absolute delta 0 across all 38x2 combinations). The numbers below are now read live from `public.abc_classification` and agree with what was actually written: 23,223 `single` rows over 38 periods and 25,437 `t3m` rows over 36. t3m emits nothing at all for 2023-01/02 rather than a zero row.
 
-| Period | Method | Tier A | Tier B | Tier C | Excluded |
+| Period | Method | Tier A | Tier B | Tier C | Classified |
 |---|---|---|---|---|---|
-| 2023-01 | single | 126 | 150 | 1822 | 0 |
-| 2023-01 | t3m | 0 | 0 | 0 | 2098 (insufficient history) |
-| 2023-02 | single | 125 | 154 | 1819 | 0 |
-| 2023-02 | t3m | 0 | 0 | 0 | 2098 (insufficient history) |
-| 2023-03 | single | 109 | 146 | 1843 | 0 |
-| 2023-03 | t3m | 124 | 159 | 1815 | 0 |
-| 2023-04 | single | 123 | 147 | 1828 | 0 |
-| 2023-04 | t3m | 122 | 157 | 1819 | 0 |
-| 2023-05 | single | 118 | 156 | 1824 | 0 |
-| 2023-05 | t3m | 125 | 168 | 1805 | 0 |
-| 2023-06 | single | 118 | 145 | 1835 | 0 |
-| 2023-06 | t3m | 131 | 169 | 1798 | 0 |
-| 2023-07 | single | 139 | 150 | 1809 | 0 |
-| 2023-07 | t3m | 135 | 165 | 1798 | 0 |
-| 2023-08 | single | 128 | 157 | 1813 | 0 |
-| 2023-08 | t3m | 140 | 162 | 1796 | 0 |
-| 2023-09 | single | 113 | 154 | 1830 | 1 (null net_amount, sku 859) |
-| 2023-09 | t3m | 134 | 167 | 1796 | 1 |
-| 2023-10 | single | 115 | 153 | 1830 | 0 |
-| 2023-10 | t3m | 126 | 165 | 1806 | 1 (window includes 2023-09 null) |
-| 2023-11 | single | 124 | 148 | 1826 | 0 |
-| 2023-11 | t3m | 123 | 159 | 1815 | 1 (window includes 2023-09 null) |
-| 2023-12 | single | 96 | 136 | 1866 | 0 |
-| 2023-12 | t3m | 120 | 154 | 1824 | 0 |
-| 2024-01 | single | 125 | 155 | 1818 | 0 |
-| 2024-01 | t3m | 123 | 157 | 1818 | 0 |
-| 2024-02 | single | 117 | 162 | 1819 | 0 |
-| 2024-02 | t3m | 120 | 161 | 1817 | 0 |
-| 2024-03 | single | 104 | 151 | 1843 | 0 |
-| 2024-03 | t3m | 122 | 164 | 1812 | 0 |
-| 2024-04 | single | 131 | 151 | 1816 | 0 |
-| 2024-04 | t3m | 130 | 170 | 1798 | 0 |
-| 2024-05 | single | 128 | 160 | 1810 | 0 |
-| 2024-05 | t3m | 133 | 169 | 1796 | 0 |
-| 2024-06 | single | 116 | 179 | 1803 | 0 |
-| 2024-06 | t3m | 136 | 175 | 1787 | 0 |
-| 2024-07 | single | 126 | 172 | 1800 | 0 |
-| 2024-07 | t3m | 136 | 203 | 1759 | 0 |
-| 2024-08 | single | 124 | 165 | 1809 | 0 |
-| 2024-08 | t3m | 137 | 198 | 1763 | 0 |
-| 2024-09 | single | 112 | 173 | 1813 | 0 |
-| 2024-09 | t3m | 131 | 184 | 1783 | 0 |
-| 2024-10 | single | 120 | 160 | 1818 | 0 |
-| 2024-10 | t3m | 127 | 174 | 1797 | 0 |
-| 2024-11 | single | 142 | 179 | 1777 | 0 |
-| 2024-11 | t3m | 133 | 186 | 1779 | 0 |
-| 2024-12 | single | 120 | 162 | 1815 | 1 (null net_amount, sku 108) |
-| 2024-12 | t3m | 137 | 181 | 1779 | 1 |
-| 2025-01 | single | 140 | 171 | 1787 | 0 |
-| 2025-01 | t3m | 144 | 185 | 1768 | 1 (window includes 2024-12 null) |
-| 2025-02 | single | 123 | 174 | 1801 | 0 |
-| 2025-02 | t3m | 136 | 183 | 1778 | 1 (window includes 2024-12 null) |
-| 2025-03 | single | 129 | 172 | 1797 | 0 |
-| 2025-03 | t3m | 138 | 185 | 1775 | 0 |
-| 2025-04 | single | 129 | 168 | 1801 | 0 |
-| 2025-04 | t3m | 133 | 180 | 1785 | 0 |
-| 2025-05 | single | 132 | 197 | 1769 | 0 |
-| 2025-05 | t3m | 137 | 188 | 1773 | 0 |
-| 2025-06 | single | 145 | 178 | 1775 | 0 |
-| 2025-06 | t3m | 146 | 191 | 1761 | 0 |
-| 2025-07 | single | 141 | 193 | 1764 | 0 |
-| 2025-07 | t3m | 152 | 203 | 1743 | 0 |
-| 2025-08 | single | 145 | 182 | 1771 | 0 |
-| 2025-08 | t3m | 155 | 205 | 1738 | 0 |
-| 2025-09 | single | 144 | 214 | 1740 | 0 |
-| 2025-09 | t3m | 158 | 220 | 1720 | 0 |
-| 2025-10 | single | 138 | 195 | 1765 | 0 |
-| 2025-10 | t3m | 154 | 218 | 1726 | 0 |
-| 2025-11 | single | 146 | 187 | 1765 | 0 |
-| 2025-11 | t3m | 153 | 217 | 1728 | 0 |
-| **2025-12** | single | 89 | 150 | 1859 | 0 |
-| **2025-12** | t3m | 139 | 201 | 1758 | 0 |
-| 2026-01 | single | 149 | 209 | 1740 | 0 |
-| 2026-01 | t3m | 149 | 210 | 1739 | 0 |
-| 2026-02 | single | 132 | 194 | 1772 | 0 |
-| 2026-02 | t3m | 143 | 215 | 1740 | 0 |
+| 2023-01 | single | 126 | 150 | 269 | 545 |
+| 2023-01 | t3m | — | — | — | 0 rows (insufficient history) |
+| 2023-02 | single | 125 | 154 | 254 | 533 |
+| 2023-02 | t3m | — | — | — | 0 rows (insufficient history) |
+| 2023-03 | single | 109 | 146 | 288 | 543 |
+| 2023-03 | t3m | 124 | 159 | 328 | 611 |
+| 2023-04 | single | 123 | 147 | 251 | 521 |
+| 2023-04 | t3m | 122 | 157 | 325 | 604 |
+| 2023-05 | single | 118 | 156 | 293 | 567 |
+| 2023-05 | t3m | 125 | 168 | 343 | 636 |
+| 2023-06 | single | 118 | 145 | 286 | 549 |
+| 2023-06 | t3m | 131 | 169 | 331 | 631 |
+| 2023-07 | single | 139 | 150 | 280 | 569 |
+| 2023-07 | t3m | 135 | 165 | 350 | 650 |
+| 2023-08 | single | 128 | 157 | 281 | 566 |
+| 2023-08 | t3m | 140 | 162 | 331 | 633 |
+| 2023-09 | single | 113 | 154 | 288 | 555 |
+| 2023-09 | t3m | 134 | 167 | 315 | 616 |
+| 2023-10 | single | 115 | 153 | 290 | 558 |
+| 2023-10 | t3m | 126 | 165 | 330 | 621 |
+| 2023-11 | single | 124 | 148 | 282 | 554 |
+| 2023-11 | t3m | 123 | 159 | 326 | 608 |
+| 2023-12 | single | 96 | 136 | 295 | 527 |
+| 2023-12 | t3m | 120 | 154 | 326 | 600 |
+| 2024-01 | single | 125 | 155 | 265 | 545 |
+| 2024-01 | t3m | 123 | 157 | 340 | 620 |
+| 2024-02 | single | 117 | 162 | 280 | 559 |
+| 2024-02 | t3m | 120 | 161 | 346 | 627 |
+| 2024-03 | single | 104 | 151 | 287 | 542 |
+| 2024-03 | t3m | 122 | 164 | 334 | 620 |
+| 2024-04 | single | 131 | 151 | 296 | 578 |
+| 2024-04 | t3m | 130 | 170 | 350 | 650 |
+| 2024-05 | single | 128 | 160 | 306 | 594 |
+| 2024-05 | t3m | 133 | 169 | 361 | 663 |
+| 2024-06 | single | 116 | 179 | 314 | 609 |
+| 2024-06 | t3m | 136 | 175 | 379 | 690 |
+| 2024-07 | single | 126 | 172 | 324 | 622 |
+| 2024-07 | t3m | 136 | 203 | 393 | 732 |
+| 2024-08 | single | 124 | 165 | 303 | 592 |
+| 2024-08 | t3m | 137 | 198 | 391 | 726 |
+| 2024-09 | single | 112 | 173 | 313 | 598 |
+| 2024-09 | t3m | 131 | 184 | 401 | 716 |
+| 2024-10 | single | 120 | 160 | 349 | 629 |
+| 2024-10 | t3m | 127 | 174 | 409 | 710 |
+| 2024-11 | single | 142 | 179 | 334 | 655 |
+| 2024-11 | t3m | 133 | 186 | 410 | 729 |
+| 2024-12 | single | 120 | 162 | 317 | 599 |
+| 2024-12 | t3m | 137 | 181 | 404 | 722 |
+| 2025-01 | single | 140 | 171 | 361 | 672 |
+| 2025-01 | t3m | 144 | 185 | 401 | 730 |
+| 2025-02 | single | 123 | 174 | 334 | 631 |
+| 2025-02 | t3m | 136 | 183 | 409 | 728 |
+| 2025-03 | single | 129 | 172 | 338 | 639 |
+| 2025-03 | t3m | 138 | 185 | 416 | 739 |
+| 2025-04 | single | 129 | 168 | 341 | 638 |
+| 2025-04 | t3m | 133 | 180 | 392 | 705 |
+| 2025-05 | single | 132 | 197 | 355 | 684 |
+| 2025-05 | t3m | 137 | 188 | 411 | 736 |
+| 2025-06 | single | 145 | 178 | 353 | 676 |
+| 2025-06 | t3m | 146 | 191 | 414 | 751 |
+| 2025-07 | single | 141 | 193 | 343 | 677 |
+| 2025-07 | t3m | 152 | 203 | 422 | 777 |
+| 2025-08 | single | 145 | 182 | 353 | 680 |
+| 2025-08 | t3m | 155 | 205 | 433 | 793 |
+| 2025-09 | single | 144 | 214 | 374 | 732 |
+| 2025-09 | t3m | 158 | 220 | 463 | 841 |
+| 2025-10 | single | 138 | 195 | 378 | 711 |
+| 2025-10 | t3m | 154 | 218 | 478 | 850 |
+| 2025-11 | single | 146 | 187 | 388 | 721 |
+| 2025-11 | t3m | 153 | 217 | 493 | 863 |
+| **2025-12** | single | 89 | 150 | 358 | 597 |
+| **2025-12** | t3m | 139 | 201 | 487 | 827 |
+| 2026-01 | single | 149 | 209 | 388 | 746 |
+| 2026-01 | t3m | 149 | 210 | 480 | 839 |
+| 2026-02 | single | 132 | 194 | 384 | 710 |
+| 2026-02 | t3m | 143 | 215 | 485 | 843 |
+
 
 **2025-12 flagged as documented anomaly** (not excluded): single Tier A drops to 89 (period min) while t3m holds at 139 — the trailing-3-month basis smooths the anomaly out, single does not.
 
@@ -112,16 +113,18 @@ No downstream rework needed. Del Monte's 6 mixed periods are logged in Open Item
 | Method | Min | Max | Median |
 |---|---|---|---|
 | single | 89 | 149 | 125.5 |
-| t3m | 0 (2023-01/02, insufficient history) | 158 | 134.5 |
+| t3m | 120 | 158 | 135.5 |
+
+**Corrected 2026-09-20.** t3m's minimum was previously reported as 0 for 2023-01/02. Those periods produce no t3m rows at all (the trailing window is incomplete), so they are absent from the distribution rather than contributing a zero; the median is over the 36 periods t3m actually covers.
 
 ## 3. Pareto band pass/fail per period per method (summary)
 
 | Method | Pass (75–85%) | Fail |
 |---|---|---|
 | single | 38 / 38 | 0 |
-| t3m | 36 / 36 evaluable (2023-01/02 excluded, no Tier A) | 0 |
+| t3m | 36 / 36 evaluable (2023-01/02 produce no rows at all) | 0 |
 
-**Note:** this check is close to tautological — Tier A's cumulative share is capped at ≤0.80 by the same cutoff used to assign it, so it lands near 0.80 by construction whenever SKU granularity is fine enough (2,098 SKUs here). It confirms no single SKU's revenue share is large enough to jump the cutoff, not an independent validation of the 80% choice.
+**Note:** this check is close to tautological — Tier A's cumulative share is capped at ≤0.80 by the same cutoff used to assign it, so it lands near 0.80 by construction whenever SKU granularity is fine enough (545-843 classified SKUs per period here). It confirms no single SKU's revenue share is large enough to jump the cutoff, not an independent validation of the 80% choice.
 
 ## 4. Core vs pool counts (membership frequency, ≥50% of present periods in Tier A = core)
 
@@ -129,6 +132,13 @@ No downstream rework needed. Del Monte's 6 mixed periods are logged in Open Item
 |---|---|---|---|
 | single | 95 | 2003 | 0 |
 | t3m | 113 | 1985 | 0 |
+
+**SUPERSEDED — do not cite these four numbers.** They use "any period with a tier"
+as the denominator, which at the time included zero-filled Tier C rows, so every
+SKU counted as present in all 38 periods. The deployed fix stopped zero-filling.
+The corrected figures, on a "present = net_amount > 0 that period" denominator,
+are in the post-approval section below: single 255 core / 1276 pool / 567 never
+present; t3m 246 / 1285 / 567.
 
 ## 5. 2026-02 Tier A cohort: single vs t3m
 

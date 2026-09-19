@@ -283,15 +283,25 @@ def main():
     cur.execute(
         """
         WITH latest_forecast AS (SELECT MAX(forecast_date) AS d FROM Forecast_Result),
-             latest_abc AS (SELECT MAX(classification_period) AS p FROM ABC_Classification)
+             -- Per-principal, method-pinned. An unscoped MAX() would let one
+             -- principal's latest period gate the other's, and an unpinned one
+             -- would resolve against the unapproved 't3m' rows (migration 0017).
+             latest_abc AS (
+                 SELECT principal, MAX(classification_period) AS p
+                 FROM ABC_Classification
+                 WHERE method = 'single'
+                 GROUP BY principal
+             )
         SELECT pd.product_key, COALESCE(pd.sku_code, pd.category_path) AS sku_id, pd.principal,
                pd.unit_price, fr.forecast_date, fr.forecast_value, fr.mase
         FROM Forecast_Result fr
         JOIN Product_Dimension pd ON pd.product_key = fr.product_key
         JOIN ABC_Classification ac ON ac.product_key = fr.product_key
         JOIN latest_forecast lf ON fr.forecast_date = lf.d
-        JOIN latest_abc la ON ac.classification_period = la.p
+        JOIN latest_abc la ON la.principal = ac.principal AND ac.classification_period = la.p
         WHERE fr.status = 'ok' AND fr.mase < %s
+          AND ac.method = 'single'
+          AND ac.tier = 'A'
         """,
         (MASE_GATE,),
     )

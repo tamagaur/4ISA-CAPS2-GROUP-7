@@ -41,6 +41,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -336,7 +337,15 @@ class ABCClassification(Base):
     __table_args__ = (
         CheckConstraint("principal IN ('unilever', 'delmonte')", name="ck_abc_classification_principal"),
         CheckConstraint("tier IN ('A', 'B', 'C')", name="ck_abc_classification_tier"),
-        UniqueConstraint("product_key", "classification_period", name="uq_abc_classification_natural_key"),
+        CheckConstraint("method IN ('single', 't3m')", name="ck_abc_classification_method"),
+        # Widened by migration 0017: 'single' and 't3m' legitimately coexist for
+        # the same (product_key, classification_period), so the pre-0017
+        # two-column key no longer describes the live table. Constraint name
+        # matches what 0017 actually created, not the old 'uq_...' convention.
+        UniqueConstraint(
+            "product_key", "classification_period", "method",
+            name="abc_classification_product_key_period_method_key",
+        ),
         Index("ix_abc_classification_tier", "tier", "classification_period"),
     )
 
@@ -347,6 +356,11 @@ class ABCClassification(Base):
     tier: Mapped[str] = mapped_column(Text, nullable=False)
     revenue_share: Mapped[decimal.Decimal | None] = mapped_column(Numeric(7, 4))
     cumulative_share: Mapped[decimal.Decimal | None] = mapped_column(Numeric(7, 4))
+    # boundary_flag: migration 0002. method/run_id: migration 0017. All three
+    # were live in the DB but absent from this model.
+    boundary_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    method: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'single'"))
+    run_id: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'legacy_pre_0017'"))
     computed_at: Mapped[datetime.datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

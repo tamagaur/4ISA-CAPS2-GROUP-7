@@ -108,6 +108,7 @@ def fetch(with_synthetic: bool):
     cur.execute("""
         SELECT product_key FROM abc_classification
         WHERE principal = 'unilever' AND classification_period = %s AND tier = 'A'
+          AND method = 'single'
     """, (ABC_PERIOD,))
     tier_a = sorted({r[0] for r in cur.fetchall()})
 

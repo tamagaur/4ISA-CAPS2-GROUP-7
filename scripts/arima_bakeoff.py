@@ -78,7 +78,8 @@ def _fetch(with_synthetic: bool = False):
     raw = pd.DataFrame(cur.fetchall(), columns=["pk", "m", "q"])
     raw["q"] = raw["q"].astype(float)
     cur.execute("SELECT product_key FROM abc_classification "
-                "WHERE principal = 'unilever' AND classification_period = %s AND tier = 'A'", (ABC_PERIOD,))
+                "WHERE principal = 'unilever' AND classification_period = %s AND tier = 'A' "
+                "AND method = 'single'", (ABC_PERIOD,))
     tier_a = sorted({r[0] for r in cur.fetchall()})
     cur.execute("SELECT product_key, sku_code, product_name FROM product_dimension WHERE principal = 'unilever'")
     names = {r[0]: (r[1], r[2]) for r in cur.fetchall()}

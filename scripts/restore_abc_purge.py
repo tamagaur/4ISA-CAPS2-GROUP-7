@@ -89,7 +89,13 @@ def restore(dry_run: bool) -> None:
                     (product_key, principal, classification_period, tier,
                      revenue_share, cumulative_share, boundary_flag, computed_at)
                 VALUES %s
-                ON CONFLICT (product_key, classification_period) DO NOTHING
+                -- Migration 0017 widened the natural key to include `method`.
+                -- The pre-0017 two-column target no longer matches any unique
+                -- index, so this statement raised InvalidColumnReference. The
+                -- backup predates 0017 and carries no method column, so its
+                -- rows land on the DB default ('single') — which is what they
+                -- were by construction.
+                ON CONFLICT (product_key, classification_period, method) DO NOTHING
                 """,
                 tuples,
                 page_size=200000,

@@ -53,7 +53,8 @@ cur.execute("SELECT product_key, calendar_month, COALESCE(quantity_sold,0) FROM 
 raw = pd.DataFrame(cur.fetchall(), columns=["pk", "m", "q"]); raw["q"] = raw["q"].astype(float)
 cur.execute("""SELECT ac.product_key, pd.sku_code, pd.product_name
                FROM abc_classification ac JOIN product_dimension pd ON pd.product_key = ac.product_key
-               WHERE ac.principal='unilever' AND ac.classification_period='2026-02' AND ac.tier='A'""")
+               WHERE ac.principal='unilever' AND ac.classification_period='2026-02' AND ac.tier='A'
+                 AND ac.method='single'""")
 meta = {r[0]: (r[1], r[2]) for r in cur.fetchall()}
 c.close()
 

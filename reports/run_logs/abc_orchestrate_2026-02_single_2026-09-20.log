@@ -1,0 +1,15 @@
+# orchestrate_abc run log — DEC-24 evidence (negative-revenue exclusions)
+# Captured 2026-09-20. Target: scratch schema ssm_abc_repro. public NOT written.
+# Command: python -m analytics.classification.orchestrate_abc --period 2026-02 --method single --schema ssm_abc_repro --principal unilever
+
+
+=== ABC classification: unilever / 2026-02 ===
+  Products classified: 710
+  Tier breakdown:      {'C': 384, 'B': 194, 'A': 132}
+  Near tier boundary:  135 (backlog #43, margin unconfirmed vs manuscript Sec.3.6)
+  Rows upserted:       710
+  Excluded (negative revenue, needs a human look): [6, 8, 9, 26, 33, 1108, 66, 68, 679, 1173, 74, 682, 80, 83, 90, 689, 690, 91, 884, 691, 885, 1337, 92, 109, 702, 116, 1028, 896, 120, 121, 713, 1114, 133, 135, 1115, 912, 1127, 1044, 748, 750, 1230, 1527, 1232, 1769, 759, 1235, 199, 229, 274, 300, 307, 312, 330, 334, 799, 354, 362, 367, 803, 385, 392, 1726, 398, 819, 480, 825, 1328, 497, 523]
+  Excluded (zero revenue, inactive this period): 1388
+
+# Result: 69 negative-revenue exclusions captured, confirming DEC-24's count of 69.
+# Scratch row count written to ssm_abc_repro.abc_classification for this period: 710 (unchanged, idempotent re-run).

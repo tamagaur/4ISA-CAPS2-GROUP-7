@@ -129,6 +129,7 @@ def main():
         JOIN Product_Dimension pd ON d.product_key = pd.product_key
         JOIN ABC_Classification abc ON abc.product_key = pd.product_key
         WHERE abc.tier = 'A'
+          AND abc.method = 'single'
         GROUP BY pd.product_key, pd.sku_code, pd.principal, d.period
         ORDER BY pd.product_key, d.period ASC
     """
