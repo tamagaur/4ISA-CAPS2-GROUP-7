@@ -3,7 +3,8 @@ import pytest
 
 from analytics.segmentation.traits import (
     history_months, first_sale_index, longest_positive_run,
-    mann_kendall_trend, coefficient_of_variation, has_restart, stability_group,
+    mann_kendall_trend, trend_stats, coefficient_of_variation, average_demand_interval,
+    has_restart, stability_group,
 )
 
 
@@ -56,9 +57,47 @@ def test_mann_kendall_noisy_series_with_no_trend_is_none():
     assert mann_kendall_trend(x) == "none"
 
 
-def test_cv_computed_over_full_series():
+def test_mann_kendall_ignores_zeros_before_first_sale():
+    # 30 not-launched-yet months then flat sales: a launch, not an up trend.
+    x = np.concatenate([np.zeros(30), np.full(8, 10.0)])
+    assert mann_kendall_trend(x) == "none"
+
+
+def test_mann_kendall_keeps_zeros_after_first_sale():
+    x = np.concatenate([np.arange(24, 12, -1, dtype=float), np.zeros(12)])
+    assert mann_kendall_trend(x) == "down"
+
+
+def test_trend_stats_reports_theil_sen_slope_from_first_sale():
+    x = np.concatenate([np.zeros(10), np.arange(10, 250, 10, dtype=float)])
+    label, p, slope = trend_stats(x)
+    assert label == "up"
+    assert p < 0.05
+    assert slope == pytest.approx(10.0)
+
+
+def test_trend_stats_untestable_series_has_no_p_or_slope():
+    assert trend_stats(np.array([0.0, 0.0, 5.0])) == ("none", None, None)
+
+
+def test_cv_constant_series_is_zero():
     x = np.array([10.0, 10.0, 10.0, 10.0])
     assert coefficient_of_variation(x) == pytest.approx(0.0)
+
+
+def test_cv_ignores_zeros_before_first_sale():
+    x = np.array([0.0, 0.0, 0.0, 10.0, 10.0, 10.0])
+    assert coefficient_of_variation(x) == pytest.approx(0.0)
+
+
+def test_cv_keeps_zeros_after_first_sale():
+    x = np.array([10.0, 0.0, 10.0, 0.0])
+    assert coefficient_of_variation(x) == pytest.approx(np.std(x, ddof=1) / 5.0)
+
+
+def test_adi_counts_from_first_sale():
+    assert average_demand_interval(np.array([0.0, 0.0, 5.0, 0.0, 5.0, 5.0])) == pytest.approx(4 / 3)
+    assert average_demand_interval(np.zeros(4)) is None
 
 
 def test_cv_none_for_nonpositive_mean():
