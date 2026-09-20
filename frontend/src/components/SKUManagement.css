@@ -12,10 +12,15 @@
 }
 
 /* Page Header */
+/* flex-wrap so the title and the Add SKU button drop onto two lines as
+   soon as they stop fitting, rather than squeezing side by side until the
+   640px rule finally stacks them. */
 .sku-page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .sku-page-title {

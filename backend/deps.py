@@ -52,7 +52,11 @@ def _get_engine() -> Engine:
                 "SUPABASE_DB_URL is not set. Copy .env.example to .env and fill "
                 "in your real Supabase connection string before starting the API."
             )
-        _engine = create_engine(db_url, pool_pre_ping=True)
+        _engine = create_engine(
+            db_url,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 10, "sslmode": "require"},
+        )
     return _engine
 
 

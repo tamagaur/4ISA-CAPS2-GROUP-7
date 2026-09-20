@@ -781,6 +781,11 @@
   .abc-summary-grid {
     grid-template-columns: 1fr;
   }
+  /* Three centred stat columns are unreadable at phone width. */
+  .abc-class-summary-row {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
 }
 
 /* Chart title + one-line definition (2026-09-18): says in plain language
