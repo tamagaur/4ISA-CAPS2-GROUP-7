@@ -1,15 +1,18 @@
 """
 scripts.bakeoff_to_xlsx - render the model bake-off as a multi-sheet .xlsx.
 
-One sheet per model (per-SKU MAPE / MASE / MAE / RMSE + SKU code + product
-name), red fill where a value fails its threshold (MAPE >= 0.20, MASE >=
-1.00; MAE / RMSE have no threshold so are never highlighted), plus a
-Summary sheet and a Legend. Rolling-origin 1-step backtest, last 6 real
-months, real Tier A. Reuses the model fns from scripts.model_bakeoff.
+One sheet per model (per-SKU MAPE / WAPE / sMAPE / MASE / MAE / RMSE + SKU
+code + product name), red fill where a value fails its threshold (MAPE >=
+0.20, MASE >= 1.00; the others have no threshold so are never highlighted),
+plus a Summary sheet and a Legend. Rolling-origin 1-step backtest, last 6
+real months, real Tier A. Reuses the model fns from scripts.model_bakeoff;
+metrics and the "unstable" MAPE label come from
+analytics.forecasting.diagnostic_metrics, same as tools/forecast_viewer.
 
-Usage:  python -m scripts.bakeoff_to_xlsx
+Usage:  python -m scripts.bakeoff_to_xlsx [out_dir]     (default: reports/)
 """
 import os
+import sys
 import time
 import warnings
 
@@ -25,8 +28,11 @@ warnings.simplefilter("ignore")
 load_dotenv()
 
 import scripts.model_bakeoff as mb   # reuse the 17 model fns
+from analytics.forecasting.diagnostic_metrics import (
+    is_mape_unstable, mape, mase, naive_scale, smape, wape,
+)
 
-REPORTS = os.path.join(os.path.dirname(__file__), os.pardir, "reports")
+REPORTS = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), os.pardir, "reports")
 OUT = os.path.join(REPORTS, "model_bakeoff_unilever_tierA.xlsx")
 MAPE_GATE, MASE_GATE = 0.20, 1.00
 TEST_H = 6
@@ -63,27 +69,39 @@ def series(g):
     return s.resample("MS").asfreq().fillna(0.0)
 S = {pk: series(g) for pk, g in raw.groupby("pk")}
 
+METRICS = ("mape", "wape", "smape", "mase", "mae", "rmse")
+
+
+def mape_text(value, unstable, min_abs):
+    """Same rule and wording as the viewer's mapeTxt(): an unstable holdout
+    prints the measured minimum |actual| instead of a 4-digit percentage."""
+    if pd.isna(value):
+        return None
+    return f"unstable (min actual = {min_abs:,.0f})" if unstable else round(value, 3)
+
+
 def backtest(x):
     n = len(x)
     origins = list(range(max(12, n - TEST_H), n))
     if len(origins) < 3:
         return None
     actual = np.array([x[t] for t in origins])
-    base = x[:origins[0]]
-    scale = np.mean(np.abs(np.diff(base))) if len(base) > 1 else 0.0
-    res = {}
+    scale = naive_scale(x[:origins[0]])
+    unstable, min_abs = is_mape_unstable(actual)
+    res = {"_check": dict(unstable=unstable, min_abs=min_abs)}
     for name in SHEET_ORDER:
         fn = mb.MODELS[name]
         preds = np.array([fn(x[:t]) for t in origins], float)
+        if name in mb.GUARDED:              # same divergence guard as model_bakeoff
+            preds = np.where(preds > np.array([x[:t].max() for t in origins]), np.nan, preds)
         preds = np.where(np.isfinite(preds), np.maximum(0, preds), np.nan)
         if not np.isfinite(preds).all():
-            res[name] = dict(mape=np.nan, mase=np.nan, mae=np.nan, rmse=np.nan)
+            res[name] = dict.fromkeys(METRICS, np.nan)
             continue
-        err = actual - preds; ae = np.abs(err); nz = actual > 0
-        mae = float(ae.mean()); rmse = float(np.sqrt((err ** 2).mean()))
-        mape = float(np.mean(ae[nz] / actual[nz])) if nz.any() else np.nan
-        mase = float(mae / scale) if scale > 0 else np.nan
-        res[name] = dict(mape=mape, mase=mase, mae=mae, rmse=rmse)
+        err = actual - preds
+        res[name] = dict(mape=mape(actual, preds), wape=wape(actual, preds), smape=smape(actual, preds),
+                         mase=mase(actual, preds, scale),
+                         mae=float(np.abs(err).mean()), rmse=float(np.sqrt((err ** 2).mean())))
     return res
 
 rows = []
@@ -101,9 +119,11 @@ for i, pk in enumerate(pks):
     r = backtest(x)
     rec = dict(pk=pk, sku=sku, name=name, months=len(x), nonzero=int((s > 0).sum()), evaluable=r is not None)
     if r:
+        chk = r.pop("_check")
+        rec["mape_unstable"] = chk["unstable"]; rec["min_abs_actual"] = chk["min_abs"]
         for mdl, d in r.items():
-            rec[f"{mdl}_mape"] = d["mape"]; rec[f"{mdl}_mase"] = d["mase"]
-            rec[f"{mdl}_mae"] = d["mae"]; rec[f"{mdl}_rmse"] = d["rmse"]
+            for k in METRICS:
+                rec[f"{mdl}_{k}"] = d[k]
     rows.append(rec)
     if (i + 1) % 20 == 0:
         print(f"  {i+1}/{len(pks)}  ({time.time()-t0:.0f}s)")
@@ -125,27 +145,28 @@ ins = df[~df.evaluable].sort_values("months")
 
 # Summary sheet
 sm = wb.create_sheet("Summary")
-sm.append(["Model", "MAPE median", "MASE median", "MAE median", "RMSE median",
-           "MAPE<0.20", "MASE<1.0", "beats naive (sMAPE n/a here -> MASE)"])
-for j in range(1, 9):
+sm.append(["Model", "MAPE median (stable SKUs)", "WAPE median", "sMAPE median", "MASE median", "MAE median",
+           "RMSE median", "MAPE<0.20", "MASE<1.0", "beats naive (MASE)"])
+for j in range(1, 11):
     sm.cell(row=1, column=j).fill = hdr_fill; sm.cell(row=1, column=j).font = hdr_font
 nv_mase = ev["naive_mase"]
 for mdl in SHEET_ORDER:
-    mp = ev[f"{mdl}_mape"]; ms = ev[f"{mdl}_mase"]
+    mp = ev[f"{mdl}_mape"].where(~ev["mape_unstable"].astype(bool)); ms = ev[f"{mdl}_mase"]
     pair = pd.DataFrame({"a": ms, "b": nv_mase}).dropna()
     beat = (pair.a < pair.b).mean() * 100 if len(pair) else np.nan
-    sm.append([LABEL[mdl], round(mp.median(), 3), round(ms.median(), 3),
+    sm.append([LABEL[mdl], round(mp.median(), 3), round(ev[f"{mdl}_wape"].median(), 3),
+               round(ev[f"{mdl}_smape"].median(), 3), round(ms.median(), 3),
                round(ev[f"{mdl}_mae"].median(), 0), round(ev[f"{mdl}_rmse"].median(), 0),
                f"{int((mp < MAPE_GATE).sum())}/{mp.notna().sum()}",
                f"{int((ms < MASE_GATE).sum())}/{ms.notna().sum()}",
                f"{beat:.0f}%"])
-for j, w in enumerate([18, 13, 13, 13, 13, 12, 12, 16], 1):
+for j, w in enumerate([18, 24, 13, 13, 13, 13, 13, 12, 12, 16], 1):
     sm.column_dimensions[get_column_letter(j)].width = w
 sm.freeze_panes = "A2"
 
 def add_model_sheet(mdl):
     ws = wb.create_sheet(LABEL[mdl][:31])
-    cols = ["#", "SKU", "product name", "months", "nz", "MAPE", "MASE", "MAE", "RMSE"]
+    cols = ["#", "SKU", "product name", "months", "nz", "MAPE", "MASE", "MAE", "RMSE", "WAPE", "sMAPE"]
     for j, cn in enumerate(cols, 1):
         c = ws.cell(row=1, column=j, value=cn); c.fill = hdr_fill; c.font = hdr_font
         c.alignment = Alignment(horizontal="center"); c.border = border
@@ -153,10 +174,13 @@ def add_model_sheet(mdl):
     r = 2
     for i, row in sub.iterrows():
         mp, ms = row[f"{mdl}_mape"], row[f"{mdl}_mase"]
+        unstable = bool(row["mape_unstable"])
         vals = [i + 1, str(row["sku"]), row["name"] or "", int(row["months"]), int(row["nonzero"]),
-                None if pd.isna(mp) else round(mp, 3), None if pd.isna(ms) else round(ms, 3),
+                mape_text(mp, unstable, row["min_abs_actual"]), None if pd.isna(ms) else round(ms, 3),
                 None if pd.isna(row[f"{mdl}_mae"]) else round(row[f"{mdl}_mae"], 0),
-                None if pd.isna(row[f"{mdl}_rmse"]) else round(row[f"{mdl}_rmse"], 0)]
+                None if pd.isna(row[f"{mdl}_rmse"]) else round(row[f"{mdl}_rmse"], 0),
+                None if pd.isna(row[f"{mdl}_wape"]) else round(row[f"{mdl}_wape"], 3),
+                None if pd.isna(row[f"{mdl}_smape"]) else round(row[f"{mdl}_smape"], 3)]
         for j, v in enumerate(vals, 1):
             cc = ws.cell(row=r, column=j, value=v); cc.border = border
             cc.alignment = Alignment(horizontal="left" if j in (2, 3) else "center")
@@ -164,7 +188,9 @@ def add_model_sheet(mdl):
         ws.cell(row=r, column=7).number_format = "0.000"
         ws.cell(row=r, column=8).number_format = "#,##0"
         ws.cell(row=r, column=9).number_format = "#,##0"
-        if pd.notna(mp) and mp >= MAPE_GATE:
+        ws.cell(row=r, column=10).number_format = "0.000"
+        ws.cell(row=r, column=11).number_format = "0.000"
+        if pd.notna(mp) and mp >= MAPE_GATE and not unstable:
             ws.cell(row=r, column=6).fill = red; ws.cell(row=r, column=6).font = red_font
         if pd.notna(ms) and ms >= MASE_GATE:
             ws.cell(row=r, column=7).fill = red; ws.cell(row=r, column=7).font = red_font
@@ -177,10 +203,10 @@ def add_model_sheet(mdl):
                                int(row["months"]), int(row["nonzero"]), "insufficient history"], 1):
             ws.cell(row=r, column=j, value=v).font = grey
         r += 1
-    for j, w in enumerate([5, 12, 42, 9, 6, 9, 9, 11, 11], 1):
+    for j, w in enumerate([5, 12, 42, 9, 6, 30, 9, 11, 11, 9, 9], 1):
         ws.column_dimensions[get_column_letter(j)].width = w
     ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:I{1 + len(sub)}"
+    ws.auto_filter.ref = f"A1:K{1 + len(sub)}"
 
 for mdl in SHEET_ORDER:
     add_model_sheet(mdl)
@@ -190,6 +216,9 @@ lg = wb.create_sheet("Legend")
 for row in [
     ["Metric", "Threshold (pass)", "Direction", "Range", "Notes"],
     ["MAPE", "< 0.20", "lower = better", "0 -> infinity", "Project gate. <0.10 excellent, 0.20-0.50 ok, >0.50 poor. Explodes when actual demand ~ 0."],
+    ["MAPE 'unstable'", "(label, not a value)", "-", "-", "Shown instead of a percentage when an actual is <= 0 or the smallest |actual| is under 10% of the mean |actual| (diagnostic_metrics.is_mape_unstable). Same text as the forecast viewer."],
+    ["WAPE", "(no fixed threshold)", "lower = better", "0 -> infinity", "Sum|error| / Sum|actual|, negative actuals included. Stable where MAPE is not."],
+    ["sMAPE", "(no fixed threshold)", "lower = better", "0 -> 2", "Symmetric % error, negative actuals included."],
     ["MASE", "< 1.00", "lower = better", "0 -> infinity", "Error vs naive 'repeat last month'. =1 tied, >1 worse than naive, <0.5 strong."],
     ["MAE", "(no fixed threshold)", "lower = better", "0 -> infinity", "Mean absolute error in UNITS. Scale-dependent - judge vs this SKU's monthly volume."],
     ["RMSE", "(no fixed threshold)", "lower = better", "0 -> infinity", "Like MAE, squares errors first, so always >= MAE. RMSE/MAE >>1 = a few big misses."],

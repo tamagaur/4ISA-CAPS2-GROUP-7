@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import warnings
 
 import numpy as np
@@ -26,6 +27,9 @@ import xgboost as xgb
 
 warnings.simplefilter("ignore")
 load_dotenv()
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, smape, wape  # noqa: E402
 
 SEAS = 12
 TEST_H = 6
@@ -57,16 +61,17 @@ def _fetch(with_synthetic: bool):
     cur = c.cursor()
     if with_synthetic:
         cur.execute("""
-            SELECT product_key, calendar_month, COALESCE(quantity_sold, 0)
+            SELECT product_key, calendar_month, COALESCE(quantity_sold, 0), is_demo
             FROM unilever_sku_demand_fact
             WHERE calendar_month <= (SELECT MAX(calendar_month) FROM unilever_sku_demand_fact_real)
             ORDER BY 1, 2
         """)
     else:
-        cur.execute("SELECT product_key, calendar_month, COALESCE(quantity_sold, 0) "
+        cur.execute("SELECT product_key, calendar_month, COALESCE(quantity_sold, 0), FALSE "
                     "FROM unilever_sku_demand_fact_real ORDER BY 1, 2")
-    raw = pd.DataFrame(cur.fetchall(), columns=["pk", "m", "q"])
+    raw = pd.DataFrame(cur.fetchall(), columns=["pk", "m", "q", "is_demo"])
     raw["q"] = raw["q"].astype(float)
+    raw["is_demo"] = raw["is_demo"].astype(bool)
     cur.execute("SELECT product_key FROM abc_classification "
                 "WHERE principal='unilever' AND classification_period=%s AND tier='A' "
                 "AND method='single'", (ABC_PERIOD,))
@@ -135,26 +140,28 @@ INCUMBENTS = {"naive": lambda x: x[-1], "ma3": lambda x: x[-3:].mean(),
               "sba_a3": _sba, "theta": _theta}
 
 
+METRIC_KEYS = ("mape", "mase", "smape", "wape", "mae", "rmse")
+
+
 def _metrics(actual, pred, scale):
-    ae = np.abs(actual - pred)
-    nz = actual > 0
-    mape = float(np.mean(ae[nz] / actual[nz])) if nz.any() else np.nan
-    den = np.abs(actual) + np.abs(pred)
-    sm = den > 0
-    smape = float(np.mean(2 * ae[sm] / den[sm])) if sm.any() else np.nan
-    mae = float(ae.mean())
-    rmse = float(np.sqrt(((actual - pred) ** 2).mean()))
-    mase = float(mae / scale) if scale > 0 else np.nan
-    return dict(mape=mape, mase=mase, smape=smape, mae=mae, rmse=rmse)
+    err = actual - pred
+    return dict(mape=mape(actual, pred), mase=mase(actual, pred, scale), smape=smape(actual, pred),
+                wape=wape(actual, pred), mae=float(np.abs(err).mean()), rmse=float(np.sqrt((err ** 2).mean())))
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--with-synthetic", action="store_true")
+    ap.add_argument("--out", default=None, help="CSV path (default under reports/).")
     args = ap.parse_args()
 
     raw, tier_a, names = _fetch(args.with_synthetic)
     panel = build_panel(raw, tier_a)
+    # first REAL month per SKU: the cohort test, origins and MASE scale are
+    # taken from the real months only, identically in both arms. Synthetic
+    # rows reach the model as training rows / lag features, nothing else.
+    real_raw = raw[~raw["is_demo"]]
+    real_start = pd.to_datetime(real_raw.groupby("pk")["m"].min() + "-01").to_dict()
     dates = np.sort(panel["date"].unique())
     real_max = pd.Timestamp(raw[["m"]].assign(d=pd.to_datetime(raw["m"] + "-01"))["d"].max())
     origins = list(pd.to_datetime(dates)[-TEST_H:])
@@ -179,38 +186,37 @@ def main():
         g = panel[panel.pk == pk].sort_values("date")
         series = g.set_index("date")["q"]
         x = series.to_numpy(float)
-        n = len(x)
-        origin_pos = [i for i, d in enumerate(series.index) if d in origins]
+        r0 = int(np.searchsorted(series.index.values, np.datetime64(real_start[pk]))) if pk in real_start else len(x)
+        n = len(x) - r0                       # REAL months only
+        nonzero = int((series.iloc[r0:] > 0).sum())
+        origin_pos = [i for i, d in enumerate(series.index) if d in origins and i >= r0]
         if n < 14 or len(origin_pos) < 3:
             rows.append(dict(pk=pk, sku=names.get(pk, (None,))[0], name=names.get(pk, (None, None))[1],
-                             months=n, nonzero=int((series > 0).sum()), evaluable=False))
+                             months=n, nonzero=nonzero, evaluable=False))
             continue
         first = origin_pos[0]
         actual = x[origin_pos]
-        base = x[:first]
-        scale = np.mean(np.abs(np.diff(base))) if len(base) > 1 else 0.0
+        scale = naive_scale(x[r0:first])
 
         rec = dict(pk=pk, sku=names.get(pk, (None,))[0], name=names.get(pk, (None, None))[1],
-                   months=n, nonzero=int((series > 0).sum()), evaluable=True)
+                   months=n, nonzero=nonzero, evaluable=True)
 
         xgp = np.array([preds[pk].get(series.index[i], np.nan) for i in origin_pos])
-        m = _metrics(actual, xgp, scale) if np.isfinite(xgp).all() else dict.fromkeys(
-            ("mape", "mase", "smape", "mae", "rmse"), np.nan)
+        m = _metrics(actual, xgp, scale) if np.isfinite(xgp).all() else dict.fromkeys(METRIC_KEYS, np.nan)
         for k, v in m.items():
             rec[f"xgboost_{k}"] = v
 
         for name, fn in INCUMBENTS.items():
             pr = np.array([fn(x[:i]) for i in origin_pos], float)
             pr = np.where(np.isfinite(pr), np.maximum(0, pr), np.nan)
-            mm = _metrics(actual, pr, scale) if np.isfinite(pr).all() else dict.fromkeys(
-                ("mape", "mase", "smape", "mae", "rmse"), np.nan)
+            mm = _metrics(actual, pr, scale) if np.isfinite(pr).all() else dict.fromkeys(METRIC_KEYS, np.nan)
             for k, v in mm.items():
                 rec[f"{name}_{k}"] = v
         rows.append(rec)
 
     df = pd.DataFrame(rows)
     suffix = "_withsynth" if args.with_synthetic else ""
-    out = os.path.join(REPORTS, f"xgboost_bakeoff_unilever_tierA{suffix}.csv")
+    out = args.out or os.path.join(REPORTS, f"xgboost_bakeoff_unilever_tierA{suffix}.csv")
     df.to_csv(out, index=False)
     print(f"wrote {out}  ({int(df.evaluable.sum())} evaluable)\n")
 
