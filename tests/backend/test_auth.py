@@ -58,13 +58,13 @@ class FakeSession:
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
-        if "SELECT user_id, password_hash, role, full_name FROM Users" in sql:
+        if "SELECT user_id, password_hash, role, full_name FROM users" in sql:
             row = next((u for u in self.users if u["email"] == params["email"]), None)
             return FakeResult(row)
-        if "SELECT 1 FROM Users" in sql:
+        if "SELECT 1 FROM users" in sql:
             exists = any(u["email"] == params["email"] for u in self.users)
             return FakeResult(True if exists else None)
-        if "INSERT INTO Users" in sql:
+        if "INSERT INTO users" in sql:
             new_user = {
                 "user_id": len(self.users) + 1,
                 "email": params["email"],

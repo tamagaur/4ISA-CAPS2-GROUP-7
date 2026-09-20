@@ -28,6 +28,8 @@ ALLOWLIST = {
         "docstring reference only; the query lives in scripts/run_lp.py",
     "scripts/backup_live_db.py":
         "SELECT * over every reflected table — a full dump must not filter",
+    "scripts/smoke_api.py":
+        "HTTP-only route driver, issues no SQL — names the table in its docstring only",
 }
 
 # The real query sites, with the predicate each must carry. Keeps the test from
