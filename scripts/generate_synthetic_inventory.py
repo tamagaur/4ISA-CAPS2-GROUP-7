@@ -143,13 +143,21 @@ def main():
         
     print(f"Generated {len(inventory_records)} rows. Saved to {csv_path}")
     
-    # Insert directly to DB
-    print("Inserting data into Inventory_Fact_Real...")
-    
-    cur.execute("DELETE FROM Inventory_Fact_Real WHERE is_demo = TRUE AND _src_file = 'Synthetic_Generator'")
-    
+    # Insert directly to DB.
+    #
+    # Target is the BASE table Inventory_Fact, never Inventory_Fact_Real
+    # (2026-09-19). The _Real views are defined `WHERE is_demo = false`
+    # (migrations/0005_fix_real_views.sql) precisely so demo rows cannot be
+    # reached through them — every row this script writes is is_demo = TRUE,
+    # so the old DELETE could never match and the old INSERT wrote rows that
+    # were invisible the moment they landed. Writing demo data through the
+    # real-only interface inverts the guarantee that interface exists to make.
+    print("Inserting data into Inventory_Fact (base table; demo rows are excluded from Inventory_Fact_Real by design)...")
+
+    cur.execute("DELETE FROM Inventory_Fact WHERE is_demo = TRUE AND _src_file = 'Synthetic_Generator'")
+
     insert_query = """
-        INSERT INTO Inventory_Fact_Real 
+        INSERT INTO Inventory_Fact
         (product_key, sku_code, snapshot_date, principal, region, quantity_on_hand, is_demo, _period, _src_file, _src_sheet)
         VALUES %s
         ON CONFLICT DO NOTHING

@@ -101,3 +101,10 @@ Chapter *.docx
 3ISA_7_CP-1_Manuscript.pdf
 DATABASE_SCHEMA.xlsx
 
+
+# Production table dumps (2026-09-14 recovery snapshot). Contains real client
+# data — customer_dimension has 23,712 customer_name rows and
+# salesman_dimension names 33 people. Same class of data as data/raw/ and
+# staging/, which are already ignored above; this sat outside those patterns
+# and would have been swept in by a `git add -A`.
+broken_state_20260914/

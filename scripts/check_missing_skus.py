@@ -15,6 +15,8 @@ FROM SellOut_Fact s
 JOIN Product_Dimension pd ON s.product_key = pd.product_key
 JOIN ABC_Classification abc ON abc.product_key = pd.product_key
 WHERE abc.tier = 'A'
+  AND abc.method = 'single'
+  AND abc.classification_period = (SELECT MAX(classification_period) FROM ABC_Classification WHERE method = 'single')
 GROUP BY pd.sku_code, pd.principal, s._period
 ORDER BY pd.sku_code, s._period ASC
 '''

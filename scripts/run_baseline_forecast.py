@@ -105,6 +105,7 @@ def resolve_abc_period(cur) -> str:
         SELECT MAX(classification_period)
         FROM ABC_Classification
         WHERE principal = %s
+          AND method = 'single'
           AND classification_period <= (
               SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real
           )
@@ -125,6 +126,7 @@ def fetch_tier_a(cur, abc_period: str) -> pd.DataFrame:
         FROM ABC_Classification abc
         JOIN Product_Dimension pd ON pd.product_key = abc.product_key
         WHERE abc.principal = %s
+          AND abc.method = 'single'
           AND abc.classification_period = %s
           AND abc.tier = 'A'
         ORDER BY abc.product_key

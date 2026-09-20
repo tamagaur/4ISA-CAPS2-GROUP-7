@@ -273,7 +273,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
-from backend.principals import PrincipalQuery, normalize_principal
+from backend.principals import PrincipalQuery, latest_abc_period, normalize_principal
 from backend.routers.recommendations import _SELECT_ONE as _RECOMMENDATION_SELECT_ONE
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 
@@ -808,7 +808,7 @@ def get_dashboard(
                 LEFT JOIN (
                     SELECT product_key, SUM(quantity_on_hand) AS current_stock
                     FROM Inventory_Fact_Real
-                    WHERE _period = (SELECT MAX(_period) FROM Inventory_Fact_Real)
+                    WHERE _period = :inv_period
                     GROUP BY product_key
                 ) inv ON inv.product_key = ac.product_key
                 LEFT JOIN (
@@ -820,7 +820,7 @@ def get_dashboard(
                 WHERE ac.classification_period = :period AND ac.tier = 'A'
                       AND ac.method = 'single' {abc_scope}
             """),
-            {"period": abc_period},
+            {"period": abc_period, "inv_period": inventory_period},
         ).mappings().all()
         comparable = [
             r for r in ss_rows
@@ -944,12 +944,12 @@ def get_dashboard(
                         BOOL_OR(stock_status = 'Active') AS any_active,
                         BOOL_OR(stock_status = 'Inactive') AS any_inactive
                     FROM Inventory_Fact_Real
-                    WHERE _period = (SELECT MAX(_period) FROM Inventory_Fact_Real)
+                    WHERE _period = :inv_period
                     GROUP BY product_key
                 ) inv ON inv.product_key = ac.product_key
                 WHERE ac.classification_period = :period AND ac.method = 'single' {abc_scope}
             """),
-            {"period": abc_period},
+            {"period": abc_period, "inv_period": inventory_period},
         ).mappings().all()
         buckets: dict[str, dict[str, int]] = {}
         for r in ts_rows:
@@ -1077,7 +1077,15 @@ def get_dashboard(
     # ---- reorder_preview -------------------------------------------------
 
     rp_query = _RECOMMENDATION_SELECT_ONE + f" WHERE lr.status = 'pending' {principal_filter}"
-    rp_rows = db.execute(text(rp_query)).mappings().all()
+    # Both anchors are bound, not inlined, so reorder_preview resolves them
+    # under the SAME scope as the rows it shows. `inventory_period` is the
+    # already-scoped value from :763. The ABC anchor is the scoped LATEST,
+    # deliberately not the page's `abc_period` — that one is rewound to the
+    # picker's applied end month, and reorder_preview answers "order now".
+    rp_rows = db.execute(
+        text(rp_query),
+        {"inv_period": inventory_period, "abc_period": latest_abc_period(db, scope)},
+    ).mappings().all()
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
     rp_items_sorted = sorted(rp_items, key=lambda it: _URGENCY_RANK.get(it.urgency, 99))
 

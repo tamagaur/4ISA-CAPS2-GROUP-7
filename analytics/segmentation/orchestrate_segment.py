@@ -172,6 +172,7 @@ def build_traits(
             principal=principal,
             product_key=pk,
             cohort_period=cohort_period,
+            abc_method=abc_method,  # part of the upsert key per migration 0020
             history_months=history_months(qty),
             first_sale_period=periods[fs_idx] if fs_idx is not None else None,
             longest_run=longest_positive_run(qty),
@@ -189,7 +190,14 @@ def build_traits(
     return traits_df, report
 
 
-def build_segments_length_v1(traits_df: pd.DataFrame, run_id: str, sku_codes: dict[int, str]) -> pd.DataFrame:
+def build_segments_length_v1(
+    traits_df: pd.DataFrame, run_id: str, sku_codes: dict[int, str], abc_method: str,
+) -> pd.DataFrame:
+    """abc_method is threaded through rather than hardcoded: it is part of
+    sku_segment's upsert key (["product_key", "cohort_period", "abc_method",
+    "scheme"]), so stamping a literal "single" on a --abc-method t3m run would
+    have collided with the approved single-method cohort and silently
+    overwritten it."""
     records = []
     for row in traits_df.sort_values("product_key").itertuples():
         bin_name, reason = bin_schemes.length_v1(row.history_months)
@@ -199,7 +207,7 @@ def build_segments_length_v1(traits_df: pd.DataFrame, run_id: str, sku_codes: di
             product_key=row.product_key,
             sku_code=sku_codes.get(row.product_key),
             cohort_period=row.cohort_period,
-            abc_method="single",
+            abc_method=abc_method,
             scheme="length_v1",
             bin=bin_name,
             bin_reason=reason,
@@ -237,10 +245,13 @@ def run(principal: str, cohort_period: str, abc_method: str, schema: str | None 
         engine, principal, cohort_period, abc_method, "2023-01", "2026-02", run_id,
     )
     sku_codes = _fetch_sku_codes(engine, principal, traits_df["product_key"].tolist())
-    segments_df = build_segments_length_v1(traits_df, run_id, sku_codes)
+    segments_df = build_segments_length_v1(traits_df, run_id, sku_codes, abc_method)
 
     traits_written = _upsert(
-        engine, "sku_traits", traits_df, ["product_key", "cohort_period"],
+        # abc_method is in the key per migration 0020 — without it a t3m cohort
+        # silently overwrites single's traits (sku_segment already keys on it,
+        # 0018:50; sku_traits was the gap).
+        engine, "sku_traits", traits_df, ["product_key", "cohort_period", "abc_method"],
         ["run_id", "history_months", "first_sale_period", "longest_run", "trend",
          "cv", "restart_flag", "stability_group", "revenue_share_2026_02"],
         schema=schema,
@@ -261,7 +272,13 @@ if __name__ == "__main__":
     parser.add_argument("--principal", default="unilever")
     parser.add_argument("--cohort-period", default="2026-02")
     parser.add_argument("--abc-method", default="single")
-    parser.add_argument("--schema", default=None, help="Target schema (default: public). Use a scratch schema first.")
+    parser.add_argument(
+        "--schema", required=True,
+        help="Schema to WRITE results into. REQUIRED and deliberately has no default — "
+             "it previously defaulted to public, so a rehearsal took an extra flag while a "
+             "live write took none. Same rule as orchestrate_abc.py's --schema. Real data "
+             "is always read from public regardless of this flag.",
+    )
     args = parser.parse_args()
 
     r = run(args.principal, args.cohort_period, args.abc_method, schema=args.schema)

@@ -15,14 +15,18 @@ match, not the other way around.
 ```bash
 git clone <repo-url>
 cd Capstone-Project
-git checkout AUDREY-TRY-MERGE
+git checkout group7/kelvin-etl
 ```
 
-`master` is a stub trunk (432 lines total across `analytics/` and
-`backend/`) — none of the real ETL, Transform, or backend work has been
-merged into it yet. `AUDREY-TRY-MERGE` is 37 commits ahead and is where
-all real work actually lives (976 files / +176,145 lines versus
-`master`). Work off this branch until the merge lands.
+`master` is a stub trunk — none of the real ETL, Transform, or backend
+work has been merged into it yet. Work off `group7/kelvin-etl`, which is
+where all real work actually lives.
+
+**Corrected 2026-09-20.** This used to say `AUDREY-TRY-MERGE`. That branch
+still exists but was last updated 2026-08-17 and is **197 commits behind**
+`kelvin-etl`, with nothing unique to it (`git rev-list --left-right --count
+AUDREY-TRY-MERGE...kelvin-etl` returns `0  197`). Checking it out put you a
+month back. Everything it had is already in `kelvin-etl`.
 
 ## 2. Install dependencies
 
@@ -78,11 +82,36 @@ Parquet file per staged sheet.
 pytest tests/ -v
 ```
 
-Expected: **109 passed**. If you see tests skipping that you expected to
-run, it almost always means step 3 or step 4 wasn't done yet — several
-tests are gated on `data/raw/` or `staging/` actually existing.
+Expected as of 2026-09-20: **303 passed / 13 failed / 1 skipped**. The 13
+failures are pre-existing (`Users` vs `users` table casing in
+`tests/backend/test_auth.py` and `test_users.py`) and are not your fault —
+see Troubleshooting. More than 13 means something is wrong.
+
+If you see tests skipping that you expected to run, it almost always means
+step 3 or step 4 wasn't done yet — several tests are gated on `data/raw/`
+or `staging/` actually existing. (This step previously said "109 passed",
+which pre-dated the backend and analytics suites.)
 
 ## Troubleshooting
+
+**The dashboard breaks after you pull.** Run this first — read-only, about ten
+seconds, writes nothing:
+
+```bash
+python scripts/smoke_api.py
+```
+
+It drives all 17 frontend-facing routes against the live database and tells you
+which side the fault is on. All PASS means the bug is in the frontend. Full
+diagnosis, the Del Monte null shapes the frontend must tolerate, and the two
+known gotchas (a stale `starlette` pin; `--schema` is now required on
+`orchestrate_abc.py` and `orchestrate_segment.py`) are in
+[reports/FRONTEND_HANDOFF_2026-09-20.md](reports/FRONTEND_HANDOFF_2026-09-20.md).
+
+**13 backend tests fail and you didn't touch them.** That is the baseline —
+`tests/backend/test_auth.py` and `test_users.py` fail on `Users` vs `users`
+table casing, and pre-date the 2026-09-20 push. Expect exactly
+**303 passed / 13 failed / 1 skipped**. More than 13 means something is wrong.
 
 **A family stages 0 rows.** Check two things: the file is under the
 subfolder its principal implies (Del Monte / SSIS / Unilever), and its

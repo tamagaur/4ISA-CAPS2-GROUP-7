@@ -110,6 +110,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import getpass
+import hashlib
 import logging
 import re
 import sys
@@ -857,6 +859,14 @@ def _load_soh_snapshot() -> pd.DataFrame:
     soh["sku_code"] = soh["sku_code"].astype(str).str.strip()
     soh["category_desc"] = soh["category_desc"].astype(str).str.strip().replace({"": None, "nan": None})
     soh = soh.dropna(subset=["category_desc"])
+    # Normalize mojibake/smart-quote apostrophes (U+FFFD, U+2019, U+2018) to
+    # ASCII "'" before anything tokenizes article_description — found
+    # 2026-09-18: 'LADY�S CHOICE...' (product_keys 120, 121) was
+    # producing a byte-distinct brand token the alias table couldn't
+    # reliably match. Source-level fix instead of another alias entry.
+    soh["article_description"] = soh["article_description"].astype(str).str.replace(
+        "[�’‘]", "'", regex=True
+    )
     return soh.sort_values("snapshot_date").groupby("sku_code").last().reset_index()
 
 
@@ -919,7 +929,12 @@ def run_category_brand_backfill(engine: Engine, schema: str, dry_run: bool) -> d
             columns=["product_key", "sku_code"],
         )
 
-    tally: dict[str, int] = {"direct_soh_match": 0, "unclassified": 0}
+    # keyword_rule is seeded as a real counter, not printed as a literal. No
+    # branch below increments it today (see this function's docstring), so it
+    # reports 0 because it genuinely counted zero — and if the fallback is ever
+    # wired up, the printed figure becomes correct on its own rather than
+    # staying a hardcoded 0 that quietly starts lying.
+    tally: dict[str, int] = {"direct_soh_match": 0, "keyword_rule": 0, "unclassified": 0}
     updates: list[dict] = []
     for _, row in demand_skus.iterrows():
         sku = row["sku_code"]
@@ -951,9 +966,10 @@ def run_category_brand_backfill(engine: Engine, schema: str, dry_run: bool) -> d
 
     print(f"\n[Product_Dimension category/brand backfill]")
     print(f"  direct_soh_match: {tally.get('direct_soh_match', 0)}")
-    print(f"  keyword_rule:     0  (no description source exists for the SKUs "
-          f"it would apply to — see run_category_brand_backfill's docstring; "
-          f"this is a real, currently-unclosed gap, not a bug in this script)")
+    print(f"  keyword_rule:     {tally.get('keyword_rule', 0)}  (never applied — the SKUs "
+          f"it would cover have no SOH row and therefore no description text to "
+          f"tokenize; see run_category_brand_backfill's docstring. A real, "
+          f"currently-unclosed gap, not a bug in this script)")
     print(f"  unclassified:     {tally.get('unclassified', 0)}")
 
     if not dry_run and updates:
@@ -1328,6 +1344,57 @@ def _strip_sql_file(sql: str) -> str:
     return "\n".join(kept)
 
 
+# ---------------------------------------------------------------------------
+# Migration ledger (0019_schema_migrations.sql)
+# ---------------------------------------------------------------------------
+
+LEDGER_TABLE = "schema_migrations"
+
+# The ONE number that legitimately maps to two files. Both are applied, neither
+# was applied twice, and renaming either would orphan its ledger row - so they
+# are grandfathered rather than renumbered. Any NEW collision is a mistake and
+# must fail loudly, which is what _assert_no_new_number_collision() is for.
+GRANDFATHERED_DUPLICATE_NUMBERS = {"0002"}
+
+
+def _migration_number(name: str) -> str:
+    return name.split("_", 1)[0]
+
+
+def _assert_no_new_number_collision(files: list[Path]) -> None:
+    """Refuse to run if a newly added migration reuses an existing number.
+
+    Application order is `sorted()` on the FILENAME, so two files sharing a
+    number are ordered by whatever follows it - luck, not intent. That is
+    tolerable for the one historical 0002 pair (they touch different tables)
+    and unacceptable for anything new."""
+    by_number: dict[str, list[str]] = {}
+    for f in files:
+        by_number.setdefault(_migration_number(f.name), []).append(f.name)
+    for number, names in sorted(by_number.items()):
+        if len(names) > 1 and number not in GRANDFATHERED_DUPLICATE_NUMBERS:
+            raise RuntimeError(
+                f"Migration number {number!r} is used by {len(names)} files: "
+                f"{', '.join(sorted(names))}. Application order between them would "
+                f"be decided by filename sort, not intent. Renumber the new file."
+            )
+
+
+def _read_ledger(engine: Engine, schema: str) -> dict[str, str | None] | None:
+    """{filename: checksum} for everything already applied, or None when the
+    ledger table does not exist yet (a schema predating 0019, including a
+    brand-new scratch schema on its first pass)."""
+    with engine.connect() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        exists = conn.execute(
+            text("SELECT to_regclass(:qualified)").bindparams(qualified=f'"{schema}".{LEDGER_TABLE}')
+        ).scalar()
+        if exists is None:
+            return None
+        rows = conn.execute(text(f"SELECT filename, checksum FROM {LEDGER_TABLE}")).all()
+    return {r[0]: r[1] for r in rows}
+
+
 def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_public: bool = False) -> None:
     _require_scratch_schema(schema, allow_public=allow_public)
     print(f"\n[schema] ensuring '{schema}' exists" + (" (dry-run: SELECT-only check)" if dry_run else ""))
@@ -1338,10 +1405,28 @@ def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_publ
             conn.execute(text("SELECT 1"))
         return
 
-    files = [SCHEMA_SQL] + sorted(MIGRATIONS_DIR.glob("0*.sql"))
+    migrations = sorted(MIGRATIONS_DIR.glob("0*.sql"))
+    _assert_no_new_number_collision(migrations)
+    files = [SCHEMA_SQL] + migrations
     with engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+    # Read ONCE, before the loop. On a fresh schema this is None (0019 has not
+    # run yet) so every file applies and 0019's backfill seeds the other 19.
+    # On every later run it is populated, and nothing re-applies.
+    applied = _read_ledger(engine, schema)
     for f in files:
+        is_migration = f != SCHEMA_SQL
+        checksum = hashlib.sha256(f.read_bytes()).hexdigest() if is_migration else None
+        if is_migration and applied is not None and f.name in applied:
+            recorded = applied[f.name]
+            if recorded is not None and recorded != checksum:
+                raise RuntimeError(
+                    f"{f.name} was applied with checksum {recorded} but the file on disk "
+                    f"now hashes to {checksum}. A migration was edited after it was applied. "
+                    f"Write a new migration instead of editing an applied one."
+                )
+            print(f"  skipped {f.relative_to(REPO_ROOT)} — already in {LEDGER_TABLE}")
+            continue
         cleaned_sql = _strip_sql_file(f.read_text(encoding="utf-8"))
         if not cleaned_sql.strip():
             print(f"  SKIPPED {f.relative_to(REPO_ROOT)} — nothing left after stripping comments/BEGIN/COMMIT")
@@ -1385,6 +1470,23 @@ def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_publ
             # safe unconditionally here, real DDL/COMMENT text in this
             # codebase never needs an un-doubled `%s`/`%()s` sequence.
             conn.exec_driver_sql(cleaned_sql.replace("%", "%%"))
+            # Recorded in the SAME transaction as the apply, so a failed
+            # migration can never leave a row claiming it succeeded. Silently
+            # skipped while the ledger table does not exist yet (files before
+            # 0019 on a fresh schema) - 0019's own backfill covers those.
+            if is_migration and conn.execute(
+                text("SELECT to_regclass(:q)").bindparams(q=f'"{schema}".{LEDGER_TABLE}')
+            ).scalar() is not None:
+                conn.execute(
+                    text(
+                        f"INSERT INTO {LEDGER_TABLE} "
+                        "(filename, checksum, applied_at, applied_by, target_schema) "
+                        "VALUES (:filename, :checksum, now(), :applied_by, :schema) "
+                        "ON CONFLICT (filename) DO NOTHING"
+                    ),
+                    {"filename": f.name, "checksum": checksum,
+                     "applied_by": getpass.getuser(), "schema": schema},
+                )
         print(f"  applied {f.relative_to(REPO_ROOT)}")
 
 

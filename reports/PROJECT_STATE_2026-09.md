@@ -694,7 +694,14 @@ classifier, not a data-safety concern.
    dump can be cleaned up once the incident is fully closed and folded
    into this report — not yet, kept for now.
 
-## 12. Column-gap audit — CLOSED (2026-09-17/18)
+## 12. Column-gap audit — CLOSED (2026-09-17/18); scratch cleanup DONE (2026-09-18)
+
+`ssm_precutover_diag`, `ssm_col_gap_audit`, `ssm_canonical`,
+`ssm_sku_brand_fix`, `ssm_binning_phase2` dropped after verified public
+apply — DB 548MB → 140MB. **Correction (2026-09-18 verification):
+`ssm_abc_phase2` was NOT dropped** — it still exists (64MB, 4 tables)
+and still holds `abc_classification_backup_20260917`, the
+pre-migration-0017 backup, intact.
 
 Commits `cccd038` (Del Monte product_dimension dedup + inventory
 product_key fix), `196e01d` (Unilever SOH `unit_cost_per_case`/
@@ -717,10 +724,69 @@ trailing-3-month**, **119 overlap** between the two bases.
 3. Verify `transform_ssis_soh`'s `unit_cost_per_case`/`stock_status`
    output (commit `196e01d`) matches `public`'s existing values — not yet
    diffed.
-4. Pre-existing `tests/backend/*`, `tests/forecasting/test_sarima.py`
-   collection errors (FastAPI/Starlette version mismatch in this dev
-   environment) — unrelated to this work.
+4. ~~Pre-existing `tests/forecasting/test_sarima.py` collection error~~
+   — **CLOSED 2026-09-18**: now passes 6/6. `tests/backend/*` collection
+   errors (FastAPI/Starlette version mismatch) remain, pre-existing,
+   unrelated to this work.
 5. Duplicate migration `0002` (`0002_add_boundary_flag.sql` and
    `0002_add_sku_management_fields.sql`) — cosmetic, not yet resolved.
 6. `net_amount` is gross, not net of returns — a manuscript limitation,
    not a pipeline defect.
+7. `tools/forecast_viewer/*` has uncommitted changes from 2026-09-16,
+   owner unknown, unrelated to Phase 1–2 work.
+
+## 15. SKU Management / ABC page recon — 2026-09-18 (Audrey)
+
+Brand dropdown junk + missing ABC categories traced. See DEC-24
+(`ARCHITECTURE.md`) for the negative-revenue-exclusion ruling. ABC
+negative-revenue exclusion: SKUs whose only 2026-02 activity was returns
+(negative revenue, no gross sales) are excluded from ABC as
+inactive-for-period, not assigned Tier C. 69 SKUs in 2026-02. No run log
+survives in the repo to confirm those 69 were actually printed in
+`orchestrate_abc.py`'s `excluded_negative_revenue` (330-331) on the last
+live run — can't verify the report vs. silent drop either way; re-run
+without `--quiet` and archive the log next time.
+
+Brand/category fixes (product_key 50186 'False' row, Del Monte's 99
+fake "brands", alias-table reapply without `COALESCE`, SOH mojibake
+normalization) — applied to `public` and verified 2026-09-18. See chat
+log 2026-09-18 for the full recon tables.
+
+Audrey's original "12 'False' rows" claim — **CLOSED**: actual live
+count was 1 (product_key 50186), deleted 2026-09-18, verified 0
+remaining.
+
+### Open items carried forward (this section)
+~~7. `abc.py:94`, `dashboard.py:438,457-458` MAX(classification_period)
+without a `method` filter~~ — **CLOSED 2026-09-18**: verified all
+`MAX(classification_period)` lookups (`abc.py:114`,
+`dashboard.py:595,619-620`) now filter `method = 'single'`, fixed
+upstream before this check.
+
+## 16. `ssis_summary` — CLOSED as deliberately demoted (2026-09-19)
+
+Recurring audit noise, settled here so it stops being re-raised as an
+orphaned-data finding.
+
+`staging/ssis_summary/` holds **805 parquet files / 1,949,687 rows** and
+reaches **no fact table**. This is correct and intentional, not a gap.
+All 805 sheets are classified `demoted` by `transform_driver.py`, with
+the reason string the manifest emits verbatim:
+
+> `doc_type='ssis_summary' is never a fact's primary source (cross-check
+> only, if referenced at all)`
+
+Measured from `transform/_manifest.json` (2026-09-14 run): 805 of 805
+sheets demoted, 0 promoted, 0 conflict, 0 blocked.
+
+This follows the Phase 1 removal of `source_of_truth.yaml`'s
+`sales.unilever` entry as a dead mapping (2026-09-09, §8) — with no
+owning fact, the family has nothing to be promoted into. It is consistent
+with the family's known grain problem: 95.6% of rows are product-less
+outlet×day×invoice sales value, so there is no SKU grain to load.
+
+**Disposition:** extraction stays on (auditability — `extract/driver.py`
+keeps it as the 7th family per DEC-04). Demotion stays. Do not treat the
+1.95M staged rows as an unloaded backlog.
+
+Re-opening this requires a grain decision first, not a loader.

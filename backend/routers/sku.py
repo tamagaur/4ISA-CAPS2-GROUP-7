@@ -21,7 +21,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
-from backend.principals import PrincipalQuery, principal_clause
+from backend.principals import (
+    PrincipalQuery,
+    latest_abc_period,
+    latest_inventory_period,
+    principal_clause,
+)
 from backend.schemas.sku import SKUCreate, SKUItem, SKUListResponse, SKUUpdate
 
 router = APIRouter(prefix="/sku", tags=["sku"])
@@ -45,7 +50,7 @@ _SELECT_ONE = """
     LEFT JOIN (
         SELECT product_key, SUM(quantity_on_hand) AS current_stock
         FROM inventory_fact_real
-        WHERE _period = (SELECT MAX(_period) FROM inventory_fact_real)
+        WHERE _period = :inv_period
         GROUP BY product_key
     ) inv ON inv.product_key = pd.product_key
     LEFT JOIN (
@@ -58,9 +63,7 @@ _SELECT_ONE = """
         SELECT product_key, tier
         FROM abc_classification
         WHERE method = 'single'
-          AND classification_period = (
-              SELECT MAX(classification_period) FROM abc_classification WHERE method = 'single'
-          )
+          AND classification_period = :abc_period
     ) abc ON abc.product_key = pd.product_key
 """
 # method='single' is load-bearing in BOTH places above (migration 0017):
@@ -88,6 +91,21 @@ def _to_item(r) -> SKUItem:
     )
 
 
+def _one_row_params(db: Session, product_key: int) -> dict:
+    """Bind params for a single-row _SELECT_ONE read by product_key.
+
+    Scope is left unfiltered (None = all), which is exactly today's
+    behaviour: the row is already pinned by product_key, so resolving its
+    true principal would cost an extra lookup and change nothing. Not an
+    oversight - the list endpoint is where scope matters.
+    """
+    return {
+        "key": product_key,
+        "inv_period": latest_inventory_period(db, None),
+        "abc_period": latest_abc_period(db, None),
+    }
+
+
 @router.get("", response_model=SKUListResponse)
 def get_skus(
     status: str | None = Query(None, description="Filter to 'ACTIVE' or 'DISABLED'. Omit for both."),
@@ -104,7 +122,15 @@ def get_skus(
     # rows — that's the real shape of the product master, not a defect.
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     query = _SELECT_ONE + " WHERE 1=1" + scope_sql
-    params: dict = {**scope_params}
+    # Both anchors resolve under the SAME scope as the rows. Measured
+    # 2026-09-20: unscoped they resolved to 2026-03 (Unilever's max), so
+    # every one of Del Monte's 15,308 SKUs reported current_stock NULL
+    # despite 5,164 Del Monte inventory rows existing at 2025-12.
+    params: dict = {
+        "inv_period": latest_inventory_period(db, principal),
+        "abc_period": latest_abc_period(db, principal),
+        **scope_params,
+    }
     if status:
         query += " AND pd.status = :status"
         params["status"] = status
@@ -153,7 +179,14 @@ def create_sku(
     ).mappings().first()
     db.commit()
 
-    result = db.execute(text(_SELECT_ONE + " WHERE pd.product_key = :key"), {"key": row["product_key"]}).mappings().first()
+    result = db.execute(
+        text(_SELECT_ONE + " WHERE pd.product_key = :key"),
+        {
+            "key": row["product_key"],
+            "inv_period": latest_inventory_period(db, "unilever"),
+            "abc_period": latest_abc_period(db, "unilever"),
+        },
+    ).mappings().first()
     return _to_item(result)
 
 
@@ -176,7 +209,9 @@ def update_sku(
     }
     if not fields:
         # Nothing to update in DB — just return current state
-        row = db.execute(text(_SELECT_ONE + " WHERE pd.product_key = :key"), {"key": product_key}).mappings().first()
+        row = db.execute(
+            text(_SELECT_ONE + " WHERE pd.product_key = :key"), _one_row_params(db, product_key)
+        ).mappings().first()
         if row is None:
             raise HTTPException(status_code=404, detail="SKU not found")
         return _to_item(row)
@@ -191,5 +226,7 @@ def update_sku(
         raise HTTPException(status_code=404, detail="SKU not found")
     db.commit()
 
-    row = db.execute(text(_SELECT_ONE + " WHERE pd.product_key = :key"), {"key": product_key}).mappings().first()
+    row = db.execute(
+        text(_SELECT_ONE + " WHERE pd.product_key = :key"), _one_row_params(db, product_key)
+    ).mappings().first()
     return _to_item(row)

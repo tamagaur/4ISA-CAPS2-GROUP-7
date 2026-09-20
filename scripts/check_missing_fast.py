@@ -20,6 +20,8 @@ WITH sku_months AS (
     JOIN Product_Dimension pd ON s.product_key = pd.product_key
     JOIN ABC_Classification abc ON abc.product_key = pd.product_key
     WHERE abc.tier = 'A'
+      AND abc.method = 'single'
+      AND abc.classification_period = (SELECT MAX(classification_period) FROM ABC_Classification WHERE method = 'single')
     GROUP BY s.product_key, pd.sku_code, pd.principal
 )
 SELECT sku_code, principal, min_p, max_p, actual_months

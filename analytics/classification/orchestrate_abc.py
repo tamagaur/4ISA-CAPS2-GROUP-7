@@ -58,6 +58,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from analytics.classification.abc import classify_abc
 from analytics.config import get_settings
 
+METHODS = ("single", "t3m")
+T3M_WINDOW_MONTHS = 3  # ROWS BETWEEN 2 PRECEDING AND CURRENT ROW in the recovered source
+
 
 @dataclass
 class AbcRunReport:
@@ -118,6 +121,97 @@ def _fetch_unilever_sku_revenue(engine: Engine, period: str) -> tuple[pd.DataFra
         all_skus = conn.execute(
             select(prod_dim.c.product_key)
             .where(prod_dim.c.principal == 'unilever')
+        ).fetchall()
+
+    all_df = pd.DataFrame(all_skus, columns=["sku_id"])
+    all_df = all_df[~all_df["sku_id"].isin(null_sku_ids)]
+    df = all_df.merge(df, on="sku_id", how="left")
+    df["total_revenue"] = df["total_revenue"].fillna(0.0)
+
+    return df, null_count
+
+
+def _fetch_unilever_sku_revenue_t3m(engine: Engine, period: str) -> tuple[pd.DataFrame, int]:
+    """Trailing-3-month revenue per sku_code for `period`, inclusive of it.
+
+    Recovered 2026-09-20 from the ad-hoc script that produced the 25,437
+    `method='t3m'` rows live in public.abc_classification
+    (run_id='phase2_unilever_2026-09-17_v2'). That script was written to a
+    session scratchpad, run once, never committed, and has since been deleted
+    from disk; the source is preserved at
+    analytics/classification/recovered/rebuild_abc_phase2_v2.py. This function
+    is a transcription of its `single`/`t3m_win`/`t3m` CTEs, verified to
+    reproduce all 25,437 rows exactly.
+
+    NEGATIVE-REVENUE INCONSISTENCY — DISCLOSURE, NOT A FIX (2026-09-20)
+    ------------------------------------------------------------------
+    This function zeroes a negative net_amount PER MONTH, before summing the
+    window. `single` does not: _split_negative_revenue() (below) clamps the
+    AGGREGATED total. With single's one-month window the two coincide, so the
+    difference is invisible there and only appears here.
+
+    The consequence is that a SKU with a large return in one month and sales in
+    the other two keeps the sales and never absorbs the return.
+
+    This was NOT a methodology decision. The recovered source computed t3m as a
+    window over the already-clamped single-month values
+    (`ROWS BETWEEN 2 PRECEDING AND CURRENT ROW`), so per-month clamping fell out
+    of the construction. Measured cost of reconciling it the other way — i.e.
+    applying single's aggregate clamp to a 3-month window — is 25,215 rows
+    instead of 25,437: 222 SKUs short, with 64 tier and 596 revenue_share
+    mismatches against what is live.
+
+    Reproducing what is live requires the per-month clamp, so that is what this
+    does. Whether the two methods SHOULD agree is a methodology question for the
+    adviser gate; it is deliberately not reconciled here, because changing it
+    would silently invalidate rows already written to public.
+    """
+    metadata = MetaData()
+    demand = Table("unilever_sku_demand_fact_real", metadata, autoload_with=engine)
+
+    # Window membership follows the DISTINCT periods actually present in the
+    # fact, ordered by date — not calendar arithmetic. That is what the
+    # recovered source's ROWS BETWEEN 2 PRECEDING did over its dense grid, and
+    # it keeps the behaviour identical if the series ever has a gap.
+    with engine.connect() as conn:
+        window = [
+            r[0] for r in conn.execute(
+                select(demand.c.calendar_month)
+                .where(demand.c.calendar_month <= period)
+                .distinct()
+                .order_by(demand.c.calendar_month.desc())
+                .limit(T3M_WINDOW_MONTHS)
+            ).fetchall()
+        ]
+
+    # window_rows < 3 in the recovered source. A partial window is NOT
+    # classified on the months it does have — the period is skipped entirely,
+    # which is why 2023-01 and 2023-02 have no t3m rows at all.
+    if len(window) < T3M_WINDOW_MONTHS:
+        return pd.DataFrame(columns=["sku_id", "total_revenue"]), 0
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(demand.c.product_key, demand.c.net_amount)
+            .where(demand.c.calendar_month.in_(window))
+        ).fetchall()
+    df = pd.DataFrame(rows, columns=["sku_id", "total_revenue"])
+    df["total_revenue"] = df["total_revenue"].astype(float)  # NUMERIC -> Decimal, see above
+
+    # BOOL_OR(excluded_null) OVER w: an explicit NULL anywhere in the window
+    # disqualifies the SKU for this period — not just the month it occurred in.
+    null_sku_ids = set(df.loc[df["total_revenue"].isna(), "sku_id"])
+    null_count = len(null_sku_ids)
+    df = df.dropna(subset=["total_revenue"])
+
+    # The per-month clamp described in this function's docstring.
+    df.loc[df["total_revenue"] < 0, "total_revenue"] = 0.0
+    df = df.groupby("sku_id", as_index=False)["total_revenue"].sum()
+
+    prod_dim = Table("product_dimension", metadata, autoload_with=engine)
+    with engine.connect() as conn:
+        all_skus = conn.execute(
+            select(prod_dim.c.product_key).where(prod_dim.c.principal == 'unilever')
         ).fetchall()
 
     all_df = pd.DataFrame(all_skus, columns=["sku_id"])
@@ -204,13 +298,18 @@ def _split_zero_revenue(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
 
 def _upsert_abc_classification(
     engine: Engine, tiered_df: pd.DataFrame, principal: str, classification_period: str,
-    method: str = "single", run_id: str | None = None,
+    method: str = "single", run_id: str | None = None, schema: str | None = None,
 ) -> int:
+    """schema selects the WRITE target only — the fetch functions above always
+    read real data from the `_Real` views in public (Hard Rule 1). Passing a
+    scratch schema here is what makes a rehearsal possible without touching
+    public; same `schema: str | None` shape as
+    analytics/segmentation/orchestrate_segment.py's _upsert()."""
     if tiered_df.empty:
         return 0
     run_id = run_id or f"{method}_{uuid4().hex[:12]}"
-    metadata = MetaData()
-    abc_table = Table("abc_classification", metadata, autoload_with=engine)
+    metadata = MetaData(schema=schema)
+    abc_table = Table("abc_classification", metadata, autoload_with=engine, schema=schema)
     records = [
         {
             "product_key": int(row.sku_id),
@@ -244,11 +343,26 @@ def _upsert_abc_classification(
 
 def run_abc_for_principal(
     engine: Engine, principal: str, classification_period: str,
-    method: str = "single", run_id: str | None = None,
+    method: str = "single", run_id: str | None = None, schema: str | None = None,
 ) -> AbcRunReport:
+    if method not in METHODS:
+        raise ValueError(f"Unknown method '{method}' — expected one of {METHODS}.")
+
     if principal == "unilever":
-        revenue_df, null_count = _fetch_unilever_sku_revenue(engine, classification_period)
+        if method == "t3m":
+            revenue_df, null_count = _fetch_unilever_sku_revenue_t3m(engine, classification_period)
+        else:
+            revenue_df, null_count = _fetch_unilever_sku_revenue(engine, classification_period)
     elif principal == "delmonte":
+        if method == "t3m":
+            # The recovered producer was Unilever-only; no t3m rows have ever
+            # existed for delmonte. Refuse rather than quietly classifying a
+            # single month under a t3m label.
+            raise ValueError(
+                "method='t3m' is not defined for delmonte — the recovered producer "
+                "(analytics/classification/recovered/rebuild_abc_phase2_v2.py) only "
+                "ever built Unilever. Del Monte ABC is separately blocked on DEC-03."
+            )
         revenue_df, null_count = _fetch_delmonte_category_revenue(engine, classification_period)
     else:
         raise ValueError(f"Unknown principal '{principal}' — expected 'unilever' or 'delmonte'.")
@@ -267,7 +381,9 @@ def run_abc_for_principal(
         )
 
     tiered = classify_abc(clean_df)
-    rows_upserted = _upsert_abc_classification(engine, tiered, principal, classification_period, method, run_id)
+    rows_upserted = _upsert_abc_classification(
+        engine, tiered, principal, classification_period, method, run_id, schema,
+    )
 
     tier_counts = tiered["tier"].value_counts().to_dict()
     near_boundary_count = int(tiered["boundary_flag"].sum())
@@ -284,7 +400,11 @@ def run_abc_for_principal(
     )
 
 
-def run_abc(classification_period: str) -> list[AbcRunReport]:
+def run_abc(
+    classification_period: str, method: str = "single",
+    schema: str | None = None, run_id: str | None = None,
+    principals: tuple[str, ...] = ("unilever", "delmonte"),
+) -> list[AbcRunReport]:
     """Runs ABC classification for both principals for one period.
     Each principal's ranking is independent — see module docstring.
 
@@ -299,9 +419,11 @@ def run_abc(classification_period: str) -> list[AbcRunReport]:
     engine = create_engine(settings.supabase_db_url, pool_pre_ping=True)
 
     reports = []
-    for principal in ("unilever", "delmonte"):
+    for principal in principals:
         try:
-            reports.append(run_abc_for_principal(engine, principal, classification_period))
+            reports.append(run_abc_for_principal(
+                engine, principal, classification_period, method, run_id, schema,
+            ))
         except Exception as exc:  # noqa: BLE001 - intentionally broad: any failure must not abort the other principal
             print(f"ABC classification FAILED for principal={principal!r} period={classification_period!r}: "
                   f"{type(exc).__name__}: {exc}")
@@ -334,10 +456,29 @@ def _print_report(report: AbcRunReport) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run ABC/Pareto classification for both principals for one period.")
+    parser = argparse.ArgumentParser(description="Run ABC/Pareto classification for one period.")
     parser.add_argument("--period", required=True, help="Classification period, 'YYYY-MM' (e.g. 2024-02).")
+    parser.add_argument(
+        "--schema", required=True,
+        help="Schema to WRITE results into. REQUIRED and deliberately has no default — "
+             "this script previously wrote public unconditionally, so a rehearsal was "
+             "impossible. Real data is always read from the _Real views in public "
+             "regardless of this flag.",
+    )
+    parser.add_argument(
+        "--method", choices=METHODS, default="single",
+        help="'single' = that month's revenue (deployed). 't3m' = trailing 3 months "
+             "including it; see _fetch_unilever_sku_revenue_t3m()'s docstring for the "
+             "negative-revenue inconsistency between the two.",
+    )
+    parser.add_argument("--run-id", default=None, help="Stamp a specific run_id (default: generated).")
+    parser.add_argument(
+        "--principal", choices=("unilever", "delmonte", "both"), default="both",
+        help="t3m is Unilever-only.",
+    )
     args = parser.parse_args()
 
-    reports = run_abc(args.period)
+    principals = ("unilever", "delmonte") if args.principal == "both" else (args.principal,)
+    reports = run_abc(args.period, args.method, args.schema, args.run_id, principals)
     for r in reports:
         _print_report(r)

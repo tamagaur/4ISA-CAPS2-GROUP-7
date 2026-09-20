@@ -29,6 +29,10 @@ supabase==2.12.0
 
 # --- Backend ---
 fastapi==0.115.5
+starlette==0.41.3  # transitive via fastapi, pinned explicitly: fastapi 0.115.5
+                   # requires starlette<0.42; an unrelated global streamlit install
+                   # pulled 1.6.0, which dropped Router(on_startup=...) and broke
+                   # collection of the entire backend suite (2026-09-20).
 uvicorn[standard]==0.32.1
 pydantic==2.10.1
 python-dotenv==1.0.1
