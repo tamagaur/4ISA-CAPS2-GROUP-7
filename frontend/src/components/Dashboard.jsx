@@ -144,6 +144,10 @@ const Dashboard = () => {
   // it fetches GET /dashboard for its own scope (same period range),
   // through the same response cache, so flipping back and forth never
   // refetches a scope already loaded this session.
+  //
+  // Deliberately not remembered (no localStorage, unlike the Topbar's
+  // filter): every visit to the dashboard starts this card on All
+  // principals, and the card's Reset button returns it there.
   const pagePrincipal = principal ?? DEFAULT_PRINCIPAL;
   const [forecastPrincipal, setForecastPrincipal] = useState(DEFAULT_PRINCIPAL);
   const forecastKey = `${period ?? ''}|${startPeriod ?? ''}|${forecastPrincipal}`;

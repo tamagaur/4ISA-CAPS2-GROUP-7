@@ -636,13 +636,32 @@ def test_portfolio_forecast_scope_label_and_series():
     pf = resp.json()["portfolio_forecast"]
     assert pf["gated_sku_count"] == 2
     assert pf["avg_mape"] == pytest.approx(12.5)
-    assert pf["scope_label"] == "Unilever only (SKU-level MA3 forecasts meeting the MAPE gate)."
+    assert pf["scope_label"] == "Unilever (SKU-level MA3 forecasts meeting the MAPE gate)."
     by_period = {pt["period"]: pt for pt in pf["series"]}
     assert by_period["2024-01"]["actual"] == pytest.approx(90.0)
     assert by_period["2024-02"]["actual"] == pytest.approx(95.0)
     assert by_period["2024-03"]["forecast"] == pytest.approx(150.0)
     assert by_period["2024-03"]["confidence_lower"] == pytest.approx(120.0)
     assert by_period["2024-03"]["actual"] is None
+
+
+def test_portfolio_forecast_all_scope_says_which_principal_it_covers():
+    """Under 'all' with only Unilever rows gated, the label must say so —
+    otherwise All and Unilever read identically and the card's filter
+    looks broken."""
+    latest_date = datetime.date(2024, 3, 1)
+    gated_rows = [
+        {"product_key": 1, "forecast_date": latest_date, "forecast_value": 100.0,
+         "confidence_lower": 80.0, "confidence_upper": 120.0, "mape": 10.0, "principal": "unilever"},
+    ]
+    session = FakeSession(latest_forecast_date=latest_date, gated_forecast_rows=gated_rows,
+                          portfolio_actual={"2024-02": 95.0})
+    with make_client(session) as c:
+        resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
+    assert resp.json()["portfolio_forecast"]["scope_label"] == (
+        "All principals — only Unilever has SKU-level forecasts meeting the MAPE gate, "
+        "so this matches the Unilever view."
+    )
 
 
 def test_portfolio_forecast_empty_when_nothing_passes_the_gate():

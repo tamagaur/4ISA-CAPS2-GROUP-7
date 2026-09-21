@@ -6,12 +6,12 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
-import { HelpCircle, ArrowRight } from 'lucide-react';
+import { HelpCircle, ArrowRight, RotateCcw } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
 import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot } from './ChartZoom';
-import { PRINCIPALS } from '../principals';
+import { DEFAULT_PRINCIPAL, PRINCIPALS } from '../principals';
 import './Charts.css';
 
 // X-axis tick + tooltip header for every period-keyed chart on this page:
@@ -793,19 +793,32 @@ export const PortfolioForecastWidget = ({
             CSS is global and that one carries viewport breakpoints meant
             for the topbar, not a card. */}
         {onPrincipalChange && (
-          <div className="card-principal-filter" role="radiogroup" aria-label="Forecast principal">
-            {PRINCIPALS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                role="radio"
-                aria-checked={principal === p.key}
-                className={`card-principal-option${principal === p.key ? ' active' : ''}`}
-                onClick={() => onPrincipalChange(p.key)}
-              >
-                {p.key === 'all' ? 'All' : p.label}
-              </button>
-            ))}
+          <div className="card-filter-controls">
+            <div className="card-principal-filter" role="radiogroup" aria-label="Forecast principal">
+              {PRINCIPALS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={principal === p.key}
+                  className={`card-principal-option${principal === p.key ? ' active' : ''}`}
+                  onClick={() => onPrincipalChange(p.key)}
+                >
+                  {p.key === 'all' ? 'All' : p.label}
+                </button>
+              ))}
+            </div>
+            {/* Back to All principals, where this card starts on every visit. */}
+            <button
+              type="button"
+              className="card-filter-reset"
+              onClick={() => onPrincipalChange(DEFAULT_PRINCIPAL)}
+              disabled={principal === DEFAULT_PRINCIPAL}
+              title={principal === DEFAULT_PRINCIPAL ? 'Already showing all principals' : 'Reset to all principals'}
+            >
+              <RotateCcw size={12} aria-hidden="true" />
+              Reset
+            </button>
           </div>
         )}
       </div>

@@ -994,7 +994,7 @@ def get_dashboard(
         gated_rows = db.execute(
             text(f"""
                 SELECT fr.product_key, fr.forecast_date, fr.forecast_value,
-                       fr.confidence_lower, fr.confidence_upper, fr.mape
+                       fr.confidence_lower, fr.confidence_upper, fr.mape, pd.principal
                 FROM Forecast_Result fr
                 JOIN Product_Dimension pd ON pd.product_key = fr.product_key
                 WHERE fr.forecast_date = :forecast_date
@@ -1027,7 +1027,22 @@ def get_dashboard(
             {"forecast_date": latest_forecast_date},
         ).scalar() or 0
     if gated_rows:
-        scope_label = "Unilever only (SKU-level MA3 forecasts meeting the MAPE gate)."
+        # Says which principals the figure actually covers, from the rows
+        # themselves. Under 'all' it used to read "Unilever only (...)" —
+        # word for word what the Unilever filter shows — so the card's
+        # All / Unilever switch looked broken when it was working: Del Monte
+        # simply has no SKU-level forecasts to add.
+        covered = sorted({r["principal"] for r in gated_rows if r.get("principal")})
+        names = {"unilever": "Unilever", "delmonte": "Del Monte"}
+        if scope == "all" and len(covered) == 1:
+            only = names.get(covered[0], covered[0])
+            scope_label = (
+                f"All principals — only {only} has SKU-level forecasts meeting the MAPE gate, "
+                f"so this matches the {only} view."
+            )
+        else:
+            who = "All principals" if scope == "all" else names.get(scope, scope)
+            scope_label = f"{who} (SKU-level MA3 forecasts meeting the MAPE gate)."
     elif scoped_forecast_count == 0:
         scope_label = (
             "No SKU-level forecasts exist for Del Monte — its sales data is invoice-grain "
