@@ -530,3 +530,18 @@
 
 
 
+
+/* A carried-forward category: the SKU's last known tier, from an earlier
+   run than the current one, kept because it had no sales in the latest
+   month. Marked rather than hidden — the alternative (showing nothing)
+   left 821 of Unilever's 2,098 SKUs looking uncategorised when they had
+   in fact been ranked.
+
+   The marker is fill alone. It first carried a dotted underbar too, which
+   read as a rendering artifact rather than as meaning — the first question
+   it drew was "why does it have ... on it", which is a marker failing at
+   the only job it has. The cell's title attribute carries the exact month
+   for anyone who needs it. */
+.cat-badge.cat-stale {
+  opacity: 0.55;
+}

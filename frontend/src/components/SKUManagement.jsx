@@ -8,6 +8,7 @@ import EditSKUModal from './EditSKUModal';
 import { logAction } from '../utils/auditLogger';
 import { getSKUs, createSKU, updateSKU } from '../api/sku';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
+import { formatMonth } from '../utils/formatDate';
 import Pagination from './Pagination';
 import './SKUManagement.css';
 
@@ -70,6 +71,9 @@ const SKUManagement = () => {
         brand: (item.brand || '').trim() || null,
         product: item.product_name || 'Unknown Product',
         cat: item.tier,
+        // The period `cat` was computed in. A tier is the SKU's LAST KNOWN
+        // classification, so this is what says whether it is current.
+        catPeriod: item.tier_period,
         leadTime: item.lead_time_days != null ? `${item.lead_time_days} days` : null,
         leadTimeDays: item.lead_time_days,
         reorderPt: item.reorder_point,
@@ -194,6 +198,19 @@ const SKUManagement = () => {
   // is ACTIVE in Product_Dimension and PATCH /sku doesn't write status yet.
   const totalSKUs = skus.length;
   const categoryASKUs = skus.filter(s => s.cat === 'A').length;
+
+  // The newest classification period present in this scope — i.e. the
+  // current ABC run. Anything older than this is a carried-forward tier
+  // from a month the SKU last had sales in, which the table marks so a
+  // stale category is never read as a fresh one.
+  const latestCatPeriod = useMemo(
+    () => skus.reduce((max, s) => (s.catPeriod && s.catPeriod > max ? s.catPeriod : max), ''),
+    [skus]
+  );
+  const staleCatSKUs = useMemo(
+    () => skus.filter(s => s.cat && s.catPeriod && s.catPeriod !== latestCatPeriod).length,
+    [skus, latestCatPeriod]
+  );
   const noBrandSKUs = skus.filter(s => !s.brand).length;
 
   const handleAddSKU = async (formData) => {
@@ -306,6 +323,18 @@ const SKUManagement = () => {
     }
   };
 
+  // Says, on hover, which ABC run a category came from — and calls out a
+  // carried-forward one explicitly rather than leaving the reader to
+  // compare dates.
+  const catTitle = (sku) => {
+    if (!sku.cat) return 'No ABC classification in any period';
+    if (!sku.catPeriod) return `Category ${sku.cat}`;
+    const when = formatMonth(sku.catPeriod);
+    return sku.catPeriod === latestCatPeriod
+      ? `Category ${sku.cat} — current run (${when})`
+      : `Category ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
+  };
+
   return (
     <div className="sku-management">
       <div className="sku-content">
@@ -332,7 +361,11 @@ const SKUManagement = () => {
           <div className="sku-summary-card summary-cat-a">
             <span className="summary-label">CATEGORY A</span>
             <span className="summary-value">{categoryASKUs.toLocaleString()}</span>
-            <span className="summary-desc">latest ABC classification</span>
+            <span className="summary-desc">
+              {staleCatSKUs > 0
+                ? `most recent ABC run per SKU · ${staleCatSKUs.toLocaleString()} carried forward`
+                : 'most recent ABC run per SKU'}
+            </span>
           </div>
           <div className="sku-summary-card summary-no-brand">
             <span className="summary-label">NO BRAND RECORDED</span>
@@ -582,9 +615,17 @@ const SKUManagement = () => {
                       </td>
                       <td className={sku.brand ? 'cell-muted' : 'cell-empty'}>{sku.brand || '—'}</td>
                       <td className="cell-product">{sku.product}</td>
-                      <td className="table-center">
+                      <td className="table-center" title={catTitle(sku)}>
                         {sku.cat
-                          ? <span className={getCatClass(sku.cat)}>{sku.cat}</span>
+                          ? (
+                            <span
+                              className={`${getCatClass(sku.cat)}${
+                                sku.catPeriod && sku.catPeriod !== latestCatPeriod ? ' cat-stale' : ''
+                              }`}
+                            >
+                              {sku.cat}
+                            </span>
+                          )
                           : <span className="cell-empty">—</span>}
                       </td>
                       <td

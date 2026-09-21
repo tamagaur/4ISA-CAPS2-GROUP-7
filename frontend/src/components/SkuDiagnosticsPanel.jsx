@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, Minus, Activity, CalendarRange, Quote } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Minus, Activity, CalendarRange } from 'lucide-react';
 import { getSegment } from '../api/segment';
 import { formatMonth } from '../utils/formatDate';
 import { SEMANTIC } from '../theme/colors';
@@ -166,32 +166,13 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
         </div>
       )}
 
-      {/* The pipeline's own words. One block per scheme; bin_reason is
-          quoted verbatim, the bin name is the label. */}
-      {data.segments.length > 0 && (
-        <div className="sku-diag-reasons">
-          {data.segments.map((seg) => (
-            <blockquote className="sku-diag-reason" key={`${seg.scheme}-${seg.abc_method}`}>
-              <Quote size={13} aria-hidden="true" className="sku-diag-reason-icon" />
-              <div>
-                <span className="sku-diag-reason-bin">
-                  {seg.bin}
-                  <span className="sku-diag-reason-scheme" title="Binning scheme · ABC method">
-                    {seg.scheme} · {seg.abc_method}
-                  </span>
-                </span>
-                <p className="sku-diag-reason-text">{seg.bin_reason}</p>
-              </div>
-            </blockquote>
-          ))}
-        </div>
-      )}
-
-      {t?.revenue_share_2026_02 != null && (
-        <p className="sku-diag-note">
-          {(t.revenue_share_2026_02 * 100).toFixed(2)}% of Unilever revenue in the Feb 2026 classification.
-        </p>
-      )}
+      {/* The three tiles above are the whole panel. The per-scheme
+          bin_reason blockquotes and the Feb-2026 revenue-share footer that
+          used to sit here were removed (2026-09-21): they restated the
+          tiles' own numbers in the pipeline's vocabulary (LONG_UP,
+          stability_v1, CHURN) and buried the summary they were meant to
+          support. GET /segment still returns segments and
+          revenue_share_2026_02 — nothing here reads them any more. */}
     </section>
   );
 };

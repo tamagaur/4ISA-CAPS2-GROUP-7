@@ -12,7 +12,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
-import { chartAnim } from '../theme/motion';
+import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot } from './ChartZoom';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import RefreshingNote from './RefreshingNote';
 import { getABCClassification } from '../api/abc';
@@ -117,10 +117,15 @@ const formatAxisQty = (value) => {
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
-    const hasActual = payload.some(p => p.dataKey === 'actual');
+    // Each line is drawn twice — the Line, plus the Area shading under it —
+    // so the raw payload carries every value twice over. The fills declare
+    // tooltipType="none", which Recharts passes through as `type`; dropping
+    // those leaves one entry per real series.
+    const series = payload.filter(p => p.type !== 'none');
+    const hasActual = series.some(p => p.dataKey === 'actual');
     const displayPayload = hasActual
-      ? payload.filter(p => p.dataKey !== 'forecast')
-      : payload;
+      ? series.filter(p => p.dataKey !== 'forecast')
+      : series;
 
     const qty = (v) => Math.round(v).toLocaleString();
 
@@ -672,6 +677,10 @@ const SKUForecast = () => {
       : [];
     return [...actualPoints, ...forecastPoints];
   }, [forecastResult, rangeStartPeriod, rangeEndPeriod, derivedForecast]);
+
+  // Windowing for the chart below — see ./ChartZoom. This page's range can
+  // run well past what the X axis can label without skipping months.
+  const zoom = useChartZoom(chartData);
 
   // The last real month INSIDE the selected range — the month the forecast
   // is projected from, so the "vs. last actual" comparison always pairs the
@@ -1245,12 +1254,16 @@ const SKUForecast = () => {
                   )}
 
                   {/* Chart */}
-                  <div className="chart-wrapper">
+                  <div className={`chart-wrapper${zoom.canPan ? ' chart-pannable' : ''}`} {...zoom.panHandlers}>
                     {/* height 420 + bottom margin 32: the X tick row sits
                         INSIDE the SVG, so with bottom:0 the month labels were
                         being clipped off the bottom edge on load. */}
                     <ResponsiveContainer width="100%" height={420}>
-                      <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 8, bottom: 32 }}>
+                      <ComposedChart data={zoom.view} margin={{ top: 20, right: 30, left: 8, bottom: 32 }}>
+                        <defs>
+                          <SeriesFill id="fill-sku-actual" color={CHART_COLORS.salesSeries} />
+                          <SeriesFill id="fill-sku-forecast" color={COLORS.forecast} />
+                        </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
                         <XAxis
                           dataKey="label"
@@ -1273,7 +1286,12 @@ const SKUForecast = () => {
                           // month). preserveStart guarantees the first
                           // tick is always shown; equidistant keeps the
                           // rest evenly spaced instead of clumping.
-                          interval="equidistantPreserveStart"
+                          // Superseded by the zoom window: a numeric
+                          // interval counts forward from index 0, so it
+                          // keeps that first tick by construction, and
+                          // drops to 0 — every month labelled — as soon as
+                          // the window is narrow enough to fit them.
+                          interval={zoom.labelInterval}
                         />
                         <YAxis
                           axisLine={true}
@@ -1298,8 +1316,35 @@ const SKUForecast = () => {
                           fill={COLORS.forecast}
                           fillOpacity={0.16}
                           name="Confidence interval"
-                          {...chartAnim()}
+                          {...zoom.zoomAnim(0)}
                           connectNulls={false}
+                        />
+
+                        {/* Series washes: above the confidence band, below
+                            both lines. baseValue="dataMin" anchors them to
+                            the axis floor rather than to zero, leaving the
+                            Y domain exactly as it was. */}
+                        <Area
+                          type="monotone"
+                          dataKey="actual"
+                          stroke="none"
+                          fill="url(#fill-sku-actual)"
+                          baseValue="dataMin"
+                          legendType="none"
+                          tooltipType="none"
+                          connectNulls
+                          {...zoom.zoomAnim(1)}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="forecast"
+                          stroke="none"
+                          fill="url(#fill-sku-forecast)"
+                          baseValue="dataMin"
+                          legendType="none"
+                          tooltipType="none"
+                          connectNulls
+                          {...zoom.zoomAnim(2)}
                         />
 
                         {/* Teal, not the old indigo: indigo sat too close to
@@ -1313,10 +1358,10 @@ const SKUForecast = () => {
                           dataKey="actual"
                           stroke={CHART_COLORS.salesSeries}
                           strokeWidth={2}
-                          dot={{ r: 3, fill: CHART_COLORS.salesSeries, strokeWidth: 0 }}
+                          dot={seriesDot({ show: zoom.showDots, color: CHART_COLORS.salesSeries })}
                           activeDot={{ r: 6 }}
                           name="Actual Sales"
-                          {...chartAnim()}
+                          {...zoom.zoomAnim(1)}
                           connectNulls
                         />
 
@@ -1326,10 +1371,10 @@ const SKUForecast = () => {
                           stroke={COLORS.forecast}
                           strokeWidth={2}
                           strokeDasharray="5 5"
-                          dot={{ r: 4, fill: COLORS.forecast, strokeWidth: 0 }}
+                          dot={seriesDot({ show: zoom.showDots, color: COLORS.forecast, r: 4 })}
                           activeDot={{ r: 6 }}
                           name="Forecast"
-                          {...chartAnim()}
+                          {...zoom.zoomAnim(2)}
                           connectNulls
                         />
                       </ComposedChart>
@@ -1346,6 +1391,8 @@ const SKUForecast = () => {
                       dashed stroke, filled band) — a CSS-only swatch faking
                       the dash via a background gradient rendered as a lumpy
                       bowtie at this size. */}
+                  <ChartZoomSlider zoom={zoom} />
+
                   <div className="chart-legend">
                     {chartData.some((pt) => pt.actual != null) && (
                       <div className="legend-item">

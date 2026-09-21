@@ -10,6 +10,7 @@ import { HelpCircle, ArrowRight } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
+import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot } from './ChartZoom';
 import './Charts.css';
 
 // X-axis tick + tooltip header for every period-keyed chart on this page:
@@ -279,10 +280,16 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
 
 const SalesStockTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
+  // Every series is now drawn twice — the Line, plus the Area shading under
+  // it — so the raw payload carries each value twice over. The fills declare
+  // tooltipType="none", which Recharts passes through as `type` on the
+  // entry; dropping those leaves exactly one row per real series.
+  const rows = payload.filter((p) => p.type !== 'none');
+  if (!rows.length) return null;
   return (
     <div className="chart-tooltip">
       <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(label)}</p>
-      {payload.map((p) => (
+      {rows.map((p) => (
         <p key={p.dataKey} style={{ margin: '0.1rem 0', color: p.color }}>
           {p.name}: {formatCompactPesos(p.value)}
         </p>
@@ -312,6 +319,10 @@ const RECEIVED_LABEL = 'Fixed Allocation';
 // two series, so it's a dashed Line, not a constant.
 export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
   const hasData = data.length > 0;
+  // Windows over whatever range the page's date filter fetched. At a wide
+  // range that is 38 months, far more than the XAxis can label without
+  // skipping — narrowing the window is what puts every month back on screen.
+  const zoom = useChartZoom(data);
   // A legend entry with no drawn series is a phantom. Live,
   // Purchase_Fact_Real holds Del Monte rows only, so `received` is null
   // for every Unilever period: the "Fixed Allocation" line never drew a
@@ -338,11 +349,19 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
         <p className="dashboard-empty-note">{emptyReason || 'No data available for this range'}</p>
       ) : (
         <>
-          <div className="chart-container">
+          <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} {...zoom.panHandlers}>
             <ResponsiveContainer width="99%" height="100%">
-              <ComposedChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
+              <ComposedChart data={zoom.view} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
+                <defs>
+                  <SeriesFill id="fill-sales" color={CHART_COLORS.salesSeries} />
+                  <SeriesFill id="fill-stock" color={CHART_COLORS.stockSeries} />
+                  {hasReceived && <SeriesFill id="fill-received" color={COLORS.forecast} />}
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} tickFormatter={formatAxisPeriod} />
+                {/* Interval comes from the zoom window, not Recharts' own
+                    crowding heuristic: 0 draws every month once the window is
+                    narrow enough to fit them, and steps up only as it widens. */}
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -350,14 +369,24 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   tickFormatter={(v) => formatCompactPesos(v)}
                 />
                 <Tooltip content={<SalesStockTooltip />} />
+                {/* Fills are declared ahead of the Lines so every line paints
+                    on top of every wash, including where two series overlap.
+                    baseValue="dataMin" anchors them to the axis floor rather
+                    than to zero, which keeps the Y domain exactly as it was. */}
+                <Area type="monotone" dataKey="sales" stroke="none" fill="url(#fill-sales)" baseValue="dataMin" legendType="none" tooltipType="none" {...zoom.zoomAnim(0)} />
+                <Area type="monotone" dataKey="stockOnHand" stroke="none" fill="url(#fill-stock)" baseValue="dataMin" legendType="none" tooltipType="none" {...zoom.zoomAnim(1)} />
+                {hasReceived && (
+                  <Area type="monotone" dataKey="received" stroke="none" fill="url(#fill-received)" baseValue="dataMin" legendType="none" tooltipType="none" {...zoom.zoomAnim(2)} />
+                )}
                 <Line
                   type="monotone"
                   dataKey="sales"
                   name="Sales"
                   stroke={CHART_COLORS.salesSeries}
                   strokeWidth={2}
-                  dot={false}
-                  {...chartAnim()}
+                  dot={seriesDot({ show: zoom.showDots, color: CHART_COLORS.salesSeries })}
+                  activeDot={{ r: 5 }}
+                  {...zoom.zoomAnim(0)}
                 />
                 <Line
                   type="monotone"
@@ -365,8 +394,9 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   name="Stock on hand"
                   stroke={CHART_COLORS.stockSeries}
                   strokeWidth={2}
-                  dot={false}
-                  {...chartAnim()}
+                  dot={seriesDot({ show: zoom.showDots, color: CHART_COLORS.stockSeries })}
+                  activeDot={{ r: 5 }}
+                  {...zoom.zoomAnim(1)}
                 />
                 {hasReceived && (
                   <Line
@@ -376,14 +406,15 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                     stroke={COLORS.forecast}
                     strokeDasharray="7 5"
                     strokeWidth={2.5}
-                    dot={{ r: 3, fill: COLORS.forecast, strokeWidth: 0 }}
+                    dot={seriesDot({ show: zoom.showDots, color: COLORS.forecast })}
                     activeDot={{ r: 5 }}
-                    {...chartAnim()}
+                    {...zoom.zoomAnim(2)}
                   />
                 )}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          <ChartZoomSlider zoom={zoom} />
           <ul className="custom-legend">
             <li className="legend-item">
               <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
@@ -716,13 +747,14 @@ export const PortfolioForecastWidget = ({
 
     // Bridge the actual/forecast junction: dashboard.py's portfolio_forecast
     // usually has exactly ONE real forecast bucket (see its docstring) —
-    // an isolated point with nothing adjacent to connect to. Both Lines
-    // below use dot={false}, so with no bridge that lone point renders as
-    // literally nothing (Recharts needs 2 adjacent non-null points to draw
-    // a segment, and the Area needs the same for the confidence band).
-    // Injecting the last actual value as that point's own "forecast" (and
-    // a zero-width band) gives both a real 2-point run to draw from —
-    // the same fix SKUForecast.jsx already applies to its own chart.
+    // an isolated point with nothing adjacent to connect to, and Recharts
+    // needs 2 adjacent non-null points to draw a segment. The Lines now
+    // fall back to an isolated-point dot (seriesDot), but the confidence
+    // band is an Area and has no such fallback, so the bridge still earns
+    // its place. Injecting the last actual value as that point's own
+    // "forecast" (and a zero-width band) gives both a real 2-point run to
+    // draw from — the same fix SKUForecast.jsx already applies to its own
+    // chart.
     const lastActualIndex = withBand.reduce(
       (found, point, i) => (point.actual != null ? i : found), -1
     );
@@ -736,6 +768,11 @@ export const PortfolioForecastWidget = ({
 
     return withBand;
   }, [series]);
+
+  // Zoom applies to the assembled chartData, not the raw series, so the
+  // actual/forecast bridge point above is computed once over the whole
+  // range instead of being recalculated for whatever window is showing.
+  const zoom = useChartZoom(chartData);
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
@@ -765,18 +802,23 @@ export const PortfolioForecastWidget = ({
             </div>
           </div>
 
-          <div className="chart-container">
+          <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} {...zoom.panHandlers}>
             <ResponsiveContainer width="99%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+              <ComposedChart data={zoom.view} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                <defs>
+                  <SeriesFill id="fill-actual" color={CHART_COLORS.salesSeries} />
+                  <SeriesFill id="fill-forecast" color={COLORS.forecast} />
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                {/* equidistantPreserveStart, not Recharts' default preserveEnd —
-                    this series now spans the dashboard's picked date range
-                    (can be 30+ months) instead of a fixed trailing 8, and
-                    preserveEnd calculates its label-skipping backward from
-                    the END, silently dropping the label at the true first
-                    point on a wide range (diagnosed for SKUForecast.jsx's
-                    identical chart earlier — same fix, same cause). */}
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval="equidistantPreserveStart" tickFormatter={formatAxisPeriod} />
+                {/* A numeric interval from the zoom window, replacing the
+                    earlier equidistantPreserveStart. That was here because
+                    Recharts' default preserveEnd skips labels counting
+                    backward from the END and so silently dropped the first
+                    point's label on a wide range; a numeric interval counts
+                    forward from index 0, which keeps the first label by
+                    construction, and drops to 0 (every month labelled) as
+                    soon as the window is narrow enough to fit them. */}
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -785,17 +827,23 @@ export const PortfolioForecastWidget = ({
                   tickFormatter={(v) => `${Math.round(v / 1000)}k`}
                 />
                 <Tooltip content={<PortfolioForecastTooltip />} />
-                <Area type="monotone" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" {...chartAnim()} />
-                <Area type="monotone" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} {...chartAnim()} />
+                <Area type="monotone" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" {...zoom.zoomAnim(0)} />
+                <Area type="monotone" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} {...zoom.zoomAnim(0)} />
+                {/* Series washes sit above the confidence band but below both
+                    lines. No stackId — these are independent fills, and
+                    joining the band's stack would add their values to it. */}
+                <Area type="monotone" dataKey="actual" stroke="none" fill="url(#fill-actual)" baseValue="dataMin" legendType="none" tooltipType="none" connectNulls={false} {...zoom.zoomAnim(1)} />
+                <Area type="monotone" dataKey="forecast" stroke="none" fill="url(#fill-forecast)" baseValue="dataMin" legendType="none" tooltipType="none" connectNulls={false} {...zoom.zoomAnim(2)} />
                 <Line
                   type="monotone"
                   dataKey="actual"
                   name="Actual demand"
                   stroke={CHART_COLORS.salesSeries}
                   strokeWidth={2}
-                  dot={false}
+                  dot={seriesDot({ show: zoom.showDots, color: CHART_COLORS.salesSeries })}
+                  activeDot={{ r: 5 }}
                   connectNulls={false}
-                  {...chartAnim()}
+                  {...zoom.zoomAnim(1)}
                 />
                 <Line
                   type="monotone"
@@ -804,13 +852,15 @@ export const PortfolioForecastWidget = ({
                   stroke={COLORS.forecast}
                   strokeDasharray="5 3"
                   strokeWidth={2}
-                  dot={false}
+                  dot={seriesDot({ show: zoom.showDots, color: COLORS.forecast })}
+                  activeDot={{ r: 5 }}
                   connectNulls={false}
-                  {...chartAnim()}
+                  {...zoom.zoomAnim(2)}
                 />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          <ChartZoomSlider zoom={zoom} />
           <ul className="custom-legend">
             <li className="legend-item">
               <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />

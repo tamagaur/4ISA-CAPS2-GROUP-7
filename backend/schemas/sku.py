@@ -27,7 +27,12 @@ class SKUItem(BaseModel):
     notes: str | None = None
     current_stock: float | None = None
     reorder_point: float | None = None
-    tier: str | None = None  # 'A' | 'B' | 'C', latest ABC_Classification period
+    tier: str | None = None  # 'A' | 'B' | 'C', this product's most recent ABC run
+    # The period `tier` was computed in ('YYYY-MM'). Travels with the tier
+    # because it is a LAST-KNOWN classification, not necessarily a current
+    # one — a SKU with no sales last month keeps its previous category, and
+    # the consumer needs the date to say how stale that is.
+    tier_period: str | None = None
 
 
 class SKUListResponse(BaseModel):
