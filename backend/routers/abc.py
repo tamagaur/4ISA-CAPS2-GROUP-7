@@ -122,7 +122,11 @@ def _stock_status(current_stock: float | None, reorder_point: float | None) -> s
 
 @router.get("", response_model=ABCResponse)
 def get_abc(
-    classification_period: str | None = Query(None, description="'YYYY-MM'. Omit to use the latest period present."),
+    classification_period: str | None = Query(
+        None,
+        description="'YYYY-MM'. Resolves to the latest classified period at or before it, per principal; "
+        "omit for the latest period present.",
+    ),
     principal: str | None = PrincipalQuery,
     view: Literal["period", "last_known"] = Query(
         "period",
@@ -135,24 +139,21 @@ def get_abc(
     if view == "last_known":
         return _get_abc_last_known(db, classification_period, principal)
 
-    # Built once and reused by BOTH the period lookup and the row query —
-    # resolving the latest period under a different scope than the rows
-    # are read under is exactly how an empty page gets rendered for a
-    # principal that does have data.
-    scope_sql, scope_params = principal_clause(principal, "principal")
+    # The row query reads under the same principal scope the period is
+    # resolved under — resolving the latest period under a different scope
+    # than the rows are read under is exactly how an empty page gets
+    # rendered for a principal that does have data.
+    _, scope_params = principal_clause(principal, "principal")
 
-    period = classification_period
+    # The page always sends a month, and each principal has its own latest
+    # run (Del Monte's is 2025-12 while Unilever's is 2026-02). An exact
+    # match on the requested month therefore returned nothing for Del Monte
+    # at 2026-02. Resolve to the latest classified period AT OR BEFORE the
+    # request instead — the same helper view=last_known already uses; with
+    # no month given it is the plain latest period, as before.
+    period = latest_abc_period(db, principal, at_or_before=classification_period)
     if period is None:
-        row = db.execute(
-            text(
-                "SELECT MAX(classification_period) AS p FROM abc_classification "
-                "WHERE method = 'single'" + scope_sql
-            ),
-            scope_params,
-        ).mappings().first()
-        period = row["p"] if row else None
-        if period is None:
-            return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[])
+        return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[])
 
     query = """
         SELECT

@@ -322,3 +322,44 @@ def test_default_view_unchanged_has_no_unclassified_count(client):
     body = resp.json()
     assert body["unclassified_count"] is None
     assert {i["tier_period"] for i in body["items"]} == {"2024-02"}
+
+
+class PeriodResolvingFakeSession(FakeSession):
+    """FakeSession whose MAX(classification_period) honours the principal scope
+    and the at_or_before bind, like the real query does."""
+
+    def execute(self, stmt, params=None):
+        sql = str(stmt)
+        params = params or {}
+        if "MAX(classification_period)" in sql:
+            self.calls.append((sql, dict(params)))
+            scope, cap = params.get("principal"), params.get("at_or_before")
+            periods = [r["_period"] for r in self.rows
+                       if (scope is None or r["principal"] == scope) and (cap is None or r["_period"] <= cap)]
+            return FakeResult([{"p": max(periods) if periods else None}])
+        return super().execute(stmt, params)
+
+
+def test_period_view_resolves_requested_month_to_latest_classified_period_per_principal():
+    """The page always sends a month. Del Monte's latest ABC run is 2025-12
+    while Unilever's is 2026-02, so an exact match on 2026-02 returned an empty
+    Del Monte tab. The requested month resolves to the latest classified period
+    at or before it for that principal - 2025-12 - and its rows come back."""
+    def row(pk, principal, period, tier="A"):
+        return {"product_key": pk, "sku_id": f"/CAT/{pk}", "product_name": f"Category {pk}", "principal": principal, "tier": tier,
+                "revenue_share": 0.5, "cumulative_share": 0.5, "boundary_flag": False, "current_stock": None,
+                "reorder_point": None, "_period": period}
+    rows = [row(1, "unilever", "2026-02"), row(10, "delmonte", "2025-12"), row(11, "delmonte", "2025-12", "B"), row(12, "delmonte", "2025-11")]
+    session = PeriodResolvingFakeSession(rows, latest_period=None)
+
+    body = _get(session, "classification_period=2026-02&principal=delmonte")
+
+    assert body["classification_period"] == "2025-12"
+    assert body["count"] == 2 and {i["product_key"] for i in body["items"]} == {10, 11}
+    max_calls = [params for sql, params in session.calls if "MAX(classification_period)" in sql]
+    assert max_calls and all(p.get("at_or_before") == "2026-02" and p.get("principal") == "delmonte" for p in max_calls)
+
+    # the same request for Unilever still lands on its own latest run, and a month before any run is empty
+    assert _get(session, "classification_period=2026-02&principal=unilever")["classification_period"] == "2026-02"
+    empty = _get(session, "classification_period=2025-10&principal=delmonte")
+    assert empty["count"] == 0 and empty["classification_period"] is None
