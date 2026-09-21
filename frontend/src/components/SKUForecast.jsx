@@ -1358,7 +1358,7 @@ const SKUForecast = () => {
                           dataKey="actual"
                           stroke={CHART_COLORS.salesSeries}
                           strokeWidth={2}
-                          dot={seriesDot({ show: zoom.showDots, color: CHART_COLORS.salesSeries })}
+                          dot={seriesDot({ color: CHART_COLORS.salesSeries })}
                           activeDot={{ r: 6 }}
                           name="Actual Sales"
                           {...zoom.zoomAnim(1)}
@@ -1371,7 +1371,7 @@ const SKUForecast = () => {
                           stroke={COLORS.forecast}
                           strokeWidth={2}
                           strokeDasharray="5 5"
-                          dot={seriesDot({ show: zoom.showDots, color: COLORS.forecast, r: 4 })}
+                          dot={seriesDot({ color: COLORS.forecast, r: 4, skip: (p) => p?.actual != null })}
                           activeDot={{ r: 6 }}
                           name="Forecast"
                           {...zoom.zoomAnim(2)}

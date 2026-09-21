@@ -9,6 +9,15 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { clearSession, isAuthenticated } from '../auth';
 
 const ProtectedRoute = ({ children }) => {
+  const location = useLocation();
+
+  if (!isAuthenticated()) {
+    // Clears a stale/expired token so a manual back-navigation to a
+    // dashboard route doesn't briefly flash stale state before redirecting.
+    clearSession();
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
   return children;
 };
 

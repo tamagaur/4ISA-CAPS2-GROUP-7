@@ -46,11 +46,16 @@ ABC_Classification carries both principals, so an unfiltered
 MAX(classification_period) can resolve to a period the selected principal
 has no rows for at all, rendering an empty page that looks like a bug.
 
-NOTE: Del Monte currently has ZERO abc_classification rows live (the old
-synthetic periods were purged in 0737434), so ?principal=delmonte
-honestly returns an empty result today. That is the correct answer, not a
-gap to paper over — it resolves itself once ABC is run for Del Monte at
-category grain (DEC-03).
+NOTE (updated 2026-09-21): Del Monte HAS abc_classification rows again —
+run_id 'dm_category_2026-09-21_v1', 673 'single' rows for 2023-01..2025-12,
+category grain (DEC-03). Those products have no sku_code (and 59 of the 85
+have no product_name), which is why sku_id must fall back to
+category_path: with a '' fallback every Del Monte row shared one empty
+sku_id, and the ABC page, which keyed its rows on it, collided on all 85.
+product_key is returned as well so the frontend has a key that is unique
+by construction. Open question for the data side, NOT resolved here: that
+run ranks ~63 sub-categories per month in 2023-24 but only 4-5 top-level
+categories in 2025, so view=last_known mixes the two grains for Del Monte.
 
 METHOD FILTER (migration 0017): abc_classification's natural key widened
 to (product_key, classification_period, method), and a 't3m' run is now
@@ -151,7 +156,8 @@ def get_abc(
 
     query = """
         SELECT
-            COALESCE(pd.sku_code, '') AS sku_id,
+            ac.product_key,
+            COALESCE(pd.sku_code, pd.category_path, '') AS sku_id,
             pd.product_name,
             ac.principal,
             ac.tier,
@@ -188,6 +194,7 @@ def get_abc(
     rows = db.execute(text(query), params).mappings().all()
     items = [
         ABCItem(
+            product_key=r["product_key"],
             sku_id=r["sku_id"] or "",
             product_name=r["product_name"],
             principal=r["principal"],
@@ -268,7 +275,8 @@ def _get_abc_last_known(
             ORDER BY product_key, classification_period DESC
         )
         SELECT
-            COALESCE(pd.sku_code, '') AS sku_id,
+            ac.product_key,
+            COALESCE(pd.sku_code, pd.category_path, '') AS sku_id,
             pd.product_name,
             ac.principal,
             ac.tier,
@@ -306,6 +314,7 @@ def _get_abc_last_known(
 
     items = [
         ABCItem(
+            product_key=r["product_key"],
             sku_id=r["sku_id"] or "",
             product_name=r["product_name"],
             principal=r["principal"],

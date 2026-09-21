@@ -11,13 +11,6 @@ export const MIN_WINDOW = 4;
 // width; past it the XAxis has to start skipping or the months collide.
 const MAX_COMFORTABLE_TICKS = 12;
 
-// Above this many visible points, per-point dots stop helping and start
-// reading as noise — three series across a 38-month range would put over a
-// hundred marks on one chart. Below it you are reading individual months,
-// and the dots are what say which values were measured rather than drawn by
-// the monotone curve between them.
-export const DOT_DENSITY_LIMIT = 12;
-
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 /**
@@ -138,7 +131,6 @@ export function useChartZoom(data, { minWindow = MIN_WINDOW } = {}) {
     canPan,
     panHandlers,
     labelInterval,
-    showDots: effectiveSize <= DOT_DENSITY_LIMIT,
     isAdjusting,
     setIsAdjusting,
     zoomAnim,
@@ -166,26 +158,28 @@ export const SeriesFill = ({ id, color }) => (
 /**
  * Per-point dot renderer for a Line, passed as its `dot` prop.
  *
- * Two rules:
+ * Every point gets a dot, at every zoom level: the curve is type="monotone",
+ * so everything between two points is interpolation, and the dots are the
+ * only thing marking which values are real observations.
  *
- *  1. Draw dots when the window is narrow enough to be read month by month
- *     (`show`), because the curve is type="monotone" — everything between
- *     two points is interpolation, and the dots are the only thing marking
- *     which values are real observations.
+ * An isolated point is drawn slightly larger. Recharts needs two adjacent
+ * non-null points to draw a segment, so a month whose neighbours are both
+ * null has no line at all — the lone dot is the entire visual record of
+ * that month.
  *
- *  2. ALWAYS draw one for an isolated point, whatever the zoom. Recharts
- *     needs two adjacent non-null points to draw a segment, so a month whose
- *     neighbours are both null renders as nothing at all with dot={false} —
- *     real data, silently invisible. It is drawn slightly larger, since a
- *     lone dot is the entire visual record of that month.
+ * `skip(payload)` omits the dot at points that aren't this series' own
+ * observation — e.g. the actual/forecast bridge, where the forecast line
+ * borrows the last actual value purely so the two lines join. Marking it
+ * would put a forecast dot on top of a real month.
  *
  * Recharts supplies the key on its own wrapper (see component/Dots.js), so
  * returning null here simply omits that dot.
  */
-export function seriesDot({ show, color, r = 3 }) {
-  return ({ cx, cy, index, points, dataKey }) => {
+export function seriesDot({ color, r = 3, skip }) {
+  return ({ cx, cy, index, points, dataKey, payload }) => {
     // A null month has no coordinates — nothing to mark.
     if (cx == null || cy == null) return null;
+    if (skip?.(payload)) return null;
 
     const valueAt = (i) => {
       const point = points?.[i];
@@ -193,8 +187,6 @@ export function seriesDot({ show, color, r = 3 }) {
       return point.value ?? point.payload?.[dataKey] ?? null;
     };
     const isolated = valueAt(index - 1) == null && valueAt(index + 1) == null;
-
-    if (!show && !isolated) return null;
 
     return (
       <circle

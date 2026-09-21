@@ -28,7 +28,7 @@ import os
 from collections.abc import Generator
 
 from dotenv import load_dotenv
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -112,3 +112,20 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token.",
         ) from exc
+
+
+def require_admin(current_user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
+    """get_current_user plus a 403 for anyone whose role isn't 'admin'.
+
+    Used on the endpoints that change shared data — the SKU master
+    (POST/PATCH /sku) and reorder decisions (PATCH /recommendations) — so a
+    staff account can read every page but not alter what the others see.
+    The frontend hides those buttons for staff too; this is the check that
+    actually holds, since the role in the browser's copy of the token is
+    only read for display."""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an admin account can do this.",
+        )
+    return current_user

@@ -79,11 +79,11 @@ class FakeSession:
 @pytest.fixture
 def sample_rows():
     return [
-        {"sku_id": "SKU-A", "product_name": "Product A", "principal": "unilever", "tier": "A", "revenue_share": 0.60,
+        {"product_key": 1, "sku_id": "SKU-A", "product_name": "Product A", "principal": "unilever", "tier": "A", "revenue_share": 0.60,
          "cumulative_share": 0.60, "boundary_flag": False, "current_stock": 120, "reorder_point": None, "_period": "2024-02"},
-        {"sku_id": "SKU-B", "product_name": "Product B", "principal": "unilever", "tier": "B", "revenue_share": 0.20,
+        {"product_key": 2, "sku_id": "SKU-B", "product_name": "Product B", "principal": "unilever", "tier": "B", "revenue_share": 0.20,
          "cumulative_share": 0.80, "boundary_flag": True, "current_stock": 40, "reorder_point": None, "_period": "2024-02"},
-        {"sku_id": "SKU-C", "product_name": "Product C", "principal": "unilever", "tier": "C", "revenue_share": 0.05,
+        {"product_key": 3, "sku_id": "SKU-C", "product_name": "Product C", "principal": "unilever", "tier": "C", "revenue_share": 0.05,
          "cumulative_share": 0.99, "boundary_flag": False, "current_stock": 0, "reorder_point": None, "_period": "2024-02"},
     ]
 
@@ -137,6 +137,22 @@ def test_tier_summary_rolls_up_correctly(client):
     assert summary["A"]["revenue_share_total"] == pytest.approx(0.60)
     assert summary["B"]["sku_count"] == 1
     assert summary["C"]["sku_count"] == 1
+
+
+def test_items_carry_product_key_and_sku_id_falls_back_to_category_path(sample_rows):
+    """Del Monte ABC rows are category grain with no sku_code. A '' fallback
+    gave all 85 of them the same sku_id, which the ABC page used as its row
+    key. The fallback itself is SQL, so it is checked on the issued query;
+    product_key (the frontend's row key) is checked on the response."""
+    session = FakeSession(sample_rows, latest_period="2024-02")
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
+    with TestClient(app) as c:
+        body = c.get("/abc", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    app.dependency_overrides.clear()
+    assert {i["product_key"] for i in body["items"]} == {1, 2, 3}
+    row_sql = [sql for sql, _ in session.calls if "FROM abc_classification ac" in sql]
+    assert row_sql and all("COALESCE(pd.sku_code, pd.category_path, '')" in sql for sql in row_sql)
 
 
 def test_empty_when_no_classification_rows_exist():
@@ -204,6 +220,7 @@ class LastKnownFakeSession:
             by_key = {p["product_key"]: p for p in self.products}
             out = [
                 {
+                    "product_key": k,
                     "sku_id": by_key[k]["sku_id"], "product_name": by_key[k]["product_name"],
                     "principal": r["principal"], "tier": r["tier"],
                     "tier_period": r["classification_period"],
@@ -262,6 +279,9 @@ def test_last_known_one_row_per_product_with_tier_period(last_known_session):
     assert set(items) == {"SKU-1", "SKU-2", "SKU-3"}
     assert items["SKU-1"]["tier"] == "A" and items["SKU-1"]["tier_period"] == "2026-02"
     assert items["SKU-3"]["tier_period"] == "2025-11"
+    assert [items[s]["product_key"] for s in ("SKU-1", "SKU-2", "SKU-3")] == [1, 2, 3]
+    lk_sql = [sql for sql, _ in last_known_session.calls if "WITH latest AS" in sql]
+    assert lk_sql and "COALESCE(pd.sku_code, pd.category_path, '')" in lk_sql[0]
 
 
 def test_last_known_revenue_total_excludes_carried_forward(last_known_session):

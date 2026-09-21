@@ -24,3 +24,23 @@ class AuditLogListResponse(BaseModel):
 class AuditLogCreate(BaseModel):
     action: str
     details: str | None = None
+
+
+class AuditUserSummary(BaseModel):
+    """One user's row on the Audit Log page (GET /audit-log/users)."""
+    user_email: str
+    user_name: str | None = None
+    role: str | None = None
+    login_count: int
+    # Sign-ins with a measured length. Lower than login_count when some
+    # sign-ins predate session tracking (backfilled from audit_log).
+    timed_session_count: int
+    # None when none of this user's sessions has a measured length yet.
+    longest_session_seconds: float | None = None
+    longest_session_started_at: datetime.datetime | None = None
+    last_login_at: datetime.datetime | None = None
+
+
+class AuditUserSummaryResponse(BaseModel):
+    items: list[AuditUserSummary]
+    count: int

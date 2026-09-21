@@ -7,6 +7,7 @@ import ViewSKUModal from './ViewSKUModal';
 import EditSKUModal from './EditSKUModal';
 import { logAction } from '../utils/auditLogger';
 import { getSKUs, createSKU, updateSKU } from '../api/sku';
+import { getCurrentUser } from '../auth';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
 import { formatMonth } from '../utils/formatDate';
 import Pagination from './Pagination';
@@ -31,6 +32,9 @@ const SKUManagement = () => {
   // Shared principal scope (Topbar's segmented control) — the SKU list
   // reloads whenever it changes, via loadSKUs' effect dep below.
   const { principal } = useOutletContext() || {};
+  // Adding and editing SKUs is admin-only (backend: require_admin on
+  // POST/PATCH /sku); staff see the list read-only.
+  const isAdmin = getCurrentUser()?.role === 'admin';
   const [rawItems, setRawItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -352,13 +356,17 @@ const SKUManagement = () => {
           <div>
             <h2 className="sku-page-title">SKU <span className="page-title-accent">Management</span></h2>
             <p className="sku-page-subtitle">
-              Add products or edit their name and brand. This is the master product list the forecasts draw from.
+              {isAdmin
+                ? 'Add products or edit their name and brand. This is the master product list the forecasts draw from.'
+                : 'The master product list the forecasts draw from. View only — adding and editing SKUs is limited to admin accounts.'}
             </p>
           </div>
-          <button className="add-sku-btn" onClick={() => setIsAddModalOpen(true)}>
-            <Plus size={16} />
-            Add SKU
-          </button>
+          {isAdmin && (
+            <button className="add-sku-btn" onClick={() => setIsAddModalOpen(true)}>
+              <Plus size={16} />
+              Add SKU
+            </button>
+          )}
         </div>
 
         {/* Summary Cards */}
@@ -694,7 +702,7 @@ const SKUManagement = () => {
         isOpen={isViewModalOpen}
         sku={selectedSKU}
         onClose={() => setIsViewModalOpen(false)}
-        onEdit={handleOpenEditModal}
+        onEdit={isAdmin ? handleOpenEditModal : undefined}
       />
 
       <EditSKUModal

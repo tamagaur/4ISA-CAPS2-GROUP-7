@@ -3,9 +3,9 @@ import { cachedRequest } from './cache';
 import { appendPrincipal } from '../principals';
 
 // principal ('all' | 'unilever' | 'delmonte') restored 2026-09-17 — see
-// src/principals.js. NOTE: Del Monte has no abc_classification rows yet,
-// so 'delmonte' legitimately returns an empty result until ABC is run for
-// it at category grain; that's an honest empty, not a failed request.
+// src/principals.js. Del Monte rows (since 2026-09-21) are category grain:
+// no SKU code, so sku_id is the category_path and product_name is often
+// null. Key rows on product_key, never sku_id.
 //
 // view: 'last_known' returns each product's most recent tier at or before
 // the period, each with its own tier_period (see backend/routers/abc.py).

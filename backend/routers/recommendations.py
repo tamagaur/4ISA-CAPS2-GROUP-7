@@ -74,7 +74,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_current_user, get_db, require_admin
 from backend.principals import (
     PrincipalQuery,
     latest_abc_period,
@@ -240,7 +240,7 @@ def update_recommendation(
     recommendation_key: int,
     decision: RecommendationDecision,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_admin),
 ) -> RecommendationItem:
     if decision.status not in ("accepted", "dismissed"):
         raise HTTPException(status_code=400, detail="status must be 'accepted' or 'dismissed'")

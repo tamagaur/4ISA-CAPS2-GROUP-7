@@ -271,7 +271,10 @@ const ABCClassification = () => {
   const sourceData = useMemo(
     () =>
       rawData.map((item) => ({
-        id: item.sku_id,
+        // Row key. product_key is unique per item; sku_id is only a label and
+        // was '' for every Del Monte (category-grain) row before the backend
+        // fell back to category_path — 85 rows sharing one React key.
+        id: item.product_key ?? `${item.principal}:${item.sku_id}`,
         sku: item.sku_id,
         product: item.product_name || 'Unknown Product',
         brand: brandLookup?.get(String(item.sku_id)) ?? null,

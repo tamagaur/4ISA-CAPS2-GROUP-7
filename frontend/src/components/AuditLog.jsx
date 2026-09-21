@@ -1,28 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { getAuditLog } from '../api/auditLog';
+import { getAuditLog, getAuditUserSummary } from '../api/auditLog';
 import { formatDateTime } from '../utils/formatDate';
-import Pagination from './Pagination';
 import './AuditLog.css';
 
-const ExpandableText = ({ text, maxLength = 60 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  if (!text) return null;
+const RECENT_CHANGES_LIMIT = 10;
+// Sign-ins are summarised per user above, so they are left out of the
+// changes list — otherwise it would be almost nothing but logins.
+const SIGN_IN_ACTIONS = ['Login', 'Logout'];
 
-  if (text.length <= maxLength) {
-    return <span>{text}</span>;
-  }
-
-  return (
-    <div className="audit-desc-expandable">
-      <span>{isExpanded ? text : `${text.substring(0, maxLength)}...`}</span>
-      <button
-        className="audit-desc-toggle"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        {isExpanded ? 'See less' : 'See more'}
-      </button>
-    </div>
-  );
+// Shorter labels for the long action names the app records.
+const ACTION_LABELS = {
+  'Reorder Recommendation Accepted': 'Reorder accepted',
+  'Reorder Recommendation Dismissed': 'Reorder dismissed',
 };
 
 const getInitials = (name) => {
@@ -42,81 +31,71 @@ const getAvatarColor = (name) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
+// 5400 -> "1h 30m", 600 -> "10m", 42 -> "42s".
+const formatDuration = (seconds) => {
+  if (seconds == null) return '—';
+  const s = Math.round(seconds);
+  if (s < 60) return `${s}s`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+};
 
-const AuditLog = () => {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [actionFilter, setActionFilter] = useState('');
-  const [userFilter, setUserFilter] = useState('');
-  // Same options/default as SKU Management and ABC Classification's
-  // tables (was a fixed 10-per-page with no way to change it).
-  const PAGE_SIZE_OPTIONS = [25, 50, 100];
-  const [logsPerPage, setLogsPerPage] = useState(25);
+const longestSessionTitle = (row) => {
+  if (row.longest_session_seconds == null) {
+    return row.login_count > 0
+      ? 'No measured session yet — these sign-ins predate session tracking'
+      : 'Never signed in';
+  }
+  return `Started ${formatDateTime(row.longest_session_started_at)} · ` +
+    `${row.timed_session_count} of ${row.login_count} sign-ins have a measured length`;
+};
 
+const UserBadge = ({ name, email }) => (
+  <div className="audit-user-info">
+    <div className="audit-avatar" style={{ backgroundColor: getAvatarColor(name) }} aria-hidden="true">
+      {getInitials(name)}
+    </div>
+    <div className="audit-user-details">
+      <span className="audit-user-name">{name}</span>
+      {email && email !== name && <span className="audit-user-handle">{email}</span>}
+    </div>
+  </div>
+);
+
+// Loads one section's data; each section fails or loads on its own, so a
+// problem with one never blanks the other.
+const useSection = (load) => {
+  const [state, setState] = useState({ loading: true, error: null, items: [] });
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    getAuditLog({ limit: 500 })
-      .then((res) => {
-        if (cancelled) return;
-        const formatted = (res.items || []).map((log) => ({
-          id: log.audit_log_key,
-          user: log.user_name || log.user_email,
-          email: log.user_email,
-          action: log.action,
-          details: log.details,
-          formattedTimestamp: formatDateTime(log.created_at),
-        }));
-        setLogs(formatted);
-      })
+    load()
+      .then((res) => { if (!cancelled) setState({ loading: false, error: null, items: res.items || [] }); })
       .catch((err) => {
-        if (cancelled) return;
-        setError(err.message || 'Failed to load audit log');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setState({ loading: false, error: err.message || 'Failed to load', items: [] });
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [load]);
+  return state;
+};
 
-  // Compute unique values for filters
-  const uniqueActions = [...new Set(logs.map(log => log.action))];
-  const uniqueUsers = [...new Set(logs.map(log => log.user))];
+const loadUsers = () => getAuditUserSummary();
+const loadChanges = () => getAuditLog({ excludeActions: SIGN_IN_ACTIONS, limit: RECENT_CHANGES_LIMIT });
 
-  // Filter logs
-  const filteredLogs = logs.filter(log => {
-    if (actionFilter && log.action !== actionFilter) return false;
-    if (userFilter && log.user !== userFilter) return false;
-    return true;
-  });
+const SectionStatus = ({ loading, error }) => {
+  if (loading) return <p className="audit-section-status">Loading…</p>;
+  if (error) return <p className="audit-section-status audit-section-error">Couldn&apos;t load this section: {error}</p>;
+  return null;
+};
 
-  // Pagination logic
-  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / logsPerPage));
-  const indexOfLastLog = currentPage * logsPerPage;
-  const indexOfFirstLog = indexOfLastLog - logsPerPage;
-  const currentLogs = filteredLogs.slice(indexOfFirstLog, indexOfLastLog);
+// Admin-only page (AdminRoute + require_admin on the API): sign-ins
+// summarised per user, then the latest changes made in the app.
+const AuditLog = () => {
+  const users = useSection(loadUsers);
+  const changes = useSection(loadChanges);
 
-  // Ensure current page is valid after filtering
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [totalPages, currentPage]);
-
-  // Any filter/page-size change puts the user back on page 1 — staying on
-  // page 7 of a result set that just shrank to 2 pages shows nothing.
-  // Mirrors SKU Management/ABC Classification's own reset effect.
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [actionFilter, userFilter, logsPerPage]);
-
-  const handleClearFilters = () => {
-    setActionFilter('');
-    setUserFilter('');
-  };
+  const totalLogins = users.items.reduce((sum, u) => sum + u.login_count, 0);
+  const longestSeconds = users.items[0]?.longest_session_seconds ?? null;
 
   return (
     <div className="audit-page">
@@ -124,110 +103,109 @@ const AuditLog = () => {
         <div className="audit-page-header">
           <div className="audit-header-left">
             <h2 className="audit-page-title">Audit <span className="page-title-accent">log</span></h2>
-            <p className="audit-page-subtitle">
-              Who did what, and when: sign-ins, SKU changes, and reorder decisions recorded in this system.
-            </p>
+            <p className="audit-page-subtitle">Who signs in, and what they change. Visible to admins only.</p>
           </div>
         </div>
 
-        {/* Filters Section */}
-        <div className="audit-filters-container">
-          <div className="audit-filter-group">
-            <label>Action</label>
-            <select
-              className="audit-dropdown-select"
-              value={actionFilter}
-              onChange={(e) => setActionFilter(e.target.value)}
-            >
-              <option value="">All Actions</option>
-              {uniqueActions.map(action => (
-                <option key={action} value={action}>{action}</option>
-              ))}
-            </select>
+        <section className="audit-section" aria-labelledby="audit-users-heading">
+          <div className="audit-section-header">
+            <h3 id="audit-users-heading" className="audit-section-title">Sign-ins by user</h3>
+            {!users.loading && !users.error && (
+              <span className="audit-section-count">
+                {users.items.length.toLocaleString()} user{users.items.length === 1 ? '' : 's'} ·{' '}
+                {totalLogins.toLocaleString()} sign-in{totalLogins === 1 ? '' : 's'}
+              </span>
+            )}
           </div>
-
-          <div className="audit-filter-group">
-            <label>Select User</label>
-            <select
-              className="audit-dropdown-select"
-              value={userFilter}
-              onChange={(e) => setUserFilter(e.target.value)}
-            >
-              <option value="">All Users</option>
-              {uniqueUsers.map(user => (
-                <option key={user} value={user}>{user}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="audit-filter-actions">
-            <button className="audit-btn-outline" onClick={handleClearFilters}>Clear Filters</button>
-          </div>
-        </div>
-
-        {loading && <p className="audit-page-subtitle">Loading audit log…</p>}
-        {error && <p className="audit-page-subtitle">Error: {error}</p>}
-
-        {/* Table Section */}
-        {!loading && !error && (
-          <div className="audit-table-wrapper">
-            <table className="audit-table">
-              <thead>
-                <tr>
-                  <th>User Name</th>
-                  <th>User email</th>
-                  <th>Action</th>
-                  <th>Timestamp</th>
-                  <th>Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentLogs.length > 0 ? (
-                  currentLogs.map((log) => (
-                    <tr key={log.id}>
-                      <td className="audit-user-cell">
-                        <div className="audit-user-info">
-                          <div
-                            className="audit-avatar"
-                            style={{ backgroundColor: getAvatarColor(log.user) }}
-                          >
-                            {getInitials(log.user)}
-                          </div>
-                          <div className="audit-user-details">
-                            <span className="audit-user-name">{log.user}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="audit-email-cell">
-                        <a href={`mailto:${log.email}`}>{log.email}</a>
-                      </td>
-                      <td className="audit-action-cell">{log.action}</td>
-                      <td className="audit-timestamp-cell">{log.formattedTimestamp}</td>
-                      <td className="audit-desc-cell">
-                        <ExpandableText text={log.details} />
-                      </td>
-                    </tr>
-                  ))
-                ) : (
+          <p className="audit-section-note">
+            A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
+            30 minutes without activity. Older sign-ins have no measured length.
+          </p>
+          <SectionStatus loading={users.loading} error={users.error} />
+          {!users.loading && !users.error && (
+            <div className="audit-table-wrapper">
+              <table className="audit-table audit-table-stack">
+                <thead>
                   <tr>
-                    <td colSpan="5" className="audit-no-results">No audit logs found.</td>
+                    <th>User</th>
+                    <th>Role</th>
+                    <th className="audit-num-cell">Sign-ins</th>
+                    <th className="audit-num-cell">Longest session</th>
+                    <th>Last sign-in</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {users.items.length > 0 ? (
+                    users.items.map((row) => {
+                      const name = row.user_name || row.user_email;
+                      const isLongest =
+                        longestSeconds != null && row.longest_session_seconds === longestSeconds;
+                      return (
+                        <tr key={row.user_email}>
+                          <td className="audit-stack-head"><UserBadge name={name} email={row.user_email} /></td>
+                          <td data-label="Role" className="audit-role-cell">{row.role || '—'}</td>
+                          <td data-label="Sign-ins" className="audit-num-cell">{row.login_count.toLocaleString()}</td>
+                          <td data-label="Longest session" className="audit-num-cell" title={longestSessionTitle(row)}>
+                            <span className="audit-duration">
+                              {isLongest && <span className="pill pill-planned audit-longest-badge">Longest</span>}
+                              {formatDuration(row.longest_session_seconds)}
+                            </span>
+                          </td>
+                          <td data-label="Last sign-in" className="audit-timestamp-cell">
+                            {row.last_login_at ? formatDateTime(row.last_login_at) : 'Never'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="audit-no-results">No users found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={filteredLogs.length}
-          pageSize={logsPerPage}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={setLogsPerPage}
-          pageSizeOptions={PAGE_SIZE_OPTIONS}
-          idPrefix="audit"
-        />
+        <section className="audit-section" aria-labelledby="audit-changes-heading">
+          <div className="audit-section-header">
+            <h3 id="audit-changes-heading" className="audit-section-title">Recent changes</h3>
+            <span className="audit-section-count">Latest {RECENT_CHANGES_LIMIT}</span>
+          </div>
+          <p className="audit-section-note">SKU edits, reorder decisions and user account changes, newest first.</p>
+          <SectionStatus loading={changes.loading} error={changes.error} />
+          {!changes.loading && !changes.error && (
+            <div className="audit-table-wrapper">
+              <table className="audit-table audit-table-stack">
+                <thead>
+                  <tr>
+                    <th>Change</th>
+                    <th>By</th>
+                    <th>When</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {changes.items.length > 0 ? (
+                    changes.items.map((log) => (
+                      <tr key={log.audit_log_key}>
+                        <td className="audit-stack-head audit-action-cell">{ACTION_LABELS[log.action] || log.action}</td>
+                        <td data-label="By"><UserBadge name={log.user_name || log.user_email} /></td>
+                        <td data-label="When" className="audit-timestamp-cell">{formatDateTime(log.created_at)}</td>
+                        <td data-label="Details" className="audit-desc-cell">{log.details || '—'}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="4" className="audit-no-results">No changes recorded yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

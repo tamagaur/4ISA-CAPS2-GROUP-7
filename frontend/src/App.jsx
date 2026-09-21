@@ -62,7 +62,14 @@ function App() {
           <Route path="abc" element={<ABCClassification />} />
           <Route path="forecast" element={<SKUForecast />} />
           <Route path="reorder" element={<ReorderRecommendations />} />
-          <Route path="audit-log" element={<AuditLog />} />
+          <Route
+            path="audit-log"
+            element={
+              <AdminRoute>
+                <AuditLog />
+              </AdminRoute>
+            }
+          />
           <Route path="upload" element={<DataUpload />} />
           <Route
             path="users"

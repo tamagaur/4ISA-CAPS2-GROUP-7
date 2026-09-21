@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_current_user, get_db, require_admin
 from backend.principals import (
     PrincipalQuery,
     latest_abc_period,
@@ -168,7 +168,7 @@ def get_skus(
 def create_sku(
     payload: SKUCreate,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_admin),
 ) -> SKUItem:
     # Unilever-only (2026-09): hard-reject anything else rather than
     # silently coercing — a client believing a non-Unilever SKU was
@@ -218,7 +218,7 @@ def update_sku(
     product_key: int,
     payload: SKUUpdate,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_admin),
 ) -> SKUItem:
     if payload.status is not None and payload.status not in ("ACTIVE", "DISABLED"):
         raise HTTPException(status_code=400, detail="status must be 'ACTIVE' or 'DISABLED'")

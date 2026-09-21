@@ -8,7 +8,7 @@
   padding: 0 3rem 3rem 3rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 2rem;
 }
 
 /* Page Header */
@@ -18,7 +18,6 @@
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 0.8rem;
-  margin-bottom: 0.25rem;
 }
 
 .audit-header-left {
@@ -41,101 +40,64 @@
 
 .audit-page-subtitle {
   color: var(--color-text-subtle);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   margin: 0;
   line-height: 1.5;
   max-width: 800px;
 }
 
-/* Filters Section (Adapted to fit SAN2 theme seamlessly) */
-.audit-filters-container {
-  display: flex;
-  align-items: flex-end;
-  gap: 1.5rem;
-  background-color: var(--color-surface);
-  padding: 1.5rem 2rem;
-  border-radius: 12px;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.04), 0 6px 6px rgba(0, 0, 0, 0.02);
-  border: 1px solid var(--color-border);
-}
-
-.audit-filter-group {
+/* Sections: "Sign-ins by user" and "Recent changes". Each is a size
+   container, so its table switches to stacked cards based on the room the
+   section actually has — the sidebar takes 250px above 900px and none
+   below, so the viewport width alone would pick the wrong layout. */
+.audit-section {
+  container: audit-section / inline-size;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
-.audit-filter-group label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-}
-
-.audit-dropdown-select {
-  appearance: none;
-  -webkit-appearance: none;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border-strong);
-  padding: 0.5rem 2rem 0.5rem 0.8rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  color: var(--color-text-body);
-  cursor: pointer;
-  transition: border-color 0.2s;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23718096' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.7rem center;
-  background-size: 1rem;
-}
-
-.audit-dropdown-select:focus,
-.audit-dropdown-select:hover {
-  border-color: var(--color-text-subtle);
-  outline: none;
-}
-
-.audit-filter-actions {
+.audit-section-header {
   display: flex;
-  gap: 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
 }
 
-.audit-btn-primary {
-  background-color: var(--color-brand-primary);
-  color: var(--color-surface);
-  border: none;
-  padding: 0.6rem 1.2rem;
-  border-radius: 6px;
+.audit-section-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.audit-section-count {
   font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  box-shadow: 0 2px 5px rgba(197, 48, 48, 0.2);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.audit-btn-primary:hover {
-  background-color: var(--color-brand-hover);
-}
-
-.audit-btn-outline {
-  background-color: var(--color-surface);
-  color: var(--color-text-body);
-  border: 1px solid var(--color-border-strong);
-  padding: 0.6rem 1.2rem;
-  border-radius: 6px;
+.audit-section-note {
+  margin: 0 0 0.5rem;
   font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  line-height: 1.5;
+  color: var(--color-text-subtle);
+  max-width: 70ch;
 }
 
-.audit-btn-outline:hover {
-  background-color: var(--color-surface-raised);
+.audit-section-status {
+  margin: 0;
+  padding: 1.25rem 0;
+  font-size: 0.9rem;
+  color: var(--color-text-subtle);
 }
 
-/* Table Section */
+.audit-section-error {
+  color: var(--color-severity-critical);
+}
+
+/* Table */
 .audit-table-wrapper {
   background-color: var(--color-surface);
   border-radius: 12px;
@@ -147,9 +109,8 @@
 
 .audit-table {
   width: 100%;
-  min-width: 900px;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 
 .audit-table thead {
@@ -158,8 +119,8 @@
 
 .audit-table th {
   text-align: left;
-  padding: 1rem 1.5rem;
-  font-size: 0.7rem;
+  padding: 0.9rem 1.25rem;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--color-text-subtle);
@@ -173,21 +134,27 @@
   transition: background-color 0.15s;
 }
 
+.audit-table tbody tr:last-child {
+  border-bottom: none;
+}
+
 .audit-table tbody tr:hover {
   background-color: var(--color-surface-raised);
 }
 
 .audit-table td {
-  padding: 1rem 1.5rem;
+  padding: 0.9rem 1.25rem;
   color: var(--color-text-body);
   vertical-align: middle;
+  line-height: 1.45;
 }
 
-/* User Cell */
+/* User cell: avatar, name, and the email beneath it */
 .audit-user-info {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .audit-avatar {
@@ -206,6 +173,7 @@
 .audit-user-details {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .audit-user-name {
@@ -214,94 +182,148 @@
 }
 
 .audit-user-handle {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--color-text-subtle);
+  overflow-wrap: anywhere;
 }
 
-/* Email Cell */
-.audit-email-cell a {
-  color: var(--color-info);
-  text-decoration: none;
-  font-weight: 500;
+.audit-role-cell {
+  color: var(--color-text-muted);
+  text-transform: capitalize;
 }
 
-.audit-email-cell a:hover {
-  text-decoration: underline;
+.audit-table th.audit-num-cell,
+.audit-table td.audit-num-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.audit-table td.audit-num-cell {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.audit-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .audit-action-cell {
   font-weight: 600;
   color: var(--color-text-heading);
+  white-space: nowrap;
 }
 
 .audit-timestamp-cell {
   color: var(--color-text-muted);
-  font-size: 0.82rem;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-/* Expandable Description */
 .audit-desc-cell {
-  max-width: 350px;
-}
-
-.audit-desc-expandable {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  color: var(--color-text-body);
-  line-height: 1.4;
-}
-
-.audit-desc-toggle {
-  background: none;
-  border: none;
-  color: var(--color-info);
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.2rem 0;
-  cursor: pointer;
-  margin-top: 0.2rem;
-  transition: color 0.2s;
-}
-
-.audit-desc-toggle:hover {
-  color: #2b6cb0;
-  text-decoration: underline;
+  min-width: 14rem;
+  overflow-wrap: anywhere;
 }
 
 .audit-no-results {
   text-align: center;
-  padding: 3rem 1rem !important;
+  padding: 2.5rem 1rem !important;
   color: var(--color-text-subtle);
   font-style: italic;
 }
 
-/* Pagination bar styles live in index.css (.table-pagination-*, shared
-   with SKU Management and ABC Classification). */
+/* Table layout: keep a name on one line; the details column wraps instead. */
+@container audit-section (min-width: 601px) {
+  .audit-table-stack .audit-user-name {
+    white-space: nowrap;
+  }
+}
 
-/* Responsive */
+/* Narrow sections (phones, or a narrow window): each row becomes a card —
+   its first cell (the user, or the change) as the heading, then one
+   label / value line per remaining cell. The labels come from each cell's
+   data-label, so a value is never read without its meaning. */
+@container audit-section (max-width: 600px) {
+  .audit-table-stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .audit-table-stack,
+  .audit-table-stack tbody,
+  .audit-table-stack tr,
+  .audit-table-stack td {
+    display: block;
+    width: 100%;
+  }
+
+  .audit-table-stack tbody tr {
+    padding: 1rem 1.1rem;
+  }
+
+  .audit-table-stack td {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 38%) 1fr;
+    column-gap: 1rem;
+    align-items: baseline;
+    padding: 0.25rem 0;
+    text-align: left !important;
+    white-space: normal;
+  }
+
+  .audit-table-stack td[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-subtle);
+  }
+
+  .audit-table-stack td.audit-stack-head {
+    display: block;
+    padding: 0 0 0.6rem;
+    font-size: 1rem;
+  }
+
+  .audit-table-stack td.audit-num-cell {
+    font-weight: 600;
+  }
+
+  .audit-table-stack td.audit-desc-cell {
+    min-width: 0;
+  }
+
+  .audit-table-stack td.audit-no-results {
+    display: block;
+    text-align: center !important;
+  }
+}
+
+/* Page-level spacing follows the viewport, like the other pages. */
 @media (max-width: 1300px) {
   .audit-content {
     padding: 0 1.5rem 1.5rem 1.5rem;
   }
 }
 
-@media (max-width: 900px) {
-  .audit-filters-container {
-    flex-wrap: wrap;
-  }
-  .audit-filter-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-}
-
 @media (max-width: 640px) {
-  .audit-page-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.8rem;
+  .audit-content {
+    padding: 0 1rem 1.5rem 1rem;
+    gap: 1.5rem;
+  }
+
+  .audit-page-title {
+    font-size: 1.6rem;
+  }
+
+  .audit-page-title .page-title-accent {
+    font-size: 1.7rem;
   }
 }

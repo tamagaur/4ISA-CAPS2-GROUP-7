@@ -17,6 +17,10 @@ from pydantic import BaseModel
 
 
 class ABCItem(BaseModel):
+    # Unique per item in both views (one row per product_key). The frontend
+    # keys rows on this, not sku_id: sku_id is a display label, and before
+    # the category_path fallback was restored every Del Monte row had ''.
+    product_key: int | None = None
     sku_id: str
     product_name: str | None = None
     principal: str

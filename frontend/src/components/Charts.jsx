@@ -118,7 +118,8 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
                   stroke={CHART_COLORS.stockSeries}
                   fill="none"
                   strokeWidth={2}
-                  dot={false}
+                  dot={seriesDot({ color: CHART_COLORS.stockSeries })}
+                  activeDot={{ r: 5 }}
                   connectNulls={false}
                   {...chartAnim()}
                 />
@@ -385,7 +386,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   name="Sales"
                   stroke={CHART_COLORS.salesSeries}
                   strokeWidth={2}
-                  dot={seriesDot({ show: zoom.showDots, color: CHART_COLORS.salesSeries })}
+                  dot={seriesDot({ color: CHART_COLORS.salesSeries })}
                   activeDot={{ r: 5 }}
                   {...zoom.zoomAnim(0)}
                 />
@@ -395,7 +396,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   name="Stock on hand"
                   stroke={CHART_COLORS.stockSeries}
                   strokeWidth={2}
-                  dot={seriesDot({ show: zoom.showDots, color: CHART_COLORS.stockSeries })}
+                  dot={seriesDot({ color: CHART_COLORS.stockSeries })}
                   activeDot={{ r: 5 }}
                   {...zoom.zoomAnim(1)}
                 />
@@ -407,7 +408,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                     stroke={COLORS.forecast}
                     strokeDasharray="7 5"
                     strokeWidth={2.5}
-                    dot={seriesDot({ show: zoom.showDots, color: COLORS.forecast })}
+                    dot={seriesDot({ color: COLORS.forecast })}
                     activeDot={{ r: 5 }}
                     {...zoom.zoomAnim(2)}
                   />
@@ -752,8 +753,8 @@ export const PortfolioForecastWidget = ({
     // Bridge the actual/forecast junction: dashboard.py's portfolio_forecast
     // usually has exactly ONE real forecast bucket (see its docstring) —
     // an isolated point with nothing adjacent to connect to, and Recharts
-    // needs 2 adjacent non-null points to draw a segment. The Lines now
-    // fall back to an isolated-point dot (seriesDot), but the confidence
+    // needs 2 adjacent non-null points to draw a segment. The Lines would
+    // still show it as an isolated-point dot (seriesDot), but the confidence
     // band is an Area and has no such fallback, so the bridge still earns
     // its place. Injecting the last actual value as that point's own
     // "forecast" (and a zero-width band) gives both a real 2-point run to
@@ -868,7 +869,7 @@ export const PortfolioForecastWidget = ({
                   name="Actual demand"
                   stroke={CHART_COLORS.salesSeries}
                   strokeWidth={2}
-                  dot={seriesDot({ show: zoom.showDots, color: CHART_COLORS.salesSeries })}
+                  dot={seriesDot({ color: CHART_COLORS.salesSeries })}
                   activeDot={{ r: 5 }}
                   connectNulls={false}
                   {...zoom.zoomAnim(1)}
@@ -880,7 +881,7 @@ export const PortfolioForecastWidget = ({
                   stroke={COLORS.forecast}
                   strokeDasharray="5 3"
                   strokeWidth={2}
-                  dot={seriesDot({ show: zoom.showDots, color: COLORS.forecast })}
+                  dot={seriesDot({ color: COLORS.forecast, skip: (p) => p?.actual != null })}
                   activeDot={{ r: 5 }}
                   connectNulls={false}
                   {...zoom.zoomAnim(2)}

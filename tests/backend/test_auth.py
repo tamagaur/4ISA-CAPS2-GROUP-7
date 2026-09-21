@@ -23,9 +23,11 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from jose import jwt
+from sqlalchemy.exc import ProgrammingError
 
 from backend import auth_utils
 from backend.deps import get_current_user, get_db
+from backend.login_limiter import MAX_FAILURES_PER_EMAIL, login_limiter
 from backend.main import app
 
 
@@ -34,6 +36,15 @@ def jwt_env(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret-do-not-use-in-prod")
     monkeypatch.setenv("JWT_ALGORITHM", "HS256")
     monkeypatch.setenv("JWT_EXPIRY_HOURS", "1")
+
+
+@pytest.fixture(autouse=True)
+def fresh_login_limiter():
+    # Every TestClient request comes from the same address, so failed-login
+    # counts would otherwise carry from one test into the next.
+    login_limiter.reset()
+    yield
+    login_limiter.reset()
 
 
 class FakeResult:
@@ -54,6 +65,13 @@ class FakeSession:
     def __init__(self, users):
         self.users = users
         self.committed = False
+        self.rolled_back = False
+        # user_session writes (migration 0023): rows opened at login, and
+        # every UPDATE issued by heartbeat/logout as (sql, params).
+        self.sessions: list[dict] = []
+        self.session_updates: list[tuple[str, dict]] = []
+        # Simulates migration 0023 not being applied yet.
+        self.fail_session_insert = False
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
@@ -78,10 +96,21 @@ class FakeSession:
                 "role": new_user["role"],
                 "full_name": new_user["full_name"],
             })
+        if "INSERT INTO user_session" in sql:
+            if self.fail_session_insert:
+                raise ProgrammingError(sql, params, Exception('relation "user_session" does not exist'))
+            self.sessions.append(dict(params))
+            return FakeResult(None)
+        if "UPDATE user_session" in sql:
+            self.session_updates.append((sql, dict(params)))
+            return FakeResult(None)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
     def commit(self):
         self.committed = True
+
+    def rollback(self):
+        self.rolled_back = True
 
     def close(self):
         pass
@@ -101,9 +130,13 @@ def fake_users():
 
 
 @pytest.fixture
-def client(fake_users):
-    session = FakeSession(fake_users)
-    app.dependency_overrides[get_db] = lambda: session
+def fake_session(fake_users):
+    return FakeSession(fake_users)
+
+
+@pytest.fixture
+def client(fake_session):
+    app.dependency_overrides[get_db] = lambda: fake_session
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -324,3 +357,121 @@ def test_register_rejects_blank_full_name(client):
         headers={"Authorization": f"Bearer {admin_token()}"},
     )
     assert resp.status_code == 422
+
+
+# --- sessions: login / heartbeat / logout (user_session, migration 0023) ---
+
+
+def _login(client):
+    resp = client.post(
+        "/auth/login",
+        json={"email": "admin@ssmcapstone.com", "password": "correct-horse-battery-staple"},
+    )
+    assert resp.status_code == 200
+    return resp.json()["access_token"]
+
+
+def test_login_opens_a_session_and_the_token_carries_its_id(client, fake_session):
+    token = _login(client)
+    assert len(fake_session.sessions) == 1
+    opened = fake_session.sessions[0]
+    assert opened["user_email"] == "admin@ssmcapstone.com"
+    assert opened["role"] == "admin"
+    assert auth_utils.decode_access_token(token).session_id == opened["session_id"]
+
+
+def test_login_still_succeeds_when_the_session_table_is_missing(client, fake_session):
+    """Session tracking is best-effort: an unapplied migration must not lock
+    everyone out. The token just carries no session id."""
+    fake_session.fail_session_insert = True
+    token = _login(client)
+    assert fake_session.rolled_back
+    assert auth_utils.decode_access_token(token).session_id is None
+
+
+def test_heartbeat_closes_an_idle_session_first_then_extends_it(client, fake_session):
+    token = _login(client)
+    sid = fake_session.sessions[0]["session_id"]
+    resp = client.post("/auth/heartbeat", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 204
+    (idle_sql, idle_params), (beat_sql, beat_params) = fake_session.session_updates
+    assert "end_reason = 'idle'" in idle_sql
+    assert idle_params == {"session_id": sid, "idle_minutes": 30}
+    assert "SET last_seen_at = now()" in beat_sql and "ended_at = now()" not in beat_sql
+    assert beat_params == {"session_id": sid}
+
+
+def test_logout_closes_the_session(client, fake_session):
+    token = _login(client)
+    resp = client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 204
+    logout_sql, params = fake_session.session_updates[-1]
+    assert "end_reason = 'logout'" in logout_sql
+    assert params == {"session_id": fake_session.sessions[0]["session_id"]}
+
+
+def test_heartbeat_for_a_token_without_a_session_id_is_a_noop(client, fake_session):
+    resp = client.post("/auth/heartbeat", headers={"Authorization": f"Bearer {admin_token()}"})
+    assert resp.status_code == 204
+    assert fake_session.session_updates == []
+
+
+def test_heartbeat_requires_auth(client):
+    assert client.post("/auth/heartbeat").status_code == 401
+
+
+# --- failed sign-in lockout (backend/login_limiter.py) ---------------------
+
+GOOD = {"email": "admin@ssmcapstone.com", "password": "correct-horse-battery-staple"}
+BAD = {"email": "admin@ssmcapstone.com", "password": "wrong-password"}
+
+
+def test_fifth_wrong_password_locks_the_email(client):
+    for _ in range(MAX_FAILURES_PER_EMAIL - 1):
+        assert client.post("/auth/login", json=BAD).status_code == 401
+    locked = client.post("/auth/login", json=BAD)
+    assert locked.status_code == 429
+    assert locked.json()["detail"] == "Too many failed sign-in attempts. Try again in 15 minutes."
+    assert locked.headers["Retry-After"] == "900"
+
+
+def test_correct_password_is_refused_while_locked(client, fake_session):
+    """Otherwise an attacker could keep guessing during the lock and watch
+    for the one answer that differs."""
+    for _ in range(MAX_FAILURES_PER_EMAIL):
+        client.post("/auth/login", json=BAD)
+    assert client.post("/auth/login", json=GOOD).status_code == 429
+    assert fake_session.sessions == []  # no sign-in happened
+
+
+def test_unknown_email_locks_the_same_way(client):
+    """Same lock for emails with no account, so the lock can't be used to
+    discover which emails exist."""
+    ghost = {"email": "nobody@ssmcapstone.com", "password": "whatever123"}
+    codes = [client.post("/auth/login", json=ghost).status_code for _ in range(MAX_FAILURES_PER_EMAIL)]
+    assert codes == [401] * (MAX_FAILURES_PER_EMAIL - 1) + [429]
+
+
+def test_successful_sign_in_resets_the_count(client):
+    for _ in range(MAX_FAILURES_PER_EMAIL - 1):
+        client.post("/auth/login", json=BAD)
+    assert client.post("/auth/login", json=GOOD).status_code == 200
+    for _ in range(MAX_FAILURES_PER_EMAIL - 1):
+        assert client.post("/auth/login", json=BAD).status_code == 401
+
+
+def test_repeated_successful_sign_ins_are_never_limited(client):
+    for _ in range(MAX_FAILURES_PER_EMAIL * 3):
+        assert client.post("/auth/login", json=GOOD).status_code == 200
+
+
+def test_lock_on_one_email_does_not_block_another(client, fake_users):
+    fake_users.append({
+        "user_id": 2, "email": "staff@ssmcapstone.com",
+        "password_hash": auth_utils.hash_password("staff-password-1"),
+        "full_name": "Staff User", "role": "staff",
+    })
+    for _ in range(MAX_FAILURES_PER_EMAIL):
+        client.post("/auth/login", json=BAD)
+    resp = client.post("/auth/login", json={"email": "staff@ssmcapstone.com", "password": "staff-password-1"})
+    assert resp.status_code == 200

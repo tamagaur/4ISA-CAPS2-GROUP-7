@@ -8,7 +8,6 @@
 // safe as this app's exposure to XSS — acceptable for an internal staff
 // tool, worth revisiting if the dashboard ever embeds third-party scripts.
 
-import { logAction } from './utils/auditLogger';
 import { invalidateCache } from './api/cache';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -124,16 +123,40 @@ export async function login(email, password) {
     throw new Error(extractErrorMessage(body, 'Login failed. Check your email and password.'));
   }
 
+  // The backend records the sign-in itself (a user_session row, see
+  // backend/routers/auth.py) — the Audit Log page counts sign-ins from
+  // there, so nothing is posted to /audit-log from here.
   const data = await res.json();
   setSession(data.access_token, data.role);
-  logAction('Login', `${email} signed in`);
   return data;
 }
 
 export function logout() {
-  const user = getCurrentUser();
-  logAction('Logout', `${user?.email || 'Unknown user'} signed out`);
+  // Fired before clearSession() so it still carries this session's token;
+  // keepalive lets it finish while the page navigates to /login.
+  apiFetch('/auth/logout', { method: 'POST', keepalive: true }).catch(() => {});
   clearSession();
+}
+
+// Tells the backend the signed-in user is still here, which is what a
+// session's length on the Audit Log page is measured from. Beats every
+// minute and when the tab becomes visible again; a hidden tab stays quiet,
+// and after 30 idle minutes the backend closes the session. Returns the
+// cleanup for a useEffect.
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
+
+export function startSessionHeartbeat() {
+  const beat = () => {
+    if (document.visibilityState !== 'visible' || !isAuthenticated()) return;
+    apiFetch('/auth/heartbeat', { method: 'POST' }).catch(() => {});
+  };
+  beat();
+  const timer = setInterval(beat, HEARTBEAT_INTERVAL_MS);
+  document.addEventListener('visibilitychange', beat);
+  return () => {
+    clearInterval(timer);
+    document.removeEventListener('visibilitychange', beat);
+  };
 }
 
 // Merges Authorization: Bearer <token> into whatever headers the caller
