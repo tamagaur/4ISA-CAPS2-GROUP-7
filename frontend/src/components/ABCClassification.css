@@ -724,6 +724,19 @@
   background-color: var(--color-surface-raised);
 }
 
+/* "This run only" — narrows the table to SKUs ranked in the selected
+   month, hiding carried-forward tiers. */
+.abc-current-run-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 /* Table */
 /* Table base styles live in index.css (.data-table-card / .data-table). */
 .abc-table {
@@ -823,4 +836,18 @@
   .abc-pareto-container {
     animation: none;
   }
+}
+
+/* Carried-forward tier: the SKU's most recent category from an earlier run.
+   Faded, matching SKU Management's .cat-badge.cat-stale. */
+.abc-cat-badge.abc-cat-stale {
+  opacity: 0.55;
+}
+
+/* The month a carried-forward row's Rev % belongs to, under the value. */
+.abc-rev-period {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--color-text-subtle);
 }

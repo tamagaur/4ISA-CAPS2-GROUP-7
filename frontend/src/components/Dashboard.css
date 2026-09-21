@@ -473,6 +473,20 @@
   min-height: 140px;
 }
 
+/* Except a card with its own filter: its empty state is one click away
+   from a full chart, so it keeps the full card height instead of the
+   page jumping every time that filter lands on an empty scope. */
+.dash-slot > .chart-widget-filterable.chart-widget-empty {
+  height: 360px;
+  min-height: 0;
+}
+
+@media (max-width: 768px) {
+  .dash-slot > .chart-widget-filterable.chart-widget-empty {
+    height: 320px;
+  }
+}
+
 /* Entrance stagger. --enter-delay inherits down to the .chart-widget
    inside each slot (Charts.css consumes it); setting it on the slot is
    what makes a row read as one build instead of both cards jumping

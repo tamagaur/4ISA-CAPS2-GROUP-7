@@ -187,6 +187,10 @@ const ABCClassification = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [classificationPeriod, setClassificationPeriod] = useState(null);
+  // Products in scope ABC has never ranked at or before this period (no
+  // sales in any run) — counted by the backend, not listed, since they have
+  // no tier to show.
+  const [unclassifiedCount, setUnclassifiedCount] = useState(null);
   // Which request the rows currently on screen came from — null until the
   // first one lands. Distinguishes "nothing to show yet" (cold load, needs
   // a skeleton) from "showing the previous answer while a new one loads"
@@ -196,6 +200,10 @@ const ABCClassification = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [brandFilter, setBrandFilter] = useState('ALL');
+  // Off by default: the table lists every SKU's most recent tier. On, it
+  // narrows to the SKUs ranked in THIS run — what the page showed before
+  // last-known tiers, and the only set whose Rev % values sum to 100%.
+  const [currentRunOnly, setCurrentRunOnly] = useState(false);
 
   // Table pagination — the full SKU table can run 600+ rows, which is
   // slow to render and hard to scan in one scroll. PAGE_SIZE_OPTIONS
@@ -231,11 +239,16 @@ const ABCClassification = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getABCClassification({ classification_period: requestedPeriod, principal })
+    // last_known: each SKU's most recent tier at or before this month, the
+    // same rule SKU Management uses, so the two pages count the same SKUs.
+    // Only-this-run used to leave two thirds of the catalogue off the page
+    // (a SKU with no sales in the month simply isn't ranked in it).
+    getABCClassification({ classification_period: requestedPeriod, principal, view: 'last_known' })
       .then((res) => {
         if (cancelled) return;
         setRawData(res.items || []);
         setClassificationPeriod(res.classification_period || null);
+        setUnclassifiedCount(res.unclassified_count ?? null);
         setLoadedKey(`${requestedPeriod ?? ''}|${principal ?? ''}`);
       })
       .catch((err) => {
@@ -263,15 +276,25 @@ const ABCClassification = () => {
         product: item.product_name || 'Unknown Product',
         brand: brandLookup?.get(String(item.sku_id)) ?? null,
         cat: item.tier,
+        // The run this row's tier and shares come from. When it is older than
+        // the page's period the tier is carried forward: the SKU had no sales
+        // in the later runs, so it was not re-ranked.
+        catPeriod: item.tier_period,
+        isCurrent: item.tier_period === classificationPeriod,
         // revenue_share / cumulative_share come from the API as 0-1 fractions
         // (see analytics/classification/abc.py); everything downstream here
         // (table cells, chart axis 0-100, tooltip) expects 0-100 percentages.
+        // For a carried-forward row this is its share of ITS OWN month's
+        // revenue, so it is labelled with that month and never summed into
+        // this run's totals.
         revPct: (item.revenue_share ?? 0) * 100,
         cumulativePct: (item.cumulative_share ?? 0) * 100,
-        nearBoundary: !!item.boundary_flag,
+        // Distance to a tier cutoff in an old run says nothing about the next
+        // review, so the flag only counts on current-run rows.
+        nearBoundary: !!item.boundary_flag && item.tier_period === classificationPeriod,
         status: item.stock_status,
       })),
-    [rawData, brandLookup]
+    [rawData, brandLookup, classificationPeriod]
   );
 
   // Handle click outside combobox to close dropdown
@@ -288,13 +311,23 @@ const ABCClassification = () => {
   const catACount = sourceData.filter(d => d.cat === 'A').length;
   const catBCount = sourceData.filter(d => d.cat === 'B').length;
   const catCCount = sourceData.filter(d => d.cat === 'C').length;
+  const carriedCountOf = (cat) => sourceData.filter(d => d.cat === cat && !d.isCurrent).length;
+  const currentRunCount = sourceData.filter(d => d.isCurrent).length;
 
   const brandsList = ['ALL', ...Array.from(new Set(sourceData.map(d => d.brand).filter(Boolean))).sort()];
 
-  // Rank by revenue share for the Pareto chart's x-axis; cumulative_share
-  // and boundary_flag already come straight from the backend.
+  // Current-run SKUs first, ranked by this run's revenue share (which is
+  // also A -> B -> C order). Carried-forward SKUs follow, by tier then most
+  // recently classified: their shares belong to different months, so
+  // ranking them against this run's shares would be meaningless.
   const dataWithCumulative = useMemo(() => {
-    const sorted = [...sourceData].sort((a, b) => b.revPct - a.revPct);
+    const sorted = [...sourceData].sort((a, b) => {
+      if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
+      if (a.isCurrent) return b.revPct - a.revPct;
+      if (a.cat !== b.cat) return a.cat < b.cat ? -1 : 1;
+      if (a.catPeriod !== b.catPeriod) return (b.catPeriod || '') < (a.catPeriod || '') ? -1 : 1;
+      return b.revPct - a.revPct;
+    });
     return sorted.map((item, index) => ({ ...item, rank: index + 1 }));
   }, [sourceData]);
 
@@ -310,7 +343,10 @@ const ABCClassification = () => {
         label: `Class ${cat}`,
         skuCount: catItems.length,
         skuSharePct: totalCount > 0 ? (catItems.length / totalCount) * 100 : 0,
-        revenueTotal: catItems.reduce((sum, d) => sum + (d.revPct || 0), 0),
+        // This run's revenue only — a carried-forward share is a fraction of
+        // another month's revenue, and adding it would push the three
+        // classes past 100% combined.
+        revenueTotal: catItems.filter((d) => d.isCurrent).reduce((sum, d) => sum + (d.revPct || 0), 0),
         inStockPct: (countOf('IN STOCK') / n) * 100,
         lowPct: (countOf('LOW') / n) * 100,
         criticalPct: (countOf('CRITICAL') / n) * 100,
@@ -350,9 +386,10 @@ const ABCClassification = () => {
         (item.brand || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCat = categoryFilter === 'ALL' || item.cat === categoryFilter;
       const matchesBrand = brandFilter === 'ALL' || item.brand === brandFilter;
-      return matchesSearch && matchesCat && matchesBrand;
+      const matchesRun = !currentRunOnly || item.isCurrent;
+      return matchesSearch && matchesCat && matchesBrand && matchesRun;
     });
-  }, [dataWithCumulative, searchQuery, categoryFilter, brandFilter]);
+  }, [dataWithCumulative, searchQuery, categoryFilter, brandFilter, currentRunOnly]);
 
   // Whenever the filtered set changes shape (new search, new filter, or
   // the page size itself), snap back to page 1 — staying on e.g. page 4
@@ -360,7 +397,7 @@ const ABCClassification = () => {
   // page or an out-of-range slice.
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, brandFilter, pageSize]);
+  }, [searchQuery, categoryFilter, brandFilter, currentRunOnly, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
 
@@ -405,12 +442,24 @@ const ABCClassification = () => {
     }, 2000);
   };
 
-  const hasActiveFilters = searchQuery !== '' || categoryFilter !== 'ALL' || brandFilter !== 'ALL';
+  const hasActiveFilters =
+    searchQuery !== '' || categoryFilter !== 'ALL' || brandFilter !== 'ALL' || currentRunOnly;
 
   const handleClearFilters = () => {
     setSearchQuery('');
     setCategoryFilter('ALL');
     setBrandFilter('ALL');
+    setCurrentRunOnly(false);
+  };
+
+  // Hover text for a category badge: which run it came from, and an explicit
+  // note when it is carried forward — same wording as SKU Management.
+  const catTitle = (item) => {
+    if (!item.catPeriod) return `Category ${item.cat}`;
+    const when = formatMonth(item.catPeriod);
+    return item.isCurrent
+      ? `Category ${item.cat} — current run (${when})`
+      : `Category ${item.cat} — last classified ${when}; no sales since, so this is carried forward`;
   };
 
   const getStatusClass = (status) => {
@@ -455,6 +504,7 @@ const ABCClassification = () => {
       <p className="abc-page-subtitle">
         Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
         {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}.</>}
+        {' '}SKUs with no sales that month keep their most recent category, shown faded with the month it was set.
         <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a SKU within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
       </p>
     </div>
@@ -528,22 +578,35 @@ const ABCClassification = () => {
           <div className="abc-summary-grid">
             <div className="abc-summary-card abc-card-a">
               <span className="abc-card-label">CATEGORY A</span>
-              <span className="abc-card-value">{catACount}</span>
+              <span className="abc-card-value">{catACount.toLocaleString()}</span>
               <span className="abc-card-desc">Top 20% · 80% of revenue</span>
+              {carriedCountOf('A') > 0 && (
+                <span className="abc-card-desc">{carriedCountOf('A').toLocaleString()} carried forward</span>
+              )}
             </div>
             <div className="abc-summary-card abc-card-b">
               <span className="abc-card-label">CATEGORY B</span>
-              <span className="abc-card-value">{catBCount}</span>
+              <span className="abc-card-value">{catBCount.toLocaleString()}</span>
               <span className="abc-card-desc">Middle tier · 15% of revenue</span>
+              {carriedCountOf('B') > 0 && (
+                <span className="abc-card-desc">{carriedCountOf('B').toLocaleString()} carried forward</span>
+              )}
             </div>
             <div className="abc-summary-card abc-card-c">
               <span className="abc-card-label">CATEGORY C</span>
-              <span className="abc-card-value">{catCCount}</span>
+              <span className="abc-card-value">{catCCount.toLocaleString()}</span>
               <span className="abc-card-desc">Long tail · 5% of revenue</span>
+              {carriedCountOf('C') > 0 && (
+                <span className="abc-card-desc">{carriedCountOf('C').toLocaleString()} carried forward</span>
+              )}
             </div>
             <div className="abc-summary-card abc-card-total">
-              <span className="abc-card-label">TOTAL SKUS</span>
-              <span className="abc-card-value">{sourceData.length}</span>
+              <span className="abc-card-label">CLASSIFIED SKUS</span>
+              <span className="abc-card-value">{sourceData.length.toLocaleString()}</span>
+              <span className="abc-card-desc">
+                {currentRunCount.toLocaleString()} ranked in this run
+                {unclassifiedCount > 0 && <> · {unclassifiedCount.toLocaleString()} never classified</>}
+              </span>
               {boundaryCount > 0 && (
                 <span className="abc-card-desc abc-card-desc-warning">
                   <AlertTriangle size={11} /> {boundaryCount} near a tier boundary
@@ -668,7 +731,7 @@ const ABCClassification = () => {
                   {panel.classAggregates.map((entry) => (
                     <div key={entry.cat} className="abc-class-summary-item">
                       <span className="abc-class-summary-headline">
-                        ~{entry.skuSharePct.toFixed(0)}% SKU Count · ~{entry.revenueTotal.toFixed(0)}% Revenue
+                        ~{entry.skuSharePct.toFixed(0)}% SKU Count · ~{entry.revenueTotal.toFixed(0)}% of {classificationPeriod ? formatMonth(classificationPeriod) : 'this run'} Revenue
                       </span>
                       <span className="abc-class-summary-archetype">{CLASS_ARCHETYPE[entry.cat]}</span>
                     </div>
@@ -771,7 +834,9 @@ const ABCClassification = () => {
                             </div>
                             <div className="abc-row-middle">
                               <span className="abc-row-product">{item.product}</span>
-                              <span className="abc-row-rev">{item.revPct}% of revenue</span>
+                              <span className="abc-row-rev">
+                                {item.revPct.toFixed(1)}% of {item.isCurrent ? '' : `${formatMonth(item.catPeriod)} `}revenue
+                              </span>
                             </div>
                             <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
                           </div>
@@ -824,7 +889,9 @@ const ABCClassification = () => {
                             </div>
                             <div className="abc-row-middle">
                               <span className="abc-row-product">{item.product}</span>
-                              <span className="abc-row-rev">{item.revPct}% revenue</span>
+                              <span className="abc-row-rev">
+                                {item.revPct.toFixed(1)}% of {item.isCurrent ? '' : `${formatMonth(item.catPeriod)} `}revenue
+                              </span>
                             </div>
                             <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
                           </div>
@@ -861,6 +928,15 @@ const ABCClassification = () => {
                   </button>
                 ))}
               </div>
+
+              <label className="abc-current-run-toggle">
+                <input
+                  type="checkbox"
+                  checked={currentRunOnly}
+                  onChange={(e) => setCurrentRunOnly(e.target.checked)}
+                />
+                This run only
+              </label>
             </div>
           </div>
 
@@ -898,6 +974,15 @@ const ABCClassification = () => {
                 </span>
               )}
 
+              {currentRunOnly && (
+                <span className="abc-active-chip">
+                  Ranked in {classificationPeriod ? formatMonth(classificationPeriod) : 'this run'} only
+                  <button className="abc-chip-remove" onClick={() => setCurrentRunOnly(false)}>
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+
               <button
                 className="abc-clear-all-chips-btn"
                 onClick={handleClearFilters}
@@ -919,7 +1004,7 @@ const ABCClassification = () => {
                   <th className="col-text col-product">Product</th>
                   <th className="col-fit">Brand</th>
                   <th className="table-center col-fit">Cat</th>
-                  <th className="table-num col-fit">Rev %</th>
+                  <th className="table-num col-fit" title="Share of revenue in the run the SKU was classified in">Rev %</th>
                   <th className="col-fit">Cover vs ROP</th>
                 </tr>
               </thead>
@@ -934,12 +1019,12 @@ const ABCClassification = () => {
                     <td className="cell-code">{formatSKU(item.sku)}</td>
                     <td className="cell-product">{item.product}</td>
                     <td className={item.brand ? 'cell-muted' : 'cell-empty'}>{item.brand || '—'}</td>
-                    <td className="table-center">
+                    <td className="table-center" title={catTitle(item)}>
                       {/* The warning icon always has a reserved slot, so badges
                           stay in one straight column whether or not a row is
                           near a tier boundary. */}
                       <span className="abc-cat-cell-inner">
-                        <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
+                        <span className={`${getCatBadgeClass(item.cat)}${item.isCurrent ? '' : ' abc-cat-stale'}`}>{item.cat}</span>
                         <span className="abc-boundary-slot">
                           {item.nearBoundary && (
                             <AlertTriangle
@@ -953,7 +1038,17 @@ const ABCClassification = () => {
                         </span>
                       </span>
                     </td>
-                    <td className="table-num cell-strong">{item.revPct.toFixed(1)}%</td>
+                    {item.isCurrent ? (
+                      <td className="table-num cell-strong">{item.revPct.toFixed(1)}%</td>
+                    ) : (
+                      <td
+                        className="table-num cell-muted"
+                        title={`${item.revPct.toFixed(2)}% of ${formatMonth(item.catPeriod)} revenue — no sales in ${formatMonth(classificationPeriod)}, so not part of this run's total`}
+                      >
+                        {item.revPct.toFixed(1)}%
+                        <span className="abc-rev-period">{formatMonth(item.catPeriod)}</span>
+                      </td>
+                    )}
                     <td><span className={getStatusClass(item.status)} title={`stock_status: ${item.status}`}>{statusLabel(item.status)}</span></td>
                   </tr>
                 ))}

@@ -69,6 +69,9 @@ class FakeResult:
     def first(self):
         return self._rows[0] if self._rows else None
 
+    def scalar(self):
+        return self._rows[0] if self._rows else None
+
 
 class FakeSession:
     """Matches only the query shapes backend/routers/dashboard.py actually
@@ -93,6 +96,7 @@ class FakeSession:
         tier_pending_reorder_rows: list | None = None,
         latest_forecast_date=None,
         gated_forecast_rows: list | None = None,
+        scoped_forecast_count: int = 1,
         portfolio_actual: dict | None = None,
         reco_preview_rows: list | None = None,
         policy_rows: list | None = None,
@@ -117,6 +121,9 @@ class FakeSession:
         self.tier_pending_reorder_rows = tier_pending_reorder_rows or []
         self.latest_forecast_date = latest_forecast_date
         self.gated_forecast_rows = gated_forecast_rows or []
+        # Forecast_Result rows in scope at the latest forecast_date, gated or
+        # not — distinguishes "none pass the gate" from "none exist at all".
+        self.scoped_forecast_count = scoped_forecast_count
         self.portfolio_actual = portfolio_actual or {}
         self.reco_preview_rows = reco_preview_rows or []
         # policy_comparison rows: [{planning_cycle_date, ss_i, forecast_value}]
@@ -215,6 +222,9 @@ class FakeSession:
 
         if "fr.mape < :mape_gate" in sql:
             return FakeResult(self.gated_forecast_rows)
+
+        if "SELECT COUNT(*) FROM Forecast_Result fr" in sql:
+            return FakeResult([self.scoped_forecast_count])
 
         if "SUM(quantity_sold) AS qty" in sql:
             return FakeResult([{"period": p, "qty": v} for p, v in self.portfolio_actual.items()])
@@ -646,6 +656,19 @@ def test_portfolio_forecast_empty_when_nothing_passes_the_gate():
         "avg_mape": None,
         "scope_label": "No products currently meet the MAPE < 20% gate.",
     }
+
+
+def test_portfolio_forecast_delmonte_says_no_forecasts_exist_not_failed_gate():
+    # Del Monte has no Forecast_Result rows at all (invoice-grain source, no
+    # SKU column) — the label must not read as "forecasts ran and failed".
+    session = FakeSession(latest_forecast_date=datetime.date(2024, 3, 1), gated_forecast_rows=[],
+                          scoped_forecast_count=0)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=delmonte", headers={"Authorization": f"Bearer {user_token()}"})
+    pf = resp.json()["portfolio_forecast"]
+    assert pf["series"] == []
+    assert pf["gated_sku_count"] == 0
+    assert pf["scope_label"].startswith("No SKU-level forecasts exist for Del Monte")
 
 
 def test_portfolio_forecast_empty_when_forecast_result_has_no_rows_at_all():

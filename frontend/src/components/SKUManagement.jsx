@@ -23,6 +23,9 @@ import './SKUManagement.css';
 // offers it as values to ASSIGN; neither is a brand anyone can pick.
 const ALL_BRANDS = 'All Brands';
 const NO_BRAND = '__NO_BRAND__';
+// Category filter sentinel for SKUs with no ABC tier in any run (never
+// ranked: no sales in any classified month). Same underscore convention.
+const NOT_CLASSIFIED = '__NOT_CLASSIFIED__';
 
 const SKUManagement = () => {
   // Shared principal scope (Topbar's segmented control) — the SKU list
@@ -163,7 +166,9 @@ const SKUManagement = () => {
       const matchesBrand =
         brandFilter === ALL_BRANDS ||
         (brandFilter === NO_BRAND ? !sku.brand : sku.brand === brandFilter);
-      const matchesCategory = categoryFilter === 'All' || sku.cat === categoryFilter;
+      const matchesCategory =
+        categoryFilter === 'All' ||
+        (categoryFilter === NOT_CLASSIFIED ? !sku.cat : sku.cat === categoryFilter);
       return matchesSearch && matchesBrand && matchesCategory;
     });
   }, [skus, searchQuery, brandFilter, categoryFilter]);
@@ -212,6 +217,10 @@ const SKUManagement = () => {
     [skus, latestCatPeriod]
   );
   const noBrandSKUs = skus.filter(s => !s.brand).length;
+  // No tier in ANY run up to the latest one — not a stale tier, an absent
+  // one. Shown as its own count (and filter) rather than defaulted to C:
+  // an invented category is worse than an honest gap.
+  const notClassifiedSKUs = skus.filter(s => !s.cat).length;
 
   const handleAddSKU = async (formData) => {
     // Only fields POST /sku actually stores (see backend/routers/sku.py's
@@ -366,6 +375,11 @@ const SKUManagement = () => {
                 ? `most recent ABC run per SKU · ${staleCatSKUs.toLocaleString()} carried forward`
                 : 'most recent ABC run per SKU'}
             </span>
+          </div>
+          <div className="sku-summary-card summary-not-classified">
+            <span className="summary-label">NOT CLASSIFIED</span>
+            <span className="summary-value">{notClassifiedSKUs.toLocaleString()}</span>
+            <span className="summary-desc">no sales in any ABC run, so never ranked</span>
           </div>
           <div className="sku-summary-card summary-no-brand">
             <span className="summary-label">NO BRAND RECORDED</span>
@@ -522,6 +536,7 @@ const SKUManagement = () => {
                     <option value="A">Category A</option>
                     <option value="B">Category B</option>
                     <option value="C">Category C</option>
+                    <option value={NOT_CLASSIFIED}>Not classified</option>
                   </select>
                 </div>
               </div>
@@ -554,7 +569,7 @@ const SKUManagement = () => {
 
                 {categoryFilter !== 'All' && (
                   <span className="sku-active-chip">
-                    Category: Category {categoryFilter}
+                    Category: {categoryFilter === NOT_CLASSIFIED ? 'Not classified' : `Category ${categoryFilter}`}
                     <button className="sku-chip-remove" onClick={() => setCategoryFilter('All')}>
                       <X size={12} />
                     </button>

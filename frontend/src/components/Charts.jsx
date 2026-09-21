@@ -11,6 +11,7 @@ import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
 import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot } from './ChartZoom';
+import { PRINCIPALS } from '../principals';
 import './Charts.css';
 
 // X-axis tick + tooltip header for every period-keyed chart on this page:
@@ -728,6 +729,9 @@ export const PortfolioForecastWidget = ({
   avgMape,
   scopeLabel,
   emptyReason,
+  principal,
+  onPrincipalChange,
+  isUpdating = false,
 }) => {
   const hasData = series.length > 0;
 
@@ -775,18 +779,42 @@ export const PortfolioForecastWidget = ({
   const zoom = useChartZoom(chartData);
 
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+    <div className={`chart-widget${onPrincipalChange ? ' chart-widget-filterable' : ''}${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Portfolio-level aggregate forecast</h4>
           <p>Summed demand across gated Category A SKUs vs. MA3 forecast</p>
         </div>
+        {/* Card-scoped principal filter — re-scopes THIS card only, never
+            the page (the Topbar's filter does that). Rendered in the empty
+            state too, so a scope with no forecasts can be switched back
+            out of. Own class names, not the Topbar's .principal-segment:
+            CSS is global and that one carries viewport breakpoints meant
+            for the topbar, not a card. */}
+        {onPrincipalChange && (
+          <div className="card-principal-filter" role="radiogroup" aria-label="Forecast principal">
+            {PRINCIPALS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                role="radio"
+                aria-checked={principal === p.key}
+                className={`card-principal-option${principal === p.key ? ' active' : ''}`}
+                onClick={() => onPrincipalChange(p.key)}
+              >
+                {p.key === 'all' ? 'All' : p.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {!hasData ? (
-        <p className="dashboard-empty-note">{emptyReason || 'No forecast data available'}</p>
+        <p className={`dashboard-empty-note${isUpdating ? ' is-refreshing' : ''}`}>
+          {isUpdating ? 'Loading forecast…' : emptyReason || 'No forecast data available'}
+        </p>
       ) : (
-        <>
+        <div className={`portfolio-forecast-body${isUpdating ? ' is-refreshing' : ''}`} aria-busy={isUpdating}>
           <div className="portfolio-stat-row">
             <div className="portfolio-stat">
               <span className="portfolio-stat-label">Gated SKUs (MAPE &lt; 20%)</span>
@@ -875,7 +903,7 @@ export const PortfolioForecastWidget = ({
               Confidence band
             </li>
           </ul>
-        </>
+        </div>
       )}
     </div>
   );
@@ -1063,7 +1091,10 @@ export const ReorderRecommendationWidget = ({
           </div>
 
           <div className="reorder-mini-list">
-            <table className="reorder-table">
+            {/* Own class name, not "reorder-table": that one is the full
+                Reorder Recs page table and carries min-width: 1180px, which
+                leaked in here (CSS is global) and forced a horizontal scroll. */}
+            <table className="reorder-mini-table">
               <thead>
                 <tr>
                   <th>SKU</th>
@@ -1086,7 +1117,7 @@ export const ReorderRecommendationWidget = ({
                         {r.sku}
                       </Link>
                     </td>
-                    <td className="reorder-table-product">{r.product}</td>
+                    <td className="reorder-mini-product" title={r.product}>{r.product}</td>
                     <td>
                       <span
                         className="urgency-badge-mini"
@@ -1098,7 +1129,7 @@ export const ReorderRecommendationWidget = ({
                         {r.urgency}
                       </span>
                     </td>
-                    <td className="reorder-table-qty">
+                    <td className="reorder-mini-qty">
                       {Number(r.orderQty ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </td>
                   </tr>

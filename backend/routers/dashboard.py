@@ -1010,11 +1010,33 @@ def get_dashboard(
         round(sum(float(r["mape"]) for r in gated_rows) / len(gated_rows), 2)
         if gated_rows else None
     )
-    scope_label = (
-        f"No products currently meet the MAPE < {MAPE_UNRELIABLE_GATE:.0f}% gate."
-        if not gated_rows
-        else "Unilever only (SKU-level MA3 forecasts meeting the MAPE gate)."
-    )
+    # "No forecasts exist for this scope" and "forecasts exist but none pass
+    # the gate" are different facts. Del Monte is the live case of the
+    # first: Forecast_Result has no Del Monte rows at all (its Sales
+    # Register is invoice-grain with no SKU column, so no SKU-level
+    # forecast is run), and reporting that as a failed MAPE gate would
+    # imply forecasts were made and judged unreliable.
+    scoped_forecast_count = 0
+    if latest_forecast_date is not None and not gated_rows:
+        scoped_forecast_count = db.execute(
+            text(f"""
+                SELECT COUNT(*) FROM Forecast_Result fr
+                JOIN Product_Dimension pd ON pd.product_key = fr.product_key
+                WHERE fr.forecast_date = :forecast_date {principal_filter}
+            """),
+            {"forecast_date": latest_forecast_date},
+        ).scalar() or 0
+    if gated_rows:
+        scope_label = "Unilever only (SKU-level MA3 forecasts meeting the MAPE gate)."
+    elif scoped_forecast_count == 0:
+        scope_label = (
+            "No SKU-level forecasts exist for Del Monte — its sales data is invoice-grain "
+            "with no SKU column, so no per-SKU forecast is run."
+            if scope == "delmonte"
+            else f"No SKU-level forecasts exist for {_scope_label(scope)}."
+        )
+    else:
+        scope_label = f"No products currently meet the MAPE < {MAPE_UNRELIABLE_GATE:.0f}% gate."
 
     series_by_period: dict[str, dict] = {}
     if gated_rows:

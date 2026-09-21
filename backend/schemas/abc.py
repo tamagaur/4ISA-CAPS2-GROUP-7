@@ -21,6 +21,13 @@ class ABCItem(BaseModel):
     product_name: str | None = None
     principal: str
     tier: str  # 'A' | 'B' | 'C'
+    # The run `tier`, revenue_share, cumulative_share and boundary_flag came
+    # from. Equal to the response's classification_period in the default
+    # view; under view=last_known an OLDER value means the tier is carried
+    # forward from the SKU's most recent run, and its revenue_share is a
+    # share of THAT month's revenue — not comparable with, and never summed
+    # into, the current run's shares.
+    tier_period: str | None = None
     revenue_share: float | None = None
     cumulative_share: float | None = None
     boundary_flag: bool = False  # backlog #43 — near a tier cutoff, margin unconfirmed vs manuscript Sec.3.6
@@ -39,7 +46,13 @@ class TierSummary(BaseModel):
     rolls that up so the dashboard doesn't have to sum client-side."""
     tier: str
     sku_count: int
-    revenue_share_total: float  # sum of this tier's SKUs' individual revenue_share
+    # Sum of revenue_share over this tier's CURRENT-run SKUs only. Carried-
+    # forward rows are excluded: their shares are fractions of other months'
+    # revenue, so adding them would push the tiers past 100% combined.
+    revenue_share_total: float
+    # How many of sku_count are carried forward (view=last_known); always 0
+    # in the default view.
+    carried_forward_count: int = 0
 
 
 class ABCResponse(BaseModel):
@@ -47,3 +60,7 @@ class ABCResponse(BaseModel):
     count: int
     classification_period: str | None = None  # 'YYYY-MM'
     tier_summary: list[TierSummary] = []
+    # view=last_known only: products in scope with no 'single' classification
+    # at or before classification_period — never ranked, so they have no tier
+    # to show. None in the default view, which does not compute it.
+    unclassified_count: int | None = None

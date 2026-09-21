@@ -63,7 +63,7 @@
 /* Summary Cards */
 .sku-summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 1.5rem;
 }
 
@@ -81,6 +81,12 @@
 
 .summary-cat-a {
   border-top-color: var(--color-abc-a);
+}
+
+/* No tier in any run — neutral, not a warning: it reflects the SKU having
+   no sales, not a data defect. */
+.summary-not-classified {
+  border-top-color: var(--color-border-strong, var(--color-text-subtle));
 }
 
 /* A data gap to clean up, not an alert: amber, like the app's other
