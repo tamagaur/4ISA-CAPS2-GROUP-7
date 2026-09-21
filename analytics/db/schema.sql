@@ -533,6 +533,9 @@ CREATE TABLE IF NOT EXISTS sku_traits (
     restart_flag                        BOOLEAN NOT NULL DEFAULT FALSE,
     stability_group                      TEXT NOT NULL CHECK (stability_group IN ('all_38', 'at_least_30', 'churn')),
     revenue_share_2026_02                 NUMERIC(7,4),
+    adi                                    NUMERIC,  -- migration 0022: months since first sale / months with a sale
+    trend_pvalue                            NUMERIC,  -- migration 0022: Mann-Kendall two-sided p, from first sale
+    trend_slope                              NUMERIC,  -- migration 0022: Theil-Sen slope, units/month, from first sale
     computed_at                            TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (product_key, cohort_period)
 );

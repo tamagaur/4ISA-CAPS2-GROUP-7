@@ -30,12 +30,23 @@ from analytics.config import get_settings
 from analytics.segmentation import bins as bin_schemes
 from analytics.segmentation.traits import (
     history_months, first_sale_index, longest_positive_run,
-    mann_kendall_trend, coefficient_of_variation, has_restart, stability_group,
+    trend_stats, coefficient_of_variation, average_demand_interval,
+    has_restart, stability_group,
 )
 
 DEMAND_SOURCE_BY_PRINCIPAL = {
     "unilever": "unilever_sku_demand_fact_real",
 }
+
+# sku_traits' own columns. build_traits() also returns tier_a_periods, which
+# stability_v1's bin_reason reads but the table has no column for, so the
+# upsert selects these explicitly.
+TRAIT_TABLE_COLUMNS = [
+    "run_id", "principal", "product_key", "cohort_period", "abc_method",
+    "history_months", "first_sale_period", "longest_run", "trend", "cv",
+    "restart_flag", "stability_group", "revenue_share_2026_02",
+    "adi", "trend_pvalue", "trend_slope",  # migration 0022
+]
 
 TOTAL_PERIODS = 38  # 2023-01 .. 2026-02 inclusive, the only fully-real Unilever span (CLAUDE.md Data realities)
 
@@ -167,6 +178,7 @@ def build_traits(
     for pk in product_keys:  # already product_key ASC from _fetch_cohort
         qty = matrices[pk]
         fs_idx = first_sale_index(qty)
+        trend, trend_pvalue, trend_slope = trend_stats(qty)
         records.append(dict(
             run_id=run_id,
             principal=principal,
@@ -176,8 +188,12 @@ def build_traits(
             history_months=history_months(qty),
             first_sale_period=periods[fs_idx] if fs_idx is not None else None,
             longest_run=longest_positive_run(qty),
-            trend=mann_kendall_trend(qty),
+            trend=trend,
+            trend_pvalue=trend_pvalue,
+            trend_slope=trend_slope,
             cv=coefficient_of_variation(qty),
+            adi=average_demand_interval(qty),
+            tier_a_periods=a_periods.get(pk, 0),
             restart_flag=has_restart(qty),
             stability_group=stability_group(a_periods.get(pk, 0), TOTAL_PERIODS),
             revenue_share_2026_02=revenue.get(pk),
@@ -190,8 +206,29 @@ def build_traits(
     return traits_df, report
 
 
-def build_segments_length_v1(
-    traits_df: pd.DataFrame, run_id: str, sku_codes: dict[int, str], abc_method: str,
+# scheme name -> how to call its bins.py function from one build_traits() row.
+# None-safe: pandas turns a missing cv/trend_pvalue/trend_slope into NaN, and the
+# scheme functions test `is None`.
+def _opt(value):
+    return None if pd.isna(value) else float(value)
+
+
+SCHEME_BUILDERS = {
+    "length_v1": lambda r: bin_schemes.length_v1(r.history_months),
+    "length_v2": lambda r: bin_schemes.length_v2(r.history_months),
+    "trend_v1": lambda r: bin_schemes.trend_v1(r.history_months, r.trend, _opt(r.trend_pvalue), _opt(r.trend_slope)),
+    "volatility_v1": lambda r: bin_schemes.volatility_v1(r.history_months, _opt(r.cv)),
+    "stability_v1": lambda r: bin_schemes.stability_v1(r.stability_group, r.tier_a_periods, TOTAL_PERIODS),
+    "combined_v1": lambda r: bin_schemes.combined_v1(r.history_months, r.trend, _opt(r.trend_pvalue), _opt(r.trend_slope)),
+}
+
+# length_v1 is deliberately NOT a default: its 132 approved rows stay as
+# written on 2026-09-17 for audit unless a run names it explicitly.
+ROUND2_SCHEMES = ["length_v2", "trend_v1", "volatility_v1", "stability_v1", "combined_v1"]
+
+
+def build_segments(
+    traits_df: pd.DataFrame, run_id: str, sku_codes: dict[int, str], abc_method: str, scheme: str,
 ) -> pd.DataFrame:
     """abc_method is threaded through rather than hardcoded: it is part of
     sku_segment's upsert key (["product_key", "cohort_period", "abc_method",
@@ -200,7 +237,7 @@ def build_segments_length_v1(
     overwritten it."""
     records = []
     for row in traits_df.sort_values("product_key").itertuples():
-        bin_name, reason = bin_schemes.length_v1(row.history_months)
+        bin_name, reason = SCHEME_BUILDERS[scheme](row)
         records.append(dict(
             run_id=run_id,
             principal=row.principal,
@@ -208,11 +245,19 @@ def build_segments_length_v1(
             sku_code=sku_codes.get(row.product_key),
             cohort_period=row.cohort_period,
             abc_method=abc_method,
-            scheme="length_v1",
+            scheme=scheme,
             bin=bin_name,
             bin_reason=reason,
         ))
     return pd.DataFrame.from_records(records)
+
+
+def _to_records(df: pd.DataFrame) -> list[dict]:
+    """Rows as dicts with every missing value as None. pandas holds a missing
+    float as NaN, and Postgres NUMERIC stores NaN as a real value rather than
+    NULL — so an unmeasurable cv/trend_pvalue/trend_slope would land as 'NaN',
+    count as non-null, and sort above every real number."""
+    return df.astype(object).where(df.notna(), None).to_dict(orient="records")
 
 
 def _upsert(engine: Engine, table_name: str, df: pd.DataFrame, conflict_cols: list[str], update_cols: list[str], schema: str | None = None) -> int:
@@ -220,7 +265,7 @@ def _upsert(engine: Engine, table_name: str, df: pd.DataFrame, conflict_cols: li
         return 0
     metadata = MetaData(schema=schema)
     table = Table(table_name, metadata, autoload_with=engine, schema=schema)
-    records = df.to_dict(orient="records")
+    records = _to_records(df)
     with engine.begin() as conn:
         stmt = pg_insert(table).values(records)
         stmt = stmt.on_conflict_do_update(
@@ -231,7 +276,14 @@ def _upsert(engine: Engine, table_name: str, df: pd.DataFrame, conflict_cols: li
     return len(records)
 
 
-def run(principal: str, cohort_period: str, abc_method: str, schema: str | None = None) -> SegmentRunReport:
+def run(
+    principal: str, cohort_period: str, abc_method: str, schema: str | None = None,
+    schemes: list[str] | None = None,
+) -> SegmentRunReport:
+    schemes = schemes or ROUND2_SCHEMES
+    unknown = [s for s in schemes if s not in SCHEME_BUILDERS]
+    if unknown:
+        raise ValueError(f"unknown scheme(s) {unknown}; known: {sorted(SCHEME_BUILDERS)}")
     settings = get_settings()
     # SUPABASE_DB_URL (settings.supabase_db_url) is read-only on this project's
     # Supabase pooler config (confirmed 2026-09-17 - see report's Open items;
@@ -245,15 +297,18 @@ def run(principal: str, cohort_period: str, abc_method: str, schema: str | None 
         engine, principal, cohort_period, abc_method, "2023-01", "2026-02", run_id,
     )
     sku_codes = _fetch_sku_codes(engine, principal, traits_df["product_key"].tolist())
-    segments_df = build_segments_length_v1(traits_df, run_id, sku_codes, abc_method)
+    segments_df = pd.concat(
+        [build_segments(traits_df, run_id, sku_codes, abc_method, s) for s in schemes], ignore_index=True,
+    )
 
     traits_written = _upsert(
         # abc_method is in the key per migration 0020 — without it a t3m cohort
         # silently overwrites single's traits (sku_segment already keys on it,
         # 0018:50; sku_traits was the gap).
-        engine, "sku_traits", traits_df, ["product_key", "cohort_period", "abc_method"],
+        engine, "sku_traits", traits_df[TRAIT_TABLE_COLUMNS], ["product_key", "cohort_period", "abc_method"],
         ["run_id", "history_months", "first_sale_period", "longest_run", "trend",
-         "cv", "restart_flag", "stability_group", "revenue_share_2026_02"],
+         "cv", "restart_flag", "stability_group", "revenue_share_2026_02",
+         "adi", "trend_pvalue", "trend_slope"],
         schema=schema,
     )
     report.traits_written = traits_written
@@ -262,13 +317,14 @@ def run(principal: str, cohort_period: str, abc_method: str, schema: str | None 
         ["run_id", "sku_code", "bin", "bin_reason"],
         schema=schema,
     )
-    report.scheme_bin_counts["length_v1"] = segments_df["bin"].value_counts().to_dict()
+    for s in schemes:
+        report.scheme_bin_counts[s] = segments_df.loc[segments_df["scheme"] == s, "bin"].value_counts().to_dict()
     print(f"traits written: {traits_written}, segments written: {segments_written}")
     return report
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Phase 2 binning Round 1: sku_traits + sku_segment (length_v1).")
+    parser = argparse.ArgumentParser(description="Phase 2 binning: sku_traits + sku_segment, one row per SKU per scheme.")
     parser.add_argument("--principal", default="unilever")
     parser.add_argument("--cohort-period", default="2026-02")
     parser.add_argument("--abc-method", default="single")
@@ -279,7 +335,12 @@ if __name__ == "__main__":
              "live write took none. Same rule as orchestrate_abc.py's --schema. Real data "
              "is always read from public regardless of this flag.",
     )
+    parser.add_argument(
+        "--schemes", nargs="+", default=ROUND2_SCHEMES, choices=sorted(SCHEME_BUILDERS),
+        help="Schemes to write. Default is the five Round 2 schemes; length_v1 is only "
+             "rewritten if named here.",
+    )
     args = parser.parse_args()
 
-    r = run(args.principal, args.cohort_period, args.abc_method, schema=args.schema)
+    r = run(args.principal, args.cohort_period, args.abc_method, schema=args.schema, schemes=args.schemes)
     print(r)

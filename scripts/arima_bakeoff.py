@@ -20,6 +20,7 @@ Usage:  python -m scripts.arima_bakeoff
 from __future__ import annotations
 
 import os
+import sys
 import time
 import warnings
 
@@ -34,6 +35,9 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.forecasting.theta import ThetaModel
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, smape, wape  # noqa: E402
 
 SEAS = 12
 TEST_H = 6
@@ -67,16 +71,17 @@ def _fetch(with_synthetic: bool = False):
         # month so synthetic 2026-03.. never enters the series. Synthetic
         # months are 2021-01..2022-12 (see reports/MODEL_BAKEOFF_UNILEVER.md).
         cur.execute("""
-            SELECT product_key, calendar_month, COALESCE(quantity_sold, 0)
+            SELECT product_key, calendar_month, COALESCE(quantity_sold, 0), is_demo
             FROM unilever_sku_demand_fact
             WHERE calendar_month <= (SELECT MAX(calendar_month) FROM unilever_sku_demand_fact_real)
             ORDER BY 1, 2
         """)
     else:
-        cur.execute("SELECT product_key, calendar_month, COALESCE(quantity_sold, 0) "
+        cur.execute("SELECT product_key, calendar_month, COALESCE(quantity_sold, 0), FALSE "
                     "FROM unilever_sku_demand_fact_real ORDER BY 1, 2")
-    raw = pd.DataFrame(cur.fetchall(), columns=["pk", "m", "q"])
+    raw = pd.DataFrame(cur.fetchall(), columns=["pk", "m", "q", "is_demo"])
     raw["q"] = raw["q"].astype(float)
+    raw["is_demo"] = raw["is_demo"].astype(bool)
     cur.execute("SELECT product_key FROM abc_classification "
                 "WHERE principal = 'unilever' AND classification_period = %s AND tier = 'A' "
                 "AND method = 'single'", (ABC_PERIOD,))
@@ -176,14 +181,16 @@ INCUMBENTS = {
 
 
 def _metrics(actual, pred, scale):
-    ae = np.abs(actual - pred)
-    nz = actual > 0
-    mape = float(np.mean(ae[nz] / actual[nz])) if nz.any() else np.nan
-    den = np.abs(actual) + np.abs(pred)
-    sm = den > 0
-    smape = float(np.mean(2 * ae[sm] / den[sm])) if sm.any() else np.nan
-    mase = float(np.mean(ae) / scale) if scale > 0 else np.nan
-    return mape, mase, smape
+    return mape(actual, pred), mase(actual, pred, scale), smape(actual, pred), wape(actual, pred)
+
+
+def guard_divergent(preds, train_max):
+    """Divergence guard: a forecast that is non-finite or above the maximum
+    of its own training window becomes NaN. Returns (guarded preds, count) -
+    the count is reported per arm, never dropped silently."""
+    preds = np.asarray(preds, float)
+    bad = ~np.isfinite(preds) | (preds > np.asarray(train_max, float))
+    return np.where(bad, np.nan, preds), int(bad.sum())
 
 
 def main():
@@ -191,45 +198,55 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--with-synthetic", action="store_true",
                     help="DIAGNOSTIC: prepend synthetic 2021-22 history. Not for reported results.")
+    ap.add_argument("--out", default=None, help="CSV path (default under reports/).")
     args = ap.parse_args()
 
     raw, tier_a, names = _fetch(args.with_synthetic)
-    S = {pk: _series(g) for pk, g in raw.groupby("pk")}
-    pks = [pk for pk in tier_a if pk in S]
-    out_path = OUT.replace(".csv", "_withsynth.csv") if args.with_synthetic else OUT
+    # R = real-only series: decides the cohort, origins, actuals and MASE
+    # scale in BOTH arms. S = training input (real + synthetic prefix).
+    R = {pk: _series(g) for pk, g in raw[~raw["is_demo"]].groupby("pk")}
+    S = {pk: _series(g) for pk, g in raw.groupby("pk")} if args.with_synthetic else R
+    pks = [pk for pk in tier_a if pk in R]
+    out_path = args.out or (OUT.replace(".csv", "_withsynth.csv") if args.with_synthetic else OUT)
     print(f"Tier A ({ABC_PERIOD}): {len(pks)} SKUs   with_synthetic={args.with_synthetic}")
 
     rows = []
     t0 = time.time()
     for i, pk in enumerate(pks):
-        x = S[pk].to_numpy(float)
-        n = len(x)
+        xr = R[pk].to_numpy(float)
+        n = len(xr)
         if n < 14:
             continue
-        origins = list(range(max(12, n - TEST_H), n))
-        if len(origins) < 3:
+        real_origins = list(range(max(12, n - TEST_H), n))
+        if len(real_origins) < 3:
             continue
-        actual = np.array([x[t] for t in origins])
-        base = x[:origins[0]]
-        scale = np.mean(np.abs(np.diff(base))) if len(base) > 1 else 0.0
+        x = S[pk].to_numpy(float)
+        if S[pk].index[-1] != R[pk].index[-1]:
+            raise RuntimeError(f"pk {pk}: training series does not end on the last real month")
+        off = len(x) - n                      # synthetic-prefix length (0 in the real arm)
+        origins = [off + t for t in real_origins]
+        actual = np.array([xr[t] for t in real_origins])
+        scale = naive_scale(xr[:real_origins[0]])
 
         order, sorder = select_order(x[:origins[0]])
         rec = {"pk": pk,
                "sku_code": names.get(pk, (None, None))[0],
                "product_name": names.get(pk, (None, None))[1],
-               "months": n, "nonzero": int((S[pk] > 0).sum()),
+               "months": n, "months_train": len(x), "nonzero": int((R[pk] > 0).sum()),
                "arima_order": f"{order}x{sorder if sorder[3] else '-'}"}
 
-        preds = np.array([arima_forecast(x[:t], order, sorder) for t in origins])
+        preds, n_guarded = guard_divergent([arima_forecast(x[:t], order, sorder) for t in origins],
+                                           [x[:t].max() for t in origins])
         preds = np.where(np.isfinite(preds), np.maximum(0, preds), np.nan)
-        mp, ms, sp = _metrics(actual, preds, scale) if np.isfinite(preds).all() else (np.nan,) * 3
-        rec["arima_auto_mape"], rec["arima_auto_mase"], rec["arima_auto_smape"] = mp, ms, sp
+        rec["arima_auto_guarded"] = n_guarded
+        mp, ms, sp, wp = _metrics(actual, preds, scale) if np.isfinite(preds).all() else (np.nan,) * 4
+        rec["arima_auto_mape"], rec["arima_auto_mase"], rec["arima_auto_smape"], rec["arima_auto_wape"] = mp, ms, sp, wp
 
         for name, fn in INCUMBENTS.items():
             pr = np.array([fn(x[:t]) for t in origins], float)
             pr = np.where(np.isfinite(pr), np.maximum(0, pr), np.nan)
-            a, b, cc = _metrics(actual, pr, scale) if np.isfinite(pr).all() else (np.nan,) * 3
-            rec[f"{name}_mape"], rec[f"{name}_mase"], rec[f"{name}_smape"] = a, b, cc
+            a, b, cc, w = _metrics(actual, pr, scale) if np.isfinite(pr).all() else (np.nan,) * 4
+            rec[f"{name}_mape"], rec[f"{name}_mase"], rec[f"{name}_smape"], rec[f"{name}_wape"] = a, b, cc, w
 
         rows.append(rec)
         if (i + 1) % 20 == 0:
@@ -238,6 +255,9 @@ def main():
     df = pd.DataFrame(rows)
     df.to_csv(out_path, index=False)
     print(f"\nwrote {out_path}  ({len(df)} SKUs)\n")
+    g = df["arima_auto_guarded"]
+    print(f"divergence guard arima_auto: {int(g.sum())} forecasts -> NaN across {int((g > 0).sum())} SKUs "
+          f"(with_synthetic={args.with_synthetic})\n")
 
     models = ["arima_auto", "naive", "ma3", "sba_a3", "theta", "ses"]
     print(f"{'model':<14}{'MAPEmed':>9}{'MASEmed':>9}{'sMAPEmed':>10}{'MAPE<.20':>10}{'beat naive':>12}{'n':>5}")

@@ -353,6 +353,14 @@ const MODEL_COLOR = {
 const fmtN = (v, d = 0) => v == null ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
 const fmt2 = v => v == null ? "—" : Number(v).toFixed(2);
 const pct = v => v == null ? "—" : (v * 100).toFixed(1) + "%";
+/* MAPE is only printed as a percentage when the holdout supports it. build.py
+   (analytics.forecasting.diagnostic_metrics.is_mape_unstable) flags holdouts
+   where a near-zero or non-positive actual dominates the average; those show
+   the measured minimum instead of a 4-digit percentage. WAPE / sMAPE stay
+   readable either way. scripts/bakeoff_to_xlsx.py prints the same text. */
+const mapeTxt = (s, v) => v == null ? "—"
+  : (s.mape_check && s.mape_check.unstable
+      ? `unstable (min actual = ${fmtN(s.mape_check.min_abs_actual)})` : pct(v));
 const holdoutN = s => s.split ? s.split.holdout_months : (s.holdout ? s.holdout.months.length : null);
 const isLowConf = s => { const h = holdoutN(s); return h != null && h < 3; };
 const passOf = mase => mase == null ? "na" : (mase < 1 ? "pass" : "fail");
@@ -528,8 +536,8 @@ function renderMain() {
         <div class="metric"><span class="k">MA3 · MASE</span>
           <span class="v num ${M.mase == null ? "" : (pass ? "pass" : "fail")}">${fmt2(M.mase)}</span>
           <span class="d">${M.mase == null ? "no benchmark" : (pass ? "beats naive (&lt;1.0)" : "worse than naive")} · on ${h}-mo rolling test</span></div>
-        <div class="metric"><span class="k">MA3 · MAPE</span>
-          <span class="v num">${pct(M.mape)}</span><span class="d">mean abs % error</span></div>
+        <div class="metric"><span class="k">MA3 · WAPE</span>
+          <span class="v num">${pct(M.wape)}</span><span class="d">Σ|error| ÷ Σ|actual| · sMAPE ${pct(M.smape)} · MAPE ${mapeTxt(s, M.mape)}</span></div>
         <div class="metric"><span class="k">MA3 · MAE</span>
           <span class="v num">${fmtN(M.mae)}</span><span class="d">units / month</span></div>
         <div class="metric"><span class="k">vs naive</span>
@@ -800,15 +808,17 @@ function drawMethodTable(s) {
     return `<tr class="${isV ? "is-verdict" : ""}">
       <td>${METHOD_LABEL[m]}${isV ? '<span class="verdict-tag">deployed</span>' : ""}${m === best && !isV ? ' <span class="hold">best here</span>' : ""}</td>
       <td class="mono num">${fmt2(x.mase)}</td>
-      <td class="mono num">${pct(x.mape)}</td>
+      <td class="mono num">${pct(x.wape)}</td>
+      <td class="mono num">${pct(x.smape)}</td>
+      <td class="mono num">${mapeTxt(s, x.mape)}</td>
       <td class="mono num">${fmtN(x.mae)}</td>
       <td class="pf ${pf}">${pf === "pass" ? "✓ " : pf === "fail" ? "✗ " : ""}${pfTxt}</td>
     </tr>`;
   };
   el.innerHTML = `<thead><tr>
-      <th>method</th><th>MASE</th><th>MAPE</th><th>MAE</th><th>vs naive (gate 1.0)</th>
+      <th>method</th><th>MASE</th><th>WAPE</th><th>sMAPE</th><th>MAPE</th><th>MAE</th><th>vs naive (gate 1.0)</th>
     </tr></thead><tbody>${METHODS.map(rowHtml).join("")}</tbody>
-    <tfoot><tr><td colspan="5" style="border:0;padding-top:8px;color:var(--muted);font-size:11px;">
+    <tfoot><tr><td colspan="7" style="border:0;padding-top:8px;color:var(--muted);font-size:11px;">
       All scored on the same ${h}-month time-ordered holdout${h < 3 ? " — only " + h + " point" + (h === 1 ? "" : "s") + ", treat as indicative" : ""}.
     </td></tr></tfoot>`;
 }
@@ -821,7 +831,7 @@ document.getElementById("footer").innerHTML = `
   demand-class routing, history-length routing, an ensemble, and a per-SKU selector on this data.
   Backtest: <b>${DATA.params.backtest}</b> — this matches how the forecast is actually run
   (re-run before each order cycle), so these numbers are the realistic ones.
-  MASE &lt; 1.0 = beats a naive forecast. SBA α = ${DATA.params.sba_alpha}, untuned.
+  MASE &lt; 1.0 = beats a naive forecast (scale = real months only, in both views). SBA α = ${DATA.params.sba_alpha}, untuned.
   <b>+ Synthetic</b> is offered on <b>${DATA.summary.with_synthetic}</b> SKUs that have synthetic
   2021-22 months available — a diagnostic "what if we had more history" view, not written anywhere.
   <div class="disclaim">These numbers are <b>report-only</b>. Nothing here has been written to

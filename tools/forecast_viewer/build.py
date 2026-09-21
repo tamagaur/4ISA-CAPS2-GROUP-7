@@ -42,6 +42,9 @@ from analytics.forecasting.baseline import (
     naive_forecast, moving_average_forecast, sba_forecast,
     MA_WINDOW, SBA_ALPHA, MIN_MONTHS_WITH_SALES,
 )
+from analytics.forecasting.diagnostic_metrics import (
+    is_mape_unstable, mape, mase, naive_scale, smape, wape,
+)
 from statsmodels.tsa.forecasting.theta import ThetaModel
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
@@ -122,25 +125,32 @@ def rolling_backtest(s, prefix=None):
     for m in METHODS:
         preds = [round(max(0.0, _one_step(m, combined[:off + t])), 2) for t in origins]
         out[m] = preds
-    # MASE scale: mean |lag-1 diff| of the training window before the first
-    # origin (constant across origins), same convention as scripts/model_bakeoff.py
-    base = combined[:off + first]
-    scale = float(np.mean(np.abs(np.diff(base)))) if len(base) > 1 else 0.0
+    # MASE scale: mean |lag-1 diff| of the REAL months before the first origin
+    # (constant across origins), same convention as scripts/model_bakeoff.py.
+    # The synthetic prefix is deliberately left out: it may change a model's
+    # forecasts, never the yardstick both arms are measured with.
+    scale = naive_scale(real[:first])
     a = np.array([real[t] for t in origins], float)
+    unstable, min_abs = is_mape_unstable(a)
+    out["mape_check"] = {"unstable": unstable, "min_abs_actual": round(min_abs, 2)}
     out["metrics"] = {}
     for m in METHODS:
         p = np.array(out[m], float)
         err = a - p
-        ae = np.abs(err)
-        nz = a > 0
         out["metrics"][m] = {
-            "mae": round(float(ae.mean()), 4),
+            "mae": round(float(np.abs(err).mean()), 4),
             "rmse": round(float(np.sqrt((err ** 2).mean())), 4),
-            "mape": round(float((ae[nz] / a[nz]).mean()), 4) if nz.any() else None,
-            "mase": round(float(ae.mean() / scale), 4) if scale > 0 else None,
+            "mape": _r4(mape(a, p)),
+            "wape": _r4(wape(a, p)),
+            "smape": _r4(smape(a, p)),
+            "mase": _r4(mase(a, p, scale)),
         }
     out["train_months_at_first_origin"] = int(off + first)
     return out
+
+
+def _r4(v):
+    return round(float(v), 4) if np.isfinite(v) else None
 
 
 def f4(v):
@@ -175,26 +185,6 @@ def future_path(s, horizon):
         "theta": [round(max(0.0, v), 2) for v in _theta_path(x, horizon)],
         "sarima": [round(max(0.0, v), 2) for v in _sarima_path(x, horizon)],
     }
-
-
-def _score(pred, actual, train):
-    """MASE (lag-1) / MAPE / MAE / RMSE on the holdout — same conventions
-    as analytics.forecasting.baseline.evaluate_baseline. Used only for the
-    synthetic-data variant (the real variant reads the frozen CSV)."""
-    pred = np.asarray(pred, float)
-    actual = np.asarray(actual, float)
-    err = actual - pred
-    ae = np.abs(err)
-    mae = float(ae.mean())
-    rmse = float(np.sqrt((err ** 2).mean()))
-    nz = actual != 0
-    mape = float((ae[nz] / np.abs(actual[nz])).mean()) if nz.any() else None
-    lag1 = np.abs(np.diff(np.asarray(train, float)))
-    scale = float(lag1.mean()) if lag1.size else 0.0
-    mase = float(mae / scale) if scale > 0 else None
-    return {"mase": None if mase is None else round(mase, 4),
-            "mape": None if mape is None else round(mape, 4),
-            "mae": round(mae, 4), "rmse": round(rmse, 4)}
 
 
 def _inline():
@@ -288,6 +278,7 @@ def main():
             rec["future"] = {"month": f3["months"][0], **{m: f3[m][0] for m in METHODS}}
             rec["future3"] = f3
             rec["metrics"] = bt["metrics"]
+            rec["mape_check"] = bt["mape_check"]    # actuals are real in both arms -> one flag
 
             # ---- "+ synthetic" variant: same rolling backtest, but each
             # origin's TRAINING gets the synthetic 2021-22 months prepended.

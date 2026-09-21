@@ -50,28 +50,28 @@ class FakeSession:
         sql = str(stmt)
         params = params or {}
 
-        if "SELECT user_id, email, full_name, role, created_at FROM Users ORDER BY user_id" in sql:
+        if "SELECT user_id, email, full_name, role, created_at FROM users ORDER BY user_id" in sql:
             return FakeResult(rows=list(self.users))
 
-        if "SELECT user_id FROM Users WHERE user_id = :user_id" in sql:
+        if "SELECT user_id FROM users WHERE user_id = :user_id" in sql:
             row = next((u for u in self.users if u["user_id"] == params["user_id"]), None)
             return FakeResult(row={"user_id": row["user_id"]} if row else None)
 
-        if "SELECT 1 FROM Users WHERE email = :email AND user_id != :user_id" in sql:
+        if "SELECT 1 FROM users WHERE email = :email AND user_id != :user_id" in sql:
             exists = any(
                 u["email"] == params["email"] and u["user_id"] != params["user_id"]
                 for u in self.users
             )
             return FakeResult(row=True if exists else None)
 
-        if sql.startswith("UPDATE Users SET"):
+        if sql.startswith("UPDATE users SET"):
             user = next(u for u in self.users if u["user_id"] == params["user_id"])
             for key in ("email", "full_name", "role", "password_hash"):
                 if key in params:
                     user[key] = params[key]
             return FakeResult(row=dict(user))
 
-        if sql.strip() == "DELETE FROM Users WHERE user_id = :user_id":
+        if sql.strip() == "DELETE FROM users WHERE user_id = :user_id":
             before = len(self.users)
             self.users[:] = [u for u in self.users if u["user_id"] != params["user_id"]]
             return FakeResult(rowcount=before - len(self.users))

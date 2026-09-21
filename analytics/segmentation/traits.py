@@ -42,36 +42,73 @@ def longest_positive_run(qty: np.ndarray) -> int:
     return longest
 
 
-def mann_kendall_trend(qty: np.ndarray, alpha: float = MANN_KENDALL_ALPHA) -> str:
-    """Mann-Kendall trend test on the full series. 'up'/'down' only if
-    p < alpha; otherwise 'none' (including series too short or constant,
-    where the test itself is uninformative rather than silently 'none'
-    by coincidence)."""
+def from_first_sale(qty: np.ndarray) -> np.ndarray:
+    """The series from the first quantity_sold > 0 month onward (empty if
+    the SKU never sold). Zeros BEFORE the first sale are "not launched
+    yet", not zero demand — a trait computed across them measures how new
+    the SKU is, not how it sells (2026-09-20: over the full zero-padded
+    series 45 of 47 Tier A SKUs with <24 sales months read trend='up';
+    from first sale, 4 do). Zeros AFTER the first sale are genuine
+    zero-demand months and stay in."""
+    idx = first_sale_index(qty)
+    return qty[idx:] if idx is not None else qty[:0]
+
+
+def active_months(qty: np.ndarray) -> int:
+    """Calendar months from first sale to the end of the window."""
+    return len(from_first_sale(qty))
+
+
+def average_demand_interval(qty: np.ndarray) -> float | None:
+    """ADI = months since first sale / months with a sale (1.0 = sold
+    every month). None if the SKU never sold."""
+    n_pos = history_months(qty)
+    return active_months(qty) / n_pos if n_pos else None
+
+
+def trend_stats(qty: np.ndarray, alpha: float = MANN_KENDALL_ALPHA) -> tuple[str, float | None, float | None]:
+    """(label, mann_kendall_p, theil_sen_slope) from first sale onward.
+    label is 'up'/'down' only if p < alpha; otherwise 'none' (including
+    series too short or constant, where the test itself is uninformative
+    rather than silently 'none' by coincidence — p and slope are None
+    there). Significance is Mann-Kendall; Theil-Sen is its paired slope
+    estimator (median of pairwise slopes, units/month) and carries the
+    magnitude, not a second vote on significance."""
+    qty = from_first_sale(qty)
     n = len(qty)
     if n < 2:
-        return "none"
+        return "none", None, None
     s = 0
     for i in range(n - 1):
         s += np.sum(np.sign(qty[i + 1:] - qty[i]))
     var_s = n * (n - 1) * (2 * n + 5) / 18.0
     if var_s <= 0:
-        return "none"
+        return "none", None, None
+    slope = float(stats.theilslopes(qty, np.arange(n))[0])
     if s > 0:
         z = (s - 1) / np.sqrt(var_s)
     elif s < 0:
         z = (s + 1) / np.sqrt(var_s)
     else:
-        return "none"
-    p = 2 * (1 - stats.norm.cdf(abs(z)))
+        return "none", 1.0, slope
+    p = float(2 * (1 - stats.norm.cdf(abs(z))))
     if p >= alpha:
-        return "none"
-    return "up" if z > 0 else "down"
+        return "none", p, slope
+    return ("up" if z > 0 else "down"), p, slope
+
+
+def mann_kendall_trend(qty: np.ndarray, alpha: float = MANN_KENDALL_ALPHA) -> str:
+    """Mann-Kendall trend label from first sale onward — see trend_stats."""
+    return trend_stats(qty, alpha)[0]
 
 
 def coefficient_of_variation(qty: np.ndarray) -> float | None:
-    """std/mean over the full series. None if the mean is not positive
-    (a CV of a non-positive-mean series is not meaningful, never
-    fabricated as 0 or inf)."""
+    """std/mean from first sale onward (see from_first_sale). None if the
+    mean is not positive (a CV of a non-positive-mean series is not
+    meaningful, never fabricated as 0 or inf)."""
+    qty = from_first_sale(qty)
+    if len(qty) == 0:
+        return None
     mean = qty.mean()
     if mean <= 0:
         return None

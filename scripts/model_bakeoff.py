@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import time
 import warnings
 
@@ -65,6 +66,9 @@ warnings.simplefilter("ignore")
 from statsmodels.tsa.holtwinters import ExponentialSmoothing, Holt, SimpleExpSmoothing
 from statsmodels.tsa.forecasting.theta import ThetaModel
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, smape, wape  # noqa: E402
 
 SEAS = 12
 REAL_START = "2023-01"          # first month of genuine per-SKU Unilever data
@@ -242,50 +246,56 @@ MODELS = {
     "hw_add12": m_hw_add, "theta": m_theta,
     "sarima_seasonal": m_sarima_seasonal, "sarima_plain": m_sarima_plain,
 }
+# Divergence guard (same rule as scripts/arima_bakeoff.py): an ARIMA-family
+# forecast above the training maximum becomes NaN and is counted.
+GUARDED = ("sarima_seasonal", "sarima_plain")
 
 
 # --------------------------------------------------------------------------- #
 # backtest
 # --------------------------------------------------------------------------- #
-def backtest_sku(series: pd.Series, test_months: int, min_train: int,
-                 real_test_index: pd.DatetimeIndex | None) -> dict | None:
-    """Rolling-origin 1-step-ahead. If real_test_index is given (the
-    --with-synthetic path), origins are pinned to those real months;
-    otherwise the last `test_months` observations of the series."""
-    if real_test_index is not None:
-        origins = [t for t in real_test_index[-test_months:] if t in series.index]
-    else:
-        n = len(series)
-        origins = list(series.index[max(min_train, n - test_months):n])
+def real_origins(real: pd.Series, test_months: int, min_train: int) -> list:
+    """Test origins = the last `test_months` months of the REAL series. Both
+    arms call this on the same real series, so the evaluable SKU set and the
+    test months are identical by construction - the synthetic arm can
+    neither add nor drop a SKU."""
+    n = len(real)
+    return list(real.index[max(min_train, n - test_months):n])
+
+
+def backtest_sku(real: pd.Series, train_series: pd.Series, test_months: int,
+                 min_train: int) -> dict | None:
+    """Rolling-origin 1-step-ahead. Origins, actuals and the MASE scale come
+    from `real` only. `train_series` is what the models are fitted on: `real`
+    itself, or (--with-synthetic) real with the synthetic 2021-22 months
+    prepended. Returns None when the REAL series is not evaluable."""
+    origins = real_origins(real, test_months, min_train)
     if len(origins) < 3:
         return None
 
-    actuals = np.array([series.loc[t] for t in origins], dtype=float)
-    base = series[series.index < origins[0]].to_numpy(float)
-    scale = float(np.mean(np.abs(np.diff(base)))) if len(base) > 1 else 0.0
+    actuals = np.array([real.loc[t] for t in origins], dtype=float)
+    scale = naive_scale(real[real.index < origins[0]].to_numpy(float))
 
     out = {}
     for name, fn in MODELS.items():
         preds = []
+        guarded = 0
         for t in origins:
-            tr = series[series.index < t].to_numpy(float)
+            tr = train_series[train_series.index < t].to_numpy(float)
             if len(tr) < 12:
                 preds.append(np.nan)
                 continue
             f = fn(tr)
+            if name in GUARDED and np.isfinite(f) and f > tr.max():
+                guarded += 1          # divergent fit - counted, never scored
+                f = np.nan
             preds.append(max(0.0, f) if np.isfinite(f) else np.nan)
         preds = np.array(preds, dtype=float)
         if not np.isfinite(preds).all():
-            out[name] = dict(mape=np.nan, mase=np.nan, smape=np.nan)
+            out[name] = dict(mape=np.nan, mase=np.nan, smape=np.nan, wape=np.nan, guarded=guarded)
             continue
-        ae = np.abs(actuals - preds)
-        nz = actuals > 0
-        mape = float(np.mean(ae[nz] / actuals[nz])) if nz.any() else np.nan
-        den = np.abs(actuals) + np.abs(preds)
-        sm = den > 0
-        smape = float(np.mean(2 * ae[sm] / den[sm])) if sm.any() else np.nan
-        mase = float(np.mean(ae) / scale) if scale > 0 else np.nan
-        out[name] = dict(mape=mape, mase=mase, smape=smape)
+        out[name] = dict(mape=mape(actuals, preds), mase=mase(actuals, preds, scale),
+                         smape=smape(actuals, preds), wape=wape(actuals, preds), guarded=guarded)
     return out
 
 
@@ -338,38 +348,43 @@ def main() -> None:
     print(f"demand rows: {len(raw)}   SKUs: {raw.product_key.nunique()}   "
           f"Tier A ({ABC_PERIOD}): {len(tier_a)}   with_synthetic={args.with_synthetic}")
 
-    series = {pk: build_series(g) for pk, g in raw.groupby("product_key")}
+    # `real` decides the cohort, origins, actuals and MASE scale in BOTH arms;
+    # `series` (real + synthetic prefix) is training input only.
+    real = {pk: build_series(g) for pk, g in raw[~raw["is_demo"]].groupby("product_key")}
+    series = {pk: build_series(g) for pk, g in raw.groupby("product_key")} if args.with_synthetic else real
 
-    real_test_index = None
     if args.with_synthetic:
         real_months = sorted(m for m in raw["calendar_month"].unique() if m >= REAL_START)
-        real_test_index = pd.to_datetime([m + "-01" for m in real_months])
         # quick seasonality contrast so the caller sees why synthetic hurts
         syn = [m for m in raw["calendar_month"].unique() if m <= "2022-12"]
         _acf_contrast(series, syn, real_months)
 
     if args.cohort == "tierA":
-        pks = [pk for pk in tier_a if pk in series]
+        pks = [pk for pk in tier_a if pk in real]
     else:
-        pks = [pk for pk in sorted(series)
-               if len(series[pk]) >= args.min_train + 2 and (series[pk] > 0).sum() >= 6]
+        pks = [pk for pk in sorted(real)
+               if len(real[pk]) >= args.min_train + 2 and (real[pk] > 0).sum() >= 6]
     print(f"cohort '{args.cohort}': {len(pks)} SKUs")
 
     rows = []
     t0 = time.time()
     for i, pk in enumerate(pks):
-        r = backtest_sku(series[pk], args.test_months, args.min_train, real_test_index)
+        r = backtest_sku(real[pk], series[pk], args.test_months, args.min_train)
         if r is None:
             continue
         rec = {"product_key": pk,
                "sku_code": names.get(pk, (None, None))[0],
                "product_name": names.get(pk, (None, None))[1],
-               "months": len(series[pk]),
-               "nonzero": int((series[pk] > 0).sum())}
+               "months": len(real[pk]),                      # REAL months (cohort basis)
+               "months_train": len(series[pk]),               # incl. synthetic prefix
+               "nonzero": int((real[pk] > 0).sum())}
         for m, d in r.items():
             rec[f"{m}_mape"] = d["mape"]
             rec[f"{m}_mase"] = d["mase"]
             rec[f"{m}_smape"] = d["smape"]
+            rec[f"{m}_wape"] = d["wape"]
+            if m in GUARDED:
+                rec[f"{m}_guarded"] = d["guarded"]
         rows.append(rec)
         if (i + 1) % 40 == 0:
             print(f"  {i + 1}/{len(pks)}  ({time.time() - t0:.0f}s)")
@@ -382,6 +397,10 @@ def main() -> None:
     )
     df.to_csv(out, index=False)
     print(f"\nwrote {out}  ({len(df)} SKUs)")
+
+    for m in GUARDED:
+        g = df[f"{m}_guarded"]
+        print(f"divergence guard {m}: {int(g.sum())} forecasts -> NaN across {int((g > 0).sum())} SKUs")
 
     summarize(df, f"COHORT {args.cohort}"
                   f"{'  (+ synthetic 2021-22 prepended - DIAGNOSTIC)' if args.with_synthetic else '  (real only)'}")
