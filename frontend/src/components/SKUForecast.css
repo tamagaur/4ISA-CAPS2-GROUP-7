@@ -684,6 +684,84 @@
   color: var(--color-text);
 }
 
+/* "How this forecast was made" — sits under the stat row and explains its
+   headline number (model, history bin, MA3 benchmark, components), so it is
+   quieter than the row: small label/value pairs on a plain raised surface,
+   no series colour. */
+.forecast-howmade {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0 0 1.25rem 0;
+  padding: 0.7rem 1rem;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.forecast-howmade-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #8b93a7;
+  text-transform: uppercase;
+}
+
+.forecast-howmade-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.75rem;
+  margin: 0;
+}
+
+.forecast-howmade-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.forecast-howmade-item dt {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.forecast-howmade-item dd {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+/* MASE >= 1: the served model did no better than a naive forecast. */
+.forecast-howmade-item dd.forecast-howmade-warn {
+  color: var(--color-warning-text);
+}
+
+/* Fallback fired: amber = "watch", the app-wide meaning, same tokens as the
+   falling-trend chip. */
+.forecast-fallback-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-warning-text);
+  background-color: var(--color-warning-bg);
+}
+
+/* Provisional / no-order notice in the headline slot: sentence-sized rather
+   than number-sized, in neutral ink rather than the forecast violet, since
+   it says there is no forecast. */
+.forecast-stat-value-notice {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text-body);
+}
+
 /* Trend reads as a chip so the direction is legible at a glance. Colours
    are DIRECTIONAL, not judgemental — slate-blue for rising, amber for
    falling, grey for flat. Deliberately not green/red: a rising or falling

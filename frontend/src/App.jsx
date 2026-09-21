@@ -16,6 +16,8 @@ const SKUManagement = lazy(pageLoaders.skuManagement);
 const ABCClassification = lazy(pageLoaders.abc);
 const SKUForecast = lazy(pageLoaders.forecast);
 const ReorderRecommendations = lazy(pageLoaders.reorder);
+const BadOrders = lazy(pageLoaders.badOrders);
+const CategoryTrends = lazy(pageLoaders.categoryTrends);
 const AuditLog = lazy(pageLoaders.auditLog);
 const DataUpload = lazy(pageLoaders.upload);
 const UserManagement = lazy(pageLoaders.users);
@@ -62,6 +64,8 @@ function App() {
           <Route path="abc" element={<ABCClassification />} />
           <Route path="forecast" element={<SKUForecast />} />
           <Route path="reorder" element={<ReorderRecommendations />} />
+          <Route path="bad-orders" element={<BadOrders />} />
+          <Route path="category-trends" element={<CategoryTrends />} />
           <Route
             path="audit-log"
             element={

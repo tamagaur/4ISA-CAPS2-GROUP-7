@@ -93,7 +93,8 @@ def get_segment(
     traits_row = db.execute(
         text("""
             SELECT cohort_period, history_months, first_sale_period, longest_run, trend, cv,
-                   restart_flag, stability_group, revenue_share_2026_02
+                   restart_flag, stability_group, revenue_share_2026_02,
+                   adi, trend_pvalue, trend_slope
             FROM sku_traits
             WHERE product_key = :product_key
             ORDER BY cohort_period DESC
@@ -127,6 +128,11 @@ def get_segment(
             restart_flag=bool(traits_row["restart_flag"]),
             stability_group=traits_row["stability_group"],
             revenue_share_2026_02=_to_float(traits_row["revenue_share_2026_02"]),
+            # migration 0022 columns; .get() so a row shape from before the
+            # migration still reads as "not measured" rather than failing.
+            adi=_to_float(traits_row.get("adi")),
+            trend_pvalue=_to_float(traits_row.get("trend_pvalue")),
+            trend_slope=_to_float(traits_row.get("trend_slope")),
         )
 
     segments = [

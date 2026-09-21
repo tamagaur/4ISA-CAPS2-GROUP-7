@@ -1,0 +1,200 @@
+/* Category trends page — the same page frame as Reorder / Bad Orders. */
+.ct-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.ct-content {
+  padding: 0 3rem 3rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.ct-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 0.3rem 0;
+}
+
+.ct-title .page-title-accent {
+  font-size: 2.1rem;
+}
+
+.ct-subtitle {
+  color: var(--color-text-subtle);
+  font-size: 0.85rem;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.ct-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.2rem 1.4rem 1.4rem;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.ct-card-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.ct-card-subtitle {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.ct-note {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.ct-table-card {
+  margin: 0;
+}
+
+.ct-table tbody tr {
+  cursor: pointer;
+}
+
+.ct-table tbody tr:hover,
+.ct-table tbody tr:focus-visible {
+  background-color: var(--color-surface-raised);
+  outline: none;
+}
+
+.ct-table tbody tr.ct-row-selected {
+  background-color: var(--color-surface-sunken);
+  box-shadow: inset 3px 0 0 var(--color-abc-a);
+}
+
+.ct-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.ct-range,
+.ct-muted {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+/* Direction chips: slate-blue up, amber down, grey flat — directional, not
+   good/bad, the same rule as the SKU forecast's trend chip. */
+.ct-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ct-dir-up { color: #3730A3; background-color: #eef2ff; }
+.ct-dir-down { color: var(--color-warning-text); background-color: var(--color-warning-bg); }
+.ct-dir-flat { color: var(--color-text-body); background-color: var(--color-surface-sunken); }
+.ct-dir-none { color: var(--color-text-subtle); background-color: var(--color-surface-raised); }
+
+.ct-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ct-detail-title {
+  margin: 0.25rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.ct-detail-sub {
+  font-weight: 500;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.ct-chart {
+  width: 100%;
+}
+
+.ct-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 1.25rem;
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+}
+
+.ct-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ct-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top: 2px solid;
+}
+
+.ct-swatch-actual { border-color: #14919B; }
+.ct-swatch-fitted { border-color: #475569; border-top-style: dashed; }
+.ct-swatch-projection { border-color: #A855F7; border-top-style: dashed; }
+
+.ct-tooltip {
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  font-size: 0.75rem;
+  color: var(--color-text-body);
+}
+
+.ct-tooltip p {
+  margin: 0;
+}
+
+.ct-tooltip .ct-tooltip-title {
+  margin-bottom: 0.2rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.ct-method {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--color-slate-400);
+  border-radius: 8px;
+  background-color: var(--color-surface-raised);
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.ct-method strong {
+  color: var(--color-text-body);
+}
+
+@media (max-width: 720px) {
+  .ct-content {
+    padding: 0 1rem 2rem;
+  }
+}

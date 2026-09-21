@@ -1,7 +1,7 @@
 // In-memory response cache for read-only GETs.
 //
-// Every analytics number in this app is batch-computed (ETL, ABC, MA3 and LP
-// all run on a schedule, not per request), so a response stays valid for
+// Every analytics number in this app is batch-computed (ETL, ABC, forecasting
+// and LP all run on a schedule, not per request), so a response stays valid for
 // minutes. Without this, every page visit re-paid the full round-trip — the
 // Dashboard's alone measured 5.4–7.1s against Supabase — even when the user
 // had just been on that page with the same date range.

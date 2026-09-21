@@ -8,6 +8,7 @@ import { invalidateCache } from '../api/cache';
 import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
 import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal } from '../principals';
+import { LATEST_DATA_PERIOD } from '../dataCoverage';
 import './DashboardLayout.css';
 
 const PageLoadingFallback = () => (
@@ -22,11 +23,12 @@ const PageLoadingFallback = () => (
 // Feb 2026 is also the system-wide upper bound on selectable dates (see
 // DateFilter.jsx's LATEST_YEAR_MONTHS — it's the last month of real
 // Unilever demand data), so "today" and "the latest pickable date" are the
-// same value by construction rather than two numbers kept in sync by hand.
+// same value by construction: both read LATEST_DATA_PERIOD from
+// dataCoverage.js, the one place to edit when a new month of data loads.
 // This was Mar 2026, which is the FORECAST month, not a month with
 // actuals — leaving it there made "Today" select an end month the picker
 // no longer offers.
-const getCurrentRealWorldPeriod = () => ({ month: 'Feb', year: '2026' });
+const getCurrentRealWorldPeriod = () => ({ ...LATEST_DATA_PERIOD });
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -63,7 +65,8 @@ const DEFAULT_MONTHS_BACK = 6;
 // allowed pick, 6 points on a line chart). Matches two real numbers
 // already in the pipeline, not an arbitrary UX guess:
 //   - analytics/forecasting/baseline.py's MIN_MONTHS_WITH_SALES = 3 is the
-//     hard floor below which MA3 won't even run for a SKU at all.
+//     hard floor below which no forecasting model runs for a SKU at all
+//     (it gets a provisional trailing average instead).
 //   - This app's own DEFAULT_MONTHS_BACK above already opens on 7 points,
 //     which is what "enough shape to see a trend, not just 2-3 connected
 //     dots" actually looks like in practice.

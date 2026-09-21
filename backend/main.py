@@ -31,7 +31,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.deps import check_db_connection, get_db
 from backend.routers import (
-    abc, audit_log, auth, bo_monitoring, dashboard, forecast, inventory, recommendations, segment, sku, users,
+    abc, audit_log, auth, bo_monitoring, category_trends, dashboard, decomposition, forecast, fsn, inventory,
+    pareto, policy_comparison, recommendations, segment, sku, users,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,11 @@ app.include_router(dashboard.router)
 app.include_router(sku.router)
 app.include_router(audit_log.router)
 app.include_router(segment.router)
+app.include_router(policy_comparison.router)
+app.include_router(fsn.router)
+app.include_router(pareto.router)
+app.include_router(decomposition.router)
+app.include_router(category_trends.router)
 
 
 @app.get("/health", tags=["health"])

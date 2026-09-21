@@ -29,6 +29,9 @@ class SkuTraits(BaseModel):
     restart_flag: bool
     stability_group: str  # 'all_38' | 'at_least_30' | 'churn'
     revenue_share_2026_02: float | None = None
+    adi: float | None = None  # months since first sale / months with a sale (1.0 = sells every month)
+    trend_pvalue: float | None = None  # Mann-Kendall two-sided p, from first sale
+    trend_slope: float | None = None  # Theil-Sen slope, units/month, from first sale
 
 
 class SkuSegmentRow(BaseModel):

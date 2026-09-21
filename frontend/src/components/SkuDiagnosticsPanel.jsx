@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, Minus, Activity, CalendarRange } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Minus, Activity, CalendarRange, Waves } from 'lucide-react';
 import { getSegment } from '../api/segment';
+import { getDecomposition } from '../api/analytics';
 import { formatMonth } from '../utils/formatDate';
 import { SEMANTIC } from '../theme/colors';
 import './SkuDiagnosticsPanel.css';
@@ -11,10 +12,12 @@ import './SkuDiagnosticsPanel.css';
 // the one place a planner looks at a single SKU also says WHY its demand
 // looks the way it does. Everything here is printed from a real column;
 // the only labels this component adds are the volatility band (from the
-// backend's cv_band, with the raw cv always beside it) and the plain-
-// language gloss on each stability_group code (the code itself stays in
-// the tooltip). bin_reason is printed verbatim — it is the pipeline's own
-// explanation and must not be paraphrased into something it didn't say.
+// backend's cv_band, with the raw cv always beside it), the plain-
+// language gloss on each stability_group code, the plain name of the
+// SKU's bin (both codes stay in the tooltip), and the seasonality band
+// over STL's measured strength (GET /decomposition). bin_reason is printed
+// verbatim — it is the pipeline's own explanation and must not be
+// paraphrased into something it didn't say.
 
 // Coefficient-of-variation bands are a display convention over the stored
 // cv (thresholds live in backend/routers/segment.py: < 0.5 low, < 1.0
@@ -52,6 +55,31 @@ const STABILITY_GLOSS = {
   churn: 'Moves in and out of Category A — fewer than 30 of the 38 periods',
 };
 
+// Bins of the combined_v1 scheme (sales-month length, with the long bin
+// split by Mann-Kendall trend), plus length_v2's plain `long` for the
+// fallback when combined_v1 is absent. The history-length bins are the same
+// ones the forecast router serves a model per (utils/forecastModel.js).
+const BIN_LABELS = {
+  insufficient: 'Too little history',
+  short: 'Short history',
+  medium: 'Medium history',
+  long: 'Long history',
+  long_up: 'Long history, rising',
+  long_flat: 'Long history, flat',
+  long_down: 'Long history, falling',
+};
+
+// STL seasonal strength (GET /decomposition, analytics/forecasting/
+// decomposition.py: F_S = max(0, 1 - Var(R)/Var(S+R))) in display bands —
+// a convention over the measured number, which always stays beside it, the
+// same rule as the volatility band. The peak and trough months are only
+// named when there is a pattern worth naming.
+const seasonalityBand = (strength) => {
+  if (strength >= 0.6) return 'Strong seasonality';
+  if (strength >= 0.3) return 'Moderate seasonality';
+  return 'Weak seasonality';
+};
+
 const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
 
@@ -68,6 +96,20 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
         if (cancelled) return;
         setState({ status: 'error', data: null, error: err.message || 'Failed to load SKU diagnostics' });
       });
+    return () => { cancelled = true; };
+  }, [skuId, principal]);
+
+  // STL is Unilever SKU-level only (a Del Monte row is a category with no
+  // SKU series), and a failure here must not blank the rest of the panel —
+  // the tile just says it couldn't be computed.
+  const [stl, setStl] = useState(null);
+  useEffect(() => {
+    if (!skuId || principal === 'delmonte') return undefined;
+    let cancelled = false;
+    setStl(null);
+    getDecomposition(skuId, { principal })
+      .then((res) => { if (!cancelled) setStl(res ?? { available: false, reason: 'No SKU-level series for this product.' }); })
+      .catch(() => { if (!cancelled) setStl({ available: false, reason: 'Could not load the STL decomposition.' }); });
     return () => { cancelled = true; };
   }, [skuId, principal]);
 
@@ -123,6 +165,9 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
   const band = t?.cv_band ? CV_BAND_META[t.cv_band] : null;
   const trend = t?.trend ? TREND_META[t.trend] : null;
   const TrendIcon = trend?.Icon;
+  const binSegment = data.segments?.find((s) => s.scheme === 'combined_v1')
+    ?? data.segments?.find((s) => s.scheme === 'length_v2')
+    ?? null;
 
   return (
     <section className={`sku-diag${compact ? ' sku-diag-compact' : ''}`}>
@@ -163,16 +208,43 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
               {t.restart_flag ? ' · restarted after a 3+ month gap' : ''}
             </span>
           </div>
+
+          {/* Seasonality: STL decomposition of the SKU's monthly demand. */}
+          {principal !== 'delmonte' && (
+            <div className="sku-diag-tile" title="STL decomposition (period 12, robust) of monthly demand from the first sale">
+              <span className="sku-diag-tile-label">
+                <Waves size={11} aria-hidden="true" /> Seasonality
+              </span>
+              <span className="sku-diag-tile-value">
+                {!stl ? '…' : stl.available ? seasonalityBand(stl.seasonal_strength) : 'Not enough history'}
+              </span>
+              <span className="sku-diag-tile-desc">
+                {!stl
+                  ? 'Decomposing…'
+                  : !stl.available
+                    ? stl.reason
+                    : `${stl.seasonal_strength >= 0.3 ? `peaks in ${stl.peak_month}, lowest in ${stl.trough_month} · ` : 'no reliable yearly pattern · '}STL seasonal strength ${stl.seasonal_strength.toFixed(2)}, trend ${stl.trend_strength.toFixed(2)}`}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* The three tiles above are the whole panel. The per-scheme
-          bin_reason blockquotes and the Feb-2026 revenue-share footer that
-          used to sit here were removed (2026-09-21): they restated the
-          tiles' own numbers in the pipeline's vocabulary (LONG_UP,
-          stability_v1, CHURN) and buried the summary they were meant to
-          support. GET /segment still returns segments and
-          revenue_share_2026_02 — nothing here reads them any more. */}
+      {/* One line under the tiles: the SKU's bin from ONE scheme,
+          combined_v1 (length_v2 when it's absent), with its bin_reason
+          verbatim. The per-scheme bin_reason blockquotes and the Feb-2026
+          revenue-share footer that used to sit here were removed
+          (2026-09-21) for restating the tiles in the pipeline's vocabulary
+          (LONG_UP, stability_v1, CHURN) — so this names the bin in plain
+          words and keeps the scheme and code in the tooltip. GET /segment's
+          revenue_share_2026_02 is still unread here. */}
+      {binSegment && (
+        <p className="sku-diag-bin" title={`${binSegment.scheme}: ${binSegment.bin}`}>
+          <span className="sku-diag-bin-label">Bin</span>
+          <span className="sku-diag-bin-name">{BIN_LABELS[binSegment.bin] || binSegment.bin}</span>
+          {binSegment.bin_reason ? ` — ${binSegment.bin_reason}` : ''}
+        </p>
+      )}
     </section>
   );
 };

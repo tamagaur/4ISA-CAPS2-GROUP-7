@@ -1,24 +1,25 @@
 """
 backend.routers.forecast — GET /forecast/{sku_id}
 
-Returns MA3 (3-month moving average) forecast output for a Unilever SKU
-from Forecast_Result, plus trailing actuals from Unilever_SKU_Demand_Fact.
-Retired SARIMA in favor of MA3 (see analytics/forecasting/baseline.py's
-module docstring for the evidence) — this endpoint reads Forecast_Result
-generically (no method filter), so it needed no query change, only this
-docstring update.
+Returns a SKU's Forecast_Result rows plus its trailing actuals from
+Unilever_SKU_Demand_Fact_Real. Since 2026-09-21 the runner
+(scripts/run_baseline_forecast.py) serves one model per history-length bin
+— MA3, TSB or the XGBoost + MA3 average, with MA3 as benchmark and
+fallback (analytics/forecasting/router.py) — and records which one in
+model_params. This endpoint reads Forecast_Result generically (no method
+filter), so the routing needed no query change. Each point also carries
+the row's `status` ('ok' | 'insufficient_data' | 'dead_sku') and holdout
+`mase`, the served model's rolling one-step MASE (null when not 'ok').
 
-UNILEVER ONLY (2026-09): Del Monte has been dropped from this app's
-scope — there is no more `?principal=` param; every lookup is hardcoded
-to `principal = 'unilever'` and resolves sku_id via sku_code only (Del
-Monte's category_path lookup and its SellOut_Fact_Real actuals branch
-are gone, not filtered — SellOut_Fact_Real is Del Monte-only at the
-schema level, see backend/routers/dashboard.py's module docstring).
+`?principal=` scopes the sku_code lookup (codes aren't unique across
+principals, see backend/principals.py); the response's `principal` is the
+resolved product's own. Forecasts exist for Unilever Tier A only: Del
+Monte's sales data has no SKU column, so its rows never resolve here.
 
-404 if sku_id doesn't resolve to a Unilever Product_Dimension row.
-Forecast_Result may legitimately be empty for a resolved product (the
-scripts/run_baseline_forecast.py runner hasn't been run against every
-SKU, or at all, yet) — that is NOT a 404, it's a 200 with forecast: [].
+404 if sku_id doesn't resolve to a Product_Dimension row in scope.
+Forecast_Result may legitimately be empty for a resolved product (every
+SKU outside Tier A, or one the runner hasn't reached) — that is NOT a
+404, it's a 200 with forecast: [].
 """
 from __future__ import annotations
 
@@ -47,7 +48,7 @@ def get_forecast(
     scope_sql, scope_params = principal_clause(principal, "principal")
     product_row = db.execute(
         text(
-            "SELECT product_key, product_name FROM Product_Dimension "
+            "SELECT product_key, product_name, principal FROM Product_Dimension "
             "WHERE sku_code = :sku_id" + scope_sql
         ),
         {"sku_id": sku_id, **scope_params},
@@ -72,7 +73,8 @@ def get_forecast(
 
     forecast_rows = db.execute(
         text("""
-            SELECT forecast_date, forecast_value, confidence_lower, confidence_upper, mape, model_params
+            SELECT forecast_date, forecast_value, confidence_lower, confidence_upper, mape, mase,
+                   status, model_params
             FROM forecast_result
             WHERE product_key = :product_key
             ORDER BY forecast_date
@@ -86,6 +88,8 @@ def get_forecast(
             confidence_lower=_safe_float(r["confidence_lower"]),
             confidence_upper=_safe_float(r["confidence_upper"]),
             mape=_safe_float(r["mape"]),
+            mase=_safe_float(r["mase"]),
+            status=r["status"],
             model_params=r["model_params"],
         )
         for r in forecast_rows
@@ -108,7 +112,7 @@ def get_forecast(
     return ForecastResponse(
         sku_id=sku_id,
         product_name=product_row["product_name"],
-        principal="unilever",
+        principal=product_row["principal"],
         actuals=actuals,
         forecast=forecast,
     )

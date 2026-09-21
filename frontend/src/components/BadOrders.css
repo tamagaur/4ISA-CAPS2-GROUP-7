@@ -1,0 +1,281 @@
+/* Bad orders page — same page frame, title and card language as Reorder
+   Recommendations (ReorderRecommendations.css), so it reads as one app. */
+.bo-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.bo-content {
+  padding: 0 3rem 3rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.bo-header {
+  margin-bottom: 0.25rem;
+}
+
+.bo-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 0.3rem 0;
+}
+
+.bo-title .page-title-accent {
+  font-size: 2.1rem;
+}
+
+.bo-subtitle {
+  color: var(--color-text-subtle);
+  font-size: 0.85rem;
+  margin: 0;
+  letter-spacing: 0.02em;
+  max-width: 60rem;
+}
+
+.bo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.bo-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+/* Empty scope (e.g. Unilever): said plainly, not an empty chart. */
+.bo-empty {
+  padding: 2.5rem 2rem;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 12px;
+  background-color: var(--color-surface);
+  text-align: center;
+}
+
+.bo-empty-title {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.bo-empty-body {
+  margin: 0 auto;
+  max-width: 36rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/* KPI cards — the value large, the basis of each figure in the small print. */
+.bo-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.bo-kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1.1rem 1.3rem;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-critical);
+  background-color: var(--color-surface);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.06), 0 6px 6px rgba(0, 0, 0, 0.03);
+}
+
+.bo-kpi-rate {
+  border-top-color: var(--color-warning);
+}
+
+.bo-kpi-gaps {
+  border-top-color: var(--color-slate-500);
+}
+
+.bo-kpi-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.bo-kpi-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bo-kpi-desc {
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.bo-card {
+  padding: 1.2rem 1.4rem 1.3rem;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.bo-card-header {
+  margin-bottom: 0.75rem;
+}
+
+.bo-card-title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.bo-card-subtitle {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.bo-chart {
+  width: 100%;
+}
+
+.bo-tooltip {
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+.bo-tooltip-label {
+  margin: 0 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.bo-tooltip-row {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-body);
+}
+
+.bo-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.bo-table-card {
+  margin: 0;
+}
+
+.bo-region-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.bo-region-row {
+  display: grid;
+  grid-template-columns: 7rem 1fr 9rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.bo-region-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.bo-region-track {
+  height: 18px;
+  border-radius: 5px;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+.bo-region-track span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background-color: var(--color-critical);
+  opacity: 0.8;
+}
+
+.bo-region-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.bo-more-btn {
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+  cursor: pointer;
+}
+
+.bo-more-btn:hover {
+  background: var(--color-surface-raised);
+}
+
+.bo-definition {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--color-slate-400);
+  border-radius: 8px;
+  background-color: var(--color-surface-raised);
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.bo-definition strong {
+  color: var(--color-text-body);
+}
+
+@media (max-width: 1100px) {
+  .bo-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bo-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .bo-content {
+    padding: 0 1rem 2rem;
+  }
+  .bo-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .bo-region-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+  .bo-region-value {
+    text-align: left;
+  }
+}

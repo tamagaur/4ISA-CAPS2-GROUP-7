@@ -1,29 +1,36 @@
 import React from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Calendar, ChevronDown, Check, RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react';
+import { LATEST_DATA_PERIOD, FIRST_DATA_YEAR } from '../dataCoverage';
 import './DateFilter.css';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// System-wide selectable range: Jan 2023 through FEBRUARY 2026 — the exact
-// span of real Unilever demand data (verified against
-// Unilever_SKU_Demand_Fact_Real: MIN = 2023-01, MAX = 2026-02). Unilever is
-// the only principal left, see DashboardLayout.jsx / the backend's 2026-09
-// Del Monte removal.
+// System-wide selectable range: Jan 2023 through FEBRUARY 2026 — the span
+// of real Unilever demand data (Unilever_SKU_Demand_Fact_Real: MIN =
+// 2023-01, MAX = 2026-02). Both principals are in scope again (Del Monte
+// was restored 2026-09-17, see principals.js); Del Monte's real sell-out
+// runs 2023-01 to 2025-12, inside this window, so Unilever's span still
+// bounds the picker.
 //
 // The ceiling was Mar 2026 before, which conflated two different things:
-// 2026-03 is the FORECAST month (MA3 projects last-actual + 1), not a month
-// anyone has actuals for. Offering it as a selectable end let the user pick
-// a window whose final month is empty by definition on every page that
-// plots actuals. The forecast month is now derived from the selected end
-// rather than being pickable itself.
+// 2026-03 is the FORECAST month (every served model projects last-actual
+// + 1), not a month anyone has actuals for. Offering it as a selectable end
+// let the user pick a window whose final month is empty by definition on
+// every page that plots actuals. The forecast month is now derived from the
+// selected end rather than being pickable itself.
 //
-// 2023 is the floor, so all of its months are valid; 2026 is the ceiling,
-// so only Jan-Feb are. 2024/2025 sit entirely inside the range and need no
-// month restriction.
-const YEARS = ['2023', '2024', '2025', '2026'];
-const LATEST_YEAR = '2026';
-const LATEST_YEAR_MONTHS = ['Jan', 'Feb'];
+// 2023 is the floor, so all of its months are valid; the latest year is the
+// ceiling, so only its months up to the latest data month are. The years in
+// between sit entirely inside the range and need no month restriction.
+// Both ends come from dataCoverage.js — the one place to edit when a new
+// month of data loads.
+const YEARS = Array.from(
+  { length: Number(LATEST_DATA_PERIOD.year) - FIRST_DATA_YEAR + 1 },
+  (_, i) => String(FIRST_DATA_YEAR + i)
+);
+const LATEST_YEAR = LATEST_DATA_PERIOD.year;
+const LATEST_YEAR_MONTHS = MONTHS.slice(0, MONTHS.indexOf(LATEST_DATA_PERIOD.month) + 1);
 const monthsForYear = (year) => (year === LATEST_YEAR ? LATEST_YEAR_MONTHS : MONTHS);
 
 // year*12+monthIndex sorts (month, year) pairs correctly across a year
@@ -82,9 +89,9 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths =
   const isSingleMonth = isLocal && singleMonth;
 
   const sm = (isLocal ? localValue.startMonth : outlet.pendingStartMonth) ?? 'Jan';
-  const sy = (isLocal ? localValue.startYear : outlet.pendingStartYear) ?? '2026';
-  const em = (isLocal ? localValue.endMonth : outlet.pendingEndMonth) ?? 'Feb';
-  const ey = (isLocal ? localValue.endYear : outlet.pendingEndYear) ?? '2026';
+  const sy = (isLocal ? localValue.startYear : outlet.pendingStartYear) ?? LATEST_YEAR;
+  const em = (isLocal ? localValue.endMonth : outlet.pendingEndMonth) ?? LATEST_DATA_PERIOD.month;
+  const ey = (isLocal ? localValue.endYear : outlet.pendingEndYear) ?? LATEST_YEAR;
 
   const startMonthOptions = monthsForYear(sy);
   const endMonthOptions = monthsForYear(ey);

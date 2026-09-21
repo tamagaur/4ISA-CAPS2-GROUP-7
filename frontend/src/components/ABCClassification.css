@@ -139,6 +139,25 @@
   cursor: help;
 }
 
+/* Del Monte notes (ranked by product category; the Jan 2025 regrouping) —
+   same raised-surface small print as the grain note below, with a slate
+   left rule so they read as context about the data, not a warning. */
+.abc-principal-note {
+  margin: 0.6rem 0 0 0;
+  padding: 0.6rem 0.9rem;
+  background-color: var(--color-surface-raised);
+  border-left: 3px solid var(--color-slate-400);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.abc-principal-note strong {
+  color: var(--color-text-body);
+  font-weight: 600;
+}
+
 .abc-page-grain-note {
   margin: -0.5rem 0 0 0;
   padding: 0.6rem 0.9rem;

@@ -152,14 +152,14 @@ const Dashboard = () => {
   const [forecastPrincipal, setForecastPrincipal] = useState(DEFAULT_PRINCIPAL);
   const forecastKey = `${period ?? ''}|${startPeriod ?? ''}|${forecastPrincipal}`;
   const forecastFollowsPage = forecastPrincipal === pagePrincipal;
-  const [cardForecast, setCardForecast] = useState(null); // { key, data, error }
+  const [cardForecast, setCardForecast] = useState(null); // { key, data, reliability, error }
   const cardForecastKey = cardForecast?.key;
   useEffect(() => {
     if (forecastFollowsPage || cardForecastKey === forecastKey) return undefined;
     let cancelled = false;
     getDashboardData({ period, startPeriod, principal: forecastPrincipal })
       .then((res) => {
-        if (!cancelled) setCardForecast({ key: forecastKey, data: res.portfolio_forecast || {} });
+        if (!cancelled) setCardForecast({ key: forecastKey, data: res.portfolio_forecast || {}, reliability: res.forecast || null });
       })
       .catch(() => {
         if (!cancelled) setCardForecast({ key: forecastKey, data: null, error: true });
@@ -283,6 +283,12 @@ const Dashboard = () => {
   const portfolioForecast = forecastFollowsPage
     ? data.portfolio_forecast || {}
     : (cardForecast?.data ?? data.portfolio_forecast) || {};
+  // The card's own scope for the MASE reliability count too (GET
+  // /dashboard's forecast block), so the two never describe different
+  // principals. Null while that scope is still loading.
+  const forecastReliability = forecastFollowsPage
+    ? data.forecast || null
+    : (cardForecastReady ? cardForecast?.reliability ?? null : null);
   const portfolioSeries = (portfolioForecast.series || []).map((pt) => ({
     period: pt.period,
     actual: pt.actual,
@@ -393,14 +399,22 @@ const Dashboard = () => {
                 gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
                 avgMape={portfolioForecast.avg_mape}
                 scopeLabel={portfolioForecast.scope_label}
+                // The backend's scope_label already says it plainly for Del
+                // Monte ("No SKU-level forecasts exist for Del Monte — …").
+                // The local sentence only stands in if it is ever missing,
+                // so the card can't fall back to a generic "No forecast data".
                 emptyReason={
                   forecastError
                     ? `Couldn't load the forecast for ${labelForPrincipal(forecastPrincipal)}.`
                     : portfolioForecast.scope_label
+                      || (forecastPrincipal === 'delmonte'
+                        ? 'No SKU-level forecasts for Del Monte — it has no SKU-level sales data, only category sell-out.'
+                        : undefined)
                 }
                 principal={forecastPrincipal}
                 onPrincipalChange={setForecastPrincipal}
                 isUpdating={forecastUpdating}
+                reliability={forecastReliability}
               />
             </Slot>
             <Slot kind="Prescriptive">

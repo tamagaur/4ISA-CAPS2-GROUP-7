@@ -85,6 +85,7 @@ class FakeSession:
         recommendation_count=0,
         forecast_total=0,
         forecast_unreliable=0,
+        forecast_evaluated=0,
         latest_sales_period: str | None = FIXED_ANCHOR,
         received: dict | None = None,
         sales: dict | None = None,
@@ -104,6 +105,7 @@ class FakeSession:
         self.recommendation_count = recommendation_count
         self.forecast_total = forecast_total
         self.forecast_unreliable = forecast_unreliable
+        self.forecast_evaluated = forecast_evaluated
         self.latest_sales_period = latest_sales_period
         self.received = received or {}
         self.sales = sales or {}
@@ -143,8 +145,10 @@ class FakeSession:
         if "COUNT(*) AS product_count" in sql:
             return FakeResult([{"product_count": self.recommendation_count}])
 
-        if "COUNT(*) FILTER (WHERE fr.mape >= :mape_gate)" in sql:
-            return FakeResult([{"total_count": self.forecast_total, "unreliable_count": self.forecast_unreliable}])
+        if "COUNT(*) FILTER (WHERE fr.mase >= :mase_gate)" in sql:
+            assert params.get("mase_gate") == 1.0, "unreliable_count must gate on MASE >= 1"
+            return FakeResult([{"total_count": self.forecast_total, "evaluated_count": self.forecast_evaluated,
+                                "unreliable_count": self.forecast_unreliable}])
 
         if sql.strip() == "SELECT MAX(calendar_month) AS p FROM Unilever_SKU_Demand_Fact_Real":
             return FakeResult([{"p": self.latest_sales_period}])
@@ -264,7 +268,7 @@ def test_requires_auth():
 
 
 def test_original_fields_unchanged():
-    session = FakeSession(recommendation_count=5, forecast_total=10, forecast_unreliable=3)
+    session = FakeSession(recommendation_count=5, forecast_total=10, forecast_evaluated=8, forecast_unreliable=3)
     with make_client(session) as c:
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     assert resp.status_code == 200
@@ -272,7 +276,10 @@ def test_original_fields_unchanged():
     assert body["principal"] == "unilever"
     assert body["inventory"] == {"value": None, "weeks_of_cover": None, "policy_weeks": 3}
     assert body["recommendations"] == {"order_value": None, "product_count": 5}
-    assert body["forecast"] == {"unreliable_count": 3, "total_count": 10}
+    assert body["forecast"] == {"unreliable_count": 3, "evaluated_count": 8, "total_count": 10}
+    # latest real sales month, overall and per principal (no Del Monte sales in this fixture)
+    assert body["latest_data_period"] == FIXED_ANCHOR
+    assert body["latest_data_period_by_principal"] == {"unilever": FIXED_ANCHOR, "delmonte": None}
     assert len(body["cover_series"]) == 12
     assert all(pt["weeks_of_cover"] is None for pt in body["cover_series"])
 
@@ -636,7 +643,7 @@ def test_portfolio_forecast_scope_label_and_series():
     pf = resp.json()["portfolio_forecast"]
     assert pf["gated_sku_count"] == 2
     assert pf["avg_mape"] == pytest.approx(12.5)
-    assert pf["scope_label"] == "Unilever (SKU-level MA3 forecasts meeting the MAPE gate)."
+    assert pf["scope_label"] == "Unilever (SKU-level forecasts meeting the MAPE gate)."
     by_period = {pt["period"]: pt for pt in pf["series"]}
     assert by_period["2024-01"]["actual"] == pytest.approx(90.0)
     assert by_period["2024-02"]["actual"] == pytest.approx(95.0)
@@ -834,8 +841,17 @@ def test_policy_comparison_sums_lp_ss_against_three_week_rule():
     assert pc["sku_count"] == 2
     assert pc["lp_safety_stock_units"] == pytest.approx(50.0)
     assert pc["rule_safety_stock_units"] == pytest.approx(3 * 150.0 / AVG_WEEKS_PER_MONTH, rel=1e-4)
+    rule = 3 * 150.0 / AVG_WEEKS_PER_MONTH
+    assert pc["lp_vs_rule_pct"] == pytest.approx(round((rule - 50.0) / rule * 100, 1))
     assert pc["rule_weeks"] == 3
     assert pc["blocked_reason"] is None
+
+
+def test_principal_echoes_the_requested_scope():
+    """Was hard-coded to 'unilever' for every scope."""
+    with make_client(FakeSession()) as c:
+        body = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["principal"] == "all"
 
 
 def test_policy_comparison_blocked_when_no_comparable_rows():
@@ -845,6 +861,7 @@ def test_policy_comparison_blocked_when_no_comparable_rows():
     pc = resp.json()["policy_comparison"]
     assert pc["lp_safety_stock_units"] is None
     assert pc["rule_safety_stock_units"] is None
+    assert pc["lp_vs_rule_pct"] is None
     assert pc["blocked_reason"]
 
 

@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle } from 'lucide-react';
+import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -14,6 +14,8 @@ import {
 import { COLORS, CHART_COLORS, SEMANTIC } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
 import { getABCClassification } from '../api/abc';
+import { getFsn } from '../api/analytics';
+import { ParetoCard, AbcFsnMatrix } from './AbcBreakdowns';
 import DateFilter from './DateFilter';
 import { formatMonth } from '../utils/formatDate';
 import { useBrandLookup } from '../utils/useBrandLookup';
@@ -28,6 +30,12 @@ import './ABCClassification.css';
 // (backend/routers/abc.py) already computes boundary_flag server-side, so
 // this constant is display-only (used in the legend copy).
 const BOUNDARY_TOLERANCE_PP = 3;
+
+// Del Monte regrouped its product categories in Jan 2025 (about 63
+// sub-categories became 4-5). In a run from then on, a Del Monte row last
+// classified before this month is one of the old sub-categories carried
+// forward — not a category that stopped selling.
+const DEL_MONTE_REGROUP_PERIOD = '2025-01';
 
 const MONTH_TO_NUM = {
   Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
@@ -200,6 +208,7 @@ const ABCClassification = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [brandFilter, setBrandFilter] = useState('ALL');
+  const [fsnFilter, setFsnFilter] = useState('ALL');
   // Off by default: the table lists every SKU's most recent tier. On, it
   // narrows to the SKUs ranked in THIS run — what the page showed before
   // last-known tiers, and the only set whose Rev % values sum to 100%.
@@ -276,7 +285,12 @@ const ABCClassification = () => {
         // fell back to category_path — 85 rows sharing one React key.
         id: item.product_key ?? `${item.principal}:${item.sku_id}`,
         sku: item.sku_id,
-        product: item.product_name || 'Unknown Product',
+        productKey: item.product_key,
+        principal: item.principal,
+        // A Del Monte row is a product category (sku_id carries its path),
+        // and the old sub-categories have no name — "Unknown Product" would
+        // imply a product that should have one.
+        product: item.product_name || (item.principal === 'delmonte' ? '—' : 'Unknown Product'),
         brand: brandLookup?.get(String(item.sku_id)) ?? null,
         cat: item.tier,
         // The run this row's tier and shares come from. When it is older than
@@ -300,6 +314,44 @@ const ABCClassification = () => {
     [rawData, brandLookup, classificationPeriod]
   );
 
+  // FSN (fast / slow / non-moving) per product over the 12 observed months
+  // up to this page's run — GET /fsn, joined to the rows by product_key.
+  // Fetched once the ABC response lands, since its window ends at that
+  // response's classification period. A classified product with no FSN
+  // row sold nothing in the window, which is non-moving by definition.
+  const fsnKey = `${principal ?? ''}|${classificationPeriod ?? ''}`;
+  const [fsn, setFsn] = useState({ key: null, byKey: new Map(), rules: null, error: false });
+  useEffect(() => {
+    if (!classificationPeriod) return undefined;
+    let cancelled = false;
+    getFsn({ principal, period: classificationPeriod })
+      .then((res) => {
+        if (cancelled) return;
+        setFsn({ key: fsnKey, byKey: new Map((res?.items || []).map((i) => [i.product_key, i])), rules: res?.rules ?? null, error: false });
+      })
+      .catch(() => { if (!cancelled) setFsn({ key: fsnKey, byKey: new Map(), rules: null, error: true }); });
+    return () => { cancelled = true; };
+  }, [principal, classificationPeriod, fsnKey]);
+  const fsnLoaded = fsn.key === fsnKey && !fsn.error;
+  const fsnOf = useCallback((row) => {
+    if (!fsnLoaded) return null;
+    return fsn.byKey.get(row.productKey) ?? { fsn: 'N', adi: null, months_with_sales: 0, months_observed: null, noSaleInWindow: true };
+  }, [fsn, fsnLoaded]);
+  const fsnTitle = (f) => {
+    const label = { F: 'Fast-moving', S: 'Slow-moving', N: 'Non-moving' }[f.fsn];
+    if (f.noSaleInWindow) return `${label} — no sale in the 12 months with data up to this run`;
+    if (f.fsn === 'N') {
+      return `${label} — no sale in the last 6 months with data (sold in ${f.months_with_sales} of the ${f.months_observed} months with data)`;
+    }
+    // Counted from the first sale in the window, as ADI is: a category
+    // launched mid-window that has sold every month since is regular.
+    const span = f.active_months ?? f.months_observed;
+    const since = span < f.months_observed ? ' since its first sale in the window' : '';
+    const sold = `sold in ${f.months_with_sales} of ${span} months with data${since}`;
+    const cadence = f.adi == null ? '' : f.adi <= 1 ? ', every month' : `, a sale every ${f.adi.toFixed(1)} months on average`;
+    return `${label} — ${sold}${cadence}`;
+  };
+
   // Handle click outside combobox to close dropdown
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -316,6 +368,26 @@ const ABCClassification = () => {
   const catCCount = sourceData.filter(d => d.cat === 'C').length;
   const carriedCountOf = (cat) => sourceData.filter(d => d.cat === cat && !d.isCurrent).length;
   const currentRunCount = sourceData.filter(d => d.isCurrent).length;
+
+  // Del Monte is ranked by product category, not SKU — its sales data has no
+  // SKU column — so with the Topbar on Del Monte every noun that names a row
+  // says "category". The All view lists both principals' rows, so its
+  // column header names both.
+  const isDelMonte = principal === 'delmonte';
+  const hasDelMonteRows = sourceData.some((d) => d.principal === 'delmonte');
+  const rowNoun = isDelMonte
+    ? { one: 'category', header: 'Category', count: 'Category Count', CAPS: 'CATEGORIES' }
+    : { one: 'SKU', header: hasDelMonteRows ? 'SKU / Category' : 'SKU', count: 'SKU Count', CAPS: 'SKUS' };
+
+  // Carried-forward Del Monte rows from before the Jan 2025 regrouping —
+  // explained in a Del Monte-only note, but only for a run after the
+  // regrouping: in an earlier run those sub-categories were the live scheme.
+  const carriedCount = sourceData.length - currentRunCount;
+  const preRegroupCarriedCount = sourceData.filter(
+    (d) => d.principal === 'delmonte' && !d.isCurrent && d.catPeriod && d.catPeriod < DEL_MONTE_REGROUP_PERIOD
+  ).length;
+  const showRegroupNote = isDelMonte && !!classificationPeriod
+    && classificationPeriod >= DEL_MONTE_REGROUP_PERIOD && preRegroupCarriedCount > 0;
 
   const brandsList = ['ALL', ...Array.from(new Set(sourceData.map(d => d.brand).filter(Boolean))).sort()];
 
@@ -390,9 +462,10 @@ const ABCClassification = () => {
       const matchesCat = categoryFilter === 'ALL' || item.cat === categoryFilter;
       const matchesBrand = brandFilter === 'ALL' || item.brand === brandFilter;
       const matchesRun = !currentRunOnly || item.isCurrent;
-      return matchesSearch && matchesCat && matchesBrand && matchesRun;
+      const matchesFsn = fsnFilter === 'ALL' || fsnOf(item)?.fsn === fsnFilter;
+      return matchesSearch && matchesCat && matchesBrand && matchesRun && matchesFsn;
     });
-  }, [dataWithCumulative, searchQuery, categoryFilter, brandFilter, currentRunOnly]);
+  }, [dataWithCumulative, searchQuery, categoryFilter, brandFilter, currentRunOnly, fsnFilter, fsnOf]);
 
   // Whenever the filtered set changes shape (new search, new filter, or
   // the page size itself), snap back to page 1 — staying on e.g. page 4
@@ -400,7 +473,7 @@ const ABCClassification = () => {
   // page or an out-of-range slice.
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, brandFilter, currentRunOnly, pageSize]);
+  }, [searchQuery, categoryFilter, brandFilter, currentRunOnly, fsnFilter, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
 
@@ -446,12 +519,13 @@ const ABCClassification = () => {
   };
 
   const hasActiveFilters =
-    searchQuery !== '' || categoryFilter !== 'ALL' || brandFilter !== 'ALL' || currentRunOnly;
+    searchQuery !== '' || categoryFilter !== 'ALL' || brandFilter !== 'ALL' || currentRunOnly || fsnFilter !== 'ALL';
 
   const handleClearFilters = () => {
     setSearchQuery('');
     setCategoryFilter('ALL');
     setBrandFilter('ALL');
+    setFsnFilter('ALL');
     setCurrentRunOnly(false);
   };
 
@@ -460,9 +534,12 @@ const ABCClassification = () => {
   const catTitle = (item) => {
     if (!item.catPeriod) return `Category ${item.cat}`;
     const when = formatMonth(item.catPeriod);
-    return item.isCurrent
-      ? `Category ${item.cat} — current run (${when})`
-      : `Category ${item.cat} — last classified ${when}; no sales since, so this is carried forward`;
+    if (item.isCurrent) return `Category ${item.cat} — current run (${when})`;
+    // Per row, so a Del Monte row keeps its reason in the All view too.
+    if (item.principal === 'delmonte' && item.catPeriod < DEL_MONTE_REGROUP_PERIOD) {
+      return `Category ${item.cat} — last classified ${when}: an older Del Monte sub-category from before the Jan 2025 regrouping, carried forward`;
+    }
+    return `Category ${item.cat} — last classified ${when}; no sales since, so this is carried forward`;
   };
 
   const getStatusClass = (status) => {
@@ -505,11 +582,37 @@ const ABCClassification = () => {
         />
       </div>
       <p className="abc-page-subtitle">
-        Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
-        {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}.</>}
-        {' '}SKUs with no sales that month keep their most recent category, shown faded with the month it was set.
-        <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a SKU within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
+        {isDelMonte ? (
+          <>
+            Product categories ranked by sales value. Category A = the categories driving roughly 80% of revenue.
+            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}.</>}
+            {' '}Categories with no sales that month keep their most recent tier, shown faded with the month it was set.
+          </>
+        ) : (
+          <>
+            Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
+            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}.</>}
+            {' '}SKUs with no sales that month keep their most recent category, shown faded with the month it was set.
+          </>
+        )}
+        <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a {rowNoun.one} within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
       </p>
+      {/* Del Monte's rows are product categories, not SKUs. Said once, up
+          front, and it also separates the two meanings of "category" on
+          this page: the product category a row IS, and the A/B/C tier it
+          was ranked into. */}
+      {isDelMonte && (
+        <p className="abc-principal-note">
+          <strong>Del Monte is ranked by product category, not SKU.</strong> Its sales data has no SKU-level
+          detail, so each row below is a product category, and its A/B/C is that category&apos;s ABC tier.
+        </p>
+      )}
+      {!isDelMonte && hasDelMonteRows && (
+        <p className="abc-principal-note">
+          <strong>Del Monte rows are product categories, not SKUs.</strong> Del Monte&apos;s sales data has no
+          SKU-level detail, so it is ranked by category.
+        </p>
+      )}
     </div>
   );
 
@@ -604,11 +707,15 @@ const ABCClassification = () => {
               )}
             </div>
             <div className="abc-summary-card abc-card-total">
-              <span className="abc-card-label">CLASSIFIED SKUS</span>
+              <span className="abc-card-label">CLASSIFIED {rowNoun.CAPS}</span>
               <span className="abc-card-value">{sourceData.length.toLocaleString()}</span>
               <span className="abc-card-desc">
                 {currentRunCount.toLocaleString()} ranked in this run
-                {unclassifiedCount > 0 && <> · {unclassifiedCount.toLocaleString()} never classified</>}
+                {/* Not for Del Monte: its unclassified count is SKU-level
+                    product records, which are never ranked one by one (the
+                    ranking is by category) — beside a category count it
+                    would read as categories missing. */}
+                {!isDelMonte && unclassifiedCount > 0 && <> · {unclassifiedCount.toLocaleString()} never classified</>}
               </span>
               {boundaryCount > 0 && (
                 <span className="abc-card-desc abc-card-desc-warning">
@@ -617,6 +724,20 @@ const ABCClassification = () => {
               )}
             </div>
           </div>
+
+          {/* Why most Del Monte rows read "carried forward": the old
+              sub-categories stopped receiving sales under those names when
+              Del Monte regrouped in Jan 2025. Del Monte only, and only for a
+              run after the regrouping (showRegroupNote). */}
+          {showRegroupNote && (
+            <p className="abc-principal-note">
+              <strong>Del Monte regrouped its product categories in Jan 2025</strong> — about 63 sub-categories
+              became 4–5 — so {preRegroupCarriedCount === carriedCount
+                ? `the ${preRegroupCarriedCount.toLocaleString()} carried-forward rows`
+                : `${preRegroupCarriedCount.toLocaleString()} of the ${carriedCount.toLocaleString()} carried-forward rows`}{' '}
+              here are the older sub-categories, last ranked before the change.
+            </p>
+          )}
 
           {/* Class Aggregation Chart + interactive drill-down — replaces
               the per-SKU Pareto chart, which wasn't readable/actionable at
@@ -634,9 +755,18 @@ const ABCClassification = () => {
                       {panel.label ? `${panel.label} — Cover vs reorder point, by class` : 'Cover vs reorder point, by class'}
                     </h3>
                     <p className="abc-pareto-subtitle">
-                      Compares each SKU&apos;s current stock with its own reorder point (from its pending LP
-                      recommendation; 100 units when it has none) — not the warehouse&apos;s Active/Inactive flag,
-                      which is what the Dashboard&apos;s warehouse-status chart shows.
+                      {isDelMonte ? (
+                        <>
+                          Del Monte has no stock record or reorder point at category grain, so every Del Monte row
+                          shows No data here.
+                        </>
+                      ) : (
+                        <>
+                          Compares each SKU&apos;s current stock with its own reorder point (from its pending LP
+                          recommendation; 100 units when it has none) — not the warehouse&apos;s Active/Inactive flag,
+                          which is what the Dashboard&apos;s warehouse-status chart shows.
+                        </>
+                      )}
                     </p>
                   </div>
                   <div className="abc-pareto-legend">
@@ -734,7 +864,7 @@ const ABCClassification = () => {
                   {panel.classAggregates.map((entry) => (
                     <div key={entry.cat} className="abc-class-summary-item">
                       <span className="abc-class-summary-headline">
-                        ~{entry.skuSharePct.toFixed(0)}% SKU Count · ~{entry.revenueTotal.toFixed(0)}% of {classificationPeriod ? formatMonth(classificationPeriod) : 'this run'} Revenue
+                        ~{entry.skuSharePct.toFixed(0)}% {rowNoun.count} · ~{entry.revenueTotal.toFixed(0)}% of {classificationPeriod ? formatMonth(classificationPeriod) : 'this run'} Revenue
                       </span>
                       <span className="abc-class-summary-archetype">{CLASS_ARCHETYPE[entry.cat]}</span>
                     </div>
@@ -767,7 +897,7 @@ const ABCClassification = () => {
                   <thead>
                     <tr>
                       <th>Status</th>
-                      <th className="table-num">SKU Count</th>
+                      <th className="table-num">{rowNoun.count}</th>
                       <th className="table-num">% of Class {selectedClass}</th>
                     </tr>
                   </thead>
@@ -784,12 +914,24 @@ const ABCClassification = () => {
                     ))}
                   </tbody>
                 </table>
-                <p className="abc-page-grain-note">
-                  {CLASS_DRILLDOWN_NOTE[selectedClass]}
-                </p>
+                {/* The class notes are SKU reorder guidance; Del Monte rows
+                    are categories with no stock or reorder point (the chart's
+                    subtitle says so), so there is nothing here to act on. */}
+                {!isDelMonte && (
+                  <p className="abc-page-grain-note">
+                    {CLASS_DRILLDOWN_NOTE[selectedClass]}
+                  </p>
+                )}
               </div>
             </div>
           ))}
+
+          {/* Brand / category Pareto (D1) and ABC × FSN (D3) — the two
+              questions the SKU table alone can't answer. */}
+          <div className="abc-breakdown-row">
+            <ParetoCard principal={principal} period={classificationPeriod} />
+            <AbcFsnMatrix rows={sourceData} fsnOf={fsnOf} rules={fsn.rules} loaded={fsnLoaded} />
+          </div>
 
           {/* Searchable Combobox & Filters Bar */}
           <div className="abc-filters-row">
@@ -799,7 +941,7 @@ const ABCClassification = () => {
                 <Search className="abc-search-icon" size={16} />
                 <input
                   type="text"
-                  placeholder="Search by product name, SKU, or brand..."
+                  placeholder={isDelMonte ? 'Search by category or name...' : 'Search by product name, SKU, or brand...'}
                   value={searchQuery}
                   onFocus={() => setIsComboboxOpen(true)}
                   onChange={(e) => {
@@ -878,7 +1020,7 @@ const ABCClassification = () => {
 
                       <div className="abc-combobox-section">
                         <div className="abc-section-header">
-                          <span>TOP ABC CLASSIFIED SKUS</span>
+                          <span>TOP ABC CLASSIFIED {rowNoun.CAPS}</span>
                         </div>
                         {filteredData.slice(0, 5).map((item) => (
                           <div
@@ -917,6 +1059,16 @@ const ABCClassification = () => {
                   {brandsList.map(b => (
                     <option key={b} value={b}>{b === 'ALL' ? 'All Brands' : b}</option>
                   ))}
+                </select>
+              </div>
+
+              <div className="abc-filter-select-wrapper">
+                <span className="abc-filter-icon-label"><Activity size={12} /> Movement:</span>
+                <select value={fsnFilter} onChange={(e) => setFsnFilter(e.target.value)} disabled={!fsnLoaded}>
+                  <option value="ALL">All (FSN)</option>
+                  <option value="F">Fast-moving</option>
+                  <option value="S">Slow-moving</option>
+                  <option value="N">Non-moving</option>
                 </select>
               </div>
 
@@ -977,6 +1129,15 @@ const ABCClassification = () => {
                 </span>
               )}
 
+              {fsnFilter !== 'ALL' && (
+                <span className="abc-active-chip">
+                  Movement: {{ F: 'Fast', S: 'Slow', N: 'Non-moving' }[fsnFilter]}
+                  <button className="abc-chip-remove" onClick={() => setFsnFilter('ALL')}>
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+
               {currentRunOnly && (
                 <span className="abc-active-chip">
                   Ranked in {classificationPeriod ? formatMonth(classificationPeriod) : 'this run'} only
@@ -1003,11 +1164,12 @@ const ABCClassification = () => {
               <thead>
                 <tr>
                   <th className="table-num col-fit">#</th>
-                  <th className="col-fit">SKU</th>
+                  <th className="col-fit">{rowNoun.header}</th>
                   <th className="col-text col-product">Product</th>
                   <th className="col-fit">Brand</th>
                   <th className="table-center col-fit">Cat</th>
-                  <th className="table-num col-fit" title="Share of revenue in the run the SKU was classified in">Rev %</th>
+                  <th className="table-center col-fit" title="Fast / Slow / Non-moving over the 12 months with data up to this run">FSN</th>
+                  <th className="table-num col-fit" title={`Share of revenue in the run the ${rowNoun.one} was classified in`}>Rev %</th>
                   <th className="col-fit">Cover vs ROP</th>
                 </tr>
               </thead>
@@ -1041,6 +1203,14 @@ const ABCClassification = () => {
                         </span>
                       </span>
                     </td>
+                    <td className="table-center">
+                      {(() => {
+                        const f = fsnOf(item);
+                        return f
+                          ? <span className={`fsn-badge fsn-${f.fsn}`} title={fsnTitle(f)}>{f.fsn}</span>
+                          : <span className="fsn-badge fsn-pending" title="Loading movement class">…</span>;
+                      })()}
+                    </td>
                     {item.isCurrent ? (
                       <td className="table-num cell-strong">{item.revPct.toFixed(1)}%</td>
                     ) : (
@@ -1057,7 +1227,7 @@ const ABCClassification = () => {
                 ))}
                 {filteredData.length === 0 && (
                   <tr className="table-empty-row">
-                    <td colSpan="7">No data for this selection.</td>
+                    <td colSpan="8">No data for this selection.</td>
                   </tr>
                 )}
               </tbody>

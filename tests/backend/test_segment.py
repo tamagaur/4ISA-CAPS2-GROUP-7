@@ -70,10 +70,15 @@ class FakeSession:
 PRODUCTS = {
     "69767334": {"product_key": 10, "product_name": "SURF 1KG", "principal": "unilever"},
     "11111111": {"product_key": 11, "product_name": "UNSEEN SKU", "principal": "unilever"},
+    "22222222": {"product_key": 12, "product_name": "PRE-0022 SKU", "principal": "unilever"},
 }
 TRAITS = {
     10: {"cohort_period": "2026-02", "history_months": 31, "first_sale_period": "2023-08", "longest_run": 31,
-         "trend": "up", "cv": 0.898, "restart_flag": False, "stability_group": "churn", "revenue_share_2026_02": 0.045},
+         "trend": "up", "cv": 0.898, "restart_flag": False, "stability_group": "churn", "revenue_share_2026_02": 0.045,
+         "adi": 1.03, "trend_pvalue": 0.0015, "trend_slope": 190.3},
+    # A row shape from before migration 0022 (no adi / trend_pvalue / trend_slope).
+    12: {"cohort_period": "2026-02", "history_months": 12, "first_sale_period": "2025-03", "longest_run": 12,
+         "trend": "none", "cv": 0.3, "restart_flag": False, "stability_group": "churn", "revenue_share_2026_02": 0.01},
 }
 SEGMENTS = {
     10: [{"scheme": "length_v1", "abc_method": "single", "cohort_period": "2026-02", "bin": "long",
@@ -111,6 +116,18 @@ def test_analyzed_sku_returns_traits_and_verbatim_bin_reason():
     assert body["traits"]["cv"] == pytest.approx(0.898)
     assert body["traits"]["cv_band"] == "medium"
     assert body["segments"][0]["bin_reason"] == "31 months with sales >= 12"
+    # migration 0022 trait columns, passed through as stored
+    assert body["traits"]["adi"] == pytest.approx(1.03)
+    assert body["traits"]["trend_pvalue"] == pytest.approx(0.0015)
+    assert body["traits"]["trend_slope"] == pytest.approx(190.3)
+
+
+def test_traits_without_0022_columns_read_as_null():
+    with make_client(FakeSession(PRODUCTS, TRAITS, SEGMENTS)) as c:
+        resp = c.get("/segment?sku=22222222", headers={"Authorization": f"Bearer {user_token()}"})
+    assert resp.status_code == 200
+    traits = resp.json()["traits"]
+    assert traits["adi"] is None and traits["trend_pvalue"] is None and traits["trend_slope"] is None
 
 
 def test_unanalyzed_sku_is_200_not_analyzed_with_reason():

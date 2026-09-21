@@ -7,7 +7,9 @@ match, not the other way around.
 
 ## Prerequisites
 
-- Python 3.11+ (developed and tested on 3.13)
+- Python 3.12+ (developed and tested on 3.13). The pinned `xgboost==3.4.1`
+  requires 3.12 or newer. On Python 3.11, install `xgboost==3.2.0` instead —
+  the newest release that still supports 3.11.
 - No system-level dependencies beyond Python and pip
 
 ## 1. Clone and check out the real trunk
@@ -38,6 +40,11 @@ pip install -r requirements.txt
 which is actually an MHTML web archive despite its `.xls` extension. If
 you installed before this date, re-run the command above even if you
 think you're already set up.
+
+`xgboost` became a pipeline dependency on 2026-09-21 — the long-history
+forecasts (`analytics/forecasting/global_model.py`) use it. If you set up
+before then, re-run the install; without it the forecasting tests and
+`scripts/run_baseline_forecast.py` fail with `No module named 'xgboost'`.
 
 ## 3. Get the source data in place
 
@@ -82,10 +89,10 @@ Parquet file per staged sheet.
 pytest tests/ -v
 ```
 
-Expected as of 2026-09-20: **303 passed / 13 failed / 1 skipped**. The 13
-failures are pre-existing (`Users` vs `users` table casing in
-`tests/backend/test_auth.py` and `test_users.py`) and are not your fault —
-see Troubleshooting. More than 13 means something is wrong.
+Expected as of 2026-09-21: **495 passed / 8 skipped / 0 failed** (with
+`xgboost` installed and `.env` pointing at the live database). The old
+`Users` vs `users` casing failures are fixed. Any failure now means
+something is wrong — see Troubleshooting.
 
 If you see tests skipping that you expected to run, it almost always means
 step 3 or step 4 wasn't done yet — several tests are gated on `data/raw/`
@@ -108,10 +115,13 @@ known gotchas (a stale `starlette` pin; `--schema` is now required on
 `orchestrate_abc.py` and `orchestrate_segment.py`) are in
 [reports/FRONTEND_HANDOFF_2026-09-20.md](reports/FRONTEND_HANDOFF_2026-09-20.md).
 
-**13 backend tests fail and you didn't touch them.** That is the baseline —
-`tests/backend/test_auth.py` and `test_users.py` fail on `Users` vs `users`
-table casing, and pre-date the 2026-09-20 push. Expect exactly
-**303 passed / 13 failed / 1 skipped**. More than 13 means something is wrong.
+**Forecasting tests fail to import (`No module named 'xgboost'`).** Re-run
+`pip install -r requirements.txt` — see step 2 for the Python 3.11 case.
+
+**`test_abc_schema_contract` lists key columns several times.** Fixed
+2026-09-21: the live database also holds experiment schemas
+(`ssm_abc_repro`, `ssm_synth_v2`, `ssm_abc_phase2`) with copies of the
+tables, and the test now reads only `public`.
 
 **A family stages 0 rows.** Check two things: the file is under the
 subfolder its principal implies (Del Monte / SSIS / Unilever), and its

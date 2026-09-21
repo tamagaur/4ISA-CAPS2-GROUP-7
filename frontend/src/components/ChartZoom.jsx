@@ -11,6 +11,16 @@ export const MIN_WINDOW = 4;
 // width; past it the XAxis has to start skipping or the months collide.
 const MAX_COMFORTABLE_TICKS = 12;
 
+// Right margin for any chart whose XAxis takes `labelInterval`. With no
+// bars the X axis is a point scale, so the latest month sits exactly on the
+// plot's right edge and its label is centred there, half of it hanging past
+// the plot. Recharts' own interval modes pull that label back inside, but a
+// numeric interval skips that step, so the margin has to hold the overhang
+// or the SVG crops it ("Feb · 202"). Half the widest "Mmm · YYYY" label in
+// Inter is ~27px at the Dashboard's 10px ticks and ~30px at SKU Forecast's
+// 11px; 36 covers both with room to spare.
+export const EDGE_LABEL_MARGIN = 36;
+
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 /**

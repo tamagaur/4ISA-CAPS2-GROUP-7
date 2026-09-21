@@ -10,7 +10,7 @@ import { HelpCircle, ArrowRight, RotateCcw } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
-import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot } from './ChartZoom';
+import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { DEFAULT_PRINCIPAL, PRINCIPALS } from '../principals';
 import './Charts.css';
 
@@ -353,7 +353,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
         <>
           <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} {...zoom.panHandlers}>
             <ResponsiveContainer width="99%" height="100%">
-              <ComposedChart data={zoom.view} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
+              <ComposedChart data={zoom.view} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
                 <defs>
                   <SeriesFill id="fill-sales" color={CHART_COLORS.salesSeries} />
                   <SeriesFill id="fill-stock" color={CHART_COLORS.stockSeries} />
@@ -733,8 +733,14 @@ export const PortfolioForecastWidget = ({
   principal,
   onPrincipalChange,
   isUpdating = false,
+  reliability = null,
 }) => {
   const hasData = series.length > 0;
+  // GET /dashboard's forecast block: evaluated = SKU forecasts with a
+  // holdout MASE, unreliable = those at MASE >= 1. Shown as how many beat
+  // a naive forecast, the pass gate the LP uses too.
+  const evaluated = reliability?.evaluated_count ?? 0;
+  const beatNaive = evaluated > 0 && reliability?.unreliable_count != null ? evaluated - reliability.unreliable_count : null;
 
   // Same base/excess stacking trick as CoverTrendWidget's policy shading:
   // an invisible area up to confidenceLower, then a visible band on top
@@ -784,7 +790,7 @@ export const PortfolioForecastWidget = ({
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Portfolio-level aggregate forecast</h4>
-          <p>Summed demand across gated Category A SKUs vs. MA3 forecast</p>
+          <p>Summed demand across gated Category A SKUs vs. forecast</p>
         </div>
         {/* Card-scoped principal filter — re-scopes THIS card only, never
             the page (the Topbar's filter does that). Rendered in the empty
@@ -831,13 +837,27 @@ export const PortfolioForecastWidget = ({
         <div className={`portfolio-forecast-body${isUpdating ? ' is-refreshing' : ''}`} aria-busy={isUpdating}>
           <div className="portfolio-stat-row">
             <div className="portfolio-stat">
-              <span className="portfolio-stat-label">Gated SKUs (MAPE &lt; 20%)</span>
+              <span className="portfolio-stat-label">
+                Gated SKUs (MAPE &lt; 20%)
+                {' '}
+                <PriorityInfo text="MAPE here is each SKU's error on a rolling one-month-ahead holdout: its served model forecasts each held-out month from the months before it, and is scored against what actually sold." />
+              </span>
               <span className="portfolio-stat-value">{gatedSkuCount}</span>
             </div>
             <div className="portfolio-stat">
               <span className="portfolio-stat-label">Avg. MAPE, portfolio</span>
               <span className="portfolio-stat-value">{avgMape.toFixed(1)}%</span>
             </div>
+            {beatNaive != null && (
+              <div className="portfolio-stat">
+                <span className="portfolio-stat-label">
+                  Beat naive (MASE &lt; 1)
+                  {' '}
+                  <PriorityInfo text="How many SKU forecasts beat a naive 'same as last month' forecast on their own rolling one-month-ahead holdout (MASE below 1). Forecasts at or above 1 are flagged unreliable. Counted over every evaluated forecast in this scope, not only the gated ones charted here." />
+                </span>
+                <span className="portfolio-stat-value">{beatNaive} / {evaluated}</span>
+              </div>
+            )}
             <div className="portfolio-stat">
               <span className="portfolio-stat-label">Scope</span>
               <span className="portfolio-stat-value portfolio-stat-scope">{scopeLabel}</span>
@@ -846,7 +866,7 @@ export const PortfolioForecastWidget = ({
 
           <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} {...zoom.panHandlers}>
             <ResponsiveContainer width="99%" height="100%">
-              <ComposedChart data={zoom.view} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+              <ComposedChart data={zoom.view} margin={{ top: 10, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
                 <defs>
                   <SeriesFill id="fill-actual" color={CHART_COLORS.salesSeries} />
                   <SeriesFill id="fill-forecast" color={COLORS.forecast} />
@@ -890,7 +910,7 @@ export const PortfolioForecastWidget = ({
                 <Line
                   type="monotone"
                   dataKey="forecast"
-                  name="Forecast (MA3)"
+                  name="Forecast"
                   stroke={COLORS.forecast}
                   strokeDasharray="5 3"
                   strokeWidth={2}
@@ -910,7 +930,7 @@ export const PortfolioForecastWidget = ({
             </li>
             <li className="legend-item">
               <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
-              Forecast (MA3)
+              Forecast
             </li>
             <li className="legend-item">
               <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
@@ -1190,7 +1210,7 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
           <h4>Safety stock: LP policy vs the blanket 3-week rule</h4>
           <p>
             Total buffer stock each policy would hold across the latest planning cycle, in demand units.
-            Rule = 3 weeks of each SKU&apos;s own MA3 forecast; LP = the per-SKU safety stock the optimizer solved for.
+            Rule = 3 weeks of each SKU&apos;s own forecast; LP = the per-SKU safety stock the optimizer solved for.
           </p>
         </div>
       </div>
@@ -1199,6 +1219,18 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
         <p className="dashboard-empty-note">{emptyReason || c.blocked_reason || 'Policy comparison not available'}</p>
       ) : (
         <div className="chart-widget-body">
+          {/* The one-number headline (IMPLEMENTATION_PLAN Phase 1.1-1.2):
+              units and percent, never pesos. lp_vs_rule_pct is how much
+              less buffer the LP holds than the rule; negative = more. */}
+          {c.lp_vs_rule_pct != null && (
+            <p className="policy-headline">
+              <span className="policy-headline-number">{Math.abs(c.lp_vs_rule_pct).toFixed(1)}%</span>
+              <span className="policy-headline-text">
+                {c.lp_vs_rule_pct >= 0 ? 'less' : 'more'} safety stock under the LP policy than the blanket{' '}
+                {c.rule_weeks ?? 3}-week rule, across {c.sku_count} SKUs
+              </span>
+            </p>
+          )}
           <div className="policy-bars">
             {rows.map((r) => (
               <div className="policy-bar-row" key={r.key}>
@@ -1211,8 +1243,19 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
             ))}
           </div>
           <p className="dashboard-chart-footnote">
-            {c.sku_count} SKUs in the {formatMonth(c.cycle_date)} cycle with a forecast for that month; units of the
-            demand series (pieces). Not converted to pesos — no per-piece cost is recorded.
+            {c.sku_count} SKUs in the {formatMonth(c.cycle_date)} cycle with a forecast for that month; both sides in
+            units of the demand series (pieces). Not converted to pesos — no cost per piece is recorded
+            (unit_cost_per_case is per case and pack size is unreliable).
+          </p>
+          {/* The headline depends on how many days of demand variability the
+              LP's safety stock covers — run_lp.py's --protection-days, 1
+              business day by default. Stated beside the number, since it
+              changes the answer (reports/PROJECT_DIAGNOSIS_2026-09-21.md). */}
+          <p className="policy-assumption">
+            <strong>Assumption:</strong> the LP&apos;s safety stock covers the demand variability of the protection
+            period it was run with (scripts/run_lp.py --protection-days; the default is 1 business day, with no
+            review period or lead time). The comparison is sensitive to that setting, which is still an open
+            planning decision.
           </p>
         </div>
       )}

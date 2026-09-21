@@ -60,13 +60,24 @@ zero):
   recommendations.product_count
     — real: COUNT(*) of pending LP_Recommendation rows. Needs no price,
     so it's honestly computable even though order_value isn't.
-  forecast.unreliable_count / forecast.total_count
-    — real: from Forecast_Result at its most recent forecast_date. mape
-    is stored as a PERCENT (see schema.sql's column comment) — the gate
-    is `mape >= 20.0`, not `>= 0.20`. unreliable_count is null (not 0)
+  forecast.unreliable_count / forecast.evaluated_count / forecast.total_count
+    — real: from Forecast_Result at its most recent forecast_date.
+    total_count is every row; evaluated_count the rows with a holdout MASE
+    (status 'ok' — provisional and no-order rows have none); unreliable_count
+    the evaluated rows that FAIL the pass gate MASE < 1
+    (MASE_UNRELIABLE_GATE), i.e. whose served model did no better on its
+    rolling one-step holdout than a naive last-value forecast. The gate was
+    `mape >= 20` until 2026-09-21: that flagged 100 of 132 Tier A SKUs
+    whatever the model, so it told the user nothing; MASE < 1 is also the
+    LP's own gate (scripts/run_lp.py). unreliable_count is null (not 0)
     when total_count is 0, matching this app's "null = no data source
     yet" convention everywhere else, rather than claiming "0 unreliable"
     when there's no forecast run to judge at all.
+  latest_data_period / latest_data_period_by_principal
+    — real: the most recent 'YYYY-MM' with real sales, overall (the later
+    of the two principals) and per principal (_latest_sales_period). The
+    frontend hard-codes the same month (frontend/src/dataCoverage.js) as
+    its date picker's ceiling; this is the value to read instead.
 
   NEW FIELDS (this pass) — every *_Real view read, is_demo=false is
   guaranteed by the view definition itself (schema.sql SECTION 8), never
@@ -191,15 +202,17 @@ zero):
 
   portfolio_forecast
     — real, but structurally different from the old mock's clean 4-period
-    horizon: scripts/run_baseline_forecast.py's deployed MA3 method
-    forecasts ONE step ahead per product, and forecast_date is that
-    product's OWN latest actual period + 1 month — there is no shared,
-    synchronized multi-period horizon anywhere in Forecast_Result to
-    report (SARIMA was retired in favor of MA3 — see
-    analytics/forecasting/baseline.py's module docstring for the
-    evidence — but the one-step-per-product shape this section already
-    documented carries over unchanged, so no aggregation logic below
-    needed to change, only this wording). series covers the SAME `period`/
+    horizon: scripts/run_baseline_forecast.py serves one model per
+    history-length bin (MA3, TSB or the XGBoost + MA3 average, see
+    analytics/forecasting/router.py) and forecasts ONE step ahead per
+    product, and forecast_date is that product's OWN latest actual
+    period + 1 month — there is no shared, synchronized multi-period
+    horizon anywhere in Forecast_Result to report (neither SARIMA's
+    retirement nor the per-bin routing changed that one-step-per-product
+    shape, so no aggregation logic below needed to change, only this
+    wording). The portfolio gate stays `mape < 20` (MAPE_PORTFOLIO_GATE),
+    each SKU's MAPE now from its served model's rolling one-step holdout.
+    series covers the SAME `period`/
     `start_period`-derived window as kpis.sales / sales_vs_stock above
     (summed quantity_sold across the gated product set, i.e. products with
     a forecast_date row where status='ok' AND mape < 20 at the most recent
@@ -253,7 +266,10 @@ zero):
     period's revenue, not of Tier A's).
   policy_comparison
     — {cycle_date, sku_count, lp_safety_stock_units, rule_safety_stock_units,
-    rule_weeks, blocked_reason}. Sums, over the latest pending planning
+    lp_vs_rule_pct, rule_weeks, blocked_reason}. lp_vs_rule_pct is how much
+    less buffer the LP holds, as a percent of the rule (negative = more).
+    The per-SKU rows behind these sums are GET /policy-comparison
+    (policy_comparison.py) — keep the two queries in step. Sums, over the latest pending planning
     cycle, the LP's ss_i against what SSM's blanket rule would hold:
     POLICY_WEEKS x (that product's own Forecast_Result.forecast_value for
     the same month / AVG_WEEKS_PER_MONTH). Both sides are on the demand
@@ -280,7 +296,12 @@ from backend.routers.recommendations import _to_item as _to_recommendation_item
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 POLICY_WEEKS = 3
-MAPE_UNRELIABLE_GATE = 20.0  # percent — see schema.sql's Forecast_Result.mape comment
+# Portfolio forecast gate (portfolio_forecast, and "Gated SKUs (MAPE < 20%)"
+# on the dashboard card): percent — see schema.sql's Forecast_Result.mape comment.
+MAPE_PORTFOLIO_GATE = 20.0
+# forecast.unreliable_count's pass gate: MASE < 1 passes, so >= 1 is
+# unreliable. Same gate as the LP (scripts/run_lp.py MASE_GATE).
+MASE_UNRELIABLE_GATE = 1.0
 
 # Step 19's LP objective weights (analytics/optimization/lp.py's W1/W2/W3:
 # 0.45/0.35/0.20) — hardcoded module constants there, not stored per-
@@ -717,16 +738,25 @@ def get_dashboard(
             )
             SELECT
                 COUNT(*) AS total_count,
-                COUNT(*) FILTER (WHERE fr.mape >= :mape_gate) AS unreliable_count
+                COUNT(fr.mase) AS evaluated_count,
+                COUNT(*) FILTER (WHERE fr.mase >= :mase_gate) AS unreliable_count
             FROM Forecast_Result fr
             JOIN Product_Dimension pd ON pd.product_key = fr.product_key
             JOIN latest ON fr.forecast_date = latest.forecast_date
             WHERE 1=1 {principal_filter}
         """),
-        {"mape_gate": MAPE_UNRELIABLE_GATE},
+        {"mase_gate": MASE_UNRELIABLE_GATE},
     ).mappings().first()
     total_count = int(forecast_row["total_count"])
+    evaluated_count = int(forecast_row["evaluated_count"])
     unreliable_count = int(forecast_row["unreliable_count"]) if total_count > 0 else None
+
+    # latest_data_period(_by_principal): the most recent real sales month per
+    # principal, whatever scope was asked for — the date picker spans both.
+    latest_by_principal = {
+        "unilever": _latest_sales_period(db, "unilever"),
+        "delmonte": _latest_sales_period(db, "delmonte"),
+    }
 
     # ---- kpis.sales / sales_vs_stock.sales ----------------------------
 
@@ -1002,7 +1032,7 @@ def get_dashboard(
                   AND fr.mape < :mape_gate
                   {principal_filter}
             """),
-            {"forecast_date": latest_forecast_date, "mape_gate": MAPE_UNRELIABLE_GATE},
+            {"forecast_date": latest_forecast_date, "mape_gate": MAPE_PORTFOLIO_GATE},
         ).mappings().all()
 
     gated_sku_count = len({r["product_key"] for r in gated_rows})
@@ -1042,7 +1072,7 @@ def get_dashboard(
             )
         else:
             who = "All principals" if scope == "all" else names.get(scope, scope)
-            scope_label = f"{who} (SKU-level MA3 forecasts meeting the MAPE gate)."
+            scope_label = f"{who} (SKU-level forecasts meeting the MAPE gate)."
     elif scoped_forecast_count == 0:
         scope_label = (
             "No SKU-level forecasts exist for Del Monte — its sales data is invoice-grain "
@@ -1051,7 +1081,7 @@ def get_dashboard(
             else f"No SKU-level forecasts exist for {_scope_label(scope)}."
         )
     else:
-        scope_label = f"No products currently meet the MAPE < {MAPE_UNRELIABLE_GATE:.0f}% gate."
+        scope_label = f"No products currently meet the MAPE < {MAPE_PORTFOLIO_GATE:.0f}% gate."
 
     series_by_period: dict[str, dict] = {}
     if gated_rows:
@@ -1171,6 +1201,10 @@ def get_dashboard(
             "sku_count": len(policy_rows),
             "lp_safety_stock_units": round(lp_units, 2),
             "rule_safety_stock_units": round(rule_units, 2),
+            # How much less (positive) or more (negative) buffer the LP holds
+            # than the rule, as a percent of the rule — the one-number
+            # headline IMPLEMENTATION_PLAN Phase 1.1 asks for.
+            "lp_vs_rule_pct": round((rule_units - lp_units) / rule_units * 100, 1) if rule_units > 0 else None,
             "rule_weeks": POLICY_WEEKS,
             "blocked_reason": None,
         }
@@ -1180,6 +1214,7 @@ def get_dashboard(
             "sku_count": 0,
             "lp_safety_stock_units": None,
             "rule_safety_stock_units": None,
+            "lp_vs_rule_pct": None,
             "rule_weeks": POLICY_WEEKS,
             "blocked_reason": (
                 f"No pending LP_Recommendation for {_scope_label(scope)} has a Forecast_Result "
@@ -1188,11 +1223,17 @@ def get_dashboard(
         }
 
     return {
-        "principal": "unilever",
+        "principal": scope,  # the scope this payload answers: 'all' | 'unilever' | 'delmonte'
         "period": None,
         "inventory": {"value": None, "weeks_of_cover": None, "policy_weeks": POLICY_WEEKS},
         "recommendations": {"order_value": None, "product_count": product_count},
-        "forecast": {"unreliable_count": unreliable_count, "total_count": total_count},
+        "forecast": {
+            "unreliable_count": unreliable_count,
+            "evaluated_count": evaluated_count,
+            "total_count": total_count,
+        },
+        "latest_data_period": max(filter(None, latest_by_principal.values()), default=None),
+        "latest_data_period_by_principal": latest_by_principal,
         "cover_series": [{"period": p, "weeks_of_cover": None} for p in periods],
         "kpis": {
             "sales": _to_float(sales),

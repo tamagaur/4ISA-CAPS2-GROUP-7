@@ -10,7 +10,9 @@ import {
   LogOut,
   X,
   ClipboardList,
-  Users
+  Users,
+  PackageX,
+  ChartLine
 } from 'lucide-react';
 import { logout, getCurrentUser, API_URL } from '../auth';
 import Modal from './Modal';
@@ -31,6 +33,8 @@ const navSections = [
     items: [
       { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
       { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
+      { name: 'Category Trends', icon: ChartLine, path: '/category-trends' },
+      { name: 'Bad Orders', icon: PackageX, path: '/bad-orders' },
     ],
   },
   {

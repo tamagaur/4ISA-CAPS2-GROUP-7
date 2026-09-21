@@ -874,6 +874,45 @@
 }
 
 /* ── Policy comparison (LP safety stock vs 3-week rule) ────────────────── */
+/* Policy card headline: the percentage large, the sentence beside it. Neutral
+   ink — a smaller buffer is only good if the assumption note below holds. */
+.policy-headline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  margin: 0.25rem 0 0.25rem;
+}
+
+.policy-headline-number {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.policy-headline-text {
+  font-size: 0.85rem;
+  color: var(--color-text-body);
+}
+
+.policy-assumption {
+  margin: 0.6rem 0 0;
+  padding: 0.55rem 0.8rem;
+  border-left: 3px solid var(--color-warning);
+  border-radius: 6px;
+  background-color: var(--color-surface-raised);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.policy-assumption strong {
+  color: var(--color-text-body);
+}
+
 .policy-bars {
   display: flex;
   flex-direction: column;

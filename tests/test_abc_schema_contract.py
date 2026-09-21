@@ -37,9 +37,12 @@ def live_columns():
     conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"])
     conn.set_session(readonly=True)
     with conn.cursor() as cur:
+        # table_schema = 'public': the live database also holds experiment
+        # copies of this table (ssm_abc_repro, ssm_synth_v2, ...), which
+        # are not what the app reads.
         cur.execute(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'abc_classification'"
+            "WHERE table_schema = 'public' AND table_name = 'abc_classification'"
         )
         cols = {r[0] for r in cur.fetchall()}
     conn.rollback()
@@ -60,10 +63,16 @@ def live_unique_keys():
             -- make tuple() iterate it character by character.
             SELECT tc.constraint_name,
                    string_agg(kcu.column_name, ',' ORDER BY kcu.ordinal_position)
+            -- Scoped to public: the experiment schemas' copies of this table
+            -- carry identically named constraints, and joining on the name
+            -- alone repeated every key column once per copy.
             FROM information_schema.table_constraints tc
             JOIN information_schema.key_column_usage kcu
               ON kcu.constraint_name = tc.constraint_name
-            WHERE tc.table_name = 'abc_classification'
+             AND kcu.constraint_schema = tc.constraint_schema
+             AND kcu.table_name = tc.table_name
+            WHERE tc.table_schema = 'public'
+              AND tc.table_name = 'abc_classification'
               AND tc.constraint_type = 'UNIQUE'
             GROUP BY tc.constraint_name
             """

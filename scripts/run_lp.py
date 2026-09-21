@@ -81,6 +81,13 @@ per-principal sum(ROP_i) vs. that principal's ceiling — provably the only
 two ways this particular LP shape can be infeasible, since Q_i's only
 lower bound is ROP_i itself, which is always individually satisfiable) and
 writes nothing for that cycle.
+
+Added 2026-09-21: --dry-run runs everything on a read-only session and
+reports what a real run would write, including the rows it would leave
+alone; --protection-days sets how many business days of demand variability
+SS_i covers (default 1, which reproduces every earlier run). A rerun keeps
+accepted/rejected rows exactly as they are (UPSERT_QUERY) and reports, but
+never deletes, pending rows for products that fell out of the pool.
 """
 from __future__ import annotations
 
@@ -105,6 +112,43 @@ logger = logging.getLogger(__name__)
 MASE_GATE = 1.0  # MASE < 1 beats the naive benchmark — see analytics/forecasting/baseline.py's
                  # own MASE_GATE and reports/MODEL_BAKEOFF_UNILEVER.md for why mape < 20 was dropped here.
 LOUD_RULE = "=" * 78
+
+# Re-running a cycle refreshes only rows still awaiting a decision. The
+# WHERE on DO UPDATE leaves an accepted/rejected row untouched: without it a
+# rerun silently put a planner's decision back to 'pending' and replaced the
+# quantities they had accepted.
+UPSERT_QUERY = """
+    INSERT INTO LP_Recommendation
+    (product_key, planning_cycle_date, q_i, rop_i, ss_i, status)
+    VALUES (%s, %s, %s, %s, %s, 'pending')
+    ON CONFLICT (product_key, planning_cycle_date)
+    DO UPDATE SET
+        q_i = EXCLUDED.q_i,
+        rop_i = EXCLUDED.rop_i,
+        ss_i = EXCLUDED.ss_i,
+        status = 'pending'
+    WHERE LP_Recommendation.status = 'pending'
+"""
+
+
+def safety_stock_for(sigma_d: float, protection_days: float = 1.0) -> float:
+    """SS_i = Z x sigma_d x sqrt(protection_days).
+
+    sigma_d is a per-business-day figure (see _sigma_d_for_product), so the
+    buffer covers `protection_days` business days of demand variability,
+    assuming i.i.d. days. The default, 1, reproduces every run before this
+    option existed (SS_i = Z x sigma_d). A periodic-review order-up-to
+    policy would use the review period plus the lead time — a planning
+    decision this script can't make (see
+    reports/PROJECT_DIAGNOSIS_2026-09-21.md), hence an explicit input."""
+    return compute_safety_stock(sigma_d * math.sqrt(protection_days))
+
+
+def _positive_float(raw: str) -> float:
+    value = float(raw)
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be > 0, got {raw!r}")
+    return value
 
 
 def _parse_ceiling(raw: str) -> tuple[str, float]:
@@ -235,6 +279,16 @@ def main():
         help="Scope this run to one principal, filtered in Python after the gating query, "
               "same convention as scripts/run_baseline_forecast.py's --principal.",
     )
+    parser.add_argument(
+        "--protection-days", type=_positive_float, default=1.0,
+        help="Business days of demand variability the safety stock covers: SS_i = Z x sigma_d x "
+             "sqrt(protection_days). The default 1 reproduces earlier runs (no review period or "
+             "lead time). A weekly review is 5; add the lead time in business days if known.",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Compute and report everything, write nothing: the database session is read-only.",
+    )
     args = parser.parse_args()
 
     supplier_ceilings = dict(args.supplier_ceilings)  # last one wins if a principal is repeated
@@ -248,7 +302,11 @@ def main():
     logger.warning(f"  warehouse_capacity                       = {args.warehouse_capacity:,.2f} units")
     logger.warning(f"  storage_cost_per_unit                    = {args.storage_cost_per_unit:,.4f} per unit")
     logger.warning(f"  default_procurement_cost_per_unit (fallback only) = {args.default_procurement_cost_per_unit:,.4f} per unit")
+    logger.warning(f"  protection_days                          = {args.protection_days:g} business day(s)"
+                   f"{' (default: no review period or lead time)' if args.protection_days == 1.0 else ''}")
     logger.warning(LOUD_RULE)
+    if args.dry_run:
+        logger.warning("DRY RUN — read-only session; nothing will be written to LP_Recommendation.")
 
     load_dotenv(override=False)
     db_url = os.environ.get("SUPABASE_DB_URL")
@@ -257,23 +315,23 @@ def main():
         return
 
     conn = psycopg2.connect(db_url)
-    conn.autocommit = True  # each cycle's upserts commit immediately
+    # Each cycle's upserts commit immediately. A dry run's session is
+    # read-only at the database, so a write would fail rather than land.
+    conn.set_session(readonly=args.dry_run, autocommit=True)
     cur = conn.cursor()
 
-    UPSERT_QUERY = """
-        INSERT INTO LP_Recommendation
-        (product_key, planning_cycle_date, q_i, rop_i, ss_i, status)
-        VALUES (%s, %s, %s, %s, %s, 'pending')
-        ON CONFLICT (product_key, planning_cycle_date)
-        DO UPDATE SET
-            q_i = EXCLUDED.q_i,
-            rop_i = EXCLUDED.rop_i,
-            ss_i = EXCLUDED.ss_i,
-            status = 'pending'
-    """
-
-    def save_result(product_key, planning_cycle_date, q_i, rop_i, ss_i):
+    def save_result(product_key, planning_cycle_date, q_i, rop_i, ss_i) -> bool:
+        """Upsert one row. False when it hit a decided row and changed nothing."""
         cur.execute(UPSERT_QUERY, (int(product_key), planning_cycle_date, float(q_i), float(rop_i), float(ss_i)))
+        return cur.rowcount > 0
+
+    def existing_rows(planning_cycle_date) -> dict:
+        """product_key -> status of the rows already stored for this cycle."""
+        cur.execute(
+            "SELECT product_key, status FROM LP_Recommendation WHERE planning_cycle_date = %s",
+            (planning_cycle_date,),
+        )
+        return {int(k): s for k, s in cur.fetchall()}
 
     # ---- Step A: gated candidate pool -----------------------------------
     # Category A (latest classification_period) with a Forecast_Result row
@@ -380,7 +438,7 @@ def main():
             procurement_cost = args.default_procurement_cost_per_unit
             fallback_unit_price_count += 1
 
-        ss_i = compute_safety_stock(sigma_d)
+        ss_i = safety_stock_for(sigma_d, args.protection_days)
         rop_i = compute_rop(forecast=float(row.forecast_value), safety_stock=ss_i)
         planning_cycle_date = row.forecast_date
 
@@ -414,6 +472,9 @@ def main():
 
     # ---- Step E: one LP solve per planning cycle -------------------------
     rows_written = 0
+    rows_kept_decided = 0
+    stale_pending_by_cycle: dict = {}
+    total_ss_by_cycle: dict = {}
     infeasible_cycles: list[tuple] = []
 
     for planning_cycle_date, skus in sorted(sku_inputs_by_cycle.items()):
@@ -429,11 +490,47 @@ def main():
             logger.error(f"  Writing NOTHING for cycle {planning_cycle_date} — no constraint was relaxed to force a solution.")
             continue
 
+        # What is already stored for this cycle decides what a write would
+        # do: decided rows are kept as they are (UPSERT_QUERY), and pending
+        # rows for products outside this run's pool are left behind —
+        # reported, never deleted, since dropping a recommendation is a
+        # planning call, not this script's.
+        existing = existing_rows(planning_cycle_date)
+        written_keys = {int(lookup[sku_id]["product_key"]) for sku_id in result}
+        stale = sorted(k for k, status in existing.items() if status == "pending" and k not in written_keys)
+        stale_pending_by_cycle[planning_cycle_date] = stale
+
+        cycle_written = cycle_kept = 0
+        total_ss_by_cycle[planning_cycle_date] = sum(lookup[s]['ss_i'] for s in result)
         for sku_id, q_i in result.items():
             info = lookup[sku_id]
-            save_result(info["product_key"], info["planning_cycle_date"], q_i, info["rop_i"], info["ss_i"])
-            rows_written += 1
-        logger.info(f"  Cycle {planning_cycle_date}: {len(result)} row(s) upserted into LP_Recommendation (status='pending').")
+            decided = existing.get(int(info["product_key"]), "pending") != "pending"
+            if args.dry_run:
+                logger.info(f"  [dry run] {sku_id}: Q_i={q_i:,.2f} ROP_i={info['rop_i']:,.2f} SS_i={info['ss_i']:,.2f}"
+                            f"{'  (decided row — would be kept as is)' if decided else ''}")
+            elif not save_result(info["product_key"], info["planning_cycle_date"], q_i, info["rop_i"], info["ss_i"]):
+                decided = True
+            if decided:
+                cycle_kept += 1
+            else:
+                cycle_written += 1
+        rows_written += cycle_written
+        rows_kept_decided += cycle_kept
+        verb = "would be upserted" if args.dry_run else "upserted into LP_Recommendation (status='pending')"
+        logger.info(f"  Cycle {planning_cycle_date}: {cycle_written} row(s) {verb}"
+                    f"{f'; {cycle_kept} decided row(s) kept as they were' if cycle_kept else ''}.")
+        if stale:
+            logger.warning(f"  Cycle {planning_cycle_date}: {len(stale)} existing pending row(s) are for products outside "
+                           f"this run's pool and are left unchanged: product_key {stale[:10]}{'...' if len(stale) > 10 else ''}")
+
+    # Older cycles still awaiting a decision: not this run's to close, but a
+    # reader of the summary should know they exist.
+    cur.execute(
+        "SELECT planning_cycle_date, COUNT(*) FROM LP_Recommendation WHERE status = 'pending' "
+        "AND planning_cycle_date < (SELECT MAX(planning_cycle_date) FROM LP_Recommendation) "
+        "GROUP BY planning_cycle_date ORDER BY planning_cycle_date"
+    )
+    older_pending = cur.fetchall()
 
     conn.close()
 
@@ -450,7 +547,17 @@ def main():
     logger.info(f"  Infeasible cycles:           {len(infeasible_cycles)}")
     for cycle_date, reasons in infeasible_cycles:
         logger.info(f"    - {cycle_date}: {'; '.join(reasons)}")
-    logger.info(f"  Rows written to LP_Recommendation: {rows_written}")
+    logger.info(f"  Rows {'that would be ' if args.dry_run else ''}written to LP_Recommendation: {rows_written}")
+    logger.info(f"  Decided rows kept as they were (accepted/rejected): {rows_kept_decided}")
+    for cycle_date, total_ss in total_ss_by_cycle.items():
+        logger.info(f"  Total SS_i in {cycle_date}: {total_ss:,.0f} units (protection_days={args.protection_days:g})")
+    for cycle_date, stale in stale_pending_by_cycle.items():
+        if stale:
+            logger.info(f"  Pending rows left unchanged in {cycle_date} (products outside this run's pool): {len(stale)}")
+    for cycle_date, count in older_pending:
+        logger.info(f"  Older cycle still pending: {cycle_date} ({count} row(s))")
+    if args.dry_run:
+        logger.info("  DRY RUN — nothing was written.")
     logger.info(LOUD_RULE)
 
 
