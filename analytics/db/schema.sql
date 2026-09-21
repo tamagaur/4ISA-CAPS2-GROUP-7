@@ -515,7 +515,8 @@ CREATE INDEX IF NOT EXISTS ix_abc_classification_tier ON ABC_Classification (tie
 -- sku_traits / sku_segment added by migration 0018 (2026-09-17, Phase 2
 -- binning Round 1 — reports/BINNING_ROUND1_2026-09.md). BINS ONLY: no
 -- model runs, no MASE, no model assignment written here — that is Phase 3.
--- sku_traits is computed once per (product_key, cohort_period); sku_segment
+-- sku_traits is computed once per (product_key, cohort_period, abc_method)
+-- (abc_method + the widened key added by migration 0020); sku_segment
 -- holds one row per (product_key, cohort_period, abc_method, scheme) so
 -- later schemes (trend_v1, volatility_v1, newness_v1, combined_v1) add rows
 -- here without touching sku_traits or the schema again.
@@ -525,6 +526,7 @@ CREATE TABLE IF NOT EXISTS sku_traits (
     principal                 TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
     product_key                BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
     cohort_period                TEXT NOT NULL,
+    abc_method                    TEXT NOT NULL DEFAULT 'single' CHECK (abc_method IN ('single', 't3m')),  -- migration 0020
     history_months                INT NOT NULL,   -- months with quantity_sold > 0
     first_sale_period               TEXT,
     longest_run                      INT NOT NULL,
@@ -537,7 +539,7 @@ CREATE TABLE IF NOT EXISTS sku_traits (
     trend_pvalue                            NUMERIC,  -- migration 0022: Mann-Kendall two-sided p, from first sale
     trend_slope                              NUMERIC,  -- migration 0022: Theil-Sen slope, units/month, from first sale
     computed_at                            TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (product_key, cohort_period)
+    UNIQUE (product_key, cohort_period, abc_method)  -- migration 0020: was (product_key, cohort_period)
 );
 
 CREATE TABLE IF NOT EXISTS sku_segment (
