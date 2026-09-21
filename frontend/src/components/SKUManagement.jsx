@@ -7,7 +7,9 @@ import ViewSKUModal from './ViewSKUModal';
 import EditSKUModal from './EditSKUModal';
 import { logAction } from '../utils/auditLogger';
 import { getSKUs, createSKU, updateSKU } from '../api/sku';
+import { getCurrentUser } from '../auth';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
+import { formatMonth } from '../utils/formatDate';
 import Pagination from './Pagination';
 import './SKUManagement.css';
 
@@ -22,11 +24,17 @@ import './SKUManagement.css';
 // offers it as values to ASSIGN; neither is a brand anyone can pick.
 const ALL_BRANDS = 'All Brands';
 const NO_BRAND = '__NO_BRAND__';
+// Category filter sentinel for SKUs with no ABC tier in any run (never
+// ranked: no sales in any classified month). Same underscore convention.
+const NOT_CLASSIFIED = '__NOT_CLASSIFIED__';
 
 const SKUManagement = () => {
   // Shared principal scope (Topbar's segmented control) — the SKU list
   // reloads whenever it changes, via loadSKUs' effect dep below.
   const { principal } = useOutletContext() || {};
+  // Adding and editing SKUs is admin-only (backend: require_admin on
+  // POST/PATCH /sku); staff see the list read-only.
+  const isAdmin = getCurrentUser()?.role === 'admin';
   const [rawItems, setRawItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -70,6 +78,9 @@ const SKUManagement = () => {
         brand: (item.brand || '').trim() || null,
         product: item.product_name || 'Unknown Product',
         cat: item.tier,
+        // The period `cat` was computed in. A tier is the SKU's LAST KNOWN
+        // classification, so this is what says whether it is current.
+        catPeriod: item.tier_period,
         leadTime: item.lead_time_days != null ? `${item.lead_time_days} days` : null,
         leadTimeDays: item.lead_time_days,
         reorderPt: item.reorder_point,
@@ -159,7 +170,9 @@ const SKUManagement = () => {
       const matchesBrand =
         brandFilter === ALL_BRANDS ||
         (brandFilter === NO_BRAND ? !sku.brand : sku.brand === brandFilter);
-      const matchesCategory = categoryFilter === 'All' || sku.cat === categoryFilter;
+      const matchesCategory =
+        categoryFilter === 'All' ||
+        (categoryFilter === NOT_CLASSIFIED ? !sku.cat : sku.cat === categoryFilter);
       return matchesSearch && matchesBrand && matchesCategory;
     });
   }, [skus, searchQuery, brandFilter, categoryFilter]);
@@ -194,7 +207,24 @@ const SKUManagement = () => {
   // is ACTIVE in Product_Dimension and PATCH /sku doesn't write status yet.
   const totalSKUs = skus.length;
   const categoryASKUs = skus.filter(s => s.cat === 'A').length;
+
+  // The newest classification period present in this scope — i.e. the
+  // current ABC run. Anything older than this is a carried-forward tier
+  // from a month the SKU last had sales in, which the table marks so a
+  // stale category is never read as a fresh one.
+  const latestCatPeriod = useMemo(
+    () => skus.reduce((max, s) => (s.catPeriod && s.catPeriod > max ? s.catPeriod : max), ''),
+    [skus]
+  );
+  const staleCatSKUs = useMemo(
+    () => skus.filter(s => s.cat && s.catPeriod && s.catPeriod !== latestCatPeriod).length,
+    [skus, latestCatPeriod]
+  );
   const noBrandSKUs = skus.filter(s => !s.brand).length;
+  // No tier in ANY run up to the latest one — not a stale tier, an absent
+  // one. Shown as its own count (and filter) rather than defaulted to C:
+  // an invented category is worse than an honest gap.
+  const notClassifiedSKUs = skus.filter(s => !s.cat).length;
 
   const handleAddSKU = async (formData) => {
     // Only fields POST /sku actually stores (see backend/routers/sku.py's
@@ -306,6 +336,18 @@ const SKUManagement = () => {
     }
   };
 
+  // Says, on hover, which ABC run a category came from — and calls out a
+  // carried-forward one explicitly rather than leaving the reader to
+  // compare dates.
+  const catTitle = (sku) => {
+    if (!sku.cat) return 'No ABC classification in any period';
+    if (!sku.catPeriod) return `Category ${sku.cat}`;
+    const when = formatMonth(sku.catPeriod);
+    return sku.catPeriod === latestCatPeriod
+      ? `Category ${sku.cat} — current run (${when})`
+      : `Category ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
+  };
+
   return (
     <div className="sku-management">
       <div className="sku-content">
@@ -314,13 +356,17 @@ const SKUManagement = () => {
           <div>
             <h2 className="sku-page-title">SKU <span className="page-title-accent">Management</span></h2>
             <p className="sku-page-subtitle">
-              Add products or edit their name and brand. This is the master product list the forecasts draw from.
+              {isAdmin
+                ? 'Add products or edit their name and brand. This is the master product list the forecasts draw from.'
+                : 'The master product list the forecasts draw from. View only — adding and editing SKUs is limited to admin accounts.'}
             </p>
           </div>
-          <button className="add-sku-btn" onClick={() => setIsAddModalOpen(true)}>
-            <Plus size={16} />
-            Add SKU
-          </button>
+          {isAdmin && (
+            <button className="add-sku-btn" onClick={() => setIsAddModalOpen(true)}>
+              <Plus size={16} />
+              Add SKU
+            </button>
+          )}
         </div>
 
         {/* Summary Cards */}
@@ -332,7 +378,16 @@ const SKUManagement = () => {
           <div className="sku-summary-card summary-cat-a">
             <span className="summary-label">CATEGORY A</span>
             <span className="summary-value">{categoryASKUs.toLocaleString()}</span>
-            <span className="summary-desc">latest ABC classification</span>
+            <span className="summary-desc">
+              {staleCatSKUs > 0
+                ? `most recent ABC run per SKU · ${staleCatSKUs.toLocaleString()} carried forward`
+                : 'most recent ABC run per SKU'}
+            </span>
+          </div>
+          <div className="sku-summary-card summary-not-classified">
+            <span className="summary-label">NOT CLASSIFIED</span>
+            <span className="summary-value">{notClassifiedSKUs.toLocaleString()}</span>
+            <span className="summary-desc">no sales in any ABC run, so never ranked</span>
           </div>
           <div className="sku-summary-card summary-no-brand">
             <span className="summary-label">NO BRAND RECORDED</span>
@@ -489,6 +544,7 @@ const SKUManagement = () => {
                     <option value="A">Category A</option>
                     <option value="B">Category B</option>
                     <option value="C">Category C</option>
+                    <option value={NOT_CLASSIFIED}>Not classified</option>
                   </select>
                 </div>
               </div>
@@ -521,7 +577,7 @@ const SKUManagement = () => {
 
                 {categoryFilter !== 'All' && (
                   <span className="sku-active-chip">
-                    Category: Category {categoryFilter}
+                    Category: {categoryFilter === NOT_CLASSIFIED ? 'Not classified' : `Category ${categoryFilter}`}
                     <button className="sku-chip-remove" onClick={() => setCategoryFilter('All')}>
                       <X size={12} />
                     </button>
@@ -582,9 +638,17 @@ const SKUManagement = () => {
                       </td>
                       <td className={sku.brand ? 'cell-muted' : 'cell-empty'}>{sku.brand || '—'}</td>
                       <td className="cell-product">{sku.product}</td>
-                      <td className="table-center">
+                      <td className="table-center" title={catTitle(sku)}>
                         {sku.cat
-                          ? <span className={getCatClass(sku.cat)}>{sku.cat}</span>
+                          ? (
+                            <span
+                              className={`${getCatClass(sku.cat)}${
+                                sku.catPeriod && sku.catPeriod !== latestCatPeriod ? ' cat-stale' : ''
+                              }`}
+                            >
+                              {sku.cat}
+                            </span>
+                          )
                           : <span className="cell-empty">—</span>}
                       </td>
                       <td
@@ -638,7 +702,7 @@ const SKUManagement = () => {
         isOpen={isViewModalOpen}
         sku={selectedSKU}
         onClose={() => setIsViewModalOpen(false)}
-        onEdit={handleOpenEditModal}
+        onEdit={isAdmin ? handleOpenEditModal : undefined}
       />
 
       <EditSKUModal

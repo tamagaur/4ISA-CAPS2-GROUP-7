@@ -247,6 +247,25 @@
   color: var(--color-text-muted);
 }
 
+/* Staff accounts: one note in place of the Accept-all button, and a
+   single-line "Pending" in each row in place of Accept/Dismiss. */
+.reorder-view-only-note {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-body);
+  background-color: var(--color-surface-sunken);
+}
+
+.reorder-pending-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 /* Bulk accept is a primary action button — brand chrome, not a data colour. */
 .reorder-bulk-btn {
   display: inline-flex;

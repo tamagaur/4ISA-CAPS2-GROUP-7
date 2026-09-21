@@ -12,8 +12,15 @@
   background-color: var(--color-surface-raised);
 }
 
+/* min-width: 0 — a flex child defaults to min-width:auto, which lets an
+   unbreakable wide descendant (a table, a long code string) force this
+   column past the viewport instead of shrinking. With overflow-x hidden
+   above, that overflow would simply be clipped off-screen; this keeps the
+   column at viewport width so each page's own scroll wrappers do their
+   job. */
 .main-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow-y: auto;

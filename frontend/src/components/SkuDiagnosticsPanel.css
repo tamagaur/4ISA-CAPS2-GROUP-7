@@ -109,54 +109,6 @@
   line-height: 1.4;
 }
 
-.sku-diag-reasons {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.sku-diag-reason {
-  display: flex;
-  gap: 0.6rem;
-  margin: 0;
-  padding: 0.7rem 0.9rem;
-  border-radius: 8px;
-  background-color: var(--color-abc-a-bg);
-  border: 1px solid var(--color-abc-c);
-}
-
-.sku-diag-reason-icon {
-  flex-shrink: 0;
-  margin-top: 0.15rem;
-  color: var(--color-abc-a);
-}
-
-.sku-diag-reason-bin {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-abc-a);
-}
-
-.sku-diag-reason-scheme {
-  font-size: 0.65rem;
-  font-weight: 500;
-  text-transform: none;
-  letter-spacing: normal;
-  color: var(--color-text-subtle);
-}
-
-.sku-diag-reason-text {
-  margin: 0.2rem 0 0 0;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--color-text);
-  line-height: 1.45;
-}
 
 .sku-diag-note {
   margin: 0;
@@ -209,20 +161,17 @@
   }
 }
 
-.sku-diag-tile,
-.sku-diag-reason {
+.sku-diag-tile {
   animation: sku-diag-item-enter 380ms ease-out both;
 }
 
 .sku-diag-tile:nth-child(1) { animation-delay: 60ms; }
 .sku-diag-tile:nth-child(2) { animation-delay: 130ms; }
 .sku-diag-tile:nth-child(3) { animation-delay: 200ms; }
-.sku-diag-reason { animation-delay: 260ms; }
 
 @media (prefers-reduced-motion: reduce) {
   .sku-diag,
-  .sku-diag-tile,
-  .sku-diag-reason {
+  .sku-diag-tile {
     animation: none;
   }
 }

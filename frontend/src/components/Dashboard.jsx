@@ -9,6 +9,7 @@ import {
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { getSegmentSummary } from '../api/segment';
+import { DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import RefreshingNote from './RefreshingNote';
 import { Package, Wallet, Clock, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
@@ -137,6 +138,35 @@ const Dashboard = () => {
     return () => { cancelled = true; };
   }, [principal]);
 
+  // The portfolio forecast card has its OWN principal filter, independent
+  // of the Topbar's page-wide one — switching it re-scopes that card only.
+  // When the two match, the card reads the page's own payload; otherwise
+  // it fetches GET /dashboard for its own scope (same period range),
+  // through the same response cache, so flipping back and forth never
+  // refetches a scope already loaded this session.
+  //
+  // Deliberately not remembered (no localStorage, unlike the Topbar's
+  // filter): every visit to the dashboard starts this card on All
+  // principals, and the card's Reset button returns it there.
+  const pagePrincipal = principal ?? DEFAULT_PRINCIPAL;
+  const [forecastPrincipal, setForecastPrincipal] = useState(DEFAULT_PRINCIPAL);
+  const forecastKey = `${period ?? ''}|${startPeriod ?? ''}|${forecastPrincipal}`;
+  const forecastFollowsPage = forecastPrincipal === pagePrincipal;
+  const [cardForecast, setCardForecast] = useState(null); // { key, data, error }
+  const cardForecastKey = cardForecast?.key;
+  useEffect(() => {
+    if (forecastFollowsPage || cardForecastKey === forecastKey) return undefined;
+    let cancelled = false;
+    getDashboardData({ period, startPeriod, principal: forecastPrincipal })
+      .then((res) => {
+        if (!cancelled) setCardForecast({ key: forecastKey, data: res.portfolio_forecast || {} });
+      })
+      .catch(() => {
+        if (!cancelled) setCardForecast({ key: forecastKey, data: null, error: true });
+      });
+    return () => { cancelled = true; };
+  }, [forecastFollowsPage, cardForecastKey, forecastKey, period, startPeriod, forecastPrincipal]);
+
   useEffect(() => {
     if (loadedKey === requestKey) return undefined;
     let cancelled = false;
@@ -245,7 +275,14 @@ const Dashboard = () => {
     pendingReorderCount: t.pending_reorder_count,
   }));
 
-  const portfolioForecast = data.portfolio_forecast || {};
+  // While the card's own scope is loading, keep the last thing it showed
+  // on screen (dimmed) rather than blanking it.
+  const cardForecastReady = cardForecast?.key === forecastKey;
+  const forecastUpdating = !forecastFollowsPage && !cardForecastReady;
+  const forecastError = !forecastFollowsPage && cardForecastReady && cardForecast.error;
+  const portfolioForecast = forecastFollowsPage
+    ? data.portfolio_forecast || {}
+    : (cardForecast?.data ?? data.portfolio_forecast) || {};
   const portfolioSeries = (portfolioForecast.series || []).map((pt) => ({
     period: pt.period,
     actual: pt.actual,
@@ -356,7 +393,14 @@ const Dashboard = () => {
                 gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
                 avgMape={portfolioForecast.avg_mape}
                 scopeLabel={portfolioForecast.scope_label}
-                emptyReason={portfolioForecast.scope_label}
+                emptyReason={
+                  forecastError
+                    ? `Couldn't load the forecast for ${labelForPrincipal(forecastPrincipal)}.`
+                    : portfolioForecast.scope_label
+                }
+                principal={forecastPrincipal}
+                onPrincipalChange={setForecastPrincipal}
+                isUpdating={forecastUpdating}
               />
             </Slot>
             <Slot kind="Prescriptive">

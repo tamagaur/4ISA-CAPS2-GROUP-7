@@ -712,6 +712,25 @@ CREATE TABLE IF NOT EXISTS Audit_Log (
 
 CREATE INDEX IF NOT EXISTS ix_audit_log_created_at ON Audit_Log (created_at DESC);
 
+-- One row per sign-in (migration 0023) — login counts and session lengths
+-- for the Audit Log page. Written by backend/routers/auth.py (login,
+-- heartbeat, logout); length = COALESCE(ended_at, last_seen_at) - started_at.
+CREATE TABLE IF NOT EXISTS user_session (
+    session_key   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    session_id    TEXT NOT NULL UNIQUE,
+    user_id       BIGINT,
+    user_email    TEXT NOT NULL,
+    user_name     TEXT,
+    role          TEXT,
+    started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at  TIMESTAMPTZ,
+    ended_at      TIMESTAMPTZ,
+    end_reason    TEXT CHECK (end_reason IN ('logout', 'idle')),
+    source        TEXT NOT NULL DEFAULT 'tracked' CHECK (source IN ('tracked', 'audit_log_backfill'))
+);
+
+CREATE INDEX IF NOT EXISTS ix_user_session_user_email ON user_session (user_email);
+
 -- ============================================================
 -- SECTION 7 — Unified product-demand read shape (DEC-13)
 -- Downstream models (ABC classification, SARIMA, LP - analytics/) need to

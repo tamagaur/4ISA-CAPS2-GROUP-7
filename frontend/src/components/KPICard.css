@@ -35,9 +35,13 @@
   opacity: 0.55;
 }
 
+/* Bold, matching every other page's headline figure (.abc-card-value,
+   .reorder-card-value, .summary-value are all 700). This was the one
+   KPI number in the app still at 500, so the hero row read lighter than
+   the cards below it. */
 .kpi-value {
   font-size: 32px;
-  font-weight: 500;
+  font-weight: 700;
   color: var(--color-text);
   margin-bottom: 4px;
   line-height: 1.15;

@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_current_user, get_db, require_admin
 from backend.principals import (
     PrincipalQuery,
     latest_abc_period,
@@ -45,7 +45,8 @@ _SELECT_ONE = """
         pd.notes AS notes,
         COALESCE(inv.current_stock, NULL) AS current_stock,
         rop.rop_i AS reorder_point,
-        abc.tier AS tier
+        abc.tier AS tier,
+        abc.classification_period AS tier_period
     FROM product_dimension pd
     LEFT JOIN (
         SELECT product_key, SUM(quantity_on_hand) AS current_stock
@@ -60,10 +61,13 @@ _SELECT_ONE = """
         ORDER BY product_key, planning_cycle_date DESC
     ) rop ON rop.product_key = pd.product_key
     LEFT JOIN (
-        SELECT product_key, tier
+        SELECT DISTINCT ON (product_key)
+               product_key, tier, classification_period
         FROM abc_classification
         WHERE method = 'single'
-          AND classification_period = :abc_period
+          AND (CAST(:abc_period AS TEXT) IS NULL
+               OR classification_period <= CAST(:abc_period AS TEXT))
+        ORDER BY product_key, classification_period DESC
     ) abc ON abc.product_key = pd.product_key
 """
 # method='single' is load-bearing in BOTH places above (migration 0017):
@@ -71,6 +75,24 @@ _SELECT_ONE = """
 # returns two tier rows per product_key and the LEFT JOIN fans out —
 # silently DUPLICATING every row in the SKU list. Pinned in the inner
 # MAX() too, so the period resolved is one 'single' actually has.
+#
+# LAST-KNOWN tier, not latest-period-only (2026-09-21). This used to
+# require classification_period = the single resolved anchor, so a SKU that
+# simply had no sales in that one month reported no category at all.
+# Measured against live data: 710 of Unilever's 2,098 SKUs (33.8%) matched
+# the 2026-02 anchor, while 1,531 (73.0%) carry a real classification in
+# SOME period — the other 821 were shown as uncategorised despite having
+# been ranked. DISTINCT ON ... ORDER BY classification_period DESC takes
+# each product's most recent run instead, the same shape the rop join above
+# already uses for lp_recommendation, and still yields exactly one row per
+# product_key, so the fan-out fix above is preserved.
+#
+# classification_period comes back with it so callers can show HOW OLD a
+# tier is: a last-known tier is only honest if its date travels with it.
+# The anchor stays as an upper bound (NULL-safe — Del Monte has no
+# abc_classification rows at all, so its anchor resolves to NULL) rather
+# than being dropped, so this can never report a classification from a
+# period later than the one the caller resolved.
 
 
 def _to_item(r) -> SKUItem:
@@ -88,6 +110,7 @@ def _to_item(r) -> SKUItem:
         current_stock=float(r["current_stock"]) if r.get("current_stock") is not None else None,
         reorder_point=float(r["reorder_point"]) if r.get("reorder_point") is not None else None,
         tier=r.get("tier"),
+        tier_period=r.get("tier_period"),
     )
 
 
@@ -145,7 +168,7 @@ def get_skus(
 def create_sku(
     payload: SKUCreate,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_admin),
 ) -> SKUItem:
     # Unilever-only (2026-09): hard-reject anything else rather than
     # silently coercing — a client believing a non-Unilever SKU was
@@ -195,7 +218,7 @@ def update_sku(
     product_key: int,
     payload: SKUUpdate,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_admin),
 ) -> SKUItem:
     if payload.status is not None and payload.status not in ("ACTIVE", "DISABLED"):
         raise HTTPException(status_code=400, detail="status must be 'ACTIVE' or 'DISABLED'")

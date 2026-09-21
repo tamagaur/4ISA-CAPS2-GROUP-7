@@ -77,6 +77,9 @@ const ReorderRecommendations = () => {
   const [pendingAccept, setPendingAccept] = useState(null); // the item awaiting Accept confirmation
   const [pendingBulk, setPendingBulk] = useState(null); // { rows } awaiting bulk-accept confirmation
   const [bulkRunning, setBulkRunning] = useState(false);
+  // Accept/Dismiss is admin-only (backend: require_admin on PATCH
+  // /recommendations); staff can review every recommendation but not act.
+  const isAdmin = getCurrentUser()?.role === 'admin';
   const [decisionLog, setDecisionLog] = useState([]);
 
   useEffect(() => {
@@ -359,6 +362,18 @@ const ReorderRecommendations = () => {
       );
     }
 
+    // Staff: the row's state instead of buttons — the one-line note above
+    // the table says why there's nothing to click.
+    if (!isAdmin) {
+      return (
+        <div className="action-status-container">
+          <span className="reorder-pending-label" title="Waiting for an admin to accept or dismiss">
+            Pending
+          </span>
+        </div>
+      );
+    }
+
     return (
       <div className="table-btn-group">
         <button
@@ -494,15 +509,22 @@ const ReorderRecommendations = () => {
           Ranked by revenue share × units below the reorder point. Cover is in days on a peso basis
           (stock at cost ÷ daily sales value).
         </p>
-        <button
-          className="reorder-bulk-btn"
-          onClick={() => setPendingBulk({ rows: bulkTargets })}
-          disabled={bulkTargets.length === 0 || bulkRunning}
-          title={bulkTargets.length === 0 ? 'No pending rows in view' : undefined}
-        >
-          {bulkRunning ? <Loader2 className="spinner-icon" size={14} /> : <CheckCheck size={14} />}
-          Accept all in view ({bulkTargets.length})
-        </button>
+        {!isAdmin && (
+          <p className="reorder-view-only-note">
+            View only — accepting or dismissing reorders is limited to admin accounts.
+          </p>
+        )}
+        {isAdmin && (
+          <button
+            className="reorder-bulk-btn"
+            onClick={() => setPendingBulk({ rows: bulkTargets })}
+            disabled={bulkTargets.length === 0 || bulkRunning}
+            title={bulkTargets.length === 0 ? 'No pending rows in view' : undefined}
+          >
+            {bulkRunning ? <Loader2 className="spinner-icon" size={14} /> : <CheckCheck size={14} />}
+            Accept all in view ({bulkTargets.length})
+          </button>
+        )}
       </div>
 
       {/* Table */}

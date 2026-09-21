@@ -1,0 +1,112 @@
+/* Zoom slider for the app's line charts. Sits between the chart body and
+   its legend.
+
+   Subtle by design: these pages already have a date filter as the primary
+   time control, so at rest this should read as a thin rule under the chart
+   — a hairline track with a small handle — and only gain contrast when the
+   pointer is on it or it has focus. No label, counter or stepper buttons;
+   the month count lives in the native tooltip and the ARIA value text. */
+
+.chart-zoom {
+  display: flex;
+  justify-content: center;
+  padding: 0.55rem 0 0.15rem;
+}
+
+.chart-zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  /* Centred and well short of the card's full width: it is a secondary
+     control sitting above the legend, and a rule running edge to edge
+     reads as a divider between the chart and the legend rather than as
+     something you can grab. */
+  width: min(45%, 400px);
+  min-width: 150px;
+  height: 5px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  cursor: ew-resize;
+  outline: none;
+  /* Filled portion = how much of the full range is in view, so the handle's
+     position doubles as a quiet gauge. --zoom-pct is set inline. */
+  background: linear-gradient(
+    to right,
+    var(--color-slate-400) 0 var(--zoom-pct, 100%),
+    var(--color-border) var(--zoom-pct, 100%) 100%
+  );
+  opacity: 1;
+  transition: background 0.18s ease;
+}
+
+/* Once zoomed, the control is doing something the reader needs to be able
+   to see at a glance, so it stops hiding. */
+.chart-zoom.is-zoomed .chart-zoom-slider {
+  background: linear-gradient(
+    to right,
+    var(--color-brand-primary) 0 var(--zoom-pct, 100%),
+    var(--color-border) var(--zoom-pct, 100%) 100%
+  );
+}
+
+/* Handle. Both vendor blocks are written out in full — a combined selector
+   list is dropped wholesale by either engine if it does not recognise the
+   other's pseudo-element. */
+.chart-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-slate-500);
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  cursor: ew-resize;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.chart-zoom-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-slate-500);
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  cursor: ew-resize;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.chart-zoom-slider:hover::-webkit-slider-thumb,
+.chart-zoom-slider:focus-visible::-webkit-slider-thumb {
+  background: var(--color-brand-primary);
+  transform: scale(1.12);
+}
+
+.chart-zoom-slider:hover::-moz-range-thumb,
+.chart-zoom-slider:focus-visible::-moz-range-thumb {
+  background: var(--color-brand-primary);
+  transform: scale(1.12);
+}
+
+.chart-zoom.is-zoomed .chart-zoom-slider::-webkit-slider-thumb {
+  background: var(--color-brand-primary);
+}
+
+.chart-zoom.is-zoomed .chart-zoom-slider::-moz-range-thumb {
+  background: var(--color-brand-primary);
+}
+
+/* ---- the chart itself, while a window is active ---- */
+
+/* With no stepper buttons, dragging the chart is the only way to move the
+   window, so the cursor has to advertise it. pan-y keeps vertical page
+   scrolling working on touch while horizontal drags pan the chart. */
+.chart-pannable {
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.chart-pannable:active {
+  cursor: grabbing;
+}

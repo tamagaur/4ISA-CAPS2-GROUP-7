@@ -173,9 +173,13 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
           <button className="view-sku-btn-close" onClick={onClose}>
             Close
           </button>
-          <button className="view-sku-btn-edit" onClick={() => { onClose(); if (onEdit) onEdit(sku); }}>
-            Edit SKU
-          </button>
+          {/* onEdit is only passed for admin accounts — staff get a
+              read-only view (POST/PATCH /sku are admin-only). */}
+          {onEdit && (
+            <button className="view-sku-btn-edit" onClick={() => { onClose(); onEdit(sku); }}>
+              Edit SKU
+            </button>
+          )}
         </div>
     </Modal>
   );

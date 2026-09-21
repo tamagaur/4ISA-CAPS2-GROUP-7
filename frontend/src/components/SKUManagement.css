@@ -12,10 +12,15 @@
 }
 
 /* Page Header */
+/* flex-wrap so the title and the Add SKU button drop onto two lines as
+   soon as they stop fitting, rather than squeezing side by side until the
+   640px rule finally stacks them. */
 .sku-page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .sku-page-title {
@@ -58,7 +63,7 @@
 /* Summary Cards */
 .sku-summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 1.5rem;
 }
 
@@ -76,6 +81,12 @@
 
 .summary-cat-a {
   border-top-color: var(--color-abc-a);
+}
+
+/* No tier in any run — neutral, not a warning: it reflects the SKU having
+   no sales, not a data defect. */
+.summary-not-classified {
+  border-top-color: var(--color-border-strong, var(--color-text-subtle));
 }
 
 /* A data gap to clean up, not an alert: amber, like the app's other
@@ -525,3 +536,18 @@
 
 
 
+
+/* A carried-forward category: the SKU's last known tier, from an earlier
+   run than the current one, kept because it had no sales in the latest
+   month. Marked rather than hidden — the alternative (showing nothing)
+   left 821 of Unilever's 2,098 SKUs looking uncategorised when they had
+   in fact been ranked.
+
+   The marker is fill alone. It first carried a dotted underbar too, which
+   read as a rendering artifact rather than as meaning — the first question
+   it drew was "why does it have ... on it", which is a marker failing at
+   the only job it has. The cell's title attribute carries the exact month
+   for anyone who needs it. */
+.cat-badge.cat-stale {
+  opacity: 0.55;
+}

@@ -5,6 +5,7 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { preloadPages } from '../pageLoaders';
 import { invalidateCache } from '../api/cache';
+import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
 import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal } from '../principals';
 import './DashboardLayout.css';
@@ -93,6 +94,10 @@ const DashboardLayout = () => {
     const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1500));
     idle(preloadPages);
   }, []);
+
+  // Keeps this sign-in's session open on the backend while the app is in
+  // use — the Audit Log page's session lengths are measured from it.
+  useEffect(() => startSessionHeartbeat(), []);
 
   const realWorldPeriod = getCurrentRealWorldPeriod();
   const defaultRange = getDefaultDateRange();

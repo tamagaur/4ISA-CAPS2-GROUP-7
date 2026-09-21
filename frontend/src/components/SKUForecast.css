@@ -17,6 +17,8 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.8rem;
 }
 
 .forecast-header-actions {
