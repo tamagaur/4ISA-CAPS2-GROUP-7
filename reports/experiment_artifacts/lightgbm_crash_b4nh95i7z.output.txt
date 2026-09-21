@@ -1,0 +1,60 @@
+Traceback (most recent call last):
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\final_models.py", line 106, in <module>
+    p = fit_predict(name, X[trm], y[trm], X[tem])
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\final_models.py", line 87, in fit_predict
+    return m.fit(Xtr, ytr).predict(Xte)
+           ~~~~~^^^^^^^^^^
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\pkgs\lightgbm\sklearn.py", line 1536, in fit
+    super().fit(
+    ~~~~~~~~~~~^
+        X,
+        ^^
+    ...<13 lines>...
+        init_model=init_model,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\pkgs\lightgbm\sklearn.py", line 1171, in fit
+    self._Booster = train(
+                    ~~~~~^
+        params=params,
+        ^^^^^^^^^^^^^^
+    ...<6 lines>...
+        callbacks=callbacks,
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\pkgs\lightgbm\engine.py", line 296, in train
+    booster = Booster(params=params, train_set=train_set)
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\pkgs\lightgbm\basic.py", line 3758, in __init__
+    train_set.construct()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\pkgs\lightgbm\basic.py", line 2574, in construct
+    self._lazy_init(
+    ~~~~~~~~~~~~~~~^
+        data=self.data,
+        ^^^^^^^^^^^^^^^
+    ...<9 lines>...
+        position=self.position,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\pkgs\lightgbm\basic.py", line 2189, in _lazy_init
+    self.set_label(label)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\pkgs\lightgbm\basic.py", line 3097, in set_label
+    self.set_field("label", label_array)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kyuan\AppData\Local\Temp\claude\c--Users-kyuan-Capstone-Project\009d381d-f10c-498b-949b-db62cbee1b73\scratchpad\pkgs\lightgbm\basic.py", line 2860, in set_field
+    _LIB.LGBM_DatasetSetField(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._handle,
+        ^^^^^^^^^^^^^
+    ...<3 lines>...
+        ctypes.c_int(type_data),
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+OSError: exception: access violation reading 0x0000000000000000
+
+[exited with code 0]

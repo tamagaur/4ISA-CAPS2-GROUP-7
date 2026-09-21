@@ -108,3 +108,9 @@ DATABASE_SCHEMA.xlsx
 # staging/, which are already ignored above; this sat outside those patterns
 # and would have been swept in by a `git add -A`.
 broken_state_20260914/
+
+# Generated data outputs (e.g. scripts/profile_soh_witness.py's SOH witness
+# profile) and raw audit dumps — derived from SSM client files, regenerable,
+# same never-committed reasoning as staging/ above.
+data/processed/*.parquet
+reports/gap_audit_raw.txt
