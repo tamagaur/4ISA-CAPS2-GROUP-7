@@ -109,7 +109,7 @@ def main() -> int:
     abc_dm = client.get("/abc?principal=delmonte", headers=headers).json()
     seg_dm = client.get("/segment/summary?principal=delmonte", headers=headers).json()
     print(f"Del Monte ABC        : count={abc_dm.get('count')}, "
-          f"classification_period={abc_dm.get('classification_period')!r}  (both empty/None = expected)")
+          f"classification_period={abc_dm.get('classification_period')!r}  (category-grain rows expected since the 2026-09-21 Del Monte ABC run; empty/None = a regression)")
     print(f"Del Monte segmentation: cohort_period={seg_dm.get('cohort_period')!r}  (None = expected)")
     if seg_dm.get("blocked_reason"):
         print(f"  blocked_reason: {seg_dm['blocked_reason']}")

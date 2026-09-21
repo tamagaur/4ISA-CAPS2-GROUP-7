@@ -29,7 +29,8 @@ Implements:
   naive_forecast(train, horizon) -> np.ndarray
   moving_average_forecast(train, horizon, window) -> np.ndarray   (MA3 = window 3)
   sba_forecast(train, horizon, alpha=0.1) -> np.ndarray
-  demand_class(series) -> str            (smooth/erratic/intermittent/lumpy/unclassifiable)
+  tsb_forecast(train, horizon) -> np.ndarray   (fixed weights; served by router.py, not an oracle/rule candidate)
+  demand_class(series) -> str           (smooth/erratic/intermittent/lumpy/unclassifiable)
   evaluate_baseline(forecast, holdout, train) -> dict
   passes_mase_gate(mase) -> bool | None
   RULE_METHOD_MAP: dict[str, str]
@@ -59,6 +60,13 @@ MA_WINDOW = 3
 # alongside this value so it is never read as a fitted parameter.
 SBA_ALPHA = 0.1
 SBA_ALPHA_TUNED = False
+
+# TSB (Teunter-Syntetos-Babai) smoothing constants: demand size / demand
+# probability. FIXED, not fitted - the values every 2026-09 diagnostic ran
+# with (scripts/model_bakeoff.py m_tsb). Locked decision 2026-09-21: do not
+# fit these per SKU.
+TSB_ALPHA_DEMAND = 0.3
+TSB_ALPHA_PROB = 0.1
 
 # Demand-class thresholds (Syntetos-Boylan-Croston cut points), identical to
 # this session's demand_shape_analysis.
@@ -146,6 +154,36 @@ def sba_forecast(train: pd.Series, horizon: int, alpha: float = SBA_ALPHA) -> np
             q += 1
     forecast *= (1 - alpha / 2)
     return np.full(horizon, float(forecast), dtype=float)
+
+
+def tsb_forecast(train: pd.Series, horizon: int, alpha_demand: float = TSB_ALPHA_DEMAND,
+                 alpha_prob: float = TSB_ALPHA_PROB) -> np.ndarray:
+    """TSB point forecast (demand size x demand probability), carried forward
+    `horizon` steps. Ported line-for-line from scripts/model_bakeoff.py m_tsb
+    so the diagnostics that chose it reproduce: both states start from the
+    training window's own averages, then one sequential pass updates the
+    probability every month and the size only on months with a sale.
+
+    Deliberately NOT registered in build_forecasters / TIE_BREAK_ORDER: TSB is
+    served by analytics.forecasting.router for the medium bin, it is not a
+    fourth candidate in the naive/ma3/sba oracle and rule picks.
+
+    TSB reads a run of zero months as a product dying - its probability decays
+    every such month. It must never be fed a synthetic 2021-22 prefix (the
+    zero-padded gap before a 2025 launch took the short bin from 0.265 to
+    0.430 median WAPE); the router enforces real-only history."""
+    x = train.to_numpy(dtype=float)
+    if len(x) < 1:
+        raise ValueError("tsb_forecast needs at least 1 training observation")
+    demand = x[x > 0].mean() if (x > 0).any() else 0.0
+    prob = (x > 0).mean()
+    for v in x:
+        if v > 0:
+            demand += alpha_demand * (v - demand)
+            prob += alpha_prob * (1 - prob)
+        else:
+            prob += alpha_prob * (0 - prob)
+    return np.full(horizon, float(demand * prob), dtype=float)
 
 
 def demand_class(series: pd.Series) -> str:

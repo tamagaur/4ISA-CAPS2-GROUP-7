@@ -116,3 +116,9 @@ def test_ratio_boundary_is_strict():
 def test_shape_mismatch_raises():
     with pytest.raises(ValueError):
         wape([1.0, 2.0], [1.0])
+
+
+def test_rmse_includes_every_actual_and_is_nan_when_empty():
+    from analytics.forecasting.diagnostic_metrics import rmse
+    assert rmse([3.0, -1.0, 0.0], [0.0, -1.0, 4.0]) == pytest.approx(np.sqrt((9 + 0 + 16) / 3))
+    assert np.isnan(rmse([], []))

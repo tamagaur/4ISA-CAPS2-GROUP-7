@@ -10,12 +10,12 @@ that module's docstring for why SARIMA was retired for this data.
 This run is REPORT-ONLY unless --write is passed (off by default):
   - always: prints the review tables below, writes
     reports/baseline_forecast_per_sku.csv and reports/BASELINE_FORECAST_RUN.md
-  - --write only: additionally upserts Forecast_Result for status='ok' SKUs
-    using the rule_method (deployable) pick. The LP-handoff numeric fallback
-    for insufficient_data / dead_sku SKUs (trailing average, provisional
-    flag) is NOT implemented this pass - its spec lives in the plan and the
-    policy fields are stamped null in model_params so the --write path has a
-    contract to fill later.
+  - --write only: additionally upserts Forecast_Result. status='ok' SKUs are
+    served by analytics.forecasting.router (short -> MA3, medium -> TSB,
+    long -> average of the global XGBoost and MA3; MA3 recorded for every SKU
+    as benchmark and fallback). insufficient_data / dead_sku keep their
+    existing provisional trailing-average / zero rows. rule_method and
+    oracle_method stay report-only diagnostics.
 
 Real data only: reads Unilever_SKU_Demand_Fact_Real (the _Real view
 structurally excludes is_demo=true), never the base table. The ABC period is
@@ -56,6 +56,9 @@ from analytics.forecasting.baseline import (
     moving_average_forecast,
     sba_forecast,
 )
+from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rmse, wape
+from analytics.forecasting.global_model import GlobalForecaster
+from analytics.forecasting.router import LIVE_MODEL, assert_real_rows, ma3_value, rolling_one_step, route
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -85,6 +88,35 @@ CLASS_EVIDENCE_ROWS = [
 # --------------------------------------------------------------------------- #
 # DB access
 # --------------------------------------------------------------------------- #
+POOLED_PORT = 6543
+# Supabase's default search_path on both the pooled and the direct URL (read 2026-09-21).
+DEFAULT_SEARCH_PATH_SCHEMAS = frozenset({"$user", "public", "extensions", "pg_catalog", "pg_temp"})
+
+
+def refuse_pooled_scratch(db_url: str, search_path: str) -> None:
+    """Raise if a non-default schema is on the search_path AND the URL is the
+    pooled one (port 6543).
+
+    A scratch rehearsal works by putting a scratch schema ahead of public so
+    this script's unqualified `Forecast_Result` lands there. That redirect is
+    a SESSION setting. The pooler on 6543 hands each transaction to whichever
+    backend is free, so the setting is not guaranteed to be in force when the
+    write transaction runs - and a write that misses the scratch table goes
+    to public. On the direct URL (5432) the session is ours for its lifetime.
+    Rehearse on the direct URL; this refuses the unsafe combination outright
+    rather than trusting it.
+    """
+    from urllib.parse import urlparse
+    schemas = {s.strip().strip('"') for s in search_path.split(",") if s.strip()}
+    extra = sorted(schemas - DEFAULT_SEARCH_PATH_SCHEMAS)
+    if extra and urlparse(db_url).port == POOLED_PORT:
+        raise RuntimeError(
+            f"refusing to start: schema(s) {extra} are on the search_path but the connection is the pooled URL "
+            f"(port {POOLED_PORT}), where a session search_path is not guaranteed to hold for the write "
+            "transaction - the write could land in public. Use the direct URL (port 5432) for a scratch run."
+        )
+
+
 def connect():
     load_dotenv(override=False)
     db_url = os.environ.get("SUPABASE_DB_URL")
@@ -93,6 +125,9 @@ def connect():
         sys.exit(1)
     conn = psycopg2.connect(db_url)
     conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute("SHOW search_path")
+        refuse_pooled_scratch(db_url, cur.fetchone()[0])
     return conn
 
 
@@ -747,7 +782,14 @@ def _write_md(df, abc_period, latest_demand_month):
     print(f"Wrote {RUN_MD}")
 
 
-DEPLOYED_METHOD = "ma3"  # the verdict — see module docstring; SARIMA / routing / ensemble all lose to plain MA3 here
+# MA3 is the benchmark and the fallback for every SKU, and the served model for
+# the short bin. The medium (TSB) and long (XGBoost+MA3 average) challengers TIE
+# with MA3 on real Tier A data - half-year block tests 2026-09-21: average no
+# wins / four ties / one loss, TSB tied in every testable block. They are served
+# because they are trained models, not because they are more accurate. SARIMA
+# and classical per-bin routing were tested and are not served. Which model
+# serves which bin lives in analytics/forecasting/router.py (LIVE_MODEL).
+BENCHMARK_METHOD = "ma3"
 
 
 def _clean_metric(v, scale=1.0):
@@ -777,17 +819,16 @@ def _f(v):
 
 
 # ~90% normal-approximation multiplier (not 95%'s 1.96) — a deliberately
-# modest claim for a 3-month moving average scored on a single train/holdout
-# split, not a proper rolling-origin residual distribution. Rounder numbers
+# modest claim for a forecast scored on one SKU's 20% holdout (a handful of
+# months), not a long rolling-origin residual distribution. Rounder numbers
 # read as more certain than this method earns.
 CONFIDENCE_Z = 1.645
 
 
 def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float | None]:
     """forecast_value +/- CONFIDENCE_Z * rmse, using the SKU's OWN real
-    holdout RMSE from evaluate_baseline (rec["ma3_rmse"], already computed
-    for the MASE gate and previously discarded rather than written to
-    Forecast_Result). None/None — never a fabricated band — when rmse is
+    holdout RMSE for the model that is SERVED (served_forecasts' rolling
+    one-step holdout - not MA3's unless MA3 is what is served). None/None — never a fabricated band — when rmse is
     itself None/NaN, e.g. a 1-point holdout. The lower bound is floored at
     0: real demand can't be negative, and an unclipped band dips below zero
     for a small forecast_value with a wide rmse."""
@@ -800,17 +841,57 @@ def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float |
     )
 
 
+def served_forecasts(df, demand_by_key, planning_month) -> dict:
+    """{product_key: {...}} for every status='ok' SKU: the routed one-step
+    forecast for `planning_month`, plus the SERVED model's holdout error.
+
+    Holdout = the same months train_holdout_split gives evaluate_sku, scored
+    rolling one-step-ahead (refit at every origin, the global model retrained
+    on months strictly before each one) with the model that serves the SKU
+    today held fixed. A one-step protocol because a one-step forecast is what
+    is served, and the only protocol defined for all three served models -
+    the static flat-line split evaluate_sku uses cannot score XGBoost. The
+    naive/ma3/sba static metrics in the CSV and in
+    model_params.holdout_metrics_all_methods are unchanged.
+
+    No DB access. Metrics come from analytics.forecasting.diagnostic_metrics.
+    """
+    wanted = {int(k) for k in df["product_key"]}
+    series_by_key = {int(k): build_series(g) for k, g in demand_by_key.items() if int(k) in wanted}
+    forecaster = GlobalForecaster(series_by_key)          # Tier A training pool, refit per target month
+    out = {}
+    for _, r in df[df["status"] == "ok"].iterrows():
+        p_key = int(r["product_key"])
+        series = series_by_key[p_key]
+        routed = route(series, planning_month, forecaster)
+        train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
+        scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=routed["bin"])
+        a, p = scored["actual"].to_numpy(), scored["value"].to_numpy()
+        out[p_key] = {
+            **routed,
+            "holdout_mape": mape(a, p), "holdout_mase": mase(a, p, naive_scale(train.to_numpy(dtype=float))),
+            "holdout_wape": wape(a, p), "holdout_rmse": rmse(a, p),
+            "holdout_ma3_wape": wape(a, scored["ma3"].to_numpy()),
+            "holdout_backups": int(scored["backup_fired"].sum()), "holdout_months": int(len(scored)),
+        }
+    return out
+
+
 def _write_forecast_result(cur, df):
     """--write path (atomic): upsert Forecast_Result for every real Tier A SKU.
 
-      status='ok'                -> forecast_value = MA3 one-step-ahead, refit on
-                                    the SKU's FULL real series; MA3's holdout
-                                    mape/mase in the columns; confidence_lower/
-                                    upper = forecast_value +/- CONFIDENCE_Z * the
-                                    SKU's own holdout RMSE (see _confidence_band;
-                                    None/None if that RMSE is undefined); ALL
-                                    THREE methods' metrics + oracle/rule picks
-                                    in model_params.
+      status='ok'                -> forecast_value = the router's one-step-ahead
+                                    forecast on the SKU's FULL real series
+                                    (short MA3 / medium TSB / long XGBoost+MA3
+                                    average, MA3 if a guard fires); the SERVED
+                                    model's rolling holdout mape/mase in the
+                                    columns; confidence_lower/upper =
+                                    forecast_value +/- CONFIDENCE_Z * that
+                                    model's holdout RMSE (see _confidence_band;
+                                    None/None if undefined); MA3's value, the
+                                    bin, components, any backup reason, and the
+                                    naive/ma3/sba static metrics + oracle/rule
+                                    picks in model_params.
       status='insufficient_data' -> forecast_value = trailing average of the real
                                     observed months, provisional=true, mape/mase
                                     NULL, mase_gate_passed null. LP fallback spec.
@@ -840,7 +921,10 @@ def _write_forecast_result(cur, df):
     cur.execute("SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real")
     planning_date = (pd.Timestamp(cur.fetchone()[0] + "-01") + relativedelta(months=1)).date()
     logger.warning(f"--write: upserting {len(df)} Tier A rows to Forecast_Result at forecast_date={planning_date} "
-                   f"(deployed method: {DEPLOYED_METHOD.upper()}). One transaction.")
+                   f"(served per bin: {LIVE_MODEL}; benchmark/fallback {BENCHMARK_METHOD.upper()}). One transaction.")
+
+    assert_real_rows(demand)
+    served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date))
 
     target_keys = [int(k) for k in df["product_key"]]
     conn = cur.connection
@@ -904,16 +988,32 @@ def _write_forecast_result(cur, df):
                 "months_span": int(r["months_span"]),
                 "months_with_sales": int(r["months_with_sales"]),
                 "demand_class_full": r["demand_class_full"],
+                "ma3_value": round(max(0.0, ma3_value(series)), 3),   # benchmark / fallback, every SKU
             }
 
             if status == "ok":
-                f_val = max(0.0, one_step(DEPLOYED_METHOD, series))
+                sv = served[p_key]
+                f_val = sv["value"]
                 mp = {
                     **base_mp,
-                    "method": DEPLOYED_METHOD,
-                    "method_rationale": "MA3 deployed for all Tier A; beat SARIMA / naive / SBA / "
-                                        "demand-class routing / history-length routing / ensemble / "
-                                        "per-SKU selector on this data",
+                    "method": sv["method"],
+                    "method_rationale": "served per history-length bin (analytics/forecasting/router.py): short MA3, "
+                                        "medium TSB, long XGBoost+MA3 average. The challengers TIE with MA3 on real "
+                                        "Tier A data; they are served because they are trained models, not because "
+                                        "they are more accurate. MA3 is the benchmark and the fallback.",
+                    "bin": sv["bin"],
+                    "sales_months": sv["sales_months"],
+                    "components": {k: (None if v is None else round(v, 3)) for k, v in sv["components"].items()},
+                    "backup_fired": sv["backup_fired"],
+                    "backup_reason": sv["backup_reason"],
+                    "training_rows": sv["training_rows"],
+                    "wape": _f(sv["holdout_wape"]),
+                    "holdout_protocol": "rolling one-step over the 20% holdout months, served model held fixed",
+                    "holdout_metrics_served": {
+                        "mape": _f(sv["holdout_mape"]), "mase": _f(sv["holdout_mase"]), "wape": _f(sv["holdout_wape"]),
+                        "rmse": _f(sv["holdout_rmse"]), "ma3_wape": _f(sv["holdout_ma3_wape"]),
+                        "months": sv["holdout_months"], "backups_fired": sv["holdout_backups"],
+                    },
                     "oracle_method": r["oracle_method"],
                     "rule_method": r["rule_method"],
                     "demand_class_train": r["demand_class_train"],
@@ -925,16 +1025,16 @@ def _write_forecast_result(cur, df):
                     "holdout_metrics_all_methods": _all_method_metrics(r),
                     "one_step_all_methods": {
                         "naive": round(one_step("naive", series), 3),
-                        "ma3": round(f_val, 3),
+                        "ma3": round(one_step(BENCHMARK_METHOD, series), 3),
                         "sba": round(one_step("sba", series), 3),
                     },
                     "provisional": False,
-                    "lp_input_method": "ma3_one_step",
+                    "lp_input_method": f"{sv['method']}_one_step",
                 }
-                ci_lower, ci_upper = _confidence_band(f_val, r["ma3_rmse"])
+                ci_lower, ci_upper = _confidence_band(f_val, sv["holdout_rmse"])
                 cur.execute(upsert, (
                     p_key, planning_date, float(f_val), ci_lower, ci_upper,
-                    _clean_metric(r["ma3_mape"], 100.0), _clean_metric(r["ma3_mase"]),
+                    _clean_metric(sv["holdout_mape"], 100.0), _clean_metric(sv["holdout_mase"]),
                     "ok", json.dumps(mp),
                 ))
                 counts["ok"] += 1

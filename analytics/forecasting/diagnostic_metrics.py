@@ -66,6 +66,12 @@ def mase(actual, pred, scale: float) -> float:
     return float(np.mean(np.abs(a - p)) / scale)
 
 
+def rmse(actual, pred) -> float:
+    """sqrt(mean (a-p)^2), every actual included. NaN if there are no points."""
+    a, p = _pair(actual, pred)
+    return float(np.sqrt(np.mean((a - p) ** 2))) if a.size else float("nan")
+
+
 def naive_scale(real_train) -> float:
     """Mean |lag-1 difference| of the REAL training months before the first
     test origin. Callers must pass real months only — never a series with a
