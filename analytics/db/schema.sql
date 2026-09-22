@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS Product_Dimension (
     product_name    TEXT,
     pack_size       TEXT,
     brand           TEXT,
-    brand_source    TEXT CHECK (brand_source IS NULL OR brand_source IN ('soh_first_token_rule')),
+    brand_source    TEXT CHECK (brand_source IS NULL OR brand_source IN ('soh_first_token_rule')),  -- migration 0026 adds 'demand_first_token_rule'
     -- Added for the SKU Management module (GET/POST/PATCH /sku) — see
     -- analytics/db/migrations/0002_add_sku_management_fields.sql for the
     -- incremental ALTER path on a database that already exists.
@@ -264,6 +264,9 @@ CREATE TABLE IF NOT EXISTS Purchase_Fact (
     _src_file                TEXT NOT NULL,
     _src_sheet                TEXT NOT NULL,
     _period                   TEXT NOT NULL,
+    -- Migration 0025 replaces this key with (invoice_num, principal, region,
+    -- invoice_date). Left as first declared on purpose: a fresh build runs this
+    -- file and then every migration, and 0025 drops this constraint by name.
     UNIQUE (invoice_num, principal, region) -- DEC-04 natural key (config/source_of_truth.yaml: purchase)
 );
 

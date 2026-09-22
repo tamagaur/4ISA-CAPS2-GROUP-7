@@ -68,6 +68,10 @@ sales:
     # Its own column map exists (config/column_maps/daily_sales_report.yaml)
     # so Transform can tag/report on it — it is never promoted to load.
     cross_check_doc_types: [daily_sales_report]
+    # 2026-09-21 (completeness audit F4): ONE PAGER is a duplicate view only
+    # for invoices it shares with a daily sheet. 57 Oct/Nov 2025 invoices
+    # (net 559,369.32) exist on the ONE PAGER alone - those are kept.
+    orphan_rescue_roles: [one_pager]
     # "principal" is not a raw header anywhere - it only exists as the
     # provenance column Extract attaches (_principal). transform.py's
     # backfill_provenance_fields() (2026-08) copies _principal -> principal
@@ -175,7 +179,11 @@ purchase:
     # invoice_num alone would collide same-invoice-number purchases across
     # different regions/principals. principal/region come from
     # transform.backfill_provenance_fields() where no raw header maps them.
-    natural_key: [invoice_num, principal, region]  # BILL/... prefix or PO ref
+    # 2026-09-21 (completeness audit F2, migration 0025): invoice_date joined
+    # the key. The September 2025 Pangasinan sheet reuses August's bill numbers
+    # (BILL/2025/0236-0253) on 18 purchases with their own date, PO and
+    # untaxed amount - a different purchase, not a second copy.
+    natural_key: [invoice_num, principal, region, invoice_date]  # BILL/... prefix or PO ref
 
 inventory:
   both:

@@ -34,6 +34,8 @@ category_path:
 
 net_amount:
   - "Total Without Tax"
+  - "Total With Tax"      # X2 (2026-09-22): the two AUGUST 2023 sheets have ONLY this amount column.
+                        # Tax-inclusive - flagged per row in net_amount_tax_inclusive (transform.flag_sellout_tax_inclusive).
 
 quantity:
   - "Product Quantity"

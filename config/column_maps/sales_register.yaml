@@ -79,6 +79,12 @@ total_discount_claim:
 
 total_cas_pcs:
   - "Total CAS/PCS"
+# X3 (2026-09-22): Sept + Dec 2025 exports split the header in two. Invoice totals
+# across mixed products - never added together (no pack size in this file).
+quantity_cases:
+  - "Total CAS"
+quantity_pieces:
+  - "Total PCS"
 
 branch_code:
   - "Branch Code"

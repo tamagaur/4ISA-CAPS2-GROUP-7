@@ -24,8 +24,11 @@ from __future__ import annotations
 import csv
 import re
 from dataclasses import dataclass, field
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -695,6 +698,12 @@ class SourceOfTruthRule:
     # building the Transform driver) — parsed here so it isn't silently
     # dropped by callers that read it directly off the rule.
     cross_check_doc_types: list[str] = field(default_factory=list)
+    # Cross-check sheet roles whose rows are kept when their natural key
+    # appears on NO system-of-record sheet (2026-09-21, completeness audit
+    # F4): the Oct/Nov 2025 sales registers carry 57 invoices (net
+    # 559,369.32) only on the "ONE PAGER" sheet. Dropping the whole role as
+    # a duplicate view lost them. See rescue_cross_check_orphans().
+    orphan_rescue_roles: list[str] = field(default_factory=list)
 
 
 def load_source_of_truth(fact: str, principal: str, config_dir: Path = DEFAULT_CONFIG_DIR) -> SourceOfTruthRule:
@@ -714,6 +723,7 @@ def load_source_of_truth(fact: str, principal: str, config_dir: Path = DEFAULT_C
         cross_check_roles=entry.get("cross_check_roles", []),
         natural_key=entry.get("natural_key"),  # may be None - see anti-fabrication note below
         cross_check_doc_types=entry.get("cross_check_doc_types", []),
+        orphan_rescue_roles=entry.get("orphan_rescue_roles", []),
     )
 
 
@@ -741,6 +751,133 @@ def filter_source_of_truth(df: pd.DataFrame, fact: str, principal: str, config_d
     return out[out["_sheet_role"].isin(rule.system_of_record_role)].copy()
 
 
+def rescue_cross_check_orphans(
+    df: pd.DataFrame, sot_df: pd.DataFrame, rule: SourceOfTruthRule, config_dir: Path = DEFAULT_CONFIG_DIR,
+) -> tuple[pd.DataFrame, dict]:
+    """Adds back the rows of rule.orphan_rescue_roles sheets whose natural key
+    is fully non-null and present on no system-of-record sheet. A cross-check
+    view is only a duplicate for the keys it shares with the system of
+    record; a key that exists nowhere else is real data with one source.
+    Returns the RAW rows (sot_df + rescued), so the rescued rows go through
+    the same column map, footer checks and dedup as every other row."""
+    report = {"roles": rule.orphan_rescue_roles, "candidate_rows": 0, "rescued_rows": 0}
+    if not rule.orphan_rescue_roles or "_sheet_role" not in df.columns:
+        return sot_df, report
+    candidates = df[df["_sheet_role"].isin(rule.orphan_rescue_roles)]
+    if rule.cross_check_doc_types and "_doc_type" in candidates.columns:
+        candidates = candidates[~candidates["_doc_type"].isin(rule.cross_check_doc_types)]
+    report["candidate_rows"] = len(candidates)
+    if candidates.empty:
+        return sot_df, report
+
+    def _keys(raw: pd.DataFrame) -> pd.DataFrame:
+        mapped, _ = apply_column_map(raw, rule.doc_type, config_dir)
+        mapped = backfill_provenance_fields(mapped)
+        missing = [k for k in rule.natural_key if k not in mapped.columns]
+        if missing:
+            raise KeyError(f"Natural key column(s) missing after column map: {missing}")
+        return mapped[rule.natural_key]
+
+    def _as_tuples(keys: pd.DataFrame) -> pd.Series:
+        return keys.astype(str).apply(lambda r: tuple(v.strip() for v in r), axis=1)
+
+    sot_keys = _keys(sot_df)
+    known = set(_as_tuples(sot_keys[sot_keys.notna().all(axis=1)]))
+    cand_keys = _keys(candidates)
+    resolvable = cand_keys.notna().all(axis=1)
+    orphan_mask = resolvable & ~_as_tuples(cand_keys).isin(known)
+    rescued = candidates.loc[orphan_mask[orphan_mask].index]
+    report["rescued_rows"] = len(rescued)
+    if rescued.empty:
+        return sot_df, report
+    return pd.concat([sot_df, rescued]), report
+
+
+# Sheets that keep the WORKBOOK's _period (H1, Yuan 2026-09-22). This hidden
+# sheet holds 578 September-2024 invoices copied into six 2025 workbooks; public
+# reports them under April 2025 and they stay there, pending SSM, until SSM says
+# what the sheet is. 14 of them carry the remark FAKE BOOKING and are
+# quarantined instead (flag_source_quarantine below).
+PERIOD_FROM_INVOICE_DATE_EXEMPT_SHEETS = {"PANGASINAN SALES REGISTER (2)"}
+
+
+def period_from_invoice_date(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Sets _period to the invoice's own month (2026-09-21, completeness audit
+    F5). _period arrives as the month of the WORKBOOK a row was read from,
+    which is not always the month of the invoice. Rows whose invoice_date
+    does not parse keep the workbook's _period - never a guessed month - and
+    so does every row of a sheet in PERIOD_FROM_INVOICE_DATE_EXEMPT_SHEETS."""
+    report = {"rows": len(df), "period_changed": 0, "unparseable_invoice_date": 0, "exempt_sheet_rows": 0}
+    if "invoice_date" not in df.columns or "_period" not in df.columns or df.empty:
+        return df, report
+    parsed = pd.to_datetime(df["invoice_date"], errors="coerce")
+    invoice_month = parsed.dt.strftime("%Y-%m")
+    exempt = (df["_src_sheet"].isin(PERIOD_FROM_INVOICE_DATE_EXEMPT_SHEETS) if "_src_sheet" in df.columns
+              else pd.Series(False, index=df.index))
+    report["exempt_sheet_rows"] = int(exempt.sum())
+    use = parsed.notna() & ~exempt
+    changed = use & (invoice_month != df["_period"])
+    report["period_changed"] = int(changed.sum())
+    report["unparseable_invoice_date"] = int(parsed.isna().sum())
+    out = df.copy()
+    out.loc[use, "_period"] = invoice_month[use]
+    return out, report
+
+
+QUARANTINE_REASON_COLUMN = "_quarantine_reason"
+
+# Source rows Yuan ruled must not load. Transform only MARKS them
+# (QUARANTINE_REASON_COLUMN); scripts/run_canonical_load.py removes the marked
+# rows after dedup and writes them to etl_quarantine with their raw values.
+#   H1 (2026-09-22): the 14 invoices remarked FAKE BOOKING on the hidden
+#       "PANGASINAN SALES REGISTER (2)" sheet (2,903,959.74).
+#   D12 (2026-09-22): the 18 September-2025 purchases whose Tax and Net Amount
+#       cells are August's (untaxed + tax != net). Limited to 2025-09: 14 real
+#       2024-01 rows fail the same arithmetic and are an open item, not ruled on.
+FAKE_BOOKING_SHEET = "PANGASINAN SALES REGISTER (2)"
+
+
+def _num(df: pd.DataFrame, col: str) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series(np.nan, index=df.index)
+    return pd.to_numeric(df[col], errors="coerce")
+
+
+def flag_source_quarantine(df: pd.DataFrame, doc_type: str) -> tuple[pd.DataFrame, dict]:
+    out = df.copy()
+    reason = pd.Series(None, index=out.index, dtype=object)
+    real = (out["is_demo"] != True) if "is_demo" in out.columns else pd.Series(True, index=out.index)  # noqa: E712
+    if doc_type == "sales_register" and "REMARKS" in out.columns and "_src_sheet" in out.columns:
+        fake = real & (out["_src_sheet"] == FAKE_BOOKING_SHEET) & (
+            out["REMARKS"].astype("string").str.strip().str.upper() == "FAKE BOOKING")
+        reason[fake.fillna(False).astype(bool)] = "source remark: FAKE BOOKING"
+    elif doc_type == "purchase_order" and "_period" in out.columns:
+        stale = real & (out["_period"] == "2025-09") & (
+            (_num(out, "untaxed_amount") + _num(out, "tax_amount") - _num(out, "net_amount")).abs() > 0.01)
+        reason[stale.fillna(False).astype(bool)] = "stale cells: untaxed + tax != net; Net Amount copied from August"
+    out[QUARANTINE_REASON_COLUMN] = reason
+    return out, {"marked": int(reason.notna().sum())}
+
+
+def flag_sellout_tax_inclusive(raw_df: pd.DataFrame) -> pd.Series:
+    """X2 (2026-09-22). Read BEFORE the column map, which coalesces both
+    amount headers into net_amount: TRUE where the row's only amount is
+    "Total With Tax" (the August 2023 sheets have no other), FALSE where
+    "Total Without Tax" is present, NULL where neither is."""
+    def col(name):
+        hits = [c for c in raw_df.columns if _normalize_header(c) == name]
+        return raw_df[hits[0]] if hits else pd.Series(np.nan, index=raw_df.index)
+    without_tax, with_tax = col("total without tax"), col("total with tax")
+    flag = pd.Series(None, index=raw_df.index, dtype=object)
+    flag[without_tax.isna() & with_tax.notna()] = True
+    flag[without_tax.notna()] = False
+    return flag
+
+
+# X3/X4 (2026-09-22): invoice totals, never combined (no SKU, no pack size).
+INVOICE_QUANTITY_COLUMNS = ["quantity_cases", "quantity_pieces"]
+
+
 @dataclass
 class DedupReport:
     input_rows: int
@@ -752,10 +889,55 @@ class DedupReport:
     # grouped with each other. See dedup_facts()'s docstring.
 
 
+def _canonical_cell(value):
+    """One comparable form per cell, so the same number read as 60764.48,
+    Decimal('60764.48') or '60764.48 ' is not mistaken for a disagreement."""
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, Decimal, np.number)):
+        return round(float(value), 6)
+    if isinstance(value, (pd.Timestamp, datetime, date)):
+        return pd.Timestamp(value).isoformat()
+    text_value = str(value).strip()
+    try:
+        return round(float(text_value), 6)
+    except ValueError:
+        return text_value
+
+
+def natural_key_series(df: pd.DataFrame, natural_key: list[str]) -> list[pd.Series]:
+    """The key columns as groupby keys, with every date-like cell as a
+    pd.Timestamp. Needed once a date joined a natural key (purchase,
+    migration 0025): real files give invoice_date as Timestamp, the synthetic
+    ones as datetime.date, and pandas can neither sort nor equate the two -
+    the same day would split into two groups, or the groupby would raise.
+    Callers must pass sort=False (a key column may still mix text and dates)."""
+    def _cell(value):
+        if isinstance(value, (datetime, date)) and not isinstance(value, pd.Timestamp):
+            return pd.Timestamp(value)
+        return value
+    return [df[c].map(_cell) if df[c].dtype == object else df[c] for c in natural_key]
+
+
 def dedup_facts(df: pd.DataFrame, natural_key: list[str], amount_col: str | None = None) -> tuple[pd.DataFrame, DedupReport]:
     """Dedup on the confirmed natural key. Anti-fabrication: if two rows
-    share a key but disagree on amount_col, we do NOT silently pick one —
-    both are kept and the conflict is reported for a human decision.
+    share a key but disagree on ANY business column, we do NOT silently pick
+    one — every distinct row is kept and the conflict is reported for a
+    human decision.
+
+    Every business column, not just amount_col (2026-09-21, completeness
+    audit F2/F3): comparing the key plus one amount dropped 18 real
+    September-2025 purchases that reuse an August bill number and net amount
+    but carry a different date, PO and untaxed amount, and 193 real Del Monte
+    stock lines whose quantity_on_hand was null on both sides - null equal
+    to null was counted as agreement while the case counts differed. A row
+    is a duplicate only when every column that is not provenance (no leading
+    underscore) matches; nulls match only when everything else does too.
 
     Null-key quarantine (2026-09-11, Phase 1 step 2a/2b): pandas'
     groupby(natural_key, dropna=False) treats every row with a fully-null
@@ -800,23 +982,27 @@ def dedup_facts(df: pd.DataFrame, natural_key: list[str], amount_col: str | None
             entry[c] = row[c]
         quarantined.append(entry)
 
-    grouped = resolvable.groupby(natural_key, dropna=False) if not resolvable.empty else []
+    grouped = resolvable.groupby(natural_key_series(resolvable, natural_key), dropna=False, sort=False) if not resolvable.empty else []
 
+    business_cols = [c for c in df.columns if not str(c).startswith("_") and c not in natural_key]
     conflicts = []
     keep_idx = list(unresolvable.index)  # quarantined rows: kept in output, never grouped
     for key_vals, group in grouped:
         if len(group) == 1:
             keep_idx.append(group.index[0])
             continue
-        if amount_col and amount_col in group.columns and group[amount_col].nunique(dropna=False) > 1:
+        canonical = group[business_cols].apply(lambda col: col.map(_canonical_cell))
+        distinct = canonical.drop_duplicates()
+        keep_idx.extend(distinct.index.tolist())  # first copy of each distinct row
+        if len(distinct) > 1:  # flagged, not resolved
+            differing = [c for c in business_cols if canonical[c].nunique(dropna=False) > 1]
             conflicts.append({
                 "key": key_vals if isinstance(key_vals, tuple) else (key_vals,),
                 "row_count": len(group),
-                "distinct_values": group[amount_col].unique().tolist(),
+                "distinct_rows": len(distinct),
+                "differing_columns": differing,
+                "distinct_values": group[amount_col].unique().tolist() if amount_col and amount_col in group.columns else [],
             })
-            keep_idx.extend(group.index.tolist())  # keep all — flagged, not resolved
-        else:
-            keep_idx.append(group.index[0])  # true duplicate, safe to collapse
 
     out = df.loc[sorted(keep_idx)].reset_index(drop=True)
     report = DedupReport(
@@ -1017,6 +1203,13 @@ def relabel_sellout_source_defect_categories(df: pd.DataFrame) -> tuple[pd.DataF
     agg = {c: "sum" for c in sum_cols}
     agg.update({c: "first" for c in other_cols})
     merged = defect_rows.groupby(group_cols, as_index=False).agg(agg)
+    # sum(min_count=1) semantics (2026-09-22): a group whose values are ALL
+    # missing is NULL, not 0. Plain "sum" turned the two August 2023 merged
+    # rows' missing revenue into a stated 0.00 - a number nobody measured.
+    # Masked after the fact so every non-empty group keeps the exact same sum.
+    present = defect_rows.groupby(group_cols, as_index=False)[sum_cols].count()
+    for c in sum_cols:
+        merged.loc[present[c].to_numpy() == 0, c] = np.nan
     # Provenance: this row no longer traces to one real file/sheet - say so
     # explicitly rather than leaving the first-merged row's original
     # _src_file/_src_sheet, which would misleadingly look like a single-
@@ -1184,14 +1377,18 @@ def transform_fact(
         )
 
     sot_df = filter_source_of_truth(df, fact, principal, config_dir)
+    sot_df, orphan_rescue_report = rescue_cross_check_orphans(df, sot_df, rule, config_dir)
     mapped_df, map_report = apply_column_map(sot_df, rule.doc_type, config_dir)
     mapped_df = coerce_is_demo_column(mapped_df)
     mapped_df = backfill_provenance_fields(mapped_df)
+    if rule.doc_type == "sell_out":
+        mapped_df["net_amount_tax_inclusive"] = flag_sellout_tax_inclusive(sot_df)
 
     if discount_alias_table and "discount_rate_label" in mapped_df.columns:
         mapped_df = apply_alias_table(mapped_df, "discount_rate_label", discount_alias_table, config_dir)
 
     total_row_exclusion_report = None
+    period_report = None
     if rule.doc_type == "sell_out":
         mapped_df, total_row_exclusion_report = exclude_footer_rows(mapped_df, SELL_OUT_FOOTER_CHECKS, "sell_out")
         # Must run AFTER backfill_provenance_fields() above (needs real
@@ -1205,6 +1402,7 @@ def transform_fact(
         mapped_df, total_row_exclusion_report = exclude_footer_rows(
             mapped_df, SALES_REGISTER_FOOTER_CHECKS, "sales_register", required=False,
         )
+        mapped_df, period_report = period_from_invoice_date(mapped_df)
     elif rule.doc_type == "sales_return":
         mapped_df, total_row_exclusion_report = exclude_footer_rows(mapped_df, SALES_RETURN_FOOTER_CHECKS, "sales_return")
 
@@ -1279,17 +1477,25 @@ def transform_fact(
     elif rule.doc_type == "inventory_sign_off":
         mapped_df, unparseable_cols = coerce_numeric_columns(mapped_df, DELMONTE_INVENTORY_NUMERIC_COLUMNS)
         numeric_coercion_report = {"unparseable_columns": unparseable_cols}
+    elif rule.doc_type in ("sales_register", "sales_return"):
+        mapped_df, unparseable_cols = coerce_numeric_columns(mapped_df, INVOICE_QUANTITY_COLUMNS)
+        numeric_coercion_report = {"unparseable_columns": unparseable_cols}
+
+    mapped_df, source_quarantine_report = flag_source_quarantine(mapped_df, rule.doc_type)
 
     deduped_df, dedup_report = dedup_facts(mapped_df, rule.natural_key, amount_col=amount_col)
     return deduped_df, {
         "doc_type": rule.doc_type,
         "column_map": map_report,
         "total_row_exclusion": total_row_exclusion_report,
+        "orphan_rescue": orphan_rescue_report,
+        "period_from_invoice_date": period_report,
         "sku_split": sku_split_report,
         "sku_shape_routing": sku_shape_report,
         "date_reformat": date_reformat_report,
         "quantity_reconciliation": quantity_report,
         "numeric_coercion": numeric_coercion_report,
+        "source_quarantine": source_quarantine_report,
         "dedup": dedup_report,
         "rows_in": len(df),
         "rows_after_sot_filter": len(sot_df),
