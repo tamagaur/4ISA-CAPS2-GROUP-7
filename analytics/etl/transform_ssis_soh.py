@@ -150,6 +150,9 @@ class SsisSohTransformResult:
     product_dimension_candidates: list[ProductDimensionCandidate]
     input_rows: int
     distinct_snapshots_in: int
+    # The rejected source rows themselves (2026-09-21, migration 0024) - `rejections`
+    # above only carries a count, and etl_quarantine needs the rows.
+    rejected_rows: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 def _load_staged(staging_dir: Path) -> pd.DataFrame:
@@ -197,6 +200,7 @@ def transform_ssis_soh(
             "spot-checked: this row's other fields are all null except a large "
             "stock_value figure — a per-sheet totals row, not a real SKU.",
         ))
+    rejected_rows = raw.loc[null_sku_mask].copy()
     df = raw.loc[~null_sku_mask].copy()
 
     # --- R9: category drift, logged before collapsing to one row per SKU ---
@@ -264,6 +268,7 @@ def transform_ssis_soh(
     return SsisSohTransformResult(
         inventory_fact_df=out,
         rejections=rejections,
+        rejected_rows=rejected_rows,
         dedup_report=dedup_report,
         category_drift=category_drift,
         product_dimension_candidates=product_dimension_candidates,

@@ -44,7 +44,8 @@ EXPECTED_PREDICATE = {
     "scripts/check_missing_fast.py": ("abc.method = 'single'",),
     "scripts/check_missing_skus.py": ("abc.method = 'single'",),
     "scripts/run_sarima.py": ("abc.method = 'single'",),
-    "tools/forecast_viewer/build.py": ("abc.method = 'single'",),
+    "scripts/archive/forecast_viewer/build.py": ("abc.method = 'single'",),
+    "tools/dsd_dev_viewer/build.py": ("AND method = %(m)s",),
     "analytics/segmentation/orchestrate_segment.py": ("abc.c.method == abc_method",),
 }
 

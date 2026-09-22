@@ -790,3 +790,34 @@ keeps it as the 7th family per DEC-04). Demotion stays. Do not treat the
 1.95M staged rows as an unloaded backlog.
 
 Re-opening this requires a grain decision first, not a loader.
+
+## 17. Real-row recovery + Yuan's 2026-09-22 rulings — scratch rebuilt, cutover rehearsed, NOT applied to public
+
+Source of truth for this phase's working detail: the Phase E handoff (2026-09-21/22). Scratch `ssm_synth_v2` = ONE canonical rebuild, 2026-09-22 20:09→20:39 (29 min 55 s). Loader exit 1 = frozen-v1-target MISMATCH banners only.
+
+| Ruling / fix | What changed | Count (verified, scratch vs public E3) |
+|---|---|---|
+| L1 | Unilever demand `net_amount_inc_tax` → `net_amount` | real demand rows identical to public |
+| F3 | sheet "ILO 090223" is Ilocos (region pattern) | +193 inventory rows, 6 re-tagged |
+| F4 | ONE PAGER-only invoices kept | +57 sales, 559,369.32 |
+| H1 | FAKE BOOKING invoices on "PANGASINAN SALES REGISTER (2)" quarantined; F5 exempt for that sheet | −14 sales, 2,903,959.74; other 564 stay 2025-04, **pending SSM** |
+| D12 | 18 Sept-2025 purchases (stale Tax/Net cells) quarantined, "Net Amount ( Actual Invoice)" kept in raw_values | 0 inserted; 14 real 2024-01 rows failing untaxed+tax=net CLOSED as rounding (max 0.50) |
+| X2 | sell-out "Total With Tax" → net_amount, `net_amount_tax_inclusive` (0027) | 122 amounts (120 NULL + 2 merged 0.00); flag 122 TRUE / 5,876 FALSE / 0 NULL |
+| X3 / X4 | "Total CAS"/"Total PCS" → `quantity_cases`/`quantity_pieces` (0027); `bo_units` stays NULL | sales 1,888; returns 227 (62 BO) |
+| X1 / D11 | SOH pack_size on SOH-only SKUs; brand_source 'demand_first_token_rule' (0026) | pack 291 (0 overwritten); brand_source 380; brand 1 (BF→BESTFOODS) |
+| sum fix | defect-category merge: all-missing group → NULL, not 0 | 114 `quantity_cases` (not a loaded column) |
+| name fix | demand product names get the SOH apostrophe normalization | 2 LADY'S CHOICE names |
+| X5 | DROPPED — PKG is pieces-per-case only in 2023-09/2024-02 (809/2,739 rows) | → product master cleanup (price-list case pack; PKG cross-check only) |
+| X6 | SOH "Hierarchy Node" not extracted: no destination, no consumer, meaning UNVERIFIED | — |
+| P2 | loader failure path keeps the scratch schema | — |
+
+Cutover: `scripts/apply_real_recovery_to_public.py` rehearsed on a copy of public (`ssm_recovery_rehearsal`): 42/42 checks; real-row diff before = E3, after = 0 on all six facts; synthetic rows, other products, forecast_result, sku_segment, sku_traits, ABC (per method) unchanged; 1 customer row added for F4.
+
+Provenance / open items (logged, not worked):
+| Item | Status |
+|---|---|
+| P3 | public Unilever demand `net_amount` has no committed writer |
+| 38 Unilever SKUs labelled SOH-sourced in public | no source in loaded SOH (2023+); 14 trace to unloaded 2021-22 SOH sheets (existence-only, D5); 24 not found in staged SOH, not searched further; brand values unchanged, only brand_source changes |
+| 5 Del Monte category product_name values in public | writer UNVERIFIED |
+| `product_dimension.manual_reorder_point` | public only, 0/17,406 populated, no migration, no code — **ask Audrey** |
+| Product master cleanup queue | DM pack size from the price list; 2021-22 SOH for product details only (never quantities) |

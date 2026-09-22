@@ -28,7 +28,7 @@ import psycopg2
 from dotenv import load_dotenv
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
+REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 
 DEMAND_START, DEMAND_END = "2023-01", "2026-02"
 

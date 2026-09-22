@@ -59,6 +59,12 @@ return_type:
 
 net_amount:
   - "Net Amount"
+# X4 (2026-09-22): GS/BO sheets of the Sept + Dec 2025 exports. Invoice totals
+# across mixed products; bo_units stays NULL (a BO row is marked by return_type only).
+quantity_cases:
+  - "Total CAS"
+quantity_pieces:
+  - "Total PCS"
 
 # Phase 4 (2026-08, is_demo load-bearing): only ever present on synthetic
 # demo rows - no real Sales Return file has this header. schema.sql's

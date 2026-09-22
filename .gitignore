@@ -114,3 +114,6 @@ broken_state_20260914/
 # same never-committed reasoning as staging/ above.
 data/processed/*.parquet
 reports/gap_audit_raw.txt
+
+# Dev viewer build inputs, copied from reports/preview/ at build time; the HTML embeds the data
+tools/dsd_dev_viewer/data/

@@ -2,8 +2,8 @@
 the switching rule (design locked 2026-09-21).
 
 Pure numpy/pandas + xgboost - no DB. Series are synthetic test fixtures built
-from 2023-01 onward; "synthetic" in the guard tests means a month BEFORE
-2023-01, which is what the project's is_demo rows are.
+from 2023-01 onward; "placeholder" in the guard tests means months marked as
+is_demo (gm.with_placeholder), not months judged by their date.
 """
 from __future__ import annotations
 
@@ -218,25 +218,71 @@ def test_same_seed_same_output():
 
 
 # ---- real data only -------------------------------------------------------------------------------------------------------
-def test_router_raises_on_a_month_before_2023():
-    s = _series(list(_sales(15)), start="2022-06-01")
-    with pytest.raises(ValueError, match="before 2023-01"):
-        router.route(s, _next(s))
-
-
-def test_global_model_raises_on_a_month_before_2023():
+def test_real_rows_before_2023_are_accepted():
+    """SSM's real 2021-22 files must replace the placeholder with no code change."""
+    s = _series(list(_sales(15)), start="2021-06-01")
+    assert router.route(s, _next(s))["value"] is not None
     pool = _pool(); pool[0] = _series(list(pool[0]), start="2021-01-01")
-    with pytest.raises(ValueError, match="before 2023-01"):
+    gm.GlobalForecaster(pool).booster_for(pd.Timestamp("2026-03-01"))
+    router.assert_real_rows(pd.DataFrame({"calendar_month": ["2021-12", "2022-12"], "quantity": [1.0, 2.0], "is_demo": [False, False]}))
+
+
+def _placeholder(series: pd.Series, n: int = 6) -> pd.Series:
+    return gm.with_placeholder(series, series.index[:n])
+
+
+def test_placeholder_rows_are_rejected_by_default():
+    s = _placeholder(_series(list(_sales(15)), start="2022-01-01"))
+    with pytest.raises(ValueError, match="placeholder"):
+        router.route(s, _next(s))
+    pool = _pool(); pool[0] = _placeholder(pool[0])
+    with pytest.raises(ValueError, match="placeholder"):
         gm.GlobalForecaster(pool).booster_for(pd.Timestamp("2026-03-01"))
-
-
-def test_router_raises_on_any_is_demo_row():
+    with pytest.raises(ValueError, match="placeholder"):
+        router.route(pool[0], _next(pool[0]), gm.GlobalForecaster(_pool()), force_bin="long")
     frame = pd.DataFrame({"calendar_month": ["2024-01", "2024-02"], "quantity": [1.0, 2.0], "is_demo": [False, True]})
     with pytest.raises(ValueError, match="is_demo"):
         router.assert_real_rows(frame)
-    router.assert_real_rows(frame.assign(is_demo=False))
-    with pytest.raises(ValueError, match="before 2023-01"):
-        router.assert_real_rows(pd.DataFrame({"calendar_month": ["2022-12"], "quantity": [1.0]}))
+    with pytest.raises(ValueError, match="is_placeholder"):
+        router.assert_real_rows(frame.drop(columns="is_demo").assign(is_placeholder=[True, False]))
+
+
+def test_placeholder_rows_pass_only_with_the_flag():
+    s = _placeholder(_series(list(_sales(15)), start="2022-01-01"))
+    assert router.route(s, _next(s), allow_placeholder=True)["value"] is not None
+    pool = _pool(); pool[0] = _placeholder(pool[0])
+    f = gm.GlobalForecaster(pool, allow_placeholder=True)
+    r = router.route(pool[0], _next(pool[0]), f, force_bin="long", allow_placeholder=True)
+    assert r["components"]["xgb"] is not None and r["backup_reason"] is None
+    router.assert_real_rows(pd.DataFrame({"calendar_month": ["2021-01"], "quantity": [1.0], "is_demo": [True]}), allow_placeholder=True)
+
+
+def test_placeholder_mark_outside_the_series_does_not_trip():
+    s = _series(list(_sales(15)), start="2024-01-01")
+    marked = gm.with_placeholder(s, [pd.Timestamp("2021-01-01")])
+    assert router.route(marked, _next(marked))["value"] == router.route(s, _next(s))["value"]
+
+
+def test_router_default_path_is_unchanged():
+    """The flag defaults to False everywhere, the live runner never passes it, and only the preview script sets it."""
+    import ast, inspect
+    for fn in (router.route, router.rolling_one_step, router.assert_real_rows, gm.assert_real_history,
+               gm.training_rows, gm.GlobalForecaster.__init__):
+        assert inspect.signature(fn).parameters["allow_placeholder"].default is False
+    assert "allow_placeholder" not in (REPO / "scripts/run_baseline_forecast.py").read_text(encoding="utf-8")
+
+    def passes_true(path) -> bool:          # a call site passing allow_placeholder=True (docstrings don't count)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:
+            return False
+        return any(isinstance(n, ast.keyword) and n.arg == "allow_placeholder" and isinstance(n.value, ast.Constant)
+                   and n.value.value is True for n in ast.walk(tree))
+    setters = sorted(p.relative_to(REPO).as_posix() for p in REPO.glob("**/*.py")
+                     if not {".venv", "node_modules", "tests"} & set(p.relative_to(REPO).parts) and passes_true(p))
+    assert setters == ["scripts/preview_router_synth.py"]
+    s = _sales(30); pool = _pool()
+    assert router.route(s, _next(s), gm.GlobalForecaster(pool)) == router.route(s, _next(s), gm.GlobalForecaster(pool), allow_placeholder=False)
 
 
 def test_every_fact_table_read_ends_in_real():

@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-REAL_START = pd.Timestamp("2023-01-01")  # first month of genuine per-SKU Unilever data
+PLACEHOLDER_ATTR = "placeholder_months"  # series.attrs key marking is_demo months (see with_placeholder)
 MIN_HISTORY = 3                          # months of history before a month can be a training row
 MIN_TRAINING_ROWS = 100                  # below this no model is returned (the diagnostics' own floor)
 SCALE_WINDOW = 6
@@ -46,14 +46,26 @@ FEATURE_NAMES = (
 )
 
 
-def assert_real_history(series: pd.Series) -> None:
-    """Raise if the series reaches before REAL_START. Months before 2023-01
-    can only be synthetic (is_demo) rows; this catches a base-table read even
-    when the is_demo column itself was dropped on the way here."""
-    if len(series) and series.index.min() < REAL_START:
+def with_placeholder(series: pd.Series, months) -> pd.Series:
+    """A copy of `series` with `months` marked as placeholder (is_demo) rows.
+    The mark lives in series.attrs[PLACEHOLDER_ATTR]; only a caller that built
+    the series from is_demo rows sets it."""
+    out = series.copy()
+    out.attrs[PLACEHOLDER_ATTR] = frozenset(pd.Timestamp(m) for m in months)
+    return out
+
+
+def assert_real_history(series: pd.Series, allow_placeholder: bool = False) -> None:
+    """Raise if the series carries placeholder (is_demo) months. Real months
+    pass whatever their date, so SSM's real 2021-22 files replace the
+    placeholder with no code change. allow_placeholder=True is for the
+    what-if preview only (scripts/preview_router_synth.py); the live router
+    never sets it."""
+    marked = series.attrs.get(PLACEHOLDER_ATTR)
+    if not allow_placeholder and marked and series.index.isin(list(marked)).any():
         raise ValueError(
-            f"history starts {series.index.min():%Y-%m}, before {REAL_START:%Y-%m}: "
-            "synthetic months must never reach a forecasting model - read the _Real view"
+            f"history contains {int(series.index.isin(list(marked)).sum())} placeholder (is_demo) months: "
+            "placeholder rows must never reach a live forecast - read the _Real view"
         )
 
 
@@ -91,14 +103,14 @@ def build_features(history: np.ndarray, target_month: pd.Timestamp) -> tuple[np.
     return np.asarray(feats, dtype=float), scale
 
 
-def training_rows(pool: dict, before: pd.Timestamp) -> tuple[np.ndarray, np.ndarray]:
+def training_rows(pool: dict, before: pd.Timestamp, allow_placeholder: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """Every (SKU, month) in `pool` with month < `before` and at least
     MIN_HISTORY months of history since first sale. Target = that month's
     quantity / scale. `before` is exclusive, so nothing at or after the month
     being forecast can enter training."""
     X, y = [], []
     for series in pool.values():
-        assert_real_history(series)
+        assert_real_history(series, allow_placeholder)
         s = from_first_sale(series)
         values = s.to_numpy(dtype=float)
         for t in range(MIN_HISTORY, len(s)):
@@ -118,15 +130,16 @@ class GlobalForecaster:
     """Holds the training pool and refits per target month on demand. One
     booster per month is cached for the life of the object only."""
 
-    def __init__(self, pool: dict):
+    def __init__(self, pool: dict, allow_placeholder: bool = False):
         self.pool = pool
+        self.allow_placeholder = allow_placeholder      # preview script only; the live router never sets it
         self._cache: dict[pd.Timestamp, tuple[xgb.Booster | None, int]] = {}
 
     def booster_for(self, target_month: pd.Timestamp) -> tuple[xgb.Booster | None, int]:
         """(model trained on months strictly before `target_month`, training
         rows). The model is None when the pool is under MIN_TRAINING_ROWS."""
         if target_month not in self._cache:
-            X, y = training_rows(self.pool, before=target_month)
+            X, y = training_rows(self.pool, before=target_month, allow_placeholder=self.allow_placeholder)
             booster = None
             if len(y) >= MIN_TRAINING_ROWS:
                 booster = xgb.train(PARAMS, xgb.DMatrix(X, label=y), num_boost_round=NUM_ROUNDS)
@@ -138,7 +151,7 @@ class GlobalForecaster:
         The forecast is None with a reason when this model cannot produce a
         number; the caller falls back. Only months before `target_month` are
         read from `series`."""
-        assert_real_history(series)
+        assert_real_history(series, self.allow_placeholder)
         booster, n_rows = self.booster_for(target_month)
         if booster is None:
             return None, n_rows, f"xgb_unavailable: {n_rows} training rows < {MIN_TRAINING_ROWS}"

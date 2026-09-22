@@ -277,6 +277,7 @@ def test_purchase_natural_key_no_longer_collapses_cross_region_rows():
         "invoice_num": ["BILL/2025/001", "BILL/2025/001"],
         "principal": ["delmonte", "delmonte"],
         "region": ["pangasinan", "ilocos"],
+        "invoice_date": ["2025-03-01", "2025-03-01"],  # in the key since migration 0025
         "untaxed_amount": [1000.0, 500.0],
     })
     out, report = dedup_facts(df, rule.natural_key)

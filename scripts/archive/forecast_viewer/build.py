@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 warnings.simplefilter("ignore")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
+REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, REPO)
 
 from analytics.forecasting.baseline import (

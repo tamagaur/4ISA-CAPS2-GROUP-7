@@ -142,3 +142,9 @@ batch:
 # file's 3 leading blank columns) are deliberately NOT mapped here and
 # NOT extracted — confirmed blank/uninformative in profiling
 # (SOH_PROFILE.md §b). Not "every confirmed column" per the ruling scope.
+# CORRECTED 2026-09-22 (X6): "blank" is wrong for Hierarchy Node - the
+# 2026-09-21 dropped-columns audit (reports/dropped_columns_2026-09-21.csv)
+# counts 30,723 rows with a value in 40 of 65 SOH sheets (e.g. 4419, 3103,
+# 6A41). EXCLUSION RULE: not extracted because no table has a column for it
+# and nothing downstream reads it; what the code means is UNVERIFIED (SSM has
+# not said). Loading it needs that answer plus a migration, not a map entry.

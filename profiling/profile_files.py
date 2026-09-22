@@ -95,7 +95,12 @@ REGION_PATTERNS = [
     # itself (already matched by the first alternative) - no legitimate
     # "PANGOLIN"-style over-match exists in this data.
     ("pangasinan", re.compile(r"pangasinan|pang(?![a-z])|pang\.", re.I)),
-    ("ilocos", re.compile(r"ilocos", re.I)),
+    # 2026-09-21 (completeness audit F3): the August 2023 Del Monte inventory
+    # workbook names its Ilocos count sheet "ILO 090223". "ilocos" never matched,
+    # the file-path fallback hit "PANGASINAN" first, and 193 real Ilocos stock
+    # lines were deduped against Pangasinan rows. Checked against all 1,499
+    # staged (file, sheet) pairs: this sheet is the only one the rule changes.
+    ("ilocos", re.compile(r"ilocos|(?<![a-z])ilo(?![a-z])", re.I)),
     # Fixed 2026-08: same root cause as DOC_TYPE_PATTERNS's unilever_sku
     # entry above - the real filename has zero characters between "La"
     # and "Union".
