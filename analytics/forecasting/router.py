@@ -39,14 +39,14 @@ from analytics.segmentation.bins import length_v2
 LIVE_MODEL = {"short": "ma3", "medium": "tsb", "long": "xgb_ma3_avg"}
 
 
-def assert_real_rows(frame: pd.DataFrame, month_col: str = "calendar_month") -> None:
-    """Raise if a demand frame carries any is_demo=true row or any month
-    before 2023-01. The _Real views exclude is_demo rows structurally, so
-    either condition means the caller read a base table."""
-    if "is_demo" in frame.columns and frame["is_demo"].fillna(False).astype(bool).any():
-        raise ValueError("demand frame contains is_demo=true rows: forecasting models read the _Real views only")
-    if len(frame):
-        assert_real_history(pd.Series(0.0, index=pd.to_datetime(frame[month_col].astype(str) + "-01")))
+def assert_real_rows(frame: pd.DataFrame, allow_placeholder: bool = False) -> None:
+    """Raise if a demand frame carries any is_demo=true (placeholder) row. The
+    _Real views exclude them structurally, so one here means the caller read a
+    base table. Months are not judged by date: real 2021-22 rows pass.
+    allow_placeholder=True is for scripts/preview_router_synth.py only."""
+    for col in ("is_demo", "is_placeholder"):
+        if not allow_placeholder and col in frame.columns and frame[col].fillna(False).astype(bool).any():
+            raise ValueError(f"demand frame contains {col}=true rows: forecasting models read the _Real views only")
 
 
 def bin_at(history: pd.Series) -> tuple[str, int]:
@@ -62,10 +62,12 @@ def ma3_value(history: pd.Series) -> float:
 
 
 def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForecaster | None = None,
-          force_bin: str | None = None) -> dict:
+          force_bin: str | None = None, allow_placeholder: bool = False) -> dict:
     """One-step-ahead forecast for `target_month`, reading only months before
     it. `force_bin` scores a fixed model over past months (holdout error of
     the model served today); leave it None to bin from the history.
+    `allow_placeholder` lets placeholder (is_demo) months through for the
+    what-if preview only; the live runner never passes it.
 
     Guard order, first hit wins, fallback is always MA3 with the reason kept:
       1. the challenger produced a number (XGBoost can have none: no positive
@@ -74,7 +76,7 @@ def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForec
       3. the final value is below zero.
     A served MA3 is floored at zero, as the runner has always done.
     """
-    assert_real_history(series)
+    assert_real_history(series, allow_placeholder)
     history = series[series.index < target_month]
     if len(history) < 1:
         raise ValueError("route() needs at least one month of history before target_month")
@@ -130,13 +132,13 @@ def _safe_xgb(forecaster: GlobalForecaster, series: pd.Series, target_month: pd.
 
 
 def rolling_one_step(series: pd.Series, months, forecaster: GlobalForecaster | None = None,
-                     force_bin: str | None = None) -> pd.DataFrame:
+                     force_bin: str | None = None, allow_placeholder: bool = False) -> pd.DataFrame:
     """route() at each of `months`, one step ahead, refit at every origin.
     Columns: month, actual, value (as served, guards applied), ma3 (the
     benchmark, floored at zero like a served MA3), method, backup_fired."""
     rows = []
     for month in months:
-        r = route(series, month, forecaster, force_bin=force_bin)
+        r = route(series, month, forecaster, force_bin=force_bin, allow_placeholder=allow_placeholder)
         if r["value"] is None:
             continue
         rows.append({"month": month, "actual": float(series.loc[month]), "value": r["value"],
