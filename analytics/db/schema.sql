@@ -516,7 +516,8 @@ CREATE INDEX IF NOT EXISTS ix_abc_classification_tier ON ABC_Classification (tie
 -- binning Round 1 — reports/BINNING_ROUND1_2026-09.md). BINS ONLY: no
 -- model runs, no MASE, no model assignment written here — that is Phase 3.
 -- sku_traits is computed once per (product_key, cohort_period, abc_method)
--- (abc_method + the widened key added by migration 0020); sku_segment
+-- (abc_method + the widened key come from migration 0020 - see the note on
+-- the table's UNIQUE line); sku_segment
 -- holds one row per (product_key, cohort_period, abc_method, scheme) so
 -- later schemes (trend_v1, volatility_v1, newness_v1, combined_v1) add rows
 -- here without touching sku_traits or the schema again.
@@ -539,7 +540,11 @@ CREATE TABLE IF NOT EXISTS sku_traits (
     trend_pvalue                            NUMERIC,  -- migration 0022: Mann-Kendall two-sided p, from first sale
     trend_slope                              NUMERIC,  -- migration 0022: Theil-Sen slope, units/month, from first sale
     computed_at                            TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (product_key, cohort_period, abc_method)  -- migration 0020: was (product_key, cohort_period)
+    -- Declared in its PRE-0020 two-column form ON PURPOSE. Migration 0020 drops this constraint and adds
+    -- UNIQUE (product_key, cohort_period, abc_method) under an explicit name, without IF NOT EXISTS. A fresh
+    -- build runs this file and then every migration, so declaring the three-column key here makes 0020 fail
+    -- with "relation ... already exists" (it did, 2026-09-21). The live key IS the three-column one.
+    UNIQUE (product_key, cohort_period)
 );
 
 CREATE TABLE IF NOT EXISTS sku_segment (
