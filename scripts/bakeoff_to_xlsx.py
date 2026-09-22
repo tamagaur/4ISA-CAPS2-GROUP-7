@@ -7,7 +7,7 @@ code + product name), red fill where a value fails its threshold (MAPE >=
 plus a Summary sheet and a Legend. Rolling-origin 1-step backtest, last 6
 real months, real Tier A. Reuses the model fns from scripts.model_bakeoff;
 metrics and the "unstable" MAPE label come from
-analytics.forecasting.diagnostic_metrics, same as tools/forecast_viewer.
+analytics.forecasting.diagnostic_metrics, same as scripts/archive/forecast_viewer.
 
 Usage:  python -m scripts.bakeoff_to_xlsx [out_dir]     (default: reports/)
 """
