@@ -32,8 +32,11 @@ Run this yourself - writes to `public` need Yuan's explicit go. Requires SUPABAS
       python -m scripts.apply_real_recovery_to_public --source ssm_synth_v2 --target public --i-have-approval
   undo it (uses the change log the cutover wrote next to its backup):
       python -m scripts.apply_real_recovery_to_public --rollback backups/real_recovery_<timestamp> --i-have-approval
-  Rollback restores every row and value; the schema objects of 0024/0026/0027 stay (additive, emptied), 0025 is
-  reverted.
+  full restore from the backup instead (independent of the change log; every touched table, row for row):
+      python -m scripts.apply_real_recovery_to_public --restore backups/real_recovery_<timestamp> --i-have-approval
+  Rollback and restore both end by re-hashing every backed-up table against the backup's md5 and resetting the
+  identity sequences to the backup's positions. The schema objects of 0024/0026/0027 stay (additive, empty / NULL);
+  0025 is reverted.
 
 One transaction. Before COMMIT it checks, and rolls back on any failure:
   - every expected count above;
@@ -84,8 +87,9 @@ FACT_KEY = {"sales_fact": ["invoice_num", "principal", "region"],
             "sellout_fact": ["category_path", "region", "_period"]}
 PRODUCT_COLUMNS = ["product_name", "pack_size", "brand", "brand_source", "category_path"]
 UNILEVER_SKU = "principal = 'unilever' AND grain = 'sku'"
+# every table the cutover writes to (etl_quarantine is created by it: recorded as absent, restored to empty)
 BACKUP_TABLES = ["sales_fact", "purchase_fact", "salesreturn_fact", "sellout_fact", "inventory_fact",
-                 "product_dimension", "customer_dimension", "salesman_dimension"]
+                 "product_dimension", "customer_dimension", "salesman_dimension", "schema_migrations", "etl_quarantine"]
 # ABC_Classification is fingerprinted per method - never as the union of 'single' and 't3m' (tests/test_abc_reader_pinning.py)
 ISOLATION = [("forecast_result", "TRUE"), ("sku_segment", "TRUE"), ("sku_traits", "TRUE"),
              ("abc_classification", "method = 'single'"), ("abc_classification", "method IS DISTINCT FROM 'single'")]
@@ -131,16 +135,114 @@ def real_diff(cur, S: str, T: str) -> dict:
     return out
 
 
+def export_csv(cur, T: str, t: str, cols: list[str]) -> bytes:
+    """The table on an EXPLICIT column list in primary-key order, so the checksum of an unchanged table stays the
+    same after a migration adds a column."""
+    buf = io.StringIO()
+    cur.copy_expert(f"COPY (SELECT {', '.join(cols)} FROM {T}.{t} ORDER BY 1) TO STDOUT WITH (FORMAT csv, HEADER true)", buf)
+    return buf.getvalue().encode("utf-8")
+
+
+def identity_state(cur, T: str, t: str) -> dict:
+    cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s AND is_identity = 'YES'", (T, t))
+    state = {}
+    for (col,) in cur.fetchall():
+        cur.execute(f"SELECT last_value, is_called FROM {one(cur, 'SELECT pg_get_serial_sequence(%s, %s)', (f'{T}.{t}', col))}")
+        state[col] = list(cur.fetchone())
+    return state
+
+
 def backup(cur, T: str, out_dir: Path) -> None:
+    """Full backup of every table the cutover writes to: data (CSV), column list, row count, md5, identity-sequence
+    positions. `--restore <dir>` puts all of it back; `--verify-backup <dir>` re-reads and re-hashes the files."""
     out_dir.mkdir(parents=True, exist_ok=False)
     manifest = {"target": T, "taken_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "tables": {}}
     for t in BACKUP_TABLES:
-        buf = io.StringIO()
-        cur.copy_expert(f"COPY (SELECT * FROM {T}.{t} ORDER BY 1) TO STDOUT WITH (FORMAT csv, HEADER true)", buf)
-        data = buf.getvalue().encode("utf-8")
+        if not one(cur, "SELECT to_regclass(%s) IS NOT NULL", (f"{T}.{t}",)):
+            manifest["tables"][t] = {"absent": True}
+            continue
+        cols = columns(cur, T, t)
+        data = export_csv(cur, T, t, cols)
         (out_dir / f"{t}.csv").write_bytes(data)
-        manifest["tables"][t] = {"rows": one(cur, f"SELECT COUNT(*) FROM {T}.{t}"), "md5": hashlib.md5(data).hexdigest()}
+        manifest["tables"][t] = {"rows": one(cur, f"SELECT COUNT(*) FROM {T}.{t}"), "md5": hashlib.md5(data).hexdigest(),
+                                 "columns": cols, "identity": identity_state(cur, T, t)}
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
+def reset_sequences(cur, T: str, manifest: dict, checks: list) -> None:
+    """Identity sequences back to the backup's positions - refused for a table whose current max key is above the
+    saved position (a row written after the backup would then collide)."""
+    for t, m in manifest["tables"].items():
+        for col, (last_value, is_called) in m.get("identity", {}).items():
+            current_max = one(cur, f"SELECT COALESCE(MAX({col}), 0) FROM {T}.{t}")
+            ok = current_max <= last_value
+            checks.append((f"{t}.{col} max key {current_max} <= saved sequence {last_value}", ok, True, ok))
+            if ok:
+                cur.execute("SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)", (f"{T}.{t}", col, last_value, is_called))
+
+
+def verify_against_backup(cur, T: str, backup_dir: Path, manifest: dict, checks: list) -> None:
+    for t, m in manifest["tables"].items():
+        if m.get("absent"):
+            present = one(cur, "SELECT to_regclass(%s) IS NOT NULL", (f"{T}.{t}",))
+            n = one(cur, f"SELECT COUNT(*) FROM {T}.{t}") if present else 0
+            checks.append((f"{t} (absent at backup) holds no rows", n, 0, n == 0))
+            continue
+        got = hashlib.md5(export_csv(cur, T, t, m["columns"])).hexdigest()
+        checks.append((f"{t} md5 equals the backup's", got, m["md5"], got == m["md5"]))
+        extra = [c for c in columns(cur, T, t) if c not in m["columns"]]
+        if extra:
+            nonnull = one(cur, f"SELECT COUNT(*) FROM {T}.{t} WHERE " + " OR ".join(f"{c} IS NOT NULL" for c in extra))
+            checks.append((f"{t} columns added after the backup {extra} hold no value", nonnull, 0, nonnull == 0))
+        state = identity_state(cur, T, t)
+        checks.append((f"{t} identity sequences equal the backup's", state, m["identity"], state == m["identity"]))
+
+
+def revert_purchase_key(cur, T: str) -> None:
+    cur.execute(f"ALTER TABLE {T}.purchase_fact DROP CONSTRAINT IF EXISTS purchase_fact_invoice_num_principal_region_invoice_date_key")
+    cur.execute(f"""ALTER TABLE {T}.purchase_fact DROP CONSTRAINT IF EXISTS purchase_fact_invoice_num_principal_region_key""")
+    cur.execute(f"ALTER TABLE {T}.purchase_fact ADD CONSTRAINT purchase_fact_invoice_num_principal_region_key UNIQUE (invoice_num, principal, region)")
+
+
+def restore_from(cur, backup_dir: Path, checks: list) -> None:
+    """Puts every backed-up table back to the backup, row for row, by primary key: rows the backup does not have are
+    deleted, rows it has are re-inserted with their original keys, changed rows are overwritten. Columns a migration
+    added after the backup go back to NULL. No TRUNCATE, no DROP of a table; migration 0025's key is reverted, the
+    additive objects of 0024/0026/0027 stay (empty / NULL)."""
+    manifest = json.loads((backup_dir / "manifest.json").read_text(encoding="utf-8"))
+    T = manifest["target"]
+    for name, m in manifest["tables"].items():
+        if not m.get("absent") and hashlib.md5((backup_dir / f"{name}.csv").read_bytes()).hexdigest() != m["md5"]:
+            raise RuntimeError(f"{name}.csv does not match its manifest md5 - backup damaged, nothing restored")
+    order = ["sales_fact", "purchase_fact", "salesreturn_fact", "sellout_fact", "inventory_fact", "etl_quarantine",
+             "customer_dimension", "salesman_dimension", "product_dimension", "schema_migrations"]
+    for t in order:
+        m = manifest["tables"][t]
+        if m.get("absent"):
+            if one(cur, "SELECT to_regclass(%s) IS NOT NULL", (f"{T}.{t}",)):
+                cur.execute(f"DELETE FROM {T}.{t}")
+            continue
+        pk = one(cur, f"""SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                          WHERE i.indrelid = '{T}.{t}'::regclass AND i.indisprimary""")
+        cols = m["columns"]
+        cur.execute(f"CREATE TEMP TABLE bk (LIKE {T}.{t}) ON COMMIT DROP")
+        with open(backup_dir / f"{t}.csv", encoding="utf-8") as fh:
+            cur.copy_expert(f"COPY bk ({', '.join(cols)}) FROM STDIN WITH (FORMAT csv, HEADER true)", fh)
+        cur.execute(f"DELETE FROM {T}.{t} x WHERE NOT EXISTS (SELECT 1 FROM bk WHERE bk.{pk} = x.{pk})")
+        deleted = cur.rowcount
+        every = columns(cur, T, t)
+        cur.execute(f"""UPDATE {T}.{t} x SET {', '.join(f'{c} = bk.{c}' for c in every if c != pk)} FROM bk
+                        WHERE bk.{pk} = x.{pk} AND ROW({', '.join('x.' + c for c in every)}) IS DISTINCT FROM ROW({', '.join('bk.' + c for c in every)})""")
+        updated = cur.rowcount
+        cur.execute(f"""INSERT INTO {T}.{t} ({', '.join(every)}) OVERRIDING SYSTEM VALUE
+                        SELECT {', '.join('bk.' + c for c in every)} FROM bk WHERE NOT EXISTS (SELECT 1 FROM {T}.{t} x WHERE x.{pk} = bk.{pk})""")
+        print(f"  restore {t}: deleted {deleted}, updated {updated}, re-inserted {cur.rowcount}")
+        cur.execute("DROP TABLE bk")
+    if one(cur, """SELECT COUNT(*) FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid JOIN pg_namespace n ON n.oid = t.relnamespace
+                   WHERE n.nspname = %s AND t.relname = 'purchase_fact' AND c.conname = 'purchase_fact_invoice_num_principal_region_invoice_date_key'""", (T,)):
+        revert_purchase_key(cur, T)
+    reset_sequences(cur, T, manifest, checks)
+    verify_against_backup(cur, T, backup_dir, manifest, checks)
 
 
 def build_rehearsal(cur, R: str) -> None:
@@ -394,14 +496,17 @@ def rollback_from(cur, backup_dir: Path, checks: list) -> None:
                 cur.execute(f"UPDATE {T}.product_dimension SET {col} = %s WHERE product_key = %s", (v, k))
     cur.execute(f"DELETE FROM {T}.etl_quarantine WHERE run_id = ANY(%s)", (log.get("quarantine_run_ids", []),))
     if "0025_purchase_fact_key_invoice_date.sql" in log["migrations_applied"]:
-        cur.execute(f"ALTER TABLE {T}.purchase_fact DROP CONSTRAINT IF EXISTS purchase_fact_invoice_num_principal_region_invoice_date_key")
-        cur.execute(f"ALTER TABLE {T}.purchase_fact ADD CONSTRAINT purchase_fact_invoice_num_principal_region_key UNIQUE (invoice_num, principal, region)")
-        cur.execute(f"DELETE FROM {T}.schema_migrations WHERE filename = '0025_purchase_fact_key_invoice_date.sql'")
-    # 0024 / 0026 / 0027 are additive and stay: etl_quarantine emptied of this run's rows, the wider brand_source CHECK,
-    # and the 0027 columns, every value of which was NULL before the cutover and is restored to NULL above.
-    for t, m in json.loads((backup_dir / "manifest.json").read_text(encoding="utf-8"))["tables"].items():
-        n = one(cur, f"SELECT COUNT(*) FROM {T}.{t}")
-        checks.append((f"{t} row count back to the backup's", n, m["rows"], n == m["rows"]))
+        revert_purchase_key(cur, T)
+    # The ledger goes back to the backup's rows. 0024 / 0026 / 0027 are additive and their objects stay: etl_quarantine
+    # (emptied of this run's rows), the wider brand_source CHECK, and the 0027 columns, every value of which was NULL
+    # before the cutover and is NULL again. A later re-apply re-runs those three files; all are idempotent.
+    cur.execute(f"DELETE FROM {T}.schema_migrations WHERE filename = ANY(%s)", (log["migrations_applied"],))
+    for t in NEW_COLUMNS:
+        cur.execute(f"UPDATE {T}.{t} SET {', '.join(f'{c} = NULL' for c in NEW_COLUMNS[t])} WHERE "
+                    + " OR ".join(f"{c} IS NOT NULL" for c in NEW_COLUMNS[t]))
+    manifest = json.loads((backup_dir / "manifest.json").read_text(encoding="utf-8"))
+    reset_sequences(cur, T, manifest, checks)
+    verify_against_backup(cur, T, backup_dir, manifest, checks)
 
 
 def main() -> int:
@@ -410,10 +515,12 @@ def main() -> int:
     p.add_argument("--target", default=None, help="'public' for the real cutover")
     p.add_argument("--rehearse", default=None, metavar="SCHEMA", help="build a scratch copy of the live tables and run the cutover against it")
     p.add_argument("--rollback", default=None, metavar="BACKUP_DIR", help="undo a cutover from the change log it wrote")
+    p.add_argument("--restore", default=None, metavar="BACKUP_DIR",
+                   help="put every backed-up table back to the backup (full restore, independent of the change log)")
     p.add_argument("--i-have-approval", action="store_true", help="required for anything that writes to public")
     args = p.parse_args()
-    if sum(bool(x) for x in (args.target, args.rehearse, args.rollback)) != 1:
-        p.error("pass exactly one of --target public, --rehearse SCHEMA, --rollback BACKUP_DIR")
+    if sum(bool(x) for x in (args.target, args.rehearse, args.rollback, args.restore)) != 1:
+        p.error("pass exactly one of --target public, --rehearse SCHEMA, --rollback BACKUP_DIR, --restore BACKUP_DIR")
     if args.target and args.target != "public":
         p.error("--target only accepts 'public'; use --rehearse for anything else")
     if args.rehearse and (args.rehearse == "public" or args.rehearse == args.source):
@@ -423,12 +530,12 @@ def main() -> int:
     cur = conn.cursor()
     checks: list = []
     try:
-        if args.rollback:
-            backup_dir = Path(args.rollback)
-            target = json.loads((backup_dir / "changes.json").read_text(encoding="utf-8"))["target"]
+        if args.rollback or args.restore:
+            backup_dir = Path(args.rollback or args.restore)
+            target = json.loads((backup_dir / "manifest.json").read_text(encoding="utf-8"))["target"]
             if target == "public" and not args.i_have_approval:
-                sys.exit("refusing: a rollback of public needs --i-have-approval")
-            rollback_from(cur, backup_dir, checks)
+                sys.exit("refusing: a rollback or restore of public needs --i-have-approval")
+            (rollback_from if args.rollback else restore_from)(cur, backup_dir, checks)
         else:
             T = args.target or args.rehearse
             if T == "public" and not args.i_have_approval:
@@ -451,7 +558,7 @@ def main() -> int:
             return 1
         conn.commit()
         print(f"\nCOMMITTED - {len(checks)} checks passed.")
-        if not args.rollback:
+        if not (args.rollback or args.restore):
             print(f"undo with: python -m scripts.apply_real_recovery_to_public --rollback {backup_dir.relative_to(REPO).as_posix()} --i-have-approval")
         return 0
     except Exception:
