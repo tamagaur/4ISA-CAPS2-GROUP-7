@@ -734,6 +734,18 @@ trailing-3-month**, **119 overlap** between the two bases.
    not a pipeline defect.
 7. `tools/forecast_viewer/*` has uncommitted changes from 2026-09-16,
    owner unknown, unrelated to Phase 1–2 work.
+8. `CLAUDE.md`'s data-interface rule cites `schema.sql:698-714` for the
+   `_Real` views. Stale: the six `CREATE OR REPLACE VIEW … _Real` statements
+   are at `analytics/db/schema.sql:832-848` (and the file is at
+   `analytics/db/schema.sql`, not the repo root). Found 2026-09-23 while
+   sourcing the dev viewer's `_Real` node. **Logged only, not fixed** — the
+   rule itself is unchanged and correct.
+9. §16's `sell_out` relabel arithmetic does not close: 8,584 combined in,
+   1,023 removed, 124 added is 7,685, but the report states — and measured —
+   7,686, and 7,686 − 26 = 7,660 matches the frozen target. One row is
+   unexplained in the write-up, not in the data (the loaded count is right
+   either way). Found 2026-09-23. **Logged only, not fixed** — needs someone
+   to re-derive the relabel counts, not a number changed in the report.
 
 ## 15. SKU Management / ABC page recon — 2026-09-18 (Audrey)
 
@@ -821,3 +833,48 @@ Provenance / open items (logged, not worked):
 | 5 Del Monte category product_name values in public | writer UNVERIFIED |
 | `product_dimension.manual_reorder_point` | public only, 0/17,406 populated, no migration, no code — **ask Audrey** |
 | Product master cleanup queue | DM pack size from the price list; 2021-22 SOH for product details only (never quantities) |
+
+### 17.1 Connection route for the recovery cutover — documented deviation (2026-09-23)
+
+The standing rule is "direct URL, port 5432, never the pooler on 6543". Measured from Yuan's machine on
+2026-09-23, the direct URL is not usable at all:
+
+| route | host | DNS | connects | mode |
+|---|---|---|---|---|
+| direct 5432 | `db.dsdxemtmbbmdtccwxzyk.supabase.co` | AAAA only, **no A record** | **no** — `getaddrinfo failed` | session |
+| session pooler 5432 | `aws-0-ap-south-1.pooler.supabase.com` | IPv4 | yes | session |
+| transaction pooler 6543 | `aws-0-ap-south-1.pooler.supabase.com` | IPv4 | yes | transaction |
+
+The machine has no global IPv6 address and no route to the direct host's AAAA address, so the direct URL fails at
+name resolution before any connection is attempted. **Decision: run the recovery cutover over the SESSION pooler on
+5432.** It preserves everything the "never 6543" rule exists to protect — one long-lived transaction per batch,
+session GUCs, `CREATE TEMP TABLE ... ON COMMIT DROP` (used by `restore_from`), and `COPY ... TO STDOUT` (used by
+every backup). Transaction mode on 6543 preserves none of them reliably and is still excluded.
+
+Accepted trade-off: the pooled hop can drop mid-statement — it did twice on 2026-09-23, both times during a
+~6-minute `COPY` while the link was degraded (~60 KB/s; the same backup later ran in 43 s). Batch mode is the
+mitigation: a dropped connection costs one batch, not the run, and the ledger makes the resume exact.
+
+Two pooler behaviours found and handled, both in `scripts/apply_real_recovery_to_public.py`:
+
+1. Supavisor **drops the libpq startup `options`**, so `connect()`'s `statement_timeout=0` never arrived and the
+   session kept the database default of `2min`. This killed migration 0027 mid-batch. Verified: startup options
+   reported `2min` on both pooler ports; an explicit `SET` reported `0`. A local `connect()` wrapper now issues
+   `SET statement_timeout = 0`, `SET idle_in_transaction_session_timeout = 0` and `SET lock_timeout = '30s'` on
+   every session instead of trusting the handshake. This is correct on the direct connection too.
+2. A whole-database `pg_total_relation_size()` scan ran for **18 minutes without completing** and had to be
+   killed. It was not slow — it was **blocked**, and the pile-up is the real lesson. When the pooled client
+   connection died mid-`COPY`, the *server* session survived as `idle in transaction` holding `AccessShareLock` on
+   `ssm_recovery_oneshot.sales_fact` (pid 4000995, 50 min). Migration 0027's `ALTER TABLE Sales_Fact ADD COLUMN`
+   from the next run then queued for `AccessExclusiveLock` behind it (pid 4001068, 42 min), and the size scan
+   queued behind *that* (pid 4002426, 28 min) — and a later `DROP SCHEMA` behind all three. Three
+   `pg_terminate_backend` calls cleared all 80 locks at once.
+   Two rules from this: after any failed pooled run, **check `pg_stat_activity` for an orphaned `idle in
+   transaction` backend before starting the next one** — the client exiting does not end the server session; and
+   read schema sizes from `pg_class.relpages` (sub-second, lock-free), only at the start and end of a run, never
+   mid-cutover. `connect()` now also sets `lock_timeout = '30s'`, so a blocked statement fails fast and names its
+   blocker instead of hanging.
+
+Scratch cleanup the same day: dropped `ssm_recovery_rehearsal`, `ssm_recovery_original`, `ssm_abc_phase2`,
+`ssm_abc_repro`. Database went 417.2 MB -> 200.5 MB (relpages basis) against the 500 MB cap. Each `DROP SCHEMA
+CASCADE` took under a second; the earlier 18-minute hang was the size query, not the drops.
