@@ -10,12 +10,15 @@ source file exactly, with nothing missing and nothing dropped by the loader. It 
 demand. The reason those SKUs score badly is timing: for 20 of the 27 SKUs we could
 measure, the big change in their sales level happens *inside* the six months we score
 them on, and eight of those changes land in December 2025. A forecast made before a
-change cannot know about it. We then tested 51 alternative forecasting models on exactly
+change cannot know about it. To be clear what these changes are: **partial level changes,
+not collapses or shutdowns, and they move in both directions** — several of these SKUs
+stepped sharply *up*. Every one of the 28 is still selling. We then tested 51 alternative
+forecasting models on exactly
 these 28 SKUs, and none of them passed our test for being measurably better — including
 every kind of smoothing. So we are not changing the model. We flag these SKUs for human
 review, we keep their wide uncertainty ranges visible rather than hiding them, and we
 leave stock buffering to the ordering side of the system. We also have one question for
-SSM: what happened around December 2025?
+SSM: did the range, assortment or promotion plan change around December 2025?
 
 ---
 
@@ -61,6 +64,14 @@ unusual number of SKUs dropping together; the worst is 2 SKUs out of 72 (2.8%).
 **So this is real demand behaviour, not a pipeline defect.** That is the single most
 important sentence in this document.
 
+**And none of these SKUs shut down.** Across all 28: **0** have a zero or negative final
+month, **1** has a single zero month anywhere in its history, and **none** is in the
+`dead_sku` path (the status for a SKU with no sale in six months). Two SKUs each carry one
+negative month — −124 units against a median of 35,104, and −1 unit. Those are
+**returns-dominated months**, where credits exceeded sales; our metrics module treats a
+negative actual as exactly that and never as demand
+(`analytics/forecasting/diagnostic_metrics.py`).
+
 ## 4. Finding 2 — it is a timing problem
 
 For **20 of the 27** SKUs where we could measure it, the largest change in sales level
@@ -68,11 +79,19 @@ happens *inside* the six months we score them on, and **8 of those land in Decem
 (`fit_review_common_2026-09-23.csv`, `cause_largest_step_month`).
 
 Why that matters: a forecast for October is made using data up to September. If a SKU's
-demand permanently halves in October, the October forecast was built from a world where it
-had not halved yet. No model can forecast a change it has not seen. It can only react
+demand moves to a new level in October, the October forecast was built from a world where
+it had not moved yet. No model can forecast a change it has not seen. It can only react
 *after* the change shows up — which is what MA3 does, and why it takes about three months
 to catch up. Scoring a SKU on precisely the months when it changed is close to the hardest
 possible test.
+
+**These moves go both ways, and that matters for how you read this whole document.** Of
+the 59 flagged months, **37 are above** the SKU's own median and **21 below**. The level
+shifts include increases of **3.25×, 2.22× and 1.59×** alongside the decreases
+(`fit_review_common_2026-09-23.csv`, `cause_level_shift`). The steepest faller, SKU
+64314335, is at **16%** of its own median over its last three months — and still sold
+**15,656 units** in its final month. Nothing here is a product dying; these are products
+whose selling level moved, up or down, and the forecast had not been told yet.
 
 **Worked example — SKU 64784425** (medium history, served by TSB):
 
@@ -174,12 +193,18 @@ them to diagnose or to define a new SKU grouping.
 
 ## 10. Open question for SSM
 
-**What happened around December 2025?** Eight of these SKUs have their largest level
-change in that single month, and more sit in the surrounding window. A delisting, a
-promotion ending, a supply interruption or a competitor entering would explain several at
-once — and it is a business fact no model can recover from the numbers alone. An answer
-here would tell us whether these are temporary dips to ride out or permanent declines to
-plan around. That distinction changes the order quantity; it does not change the model.
+**Did the range, assortment or promotion plan change around December 2025?** Eight of
+these SKUs have their largest level change in that single month, and more sit in the
+surrounding window — but **some stepped up while others stepped down**. That pattern
+points at a planned change rather than a problem: a range review, a pack or size
+switch where volume moved from one SKU to its replacement, a promotion starting or
+ending, or a change in what Unilever pushed that quarter.
+
+We are deliberately not asking "what went wrong." Nothing in the data says anything went
+wrong. What we cannot tell from the numbers alone is whether these new levels are
+temporary or permanent — and that is a business fact only SSM holds. An answer would tell
+us whether to treat these as dips to ride out or as the new normal to plan around. It
+changes the order quantity; it does not change the model.
 
 ---
 
