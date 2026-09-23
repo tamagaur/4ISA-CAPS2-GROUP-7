@@ -19,8 +19,23 @@ scripts/preview_router_synth.py: router_preview_synth.csv, series_synth.csv and
 preview_summary.csv, copied into data/ at build time. The build stops if any is
 missing. Placeholder months are never demand; the page labels them everywhere.
 
+TWO THINGS ARE COMPUTED HERE RATHER THAN READ (both labelled as such on the
+page, both checked against what the pipeline stored):
+  - MA3's MASE on the served model's holdout months (ma3_same_holdout).
+  - The confidence band over the HOLDOUT months (add_band_evidence). Only ONE
+    band is stored per SKU, around the planning-month forecast; no per-month
+    band exists anywhere. This re-runs the served model's rolling one-step
+    holdout - DEC-25's own protocol - and applies the writer's rule to each
+    month. Costs ~10s (one XGBoost booster per distinct holdout month, cached
+    across SKUs); there is no cheaper way, because the numbers do not exist.
+
+ETL and dashboard-API numbers on the Pipeline tab are NOT computed or queried:
+every one is copied from a file under reports/ and carries its citation (see
+ETL_NODES). Where no report states a number, the page prints "not on record".
+
 Usage (from the repo root, .env holding SUPABASE_DIRECT_URL or SUPABASE_DB_URL):
     python tools/dsd_dev_viewer/build.py [--preview-src <folder>]
+    python tools/dsd_dev_viewer/build.py --offline   # rebuild from data/db_snapshot.json
 """
 from __future__ import annotations
 
@@ -62,6 +77,234 @@ EXPECTED = {
     "model": {"ma3": 30, "tsb": 17, "xgb_ma3_avg": 72, "provisional": 13},
     "backup": {"not fired": 89, "not applicable": 43, "fired": 0},
     "forecast_result": 132,
+}
+
+# --------------------------------------------------------------------------- #
+# The stored confidence band - what it actually is
+# --------------------------------------------------------------------------- #
+# Writer: scripts/run_baseline_forecast.py:825 (CONFIDENCE_Z) and :828
+# (_confidence_band), called at :1034. Forecast_Result.confidence_lower/upper =
+# forecast_value +/- 1.645 * the SERVED model's rolling one-step holdout RMSE,
+# lower bound floored at 0, NULL/NULL when that RMSE is undefined. A symmetric
+# normal-approximation interval around a point forecast - not a predictive
+# interval from a fitted model.
+#
+# LEVEL: not decided anywhere. DEC-25 (ARCHITECTURE.md:95) states the RMSE basis
+# and states no level. The only level claim in the repo is the writer's own
+# comment (run_baseline_forecast.py:821-824): "~90% normal-approximation
+# multiplier (not 95%'s 1.96)". 1.645 is the two-sided 90% normal quantile, so
+# 90% is nominal and undocumented as a decision. Nothing in the repo measures
+# whether it holds - which is what this page's coverage columns test.
+CONFIDENCE_Z = 1.645
+BAND_LEVEL_NOMINAL = 0.90
+# The one phrase every level mention uses. There is no decided level to cite, so
+# the multiplier and the absence of a DEC-25 statement travel with the number.
+BAND_LEVEL_LABEL = ("nominal ~90% (level not documented in DEC-25; multiplier 1.645 "
+                    "from the writer code)")
+BAND_DEF = {
+    "interval": "Symmetric normal-approximation interval around the point forecast: "
+                "forecast ± 1.645 × RMSE, lower bound floored at 0. NULL/NULL when the RMSE is "
+                "undefined (e.g. a 1-month holdout) - never a fabricated band.",
+    "sigma": "The SERVED model's own rolling one-step holdout RMSE "
+             "(model_params.holdout_metrics_served.rmse) - not MA3's, unless MA3 is what serves that "
+             "SKU. Same holdout and same protocol as the stored mape / mase / wape (DEC-25).",
+    "level": BAND_LEVEL_LABEL + ". 1.645 is the two-sided 90% normal quantile, and "
+             "scripts/run_baseline_forecast.py:821-824 calls it a “~90% normal-approximation "
+             "multiplier”. DEC-25 documents the RMSE basis and does NOT state a level, so there is "
+             "no decided level to cite: the figure used as the comparison point below is that "
+             "comment's nominal one and nothing stronger.",
+    "stored": "ONE band per SKU, on the forecast_date row, around the PLANNING-month forecast. No "
+              "per-holdout-month band is stored anywhere in the database.",
+    "corridor": "The corridor on this page is computed at build time: the served model's rolling "
+                "one-step holdout is re-run (DEC-25's protocol) and the writer's own rule is applied "
+                "to each month's forecast, using that SKU's one holdout RMSE. The recomputation is "
+                "checked against the stored mase / wape / rmse / holdout months.",
+    "ma3": "No MA3 band is stored. model_params.holdout_metrics_all_methods.ma3.rmse exists but "
+           "belongs to the RETIRED static 80/20 flat-line protocol - a different protocol from "
+           "DEC-25's, so it is not this band. MA3's corridor here is computed from MA3's own rolling "
+           "one-step RMSE on the same months, and is labelled computed everywhere it appears.",
+    "z": CONFIDENCE_Z,
+    "level_nominal": BAND_LEVEL_NOMINAL,
+    "level_label": BAND_LEVEL_LABEL,
+}
+
+# --------------------------------------------------------------------------- #
+# ETL and dashboard-API numbers - copied from reports/, never computed here
+# --------------------------------------------------------------------------- #
+# Rule for this block: a number appears only if a file under reports/ states it,
+# and the citation travels with it. Where no report states one, the value is NOR
+# and the page prints "not on record". The ETL stages are not re-run by this
+# build, so nothing here is measured live.
+NOR = "not on record"
+ETL_NODES = {
+    "raw": {
+        "title": "Raw source files", "sub": "data/raw/ (read-only)",
+        "source": "reports/FULL_DATA_AUDIT.md §A (generated 2026-08-25)",
+        "io": ["in 569 files", "out 8 families"], "mline": "179 never classified",
+        "columns": [["doc_type", 0], ["principal / corpus", 0], ["real?", 0], ["files", 1]],
+        "rows": [
+            ["inventory_sign_off", "delmonte", "real", 17],
+            ["inventory_sign_off", "synthetic corpus", "synthetic", 92],
+            ["purchase_order", "delmonte", "real", 11],
+            ["purchase_order", "synthetic corpus", "synthetic", 104],
+            ["rmr_gs_bo", "delmonte", "real", 2],
+            ["sales_register", "delmonte", "real", 22],
+            ["sales_return", "delmonte", "real", 19],
+            ["sell_out", "delmonte", "real", 17],
+            ["ssis_summary", "Unilever+SSIS folders", "real", 105],
+            ["unilever_sku", "unilever", "real", 1],
+            ["unknown (never classified)", "mixed", "mixed", 179],
+        ],
+        "checks": [
+            {"ok": None, "text": "569 files on disk, and the 11 rows below sum to 569 exactly. No ROW count "
+                                 "exists at this stage on record - Extract is the first stage that counts rows."},
+            {"warn": True, "text": "179 files are never classified, so they have never been ingested under any "
+                                   "doc_type: 178 synthetic SALES_REGISTER_*/SELL_OUT_* files plus one under "
+                                   "data/raw/SSIS/. Root cause on record: profile_files.py's DOC_TYPE_PATTERNS "
+                                   "matches whitespace where those filenames use an underscore."},
+            {"ok": None, "text": "Formats: 567 .xlsx, 1 .xls (the La Union SKU file, MHTML-disguised), 1 file "
+                                 "with no extension (.gitkeep)."},
+        ],
+    },
+    "extract": {
+        "title": "Extract", "sub": "extract/driver.py → staging/*.parquet",
+        "source": "reports/PROJECT_STATE_2026-09.md §3 (staging/_manifest.json, 2026-08-20 20:44) + "
+                  "reports/PHASE1_EXECUTION_PLAN_2026-09.md “Fresh manifest state” and §4",
+        "io": ["in data/raw/ (569 files)", "out 1,590 sheets"], "mline": "2,089,347 rows · 0 reject",
+        "columns": [["doc_type", 0], ["sheets staged", 1], ["rows staged", 1], ["rejects", 1]],
+        "rows": [
+            ["ALL (8 families)", 1590, 2089347, 0],
+            ["ssis_summary", 805, 1949687, NOR],
+            ["sales_return", 68, 1931, NOR],
+            ["unilever_sku", 31, 44583, NOR],
+            ["the other 5 families", NOR, NOR, NOR],
+        ],
+        "checks": [
+            {"ok": None, "text": "8 families, 1,590 sheets, 2,089,347 rows staged, 0 rejects. No expected row "
+                                 "count is on record to compare against."},
+            {"warn": True, "text": "Per-family row counts are on record for 3 of the 8 families only; the other "
+                                   "5 are not on record."},
+            {"warn": True, "text": "unilever_sku's 31 sheets / 44,583 rows include ~30 non-La-Union sheets (SOH "
+                                   "etc.), not just the one real SKU-demand file (1 file / 24,906 rows)."},
+            {"ok": None, "text": "This manifest only ever tracked data/raw/. Synthetic files are written straight "
+                                 "into staging/ by a separate step, never through extract.driver, so Transform "
+                                 "sees more sheets than Extract staged - expected, not a defect (PHASE1 §4)."},
+        ],
+    },
+    "transform": {
+        "title": "Transform", "sub": "transform_driver.py → transform/_manifest.json",
+        "source": "reports/PHASE1_EXECUTION_PLAN_2026-09.md “Fresh manifest state”, step 1, §1 "
+                  "(purchase_order region fix), §2 (footer rows), §16 (sell_out relabel) + "
+                  "reports/COLUMN_GAP_AUDIT_2026-09.md (inventory header artifacts)",
+        "io": ["in staging/ glob", "out 720 promoted"], "mline": "902 demoted · 37 reject",
+        "columns": [["manifest state", 0], ["promoted", 1], ["demoted", 1], ["reject (sheets)", 1], ["blocked", 1]],
+        "rows": [
+            ["2026-08-20 snapshot", 669, NOR, 921, 805],
+            ["after Phase 1 step 1 (2026-09-09)", 720, 902, 86, 0],
+            ["after the purchase_order region fix (2026-09-09)", NOR, NOR, 37, 0],
+        ],
+        "checks": [
+            {"warn": True, "text": "37 sheets still reject, all genuine dedup conflicts: sales_return 14, "
+                                   "inventory_sign_off 11, sell_out 7, sales_register 5, purchase_order 0 (was 49 "
+                                   "before the region fix). 14 + 11 + 7 + 5 = 37."},
+            {"ok": None, "text": "Rows dropped or rewritten BY RULE at Transform, where a report states the count: "
+                                 "sales_register TOTAL/footer rows 181 raw / 177 post-mapping; inventory_sign_off "
+                                 "7 section-header artifact rows; sell_out 1,023 source-defect 'False' category "
+                                 "rows relabelled to UNCLASSIFIED and summed into 124 merged rows (22 real). "
+                                 "Revenue preserved - relabelled and merged, not dropped."},
+            {"ok": None, "text": "The 805 'blocked' sheets were ssis_summary against a null natural_key - a dead "
+                                 "mapping, removed 2026-09-09. They reclassify as cleanly demoted, not lost data "
+                                 "(no product grain, 0 real DB rows ever traced to them)."},
+        ],
+    },
+    "load": {
+        "title": "Load", "sub": "scripts/run_canonical_load.py",
+        "source": "reports/PHASE1_EXECUTION_PLAN_2026-09.md §11 (full row accounting, 2026-09-14), §14 "
+                  "(item 36), §16 (item 40a) + reports/PROJECT_STATE_2026-09.md §10 (frozen targets) and "
+                  "§11 (cutover counts, 2026-09-16)",
+        "io": ["in 135,007 rows", "out 157,923 loaded"], "mline": "912 quarantined (real)",
+        "columns": [["fact table", 0], ["combined in", 1], ["quarantined (NOT NULL key)", 1],
+                    ["dropped (NOT NULL other)", 1], ["dropped (conflict group)", 1],
+                    ["after rule relabel / merge", 1], ["loaded", 1], ["frozen target", 1]],
+        "rows": [
+            ["unilever_sku_demand_fact", 44575, 0, 0, 0, "—", 44575, 44575],
+            ["sales_fact", 53742, 432, 197, 4, "—", 53109, 53109],
+            ["purchase_fact", 4594, 27, 13, 1792, "—", 2762, 2762],
+            ["salesreturn_fact", 1900, 0, 0, 270, "—", 1630, 1630],
+            ["sellout_fact", 8584, 0, 0, 26, 7686, 7660, 7660],
+            ["inventory_fact (inventory_sign_off)", 21612, 453, 0, 254, "—", 20905, 20905],
+            ["inventory_fact (ssis_soh / unilever)", NOR, NOR, NOR, NOR, "—", 27282, 27282],
+        ],
+        "checks": [
+            {"ok": True, "text": "Every frozen target matched exactly at the 2026-09-16 cutover: sales 53,109 / "
+                                 "purchase 2,762 / sales_return 1,630 / sell_out 7,660 / inventory 48,187 "
+                                 "(20,905 DM + 27,282 UL) / demand 44,575."},
+            {"warn": True, "text": "sell_out's relabel arithmetic does not close on record: PHASE1 §16 gives "
+                                   "8,584 in, 1,023 removed, 124 added and states 7,686 - but 8,584 - 1,023 + 124 "
+                                   "= 7,685. 7,686 is the MEASURED count and 7,686 - 26 = 7,660 matches the "
+                                   "target, so one row is unexplained in the report, not in the data."},
+            {"warn": True, "text": "inventory_sign_off is 20,905 in public. A later fix (7 section-header artifact "
+                                   "rows excluded, COLUMN_GAP_AUDIT_2026-09.md) takes the code target to 20,898; "
+                                   "no re-load into public is on record."},
+            {"ok": None, "text": "'in 135,007 rows' is the sum of the six combined-in counts below. It "
+                                 "excludes ssis_soh, whose input count is not on record - only its 27,282 "
+                                 "loaded rows are."},
+            {"ok": None, "text": "The quarantined and conflict columns are REAL-ONLY by design (FACT_PLAN's own "
+                                 "comment): demo-data noise is counted and printed separately by the loader, never "
+                                 "blended into a pass/fail target. 'combined in' and 'loaded' are real+demo."},
+            {"ok": None, "text": "purchase_fact's conflict-group column is 1,792 (demo only) AFTER item 36's fix. "
+                                 "Before it, 1,887 rows were dropped including 95 real ones and the loaded count "
+                                 "was 2,667."},
+            {"ok": None, "text": "salesreturn_fact was 0 rows in public before the cutover (the BO path was dead), "
+                                 "so its 1,630 rows are a clean addition - nothing overwritten."},
+        ],
+    },
+    "base": {
+        "title": "Base fact tables", "sub": "public schema (Supabase)",
+        "source": "reports/PROJECT_STATE_2026-09.md §11 “Final counts, 2026-09-16” "
+                  "(post-cutover public)",
+        "io": ["in the Load run above", "out 157,923 rows"], "mline": "6 fact tables",
+        "columns": [["table", 0], ["rows in public", 1], ["real", 1], ["demo", 1]],
+        "rows": [
+            ["unilever_sku_demand_fact", 44575, 24906, 19669],
+            ["sales_fact", 53109, NOR, NOR],
+            ["purchase_fact", 2762, NOR, NOR],
+            ["salesreturn_fact", 1630, NOR, NOR],
+            ["sellout_fact", 7660, NOR, NOR],
+            ["inventory_fact", 48187, NOR, NOR],
+        ],
+        "checks": [
+            {"ok": None, "text": "This is the first node INSIDE Supabase. Everything to its left is Python "
+                                 "reading files; everything from here on is a table or a view."},
+            {"warn": True, "text": "The real / demo split post-cutover is on record for unilever_sku_demand_fact "
+                                   "only. POST_LOAD_VERIFICATION.md has a full split but is a 2026-08-20 "
+                                   "pre-cutover snapshot and its totals no longer match, so it is not quoted here."},
+            {"ok": None, "text": "inventory_fact's 48,187 is 20,905 Del Monte (inventory_sign_off) + 27,282 "
+                                 "Unilever (ssis_soh), two different doc_types in one table."},
+            {"ok": None, "text": "Demo rows load into these base tables by design and are excluded downstream by "
+                                 "the _Real views, never by a caller-supplied filter (CLAUDE.md rule 1)."},
+        ],
+    },
+    "api": {
+        "title": "Dashboard API", "sub": "GET /forecast/{sku_id} · GET /dashboard",
+        "source": "reports/FRONTEND_HANDOFF_2026-09-20.md (verified 2026-09-20)",
+        "io": ["in forecast_result", "out 17 routes"], "mline": "3 principal scopes",
+        "columns": [["check", 0], ["result", 0]],
+        "rows": [
+            ["All 17 frontend-facing routes × 3 principal scopes", "200"],
+            ["npm run build", "exit 0, 731 ms, 18 chunks, no warnings"],
+            ["Backend importing anything from analytics/", "none - offline scripts cannot affect the API"],
+            ["Test suite", "303 passed / 13 failed / 1 skipped (the 13 pre-existing)"],
+        ],
+        "checks": [
+            {"ok": None, "text": "This is where the band leaves Supabase. backend/routers/forecast.py:75-87 passes "
+                                 "confidence_lower/upper through per SKU; backend/routers/dashboard.py:996-1105 "
+                                 "SUMS them across SKUs per period for the dashboard chart, so the dashboard's "
+                                 "band is a sum of per-SKU bands."},
+            {"warn": True, "text": "Verified 2026-09-20 by scripts/smoke_api.py, NOT by this build - this page "
+                                   "never calls the API. Re-run that script before trusting the row above."},
+        ],
+    },
 }
 
 COHORT = """SELECT product_key FROM abc_classification
@@ -108,10 +351,34 @@ def _num(v, nd=4):
     return None if v is None else round(float(v), nd)
 
 
-def fetch() -> tuple[dict, dict]:
+def _connect():
+    """Read-only connection, SUPABASE_DIRECT_URL first then SUPABASE_DB_URL.
+
+    It used to be `DIRECT or DB_URL`, which fails outright when only the direct
+    host is unreachable (2026-09-23: its DNS name no longer resolves from this
+    machine while the pooled host does). Both are tried, the one that connected
+    is reported, and every failure is printed - a build must not be able to
+    silently read a different database than the banner claims."""
     load_dotenv(os.path.join(REPO, ".env"))
-    conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"])
-    conn.set_session(readonly=True, autocommit=True)
+    errors = []
+    for name in ("SUPABASE_DIRECT_URL", "SUPABASE_DB_URL"):
+        url = os.environ.get(name)
+        if not url:
+            errors.append(f"{name}: unset")
+            continue
+        try:
+            conn = psycopg2.connect(url, connect_timeout=20)
+        except psycopg2.OperationalError as exc:
+            errors.append(f"{name}: {str(exc).strip().splitlines()[0]}")
+            continue
+        conn.set_session(readonly=True, autocommit=True)
+        return conn, name
+    raise SystemExit("no database reachable:\n  " + "\n  ".join(errors)
+                     + f"\nrebuild the page from the last snapshot with: --offline ({SNAPSHOT})")
+
+
+def fetch() -> tuple[dict, dict, str]:
+    conn, dsn = _connect()
     cur = conn.cursor()
     params = {"p": PRINCIPAL, "per": ABC_PERIOD, "m": ABC_METHOD, "start": REAL_START}
     out, timing = {}, {}
@@ -121,7 +388,7 @@ def fetch() -> tuple[dict, dict]:
         out[name] = cur.fetchall()
         timing[name] = round(time.perf_counter() - t, 2)
     conn.close()
-    return out, timing
+    return out, timing, dsn
 
 
 def months(start: str, end: str) -> list[str]:
@@ -143,6 +410,19 @@ def recent_level_ratio(series: list[float]) -> float | None:
     return None if m12 <= 0 else sum(series[-3:]) / 3 / m12
 
 
+def model_series(monthly: list, periods: list[str]):
+    """The modelling series: first row -> last row, gaps zero-filled. Exactly
+    what scripts/run_baseline_forecast.build_series() hands the router, rebuilt
+    from the monthly values this page already holds. None with no rows at all."""
+    import pandas as pd
+    present = [i for i, v in enumerate(monthly) if v is not None]
+    if not present:
+        return None
+    a, b = present[0], present[-1]
+    idx = pd.to_datetime([periods[i] + "-01" for i in range(a, b + 1)])
+    return pd.Series([monthly[i] or 0.0 for i in range(a, b + 1)], index=idx, dtype=float)
+
+
 def ma3_same_holdout(monthly: list, periods: list[str]) -> tuple[float | None, int]:
     """MA3's MASE on the same rolling one-step holdout the served model was
     scored on. Reuses the pipeline's own pieces, no reimplementation:
@@ -153,15 +433,12 @@ def ma3_same_holdout(monthly: list, periods: list[str]) -> tuple[float | None, i
       metric  diagnostic_metrics.mase with naive_scale(train)
     Pure computation on the rows already pulled; no DB access."""
     import numpy as np
-    import pandas as pd
     from analytics.forecasting.diagnostic_metrics import mase, naive_scale
     from analytics.forecasting.router import rolling_one_step
     from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
-    present = [i for i, v in enumerate(monthly) if v is not None]
-    if not present:
+    series = model_series(monthly, periods)
+    if series is None:
         return None, 0
-    idx = pd.to_datetime([periods[i] + "-01" for i in range(present[0], present[-1] + 1)])
-    series = pd.Series([monthly[i] or 0.0 for i in range(present[0], present[-1] + 1)], index=idx, dtype=float)
     train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
     scored = rolling_one_step(series, list(holdout.index), None, force_bin="short")
     m = mase(scored["actual"].to_numpy(), scored["ma3"].to_numpy(), naive_scale(train.to_numpy(dtype=float)))
@@ -221,6 +498,8 @@ def assemble(raw: dict) -> dict:
             "ma3": ma3_n, "components": comps,
             "gap": None if fval_n is None or not ma3_n else round((fval_n - ma3_n) / ma3_n, 4),
             "rlr": None if rlr is None else round(rlr, 3),
+            # the RMSE the band was built from (model_params.holdout_metrics_served.rmse)
+            "rmse": _num(served.get("rmse")),
             "mase": _num(mase), "ma3_mase": _num(ma3_mase), "mape": _num(mape), "wape": _num(served.get("wape")),
             "ma3_wape": _num(served.get("ma3_wape")), "holdout_months": h, "holdout": holdout,
             "backup": ("fired" if fired == "true" else "not fired") if method in CHALLENGERS else "not applicable",
@@ -273,6 +552,153 @@ def assemble(raw: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# The band over the holdout months, and its coverage
+# --------------------------------------------------------------------------- #
+def one_band(value, rmse):
+    """scripts/run_baseline_forecast.py::_confidence_band, applied to one month.
+    Same multiplier, same floor at zero, same None/None when rmse is undefined."""
+    if rmse is None or value is None:
+        return None, None
+    return max(0.0, value - CONFIDENCE_Z * rmse), value + CONFIDENCE_Z * rmse
+
+
+def add_band_evidence(payload: dict) -> dict:
+    """Per-SKU band corridor across the holdout months, plus coverage.
+
+    WHY THIS IS COMPUTED AND NOT READ: Forecast_Result stores one band per SKU,
+    around the planning-month forecast. A corridor needs a forecast per holdout
+    month, and nothing stores those. So the served model's rolling one-step
+    holdout is re-run here - DEC-25's own protocol, the same one the stored
+    mape/mase/wape/rmse come from - and the writer's rule (one_band) is applied
+    to each month using that SKU's single holdout RMSE.
+
+    THE RECOMPUTATION IS CHECKED, NOT TRUSTED: for every scored SKU the MASE,
+    WAPE, RMSE and holdout-month count this produces are compared against what
+    the pipeline stored, and main() prints how many of the 119 agree. If those
+    counts are not 119/119 the corridor is not the served model's and the page
+    says so rather than drawing it.
+
+    Coverage = holdout months whose actual falls inside that month's band,
+    over holdout months. Band width / forecast is taken from the STORED band
+    (confidence_upper - confidence_lower) / forecast_value, i.e. the number the
+    SKU panel already shows, floor included. MA3's corridor is computed the same
+    way from MA3's own rolling one-step RMSE on the same months - no MA3 band is
+    stored anywhere (BAND_DEF['ma3'])."""
+    import statistics
+
+    from analytics.forecasting.diagnostic_metrics import mase, naive_scale, rmse as rmse_metric, wape
+    from analytics.forecasting.global_model import GlobalForecaster
+    from analytics.forecasting.router import rolling_one_step
+    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+
+    periods = payload["periods"]
+    pool = {}
+    for s in payload["skus"]:
+        ser = model_series(s["monthly"], periods)
+        if ser is not None:
+            pool[s["pk"]] = ser
+    # The same Tier A training pool served_forecasts() builds, so the global
+    # model sees the same cross-SKU history it saw when the row was written.
+    forecaster = GlobalForecaster(pool)
+    agree = {"n": 0, "mase": 0, "wape": 0, "rmse": 0, "months": 0}
+    derived, months_seen = 0, []
+
+    for s in payload["skus"]:
+        for k in ("hpath", "cov", "bw", "ma3_cov", "ma3_bw", "ma3_rmse", "outside"):
+            s.setdefault(k, None)
+        if s["status"] != "ok" or s["pk"] not in pool:
+            continue
+        series = pool[s["pk"]]
+        train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
+        scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=s["router_bin"])
+        if scored.empty:
+            continue
+        a = scored["actual"].to_numpy(dtype=float)
+        v = scored["value"].to_numpy(dtype=float)
+        m3 = scored["ma3"].to_numpy(dtype=float)
+        scale = naive_scale(train.to_numpy(dtype=float))
+
+        # The band's own sigma. A snapshot cached before this build stored it has
+        # to invert the stored band instead: confidence_upper is never floored,
+        # so (hi - forecast) / Z recovers it to the band's 2-dp precision.
+        r = s.get("rmse")
+        if r is None and s.get("hi") is not None and s.get("served") is not None:
+            r = round((s["hi"] - s["served"]) / CONFIDENCE_Z, 4)
+            s["rmse"], s["rmse_derived"] = r, True
+            derived += 1
+        r3 = _num(rmse_metric(a, m3))
+
+        rows = []
+        for i, month in enumerate(scored["month"]):
+            key = month.strftime("%Y-%m")
+            lo, hi = one_band(float(v[i]), r)
+            lo3, hi3 = one_band(float(m3[i]), r3)
+            rows.append({
+                "m": key, "i": periods.index(key) if key in periods else None,
+                "a": _num(a[i], 1), "v": _num(v[i], 3), "lo": _num(lo, 3), "hi": _num(hi, 3),
+                "m3": _num(m3[i], 3), "lo3": _num(lo3, 3), "hi3": _num(hi3, 3),
+                "out": None if lo is None else not (lo <= a[i] <= hi),
+                "out3": None if lo3 is None else not (lo3 <= a[i] <= hi3),
+                "bu": bool(scored["backup_fired"].iloc[i]),
+            })
+        s["hpath"] = rows
+        s["outside"] = [x["i"] for x in rows if x["out"]]
+        tested = [x for x in rows if x["out"] is not None]
+        tested3 = [x for x in rows if x["out3"] is not None]
+        s["cov"] = None if not tested else round(sum(1 for x in tested if not x["out"]) / len(tested), 4)
+        s["ma3_cov"] = None if not tested3 else round(sum(1 for x in tested3 if not x["out3"]) / len(tested3), 4)
+        # width / forecast, from the stored band for the served model and from
+        # the same rule applied to MA3's planning-month value for MA3
+        if s.get("lo") is not None and s.get("hi") is not None and s.get("served"):
+            s["bw"] = round((s["hi"] - s["lo"]) / s["served"], 4)
+        lo3p, hi3p = one_band(s.get("ma3"), r3)
+        if lo3p is not None and s.get("ma3"):
+            s["ma3_bw"] = round((hi3p - lo3p) / s["ma3"], 4)
+        s["ma3_rmse"] = r3
+
+        agree["n"] += 1
+        months_seen.append(len(rows))
+        tol = 0.02 if s.get("rmse_derived") else 0.0006
+        got_mase, got_wape = mase(a, v, scale), wape(a, v)
+        if s["mase"] is not None and abs(got_mase - s["mase"]) <= 0.0006:
+            agree["mase"] += 1
+        if s["wape"] is not None and abs(got_wape - s["wape"]) <= 0.0006:
+            agree["wape"] += 1
+        if r is not None and abs(rmse_metric(a, v) - r) <= tol:
+            agree["rmse"] += 1
+        if len(rows) == s["holdout_months"]:
+            agree["months"] += 1
+
+    def block(rows):
+        cov = [s["cov"] for s in rows if s["cov"] is not None]
+        cov3 = [s["ma3_cov"] for s in rows if s["ma3_cov"] is not None]
+        bw = [s["bw"] for s in rows if s["bw"] is not None]
+        bw3 = [s["ma3_bw"] for s in rows if s["ma3_bw"] is not None]
+        med = lambda xs: None if not xs else round(statistics.median(xs), 4)
+        return {"n": len(rows), "scored": len(cov), "cov": med(cov), "bw": med(bw),
+                "below": sum(1 for c in cov if c < BAND_LEVEL_NOMINAL),
+                "cov3": med(cov3), "bw3": med(bw3),
+                "below3": sum(1 for c in cov3 if c < BAND_LEVEL_NOMINAL)}
+
+    scored_skus = [s for s in payload["skus"] if s["cov"] is not None]
+    return {
+        **BAND_DEF, "agree": agree, "derived_rmse": derived,
+        "all": block(scored_skus),
+        "by_model": {m: block([s for s in scored_skus if s["method"] == m])
+                     for m in MODEL_LABEL if any(s["method"] == m for s in scored_skus)},
+        "holdout_months": [min(months_seen), max(months_seen)] if months_seen else None,
+        # 1-8 holdout months means coverage can only take values k/n: with 8
+        # months the nearest step below 1.0 is 0.875, so no SKU can land between
+        # 0.875 and 1.0. "Below 90%" therefore means "at least one month outside",
+        # not "close to the nominal level" - stated here so the count is not read
+        # as a near miss.
+        "granularity": ("Coverage can only take values k/n with n = the SKU's holdout months "
+                        "(1-8 here), so no SKU can score between 0.875 and 1.0. Below the "
+                        + BAND_LEVEL_LABEL + " means at least one holdout month fell outside the band."),
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Preview mode: "with 2021-22 placeholder" (what-if, never evidence)
 # --------------------------------------------------------------------------- #
 PREVIEW_FILES = ("router_preview_synth.csv", "series_synth.csv", "preview_summary.csv")
@@ -280,6 +706,11 @@ PREVIEW_FILES = ("router_preview_synth.csv", "series_synth.csv", "preview_summar
 # DSD_PREVIEW_SRC; the files are copied into data/ at build time.
 DEFAULT_PREVIEW_SRC = os.environ.get("DSD_PREVIEW_SRC", os.path.join(REPO, "reports", "preview"))
 DATA_DIR = os.path.join(HERE, "data")
+# Every live build writes the assembled DB payload here so the page can be
+# rebuilt when the database is unreachable (--offline). It is a snapshot of one
+# read, not a substitute for one: the page banner and stdout both name its
+# timestamp, and preview mode still reads reports/preview/ either way.
+SNAPSHOT = os.path.join(DATA_DIR, "db_snapshot.json")
 PREVIEW_START = "2021-01"
 PREVIEW_METHOD = {"trailing_average": "provisional"}
 
@@ -415,12 +846,30 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--preview-src", default=DEFAULT_PREVIEW_SRC,
                     help="folder holding the preview CSVs (default: $DSD_PREVIEW_SRC or the preview session's scratchpad)")
+    ap.add_argument("--offline", action="store_true",
+                    help=f"rebuild from the last live read ({SNAPSHOT}) instead of querying the database")
     args = ap.parse_args()
     t0 = time.perf_counter()
     copy_preview_inputs(args.preview_src)          # fails loudly before any DB work
-    raw, timing = fetch()
-    t_db = time.perf_counter() - t0
-    payload = assemble(raw)
+    if args.offline:
+        if not os.path.isfile(SNAPSHOT):
+            raise SystemExit(f"--offline needs {SNAPSHOT}, written by a live build. Not present.")
+        with open(SNAPSHOT, encoding="utf-8") as fh:
+            payload = json.load(fh)
+        timing, dsn, t_db = {}, f"snapshot {os.path.basename(SNAPSHOT)}", 0.0
+        print(f"--offline: rebuilding from {SNAPSHOT} (read {payload['meta']['generated']}); no DB query")
+    else:
+        raw, timing, dsn = fetch()
+        t_db = time.perf_counter() - t0
+        payload = assemble(raw)
+        with open(SNAPSHOT, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, separators=(",", ":"), allow_nan=False, default=str)
+    payload["meta"]["source"] = dsn
+    payload["meta"]["offline"] = bool(args.offline)
+    t_band = time.perf_counter()
+    payload["band"] = add_band_evidence(payload)
+    t_band = time.perf_counter() - t_band
+    payload["etl"] = ETL_NODES
     payload["preview"] = assemble_preview(payload["skus"])
     payload["backup_options"] = load_backup_options(args.preview_src)
     data = json.dumps(payload, separators=(",", ":"), allow_nan=False, default=str).replace("</", "<\\/")
@@ -437,6 +886,22 @@ def main():
     short = [s for s in payload["skus"] if s["method"] == "ma3"]
     same = sum(1 for s in short if s["mase"] is not None and s["ma3_mase"] is not None and abs(s["ma3_mase"] - s["mase"]) <= 0.00051)
     print(f"MA3-served SKUs whose recomputed MA3 MASE equals the stored served MASE (3 dp, as stored): {same} of {len(short)}")
+    b, ag = payload["band"], payload["band"]["agree"]
+    print(f"band = forecast +/- {CONFIDENCE_Z} * served holdout RMSE, lower floored at 0; "
+          f"level {BAND_LEVEL_LABEL}")
+    print(f"corridor recomputed for {ag['n']} scored SKUs; agrees with what was stored - "
+          f"mase {ag['mase']}/{ag['n']}, wape {ag['wape']}/{ag['n']}, rmse {ag['rmse']}/{ag['n']}, "
+          f"holdout months {ag['months']}/{ag['n']}"
+          + (f" (rmse inverted from the stored band for {b['derived_rmse']} SKUs: the snapshot predates "
+             f"model_params rmse being carried)" if b["derived_rmse"] else ""))
+    a = b["all"]
+    print(f"coverage (served): median {a['cov']}, {a['below']} of {a['scored']} below {BAND_LEVEL_LABEL}, "
+          f"median band width / forecast {a['bw']}; holdout months {b['holdout_months']}")
+    print(f"coverage (MA3, computed - no MA3 band is stored): median {a['cov3']}, "
+          f"{a['below3']} of {a['scored']} below {BAND_LEVEL_LABEL}, median width / forecast {a['bw3']}")
+    for meth, blk in b["by_model"].items():
+        print(f"  {meth}: n={blk['n']} median coverage={blk['cov']} below={blk['below']} "
+              f"median width/forecast={blk['bw']} | MA3 median coverage={blk['cov3']} below={blk['below3']}")
     pv = payload["preview"]
     pvc = {}
     for s in pv["skus"].values():
@@ -445,8 +910,8 @@ def main():
           f"file check, MA3-served SKUs with served MASE == ma3_holdout_mase: {pv['checks']['ma3_equal']} of {pv['checks']['ma3_total']} "
           f"backup_options={'loaded' if payload['backup_options'] else 'none (pending decision)'}")
     print(f"problems={m['problems'] or 'none'}")
-    print(f"query seconds={timing}  db total={t_db:.2f}s  build total={time.perf_counter() - t0:.2f}s  "
-          f"html={os.path.getsize(out) / 1024:.0f} KB")
+    print(f"source={dsn}  query seconds={timing}  db total={t_db:.2f}s  band evidence={t_band:.2f}s  "
+          f"build total={time.perf_counter() - t0:.2f}s  html={os.path.getsize(out) / 1024:.0f} KB")
 
 
 TEMPLATE = r"""<!DOCTYPE html>
@@ -615,6 +1080,24 @@ dl.kv dd{margin:0;font-family:var(--mono);word-break:break-word}
 .kn text.st{fill:var(--ink-3);font-size:10.5px}
 .wire{fill:none;stroke:var(--ink-3);stroke-width:1.5;opacity:.6}
 .wire.path{stroke:var(--accent);opacity:1;stroke-width:2.5}
+/* database boundary: the frame around what lives in Supabase, and the lane outside it */
+.dbframe{fill:rgba(110,168,254,.05);stroke:var(--accent);stroke-width:1.5;stroke-dasharray:7 4}
+.dbframe-l{fill:var(--accent);font-size:10.5px;font-weight:700;letter-spacing:.09em;opacity:.95}
+.lane-l{fill:var(--ink-3);font-size:10.5px;font-weight:600;letter-spacing:.09em}
+.xing circle{fill:var(--bg);stroke:var(--accent);stroke-width:1.6}
+.xing text{fill:var(--accent);font-size:10px;font-weight:700;text-anchor:middle}
+.xing text.w{fill:var(--ink-2);font-size:9.5px;font-weight:600;letter-spacing:.05em}
+.wire.cross{stroke:var(--accent);opacity:.85;stroke-width:2}
+.wire.wrap{stroke:var(--accent);opacity:.5;stroke-dasharray:6 4}
+.kn text.tag{fill:var(--ink-3);font-size:9.5px;letter-spacing:.05em}
+.srcline{font-size:11px;color:var(--ink-3);margin:-4px 0 8px}
+.srcline b{color:var(--ink-2);font-weight:600}
+/* band corridor */
+.corr{stroke:none}
+.outmark{stroke:var(--bad);fill:none;stroke-width:1.8}
+.sw-corr{width:14px;height:10px;border-radius:2px;display:inline-block;opacity:.3}
+.sw-out{width:10px;height:10px;border-radius:50%;display:inline-block;border:2px solid var(--bad)}
+.banddef dl.kv dt{min-width:118px}
 .lightbox{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--ink-2)}
 .lightbox span{display:inline-flex;gap:6px;align-items:center}
 .lamp{width:10px;height:10px;border-radius:50%;display:inline-block}
@@ -664,6 +1147,7 @@ dl.kv dd{margin:0;font-family:var(--mono);word-break:break-word}
   <div class="kpis" id="kpis"></div>
 
   <section id="tab-forecasts">
+    <div class="card banddef" id="bandCard" style="margin-bottom:14px"></div>
     <div class="toolbar">
       <div class="ac" id="acF"></div>
       <div class="seg" id="binSeg"></div>
@@ -688,6 +1172,8 @@ dl.kv dd{margin:0;font-family:var(--mono);word-break:break-word}
         <span><i class="lamp" style="background:var(--warn)"></i>warnings</span>
         <span><i class="lamp" style="background:var(--bad)"></i>count mismatch</span>
         <span><i class="lamp" style="background:var(--none)"></i>no expected count on record</span>
+        <span style="margin-left:6px"><i class="lamp" style="background:none;border:1.5px dashed var(--accent);border-radius:2px"></i>inside Supabase</span>
+        <span><i class="lamp" style="background:var(--ink-3);border-radius:2px"></i>ETL / API node &mdash; every number from a file under reports/</span>
       </div>
     </div>
     <div class="two" id="pgrid">
@@ -716,6 +1202,40 @@ const PROV = s => s.status === 'insufficient_data';
 const NT = 'not testable (<3 months)';
 const modelPill = m => `<span class="pill"><i style="background:${COLOR[m]}"></i>${esc(mlabel(m))}</span>`;
 const fcMonth = D.meta.forecast_date ? D.meta.forecast_date.slice(0, 7) : 'next';
+const B = D.band;
+const pctv = (v, d=1) => v == null ? '\u2014' : (v * 100).toFixed(d) + '%';
+const LVL = B.level_nominal, LVLL = B.level_label;
+const hpoint = (s, i) => s.hpath ? s.hpath.find(p => p.i === i) : null;
+function drawBandCard(){
+  const a = B.all, rows = Object.entries(B.by_model);
+  $('#bandCard').innerHTML = `<h2>The stored confidence band \u2014 what it is, and whether it holds</h2>`
+    + `<div class="sub">Read from <b>Forecast_Result.confidence_lower / confidence_upper</b>. Definition traced to `
+    + `DEC-25 (ARCHITECTURE.md) and the writer, scripts/run_baseline_forecast.py:821\u2013840.</div>`
+    + kv([
+        ['interval', esc(B.interval)],
+        ['\u03c3 used', esc(B.sigma)],
+        ['level', `<b style="color:var(--flag-ink)">${esc(B.level)}</b>`],
+        ['stored where', esc(B.stored)],
+        ['corridor on this page', esc(B.corridor)],
+        ['MA3 band', esc(B.ma3)],
+        ['recomputation check', `${B.agree.mase}/${B.agree.n} MASE, ${B.agree.wape}/${B.agree.n} WAPE, `
+          + `${B.agree.rmse}/${B.agree.n} RMSE, ${B.agree.months}/${B.agree.n} holdout-month counts match what the `
+          + `pipeline stored` + (B.derived_rmse ? ` \u00b7 \u03c3 inverted from the stored band for ${B.derived_rmse} SKUs` : '')],
+        ['coverage granularity', esc(B.granularity)],
+      ])
+    + (V.pv ? `<div class="pvnote">Preview mode carries no corridor: the preview file holds one forecast per SKU, not a `
+      + `per-month path. Coverage columns read \u2014 here. Switch to <b>Real only</b> for them.</div>` : '')
+    + `<table class="mini" style="margin-top:10px"><tr><th class="l">cohort</th><th>SKUs</th>`
+    + `<th>median coverage</th><th title="${esc(LVLL)}">below ${esc(LVLL)}</th><th>median band width / forecast</th>`
+    + `<th>MA3 median coverage (computed)</th><th title="${esc(LVLL)}">MA3 below ${esc(LVLL)}</th></tr>`
+    + [['All scored', a], ...rows.map(([m, blk]) => [mlabel(m), blk])].map(([l, blk]) =>
+        `<tr><td class="l">${esc(l)}</td><td>${blk.scored}</td><td>${pctv(blk.cov)}</td>`
+        + `<td${blk.below ? ' style="color:var(--flag-ink);font-weight:600"' : ''}>${blk.below}</td>`
+        + `<td>${fmt(blk.bw)}</td><td>${pctv(blk.cov3)}</td><td>${blk.below3}</td></tr>`).join('')
+    + `</table><div class="muted" style="font-size:12px">Holdout length across the cohort: `
+    + `${B.holdout_months ? B.holdout_months[0] + '\u2013' + B.holdout_months[1] + ' months' : '\u2014'}. `
+    + `The 13 provisional SKUs have no holdout and no band.</div>`;
+}
 const absGap = s => s.gap == null ? null : Math.abs(s.gap);
 const LONG_NOTE = 'All 72 long forecasts change in preview: the global XGBoost model learns across SKUs, so extra history for 40 SKUs shifts every long forecast.';
 const MODEL_KEYS = Object.keys(D.model_label);
@@ -725,7 +1245,11 @@ let V;
 function count(rows, key, order){ const c = {}; (order || []).forEach(k => c[k] = 0); rows.forEach(s => c[s[key]] = (c[s[key]] || 0) + 1); return c; }
 function buildView(mode){
   const pv = mode === 'preview';
-  const skus = pv ? D.skus.map(s => ({...s, real_served: s.served, ...D.preview.skus[s.pk], mode})) : D.skus.map(s => ({...s, real_bin: s.router_bin, ph: null, ph_count: 0, mode}));
+  // The corridor and its coverage are computed from the REAL served path. The
+  // preview file has no per-month forecasts, so preview mode carries none rather
+  // than showing a real corridor under preview numbers.
+  const skus = pv ? D.skus.map(s => ({...s, real_served: s.served, ...D.preview.skus[s.pk], mode,
+                                      hpath: null, cov: null, bw: null, ma3_cov: null, ma3_bw: null})) : D.skus.map(s => ({...s, real_bin: s.router_bin, ph: null, ph_count: 0, mode}));
   return {
     mode, pv, skus, byPk: new Map(skus.map(s => [s.pk, s])),
     periods: pv ? D.preview.periods : D.periods,
@@ -745,7 +1269,7 @@ function setMode(mode){
     : `Every number is read from what the pipeline stored (forecast_result, sku_segment, sku_traits, unilever_sku_demand_fact_real). Nothing is refitted. <b>Cohort result:</b> TSB and the XGBoost + MA3 average tie MA3 on real Tier A data (half-year block tests). They are served because they are trained models that use the full history, not because they are more accurate. MA3 is the benchmark and the fallback. Per-SKU pages show that SKU's own MASE and WAPE only.`;
   filter = null;
   buildPN();
-  drawKpis(); initSegs();
+  drawKpis(); initSegs(); drawBandCard();
   showTab(tab);
 }
 function drawKpis(){
@@ -759,7 +1283,8 @@ function drawKpis(){
     ...(V.pv ? [[V.skus.filter(s => s.ph_count > 0).length, 'SKUs with placeholder months']] : [[V.counts.backup.fired, 'MA3 backup fired']]),
   ].map(([v, l]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
 }
-$('#meta').innerHTML = `${esc(D.meta.cohort)}<br>forecast month ${esc(fcMonth)} · built ${esc(D.meta.generated.replace('T', ' '))}`
+$('#meta').innerHTML = `${esc(D.meta.cohort)}<br>forecast month ${esc(fcMonth)} · ${D.meta.offline ? 'snapshot read' : 'read live'} ${esc(D.meta.generated.replace('T', ' '))}`
+  + (D.meta.offline ? ` · <b style="color:var(--flag-ink)">rebuilt offline from the last snapshot</b>` : '')
   + (D.meta.problems.length ? ` · <b>${D.meta.problems.length} data problems</b>` : '');
 
 function metricCell(s, k){
@@ -778,7 +1303,9 @@ function backupOptions(s){
 const GEOM = {};
 function chart(s, W, H, mode){
   const P = V.periods.concat([fcMonth]), n = P.length, big = mode === 'big', spark = mode === 'spark';
-  const cand = s.monthly.concat(spark ? [s.served] : [s.served, s.ma3, s.hi, s.lo]).filter(v => v != null);
+  const corr = spark || !s.hpath ? [] : s.hpath.filter(p => p.i != null && p.lo != null);
+  const cand = s.monthly.concat(spark ? [s.served] : [s.served, s.ma3, s.hi, s.lo])
+    .concat(corr.flatMap(p => [p.hi, p.lo, p.v])).filter(v => v != null);
   const ymax = Math.max(1, ...cand) * 1.08, ymin = Math.min(0, ...cand);
   const L = big ? 56 : spark ? 2 : 6, R = spark ? 5 : big ? 18 : 12, T = spark ? 3 : 8, B = spark ? 3 : big ? 26 : 16;
   const X = i => L + i * (W - L - R) / (n - 1), Y = v => T + (H - T - B) * (1 - (v - ymin) / (ymax - ymin));
@@ -800,6 +1327,27 @@ function chart(s, W, H, mode){
     g += `<rect x="${X(n - 1.5)}" y="${T}" width="${X(n - 1) - X(n - 1.5) + R}" height="${H - T - B}" fill="var(--surface-3)" opacity=".45"/>`;
     const labels = big ? P.map((_, i) => i).filter(i => (i % 6 === 0 && i < n - 4) || i === n - 1) : [0, n - 1];
     labels.forEach(i => g += `<text x="${X(i)}" y="${H - (big ? 8 : 3)}" text-anchor="${big ? 'middle' : (i ? 'end' : 'start')}" fill="var(--ink-3)" font-size="${big ? 10 : 9}">${P[i]}</text>`);
+  }
+  // The band across the HOLDOUT months: a corridor around each month's own
+  // one-step forecast, not a flat line around the final forecast. Computed at
+  // build time (nothing stores a per-month band) - see D.band.corridor.
+  if (corr.length){
+    const up = corr.map(p => `${X(p.i).toFixed(1)},${Y(p.hi).toFixed(1)}`);
+    const dn = corr.map(p => `${X(p.i).toFixed(1)},${Y(Math.max(ymin, p.lo)).toFixed(1)}`);
+    if (corr.length > 1){
+      g += `<polygon class="corr" points="${up.concat(dn.slice().reverse()).join(' ')}" fill="${COLOR[s.method]}" opacity=".17"/>`
+        + `<polyline points="${up.join(' ')}" fill="none" stroke="${COLOR[s.method]}" stroke-width="1.2" stroke-dasharray="4 3" opacity=".85"/>`
+        + `<polyline points="${dn.join(' ')}" fill="none" stroke="${COLOR[s.method]}" stroke-width="1.2" stroke-dasharray="4 3" opacity=".85"/>`
+        + `<polyline points="${corr.map(p => `${X(p.i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ')}" fill="none" stroke="${COLOR[s.method]}" stroke-width="1.6"/>`;
+    } else {
+      const p = corr[0], w = big ? 9 : 6;
+      g += `<rect x="${X(p.i) - w / 2}" y="${Y(p.hi)}" width="${w}" height="${Math.max(1, Y(Math.max(ymin, p.lo)) - Y(p.hi))}" rx="3" fill="${COLOR[s.method]}" opacity=".22"/>`
+        + `<circle cx="${X(p.i)}" cy="${Y(p.v)}" r="${big ? 3 : 2}" fill="${COLOR[s.method]}"/>`;
+    }
+    corr.filter(p => p.out).forEach(p => {
+      const r = big ? 5 : 3.5;
+      g += `<circle class="outmark" cx="${X(p.i)}" cy="${Y(p.a)}" r="${r}"><title>${p.m}: actual ${fmt(p.a, 1)} outside the band ${fmt(p.lo, 0)}\u2013${fmt(p.hi, 0)}</title></circle>`;
+    });
   }
   // actual: a segment only between two consecutive months that both have a row AND are the same kind
   // (real vs placeholder). Placeholder months are dashed in their own colour, never styled as demand.
@@ -850,6 +1398,14 @@ document.addEventListener('mousemove', ev => {
     rows = [[ph ? 'Placeholder' : 'Actual', v == null ? ((s.null_months || []).includes(i) ? 'NULL quantity (pipeline counts it as 0)' : 'no row') : fmt(v, 1)]];
     if (ph) rows.push(['', 'not SSM data']);
     if (s.holdout && i >= s.holdout[0] && i <= s.holdout[1]) rows.push(['', 'holdout month']);
+    const hp = hpoint(s, i);
+    if (hp){
+      rows.push([`One-step \u00b7 ${mlabel(s.method)}`, fmt(hp.v)]);
+      if (hp.lo != null) rows.push(['Band (computed)', `${fmt(hp.lo, 0)} \u2013 ${fmt(hp.hi, 0)}`]);
+      rows.push(['Actual vs band', hp.out == null ? '\u2014' : hp.out ? 'OUTSIDE' : 'inside']);
+      rows.push(['MA3 one-step', fmt(hp.m3)]);
+      if (hp.bu) rows.push(['', 'MA3 backup fired this month']);
+    }
   }
   tip.innerHTML = `<div class="h">${esc(s.code)} · ${i === gm.n - 1 ? fcMonth + ' (forecast)' : V.periods[i]}</div>`
     + rows.map(([k, v]) => `<div class="r"><span>${esc(k)}</span><b>${v}</b></div>`).join('');
@@ -863,7 +1419,9 @@ const LEGEND = s => `<div class="legend"><span><i class="sw-line" style="backgro
   + ((s.null_months || []).length ? `<span><i class="sw-null"></i>NULL quantity (pipeline counts it as 0)</span>` : '')
   + `<span><i class="sw-dot" style="background:${COLOR[s.method]}"></i>Served · ${esc(mlabel(s.method))}</span>`
   + (s.method !== 'ma3' ? `<span><i class="sw-ring" style="border-color:var(--m-ma3)"></i>MA3</span>` : '')
-  + (s.lo != null ? `<span><i class="sw-band" style="background:${COLOR[s.method]}"></i>Band</span>` : '')
+  + (s.lo != null ? `<span><i class="sw-band" style="background:${COLOR[s.method]}"></i>Band (${esc(fcMonth)}, stored)</span>` : '')
+  + (s.hpath && s.hpath.length ? `<span><i class="sw-corr" style="background:${COLOR[s.method]}"></i>Band over the holdout (computed)</span>`
+    + `<span><i class="sw-out"></i>Actual outside the band</span>` : '')
   + (s.holdout ? `<span><i class="sw-hold"></i>Holdout months</span>` : '') + `</div>`;
 function statTiles(s){
   const p = PROV(s);
@@ -874,7 +1432,12 @@ function statTiles(s){
     [p ? NT : fmt(s.mase), 'MASE (served, holdout)', !p && s.mase >= 1],
     [p ? NT : fmt(s.ma3_mase), 'MA3 MASE (same holdout)', !p && s.ma3_mase >= 1],
     [p ? NT : fmt(s.wape), 'WAPE (served, holdout)'],
-    [p ? NT : fmt(s.ma3_wape), 'MA3 WAPE (same holdout)'], [fmt(s.rlr), 'Recent level ratio (3 / 12 mo)'],
+    [p ? NT : fmt(s.ma3_wape), 'MA3 WAPE (same holdout)'],
+    [p ? NT : pctv(s.cov), 'Coverage (holdout)', !p && s.cov != null && s.cov < LVL],
+    [p ? NT : fmt(s.bw), 'Band width / forecast'],
+    [p ? NT : pctv(s.ma3_cov), 'MA3 coverage (computed)', !p && s.ma3_cov != null && s.ma3_cov < LVL],
+    [p ? NT : fmt(s.ma3_bw), 'MA3 band width / forecast'],
+    [fmt(s.rlr), 'Recent level ratio (3 / 12 mo)'],
   ].map(([v, l, f]) => `<div class="stat${f ? ' flag' : ''}" title="${esc(v)}"><div class="v">${esc(v)}</div><div class="l">${l}</div></div>`).join('') + `</div>`;
 }
 const kv = o => '<dl class="kv">' + o.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('') + '</dl>';
@@ -891,6 +1454,10 @@ function detailHTML(s, W){
       ['router bin', esc(s.router_bin) + (s.sales_months != null ? ` (${s.sales_months} sales months${V.pv ? ', incl. placeholder' : ''})` : '')],
       ['holdout months', s.holdout ? `${s.holdout_months} (${V.periods[s.holdout[0]]} – ${V.periods[s.holdout[1]]})` : '—'],
       ['components', esc(s.components ? JSON.stringify(s.components) : '—')],
+      ['band (stored)', s.lo == null ? '\u2014 (no holdout RMSE)' : `${fmt(s.lo)} \u2013 ${fmt(s.hi)} = ${fmt(s.served)} \u00b1 ${B.z} \u00d7 ${fmt(s.rmse)}`
+        + (s.rmse_derived ? ' <span class="muted">(\u03c3 inverted from the stored band)</span>' : '')],
+      ['coverage', s.cov == null ? '\u2014' : `${pctv(s.cov)} of ${s.hpath.length} holdout months inside`
+        + (s.outside && s.outside.length ? ` \u00b7 outside: ${s.outside.map(i => V.periods[i]).join(', ')}` : '')],
       ['MA3 backup', esc(s.backup) + (s.backup_reason ? ` — ${esc(s.backup_reason)}` : '')],
       ['backup options', backupOptions(s)],
       ['bin_reason', esc(s.bin_reason)],
@@ -917,7 +1484,8 @@ function renderTable(el, cols, rows, st, onRow, selected){
     const c = cols.find(x => x.k === th.dataset.k); if (c.sort === false) return;
     st.d = st.k === c.k ? -st.d : (c.num ? -1 : 1); st.k = c.k; renderTable(el, cols, rows, st, onRow, selected);
   });
-  el.querySelectorAll('tbody tr').forEach(tr => tr.onclick = () => onRow(+tr.dataset.pk));
+  // ETL rows are report rows, not SKUs: they pass no onRow and stay unclickable.
+  if (onRow) el.querySelectorAll('tbody tr').forEach(tr => tr.onclick = () => onRow(+tr.dataset.pk));
   return sorted;
 }
 const C = {
@@ -935,6 +1503,15 @@ const C = {
   ma3_wape: {k:'ma3_wape', l:'MA3 WAPE', num:1, r: s => metricCell(s, 'ma3_wape')},
   rlr: {k:'rlr', l:'Recent level ratio', num:1, tip:'mean(last 3 months) / mean(last 12 months) of the modelling series; display only, no threshold', r: s => `<td class="num">${fmt(s.rlr)}</td>`},
   spark: {k:'spark', l:'Monthly demand', sort:false, r: s => `<td class="spark">${chart(s, 150, 30, 'spark')}</td>`},
+  cov: {k:'cov', l:'Coverage (holdout)', num:1, tip:'Share of holdout months whose actual falls inside that month\u2019s band. Computed here - no per-month band is stored. Flagged below ' + LVLL + '.',
+    r: s => PROV(s) ? `<td class="num muted">${NT}</td>`
+      : `<td class="num${s.cov != null && s.cov < LVL ? ' flag' : ''}">${pctv(s.cov)}</td>`},
+  bw: {k:'bw', l:'Band width / forecast', num:1, tip:'(confidence_upper - confidence_lower) / forecast_value, as stored on the forecast_date row',
+    r: s => PROV(s) ? `<td class="num muted">${NT}</td>` : `<td class="num">${fmt(s.bw)}</td>`},
+  ma3_cov: {k:'ma3_cov', l:'MA3 coverage (computed)', num:1, tip:'The same rule applied to MA3\u2019s own rolling one-step RMSE on the same months. No MA3 band is stored. Flagged below ' + LVLL + '.',
+    r: s => PROV(s) ? `<td class="num muted">${NT}</td>`
+      : `<td class="num${s.ma3_cov != null && s.ma3_cov < LVL ? ' flag' : ''}">${pctv(s.ma3_cov)}</td>`},
+  ma3_bw: {k:'ma3_bw', l:'MA3 band width / forecast', num:1, r: s => PROV(s) ? `<td class="num muted">${NT}</td>` : `<td class="num">${fmt(s.ma3_bw)}</td>`},
 };
 
 // ---------------- tabs ----------------
@@ -1074,7 +1651,8 @@ function initSegs(){
   seg($('#viewSeg'), [['table', 'Table view'], ['grid', 'Grid view']], () => gView, v => gView = v);
 }
 const acF = autocomplete($('#acF'), 'Find a SKU by code or product…', pk => { fSel = pk; drawForecasts(); });
-const F_COLS = () => [C.code, C.name, C.method, C.spark, C.served, C.ma3, C.gap, ...(V.pv ? [C.change, C.ph] : []), C.mase, C.ma3_mase, C.wape, C.rlr];
+const F_COLS = () => [C.code, C.name, C.method, C.spark, C.served, C.ma3, C.gap, ...(V.pv ? [C.change, C.ph] : []),
+  C.mase, C.ma3_mase, C.wape, ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw]), C.rlr];
 function drawFocus(){
   const s = V.byPk.get(fSel), i = fOrder.findIndex(x => x.pk === fSel);
   if (!s){ $('#focus').innerHTML = '<div class="empty">Select a SKU.</div>'; return; }
@@ -1124,17 +1702,41 @@ function light(checks){
   return 'none';
 }
 let PN = [];
+// Lane membership is the database boundary: 'db' = the object lives in Supabase,
+// 'out' = Python or a file outside it. Every wire whose two ends sit in different
+// lanes is a boundary crossing, and drawPipeline() marks each one.
+const NOREC = 'not on record';
+function etlNode(id, row, col, lane){
+  const e = D.etl[id];
+  const cols = e.columns.map((c, i) => ({k:'c' + i, l:c[0], num:c[1], v: r => r[i],
+    r: r => `<td class="${c[1] ? 'num' : ''}${String(r[i]) === NOREC ? ' muted' : ''}">${esc(r[i])}</td>`}));
+  return {id, row, col, lane, etl:true, title:e.title, sub:e.sub, source:e.source, io:e.io,
+          mline:e.mline, checks:e.checks, tag:'reports/', rows: () => e.rows, has: () => true, cols};
+}
 function buildPN(){
   const E = V.expected, S = V.skus, scored = S.filter(s => s.status === 'ok');
   const rowsOut = S.reduce((a, s) => a + s.view_rows, 0);
   const negSkus = S.filter(s => s.neg_months > 0), gapSkus = S.filter(s => s.gap_months > 0);
   const P = V.pv ? D.preview : null;
   const src = V.pv ? 'from preview file' : '';
+  const covAll = B.all;
   PN = [
-    {id:'demand', col:0, title:V.pv ? 'Preview series' : 'Real demand view', sub:V.pv ? 'series_synth.csv' : 'unilever_sku_demand_fact_real',
-     io:V.pv ? [`in ${fmt(P.file_rows, 0)} rows`, `${fmt(P.placeholder_rows, 0)} placeholder · ${P.placeholder_skus} SKUs`] : [`in ${fmt(D.meta.view_rows, 0)} rows`, `out ${fmt(rowsOut, 0)} rows · ${S.length} SKUs`],
-     checks:[{ok:null, text:V.pv ? `No expected row count on record (file: ${fmt(P.file_rows, 0)} rows)` : `No expected row count on record (view: ${fmt(D.meta.view_rows, 0)} rows, ${D.meta.view_skus} SKUs)`},
-       ...(V.pv ? [{warn:true, text:`${fmt(P.placeholder_rows, 0)} placeholder rows (2021–22) across ${P.placeholder_skus} SKUs — not SSM data`}] : []),
+    // ---- row 0: files in, through ETL, across the write boundary, into the DB
+    etlNode('raw', 0, 0, 'out'),
+    etlNode('extract', 0, 1, 'out'),
+    etlNode('transform', 0, 2, 'out'),
+    etlNode('load', 0, 3, 'out'),
+    etlNode('base', 0, 4, 'db'),
+    {id:'real', row:0, col:5, lane:'db',
+     title:V.pv ? 'Preview series' : '_Real views', sub:V.pv ? 'series_synth.csv' : 'unilever_sku_demand_fact_real',
+     source:V.pv ? 'reports/preview/series_synth.csv (scripts/preview_router_synth.py output)'
+                 : 'analytics/db/schema.sql:832-848 (the six CREATE VIEW ... WHERE is_demo = false) · row counts read live by this build',
+     io:V.pv ? [`in ${fmt(P.file_rows, 0)} rows`, `${fmt(P.placeholder_rows, 0)} placeholder · ${P.placeholder_skus} SKUs`]
+             : [`in ${fmt(D.meta.view_rows, 0)} rows`, `out ${fmt(rowsOut, 0)} Tier A rows`],
+     checks:[{ok:null, text:V.pv ? `No expected row count on record (file: ${fmt(P.file_rows, 0)} rows)`
+                                 : `No expected row count on record (view: ${fmt(D.meta.view_rows, 0)} rows, ${D.meta.view_skus} SKUs)`},
+       ...(V.pv ? [{warn:true, text:`${fmt(P.placeholder_rows, 0)} placeholder rows (2021–22) across ${P.placeholder_skus} SKUs — not SSM data`}]
+                : [{ok:null, text:'The views exclude is_demo = true structurally, so a real-vs-synthetic mix-up is a query-target mistake, not a filter a caller can forget. Every model reads these, never the base tables (enforced by tests/forecasting/test_real_view_reads.py).'}]),
        {warn:negSkus.length > 0, text:`${negSkus.length} Tier A SKUs have a negative month`},
        {warn:gapSkus.length > 0, text:`${gapSkus.length} Tier A SKUs have months with no row between their first and last row`}],
      rows:() => S, has:() => true,
@@ -1143,19 +1745,23 @@ function buildPN(){
        {k:'last_i', l:'Last row', r:s => `<td>${s.last_i == null ? '—' : V.periods[s.last_i]}</td>`},
        {k:'gap_months', l:'Months with no row', num:1, r:s => `<td class="num${s.gap_months ? ' flag' : ''}">${s.gap_months}</td>`},
        {k:'neg_months', l:'Negative months', num:1, r:s => `<td class="num${s.neg_months ? ' flag' : ''}">${s.neg_months}</td>`}, C.spark]},
-    {id:'abc', col:1, title:'ABC Tier A', sub:'abc_classification · 2026-02 · single',
+    // ---- row 1: classification and binning in the DB, models outside it, back in, then out to the API
+    {id:'abc', row:1, col:0, lane:'db', title:'ABC Tier A', sub:'abc_classification · 2026-02 · single',
+     source:'read live by this build; the 132 expected is Yuan’s 2026-09-22 figure for the live 2026-03 forecast',
      io:[`in ${D.meta.abc_classified} SKUs`, `out ${S.length} Tier A`],
      checks:[{ok:S.length === E.tier_a, text:`Tier A = ${S.length} (expected ${E.tier_a}${V.pv ? ', rows in preview file' : ''})`},
        {ok:null, text:`All tiers: ${Object.entries(D.meta.abc_tiers).map(([k, v]) => `${k}=${v}`).join(', ')}`}],
      rows:() => S, has:() => true,
      cols:[C.code, C.name, {k:'rev', l:'Revenue share 2026-02', num:1, v:s => s.traits && s.traits.revenue_share, r:s => `<td class="num">${fmt(s.traits && s.traits.revenue_share, 5)}</td>`}, C.spark]},
-    {id:'combined', col:2, title:'combined_v1 bins', sub:'sku_segment' + (V.pv ? ' (real, not re-binned)' : ''),
+    {id:'combined', row:1, col:1, lane:'db', title:'combined_v1 bins', sub:'sku_segment' + (V.pv ? ' (real, not re-binned)' : ''),
+     source:'read live by this build (sku_segment, scheme combined_v1)',
      io:[`in ${S.length}`, `out ${D.combined_order.map(b => V.counts.combined[b]).join('/')}`],
      checks:[{ok:eqMap(V.counts.combined, E.combined), text:`${D.combined_order.map(b => `${b} ${V.counts.combined[b]}`).join(', ')} (expected ${D.combined_order.map(b => E.combined[b]).join('/')})`},
        ...(V.pv ? [{ok:null, text:'combined_v1 is the real sku_segment scheme; the preview does not re-bin it.'}] : [])],
      rows:() => S, has:() => true, sankey:true,
      cols:() => { const r = R_COLS(); return [...r.slice(0, 3), {k:'bin_reason', l:'bin_reason', r:s => `<td class="name" style="max-width:320px" title="${esc(s.bin_reason)}">${esc(s.bin_reason)}</td>`}, ...r.slice(3)]; }},
-    {id:'router', col:3, title:V.pv ? 'Router bins (preview)' : 'Router bins (live)', sub:V.pv ? 'router_preview_synth.csv · bin' : 'model_params.bin · length_v2',
+    {id:'router', row:1, col:2, lane:'db', title:V.pv ? 'Router bins (preview)' : 'Router bins (live)', sub:V.pv ? 'router_preview_synth.csv · bin' : 'model_params.bin · length_v2',
+     source:V.pv ? 'reports/preview/router_preview_synth.csv' : 'read live by this build (forecast_result.model_params.bin, DEC-26 length_v2)',
      io:[`in ${S.length}`, `out ${D.router_order.map(b => V.counts.router[b]).join('/')}`],
      checks:[{ok:eqMap(V.counts.router, E.router), text:`${D.router_order.map(b => `${b} ${V.counts.router[b]}`).join(', ')} (expected ${D.router_order.map(b => E.router[b]).join('/')}${src ? ' ' + src : ''})`},
        ...(V.pv ? [{ok:null, text:binMoves().text}] : [])],
@@ -1164,36 +1770,61 @@ function buildPN(){
     ...MODEL_KEYS.map((m, i) => {
       const mine = S.filter(s => s.method === m), sc = mine.filter(s => s.mase != null), hi = maseHigh(sc);
       const bin = {ma3:'short', tsb:'medium', xgb_ma3_avg:'long', provisional:'insufficient'}[m];
-      return {id:'model:' + m, col:4, row:i, model:m, title:mlabel(m), sub:mnote(m),
-        mline: m === 'provisional' ? null : `MASE≥1 ${hi.length}/${sc.length} · MA3 ${ma3High(sc).length}/${sc.length}`,
+      const blk = B.by_model[m];
+      return {id:'model:' + m, row:1, col:3, mrow:i, lane:'out', model:m, title:mlabel(m), sub:mnote(m),
+        source:'analytics/forecasting/router.py LIVE_MODEL (DEC-26); coverage computed by this build (D.band)',
+        mline: m === 'provisional' ? null
+          : `MASE≥1 ${hi.length}/${sc.length} · cover ${blk ? pctv(blk.cov, 0) : '—'}`,
         io:[`in ${V.counts.router[bin]} (${bin})`, `out ${mine.length}`],
         checks:[{ok:mine.length === E.model[m], text:`${mine.length} SKUs (expected ${E.model[m]}${src ? ' ' + src : ''})`},
-          ...(m === 'provisional' ? [] : [{warn:hi.length > 0, text:maseLine(mine)}]),
+          ...(m === 'provisional' ? [{ok:null, text:'No holdout, no band, no coverage: under 3 sales months there is nothing to score.'}]
+            : [{warn:hi.length > 0, text:maseLine(mine)},
+               ...(blk ? [{warn:blk.below > 0, text:`Band coverage on this cohort: median ${pctv(blk.cov)}, `
+                   + `${blk.below} of ${blk.scored} below ${LVLL}, median band width / forecast ${fmt(blk.bw)}. `
+                   + `MA3 on the same months (computed, no MA3 band is stored): median ${pctv(blk.cov3)}, ${blk.below3} below.`},
+                  {ok:null, text:B.granularity}]
+                 : [{ok:null, text:'Coverage is not available in preview mode.'}])]),
           ...(V.pv && m === 'xgb_ma3_avg' ? [{ok:null, text:`${LONG_NOTE} ${mine.filter(s => s.change != null && Math.abs(s.change) > 0).length} of ${mine.length} changed.`}] : [])],
         rows:() => mine, has:s => s.method === m,
-        cols:[C.code, C.name, C.served, ...(V.pv ? [C.change] : []), C.ma3, C.gap, C.mase, C.ma3_mase, C.wape]};
+        cols:[C.code, C.name, C.served, ...(V.pv ? [C.change] : []), C.ma3, C.gap, C.mase, C.ma3_mase, C.wape,
+          ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw])]};
     }),
-    {id:'holdout', col:5, title:'Holdout evaluation', sub:V.pv ? 'as given in the preview file' : 'rolling one-step, served model',
+    {id:'holdout', row:1, col:4, lane:'out', title:'Holdout evaluation', sub:V.pv ? 'as given in the preview file' : 'rolling one-step, served model',
+     source:'DEC-25 (ARCHITECTURE.md:95); metrics read live from model_params.holdout_metrics_served, coverage computed by this build',
      io:[`in ${scored.length} routed`, `out ${scored.filter(s => s.mase != null).length} scored`],
      checks:[{ok:scored.length === E.router.short + E.router.medium + E.router.long, text:`${scored.length} routed SKUs (expected ${E.router.short + E.router.medium + E.router.long} = short + medium + long)`},
        {ok:scored.every(s => s.mase != null), text:`${scored.filter(s => s.mase == null).length} routed SKUs without a MASE`},
-       {warn:maseHigh(scored).length > 0, text:maseLine(scored)}],
+       {warn:maseHigh(scored).length > 0, text:maseLine(scored)},
+       ...(V.pv ? [{ok:null, text:'Coverage is not available in preview mode — the preview file holds no per-month path.'}]
+         : [{ok:B.agree.mase === B.agree.n && B.agree.wape === B.agree.n && B.agree.rmse === B.agree.n && B.agree.months === B.agree.n,
+             text:`Recomputed holdout path agrees with what was stored: MASE ${B.agree.mase}/${B.agree.n}, WAPE ${B.agree.wape}/${B.agree.n}, `
+               + `RMSE ${B.agree.rmse}/${B.agree.n}, holdout months ${B.agree.months}/${B.agree.n}. The corridor is only the served model’s if these match.`},
+            {warn:covAll.below > 0, text:`Coverage across all ${covAll.scored} scored SKUs: median ${pctv(covAll.cov)}, `
+               + `${covAll.below} below ${LVLL}, median band width / forecast ${fmt(covAll.bw)}.`},
+            {ok:null, text:B.granularity}])],
      rows:() => scored, has:s => s.status === 'ok',
      cols:[C.code, C.name, C.method, {k:'holdout_months', l:'Holdout months', num:1, r:s => `<td class="num">${fmt(s.holdout_months, 0)}</td>`}, C.mase,
- C.ma3_mase, C.wape, C.ma3_wape]},
-    {id:'fr', col:6, title:V.pv ? 'Preview forecasts' : 'forecast_result', sub:V.pv ? 'router_preview_synth.csv (not Forecast_Result)' : `forecast_date ${D.meta.forecast_date}`,
+       C.ma3_mase, C.wape, C.ma3_wape, ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw])]},
+    {id:'fr', row:1, col:5, lane:'db', title:V.pv ? 'Preview forecasts' : 'forecast_result', sub:V.pv ? 'router_preview_synth.csv (not Forecast_Result)' : `forecast_date ${D.meta.forecast_date}`,
+     source:V.pv ? 'reports/preview/router_preview_synth.csv' : 'read live by this build; band definition DEC-25 + scripts/run_baseline_forecast.py:821-840',
      io:[`in ${S.length}`, `out ${S.filter(s => s.status).length} rows`],
      checks:[{ok:S.filter(s => s.status).length === E.forecast_result, text:`${S.filter(s => s.status).length} rows (expected ${E.forecast_result}${src ? ' ' + src : ''})`},
-       {ok:eqMap(V.counts.backup, E.backup), text:`MA3 backup: ${D.backup_order.map(b => `${b} ${V.counts.backup[b]}`).join(', ')} (expected ${D.backup_order.map(b => E.backup[b]).join('/')}${src ? ' ' + src : ''})`}],
+       {ok:eqMap(V.counts.backup, E.backup), text:`MA3 backup: ${D.backup_order.map(b => `${b} ${V.counts.backup[b]}`).join(', ')} (expected ${D.backup_order.map(b => E.backup[b]).join('/')}${src ? ' ' + src : ''})`},
+       {ok:null, text:`Band stored here, one per SKU: ${B.interval} σ = ${B.sigma}`},
+       {warn:true, text:`Level: ${B.level}`},
+       {ok:null, text:`${S.filter(s => s.lo != null).length} of ${S.length} rows carry a band; the rest are the ${V.counts.model.provisional} provisional SKUs (no holdout RMSE, so NULL/NULL, never a fabricated band).`}],
      rows:() => S, has:() => true,
      cols:[C.code, C.name, {k:'status', l:'Status', r:s => `<td>${esc(s.status)}</td>`}, C.method, C.served, ...(V.pv ? [C.change] : []),
        {k:'lo', l:'Band low', num:1, r:s => `<td class="num">${fmt(s.lo)}</td>`}, {k:'hi', l:'Band high', num:1, r:s => `<td class="num">${fmt(s.hi)}</td>`},
-       {k:'backup', l:'MA3 backup', r:s => `<td class="muted">${esc(s.backup)}</td>`}, {k:'_bo', l:'Backup options', sort:false, r:s => `<td>${backupOptions(s)}</td>`}]},
+       ...(V.pv ? [] : [{k:'rmse', l:'Holdout RMSE (σ)', num:1, r:s => `<td class="num">${fmt(s.rmse)}</td>`}, C.bw, C.cov]),
+       {k:'backup', l:'MA3 backup', r:s => `<td class="muted">${esc(s.backup)}</td>`}, {k:'_bo', l:'Backup options', sort:false, r:s => `<td>${backupOptions(s)}</td>`}],
+    },
+    etlNode('api', 1, 6, 'out'),
   ];
   PN.forEach(n => n.light = light(n.checks));
 }
 const LAMP = {ok:'var(--ok)', warn:'var(--warn)', bad:'var(--bad)', none:'var(--none)'};
-let pSel = 'model:tsb', pSku = null;
+let pSel = 'raw', pSku = null;
 const pStates = {};
 function drawSummary(){
   const el = $('#pvSummary');
@@ -1214,20 +1845,88 @@ function drawSummary(){
 }
 function drawPipeline(){
   drawSummary();
-  const W = 1240, nw = 166, nh = 82, colX = c => 10 + c * ((W - nw - 20) / 6), mainY = 200;
+  // Geometry: two rows, and within each row two lanes. The lower lane is inside
+  // Supabase and gets a dashed frame; the upper lane is Python or files. A wire
+  // between lanes is a database boundary crossing and gets a marker.
+  const W = 1340, nw = 170, nh = 86, pad = 16;
+  const step = (W - nw - 2 * pad) / 6, cx = c => pad + c * step;
+  const MODELS = PN.filter(n => n.model);
+  const mh = MODELS.length * (nh + 18) - 18;
+  const Y = {r0out:52, r0db:52 + nh + 84, r1out:0, r1db:0};
+  Y.r1out = Y.r0db + nh + 116;
+  Y.r1db = Y.r1out + mh + 96;
+  const H = Y.r1db + nh + 46;
+  const wrapY = Y.r0db + nh + 36;                        // the row-0 -> row-1 hand-off
   const pos = {};
-  PN.forEach(n => { pos[n.id] = {x:colX(n.col), y:n.col === 4 ? 28 + n.row * (nh + 50) : mainY}; });
-  const H = 28 + 4 * (nh + 50);
+  PN.forEach(n => {
+    const y = n.lane === 'db' ? (n.row ? Y.r1db : Y.r0db)
+      : n.row === 0 ? Y.r0out
+      : n.model ? Y.r1out + n.mrow * (nh + 18) : Y.r1out + (mh - nh) / 2;
+    pos[n.id] = {x:cx(n.col), y, lane:n.lane, row:n.row};
+  });
   const sku = pSku && V.byPk.get(pSku);
   const onPath = n => sku && n.has(sku);
-  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Pipeline node graph">`;
-  const wire = (a, b) => {
-    const A = pos[a.id], B = pos[b.id], x1 = A.x + nw + 5, y1 = A.y + nh / 2, x2 = B.x - 5, y2 = B.y + nh / 2, mx = (x1 + x2) / 2;
-    s += `<path class="wire${sku && onPath(a) && onPath(b) ? ' path' : ''}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
-  };
-  const byCol = c => PN.filter(n => n.col === c);
-  for (let c = 0; c < 6; c++) byCol(c).forEach(a => byCol(c + 1).forEach(b => { if (!(a.model === 'provisional' && b.id === 'holdout')) wire(a, b); }));
-  wire(PN.find(n => n.model === 'provisional'), PN.find(n => n.id === 'fr'));
+  const at = id => PN.find(n => n.id === id);
+  const prov = MODELS.find(n => n.model === 'provisional');
+  const EDGES = [
+    ['raw', 'extract'], ['extract', 'transform'], ['transform', 'load'],
+    ['load', 'base', {xing:'①', label:'data ENTERS Supabase'}],
+    ['base', 'real'],
+    ['real', 'abc', {wrap:true}],
+    ['abc', 'combined'], ['combined', 'router'],
+    ...MODELS.map(m => ['router', m.id, {xing:'', label:'read'}]),
+    ...MODELS.filter(m => m.model !== 'provisional').map(m => [m.id, 'holdout']),
+    ['holdout', 'fr', {xing:'', label:'write'}],
+    ...(prov ? [[prov.id, 'fr', {xing:'', label:'write'}]] : []),
+    ['fr', 'api', {xing:'②', label:'data LEAVES Supabase'}],
+  ];
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Pipeline node graph: raw files through ETL into Supabase, out to the models, back in, and out to the dashboard API">`;
+
+  // the Supabase frames: one per contiguous run of db-lane nodes in a row
+  [0, 1].forEach(row => {
+    const cols = PN.filter(n => n.lane === 'db' && n.row === row).map(n => n.col).sort((a, b) => a - b);
+    let run = [];
+    const flush = () => {
+      if (!run.length) return;
+      const x0 = cx(run[0]) - 15, x1 = cx(run[run.length - 1]) + nw + 15;
+      const y0 = (row ? Y.r1db : Y.r0db) - 52;
+      s += `<rect class="dbframe" x="${x0}" y="${y0}" width="${x1 - x0}" height="${nh + 72}" rx="12"/>`
+        + `<text class="dbframe-l" x="${x1 - 12}" y="${y0 + 17}" text-anchor="end">SUPABASE · POSTGRES — INSIDE THE DATABASE</text>`;
+      run = [];
+    };
+    cols.forEach((c, i) => { if (i && c !== cols[i - 1] + 1) flush(); run.push(c); });
+    flush();
+    const yo = row ? Y.r1out : Y.r0out;
+    s += `<text class="lane-l" x="${pad}" y="${yo - 30}">OUTSIDE THE DATABASE — PYTHON / FILES</text>`;
+  });
+
+  const marks = [];
+  EDGES.forEach(([a, b, o]) => {
+    const A = pos[a], Bp = pos[b], na = at(a), nb = at(b);
+    if (!A || !Bp) return;
+    const lit = sku && onPath(na) && onPath(nb) ? ' path' : '';
+    if (o && o.wrap){
+      // row 0 -> row 1: down out of the DB frame, left above the model fan, down again
+      const x1 = A.x + nw / 2, x2 = Bp.x + nw / 2;
+      s += `<path class="wire wrap${lit}" d="M${x1},${A.y + nh + 18} V${wrapY} H${x2} V${Bp.y - 1}"/>`
+        + `<path d="M${x2 - 5},${Bp.y - 9} l5,8 l5,-8z" fill="var(--accent)" opacity=".7"/>`
+        + `<text class="lane-l" x="${x2 + 14}" y="${wrapY - 6}" style="fill:var(--accent)">same database, next stage</text>`;
+      return;
+    }
+    const x1 = A.x + nw + 5, y1 = A.y + nh / 2, x2 = Bp.x - 5, y2 = Bp.y + nh / 2, mx = (x1 + x2) / 2;
+    const cross = A.lane !== Bp.lane;
+    s += `<path class="wire${cross ? ' cross' : ''}${lit}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
+    // One marker per crossing, not per wire: router -> the four model nodes is a
+    // single read across the boundary, and stacking four pills on one another
+    // just hid the nodes underneath.
+    if (cross && o){
+      const key = `${a}|${o.xing || o.label}`;
+      const seen = marks.find(k => k.key === key);
+      if (seen){ seen.xs.push((x1 + x2) / 2); seen.ys.push((y1 + y2) / 2); }
+      else marks.push({key, xs:[(x1 + x2) / 2], ys:[(y1 + y2) / 2], ...o});
+    }
+  });
+
   PN.forEach(n => {
     const {x, y} = pos[n.id];
     const cls = ['kn', pSel === n.id ? 'sel' : '', sku ? (onPath(n) ? 'path' : 'dim') : ''].join(' ');
@@ -1235,14 +1934,28 @@ function drawPipeline(){
     s += `<g class="${cls}" data-id="${esc(n.id)}" tabindex="0">`
       + `<text class="t" x="${x + nw / 2}" y="${y - 8}" text-anchor="middle">${esc(n.title)}</text>`
       + `<rect class="body" x="${x}" y="${y}" width="${nw}" height="${nh}" rx="8"/>`
-      + `<rect x="${x}" y="${y}" width="${nw}" height="5" rx="2" fill="${n.model ? COLOR[n.model] : V.pv ? 'var(--ph)' : 'var(--accent)'}" opacity=".85"/>`
+      + `<rect x="${x}" y="${y}" width="${nw}" height="5" rx="2" fill="${n.model ? COLOR[n.model] : n.etl ? 'var(--ink-3)' : V.pv ? 'var(--ph)' : 'var(--accent)'}" opacity=".85"/>`
       + `<path d="M${x - 6},${y + nh / 2 - 5} l6,5 l-6,5z" fill="var(--ink-3)"/><path d="M${x + nw},${y + nh / 2 - 5} l6,5 l-6,5z" fill="var(--ink-3)"/>`
-      + `<text class="st" x="${x + 10}" y="${y + 22}">${esc(trunc(n.sub, 27))}</text>`
-      + `<text class="io" x="${x + 10}" y="${y + 40}">${esc(trunc(n.io[0], 24))}</text>`
-      + `<text class="io" x="${x + 10}" y="${y + 56}">${esc(trunc(n.io[1], 24))}</text>`
-      + (n.mline ? `<text class="io" x="${x + 10}" y="${y + 72}" style="fill:var(--ink-2);font-size:10.5px">${esc(n.mline)}</text>` : '')
+      + `<text class="st" x="${x + 10}" y="${y + 22}">${esc(trunc(n.sub, 28))}</text>`
+      + `<text class="io" x="${x + 10}" y="${y + 40}">${esc(trunc(n.io[0], 23))}</text>`
+      + `<text class="io" x="${x + 10}" y="${y + 56}">${esc(trunc(n.io[1], 23))}</text>`
+      + (n.mline ? `<text class="io" x="${x + 10}" y="${y + 72}" style="fill:var(--ink-2);font-size:10.5px">${esc(trunc(n.mline, 26))}</text>` : '')
+
       + `<circle cx="${x + nw / 2}" cy="${y + nh + 12}" r="6" fill="${LAMP[n.light]}" stroke="var(--surface-1)" stroke-width="2"><title>${esc(n.light)}</title></circle>`
       + `<title>${esc(n.title)}: ${esc(n.io.join(' → '))}</title></g>`;
+  });
+
+  // boundary markers last, so they sit above the wires
+  const mean = arr => arr.reduce((x, y) => x + y, 0) / arr.length;
+  marks.forEach(k => {
+    const x = mean(k.xs), y = mean(k.ys);
+    s += `<g class="xing">`
+      + (k.xing ? `<circle cx="${x}" cy="${y}" r="12"/><text x="${x}" y="${y + 4}">${k.xing}</text>`
+                  + `<rect x="${x - 86}" y="${y - 40}" width="172" height="20" rx="10" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.2"/>`
+                  + `<text class="w" x="${x}" y="${y - 26}">${esc(k.xing + '  ' + k.label)}</text>`
+                : `<rect x="${x - 50}" y="${y - 9}" width="44" height="18" rx="9" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.2"/>`
+                  + `<text class="w" x="${x - 28}" y="${y + 4}">${esc(k.label.toUpperCase())}</text>`)
+      + `</g>`;
   });
   $('#pSvg').innerHTML = s + '</svg>';
   $$('#pSvg .kn').forEach(g => g.onclick = () => { pSel = g.dataset.id; drawPipeline(); });
@@ -1250,10 +1963,13 @@ function drawPipeline(){
 }
 function drawPanel(){
   const n = PN.find(x => x.id === pSel);
-  const st = pStates[n.id] || (pStates[n.id] = {k:'code', d:1});
+  const st = pStates[n.id] || (pStates[n.id] = {k:n.etl ? 'c0' : 'code', d:1});
   const cols = typeof n.cols === 'function' ? n.cols() : n.cols;
-  if (!cols.find(c => c.k === st.k)) { st.k = 'code'; st.d = 1; }
-  $('#pPanel').innerHTML = `<div class="pnode"><i class="lamp" style="background:${LAMP[n.light]}"></i><h3>${esc(n.title)}</h3><span class="muted">${esc(n.sub)} · ${esc(n.io.join(' → '))}</span><span class="count" id="pcount"></span></div>`
+  if (!cols.find(c => c.k === st.k)) { st.k = cols[0].k; st.d = 1; }
+  $('#pPanel').innerHTML = `<div class="pnode"><i class="lamp" style="background:${LAMP[n.light]}"></i><h3>${esc(n.title)}</h3>`
+    + `<span class="pill">${n.lane === 'db' ? 'inside Supabase' : 'outside the database'}</span>`
+    + `<span class="muted">${esc(n.sub)} · ${esc(n.io.join(' → '))}</span><span class="count" id="pcount"></span></div>`
+    + (n.source ? `<div class="srcline"><b>${n.etl ? 'Numbers from' : 'Source'}:</b> ${esc(n.source)}</div>` : '')
     + `<ul class="checks">${n.checks.map(c => `<li>${c.ok === false ? '✗ ' : c.warn ? '⚠ ' : c.ok ? '✓ ' : ''}${esc(c.text)}</li>`).join('')}</ul>`
     + (n.sankey ? `<div style="color:var(--ink-3);font-size:12px;margin-bottom:6px">Tier A → combined_v1 bin → ${V.pv ? 'router bin (real) → router bin (preview)' : 'live router bin'} → served model → MA3 backup. Click a node to filter the table below.</div>`
       + (V.pv ? `<div class="pvnote" id="moveNote">${esc(binMoves().text)}</div>` : '')
@@ -1262,7 +1978,8 @@ function drawPanel(){
     + `<div class="tw" style="max-height:420px"><table id="ptbl"><thead></thead><tbody></tbody></table></div>`;
   const draw = () => {
     const rows = n.sankey ? n.rows().filter(s => sankeyMatch(s) && textMatch(s, $('#q').value)) : n.rows();
-    renderTable($('#ptbl'), cols, rows, st, pk => selectPipelineSku(pk), pSku);
+    // ETL rows are rows of a report, not SKUs - nothing to select from them.
+    renderTable($('#ptbl'), cols, rows, st, n.etl ? null : pk => selectPipelineSku(pk), pSku);
     $('#pcount').textContent = `${rows.length} of ${n.rows().length} rows` + (n.sankey && filter ? ` · ${filter.replace(':', ' = ')}` : '');
   };
   if (n.sankey){
