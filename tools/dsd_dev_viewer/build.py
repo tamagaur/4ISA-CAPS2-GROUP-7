@@ -1603,7 +1603,7 @@ function routingKv(s){
         + (s.outside && s.outside.length ? ` \u00b7 outside: ${s.outside.map(i => V.periods[i]).join(', ')}` : '')],
       ['MA3 backup', esc(s.backup) + (s.backup_reason ? ` — ${esc(s.backup_reason)}` : '')],
       ['backup options', backupOptions(s)],
-      ['bin_reason', esc(s.bin_reason)],
+      ['bin_reason', binReasonHTML(s)],
       ['other schemes', esc(Object.entries(s.schemes).filter(([k]) => k !== 'combined_v1').map(([k, v]) => `${k}=${v}`).join(', '))],
     ]);
 }
@@ -1924,17 +1924,32 @@ function statTiles(s){
   return `<div class="stats">` + [
     [fmt(s.served), `Served forecast${s.provisional ? ' (provisional)' : ''}`], [fmt(s.ma3), 'MA3 forecast'],
     [pct(s.gap), 'Served vs MA3'],
-    ...(V.pv ? [[pct(s.change), 'Served change vs real']] : [[s.lo == null ? '—' : `${fmt(s.lo, 0)}–${fmt(s.hi, 0)}`, 'Band']]),
+    // WAPE / MA3 WAPE, MA3 coverage, MA3 band width and the raw Band card were
+    // dropped 2026-09-23: the band's bounds are already printed by the Routing
+    // block below as 'band (stored)', and the MA3 mirrors of coverage and width
+    // belong to the Band detail section, not to this summary.
+    ...(V.pv ? [[pct(s.change), 'Served change vs real']] : []),
     [p ? NT : fmt(s.mase), 'MASE (served, holdout)', !p && s.mase >= 1],
     [p ? NT : fmt(s.ma3_mase), 'MA3 MASE (same holdout)', !p && s.ma3_mase >= 1],
-    [p ? NT : fmt(s.wape), 'WAPE (served, holdout)'],
-    [p ? NT : fmt(s.ma3_wape), 'MA3 WAPE (same holdout)'],
     [p ? NT : pctv(s.cov), 'Coverage (holdout)', !p && s.cov != null && s.cov < LVL],
     [p ? NT : fmt(s.bw), 'Band width / forecast'],
-    [p ? NT : pctv(s.ma3_cov), 'MA3 coverage (computed)', !p && s.ma3_cov != null && s.ma3_cov < LVL],
-    [p ? NT : fmt(s.ma3_bw), 'MA3 band width / forecast'],
     [fmt(s.rlr), 'Recent level ratio (3 / 12 mo)'],
   ].map(([v, l, f]) => `<div class="stat${f ? ' flag' : ''}" title="${esc(v)}"><div class="v">${esc(v)}</div><div class="l">${l}</div></div>`).join('') + `</div>`;
+}
+// bin_reason as sku_segment stored it, with one thing added and nothing changed:
+// where the reason's own Mann-Kendall p is >= 0.05 the Theil-Sen slope it quotes
+// is labelled NOT SIGNIFICANT, so a non-zero slope is not read as a trend. The p
+// is taken from the reason string itself (falling back to sku_traits.trend_pvalue)
+// so the label always describes the number printed beside it.
+const MK_ALPHA = 0.05;
+function binReasonHTML(s){
+  const r = s.bin_reason;
+  if (!r) return esc(r);
+  const m = /Mann-Kendall p=([0-9.]+)/.exec(r);
+  const pv = m ? parseFloat(m[1]) : (s.traits && s.traits.trend_pvalue);
+  if (!/Theil-Sen slope/.test(r) || pv == null || !(pv >= MK_ALPHA)) return esc(r);
+  return esc(r) + ` <span class="ret" title="Mann-Kendall p=${esc(pv)} >= ${MK_ALPHA}: the slope is not distinguishable from no trend">`
+    + `— slope not statistically significant (p ≥ ${MK_ALPHA})</span>`;
 }
 const kv = o => '<dl class="kv">' + o.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('') + '</dl>';
 const skuNotes = s => V.pv ? (s.ph_count ? `<div class="pvnote">${s.ph_count} placeholder months (2021–22) prepended. They are not SSM's sales.</div>` : '')
@@ -2289,7 +2304,7 @@ function buildPN(){
      checks:[{ok:eqMap(V.counts.combined, E.combined), text:`${D.combined_order.map(b => `${b} ${V.counts.combined[b]}`).join(', ')} (expected ${D.combined_order.map(b => E.combined[b]).join('/')})`},
        ...(V.pv ? [{ok:null, text:'combined_v1 is the real sku_segment scheme; the preview does not re-bin it.'}] : [])],
      rows:() => S, has:() => true, sankey:true,
-     cols:() => { const r = R_COLS(); return [...r.slice(0, 3), {k:'bin_reason', l:'bin_reason', r:s => `<td class="name" style="max-width:320px" title="${esc(s.bin_reason)}">${esc(s.bin_reason)}</td>`}, ...r.slice(3)]; }},
+     cols:() => { const r = R_COLS(); return [...r.slice(0, 3), {k:'bin_reason', l:'bin_reason', r:s => `<td class="name" style="max-width:320px" title="${esc(s.bin_reason)}">${binReasonHTML(s)}</td>`}, ...r.slice(3)]; }},
     {id:'router', row:1, col:2, lane:'db', title:V.pv ? 'Router bins (preview)' : 'Router bins (live)', sub:V.pv ? 'router_preview_synth.csv · bin' : 'model_params.bin · length_v2',
      source:V.pv ? 'reports/preview/router_preview_synth.csv' : 'read live by this build (forecast_result.model_params.bin, DEC-26 length_v2)',
      io:[`in ${S.length}`, `out ${D.router_order.map(b => V.counts.router[b]).join('/')}`],
