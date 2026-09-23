@@ -474,6 +474,8 @@ def rollback_from(cur, backup_dir: Path, checks: list) -> None:
 # single transaction, so both paths produce the identical 42 checks.
 # ---------------------------------------------------------------------------------------------------------------
 LEDGER = "etl_cutover_ledger"
+# surrogate key of every table a batch can insert into, for the scoped per-batch checksum
+IDENT = {**{t: k for t, (k, _) in FACTS.items()}, **DIM_KEY, "etl_quarantine": "quarantine_key"}
 
 
 def chunks(xs: list, n: int = CHUNK):
@@ -486,11 +488,16 @@ def copy_quarantine(cur, S: str, T: str, predicate: str, log: dict) -> int:
     shared = [c for c in columns(cur, S, "etl_quarantine") if c != "quarantine_key"]
     cur.execute(f"SELECT quarantine_key FROM {S}.etl_quarantine WHERE NOT is_demo AND ({predicate}) ORDER BY quarantine_key")
     keys = [r[0] for r in cur.fetchall()]
-    copied = 0
+    copied, new_keys = 0, []
     for part in chunks(keys):
         cur.execute(f"INSERT INTO {T}.etl_quarantine ({', '.join(shared)}) SELECT {', '.join(shared)} "
-                    f"FROM {S}.etl_quarantine WHERE quarantine_key = ANY(%s)", (part,))
-        copied += cur.rowcount
+                    f"FROM {S}.etl_quarantine WHERE quarantine_key = ANY(%s) RETURNING quarantine_key", (part,))
+        rows = cur.fetchall()
+        copied += len(rows)
+        new_keys += [r[0] for r in rows]
+    # recorded so batch_checksums() can hash the rows this batch actually wrote - without it the two quarantine
+    # batches (7,791 rows, the largest write of the cutover) would carry no checksum at all, only a count
+    log["inserted"].setdefault("etl_quarantine", []).extend(new_keys)
     if keys:
         cur.execute(f"SELECT DISTINCT run_id FROM {S}.etl_quarantine WHERE quarantine_key = ANY(%s)", (keys,))
         for (r,) in cur.fetchall():
@@ -764,7 +771,7 @@ def batch_checksums(cur, T: str, delta: dict) -> tuple[str | None, str | None]:
     for table, keys in sorted((delta.get("inserted") or {}).items()):
         if not keys:
             continue
-        ident = FACTS[table][0] if table in FACTS else DIM_KEY.get(table)
+        ident = IDENT.get(table)
         if ident is None:
             continue
         cols = [c for c in columns(cur, T, table) if c not in LOAD_TIME]
