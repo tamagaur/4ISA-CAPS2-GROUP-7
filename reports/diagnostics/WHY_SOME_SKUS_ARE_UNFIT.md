@@ -12,7 +12,7 @@ measure, the big change in their sales level happens *inside* the six months we 
 them on, and eight of those changes land in December 2025. A forecast made before a
 change cannot know about it. To be clear what these changes are: **partial level changes,
 not collapses or shutdowns, and they move in both directions** — several of these SKUs
-stepped sharply *up*. Every one of the 28 is still selling. We then tested 51 alternative
+stepped sharply *up*. Every one of the 28 is still selling. We then tested 50 alternative
 forecasting models on exactly
 these 28 SKUs, and none of them passed our test for being measurably better — including
 every kind of smoothing. So we are not changing the model. We flag these SKUs for human
@@ -109,16 +109,17 @@ TSB being a poor choice. It is a SKU whose demand moved and neither model was to
 
 ## 5. Finding 3 — no model fixes it
 
-We took 51 candidate forecasting models whose predictions were already stored from the
+We took the 50 candidate forecasting models whose predictions were already stored from the
 earlier bake-off (`reports/experiment_artifacts/preds_plus.csv.gz`) and scored every one
-of them on **only these 28 SKUs**.
+of them against MA3 on **only these 28 SKUs**. (That file holds 51 forecast columns; the
+51st is MA3 itself, the benchmark they are scored against, so 50 are candidates.)
 
 Our rule for saying one model is measurably better than another has two conditions, both
 required: the statistical confidence interval on the difference must be entirely on one
 side of zero, **and** more SKUs must improve than get worse (`analytics/forecasting/switching.py`).
 
-- **0 of 51 passed.** Every one came out a tie.
-- Across 51 models × 5 half-year test blocks: **2 wins, 241 ties, 7 losses.**
+- **0 of 50 passed.** Every one came out a tie.
+- Across 50 models × 5 half-year test blocks = 250 scored cells: **2 wins, 241 ties, 7 losses.**
 - Those 2 wins are one block each, out of five, with no overall result clearing the bar.
   They are what two equally-good models produce by coincidence, not evidence.
 - There is a second reason to discount them: **these 28 SKUs were chosen because they
@@ -140,7 +141,7 @@ And the problem is that these 28 SKUs have **two opposite problems mixed togethe
   Models covering this that we tested: naive (just repeat last month), MA2, drift and Holt.
 
 Turn one dial and you fix one group while making the other worse. That is exactly why all
-51 came out flat. **CV** below means *coefficient of variation* — the standard deviation
+50 came out flat. **CV** below means *coefficient of variation* — the standard deviation
 divided by the average, a plain measure of how much a SKU bounces around month to month.
 
 ## 7. Finding 4 — a cause is a description, not a diagnosis
@@ -184,7 +185,7 @@ them to diagnose or to define a new SKU grouping.
 - **We did not edit the spikes out of the data.** They are what SSM reported. Smoothing
   them away in the stored history would make our numbers look better by changing the
   client's records — the exact thing our anti-fabrication rule forbids.
-- **We did not swap models per SKU.** Picking whichever of the 51 happened to score best
+- **We did not swap models per SKU.** Picking whichever of the 50 happened to score best
   on each SKU is choosing with hindsight. We measured it: it is a ceiling, not a strategy.
 - **We did not create a bin or rule defined by fit results.** Grouping SKUs by "these ones
   forecast badly" and then reporting that the group forecasts badly is circular.
@@ -208,8 +209,8 @@ changes the order quantity; it does not change the model.
 
 ---
 
-**Caveat on sourcing.** One set of numbers in section 5 — the 51-candidate table, the
-0-of-51 pass count and the 2/241/7 block record — was computed in analysis over
+**Caveat on sourcing.** One set of numbers in section 5 — the 50-candidate table, the
+0-of-50 pass count and the 2/241/7 block record — was computed in analysis over
 `preds_plus.csv.gz` and is **not currently written to a file in this repository**. Every
 other number cites a committed file. If that table needs to be auditable, it should be
 exported before it is quoted in the manuscript.

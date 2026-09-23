@@ -65,13 +65,27 @@ Built by `experiment_artifacts/scripts/build_experiment_log.py`, then `backfill_
 |---|---|
 | `routing_8020`, `routing_7030` | 17 models per combined_v1 bin, single time split, plus routing strategies and a merged-long check. |
 | `synthetic_arm_A_8020`, `synthetic_arm_B_8020` | Same, with the 2021-22 synthetic months as training context. Not reportable. |
-| `candidate_search_tierA` | 37 candidates incl. XGBoost variants, random forest, ridge, neural net, auto-ETS, ensembles; every-month test. Includes the two LightGBM crashes (both `lgbm`, `bin = ALL`), so 36 produced forecasts. Count corrected from "35" 2026-09-23: it is `nunique()` over this run's `model` column. |
+| `candidate_search_tierA` | 37 distinct `model` names — XGBoost variants, random forest, ridge, neural net, auto-ETS, ensembles; every-month test. One of the 37, `lgbm`, appears only as the two LightGBM crash rows (`bin = ALL`), so **36 produced forecasts**. Corrected from "35" on 2026-09-23; 35 matches no count in the artifacts. |
 | `block_tests_tierA`, `monthly_scoreboard_tierA` | XGBoost+MA3 average and TSB vs MA3 by half-year block and by month. |
 | `global_model_trainA_evalABC` | XGBoost trained on Tier A origins, scored on Tier A and Tier A+B+C. |
 | `global_model_trainABC_evalABC` | `artifact_missing`: the result file was overwritten by the run above. |
 | `synthetic_prefix_check_tierA` | Synthetic prefix applied to TSB and XGBoost. Not reportable. |
 | `xgboost_bakeoff_old` | The 2026-09-02 XGBoost bake-off CSVs already under `reports/`. |
 | `gate_d_bakeoff` | The 2026-09-20 Gate D bake-offs (17-model, auto-ARIMA, global XGBoost), real and synthetic arms, 89 evaluable Tier A SKUs. Backfilled by `scripts/backfill_gate_d.py` from `gate_d_*.csv`; the workbook `gate_d_model_bakeoff_unilever_tierA.xlsx` is the same run's presentation view. These artifacts predate the `months_train` label fix. Synthetic arms are not reportable. |
+
+## Counting convention
+
+Model counts differ between runs because each one counts **that run's forecast
+columns**, not a single project-wide list. Nothing below contradicts anything else:
+
+| figure | counts | run | appears in |
+|---|---|---|---|
+| **17** | 16 classical models + the MA3 benchmark | `routing_8020` / `routing_7030` | this file (row above); ARCHITECTURE.md DEC-26 |
+| **37** | distinct `model` names logged; `lgbm` is crash-only, so 36 produced forecasts | `candidate_search_tierA` | this file |
+| **50** | candidates scored against MA3 on the 28 not-fit SKUs (`preds_plus.csv.gz` holds 51 forecast columns; the 51st is MA3 itself) | 2026-09-23 not-fit re-score | `reports/diagnostics/README.md`; `WHY_SOME_SKUS_ARE_UNFIT.md` |
+| ~~35~~ | **withdrawn.** It reproduces no count in any artifact. | — | was this file, until 2026-09-23 |
+
+Check that closes the 50: 2 wins + 241 ties + 7 losses = 250 = 50 models × 5 blocks.
 
 ## Appended 2026-09-23 — candidate follow-up of 2026-09-22
 

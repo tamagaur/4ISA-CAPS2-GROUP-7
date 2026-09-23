@@ -87,6 +87,6 @@ candidate bin: a bin defined by fit results would be circular.
   true when written, before batch 1 ran the same day.)*
 - Anything selected *because* it scored badly (the 28) cannot be used to justify a
   model change on its own — a win on a selected subset is the selection problem,
-  not evidence. Of 51 candidate models scored on these 28, **none** passed the
+  not evidence. Of the 50 candidate models scored on these 28, **none** passed the
   two-condition test (95% bootstrap interval on the median per-SKU WAPE difference
   clear of zero, seed 20260921, 1,000 resamples, **and** more SKUs improving).
