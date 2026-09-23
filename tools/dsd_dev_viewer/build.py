@@ -725,8 +725,18 @@ CAUSE_THRESHOLDS = [
 VERDICT_ORDER = ["clean", "borderline", "not fit", "no verdict (never scored)"]
 # The guardrail sentence every not-fit SKU carries, per Yuan 2026-09-23. The
 # "0 of 51" is his figure, quoted as given; it is not recomputed here.
-NO_BETTER_MODEL = ("No other model is known to fix this: 0 of 51 candidates passed. "
-                   "Treat it as a SKU to review, not a model to swap.")
+NO_BETTER_MODEL = ("51 candidate models were tested on these SKUs; none passed the test. "
+                   "This is treated as a review flag, not a model problem.")
+
+
+def _num(v, nd=4):
+    return None if v is None else round(float(v), nd)
+
+
+def _median(values):
+    import statistics
+    vals = [v for v in values if v is not None]
+    return None if not vals else round(statistics.median(vals), 4)
 
 
 def load_fit_review(payload: dict) -> dict:
@@ -758,6 +768,7 @@ def load_fit_review(payload: dict) -> dict:
 
     cohort = {s_["pk"] for s_ in payload["skus"]}
     agree = {"n": 0, "mase": 0, "bw": 0}
+    spike_check = {"n": 0, "ok": 0, "bad": []}
     counts = {"verdict": {}, "cause": {}, "cause_verdict": {}, "by_bin": {}}
     for sku in payload["skus"]:
         r = rows.get(sku["pk"])
@@ -770,6 +781,10 @@ def load_fit_review(payload: dict) -> dict:
             causes_all=[label for col, label in CAUSE_FLAGS.items() if r.get(col) == "1"],
             cause_level_shift=num(r["cause_level_shift"]), cause_cv=num(r["cause_cv_last12"]),
             cause_median_units=num(r["cause_median_units"]), cause_spikes=num(r["cause_n_spikes"]),
+            cause_mad=num(r["cause_mad"]), cause_step_month=r["cause_largest_step_month"] or None,
+            cause_zero_share=num(r["cause_zero_missing_share"]), cause_zero_run=num(r["cause_longest_zero_run"]),
+            cause_n_months=num(r["cause_n_months"]), cause_is_level_shift=r["cause_is_level_shift"] == "1",
+            sales_months_fit=num(r["sales_months"]),
             verdict=r["verdict"], cause=cause,
             assessable=r["assessable"] == "yes", assessable_reason=r["assessable_reason"],
             verdict_source=r["verdict_source"],
@@ -788,6 +803,24 @@ def load_fit_review(payload: dict) -> dict:
         counts["cause_verdict"][cause][r["verdict"]] = counts["cause_verdict"][cause].get(r["verdict"], 0) + 1
         counts["by_bin"].setdefault(sku["router_bin"], {})
         counts["by_bin"][sku["router_bin"]][r["verdict"]] = counts["by_bin"][sku["router_bin"]].get(r["verdict"], 0) + 1
+        # Which months are spikes is not a column, but its two parameters are:
+        # |value - cause_median_units| > 3 x cause_mad, applied to the SKU's own
+        # modelling series. Checked below - the count must equal cause_n_spikes.
+        med, mad = sku["cause_median_units"], sku["cause_mad"]
+        sku["spike_top"] = None
+        if med is not None and mad is not None and sku["first_i"] is not None:
+            months = payload["periods"]
+            hits = [(months[i], sku["monthly"][i] or 0.0)
+                    for i in range(sku["first_i"], sku["last_i"] + 1)
+                    if abs((sku["monthly"][i] or 0.0) - med) > 3 * mad]
+            spike_check["n"] += 1
+            if len(hits) == int(sku["cause_spikes"] or 0):
+                spike_check["ok"] += 1
+            else:
+                spike_check["bad"].append(sku["code"])
+            if hits:
+                m, v = max(hits, key=lambda h: abs(h[1] - med))
+                sku["spike_top"] = {"m": m, "v": _num(v, 1)}
         if scored:
             agree["n"] += 1
             if sku["mase"] is not None and sku["mase_pipeline"] is not None and abs(sku["mase"] - sku["mase_pipeline"]) <= 0.0011:
@@ -797,9 +830,17 @@ def load_fit_review(payload: dict) -> dict:
     return {
         "file": os.path.relpath(FIT_REVIEW, REPO).replace("\\", "/"),
         "rows": len(rows), "missing": sorted(cohort - set(rows)), "extra": sorted(set(rows) - cohort),
-        "agree": agree, "counts": counts,
+        "agree": agree, "counts": counts, "spike_check": spike_check,
         "verdict_order": VERDICT_ORDER, "cause_order": CAUSE_ORDER, "no_better_model": NO_BETTER_MODEL,
         "thresholds": CAUSE_THRESHOLDS,
+        # The two gates are the README's measured figures, quoted, never recomputed.
+        # The two medians ARE computed here, over the CSV rows that carry the column,
+        # and the sentence that uses one says so.
+        "gate_cv": 0.4365, "gate_units": 812.5,
+        "median_cv": _median([num(r["cause_cv_last12"]) for r in rows.values()]),
+        "median_cv_n": sum(1 for r in rows.values() if num(r["cause_cv_last12"]) is not None),
+        "median_units": _median([num(r["cause_median_units"]) for r in rows.values()]),
+        "median_units_n": sum(1 for r in rows.values() if num(r["cause_median_units"]) is not None),
         "cause_note": ("Cause group is the CSV's own cause_group column; every threshold is recorded in "
                        "reports/diagnostics/README.md. The rules are NOT exclusive - cause_group is the "
                        "first match, and a SKU's other fired rules are listed on its own page. "
@@ -1019,6 +1060,9 @@ def main():
           f"missing from CSV {len(f['missing'])}, not in cohort {len(f['extra'])}; "
           f"agrees with the DB read: mase_pipeline {f['agree']['mase']}/{f['agree']['n']}, "
           f"band width/forecast {f['agree']['bw']}/{f['agree']['n']}")
+    sc = f["spike_check"]
+    print(f"  spike months re-identified from cause_median_units +/- 3 x cause_mad match cause_n_spikes: "
+          f"{sc['ok']}/{sc['n']}" + (f" MISMATCH {sc['bad']}" if sc["bad"] else ""))
     print(f"  verdict={f['counts']['verdict']}")
     print(f"  cause={f['counts']['cause']}")
     for cs in f["cause_order"]:
@@ -1115,6 +1159,8 @@ nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--acce
 .btn:hover{background:var(--surface-3)}
 .btn:disabled{opacity:.4;cursor:default}
 .seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line-2);border-radius:8px;padding:2px;flex-wrap:wrap}
+#causeSeg{flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:thin}
+#causeSeg button{white-space:nowrap}
 .seg button{background:none;border:0;padding:4px 10px;border-radius:6px;cursor:pointer;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
 .seg button[aria-pressed="true"]{background:var(--surface-3);color:var(--ink)}
 .seg i{width:8px;height:8px;border-radius:50%}
@@ -1232,6 +1278,37 @@ dl.kv dd{margin:0;font-family:var(--mono);word-break:break-word}
   border-radius:0 8px 8px 0;font-size:12px;margin:8px 0}
 .unfitnote b{color:#ffd98a}
 .v-clean{color:var(--ok)} .v-borderline{color:var(--warn)} .v-notfit{color:var(--bad);font-weight:600}
+.explain{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin:10px 0}
+.explain h4{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--ink-2);letter-spacing:.02em}
+.explain h4+h4{margin-top:12px}
+.explain ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.65;color:var(--ink)}
+.explain li{margin:0}
+.explain s-[title]{}
+.explain span[title]{border-bottom:1px dotted var(--line-2);cursor:help}
+.explain .cl{color:var(--ink-2)}
+.ret{color:var(--flag-ink);font-style:italic}
+.verdictline{display:flex;gap:10px;align-items:flex-start;padding:11px 14px;border-radius:var(--r);margin:10px 0;
+  font-size:13.5px;line-height:1.55;border:1px solid var(--line)}
+.verdictline.notfit{background:rgba(229,72,77,.10);border-color:rgba(229,72,77,.35)}
+.verdictline.borderline{background:var(--flag-bg);border-color:rgba(224,165,38,.35)}
+.verdictline.clean{background:rgba(47,179,109,.08);border-color:rgba(47,179,109,.3)}
+.verdictline b{white-space:nowrap}
+details.sec{border:1px solid var(--line);border-radius:var(--r);padding:0;margin:8px 0;background:var(--surface-1)}
+/* display:flex on a <summary> stops the engine treating it as the disclosure
+   summary: the closed content keeps rendering. Measured in headless Edge
+   2026-09-23 - every collapsed section was still fully visible. Keep summary at
+   its default display, and hide the bodies explicitly as well. */
+details.sec>summary{padding:9px 14px;font-weight:600;font-size:12.5px;color:var(--ink-2);list-style:none}
+details.sec:not([open])>.secbody{display:none}
+details.legendbox:not([open])>.legend{display:none}
+details.sec>summary::before{content:"\25b8";color:var(--ink-3);transition:transform .12s}
+details.sec[open]>summary::before{transform:rotate(90deg)}
+details.sec>summary:hover{color:var(--ink)}
+details.sec .secbody{padding:2px 14px 12px}
+details.sec .explain{background:none;border:0;padding:0;margin:0}
+details.legendbox{border:0;padding:0;margin:2px 0}
+details.legendbox>summary{color:var(--ink-3);font-size:11.5px;font-weight:600;padding:2px 0}
+.stats.four{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));max-width:760px}
 .banddef dl.kv dt{min-width:118px}
 .lightbox{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--ink-2)}
 .lightbox span{display:inline-flex;gap:6px;align-items:center}
@@ -1282,7 +1359,7 @@ dl.kv dd{margin:0;font-family:var(--mono);word-break:break-word}
   <div class="kpis" id="kpis"></div>
 
   <section id="tab-forecasts">
-    <div class="card banddef" id="bandCard" style="margin-bottom:14px"></div>
+    <div class="banddef" id="bandCard" style="margin-bottom:14px"></div>
     <div class="toolbar">
       <div class="ac" id="acF"></div>
       <div class="seg" id="binSeg"></div>
@@ -1290,6 +1367,7 @@ dl.kv dd{margin:0;font-family:var(--mono);word-break:break-word}
       <div class="seg" id="verdictSeg" title="Fit verdict, from the fit review CSV"></div>
       <div class="seg" id="causeSeg" title="Cause group, built only from signals already on record"></div>
       <div class="seg" id="viewSeg"></div>
+      <button class="btn" id="colsBtn"></button>
       <span class="count" id="gcount"></span>
     </div>
     <div class="card" id="focus" style="margin-bottom:14px"></div>
@@ -1355,28 +1433,203 @@ const causeSplit = (rows, c) => ({
 });
 const causeTag = (rows, c) => { const k = causeSplit(rows, c); return `${c} ${k.unfit} not fit / ${k.clean} clean`; };
 const WIDE_BAND = 2;
-// A band wider than twice the forecast carries no usable information, whatever
-// the fit verdict says - 64861486 is clean and still 4.3x.
-const bandNote = s => s.bw != null && s.bw > WIDE_BAND
-  ? `<div class="widenote">Band width / forecast is <b>${fmt(s.bw)}</b> \u2014 band wider than 2\u00d7 the forecast `
-    + `\u2014 the interval is too wide to be informative here. Stored band ${fmt(s.lo, 0)}\u2013${fmt(s.hi, 0)} `
-    + `around a forecast of ${fmt(s.served, 0)}.</div>` : '';
-// Every not-fit SKU says why, in the SKU's own numbers, and says plainly that
-// swapping the model is not the answer (Yuan, 2026-09-23).
-const unfitNote = s => s.verdict !== 'not fit' ? '' :
-  `<div class="unfitnote"><b>Not fit to use on this SKU.</b> Cause group: <b>${esc(s.cause)}</b>`
-  + (s.cause === 'none of the above' ? ' (no cause rule fires on this SKU)' : '')
-  + (s.causes_all && s.causes_all.length > 1 ? ` (first match; also fired: ${esc(s.causes_all.filter(c => c !== s.cause).join(', '))})` : '')
-  + `. Recent level ratio (3 / 12 mo) <b>${fmt(s.rlr_fit != null ? s.rlr_fit : s.rlr)}</b>`
-  + `. MASE ${fmt(s.mase_common)} on the common window`
-  + (s.ma3_fails ? `, and <b>MA3 also fails on this SKU</b> (MA3 MASE ${fmt(s.ma3_mase_common)})` : '')
-  + `. ${esc(F.no_better_model)}`
-  + (s.flags && s.flags.length ? ` Verdict flags: ${esc(s.flags.join(', '))}.` : '')
-  + ` <span class="muted">${esc(s.cause)}: ${esc((F.thresholds.find(t => t[0] === s.cause) || [,'no rule fired'])[1])}`
-  + ` \u00b7 across the cohort ${causeTag(V.skus, s.cause)}.</span></div>`;
+// ---------------------------------------------------------------------------
+// Plain-language explanation. FIXED sentence templates with stored numbers
+// dropped in - no sentence is composed at run time, and every one carries the
+// field it came from in its tooltip. Sources are the fit review CSV
+// (reports/diagnostics/fit_review_common_2026-09-23.csv), its README's two
+// measured gates, and the page's own stored band / recomputed holdout path.
+// ---------------------------------------------------------------------------
+const CSVSRC = 'fit_review_common_2026-09-23.csv';
+// A negative actual is a returns-dominated month, not demand
+// (analytics/forecasting/diagnostic_metrics.py:7-11: negatives are excluded
+// from MAPE, kept in WAPE/sMAPE). Labelling only - no stored value changes.
+const RETURNS = 'returns exceeded sales that month; not a demand reading';
+const RETSRC = 'analytics/forecasting/diagnostic_metrics.py:7-11 \u2014 a negative actual is returns-dominated';
+const retTag = v => v != null && v < 0 ? ` <span class="ret" title="${esc(RETSRC)}">(${RETURNS})</span>` : '';
+const said = {mad: false};
+const sent = (src, txt) => `<span title="${esc(src)}">${txt}</span>`;
+const u = (v, d=0) => fmt(v, d);
+function seriesSentences(s){
+  const out = [];
+  out.push(sent(`sales_months (${CSVSRC}) \u00b7 model_params.bin`,
+    `<b>${u(s.sales_months_fit != null ? s.sales_months_fit : s.sales_months)}</b> months with sales, routed to the <b>${esc(s.router_bin)}</b> bin.`));
+
+  const rlr = s.rlr_fit != null ? s.rlr_fit : s.rlr;
+  let lvl = rlr == null ? sent('recent_level_ratio (' + CSVSRC + ')', 'No recent-level ratio on record: fewer than 12 months.')
+    : sent(`recent_level_ratio (${CSVSRC})`, `Recent 3 months are at <b>${(rlr * 100).toFixed(1)}%</b> of the 12-month level.`);
+  if (s.cause_is_level_shift && s.cause_level_shift != null)
+    lvl += ' ' + sent(`cause_level_shift, cause_largest_step_month (${CSVSRC})`,
+      `A level change of <b>${fmt(s.cause_level_shift, 2)}\u00d7</b> sits in <b>${esc(s.cause_step_month || '\u2014')}</b>.`);
+  out.push(lvl);
+
+  const madName = said.mad ? '3 MAD' : '3 MAD (median absolute deviation)';
+  said.mad = true;
+  const sp = s.cause_spikes, spk = s.spike_top;
+  out.push(sent(`cause_n_spikes, cause_mad, cause_median_units (${CSVSRC}); the largest is the series month furthest from that median`,
+    sp ? `<b>${u(sp)}</b> month${sp === 1 ? ' is' : 's are'} more than ${madName} from this SKU\u2019s own median of <b>${u(s.cause_median_units)}</b> units \u2014 largest deviation: <b>${u(spk && spk.v)}</b> units in <b>${esc(spk && spk.m)}</b>.`
+       : `No month is more than ${madName} from this SKU\u2019s own median of <b>${u(s.cause_median_units)}</b> units.`));
+
+  out.push(s.cause_cv == null
+    ? sent(`cause_cv_last12 (${CSVSRC})`, 'No CV on record: fewer than 12 months.')
+    : sent(`cause_cv_last12 (${CSVSRC}); the p75 gate ${F.gate_cv} is the README\u2019s measured figure; the cohort median is computed over the ${F.median_cv_n} rows that carry a CV`,
+      `CV over the last 12 months is <b>${fmt(s.cause_cv)}</b>, against a cohort median of <b>${fmt(F.median_cv)}</b>; it <b>${s.cause_cv > F.gate_cv ? 'clears' : 'does not clear'}</b> the high-volatility gate of ${F.gate_cv}.`));
+
+  out.push(sent(`cause_median_units (${CSVSRC}); the ${F.gate_units}-unit gate is the README\u2019s measured lower quartile; the cohort median is computed over ${F.median_units_n} rows`,
+    `Median monthly units <b>${u(s.cause_median_units)}</b>, against a cohort median of <b>${u(F.median_units)}</b>; it <b>${s.cause_median_units <= F.gate_units ? 'sits in' : 'is above'}</b> the cohort\u2019s bottom quarter (gate ${F.gate_units} units).`));
+
+  const zc = s.cause_zero_share == null ? null : Math.round(s.cause_zero_share * s.cause_n_months);
+  out.push(sent(`cause_zero_missing_share \u00d7 cause_n_months, cause_longest_zero_run (${CSVSRC})`,
+    zc ? `<b>${zc}</b> month${zc === 1 ? '' : 's'} are zero or missing, longest run <b>${u(s.cause_zero_run)}</b>.`
+       : 'No zero or missing months.'));
+  return out;
+}
+function outsideSentences(s){
+  if (!s.hpath) return [];
+  const half = s.rmse == null ? null : B.z * s.rmse;
+  return s.hpath.filter(p => p.out).map(p => {
+    const gap = half ? Math.abs(p.a - p.v) / half : null;
+    const spike = s.cause_mad != null && s.cause_median_units != null && Math.abs(p.a - s.cause_median_units) > 3 * s.cause_mad;
+    const clause = p.m === s.cause_step_month
+      ? sent(`cause_largest_step_month (${CSVSRC})`, 'It is the level-change month.')
+      : spike ? sent(`cause_mad, cause_median_units (${CSVSRC})`, 'It is a spike month.')
+      : sent(`cause_largest_step_month, cause_mad, cause_median_units (${CSVSRC})`, 'It is neither, the miss is ordinary error.');
+    return sent(`the month\u2019s actual and one-step forecast from the recomputed served holdout; the band from the stored \u03c3 (model_params.holdout_metrics_served.rmse)`,
+      `<b>${esc(p.m)}</b>: actual <b>${u(p.a, 1)}</b>${retTag(p.a)} vs forecast <b>${u(p.v)}</b>; the band reaches <b>${u(p.lo)}\u2013${u(p.hi)}</b> (\u00b1${B.z} \u00d7 RMSE ${u(s.rmse)}). The gap is <b>${gap == null ? '\u2014' : fmt(gap, 2)}\u00d7</b> the band half-width.`)
+      + ' <span class="cl">' + clause + '</span>';
+  });
+}
+function honestySentences(s){
+  const out = [];
+  if (s.bw != null && s.bw > WIDE_BAND)
+    out.push(['widenote', sent('(confidence_upper \u2212 confidence_lower) / forecast_value, as stored',
+      `Band width / forecast is <b>${fmt(s.bw)}</b>: the band is wider than 2\u00d7 the forecast, so it is too wide to be informative here.`)]);
+  if (s.verdict === 'not fit'){
+    const bits = [sent(`verdict, cause_group (${CSVSRC})`,
+      `<b>Not fit to use on this SKU.</b> Cause group: <b>${esc(s.cause)}</b>`
+      + (s.cause === 'none of the above' ? ' (no cause rule fires on this SKU)' : '')
+      + (s.causes_all && s.causes_all.length > 1 ? `, first match; also fired: ${esc(s.causes_all.filter(c => c !== s.cause).join(', '))}` : '') + '.')];
+    bits.push(sent(`mase_common, flag_* columns (${CSVSRC}); the not-fit gate is MASE >= 1.1, reports/diagnostics/README.md`,
+      `MASE is <b>${fmt(s.mase_common)}</b> on the common window`
+      + (s.flags && s.flags.length ? `, flags: ${esc(s.flags.join(', '))}` : '') + '.'));
+    if (s.ma3_fails) bits.push(sent(`ma3_also_fails_common, ma3_mase_common (${CSVSRC})`,
+      `MA3 also fails the gate on this SKU (MA3 MASE ${fmt(s.ma3_mase_common)}).`));
+    bits.push(sent('cause thresholds: reports/diagnostics/README.md; cohort split counted over the 132 rows',
+      `<span class="muted">${esc(s.cause)}: ${esc((F.thresholds.find(t => t[0] === s.cause) || [, 'no rule fired'])[1])}`
+      + ` · across the cohort ${causeTag(V.skus, s.cause)}.</span>`));
+    bits.push(sent('Yuan, 2026-09-23 \u2014 fixed text, not recomputed here', esc(F.no_better_model)));
+    out.push(['unfitnote', bits.join(' ')]);
+  }
+  return out;
+}
+// Collapsed-section state, remembered for the life of the page so moving
+// between SKUs does not re-collapse what you opened. Nothing is removed by the
+// collapse - every section is one click away and holds what it always held.
+const openSec = {};
+function sec(key, title, body, hint){
+  if (!body) return '';
+  return `<details class="sec" data-sec="${esc(key)}"${openSec[key] ? ' open' : ''}>`
+    + `<summary>${esc(title)}${hint != null ? ` <span class="muted">${esc(hint)}</span>` : ''}</summary>`
+    + `<div class="secbody">${body}</div></details>`;
+}
+function bindSecs(root){
+  $$(root + ' details.sec').forEach(d => d.ontoggle = () => { openSec[d.dataset.sec] = d.open; });
+}
+// The verdict in plain words. One fixed sentence per verdict, plus one fixed
+// clause per cause group - no sentence is composed at run time.
+function verdictLine(s){
+  const pctOf = v => v == null ? null : Math.round(v * 100) + '%';
+  const rlr = s.rlr_fit != null ? s.rlr_fit : s.rlr;
+  const inHoldout = s.cause_step_month && s.holdout
+    && V.periods.indexOf(s.cause_step_month) >= s.holdout[0] && V.periods.indexOf(s.cause_step_month) <= s.holdout[1];
+  const CAUSE = {
+    'level shift': rlr == null ? 'The selling level has shifted.'
+      : `Recent sales are at ${pctOf(rlr)} of the usual level; the change happened `
+        + (inHoldout ? 'during the months we score on.' : `in ${s.cause_step_month}, outside the months we score on.`),
+    'spiky': `${u(s.cause_spikes)} month(s) sit far outside this SKU\u2019s usual range, and a one-step forecast cannot follow them.`,
+    'high volatility': 'Month-to-month swings on this SKU are wider than most of the cohort.',
+    'intermittent': 'Many months have no sales at all, so there is little to follow.',
+    'tiny scale': 'This SKU sells in small volumes, so ordinary swings look large against them.',
+    'trend reversal': 'The recent trend runs opposite to the longer-run trend.',
+    'none of the above': 'No cause rule fires; the forecast simply misses by more than the gate allows.',
+  };
+  const tail = CAUSE[s.cause] || '';
+  if (s.verdict === 'not fit') return ['notfit', `<b>Not fit to use.</b> ${tail}`];
+  if (s.verdict === 'borderline') return ['borderline', `<b>Borderline.</b> It sits just inside the gate. ${tail}`];
+  if (s.verdict === 'clean') return ['clean', `<b>Fit to use on the evidence tested.</b> ${tail}`];
+  return ['', `<b>Not scored.</b> Under 3 months of sales, so there is nothing to measure yet.`];
+}
+function verdictBlock(s){
+  const [cls, txt] = verdictLine(s);
+  return `<div class="verdictline ${cls}" title="verdict, cause_group (${esc(CSVSRC)}); recent_level_ratio, cause_largest_step_month">${txt}</div>`;
+}
+// The four that answer "what is the number and can I use it". MASE on the
+// common window is the one the verdict is made on, so it carries the 1.1 gate.
+function topTiles(s){
+  const p = PROV(s);
+  return `<div class="stats four">` + [
+    [fmt(s.served), `Served forecast${s.provisional ? ' (provisional)' : ''}`, false],
+    [fmt(s.ma3), 'MA3 forecast', false],
+    [p ? NT : fmt(s.mase_common), 'MASE (common window)', !p && s.mase_common != null && s.mase_common >= 1.1],
+    [fmt(s.rlr_fit != null ? s.rlr_fit : s.rlr), 'Recent level ratio (3 / 12 mo)', false],
+  ].map(([v, l, f]) => `<div class="stat${f ? ' flag' : ''}" title="${esc(v)}"><div class="v">${esc(v)}</div><div class="l">${l}</div></div>`).join('') + `</div>`;
+}
+const legendBox = s => `<details class="legendbox"${openSec.legend ? ' open' : ''} data-sec="legend"><summary>legend</summary>${LEGEND(s)}</details>`;
+// The four collapsed sections. Every block that used to sit open on the page is
+// in exactly one of them; nothing was dropped.
+function routingKv(s){
+  return `<h4 style="margin:14px 0 4px;font-size:12px;color:var(--ink-2)">Routing</h4>` + kv([
+      ['status', esc(s.status)],
+      ['router bin', esc(s.router_bin) + (s.sales_months != null ? ` (${s.sales_months} sales months${V.pv ? ', incl. placeholder' : ''})` : '')],
+      ['holdout months', s.holdout ? `${s.holdout_months} (${V.periods[s.holdout[0]]} – ${V.periods[s.holdout[1]]})` : '—'],
+      ['components', esc(s.components ? JSON.stringify(s.components) : '—')],
+      ['band (stored)', s.lo == null ? '\u2014 (no holdout RMSE)' : `${fmt(s.lo)} \u2013 ${fmt(s.hi)} = ${fmt(s.served)} \u00b1 ${B.z} \u00d7 ${fmt(s.rmse)}`
+        + (s.rmse_derived ? ' <span class="muted">(\u03c3 inverted from the stored band)</span>' : '')],
+      ['coverage', s.cov == null ? '\u2014' : `${pctv(s.cov)} of ${s.hpath.length} holdout months inside`
+        + (s.outside && s.outside.length ? ` \u00b7 outside: ${s.outside.map(i => V.periods[i]).join(', ')}` : '')],
+      ['MA3 backup', esc(s.backup) + (s.backup_reason ? ` — ${esc(s.backup_reason)}` : '')],
+      ['backup options', backupOptions(s)],
+      ['bin_reason', esc(s.bin_reason)],
+      ['other schemes', esc(Object.entries(s.schemes).filter(([k]) => k !== 'combined_v1').map(([k, v]) => `${k}=${v}`).join(', '))],
+    ]);
+}
+function skuSections(s, W){
+  said.mad = false;                       // spell out MAD once per render
+  const outs = outsideSentences(s), hon = honestySentences(s);
+  const why = hon.map(([cls, t]) => cls === 'unfitnote' ? `<div class="${cls}">${t}</div>` : '').join('')
+    || `<div class="explain"><ul><li>${verdictLine(s)[1].replace(/<\/?b>/g, '')}</li></ul></div>`;
+  const bandBody = hon.filter(([cls]) => cls === 'widenote').map(([cls, t]) => `<div class="${cls}">${t}</div>`).join('')
+    + (outs.length ? `<div class="explain"><h4>Why the actual fell outside the band</h4><ul>`
+        + outs.map(x => `<li>${x}</li>`).join('') + `</ul></div>` : '')
+    + kv([['band (stored)', s.lo == null ? '\u2014 (no holdout RMSE)'
+            : `${fmt(s.lo)} \u2013 ${fmt(s.hi)} = ${fmt(s.served)} \u00b1 ${B.z} \u00d7 ${fmt(s.rmse)}`],
+          ['band width / forecast', fmt(s.bw)],
+          ['coverage', s.cov == null ? '\u2014' : `${pctv(s.cov)} of ${s.hpath.length} holdout months inside`
+            + (s.outside && s.outside.length ? ` \u00b7 outside: ${s.outside.map(i => V.periods[i]).join(', ')}` : '')],
+          ['MA3 band (computed)', s.ma3_bw == null ? '\u2014' : `width / forecast ${fmt(s.ma3_bw)} \u00b7 coverage ${pctv(s.ma3_cov)}`]]);
+  return sec('why', 'Why this verdict', why)
+    + sec('series', 'Series shape', `<div class="explain"><ul>` + seriesSentences(s).map(x => `<li>${x}</li>`).join('') + `</ul></div>`)
+    + sec('band', 'Band detail', bandBody, outs.length ? `${outs.length} month(s) outside` : '')
+    + sec('all', 'All metrics', statTiles(s) + routingKv(s));
+}
+
+// the same summary, one line, for the sparkline column's hover
+function oneLine(s){
+  const rlr = s.rlr_fit != null ? s.rlr_fit : s.rlr;
+  return [`${u(s.sales_months_fit != null ? s.sales_months_fit : s.sales_months)} months of sales, ${s.router_bin} bin`,
+    rlr == null ? 'no recent-level ratio' : `recent 3 at ${(rlr * 100).toFixed(1)}% of the 12-month level`,
+    `${u(s.cause_spikes)} spike month(s) beyond 3 MAD`,
+    s.cause_cv == null ? 'no CV' : `CV ${fmt(s.cause_cv)} vs cohort median ${fmt(F.median_cv)}`,
+    `median ${u(s.cause_median_units)} units`,
+    (s.cause_zero_share ? `${Math.round(s.cause_zero_share * s.cause_n_months)} zero/missing months` : 'no zero or missing months'),
+    (s.neg_months ? `${s.neg_months} negative month(s): ${RETURNS}` : null),
+    `fit verdict: ${s.verdict}`].filter(Boolean).join(' \u00b7 ');
+}
 function drawBandCard(){
   const a = B.all, rows = Object.entries(B.by_model);
-  $('#bandCard').innerHTML = `<h2>The stored confidence band \u2014 what it is, and whether it holds</h2>`
+  $('#bandCard').innerHTML = `<details class="sec"${openSec.band_explainer ? ' open' : ''} data-sec="band_explainer">`
+    + `<summary>The stored band is an error range, not a validated confidence interval \u2014 details</summary>`
+    + `<div class="secbody">`
     + `<div class="sub">Read from <b>Forecast_Result.confidence_lower / confidence_upper</b>. Definition traced to `
     + `DEC-25 (ARCHITECTURE.md) and the writer, scripts/run_baseline_forecast.py:821\u2013840.</div>`
     + kv([
@@ -1406,7 +1659,9 @@ function drawBandCard(){
         + `<td>${fmt(blk.bw)}</td><td>${pctv(blk.cov3)}</td><td>${blk.below3}</td></tr>`).join('')
     + `</table><div class="muted" style="font-size:12px">Holdout length across the cohort: `
     + `${B.holdout_months ? B.holdout_months[0] + '\u2013' + B.holdout_months[1] + ' months' : '\u2014'}. `
-    + `The 13 provisional SKUs have no holdout and no band.</div>`;
+    + `The 13 provisional SKUs have no holdout and no band.</div>`
+    + `</div></details>`;
+  bindSecs('#bandCard');
 }
 const absGap = s => s.gap == null ? null : Math.abs(s.gap);
 const LONG_NOTE = 'All 72 long forecasts change in preview: the global XGBoost model learns across SKUs, so extra history for 40 SKUs shifts every long forecast.';
@@ -1601,6 +1856,7 @@ document.addEventListener('mousemove', ev => {
   } else {
     const v = s.monthly[i], ph = s.ph && i >= s.ph[0] && i <= s.ph[1];
     rows = [[ph ? 'Placeholder' : 'Actual', v == null ? ((s.null_months || []).includes(i) ? 'NULL quantity (pipeline counts it as 0)' : 'no row') : fmt(v, 1)]];
+    if (v != null && v < 0) rows.push(['', RETURNS]);
     if (ph) rows.push(['', 'not SSM data']);
     if (s.holdout && i >= s.holdout[0] && i <= s.holdout[1]) rows.push(['', 'holdout month']);
     const hp = hpoint(s, i);
@@ -1654,21 +1910,9 @@ function detailHTML(s, W){
   return `<div class="dhead"><div class="code">${esc(s.code)}</div><div class="nm">${esc(s.name)}</div>`
     + `<div class="tags">${modelPill(s.method)}<span class="pill">router: ${esc(s.router_bin)}</span>${V.pv ? `<span class="pill">real bin: ${esc(s.real_bin)}</span>` : ''}<span class="pill">combined_v1: ${esc(s.combined)}</span></div></div>`
     + skuNotes(s)
-    + `<div class="chart">${chart(s, W || 420, 230, 'big')}</div>` + LEGEND(s) + bandNote(s) + unfitNote(s) + statTiles(s)
-    + `<details open><summary>Routing</summary>` + kv([
-      ['status', esc(s.status)],
-      ['router bin', esc(s.router_bin) + (s.sales_months != null ? ` (${s.sales_months} sales months${V.pv ? ', incl. placeholder' : ''})` : '')],
-      ['holdout months', s.holdout ? `${s.holdout_months} (${V.periods[s.holdout[0]]} – ${V.periods[s.holdout[1]]})` : '—'],
-      ['components', esc(s.components ? JSON.stringify(s.components) : '—')],
-      ['band (stored)', s.lo == null ? '\u2014 (no holdout RMSE)' : `${fmt(s.lo)} \u2013 ${fmt(s.hi)} = ${fmt(s.served)} \u00b1 ${B.z} \u00d7 ${fmt(s.rmse)}`
-        + (s.rmse_derived ? ' <span class="muted">(\u03c3 inverted from the stored band)</span>' : '')],
-      ['coverage', s.cov == null ? '\u2014' : `${pctv(s.cov)} of ${s.hpath.length} holdout months inside`
-        + (s.outside && s.outside.length ? ` \u00b7 outside: ${s.outside.map(i => V.periods[i]).join(', ')}` : '')],
-      ['MA3 backup', esc(s.backup) + (s.backup_reason ? ` — ${esc(s.backup_reason)}` : '')],
-      ['backup options', backupOptions(s)],
-      ['bin_reason', esc(s.bin_reason)],
-      ['other schemes', esc(Object.entries(s.schemes).filter(([k]) => k !== 'combined_v1').map(([k, v]) => `${k}=${v}`).join(', '))],
-    ]) + `</details>`
+    + verdictBlock(s)
+    + `<div class="chart">${chart(s, W || 420, 230, 'big')}</div>` + legendBox(s) + topTiles(s) + skuSections(s, W)
+
     + `<details><summary>Traits (sku_traits, 2026-02, real data)</summary>` + kv(Object.entries(s.traits || {}).map(([k, v]) => [k, esc(v == null ? '—' : v)])) + `</details>`;
 }
 
@@ -1708,7 +1952,7 @@ const C = {
   wape: {k:'wape', l:'WAPE', num:1, r: s => metricCell(s, 'wape')},
   ma3_wape: {k:'ma3_wape', l:'MA3 WAPE', num:1, r: s => metricCell(s, 'ma3_wape')},
   rlr: {k:'rlr', l:'Recent level ratio', num:1, tip:'mean(last 3 months) / mean(last 12 months) of the modelling series; display only, no threshold', r: s => `<td class="num">${fmt(s.rlr)}</td>`},
-  spark: {k:'spark', l:'Monthly demand', sort:false, r: s => `<td class="spark">${chart(s, 150, 30, 'spark')}</td>`},
+  spark: {k:'spark', l:'Monthly demand', sort:false, r: s => `<td class="spark" title="${esc(oneLine(s))}">${chart(s, 150, 30, 'spark')}</td>`},
   cov: {k:'cov', l:'Coverage (holdout)', num:1, tip:'Share of holdout months whose actual falls inside that month\u2019s band. Computed here - no per-month band is stored. Flagged below ' + LVLL + '.',
     r: s => PROV(s) ? `<td class="num muted">${NT}</td>`
       : `<td class="num${s.cov != null && s.cov < LVL ? ' flag' : ''}">${pctv(s.cov)}</td>`},
@@ -1874,9 +2118,15 @@ function initSegs(){
   seg($('#viewSeg'), [['table', 'Table view'], ['grid', 'Grid view']], () => gView, v => gView = v);
 }
 const acF = autocomplete($('#acF'), 'Find a SKU by code or product…', pk => { fSel = pk; drawForecasts(); });
-const F_COLS = () => [C.code, C.name, C.method, C.spark, C.served, C.ma3, C.gap, ...(V.pv ? [C.change, C.ph] : []),
-  ...(V.pv ? [] : [C.verdict, C.cause]), C.mase, C.mase_common, C.mase_pipeline, C.ma3_mase, C.wape,
-  ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw, C.assessable]), C.rlr];
+// Nine columns answer the usual question; the other fourteen are one click
+// away and every one of them stays sortable when shown.
+let colsOpen = false;
+const F_DEFAULT = () => [C.code, C.name, C.method, C.spark, C.served, C.ma3,
+  ...(V.pv ? [C.change] : [C.mase_common, C.verdict]), C.rlr];
+const F_MORE = () => [C.gap, ...(V.pv ? [C.ph] : [C.cause, C.assessable]), C.mase,
+  ...(V.pv ? [] : [C.mase_pipeline]), C.ma3_mase, C.wape,
+  ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw])];
+const F_COLS = () => colsOpen ? [...F_DEFAULT(), ...F_MORE()] : F_DEFAULT();
 function drawFocus(){
   const s = V.byPk.get(fSel), i = fOrder.findIndex(x => x.pk === fSel);
   if (!s){ $('#focus').innerHTML = '<div class="empty">Select a SKU.</div>'; return; }
@@ -1885,9 +2135,14 @@ function drawFocus(){
     + `<div class="focusnav"><span class="muted">${i >= 0 ? `${i + 1} of ${fOrder.length} in filter` : 'outside the current filter'}</span>`
     + `<button class="btn" id="fPrev" ${i <= 0 ? 'disabled' : ''}>← Prev</button><button class="btn" id="fNext" ${i < 0 || i >= fOrder.length - 1 ? 'disabled' : ''}>Next →</button></div></div>`
     + skuNotes(s)
-    + `<div class="focus"><div><div class="chart">${chart(s, 1100, 300, 'big')}</div>${LEGEND(s)}${bandNote(s)}${unfitNote(s)}</div>`
+    + verdictBlock(s)
+    + topTiles(s)
+    + `<div class="focus"><div><div class="chart">${chart(s, 1100, 300, 'big')}</div>${legendBox(s)}</div>`
     + `<div class="backupbox"><b>Backup options${V.pv ? ` · preview bin: ${esc(s.router_bin)}` : ''}</b><div class="bo">${backupOptions(s)}</div><div style="margin-top:6px">Live fallback today: MA3. MA3 backup: ${esc(s.backup)}.</div></div></div>`
-    + statTiles(s);
+    + skuSections(s);
+  bindSecs('#focus');
+  const lg = $('#focus details.legendbox');
+  if (lg) lg.ontoggle = () => { openSec.legend = lg.open; };
   if (i > 0) $('#fPrev').onclick = () => { fSel = fOrder[i - 1].pk; drawForecasts(); };
   if (i >= 0 && i < fOrder.length - 1) $('#fNext').onclick = () => { fSel = fOrder[i + 1].pk; drawForecasts(); };
 }
@@ -1896,6 +2151,10 @@ function drawForecasts(){
   const rows = V.skus.filter(s => (gBin === 'all' || s.router_bin === gBin) && (gModel === 'all' || s.method === gModel)
     && (gVerdict === 'all' || s.verdict === gVerdict) && (gCause === 'all' || s.cause === gCause));
   $('#gcount').textContent = `${rows.length} of ${V.skus.length} SKUs`;
+  const cb = $('#colsBtn');
+  cb.textContent = colsOpen ? `Columns: all ${F_DEFAULT().length + F_MORE().length}` : `Columns: ${F_DEFAULT().length} of ${F_DEFAULT().length + F_MORE().length}`;
+  cb.title = colsOpen ? 'Hide the extra columns' : 'Show every column \u2014 ' + F_MORE().map(c => c.l).join(', ');
+  cb.onclick = () => { colsOpen = !colsOpen; drawForecasts(); };
   $('#fTableCard').hidden = gView !== 'table'; $('#grid').hidden = gView !== 'grid';
   const onRow = pk => { fSel = pk; drawForecasts(); };
   const cols = F_COLS();
@@ -1980,7 +2239,8 @@ function buildPN(){
        {k:'first_i', l:'First row', r:s => `<td>${s.first_i == null ? '—' : V.periods[s.first_i]}</td>`},
        {k:'last_i', l:'Last row', r:s => `<td>${s.last_i == null ? '—' : V.periods[s.last_i]}</td>`},
        {k:'gap_months', l:'Months with no row', num:1, r:s => `<td class="num${s.gap_months ? ' flag' : ''}">${s.gap_months}</td>`},
-       {k:'neg_months', l:'Negative months', num:1, r:s => `<td class="num${s.neg_months ? ' flag' : ''}">${s.neg_months}</td>`}, C.spark]},
+       {k:'neg_months', l:'Negative months (returns)', num:1, tip:RETSRC,
+        r:s => `<td class="num${s.neg_months ? ' flag' : ''}" title="${esc(s.neg_months ? RETURNS : '')}">${s.neg_months}</td>`}, C.spark]},
     // ---- row 1: classification and binning in the DB, models outside it, back in, then out to the API
     {id:'abc', row:1, col:0, lane:'db', title:'ABC Tier A', sub:'abc_classification · 2026-02 · single',
      source:'read live by this build; the 132 expected is Yuan’s 2026-09-22 figure for the live 2026-03 forecast',
@@ -2238,7 +2498,7 @@ function drawDock(){
   const s = pSku && V.byPk.get(pSku);
   $('#pDock').hidden = !s;
   $('#pgrid').style.gridTemplateColumns = s ? '' : '1fr';
-  if (s) $('#pDock').innerHTML = detailHTML(s, 420);
+  if (s){ $('#pDock').innerHTML = detailHTML(s, 420); bindSecs('#pDock'); }
 }
 const acP = autocomplete($('#acP'), 'Find a SKU to trace its path…', pk => selectPipelineSku(pk));
 function selectPipelineSku(pk){ pSku = pk; drawPipeline(); }
