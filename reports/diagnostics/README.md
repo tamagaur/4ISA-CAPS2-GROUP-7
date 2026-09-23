@@ -78,11 +78,13 @@ candidate bin: a bin defined by fit results would be circular.
   traces all 59 flagged months: 58 spikes match the staged raw row exactly, 1 is a
   real zero, 0 are missing data, 0 were excluded by a loader rule. No period shows
   a cohort-wide drop (worst is 2 of 72 SKUs, 2.8%).
-- `etl_quarantine` **does not exist in `public`** — migration `0024_etl_quarantine.sql`
-  is in the repo but unapplied. It exists only in the scratch schemas
-  `ssm_recovery_rehearsal` and `ssm_synth_v2`, and is empty there. The
-  "0 excluded by rule" result rests on the raw-vs-fact reconciliation, not on a
-  quarantine lookup.
+- `etl_quarantine` **exists in `public` and is empty** — migration
+  `0024_etl_quarantine.sql` was applied in batch 1 of the recovery cutover
+  (2026-09-23, see `reports/PROJECT_STATE_2026-09.md` §17.2). It holds 0 rows, so it
+  can neither confirm nor contradict an exclusion. The "0 excluded by rule" result
+  rests on the raw-vs-fact reconciliation, not on a quarantine lookup.
+  *(Earlier revisions of this file said the table was absent from `public`; that was
+  true when written, before batch 1 ran the same day.)*
 - Anything selected *because* it scored badly (the 28) cannot be used to justify a
   model change on its own — a win on a selected subset is the selection problem,
   not evidence. Of 51 candidate models scored on these 28, **none** passed the
