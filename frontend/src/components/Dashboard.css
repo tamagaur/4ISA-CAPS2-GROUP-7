@@ -341,7 +341,7 @@
 
 /* ── Continuous dashboard (2026-09-18) ───────────────────────────────────
    One uninterrupted page: no numbered sections, no dividers, no paragraph
-   of explanation above each block. The hero strip carries the five figures
+   of explanation above each block. The hero strip carries the four figures
    that answer "what is happening right now"; every row below is evidence,
    each tagged with the kind of analytics it answers so all four
    (descriptive / diagnostic / predictive / prescriptive) are demonstrable
@@ -354,9 +354,12 @@
   align-items: stretch;
 }
 
-/* Five across: the hero row is the only place that needs a fifth column. */
+/* Hero row: as many equal columns as fit at 13rem each, so the four cards
+   always share the row evenly (four across on a 1366px laptop). min(100%)
+   keeps a lone column from ever being wider than the screen. The two
+   media rules further down only stop auto-fit landing on 3 + 1. */
 .kpi-strip-hero {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
 }
 
 .dash-row {
@@ -366,8 +369,9 @@
   min-width: 0;
 }
 
-/* Trend chart wide, donut narrow — the donut needs no horizontal room. */
-.dash-row-wide-narrow { grid-template-columns: 1.7fr 1fr; }
+/* Trend chart and ABC card share the row evenly: the ABC card needs 448px
+   inside it for the 180px donut, a 28px gap and its 240px tier card. */
+.dash-row-wide-narrow { grid-template-columns: 1fr 1fr; }
 /* Three thin tier bars narrow, the diagnostic bars wide. */
 .dash-row-narrow-wide { grid-template-columns: 1fr 1.4fr; }
 .dash-row-even        { grid-template-columns: 1fr 1fr; }
@@ -382,11 +386,29 @@
   min-width: 0;
 }
 
-/* Analytics-type tag. Deliberately quiet — it labels the widget for a
-   reviewer without competing with the widget's own title. */
+/* Analytics-type tag, and in preview mode the "Real data only" tag beside
+   it. Deliberately quiet — they label the widget for a reviewer without
+   competing with the widget's own title. */
+.dash-kind-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+.dash-real-only {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .dash-kind {
   align-self: flex-start;
-  margin-bottom: 0.4rem;
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
   background: var(--color-surface-sunken);
@@ -423,6 +445,37 @@
   color: var(--color-text-muted);
 }
 
+/* The LP-staleness notice above the hero strip. Amber "watch", not red
+   "act": the numbers on screen are real and usable, one input behind them
+   is out of date. Full sentence + icon, so it does not depend on colour
+   alone to be understood. */
+.dash-stale-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 0 1rem 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--color-warning-border, #f0d38a);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--color-warning-bg, #fdf6e3);
+  color: var(--color-text-strong, #3f3a2e);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.dash-stale-note svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  color: var(--color-warning-fg, #a87b1a);
+}
+
+@media (max-width: 640px) {
+  .dash-stale-note {
+    font-size: 0.76rem;
+  }
+}
+
 .band-link {
   display: inline-flex;
   align-items: center;
@@ -436,18 +489,26 @@
   text-decoration: underline;
 }
 
-@media (max-width: 1280px) {
+/* Below this the ABC card is too narrow for the donut and its tier card
+   side by side, so the trend chart and the ABC card each get a full row
+   instead. */
+@media (max-width: 1350px) {
+  .dash-row-wide-narrow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Where three cards would fit but four wouldn't: two by two, never 3 + 1. */
+@media (max-width: 1250px) {
   .kpi-strip-hero {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1100px) {
-  .kpi-strip,
-  .kpi-strip-hero {
+  .kpi-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .dash-row-wide-narrow,
   .dash-row-narrow-wide,
   .dash-row-even {
     grid-template-columns: 1fr;
@@ -495,7 +556,6 @@
 .kpi-strip-hero .kpi-card:nth-child(2) { --enter-delay: 50ms; }
 .kpi-strip-hero .kpi-card:nth-child(3) { --enter-delay: 100ms; }
 .kpi-strip-hero .kpi-card:nth-child(4) { --enter-delay: 150ms; }
-.kpi-strip-hero .kpi-card:nth-child(5) { --enter-delay: 200ms; }
 
 .kpi-card {
   animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
@@ -516,14 +576,14 @@
 .dash-row-single .dash-slot:nth-child(1)      { --enter-delay: 540ms; }
 
 /* The type tag rides in with its card rather than sitting there first. */
-.dash-slot .dash-kind {
+.dash-slot .dash-kind-row {
   animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
   animation-delay: var(--enter-delay, 0ms);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .kpi-card,
-  .dash-slot .dash-kind {
+  .dash-slot .dash-kind-row {
     animation: none;
   }
 }

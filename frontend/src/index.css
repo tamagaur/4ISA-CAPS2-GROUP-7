@@ -509,6 +509,10 @@ table td.table-center {
   --color-dispatched: #14919B;
   --color-forecast: #A855F7;
   --color-forecast-bg: #F3E8FF;
+  /* Placeholder months in preview mode (src/dataMode.js): a neutral tint
+     whose one meaning is "not SSM's data", never a status. Mirrors
+     CHART_COLORS.placeholder. */
+  --color-placeholder: #94A3B8;
 
   /* ABC Single-Hue Plum Ramp */
   --color-abc-a: #6B2C5F;
@@ -631,8 +635,18 @@ table td.table-center {
 html, body, #root, .App {
   margin: 0;
   padding: 0;
-  width: 100vw;
+  /* width: 100% — NOT 100vw. 100vw is the viewport INCLUDING the classic
+     scrollbar gutter, so on any desktop browser that reserves one the shell
+     was ~15px wider than the space available and the right edge was clipped
+     by the overflow:hidden below (the app shell scrolls in its inner panes,
+     not here — see components/DashboardLayout.css). */
+  width: 100%;
+  /* 100dvh, with 100vh underneath it for browsers that lack dvh: on mobile
+     100vh is the tallest the viewport ever gets, so the browser chrome
+     covers the bottom of a full-height layout. dvh tracks the visible
+     height instead. */
   height: 100vh;
+  height: 100dvh;
   font-family: var(--font-inter);
   font-size: 14px; /* Standard dashboard density */
   -webkit-font-smoothing: antialiased;
@@ -677,7 +691,6 @@ html, body, #root, .App {
 
 .chart-widget,
 .abc-pareto-chart-wrapper,
-.bo-chart-wrapper,
 .forecast-chart-container {
   animation: var(--anim-chart-widget, chartWidgetEnter) 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -705,7 +718,6 @@ html, body, #root, .App {
 @media (prefers-reduced-motion: reduce) {
   .chart-widget,
   .abc-pareto-chart-wrapper,
-  .bo-chart-wrapper,
   .forecast-chart-container {
     animation: none;
   }
@@ -890,4 +902,21 @@ html, body, #root, .App {
   .is-refreshing {
     transition: none;
   }
+}
+
+/* Preview mode (src/dataMode.js): a card's or page's one-line "this
+   includes placeholder data" statement, in text ink with the placeholder
+   neutral as its edge — never a status colour. Global because dashboard
+   cards, Category Trends, SKU Forecast and the SKU panel all use it. The
+   second selector outranks Charts.css's `.chart-header p` inside a card. */
+.chart-placeholder-note,
+.chart-header p.chart-placeholder-note {
+  margin: 0.4rem 0 0;
+  padding: 0.35rem 0.6rem;
+  border-left: 3px solid var(--color-placeholder);
+  border-radius: 4px;
+  background: var(--color-surface-sunken);
+  color: var(--color-text-body);
+  font-size: 0.72rem;
+  line-height: 1.4;
 }

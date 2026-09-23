@@ -19,6 +19,10 @@ same classify_abc() with the same 80% / 95% cutoffs.
 `months` = 1 matches the ABC page (one month's revenue, the 'single'
 method); 12 sums the trailing 12 months ending at `period` for a steadier
 view. Default `period`: each principal's latest data month.
+
+X-Data-Mode: preview adds Unilever's 2021-22 placeholder months to the
+revenue, so a window reaching back into them ranks placeholder revenue
+(backend/data_mode.py).
 """
 from __future__ import annotations
 
@@ -28,6 +32,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF, classify_abc
+from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import PrincipalQuery, normalize_principal
 from backend.routers.dashboard import _latest_sales_period
@@ -41,16 +46,18 @@ def _month_minus(period: str, months: int) -> str:
     return f"{total // 12:04d}-{total % 12 + 1:02d}"
 
 
+# {demand} is the Unilever demand relation for the request's data mode
+# (backend/data_mode.py) — the _Real view's own name in real mode.
 _QUERIES = {
     ("unilever", "brand"): """
         SELECT COALESCE(pd.brand, 'NO BRAND') AS name, SUM(d.net_amount) AS revenue, COUNT(DISTINCT d.product_key) AS products
-        FROM Unilever_SKU_Demand_Fact_Real d JOIN Product_Dimension pd ON pd.product_key = d.product_key
+        FROM {demand} d JOIN Product_Dimension pd ON pd.product_key = d.product_key
         WHERE d.calendar_month > :start AND d.calendar_month <= :end AND d.net_amount > 0
         GROUP BY 1
     """,
     ("unilever", "category"): """
         SELECT COALESCE(pd.category_path, 'UNCLASSIFIED') AS name, SUM(d.net_amount) AS revenue, COUNT(DISTINCT d.product_key) AS products
-        FROM Unilever_SKU_Demand_Fact_Real d JOIN Product_Dimension pd ON pd.product_key = d.product_key
+        FROM {demand} d JOIN Product_Dimension pd ON pd.product_key = d.product_key
         WHERE d.calendar_month > :start AND d.calendar_month <= :end AND d.net_amount > 0
         GROUP BY 1
     """,
@@ -64,7 +71,7 @@ _QUERIES = {
 }
 
 
-def pareto_for(db: Session, principal: str, grain: str, period: str | None, months: int) -> dict:
+def pareto_for(db: Session, principal: str, grain: str, period: str | None, months: int, mode: str = REAL) -> dict:
     query = _QUERIES.get((principal, grain))
     if query is None:
         return {"principal": principal, "rows": [], "blocked_reason": (
@@ -75,7 +82,9 @@ def pareto_for(db: Session, principal: str, grain: str, period: str | None, mont
     end = min(period, latest) if (period and latest) else (period or latest)
     if end is None:
         return {"principal": principal, "rows": [], "blocked_reason": f"No sales data for {principal}."}
-    rows = db.execute(text(query), {"start": _month_minus(end, months), "end": end}).mappings().all()
+    rows = db.execute(
+        text(query.format(demand=unilever_demand(mode))), {"start": _month_minus(end, months), "end": end}
+    ).mappings().all()
     df = pd.DataFrame(
         [{"sku_id": r["name"], "total_revenue": float(r["revenue"]), "products": int(r["products"])} for r in rows],
         columns=["sku_id", "total_revenue", "products"],
@@ -109,13 +118,19 @@ def get_pareto(
     principal: str | None = PrincipalQuery,
     period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
     months: int = Query(1, ge=1, le=36, description="1 = the ABC page's single month; 12 = trailing year."),
+    mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> dict:
     scope = normalize_principal(principal)
-    return {
+    payload = {
         "grain": grain,
         "months": months,
         "cutoffs": {"A": TIER_A_CUTOFF, "B": TIER_B_CUTOFF},
-        "principals": [pareto_for(db, p, grain, period, months) for p in ([scope] if scope else ["unilever", "delmonte"])],
+        "principals": [
+            pareto_for(db, p, grain, period, months, mode) for p in ([scope] if scope else ["unilever", "delmonte"])
+        ],
     }
+    if mode == PREVIEW:
+        payload["data_mode"] = preview_block(db)
+    return payload

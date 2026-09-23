@@ -69,6 +69,9 @@ export const CHART_COLORS = {
   cumulativeCurve: '#475569',
   gridline: '#E2E8F0',
   axisLabel: '#64748B',
+  // Tint behind placeholder months in preview mode (src/dataMode.js). Its
+  // one meaning is "not SSM's data"; mirrors --color-placeholder.
+  placeholder: '#94A3B8',
   lpWeights: {
     cost: COLORS.dispatched,
     service_level: COLORS.salesTrend,

@@ -203,3 +203,81 @@
   background-color: #fff5f5;
   box-shadow: 0 0 0 2px rgba(197, 48, 48, 0.12);
 }
+
+/* ── Preview switch ───────────────────────────────────────────────────
+   Chrome, so brand colour marks "on" (colors.js: brand is chrome only).
+   Sized to sit beside the principal control at the same height. */
+.data-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.55rem 0.35rem 0.75rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 20px;
+  background: var(--color-surface);
+  color: var(--color-text-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.data-mode-toggle:hover {
+  border-color: var(--color-text-subtle);
+  color: var(--color-text);
+}
+
+.data-mode-toggle:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.data-mode-toggle.is-on {
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
+}
+
+.data-mode-toggle-track {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--color-border-strong);
+  transition: background-color 0.2s ease;
+}
+
+.data-mode-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  transition: transform 0.2s ease;
+}
+
+.data-mode-toggle.is-on .data-mode-toggle-track {
+  background: var(--color-brand-primary);
+}
+
+.data-mode-toggle.is-on .data-mode-toggle-thumb {
+  transform: translateX(12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-mode-toggle-track,
+  .data-mode-toggle-thumb {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .data-mode-toggle-label {
+    display: none;
+  }
+  .data-mode-toggle {
+    padding: 0.35rem 0.55rem;
+  }
+}

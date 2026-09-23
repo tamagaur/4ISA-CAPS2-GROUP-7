@@ -11,6 +11,14 @@ export const MIN_WINDOW = 4;
 // width; past it the XAxis has to start skipping or the months collide.
 const MAX_COMFORTABLE_TICKS = 12;
 
+// Horizontal room one "Mmm · YYYY" tick needs (~52px at 10-11px, plus a
+// gap), and the part of a chart container the plot doesn't get (Y axis and
+// margins). A chart that attaches `containerRef` gets ticks sized to its
+// measured width: 12 fixed ticks overlapped in a half-width card once a
+// range passed ~3 years (the 5-year preview's default, 2026-09-24).
+const LABEL_SLOT_PX = 64;
+const NON_PLOT_PX = 70;
+
 // Right margin for any chart whose XAxis takes `labelInterval`. With no
 // bars the X axis is a point scale, so the latest month sits exactly on the
 // plot's right edge and its label is centred there, half of it hanging past
@@ -46,6 +54,18 @@ export function useChartZoom(data, { minWindow = MIN_WINDOW } = {}) {
   const [size, setSize] = useState(null);
   const [end, setEnd] = useState(null);
   const [isAdjusting, setIsAdjusting] = useState(false);
+
+  // Width of the chart container, when the caller attaches containerRef.
+  const [width, setWidth] = useState(null);
+  const observer = useRef(null);
+  const containerRef = useCallback((node) => {
+    observer.current?.disconnect();
+    observer.current = null;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    observer.current = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.current.observe(node);
+  }, []);
+  useEffect(() => () => observer.current?.disconnect(), []);
 
   // A new date range is a different question being asked — start it fully
   // zoomed out rather than carrying the previous range's window over onto
@@ -118,8 +138,12 @@ export function useChartZoom(data, { minWindow = MIN_WINDOW } = {}) {
     : {};
 
   // Every Nth label, chosen so ticks never exceed what fits. 0 means
-  // "draw them all" in Recharts' interval vocabulary.
-  const labelInterval = Math.max(0, Math.ceil(effectiveSize / MAX_COMFORTABLE_TICKS) - 1);
+  // "draw them all" in Recharts' interval vocabulary. Without a measured
+  // width (no containerRef) it is the fixed MAX_COMFORTABLE_TICKS, as before.
+  const maxTicks = width
+    ? clamp(Math.floor((width - NON_PLOT_PX) / LABEL_SLOT_PX), 2, MAX_COMFORTABLE_TICKS)
+    : MAX_COMFORTABLE_TICKS;
+  const labelInterval = Math.max(0, Math.ceil(effectiveSize / maxTicks) - 1);
 
   // Re-slicing on every slider step would restart Recharts' 700ms entrance
   // on each tick, so the chart would strobe instead of scrub. Animation
@@ -140,6 +164,7 @@ export function useChartZoom(data, { minWindow = MIN_WINDOW } = {}) {
     canZoom: total > minWindow,
     canPan,
     panHandlers,
+    containerRef,
     labelInterval,
     isAdjusting,
     setIsAdjusting,

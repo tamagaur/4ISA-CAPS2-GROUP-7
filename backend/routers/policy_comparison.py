@@ -28,6 +28,8 @@ from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import PrincipalQuery, principal_clause
+from backend.data_mode import PREVIEW, get_data_mode, forecast_source, lp_source, predictive_preview, preview_block
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle
 from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, POLICY_WEEKS
 
 router = APIRouter(prefix="/policy-comparison", tags=["policy-comparison"])
@@ -43,25 +45,32 @@ VALUATION_BLOCKED_REASON = (
 @router.get("")
 def get_policy_comparison(
     principal: str | None = PrincipalQuery,
+    mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> dict:
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
+    # The LP's current cycle, resolved under the SAME scope as the rows
+    # (backend/lp_cycle.py). The MAX() subquery this replaces was unscoped,
+    # so a principal with no rows in the newest cycle silently compared
+    # against another principal's cycle.
+    cycle = current_cycle(db, principal, mode)
+    cycle_clause = CURRENT_CYCLE_CLAUSE if cycle is not None else " AND 1=0"
+    lp, lp_params = lp_source(mode)
+    fc, fc_params = forecast_source(mode)
     rows = db.execute(
         text(f"""
             SELECT lr.planning_cycle_date, lr.ss_i, fr.forecast_value,
                    COALESCE(pd.sku_code, pd.category_path) AS sku_id, pd.product_name, pd.principal
-            FROM LP_Recommendation lr
+            FROM {lp} lr
             JOIN Product_Dimension pd ON pd.product_key = lr.product_key
-            JOIN Forecast_Result fr
+            JOIN {fc} fr
               ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
             WHERE lr.status = 'pending'
-              AND lr.planning_cycle_date = (
-                  SELECT MAX(planning_cycle_date) FROM LP_Recommendation WHERE status = 'pending'
-              )
+              {cycle_clause}
               {scope_sql}
         """),
-        scope_params,
+        {**scope_params, "current_cycle": cycle, **lp_params, **fc_params},
     ).mappings().all()
     rows = [r for r in rows if r["forecast_value"] is not None and r["ss_i"] is not None]
 
@@ -85,7 +94,7 @@ def get_policy_comparison(
     items.sort(key=lambda i: i["difference_units"], reverse=True)
 
     cycle = rows[0]["planning_cycle_date"] if rows else None
-    return {
+    payload = {
         "cycle_date": cycle.isoformat() if hasattr(cycle, "isoformat") else cycle,
         "rule_weeks": POLICY_WEEKS,
         "portfolio": {
@@ -105,3 +114,6 @@ def get_policy_comparison(
             "month, so the two policies can't be compared."
         ),
     }
+    if mode == PREVIEW:
+        payload["data_mode"] = preview_block(db, real_only=None if predictive_preview(mode) else ["items", "portfolio"])
+    return payload

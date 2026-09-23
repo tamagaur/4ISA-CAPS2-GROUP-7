@@ -15,6 +15,8 @@ import { labelForPrincipal } from '../principals';
 import { formatMonth } from '../utils/formatDate';
 import { formatCompactPesos } from '../utils/formatters';
 import { CHART_COLORS, COLORS } from '../theme/colors';
+import { isPlaceholderPeriod } from '../dataMode';
+import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import RefreshingNote from './RefreshingNote';
 import './CategoryTrends.css';
 
@@ -40,7 +42,7 @@ const axisMonth = (period) => {
   return y ? `${m} · ${y}` : period;
 };
 
-const TrendTooltip = ({ active, payload, label }) => {
+const TrendTooltip = ({ active, payload, label, placeholder }) => {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
   return (
@@ -49,11 +51,14 @@ const TrendTooltip = ({ active, payload, label }) => {
       {p.actual != null && <p>Revenue: {formatCompactPesos(p.actual)}</p>}
       {p.fitted != null && <p>Trend line: {formatCompactPesos(p.fitted)}</p>}
       {p.projection != null && p.actual == null && <p>Projected trend: {formatCompactPesos(p.projection)}</p>}
+      {isPlaceholderPeriod(label, placeholder) && <p className="ct-tooltip-placeholder">Placeholder month — not SSM&apos;s data</p>}
     </div>
   );
 };
 
-const CategoryChart = ({ category }) => {
+// `placeholder` is the payload's data_mode.placeholder window — set only in
+// preview mode (src/dataMode.js), so real mode draws no band.
+const CategoryChart = ({ category, placeholder = null }) => {
   const data = useMemo(() => {
     const history = category.history || [];
     const fitted = category.fitted || [];
@@ -73,15 +78,17 @@ const CategoryChart = ({ category }) => {
     }
     return rows;
   }, [category]);
+  const bandSpan = placeholderSpan(data, placeholder);
 
   return (
     <div className="ct-chart">
       <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={data} margin={{ top: 10, right: 16, left: 4, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+          {renderPlaceholderBand(bandSpan)}
           <XAxis dataKey="period" tickFormatter={axisMonth} minTickGap={24} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} />
           <YAxis tickFormatter={formatCompactPesos} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} width={56} />
-          <Tooltip content={<TrendTooltip />} />
+          <Tooltip content={<TrendTooltip placeholder={placeholder} />} />
           <Line dataKey="actual" name="Revenue" stroke={CHART_COLORS.salesSeries} strokeWidth={2} dot={{ r: 2 }} connectNulls={false} isAnimationActive={false} />
           <Line dataKey="fitted" name="Trend line" stroke={CHART_COLORS.cumulativeCurve} strokeWidth={1.5} strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />
           <Line dataKey="projection" name="Projected trend" stroke={COLORS.forecast} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} isAnimationActive={false} />
@@ -91,12 +98,13 @@ const CategoryChart = ({ category }) => {
         <span><i className="ct-swatch ct-swatch-actual" />Monthly revenue</span>
         <span><i className="ct-swatch ct-swatch-fitted" />Trend line (last {category.points ?? 24} months)</span>
         {category.available && <span><i className="ct-swatch ct-swatch-projection" />Trend, next 12 months</span>}
+        {bandSpan && <span><i className="ct-swatch ct-swatch-placeholder" />Placeholder months — not SSM&apos;s data</span>}
       </div>
     </div>
   );
 };
 
-const PrincipalSection = ({ section }) => {
+const PrincipalSection = ({ section, placeholder = null }) => {
   const categories = section.categories || [];
   const [selected, setSelected] = useState(() => categories.find((c) => c.available)?.category ?? categories[0]?.category);
   const current = categories.find((c) => c.category === selected) ?? categories[0];
@@ -113,6 +121,9 @@ const PrincipalSection = ({ section }) => {
             : 'No revenue data loaded.'}
           {section.principal === 'delmonte' &&
             ' Only months since Del Monte regrouped its categories in Jan 2025 count — the older sub-categories are different categories.'}
+          {section.principal === placeholder?.principal && observed.some((m) => isPlaceholderPeriod(m, placeholder)) &&
+            ` ${formatMonth(placeholder.start)} – ${formatMonth(placeholder.end)} is placeholder data (preview), not SSM's.`
+            + ' The trend line and projection use only the last 24 months, all real, so they are the same as without it.'}
         </p>
       </div>
       {!anyProjection && categories.length > 0 && (
@@ -183,7 +194,7 @@ const PrincipalSection = ({ section }) => {
               </span>
             )}
           </h4>
-          <CategoryChart category={current} />
+          <CategoryChart category={current} placeholder={placeholder} />
           {!current.available && <p className="ct-note">{current.reason}</p>}
         </div>
       )}
@@ -222,7 +233,11 @@ const CategoryTrends = () => {
         {state.status === 'error' && <p className="ct-note" role="alert">Could not load category trends: {state.error}</p>}
 
         {data && (data.principals || []).map((section) => (
-          <PrincipalSection key={`${section.principal}|${principal ?? ''}`} section={section} />
+          <PrincipalSection
+            key={`${section.principal}|${principal ?? ''}`}
+            section={section}
+            placeholder={data.data_mode?.placeholder ?? null}
+          />
         ))}
 
         {data && (

@@ -1,5 +1,5 @@
 import React, { lazy, useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Login from './Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
@@ -16,7 +16,6 @@ const SKUManagement = lazy(pageLoaders.skuManagement);
 const ABCClassification = lazy(pageLoaders.abc);
 const SKUForecast = lazy(pageLoaders.forecast);
 const ReorderRecommendations = lazy(pageLoaders.reorder);
-const BadOrders = lazy(pageLoaders.badOrders);
 const CategoryTrends = lazy(pageLoaders.categoryTrends);
 const AuditLog = lazy(pageLoaders.auditLog);
 const DataUpload = lazy(pageLoaders.upload);
@@ -64,7 +63,6 @@ function App() {
           <Route path="abc" element={<ABCClassification />} />
           <Route path="forecast" element={<SKUForecast />} />
           <Route path="reorder" element={<ReorderRecommendations />} />
-          <Route path="bad-orders" element={<BadOrders />} />
           <Route path="category-trends" element={<CategoryTrends />} />
           <Route
             path="audit-log"
@@ -84,6 +82,9 @@ function App() {
             }
           />
         </Route>
+        {/* Unknown or retired URLs land on the dashboard instead of a
+            blank page. */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
     </ToastProvider>

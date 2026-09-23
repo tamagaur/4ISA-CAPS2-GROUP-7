@@ -140,7 +140,7 @@ Parquet file per staged sheet.
 pytest tests/ -v
 ```
 
-Expected as of 2026-09-21: **495 passed / 8 skipped / 0 failed** (with
+Expected as of 2026-09-23: **554 passed / 8 skipped / 0 failed** (with
 `xgboost` installed and `.env` pointing at the live database). The old
 `Users` vs `users` casing failures are fixed. Any failure now means
 something is wrong — see Troubleshooting.

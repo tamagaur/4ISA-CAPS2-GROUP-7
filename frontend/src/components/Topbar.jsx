@@ -1,7 +1,8 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { Check, Calendar } from 'lucide-react';
+import { Check, Calendar, FlaskConical } from 'lucide-react';
 import { PRINCIPALS } from '../principals';
+import { DATA_MODES, isPreviewMode } from '../dataMode';
 import './Topbar.css';
 
 const Topbar = ({
@@ -26,7 +27,10 @@ const Topbar = ({
   realWorldYear = '2026',
   principal = 'all',
   setPrincipal = () => {},
+  dataMode = DATA_MODES.REAL,
+  onDataModeChange = () => {},
 }) => {
+  const preview = isPreviewMode(dataMode);
   const location = useLocation();
   const isToday =
     pendingStartMonth === realWorldMonth &&
@@ -86,6 +90,28 @@ const Topbar = ({
               </select>
             </div>
           </div>
+        )}
+
+        {/* Preview mode (src/dataMode.js): adds Unilever's 2021-22
+            placeholder months to the descriptive and diagnostic views.
+            Same pages as the principal filter; the banner under this bar
+            says what it changes whenever it is on. */}
+        {showPrincipalFilter && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={preview}
+            aria-label="5-year preview with 2021–22 placeholder data"
+            className={`data-mode-toggle${preview ? ' is-on' : ''}`}
+            onClick={() => onDataModeChange(preview ? DATA_MODES.REAL : DATA_MODES.PREVIEW)}
+            title={preview
+              ? 'On: Jan 2021 – Dec 2022 is placeholder data. Click to go back to real data only.'
+              : 'See the dashboard over five years, with Jan 2021 – Dec 2022 filled by placeholder (synthetic) Unilever data in the descriptive and diagnostic views.'}
+          >
+            <FlaskConical size={14} aria-hidden="true" />
+            <span className="data-mode-toggle-label">5-year preview</span>
+            <span className="data-mode-toggle-track" aria-hidden="true"><span className="data-mode-toggle-thumb" /></span>
+          </button>
         )}
       </div>
 

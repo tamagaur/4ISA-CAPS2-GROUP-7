@@ -2,6 +2,7 @@ import React from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Calendar, ChevronDown, Check, RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react';
 import { LATEST_DATA_PERIOD, FIRST_DATA_YEAR } from '../dataCoverage';
+import { PLACEHOLDER_START, isPreviewMode } from '../dataMode';
 import './DateFilter.css';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -25,9 +26,14 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 // between sit entirely inside the range and need no month restriction.
 // Both ends come from dataCoverage.js — the one place to edit when a new
 // month of data loads.
-const YEARS = Array.from(
-  { length: Number(LATEST_DATA_PERIOD.year) - FIRST_DATA_YEAR + 1 },
-  (_, i) => String(FIRST_DATA_YEAR + i)
+//
+// Preview mode (src/dataMode.js) moves the floor back to the first
+// placeholder year, 2021, so the five-year span is pickable. A page that
+// reads real data only in preview too (SKU Forecast: forecasts never see a
+// placeholder month) passes `realOnly` and keeps the real floor.
+const yearsFrom = (firstYear) => Array.from(
+  { length: Number(LATEST_DATA_PERIOD.year) - firstYear + 1 },
+  (_, i) => String(firstYear + i)
 );
 const LATEST_YEAR = LATEST_DATA_PERIOD.year;
 const LATEST_YEAR_MONTHS = MONTHS.slice(0, MONTHS.indexOf(LATEST_DATA_PERIOD.month) + 1);
@@ -83,8 +89,13 @@ const noop = () => {};
 // of a range entirely. Not supported in shared mode: writing a one-month
 // range into DashboardLayout would push every other page below its 6-month
 // trend minimum.
-const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS, singleMonth = false }) => {
+const DateFilter = ({
+  onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS, singleMonth = false, realOnly = false,
+}) => {
   const outlet = useOutletContext() || {};
+  const years = yearsFrom(
+    !realOnly && isPreviewMode(outlet.dataMode) ? Number(PLACEHOLDER_START.year) : FIRST_DATA_YEAR
+  );
   const isLocal = !!(localValue && onLocalChange);
   const isSingleMonth = isLocal && singleMonth;
 
@@ -194,7 +205,7 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths =
               value={ey}
               onChange={(e) => handleSingleYearChange(e.target.value)}
             >
-              {YEARS.map((y) => (
+              {years.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
@@ -240,7 +251,7 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths =
           value={sy}
           onChange={(e) => handleStartYearChange(e.target.value)}
         >
-          {YEARS.map((y) => (
+          {years.map((y) => (
             <option key={y} value={y}>{y}</option>
           ))}
         </select>
@@ -271,7 +282,7 @@ const DateFilter = ({ onRefresh, localValue, onLocalChange, onReset, minMonths =
           value={ey}
           onChange={(e) => handleEndYearChange(e.target.value)}
         >
-          {YEARS.map((y) => (
+          {years.map((y) => (
             <option key={y} value={y}>{y}</option>
           ))}
         </select>

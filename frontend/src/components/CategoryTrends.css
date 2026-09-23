@@ -1,4 +1,4 @@
-/* Category trends page — the same page frame as Reorder / Bad Orders. */
+/* Category trends page — the same page frame as Reorder. */
 .ct-page {
   flex: 1;
   display: flex;
@@ -157,6 +157,17 @@
 .ct-swatch-actual { border-color: #14919B; }
 .ct-swatch-fitted { border-color: #475569; border-top-style: dashed; }
 .ct-swatch-projection { border-color: #A855F7; border-top-style: dashed; }
+/* Preview mode's placeholder band, as a block swatch — same tint and
+   alpha as the chart's ReferenceArea (Charts.jsx renderPlaceholderBand). */
+.ct-swatch-placeholder {
+  width: 14px;
+  height: 10px;
+  border: none;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-placeholder) 16%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--color-placeholder) 60%, transparent);
+  vertical-align: middle;
+}
 
 .ct-tooltip {
   padding: 0.55rem 0.7rem;
@@ -176,6 +187,14 @@
   margin-bottom: 0.2rem;
   font-weight: 700;
   color: var(--color-text);
+}
+
+.ct-tooltip .ct-tooltip-placeholder {
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-weight: 600;
 }
 
 .ct-method {

@@ -10,9 +10,11 @@ import {
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { getSegmentSummary } from '../api/segment';
 import { DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
+import { staleCoverageNotice } from '../dataCoverage';
+import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import RefreshingNote from './RefreshingNote';
-import { Package, Wallet, Clock, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
+import { Package, Wallet, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -40,6 +42,33 @@ const MONTH_TO_NUM = {
 const toPeriod = (month, year) =>
   month && year ? `${year}-${MONTH_TO_NUM[month]}` : undefined;
 
+// 'YYYY-MM' -> 'Feb 2026'. Every figure on this page belongs to a specific
+// month, and until 2026-09-23 no card said which: the Sales card read
+// "This period's total sales" while the backend walks back to the most
+// recent month that HAS data, which under All principals is Dec 2025 (Del
+// Monte's last) against Unilever's own Feb 2026. Same card, same caption,
+// two different months depending on a filter elsewhere on the page.
+const NUM_TO_MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const periodLabel = (period) => {
+  if (!period) return null;
+  const [year, num] = String(period).split('-');
+  return `${NUM_TO_MONTH[Number(num) - 1] || num} ${year}`;
+};
+
+// Names the principals a figure actually covers, but only when that is
+// NARROWER than what the user asked for — saying "Unilever only" while the
+// Unilever filter is already on would be noise. Under All principals it is
+// the whole point: stock valuation and the ABC run are Unilever-only today
+// (Del Monte carries no unit cost, and the latest ABC run has no Del Monte
+// rows), which the page used to present as the portfolio's own numbers.
+const PRINCIPAL_NAMES = { unilever: 'Unilever', delmonte: 'Del Monte' };
+const coverageNote = (coverage, pagePrincipal) => {
+  if (!coverage || coverage.length === 0) return null;
+  if (pagePrincipal !== DEFAULT_PRINCIPAL) return null;
+  if (coverage.length > 1) return null;
+  return `${PRINCIPAL_NAMES[coverage[0]] || coverage[0]} only`;
+};
+
 // "Share of Category A SKUs at/above safety stock" — display thresholds
 // for the card's colour, not a pipeline rule: below 60% is an act-now
 // signal (red), below 90% a watch (amber), otherwise healthy. The 9% live
@@ -61,9 +90,19 @@ const safetyStockMetricType = (rate) => {
 //   Diagnostic  — why it happened
 //   Predictive  — what happens next
 //   Prescriptive— what to do about it
-const Slot = ({ kind, children }) => (
+// `realOnly` (preview mode only) tags a predictive or prescriptive widget
+// that preview deliberately leaves on real data (backend/data_mode.py), so
+// the page says which cards the placeholder months reach and which not.
+const Slot = ({ kind, realOnly = false, children }) => (
   <div className="dash-slot" data-kind={kind}>
-    <span className="dash-kind">{kind}</span>
+    <span className="dash-kind-row">
+      <span className="dash-kind">{kind}</span>
+      {realOnly && (
+        <span className="dash-real-only" title="Preview adds placeholder months to descriptive and diagnostic views only. This card reads real data.">
+          Real data only
+        </span>
+      )}
+    </span>
     {children}
   </div>
 );
@@ -75,7 +114,7 @@ const Slot = ({ kind, children }) => (
 const DashboardSkeleton = () => (
   <div className="dashboard-body" aria-hidden="true">
     <div className="kpi-strip kpi-strip-hero">
-      {[0, 1, 2, 3, 4].map((k) => (
+      {[0, 1, 2, 3].map((k) => (
         <div className="kpi-card skeleton-card" key={k}>
           <div className="skeleton-line skeleton-line-title" />
           <div className="skeleton-line skeleton-line-value" />
@@ -97,7 +136,8 @@ const DashboardSkeleton = () => (
 );
 
 const Dashboard = () => {
-  const { startMonth, startYear, endMonth, endYear, principal } = useOutletContext() || {};
+  const { startMonth, startYear, endMonth, endYear, principal, dataMode } = useOutletContext() || {};
+  const preview = isPreviewMode(dataMode);
   const period = toPeriod(endMonth, endYear);
   const startPeriod = toPeriod(startMonth, startYear);
   // Every input the request varies on, principal included. It was
@@ -234,25 +274,36 @@ const Dashboard = () => {
 
   const { data } = loaded;
   const kpis = data.kpis || {};
-  const weeksOfCover = kpis.weeks_of_cover || {};
-  const policyWeeks = data.inventory?.policy_weeks ?? 3;
-
-  const sales = kpiDisplay(kpis.sales, kpis.sales_blocked_reason, formatCompactPesos, "This period's total sales");
-  const sohValue = kpiDisplay(kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos, 'Stock-on-hand valuation');
-
-  const weeksOfCoverValue = weeksOfCover.value ?? null;
-  const weeksOfCoverReason = weeksOfCover.blocked_reason ?? null;
-  const weeksOfCoverDisplay = kpiDisplay(
-    weeksOfCoverValue, weeksOfCoverReason, (v) => `${v.toFixed(1)} wks`, "vs. SSM's 3-week policy"
+  // Preview only: the payload's own placeholder window (null in real mode),
+  // which marks the months and the cards the placeholder data reaches.
+  const placeholder = data.data_mode?.placeholder ?? null;
+  // The fields this payload left on real data (backend/data_mode.py). With
+  // the what-if forecasts built, the predictive and prescriptive cards
+  // follow the five-year history too; without them they stay real and say so.
+  const realOnly = new Set(data.data_mode?.real_only || []);
+  const portfolioRealOnly = preview && realOnly.has('portfolio_forecast');
+  const placeholderNote = (period) => (
+    isPlaceholderPeriod(period, placeholder)
+      ? `${periodLabel(period)} is a placeholder month — these tiers come from placeholder sales, not SSM's.`
+      : null
   );
-  // Below policy is a stockout-risk signal (red, 'danger'); above policy
-  // reads as excess tied-up capital via the 'gap' tier's isOverTarget
-  // branch (amber); exactly at policy is healthy. Blocked (no value to
-  // judge) gets no metricType at all, which KPICard renders in slate —
-  // never a coloured verdict on data that isn't there.
-  const weeksOfCoverMetricType =
-    weeksOfCoverValue === null ? undefined : weeksOfCoverValue < policyWeeks ? 'danger' : 'gap';
-  const weeksOfCoverIsOverTarget = weeksOfCoverValue !== null && weeksOfCoverValue > policyWeeks;
+
+  // Each card names the month it is for, and the principals it covers when
+  // those are narrower than the page's own filter — see periodLabel /
+  // coverageNote above for why both are necessary.
+  const salesMonth = periodLabel(kpis.sales_period);
+  const sohMonth = periodLabel(kpis.soh_period);
+  const sohCoverage = coverageNote(kpis.soh_coverage, pagePrincipal);
+  const salesIsPlaceholder = isPlaceholderPeriod(kpis.sales_period, placeholder);
+  const sales = kpiDisplay(
+    kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
+    salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales',
+  );
+  const sohValue = kpiDisplay(
+    kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
+    [sohMonth ? `Stock-on-hand valuation · ${sohMonth}` : 'Stock-on-hand valuation', sohCoverage]
+      .filter(Boolean).join(' · '),
+  );
 
   const salesVsStock = (data.sales_vs_stock || []).map((pt) => ({
     period: pt.period,
@@ -289,7 +340,11 @@ const Dashboard = () => {
   const forecastReliability = forecastFollowsPage
     ? data.forecast || null
     : (cardForecastReady ? cardForecast?.reliability ?? null : null);
-  const portfolioSeries = (portfolioForecast.series || []).map((pt) => ({
+  // A real-only forecast card in preview has nothing in the placeholder
+  // months by construction — dropped rather than drawn as a blank run.
+  const portfolioSeries = (portfolioForecast.series || [])
+    .filter((pt) => !(portfolioRealOnly && isPlaceholderPeriod(pt.period, placeholder)))
+    .map((pt) => ({
     period: pt.period,
     actual: pt.actual,
     forecast: pt.forecast,
@@ -320,8 +375,19 @@ const Dashboard = () => {
     'Measurable Category A SKUs below their safety stock'
   );
 
-  // Pending action count — the "what to do" figure in the hero strip.
+  // Pending action count — the "what to do" figure in the hero strip. Now
+  // the CURRENT LP cycle only: it counted every undecided row ever written,
+  // so 179 leftovers from runs going back to 2023-05 were being presented
+  // as work awaiting a decision today (429 against the real 250).
   const pendingCount = data.recommendations?.product_count ?? 0;
+  const lp = data.lp || {};
+  // Non-null only when the live data has moved past the hardcoded ceiling.
+  const coverageStale = staleCoverageNotice(data.latest_data_period);
+  const lpCycleLabel = periodLabel(lp.cycle_date ? String(lp.cycle_date).slice(0, 7) : null);
+  const pendingContext = [
+    'LP recommendations awaiting a decision',
+    lpCycleLabel ? `${lpCycleLabel} cycle` : null,
+  ].filter(Boolean).join(' · ');
 
   return (
     <div className="dashboard">
@@ -339,9 +405,52 @@ const Dashboard = () => {
           aria-busy={isRefreshing}
           data-enter-cycle={enterCycle}
         >
-          {/* Hero strip — the five figures that answer "what is happening
-              right now": money in, money parked, service risk, cover vs the
-              policy this project exists to replace, and work waiting. */}
+          {/* The date picker's ceiling and the app's pinned "today" are a
+              hand-edited constant. When the database moves past it, every
+              page quietly keeps ending at the old month — so the page says
+              so instead, naming the one file to edit. */}
+          {coverageStale && (
+            <div className="dash-stale-note" role="status">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>
+                <strong>New data has loaded past the date picker&apos;s range.</strong>{' '}
+                The database now holds sales through {coverageStale.live}, but this app is pinned to{' '}
+                {coverageStale.pinned}. Update <code>LATEST_DATA_PERIOD</code> in{' '}
+                <code>frontend/src/dataCoverage.js</code> so the picker and every default range
+                reach the newest month.
+              </span>
+            </div>
+          )}
+
+          {/* The LP's own freshness. q_i and rop_i are solved against the
+              forecasts of the day the LP ran; when the forecasts are later
+              rewritten (they were, on 2026-09-21, while the LP last ran
+              2026-08-24) those two are built on numbers the table no longer
+              holds. Safety stock is unaffected — it comes from demand
+              history, not from a model. Stated on the page rather than
+              left for someone to discover in a report. */}
+          {lp.is_stale && (
+            <div className="dash-stale-note" role="status">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>
+                <strong>
+                  {lp.stale_row_count < lp.row_count ? 'Some reorder quantities' : 'Reorder quantities'}
+                  {' '}are from an older LP run.
+                </strong>{' '}
+                {lp.reason}{' '}
+                {lp.superseded_pending_count > 0 && (
+                  <>
+                    {lp.superseded_pending_count.toLocaleString()} undecided rows from earlier cycles
+                    are not counted here.
+                  </>
+                )}
+              </span>
+            </div>
+          )}
+
+          {/* Hero strip — the four figures that answer "what is happening
+              right now": money in, money parked, service risk, and work
+              waiting. */}
           <div className="kpi-strip kpi-strip-hero">
             <KPICard
               title="Sales"
@@ -363,37 +472,33 @@ const Dashboard = () => {
               icon={<AlertTriangle size={20} />}
             />
             <KPICard
-              title="Weeks of cover"
-              value={weeksOfCoverDisplay.value}
-              metricType={weeksOfCoverMetricType}
-              isOverTarget={weeksOfCoverIsOverTarget}
-              contextLine={weeksOfCoverDisplay.contextLine}
-              icon={<Clock size={20} />}
-            />
-            <KPICard
               title="Pending reorder actions"
               value={pendingCount.toLocaleString()}
               metricType="recommendation"
-              contextLine="LP recommendations awaiting a decision"
+              contextLine={pendingContext}
               icon={<ClipboardList size={20} />}
             />
           </div>
 
           {/* DESCRIPTIVE — what happened */}
           <div className="dash-row dash-row-wide-narrow">
-            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} /></Slot>
-            <Slot kind="Descriptive"><ABCDonutWidget data={abcMix} revenue={data.abc_revenue} /></Slot>
+            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} /></Slot>
+            <Slot kind="Descriptive">
+              <ABCDonutWidget data={abcMix} revenue={data.abc_revenue} note={placeholderNote(data.abc_revenue?.period)} />
+            </Slot>
           </div>
 
           {/* DESCRIPTIVE + DIAGNOSTIC — the state, then why it looks that way */}
           <div className="dash-row dash-row-narrow-wide">
-            <Slot kind="Descriptive"><CategoryStockBarWidget data={tierStock} /></Slot>
+            <Slot kind="Descriptive">
+              <CategoryStockBarWidget data={tierStock} note={placeholderNote(data.abc_revenue?.period)} />
+            </Slot>
             <Slot kind="Diagnostic"><DemandVolatilityWidget summary={segmentSummary} /></Slot>
           </div>
 
           {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
           <div className="dash-row dash-row-even">
-            <Slot kind="Predictive">
+            <Slot kind="Predictive" realOnly={portfolioRealOnly}>
               <PortfolioForecastWidget
                 series={portfolioSeries}
                 gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
@@ -417,7 +522,7 @@ const Dashboard = () => {
                 reliability={forecastReliability}
               />
             </Slot>
-            <Slot kind="Prescriptive">
+            <Slot kind="Prescriptive" realOnly={preview && realOnly.has('reorder_preview')}>
               <ReorderRecommendationWidget
                 rows={reorderRows}
                 criticalCount={reorderPreview.critical_count ?? 0}
@@ -430,7 +535,9 @@ const Dashboard = () => {
 
           {/* PRESCRIPTIVE — the policy question this project exists to answer */}
           <div className="dash-row dash-row-single">
-            <Slot kind="Prescriptive"><PolicyComparisonWidget comparison={data.policy_comparison} /></Slot>
+            <Slot kind="Prescriptive" realOnly={preview && realOnly.has('policy_comparison')}>
+              <PolicyComparisonWidget comparison={data.policy_comparison} />
+            </Slot>
           </div>
 
           <p className="dash-footnote">

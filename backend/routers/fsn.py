@@ -16,6 +16,10 @@ Unilever_SKU_Demand_Fact_Real; Del Monte per product category from
 SellOut_Fact_Real, summed across regions like the ABC run. A product with no
 sale anywhere in the window isn't listed — it is non-moving by definition,
 and callers treat a classified product missing here as 'N'.
+
+X-Data-Mode: preview adds Unilever's 2021-22 placeholder months, so a
+window ending in them is classified on placeholder movement
+(backend/data_mode.py).
 """
 from __future__ import annotations
 
@@ -29,19 +33,22 @@ from sqlalchemy.orm import Session
 from analytics.classification.fsn import (
     FAST_ADI_MAX, FSN_LABELS, FSN_WINDOW_MONTHS, MIN_FAST_SALES_MONTHS, NON_MOVING_MONTHS, classify_fsn,
 )
+from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import PrincipalQuery, normalize_principal
 
 router = APIRouter(prefix="/fsn", tags=["fsn"])
 
 # Per principal: (observed-months query, per-product monthly quantity query).
+# {demand} is the Unilever demand relation for the request's data mode
+# (backend/data_mode.py) — the _Real view's own name in real mode.
 _SOURCES = {
     "unilever": (
-        "SELECT DISTINCT calendar_month AS period FROM Unilever_SKU_Demand_Fact_Real "
+        "SELECT DISTINCT calendar_month AS period FROM {demand} "
         "WHERE calendar_month <= :end ORDER BY calendar_month DESC LIMIT :n",
         """
         SELECT d.product_key, pd.sku_code AS sku_id, d.calendar_month AS period, SUM(d.quantity_sold) AS qty
-        FROM Unilever_SKU_Demand_Fact_Real d
+        FROM {demand} d
         JOIN Product_Dimension pd ON pd.product_key = d.product_key
         WHERE d.calendar_month = ANY(:months)
         GROUP BY d.product_key, pd.sku_code, d.calendar_month
@@ -61,9 +68,11 @@ _SOURCES = {
 }
 
 
-def classify_principal(db: Session, principal: str, period: str | None) -> tuple[dict | None, list[dict]]:
+def classify_principal(
+    db: Session, principal: str, period: str | None, mode: str = REAL,
+) -> tuple[dict | None, list[dict]]:
     """(window, items) for one principal; window None when it has no data."""
-    months_sql, qty_sql = _SOURCES[principal]
+    months_sql, qty_sql = (sql.format(demand=unilever_demand(mode)) for sql in _SOURCES[principal])
     end = period or "9999-12"
     months = sorted(r["period"] for r in db.execute(text(months_sql), {"end": end, "n": FSN_WINDOW_MONTHS}).mappings().all())
     if not months:
@@ -94,18 +103,19 @@ def classify_principal(db: Session, principal: str, period: str | None) -> tuple
 def get_fsn(
     principal: str | None = PrincipalQuery,
     period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$", description="Window end 'YYYY-MM'; default the latest data month."),
+    mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> dict:
     scope = normalize_principal(principal)
     windows, items = {}, []
     for p in ([scope] if scope else ["unilever", "delmonte"]):
-        window, rows = classify_principal(db, p, period)
+        window, rows = classify_principal(db, p, period, mode)
         if window:
             windows[p] = window
             items.extend(rows)
     counts = Counter(i["fsn"] for i in items)
-    return {
+    payload = {
         "period": period,
         "windows": windows,
         "rules": {
@@ -118,3 +128,6 @@ def get_fsn(
         "summary": {k: counts.get(k, 0) for k in ("F", "S", "N")},
         "items": items,
     }
+    if mode == PREVIEW:
+        payload["data_mode"] = preview_block(db)
+    return payload

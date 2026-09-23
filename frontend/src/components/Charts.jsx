@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   ComposedChart, BarChart, Bar, Cell, Line,
-  PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
@@ -12,7 +12,17 @@ import { formatMonth } from '../utils/formatDate';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
 import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { DEFAULT_PRINCIPAL, PRINCIPALS } from '../principals';
+import { isPlaceholderPeriod } from '../dataMode';
+import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import './Charts.css';
+
+// Legend entry for the placeholder band (utils/placeholderBand.jsx).
+const PlaceholderLegendItem = () => (
+  <li className="legend-item">
+    <span className="legend-placeholder" aria-hidden="true" />
+    Placeholder months — not SSM&apos;s data
+  </li>
+);
 
 // X-axis tick + tooltip header for every period-keyed chart on this page:
 // "Jan · 2026" — short month, middle dot, full year. Was the raw 'YYYY-MM'
@@ -280,7 +290,7 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
   );
 };
 
-const SalesStockTooltip = ({ active, payload, label }) => {
+const SalesStockTooltip = ({ active, payload, label, placeholder }) => {
   if (!active || !payload || !payload.length) return null;
   // Every series is now drawn twice — the Line, plus the Area shading under
   // it — so the raw payload carries each value twice over. The fills declare
@@ -296,21 +306,27 @@ const SalesStockTooltip = ({ active, payload, label }) => {
           {p.name}: {formatCompactPesos(p.value)}
         </p>
       ))}
+      {isPlaceholderPeriod(label, placeholder) && (
+        <p className="chart-tooltip-placeholder">Placeholder month — not SSM&apos;s data</p>
+      )}
     </div>
   );
 };
 
-// SUPPLIER-ALLOCATION PROXY — no supplier allocation schedule exists
-// anywhere in the schema or the source files; SSM has never provided one.
-// backend/routers/dashboard.py's sales_vs_stock[].received sums
-// Purchase_Fact_Real.net_amount as a stand-in instead. Displayed as "Fixed
-// Allocation" per product decision (2026-08) despite being received-
-// quantity data underneath, not a real allocation schedule — see this
-// file's git history for the more literal "Received (proxy for
-// allocation)" wording this replaced. SalesStockTooltip renders whatever
-// `name` each Line declares, so that's the only other place this label
-// lives.
-const RECEIVED_LABEL = 'Fixed Allocation';
+// No supplier allocation schedule exists anywhere in the schema or the
+// source files; SSM has never provided one. This series is
+// backend/routers/dashboard.py's sales_vs_stock[].received — the peso value
+// of purchases actually RECEIVED (Purchase_Fact_Real.net_amount).
+//
+// It was labelled "Fixed Allocation" (product decision, 2026-08) even
+// though no allocation figure exists to plot. Renamed 2026-09-23: a chart
+// legend is read on its own, away from the subtitle that explained the
+// substitution, and a reader has no way to tell a stand-in from the real
+// thing when the stand-in wears the real thing's name. The subtitle still
+// says it stands in for the allocation schedule. SalesStockTooltip renders
+// whatever `name` each Line declares, so this constant is the only place
+// the label lives.
+const RECEIVED_LABEL = 'Purchases received';
 
 // Sales vs. Stock on Hand — the dashboard's hero chart. `data` is
 // [{ period, sales, stockOnHand, received }], all three in pesos (GET
@@ -319,7 +335,7 @@ const RECEIVED_LABEL = 'Fixed Allocation';
 // kpis.soh_value and sales_vs_stock[].received docstring sections). No
 // flat ReferenceLine for `received`: it varies per period like the other
 // two series, so it's a dashed Line, not a constant.
-export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
+export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null }) => {
   const hasData = data.length > 0;
   // Windows over whatever range the page's date filter fetched. At a wide
   // range that is 38 months, far more than the XAxis can label without
@@ -332,17 +348,21 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
   // The Line and its legend entry now appear together, only when at least
   // one real point exists — and the subtitle says which case it is.
   const hasReceived = data.some((pt) => pt.received != null);
+  // Preview only: the placeholder months inside the visible window, and
+  // whether the fetched range holds any at all (the legend entry).
+  const bandSpan = placeholderSpan(zoom.view, placeholder);
+  const hasPlaceholder = placeholderSpan(data, placeholder) != null;
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Sales vs Stock on Hand</h4>
+          <h4>Sales vs Stock on Hand <span className="chart-unit">₱</span></h4>
           <p>
             Monthly revenue and stock-on-hand valuation, in pesos.
             {hasReceived
-              ? ' Received quantities stand in for the supplier allocation schedule, which SSM has not yet provided.'
-              : ' No purchase records exist for this scope, so no received/allocation line is drawn.'}
+              ? ' The purchases-received line stands in for the supplier allocation schedule, which SSM has not yet provided — it is what was bought, not an allocation.'
+              : ' No purchase records exist for this scope, so no purchases line is drawn.'}
           </p>
         </div>
       </div>
@@ -351,7 +371,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
         <p className="dashboard-empty-note">{emptyReason || 'No data available for this range'}</p>
       ) : (
         <>
-          <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} {...zoom.panHandlers}>
+          <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={zoom.view} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
                 <defs>
@@ -360,6 +380,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   {hasReceived && <SeriesFill id="fill-received" color={COLORS.forecast} />}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                {renderPlaceholderBand(bandSpan)}
                 {/* Interval comes from the zoom window, not Recharts' own
                     crowding heuristic: 0 draws every month once the window is
                     narrow enough to fit them, and steps up only as it widens. */}
@@ -370,7 +391,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                   tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                   tickFormatter={(v) => formatCompactPesos(v)}
                 />
-                <Tooltip content={<SalesStockTooltip />} />
+                <Tooltip content={<SalesStockTooltip placeholder={placeholder} />} />
                 {/* Fills are declared ahead of the Lines so every line paints
                     on top of every wash, including where two series overlap.
                     baseValue="dataMin" anchors them to the axis floor rather
@@ -432,6 +453,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
                 {RECEIVED_LABEL}
               </li>
             )}
+            {hasPlaceholder && <PlaceholderLegendItem />}
           </ul>
         </>
       )}
@@ -440,44 +462,223 @@ export const SalesVsStockWidget = ({ data = [], emptyReason }) => {
 };
 
 const ABC_TIER_COLORS = { A: COLORS.abcA, B: COLORS.abcB, C: COLORS.abcC };
+const abcTierColor = (tier) => ABC_TIER_COLORS[tier] || CHART_COLORS.abcRamp[0];
 
-const ABCDonutTooltip = ({ active, payload }) => {
-  if (!active || !payload || !payload.length) return null;
-  const row = payload[0].payload;
+// The ring is plain SVG so each segment can be a real keyboard button. Same
+// layout the Recharts ring had: it starts at 3 o'clock, runs
+// counter-clockwise, with 2° gaps between tiers. The outer radius stops 2px
+// short of the box, which leaves room for the selected tier's 2px stroke and
+// keeps the ring's left edge on the card title's left edge.
+const ABC_DONUT_SIZE = 180;
+const ABC_RING_OUTER = 88;
+const ABC_RING_INNER = 62;
+const ABC_PAD_ANGLE = 2;
+// Each principal's tier shares add up to 100% of that principal's revenue.
+// Further off than this and they were summed across principals, so they are
+// not a share of any revenue this card could name.
+const ABC_SHARE_SUM_TOLERANCE = 2;
+const ABC_TOOLTIP_GAP = 12;
+const ABC_VIEWPORT_MARGIN = 4;
+
+const abcPoint = (radius, degrees) => {
+  const angle = (degrees * Math.PI) / 180;
+  const centre = ABC_DONUT_SIZE / 2;
+  return `${(centre + radius * Math.cos(angle)).toFixed(2)} ${(centre - radius * Math.sin(angle)).toFixed(2)}`;
+};
+
+const abcArc = (start, end) => {
+  const large = end - start > 180 ? 1 : 0;
+  return [
+    `M${abcPoint(ABC_RING_OUTER, start)}`,
+    `A${ABC_RING_OUTER} ${ABC_RING_OUTER} 0 ${large} 0 ${abcPoint(ABC_RING_OUTER, end)}`,
+    `L${abcPoint(ABC_RING_INNER, end)}`,
+    `A${ABC_RING_INNER} ${ABC_RING_INNER} 0 ${large} 1 ${abcPoint(ABC_RING_INNER, start)}`,
+    'Z',
+  ].join(' ');
+};
+
+// One arc per tier, sized by its revenue share exactly as the Recharts Pie
+// sized it (shares relative to their own sum, minus the gaps).
+const abcSegments = (data) => {
+  const values = data.map((d) => (Number.isFinite(d.sharePct) && d.sharePct > 0 ? d.sharePct : 0));
+  const sum = values.reduce((acc, v) => acc + v, 0);
+  const available = 360 - ABC_PAD_ANGLE * values.filter((v) => v > 0).length;
+  let angle = 0;
+  return data.map((d, i) => {
+    const sweep = sum > 0 ? (values[i] / sum) * available : 0;
+    const segment = { tier: d.tier, path: sweep > 0 ? abcArc(angle, angle + sweep) : null };
+    if (sweep > 0) angle += sweep + ABC_PAD_ANGLE;
+    return segment;
+  });
+};
+
+// The selected tier, SKUs first and revenue second. `facts` come from the
+// same abc_mix rows the ring and the share bars draw. A revenue figure that
+// can't be trusted (no total, or shares that don't add up to ~100%) reads
+// "Revenue not available", and the sentence is left out rather than stated
+// on numbers that aren't real.
+const AbcTierCard = ({ facts }) => {
+  const x = facts.skuPct.toFixed(0);
+  const y = facts.revenuePct != null ? facts.revenuePct.toFixed(0) : null;
+  const revenueKnown = facts.amount != null && y != null;
   return (
-    <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.15rem 0' }}>Tier {row.tier}</p>
-      <p style={{ margin: 0 }}>{row.count} SKUs · {row.sharePct.toFixed(0)}% of revenue</p>
+    <div className="abc-tier-card" aria-live="polite">
+      <p className="abc-tier-card-name">
+        <span className="legend-color" style={{ backgroundColor: abcTierColor(facts.tier) }} aria-hidden="true" />
+        Tier {facts.tier}
+      </p>
+      {/* Stacked when the card is narrow; side by side as it widens (see
+          the container queries in Charts.css). Reading order stays SKUs,
+          then revenue, then the sentence at every width. */}
+      <div className="abc-tier-card-body">
+        <div className="abc-tier-card-stat">
+          <p className="abc-tier-card-skus">{facts.count.toLocaleString()} SKUs</p>
+          <p className="abc-tier-card-note">{x}% of all SKUs</p>
+        </div>
+        <div className="abc-tier-card-stat">
+          <p className={`abc-tier-card-revenue${facts.amount == null ? ' is-unavailable' : ''}`}>
+            {facts.amount != null ? `${formatCompactPesos(facts.amount)} revenue` : 'Revenue not available'}
+          </p>
+          {y != null && <p className="abc-tier-card-note">{y}% of total revenue</p>}
+        </div>
+        {revenueKnown && (
+          <p className="abc-tier-card-insight">
+            <span>
+              {Number(y) > Number(x) ? (
+                <>Tier {facts.tier} is only <strong>{x}%</strong> of SKUs but brings in <strong>{y}%</strong> of revenue.</>
+              ) : (
+                <>Tier {facts.tier} is <strong>{x}%</strong> of SKUs but brings in only <strong>{y}%</strong> of revenue.</>
+              )}
+            </span>
+          </p>
+        )}
+      </div>
     </div>
   );
 };
 
-// ABC classification donut — `data` is [{ tier: 'A'|'B'|'C', count, sharePct }].
-// The RING encodes revenue share, so the centre now states the revenue
-// those shares are shares of (GET /dashboard's abc_revenue — the same
-// net_amount basis the classification ran on) with the SKU count as a
-// smaller second line. It used to print "710 SKUs" in the middle of a ring
-// that was 80% Tier A by revenue — two units in one graphic, and Tier A is
-// only ~19% of SKUs. The paired bars underneath put that Pareto contrast in
-// one glance: the same three tiers as share of revenue vs share of SKUs.
-// `revenue` is {period, total, blocked_reason}; a null total falls back to
-// the SKU count in the centre with the reason in its tooltip, never a
-// stand-in figure.
-export const ABCDonutWidget = ({ data = [], revenue, emptyReason }) => {
+// Hover detail for one segment. Portalled to <body> with position: fixed, so
+// no card's overflow can clip it and nothing on the page sits above it.
+// Placed 12px from the pointer on the side away from the ring's centre;
+// when that would leave the viewport it flips (up/down, then left/right),
+// and any spot that would cover the ring is skipped. Mouse only — a tap
+// selects instead.
+const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
+  const tipRef = useRef(null);
+  const [pos, setPos] = useState(null);
+
+  useLayoutEffect(() => {
+    const tip = tipRef.current?.getBoundingClientRect();
+    const ring = ringRef.current?.getBoundingClientRect();
+    if (!tip || !ring) return;
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    const m = ABC_VIEWPORT_MARGIN;
+    const gap = ABC_TOOLTIP_GAP;
+    const scale = ring.width / ABC_DONUT_SIZE;
+    const cx = ring.left + ring.width / 2;
+    const cy = ring.top + ring.height / 2;
+    const clearRadius = (ABC_RING_OUTER + 2) * scale;
+    const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+    const onScreen = (l, t) => l >= m && t >= m && l + tip.width <= vw - m && t + tip.height <= vh - m;
+    const clearOfRing = (l, t) => {
+      const nx = clamp(cx, l, l + tip.width);
+      const ny = clamp(cy, t, t + tip.height);
+      return (nx - cx) ** 2 + (ny - cy) ** 2 > clearRadius ** 2;
+    };
+    // Corner of the tooltip 12px from (x, y), towards side (sx, sy).
+    const beside = (x, y, sx, sy) => [sx > 0 ? x + gap : x - gap - tip.width, sy > 0 ? y + gap : y - gap - tip.height];
+    const sx = hover.x >= cx ? 1 : -1;
+    const sy = hover.y >= cy ? 1 : -1;
+    // A pointer deep in the ring is pushed out to the ring's edge first.
+    const r = Math.hypot(hover.x - cx, hover.y - cy) || 1;
+    const edge = Math.max(r, ABC_RING_OUTER * scale) / r;
+    const ex = cx + (hover.x - cx) * edge;
+    const ey = cy + (hover.y - cy) * edge;
+    const candidates = [
+      beside(hover.x, hover.y, sx, sy), beside(hover.x, hover.y, sx, -sy),
+      beside(hover.x, hover.y, -sx, sy), beside(hover.x, hover.y, -sx, -sy),
+      beside(ex, ey, sx, sy), beside(ex, ey, sx, -sy), beside(ex, ey, -sx, sy), beside(ex, ey, -sx, -sy),
+      [ring.right + gap, clamp(hover.y - tip.height / 2, m, vh - tip.height - m)],
+      [ring.left - gap - tip.width, clamp(hover.y - tip.height / 2, m, vh - tip.height - m)],
+      [clamp(hover.x - tip.width / 2, m, vw - tip.width - m), ring.bottom + gap],
+      [clamp(hover.x - tip.width / 2, m, vw - tip.width - m), ring.top - gap - tip.height],
+    ];
+    const [left, top] = candidates.find(([l, t]) => onScreen(l, t) && clearOfRing(l, t)) || candidates[0];
+    setPos({ left: clamp(left, m, vw - tip.width - m), top: clamp(top, m, vh - tip.height - m) });
+  }, [hover, ringRef]);
+
+  const revenueLine = facts.revenuePct == null
+    ? 'Revenue not available'
+    : [facts.amount != null ? formatCompactPesos(facts.amount) : null, `${facts.revenuePct.toFixed(0)}% of revenue`]
+      .filter(Boolean).join(' · ');
+
+  return createPortal(
+    <div
+      ref={tipRef}
+      className="abc-hover-tip"
+      role="tooltip"
+      style={pos ? { left: pos.left, top: pos.top } : { left: 0, top: 0, visibility: 'hidden' }}
+    >
+      <span className="abc-hover-tip-title">Tier {facts.tier}</span>
+      <span>{facts.count.toLocaleString()} SKUs · {facts.skuPct.toFixed(0)}% of SKUs</span>
+      <span>{revenueLine}</span>
+    </div>,
+    document.body,
+  );
+};
+
+// ABC classification — `data` is [{ tier: 'A'|'B'|'C', count, sharePct }],
+// `revenue` is GET /dashboard's abc_revenue {period, total, blocked_reason}.
+// The ring encodes each tier's share of revenue and its centre stays empty;
+// clicking a segment or its legend item picks the tier the card beside it
+// describes (Tier A on load, never nothing). The paired bars underneath put
+// all three tiers' share of revenue next to their share of SKUs.
+export const ABCDonutWidget = ({ data = [], revenue, emptyReason, note }) => {
+  const [selectedTier, setSelectedTier] = useState('A');
+  const [hover, setHover] = useState(null);
+  const ringRef = useRef(null);
+
   const hasData = data.length > 0;
   const total = data.reduce((sum, d) => sum + d.count, 0);
-  const revenueTotal = revenue?.total ?? null;
+  const skuSharePct = (d) => (total > 0 ? (d.count / total) * 100 : 0);
   const sharePairs = [
     { key: 'sharePct', label: 'Share of revenue', value: (d) => d.sharePct },
-    { key: 'skuPct', label: 'Share of SKUs', value: (d) => (total > 0 ? (d.count / total) * 100 : 0) },
+    { key: 'skuPct', label: 'Share of SKUs', value: skuSharePct },
   ];
+
+  const revenueTotal = revenue?.total != null && Number.isFinite(Number(revenue.total)) ? Number(revenue.total) : null;
+  const shareSum = data.reduce((sum, d) => sum + Number(d.sharePct), 0);
+  const sharesAddUp = Number.isFinite(shareSum) && Math.abs(shareSum - 100) <= ABC_SHARE_SUM_TOLERANCE;
+  const factsFor = (d) => ({
+    tier: d.tier,
+    count: d.count,
+    skuPct: skuSharePct(d),
+    revenuePct: sharesAddUp ? d.sharePct : null,
+    amount: sharesAddUp && revenueTotal != null ? (revenueTotal * d.sharePct) / 100 : null,
+  });
+
+  const selected = data.find((d) => d.tier === selectedTier) || data.find((d) => d.tier === 'A') || data[0];
+  const hovered = hover ? data.find((d) => d.tier === hover.tier) : null;
+  const segments = abcSegments(data);
+
+  const selectOnKey = (tier) => (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setSelectedTier(tier);
+    }
+  };
+  const trackHover = (tier) => (e) => {
+    if (e.pointerType === 'mouse') setHover({ tier, x: e.clientX, y: e.clientY });
+  };
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>ABC classification</h4>
-          <p>Ring: each tier's share of revenue. Bars: that share next to the tier's share of the SKU count.</p>
+          <p>Ring: each tier's share of revenue. Click a tier to see its details.</p>
+          {note && <p className="chart-placeholder-note">{note}</p>}
         </div>
       </div>
 
@@ -485,51 +686,54 @@ export const ABCDonutWidget = ({ data = [], revenue, emptyReason }) => {
         <p className="dashboard-empty-note">{emptyReason || 'No ABC classification available'}</p>
       ) : (
         <div className="chart-widget-body">
-          <div className="chart-container donut-container" style={{ position: 'relative' }}>
-            <ResponsiveContainer width="99%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data}
-                  dataKey="sharePct"
-                  nameKey="tier"
-                  innerRadius="60%"
-                  outerRadius="85%"
-                  paddingAngle={2}
-                  {...chartAnim()}
-                >
-                  {data.map((d) => (
-                    <Cell key={d.tier} fill={ABC_TIER_COLORS[d.tier] || CHART_COLORS.abcRamp[0]} />
-                  ))}
-                </Pie>
-                <Tooltip content={<ABCDonutTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="donut-center-label">
-              {revenueTotal != null ? (
-                <>
-                  <span className="donut-center-value">{formatCompactPesos(revenueTotal)}</span>
-                  <span className="donut-center-caption">revenue · {formatMonth(revenue.period)}</span>
-                  <span className="donut-center-secondary">{total.toLocaleString()} SKUs</span>
-                </>
-              ) : (
-                <>
-                  <span className="donut-center-value">{total.toLocaleString()}</span>
-                  <span className="donut-center-caption">SKUs</span>
-                  <span className="donut-center-secondary" title={revenue?.blocked_reason || 'Revenue total not available'}>
-                    revenue n/a
-                  </span>
-                </>
-              )}
+          <div className="abc-overview">
+            <div className="abc-donut-col">
+              <svg
+                ref={ringRef}
+                className="abc-donut"
+                width={ABC_DONUT_SIZE}
+                height={ABC_DONUT_SIZE}
+                viewBox={`0 0 ${ABC_DONUT_SIZE} ${ABC_DONUT_SIZE}`}
+                role="group"
+                aria-label="Share of revenue by tier"
+              >
+                {segments.map((s) => s.path && (
+                  <path
+                    key={s.tier}
+                    d={s.path}
+                    fill={abcTierColor(s.tier)}
+                    className={`abc-seg${s.tier === selected.tier ? ' is-selected' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={s.tier === selected.tier}
+                    aria-label={`Tier ${s.tier}`}
+                    onClick={() => setSelectedTier(s.tier)}
+                    onKeyDown={selectOnKey(s.tier)}
+                    onPointerEnter={trackHover(s.tier)}
+                    onPointerMove={trackHover(s.tier)}
+                    onPointerLeave={() => setHover(null)}
+                  />
+                ))}
+              </svg>
+              <ul className="abc-legend">
+                {data.map((d) => (
+                  <li key={d.tier}>
+                    <button
+                      type="button"
+                      className={`abc-legend-btn${d.tier === selected.tier ? ' is-selected' : ''}`}
+                      aria-pressed={d.tier === selected.tier}
+                      aria-label={`Tier ${d.tier}`}
+                      onClick={() => setSelectedTier(d.tier)}
+                    >
+                      <span className="legend-color" style={{ backgroundColor: abcTierColor(d.tier) }} aria-hidden="true" />
+                      {d.tier}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
+            <AbcTierCard facts={factsFor(selected)} />
           </div>
-          <ul className="custom-legend">
-            {data.map((d) => (
-              <li className="legend-item" key={d.tier}>
-                <span className="legend-color" style={{ backgroundColor: ABC_TIER_COLORS[d.tier] || CHART_COLORS.abcRamp[0] }} />
-                Tier {d.tier}
-              </li>
-            ))}
-          </ul>
           <div className="abc-share-pair" role="img" aria-label="Share of revenue versus share of SKUs, by tier">
             {sharePairs.map((pair) => (
               <div className="abc-share-row" key={pair.key}>
@@ -540,7 +744,7 @@ export const ABCDonutWidget = ({ data = [], revenue, emptyReason }) => {
                     return (
                       <span
                         key={d.tier}
-                        style={{ width: `${v}%`, backgroundColor: ABC_TIER_COLORS[d.tier] || CHART_COLORS.abcRamp[0] }}
+                        style={{ width: `${v}%`, backgroundColor: abcTierColor(d.tier) }}
                         title={`Tier ${d.tier}: ${v.toFixed(0)}% ${pair.key === 'skuPct' ? `of SKUs (${d.count})` : 'of revenue'}`}
                       />
                     );
@@ -554,6 +758,7 @@ export const ABCDonutWidget = ({ data = [], revenue, emptyReason }) => {
           </div>
         </div>
       )}
+      {hovered && <AbcHoverTooltip hover={hover} facts={factsFor(hovered)} ringRef={ringRef} />}
     </div>
   );
 };
@@ -593,7 +798,7 @@ const WAREHOUSE_STATUS_COLORS = {
 // they measure. Legend entries appear only for segments that actually have
 // a non-zero count somewhere in the data — live, no ABC-classified product
 // is flagged Inactive, so a "Dead stock" swatch was pointing at nothing.
-export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
+export const CategoryStockBarWidget = ({ data = [], emptyReason, note }) => {
   const hasData = data.length > 0;
   const hasDead = data.some((row) => (row.deadStock || 0) > 0);
   const hasPending = data.some((row) => (row.pendingReorderCount || 0) > 0);
@@ -613,6 +818,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason }) => {
             stock snapshot — not by whether stock covers the reorder point (that is the ABC page&apos;s
             &ldquo;Cover vs reorder point&rdquo;).
           </p>
+          {note && <p className="chart-placeholder-note">{note}</p>}
         </div>
       </div>
 
@@ -789,7 +995,9 @@ export const PortfolioForecastWidget = ({
     <div className={`chart-widget${onPrincipalChange ? ' chart-widget-filterable' : ''}${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Portfolio-level aggregate forecast</h4>
+          {/* The unit is PIECES here and pesos on the chart above it; the
+              y-axis reads "120k" in both, so it is named in the heading. */}
+          <h4>Portfolio-level aggregate forecast <span className="chart-unit">pieces</span></h4>
           <p>Summed demand across gated Category A SKUs vs. forecast</p>
         </div>
         {/* Card-scoped principal filter — re-scopes THIS card only, never
@@ -864,7 +1072,7 @@ export const PortfolioForecastWidget = ({
             </div>
           </div>
 
-          <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} {...zoom.panHandlers}>
+          <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={zoom.view} margin={{ top: 10, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
                 <defs>
@@ -1292,6 +1500,14 @@ export const DemandVolatilityWidget = ({ summary, emptyReason }) => {
   const buckets = s.volatility || [];
   const hasData = (s.analyzed_count ?? 0) > 0 && buckets.length > 0;
   const total = buckets.reduce((sum, b) => sum + (b.sku_count || 0), 0);
+  // Preview (GET /segment/summary's data_mode): the same cohort measured
+  // over the placeholder months too. gap.high_volatility counts the erratic
+  // SKUs whose real sales start after the placeholder but which have a sale
+  // or two inside it — the empty months between read as volatility, so the
+  // band is the placeholder's doing, and the card must say so.
+  const preview = s.data_mode;
+  const gap = preview?.placeholder_gap_skus;
+  const erratic = buckets.find((b) => b.band === 'high')?.sku_count ?? 0;
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
@@ -1349,9 +1565,21 @@ export const DemandVolatilityWidget = ({ summary, emptyReason }) => {
             })}
           </div>
 
+          {gap?.high_volatility > 0 && (
+            <p className="chart-placeholder-note">
+              {gap.high_volatility === erratic ? `All ${erratic}` : `${gap.high_volatility} of the ${erratic}`} erratic
+              SKUs first sold for real after {formatMonth(preview.placeholder?.first_real_month)} but have a sale or two in
+              the placeholder years, so the empty months in between read as swings. That comes from the placeholder,
+              not from SSM&apos;s sales.
+            </p>
+          )}
+
           <p className="dashboard-chart-footnote">
             {s.analyzed_count} Category A SKUs in the {formatMonth(s.cohort_period)} cohort · trend from
-            Mann-Kendall (p &lt; 0.05). Open a SKU on SKU Forecast for its own reason.
+            Mann-Kendall (p &lt; 0.05)
+            {preview?.traits_window
+              ? ` · measured ${formatMonth(preview.traits_window.start)} – ${formatMonth(preview.traits_window.end)}, placeholder months included`
+              : ''}. Open a SKU on SKU Forecast for its own reason.
           </p>
         </div>
       )}

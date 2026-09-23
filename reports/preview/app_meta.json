@@ -1,0 +1,28 @@
+{
+  "built_at": "2026-09-23T17:22:22+00:00",
+  "target_month": "2026-03",
+  "abc_period": "2026-02",
+  "first_real_month": "2023-01",
+  "last_real_month": "2026-02",
+  "series_rows": 5041,
+  "placeholder_rows": 1954,
+  "placeholder_start": "2021-01",
+  "placeholder_end": "2022-12",
+  "forecast_status": {
+    "ok": 126,
+    "insufficient_data": 6
+  },
+  "lp_skus": 71,
+  "live_reproduction_check": {
+    "skus_live": 132,
+    "skus_rebuilt": 132,
+    "skus_matched": 132,
+    "forecast_equal": 132,
+    "status_equal": 132,
+    "mase_equal": 119,
+    "mase_compared": 119,
+    "passed": true
+  },
+  "lp_limits": "non-binding (10 x total ROP); uniform unit cost 1.0 where unit_price is null",
+  "protection_days": 1.0
+}

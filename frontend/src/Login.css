@@ -1,7 +1,23 @@
 .login-container {
   display: flex;
-  height: 100vh;
-  width: 100vw;
+  /* This page is the one screen with no inner scrolling pane of its own
+     (the app shell's panes are in DashboardLayout.css), and its ancestors
+     are height-capped with overflow:hidden — so without these three lines
+     anything taller or wider than the viewport was simply CUT OFF with no
+     way to reach it. At 390px the logo, the tagline and part of the sign-in
+     card were off-screen, and on a short laptop window the Sign In button
+     itself could be. min-height + auto lets the page grow and scroll. */
+  /* height, NOT min-height. html/body/#root are height-capped with
+     overflow:hidden (index.css), so a container TALLER than the viewport
+     overflows its parent and is clipped — it cannot scroll the page,
+     because the page has no scroll to give. Pinning this element to the
+     viewport height instead makes it the scroll container itself, so
+     whatever does not fit is reached by scrolling here. Measured at
+     390x844: content is 868px, i.e. 24px taller than the viewport. */
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  width: 100%;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -247,15 +263,26 @@
   .login-container {
     flex-direction: column;
   }
-  
+
+  /* flex ratios were splitting a FIXED viewport height between the two
+     panels, which is what squeezed and clipped them once stacked. Stacked,
+     each panel should be as tall as its own content and let the page
+     scroll. */
   .login-left {
-    flex: 3;
-    padding: 2rem;
+    flex: 0 0 auto;
+    padding: 2rem 1rem;
   }
-  
+
   .login-right {
-    flex: 7;
+    flex: 1 0 auto;
     padding: 1rem;
+  }
+
+  /* The logo was 72% of a box that could be wider than the screen. Cap it
+     against the viewport itself so it can never overhang. */
+  .logo-image {
+    width: 100%;
+    max-width: min(320px, 70vw);
   }
   
   .login-card {

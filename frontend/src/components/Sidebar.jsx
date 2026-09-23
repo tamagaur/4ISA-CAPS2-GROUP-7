@@ -11,7 +11,6 @@ import {
   X,
   ClipboardList,
   Users,
-  PackageX,
   ChartLine
 } from 'lucide-react';
 import { logout, getCurrentUser, API_URL } from '../auth';
@@ -34,7 +33,6 @@ const navSections = [
       { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
       { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
       { name: 'Category Trends', icon: ChartLine, path: '/category-trends' },
-      { name: 'Bad Orders', icon: PackageX, path: '/bad-orders' },
     ],
   },
   {

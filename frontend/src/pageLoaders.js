@@ -9,7 +9,6 @@ export const pageLoaders = {
   abc: () => import('./components/ABCClassification'),
   forecast: () => import('./components/SKUForecast'),
   reorder: () => import('./components/ReorderRecommendations'),
-  badOrders: () => import('./components/BadOrders'),
   categoryTrends: () => import('./components/CategoryTrends'),
   auditLog: () => import('./components/AuditLog'),
   upload: () => import('./components/DataUpload'),

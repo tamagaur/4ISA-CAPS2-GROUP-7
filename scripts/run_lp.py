@@ -117,6 +117,11 @@ LOUD_RULE = "=" * 78
 # WHERE on DO UPDATE leaves an accepted/rejected row untouched: without it a
 # rerun silently put a planner's decision back to 'pending' and replaced the
 # quantities they had accepted.
+#
+# generated_at is restamped on refresh because its DEFAULT now() fires only
+# on INSERT, and backend/lp_cycle.py dates the run from it: a refreshed row
+# that kept its first-insert time made a rerun look like it never happened,
+# so the dashboard's stale-LP banner could not clear.
 UPSERT_QUERY = """
     INSERT INTO LP_Recommendation
     (product_key, planning_cycle_date, q_i, rop_i, ss_i, status)
@@ -126,7 +131,8 @@ UPSERT_QUERY = """
         q_i = EXCLUDED.q_i,
         rop_i = EXCLUDED.rop_i,
         ss_i = EXCLUDED.ss_i,
-        status = 'pending'
+        status = 'pending',
+        generated_at = now()
     WHERE LP_Recommendation.status = 'pending'
 """
 

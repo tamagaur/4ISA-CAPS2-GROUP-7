@@ -18,13 +18,14 @@ for the derivations and the unit caveats):
   revenue_share   — the SKU's share of period revenue at its latest
                     single-period ABC run; None when never classified.
   stockout_gap    — max(0, rop_i - current_stock); None when stock unknown.
+                    In PIECES since 2026-09-23 (see current_stock), so it is
+                    now a real shortfall quantity, not an index.
   priority_score  — revenue_share x stockout_gap, the "revenue at risk"
-                    ranking key. A ranking index only, NOT pesos: rop_i is
-                    on the demand series' piece scale while quantity_on_hand
-                    is in cases (see the router docstring), so its absolute
-                    value is not a quantity of anything. None when either
-                    input is missing — such rows are unranked, never
-                    ranked as zero.
+                    ranking key. Both inputs are now on a consistent basis
+                    (revenue share x a piece shortfall) — before 2026-09-23
+                    the gap mixed cases and pieces, so the ranking is no
+                    longer merely ordinal. None when either input is
+                    missing — such rows are unranked, never ranked as zero.
   days_of_cover   — stock at cost (₱) / average daily sales value (₱/day),
                     the same peso basis GET /dashboard's weeks_of_cover uses,
                     precisely BECAUSE stock (cases) and demand (pieces)
@@ -48,8 +49,14 @@ class RecommendationItem(BaseModel):
     rop_i: float  # reorder point
     ss_i: float  # safety stock
     status: str  # 'pending' | 'accepted' | 'dismissed'
-    current_stock: float | None = None  # None = no Inventory_Fact_Real row at the latest snapshot
+    # PIECES since 2026-09-23 (backend/stock_units.py), the same unit as
+    # rop_i/ss_i/q_i — cases x pack_size + the loose remainder. None when
+    # there is no snapshot row, or no usable pack size to convert with.
+    current_stock: float | None = None
+    current_stock_cases: float | None = None  # the raw snapshot figure, for display
     urgency: str  # 'CRITICAL' | 'URGENT' | 'PLANNED' | 'NO DATA' — derived from current_stock vs rop_i
+    # Why urgency is 'NO DATA': no snapshot row, or no usable pack size.
+    stock_blocked_reason: str | None = None
     revenue_share: float | None = None
     stockout_gap: float | None = None
     priority_score: float | None = None
@@ -60,6 +67,15 @@ class RecommendationItem(BaseModel):
 class RecommendationsResponse(BaseModel):
     items: list[RecommendationItem]
     count: int
+    # The LP cycle these rows belong to, and how many pending rows from
+    # earlier runs were withheld so a superseded cycle can't be acted on
+    # (backend/lp_cycle.py). Optional so older fixtures still validate.
+    planning_cycle_date: str | None = None
+    superseded_count: int = 0
+    # {cycle_date, lp_generated_at, forecast_generated_at, is_stale,
+    #  superseded_pending_count, reason} — lets the UI warn that q_i/rop_i
+    #  were solved against forecasts that have since been replaced.
+    freshness: dict | None = None
 
 
 class RecommendationDecision(BaseModel):

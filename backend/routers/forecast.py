@@ -24,9 +24,19 @@ SKU outside Tier A, or one the runner hasn't reached) — that is NOT a
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.data_mode import (
+    PREVIEW,
+    forecast_source,
+    get_data_mode,
+    predictive_preview,
+    preview_block,
+    unilever_demand,
+)
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import PrincipalQuery, principal_clause
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
@@ -38,6 +48,7 @@ router = APIRouter(prefix="/forecast", tags=["forecast"])
 def get_forecast(
     sku_id: str,
     principal: str | None = PrincipalQuery,
+    mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> ForecastResponse:
@@ -71,15 +82,20 @@ def get_forecast(
         except (ValueError, TypeError):
             return default
 
+    # Preview with built outputs (backend/data_mode.py): the five-year what-if
+    # forecast, and the history it was made from — placeholder months included.
+    # Otherwise the live forecast and the real history, in either mode.
+    fc, fc_params = forecast_source(mode, "forecast_result")
+    demand = "unilever_sku_demand_fact_real" if not predictive_preview(mode) else unilever_demand(mode)
     forecast_rows = db.execute(
-        text("""
+        text(f"""
             SELECT forecast_date, forecast_value, confidence_lower, confidence_upper, mape, mase,
                    status, model_params
-            FROM forecast_result
+            FROM {fc}
             WHERE product_key = :product_key
             ORDER BY forecast_date
         """),
-        {"product_key": product_key},
+        {"product_key": product_key, **fc_params},
     ).mappings().all()
     forecast = [
         ForecastPoint(
@@ -96,9 +112,9 @@ def get_forecast(
     ]
 
     actual_rows = db.execute(
-        text("""
+        text(f"""
             SELECT calendar_month, quantity_sold
-            FROM unilever_sku_demand_fact_real
+            FROM {demand}
             WHERE product_key = :product_key
             ORDER BY calendar_month DESC
         """),
@@ -109,11 +125,15 @@ def get_forecast(
         for r in reversed(actual_rows)
     ]
 
-    return ForecastResponse(
+    response = ForecastResponse(
         sku_id=sku_id,
         product_name=product_row["product_name"],
         principal=product_row["principal"],
         actuals=actuals,
         forecast=forecast,
     )
+    if mode != PREVIEW:
+        return response
+    block = preview_block(db, real_only=None if predictive_preview(mode) else ["forecast", "actuals"])
+    return JSONResponse({**jsonable_encoder(response), "data_mode": block})
 

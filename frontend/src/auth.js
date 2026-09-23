@@ -9,6 +9,7 @@
 // tool, worth revisiting if the dashboard ever embeds third-party scripts.
 
 import { invalidateCache } from './api/cache';
+import { dataModeHeaders } from './dataMode';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'dsd_access_token';
@@ -181,9 +182,15 @@ export async function apiFetch(path, options = {}) {
     throw new Error('Session expired. Please log in again.');
   }
 
+  // Preview mode rides on every read as X-Data-Mode (src/dataMode.js), so
+  // no api/*.js wrapper has to remember it.
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: authHeaders({ 'Content-Type': 'application/json', ...options.headers }),
+    headers: authHeaders({
+      'Content-Type': 'application/json',
+      ...dataModeHeaders(options.method),
+      ...options.headers,
+    }),
   });
   if (res.status === 401) {
     clearSession();

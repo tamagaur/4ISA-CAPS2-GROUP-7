@@ -42,6 +42,23 @@
   color: var(--color-text-subtle);
 }
 
+/* The unit a chart's y-axis is in, beside its title. The axes are compacted
+   to "120k" / "22M", which reads the same whether the quantity is pesos or
+   pieces — and this dashboard plots both, one above the other. Sits in the
+   heading rather than as an axis label so it survives the chart being
+   zoomed, panned or narrowed to a phone width. */
+.chart-unit {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--color-border, #e3e0d8);
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 /* Range Controls on Chart Card */
 .chart-range-controls {
   display: flex;
@@ -147,44 +164,6 @@
   position: relative;
 }
 
-/* flex:none + an explicit height, overriding chart-container's flex:1 —
-   this widget's card is now auto-height (see Dashboard.css's
-   .chart-duo-abc .chart-widget), so there's no fixed ancestor height left
-   for flex:1 to grow into. Recharts' ResponsiveContainer needs a real
-   pixel height from its parent to render at all, so the donut gets its
-   own fixed height regardless of the card around it. */
-.donut-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  height: 180px;
-}
-
-.donut-center-label {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-}
-
-.donut-center-value {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--color-text);
-  line-height: 1;
-}
-
-.donut-center-caption {
-  font-size: 0.7rem;
-  color: var(--color-text-subtle);
-  margin-top: 0.15rem;
-}
-
 .custom-legend {
   list-style: none;
   padding: 0;
@@ -231,6 +210,16 @@
   border-top-style: dashed;
 }
 
+/* Placeholder months (preview mode): the band's own tint as a swatch. The
+   alpha matches the ReferenceArea's fillOpacity (0.16) in Charts.jsx. */
+.legend-placeholder {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-placeholder) 16%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--color-placeholder) 60%, transparent);
+}
+
 .chart-tooltip {
   background-color: var(--color-surface);
   border-radius: 8px;
@@ -238,6 +227,14 @@
   padding: 0.5rem 0.75rem;
   font-size: 0.75rem;
   color: var(--color-text);
+}
+
+.chart-tooltip-placeholder {
+  margin: 0.3rem 0 0;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-weight: 600;
 }
 
 .abc-bars {
@@ -822,14 +819,7 @@
 }
 
 
-/* ── ABC donut: revenue centre + paired share bars (2026-09-18) ────────── */
-.donut-center-secondary {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  margin-top: 0.2rem;
-}
-
+/* ── ABC classification: donut + legend, selected-tier card, share bars ─── */
 .abc-share-pair {
   display: flex;
   flex-direction: column;
@@ -871,6 +861,288 @@
   font-size: 0.68rem;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Donut + legend on the left, the selected tier's card on the right; the
+   card drops below the donut, full width, on phones (< 768px). */
+.abc-overview {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 28px;
+}
+
+.abc-donut-col {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.abc-donut {
+  display: block;
+  overflow: visible;
+}
+
+/* Unselected tiers step back so the selected one reads first. */
+.abc-seg {
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 150ms ease-out;
+}
+
+.abc-seg.is-selected {
+  opacity: 1;
+  stroke: var(--color-text);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.abc-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.abc-legend-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.abc-legend-btn.is-selected {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+/* Keyboard focus only: a clicked segment would otherwise keep the browser's
+   own focus box around its bounding rectangle. */
+.abc-seg:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.abc-seg:focus-visible,
+.abc-legend-btn:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Fills everything right of the donut in both directions: as wide as the
+   ABC card allows and as tall as the donut + legend, content centred in it.
+   A size container, so its layout follows its own width (below), not the
+   window's — the ABC card is narrow on a 1366px laptop but full-width
+   below 1350px. */
+.abc-tier-card {
+  flex: 1 1 240px;
+  min-width: 240px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-raised);
+  container-type: inline-size;
+}
+
+.abc-tier-card-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.abc-tier-card-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.abc-tier-card-stat + .abc-tier-card-stat {
+  margin-top: 0.6rem;
+}
+
+.abc-tier-card-name {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.abc-tier-card-skus {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--color-text);
+}
+
+.abc-tier-card-revenue {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+
+.abc-tier-card-revenue.is-unavailable {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.abc-tier-card-note {
+  margin: 0.1rem 0 0;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+/* The thin divider sits on the sentence, so it only appears with it. */
+.abc-tier-card-insight {
+  margin: 0.7rem 0 0;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--color-text-body);
+}
+
+.abc-tier-card-insight strong {
+  color: var(--color-text);
+}
+
+/* Medium card: SKUs and revenue side by side, the sentence underneath. */
+@container (min-width: 400px) {
+  .abc-tier-card-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+  }
+  .abc-tier-card-stat + .abc-tier-card-stat {
+    margin-top: 0;
+    padding-left: 1.5rem;
+    border-left: 1px solid var(--color-border);
+  }
+  .abc-tier-card-insight {
+    grid-column: 1 / -1;
+    font-size: 0.85rem;
+  }
+  .abc-tier-card-name {
+    margin-bottom: 0.6rem;
+    font-size: 0.9rem;
+  }
+  .abc-tier-card-skus {
+    font-size: 2.3rem;
+  }
+  .abc-tier-card-revenue:not(.is-unavailable) {
+    font-size: 1.5rem;
+  }
+  .abc-tier-card-revenue.is-unavailable {
+    font-size: 1rem;
+  }
+  .abc-tier-card-note {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* Wide card: SKUs | revenue | sentence in one row, equal columns, the
+   type scaled up so the row fills the panel's height as well as its width.
+   With no sentence (revenue unavailable) the two stats share the width. */
+@container (min-width: 620px) {
+  .abc-tier-card-name {
+    margin-bottom: 0.75rem;
+    font-size: 0.95rem;
+  }
+  .abc-tier-card-body {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+  .abc-tier-card-skus {
+    font-size: 2.6rem;
+  }
+  .abc-tier-card-revenue:not(.is-unavailable) {
+    font-size: 1.7rem;
+  }
+  .abc-tier-card-revenue.is-unavailable {
+    font-size: 1.1rem;
+  }
+  .abc-tier-card-note {
+    margin-top: 0.3rem;
+    font-size: 0.85rem;
+  }
+  .abc-tier-card-insight {
+    grid-column: auto;
+    display: flex;
+    align-items: center;
+    margin: 0;
+    padding: 0 0 0 1.5rem;
+    border-top: 0;
+    border-left: 1px solid var(--color-border);
+    font-size: 0.9rem;
+  }
+}
+
+/* Portalled to <body> (see AbcHoverTooltip): fixed, above every card and
+   the app chrome (highest z-index elsewhere is 2000), one fact per line. */
+.abc-hover-tip {
+  position: fixed;
+  z-index: 2100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 9px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  font-family: var(--font-inter);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--color-text-body);
+  white-space: nowrap;
+}
+
+.abc-hover-tip-title {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+@media (max-width: 767px) {
+  .abc-overview {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  .abc-donut-col {
+    align-self: flex-start;
+  }
+  .abc-tier-card {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .abc-seg {
+    transition: none;
+  }
 }
 
 /* ── Policy comparison (LP safety stock vs 3-week rule) ────────────────── */

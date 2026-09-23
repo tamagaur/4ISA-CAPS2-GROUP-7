@@ -20,6 +20,7 @@ import DateFilter from './DateFilter';
 import { formatMonth } from '../utils/formatDate';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { labelForPrincipal } from '../principals';
+import { isPlaceholderPeriod } from '../dataMode';
 import Pagination from './Pagination';
 import RefreshingNote from './RefreshingNote';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
@@ -195,6 +196,10 @@ const ABCClassification = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [classificationPeriod, setClassificationPeriod] = useState(null);
+  // Preview mode only (src/dataMode.js): the payload's placeholder window.
+  // A run for one of those months is computed on request from placeholder
+  // sales (backend/routers/abc.py), and every label that names it says so.
+  const [placeholder, setPlaceholder] = useState(null);
   // Products in scope ABC has never ranked at or before this period (no
   // sales in any run) — counted by the backend, not listed, since they have
   // no tier to show.
@@ -257,6 +262,7 @@ const ABCClassification = () => {
         if (cancelled) return;
         setRawData(res.items || []);
         setClassificationPeriod(res.classification_period || null);
+        setPlaceholder(res.data_mode?.placeholder ?? null);
         setUnclassifiedCount(res.unclassified_count ?? null);
         setLoadedKey(`${requestedPeriod ?? ''}|${principal ?? ''}`);
       })
@@ -533,7 +539,9 @@ const ABCClassification = () => {
   // note when it is carried forward — same wording as SKU Management.
   const catTitle = (item) => {
     if (!item.catPeriod) return `Category ${item.cat}`;
-    const when = formatMonth(item.catPeriod);
+    const when = isPlaceholderPeriod(item.catPeriod, placeholder)
+      ? `${formatMonth(item.catPeriod)} (placeholder data)`
+      : formatMonth(item.catPeriod);
     if (item.isCurrent) return `Category ${item.cat} — current run (${when})`;
     // Per row, so a Del Monte row keeps its reason in the All view too.
     if (item.principal === 'delmonte' && item.catPeriod < DEL_MONTE_REGROUP_PERIOD) {
@@ -565,6 +573,9 @@ const ABCClassification = () => {
   // success — the date picker lives in this header, so blanking the page
   // while refetching removed the control the user had just changed. Same
   // fix as Dashboard.jsx's `header`.
+  const periodPlaceholderNote = isPlaceholderPeriod(classificationPeriod, placeholder)
+    ? " — a placeholder month: these tiers come from placeholder sales, not SSM's"
+    : '';
   const header = (
     <div className="abc-page-header">
       <div className="abc-page-title-row">
@@ -585,13 +596,13 @@ const ABCClassification = () => {
         {isDelMonte ? (
           <>
             Product categories ranked by sales value. Category A = the categories driving roughly 80% of revenue.
-            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}.</>}
+            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}{periodPlaceholderNote}.</>}
             {' '}Categories with no sales that month keep their most recent tier, shown faded with the month it was set.
           </>
         ) : (
           <>
             Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
-            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}.</>}
+            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}{periodPlaceholderNote}.</>}
             {' '}SKUs with no sales that month keep their most recent category, shown faded with the month it was set.
           </>
         )}

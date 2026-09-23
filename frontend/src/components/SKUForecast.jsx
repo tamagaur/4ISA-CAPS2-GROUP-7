@@ -21,6 +21,8 @@ import { useBrandLookup } from '../utils/useBrandLookup';
 import { describeServedModel, describeFallbackReason } from '../utils/forecastModel';
 import DateFilter from './DateFilter';
 import SkuDiagnosticsPanel from './SkuDiagnosticsPanel';
+import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
+import { isPreviewMode } from '../dataMode';
 import './SKUForecast.css';
 
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
@@ -187,12 +189,36 @@ const SKUForecast = () => {
   // Del Monte has no SKU-level forecasts at all (DEL_MONTE_NO_FORECAST): the
   // page shows that message in place of the picker and fetches nothing.
   const isDelMonte = principal === 'delmonte';
-  const [localRange, setLocalRange] = useState(() => ({
-    startMonth: dashboardRange.startMonth,
-    startYear: dashboardRange.startYear,
-    endMonth: dashboardRange.endMonth,
-    endYear: dashboardRange.endYear,
-  }));
+  // Preview (backend/data_mode.py): with the what-if forecasts built, this
+  // page shows them against the five-year history and the shared range
+  // passes through. Without them the forecasts are the live, real-only
+  // ones, so the range never reaches into the placeholder months: a shared
+  // range starting there starts at the first real month here instead, and
+  // one lying wholly inside them falls back to all real months.
+  const previewOn = isPreviewMode(dashboardRange.dataMode);
+  const whatIf = previewOn && Boolean(dashboardRange.previewInfo?.outputs);
+  const realFloor = previewOn && !whatIf;
+  const seedRange = (() => {
+    const shared = {
+      startMonth: dashboardRange.startMonth,
+      startYear: dashboardRange.startYear,
+      endMonth: dashboardRange.endMonth,
+      endYear: dashboardRange.endYear,
+    };
+    if (!realFloor || Number(shared.startYear) >= FIRST_DATA_YEAR) return shared;
+    const floorStart = { startMonth: 'Jan', startYear: String(FIRST_DATA_YEAR) };
+    return Number(shared.endYear) >= FIRST_DATA_YEAR
+      ? { ...shared, ...floorStart }
+      : { ...floorStart, endMonth: LATEST_DATA_PERIOD.month, endYear: LATEST_DATA_PERIOD.year };
+  })();
+  const [localRange, setLocalRange] = useState(() => seedRange);
+  // GET /data-mode answers after this page first renders, so a preview seed
+  // taken before it lands is the real-floor one; re-seed once the what-if
+  // outputs are known to exist, so the five-year range shows without a Clear.
+  useEffect(() => {
+    if (whatIf) setLocalRange(seedRange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [whatIf]);
   const rangeStartPeriod = toPeriod(localRange.startMonth, localRange.startYear);
   const rangeEndPeriod = toPeriod(localRange.endMonth, localRange.endYear);
 
@@ -202,17 +228,12 @@ const SKUForecast = () => {
   // comparing localRange against the LIVE dashboardRange is equivalent to
   // comparing against the original seed — only shown once the user has
   // actually picked something different, never just because the page loaded.
-  const resetToDashboardRange = () => setLocalRange({
-    startMonth: dashboardRange.startMonth,
-    startYear: dashboardRange.startYear,
-    endMonth: dashboardRange.endMonth,
-    endYear: dashboardRange.endYear,
-  });
+  const resetToDashboardRange = () => setLocalRange(seedRange);
   const isCustomRange =
-    localRange.startMonth !== dashboardRange.startMonth ||
-    localRange.startYear !== dashboardRange.startYear ||
-    localRange.endMonth !== dashboardRange.endMonth ||
-    localRange.endYear !== dashboardRange.endYear;
+    localRange.startMonth !== seedRange.startMonth ||
+    localRange.startYear !== seedRange.startYear ||
+    localRange.endMonth !== seedRange.endMonth ||
+    localRange.endYear !== seedRange.endYear;
 
   const [rawItems, setRawItems] = useState([]);
   const [listLoading, setListLoading] = useState(true);
@@ -811,6 +832,20 @@ const SKUForecast = () => {
               Next-month forecast for Category A SKUs, from Forecast_Result. Each SKU&apos;s model depends on
               how many months of sales it has.
             </p>
+            {whatIf && (
+              <p className="chart-placeholder-note">
+                Preview: this forecast is a what-if run of the same models on the five-year history, 2021–22
+                placeholder months included (built {String(dashboardRange.previewInfo.outputs.built_at).slice(0, 10)}).
+                It is never saved and is not the live forecast.
+              </p>
+            )}
+            {realFloor && (
+              <p className="chart-placeholder-note">
+                Preview is on, but forecasts are made from real data only, so this chart starts no earlier than
+                Jan {FIRST_DATA_YEAR}. The &ldquo;Why this SKU behaves this way&rdquo; panel below does include the
+                2021–22 placeholder months.
+              </p>
+            )}
           </div>
 
           <div className="forecast-header-actions">
@@ -821,6 +856,7 @@ const SKUForecast = () => {
                 onLocalChange={setLocalRange}
                 onReset={isCustomRange ? resetToDashboardRange : undefined}
                 minMonths={effectiveMinMonths}
+                realOnly={realFloor}
               />
             )}
             <button
@@ -1532,7 +1568,7 @@ const SKUForecast = () => {
                   )}
 
                   {/* Chart */}
-                  <div className={`chart-wrapper${zoom.canPan ? ' chart-pannable' : ''}`} {...zoom.panHandlers}>
+                  <div className={`chart-wrapper${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
                     {/* height 420 + bottom margin 32: the X tick row sits
                         INSIDE the SVG, so with bottom:0 the month labels were
                         being clipped off the bottom edge on load. */}

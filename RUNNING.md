@@ -89,10 +89,13 @@ Parquet file per staged sheet.
 pytest tests/ -v
 ```
 
-Expected as of 2026-09-21: **495 passed / 8 skipped / 0 failed** (with
+Expected as of 2026-09-23: **554 passed / 8 skipped / 0 failed** (with
 `xgboost` installed and `.env` pointing at the live database). The old
 `Users` vs `users` casing failures are fixed. Any failure now means
 something is wrong — see Troubleshooting.
+
+(Was 495 on 2026-09-21. The merge of `kelvin-etl` added the ETL recovery
+and real-view suites; 2026-09-23's unit/LP-cycle fixes added 12 more.)
 
 If you see tests skipping that you expected to run, it almost always means
 step 3 or step 4 wasn't done yet — several tests are gated on `data/raw/`

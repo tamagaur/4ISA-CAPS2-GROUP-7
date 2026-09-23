@@ -40,16 +40,26 @@ class FakeResult:
     def all(self):
         return self._rows
 
+    def first(self):
+        return self._rows[0] if self._rows else None
+
 
 class FakeSession:
-    def __init__(self, rows):
+    def __init__(self, rows, cycle=None):
         self.rows = rows
         self.last_params = None
+        # The LP's current planning cycle (backend/lp_cycle.py). The router
+        # resolves it under the request's own scope instead of the unscoped
+        # MAX() subquery it used to inline, so the fake has to answer it.
+        self.cycle = cycle if cycle is not None else datetime.date(2026, 3, 1)
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
+        if "MAX(lr.planning_cycle_date) AS d" in sql:
+            return FakeResult([{"d": self.cycle}])
         self.last_params = params or {}
         if "FROM LP_Recommendation lr" in sql and "fr.forecast_date = lr.planning_cycle_date" in sql:
+            self.last_sql = sql
             return FakeResult(self.rows)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -115,7 +125,14 @@ def test_principal_scope_is_bound_not_interpolated():
     session = FakeSession(ROWS)
     with make_client(session) as c:
         c.get("/policy-comparison?principal=delmonte", headers={"Authorization": f"Bearer {user_token()}"})
-    assert session.last_params == {"principal": "delmonte"}
+    # The scope reaches SQL as a BIND, never as a literal. Asserted on the
+    # bind itself plus the query text rather than on the whole params dict,
+    # which also carries the LP cycle bind since 2026-09-23.
+    assert session.last_params["principal"] == "delmonte"
+    assert "delmonte" not in session.last_sql
+    # The cycle is bound too, for the same reason.
+    assert ":current_cycle" in session.last_sql
+    assert "current_cycle" in session.last_params
 
 
 def test_blocked_when_nothing_compares():

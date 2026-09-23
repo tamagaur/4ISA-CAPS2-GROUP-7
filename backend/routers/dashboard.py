@@ -23,6 +23,13 @@ Two different mechanisms are in play, and the difference matters:
     Del Monte. Sales_Fact is deliberately NOT used — it is Del Monte-only
     INVOICE grain (DEC-10) with no per-period demand-comparable shape.
 
+PREVIEW (2026-09-23): the X-Data-Mode: preview header adds Unilever's
+2021-22 placeholder months to the descriptive figures — kpis.sales,
+sales_vs_stock.sales, abc_mix / abc_coverage / abc_revenue / tier_stock
+(tiers computed on request for a placeholder end month, since no stored run
+covers one). Everything LP- or forecast-based stays real, and the payload's
+data_mode.real_only lists those fields. See backend/data_mode.py.
+
 Under 'all', per-period figures are combined by _combine_principal_sums:
 a period reports a total only when BOTH principals have a real value for
 it, never one side's number presented as the whole portfolio. Unilever's
@@ -48,12 +55,21 @@ Honest-null policy (matches the frontend's null-handling contract — a null
 value means "cannot honestly compute this", never a guess or a fabricated
 zero):
 
-  ORIGINAL FIELDS (unchanged from before this pass):
-  inventory.value / inventory.weeks_of_cover / cover_series[].weeks_of_cover
-    — always null. inventory_fact has no valuation/price column anywhere
-    (confirmed against the live schema). There is nothing honest to
-    compute here yet — do not fabricate a value once this file is touched
-    again for a different reason.
+  ORIGINAL FIELDS:
+  inventory.value
+    — real since 2026-09-23: the same figure as kpis.soh_value, from the
+      same source. It was hardcoded null on the grounds that "inventory_fact
+      has no valuation/price column anywhere (confirmed against the live
+      schema)" — that claim was already out of date when written.
+      Inventory_Fact.valuation exists (migration 0004) and is populated on
+      every row of the current snapshot, and unit_cost_per_case has been
+      there since the Unilever SOH load. Having a null field documented as
+      impossible sitting beside a populated one that measures the same
+      thing is the kind of contradiction an adviser finds first.
+  inventory.weeks_of_cover / cover_series[].weeks_of_cover
+    — still null: this is the PER-PERIOD cover series, which needs a
+      per-period demand denominator this endpoint does not compute.
+      kpis.weeks_of_cover is the real, single-figure version.
   recommendations.order_value
     — always null. lp_recommendation has no runner yet, and even once one
     exists, Q_i * unit_price needs a cost column that doesn't exist.
@@ -106,11 +122,15 @@ zero):
         schema.sql's own comment on that column confirms the source
         header states it is a per-CASE price.
     quantity_on_hand (cases) x unit_cost_per_case (pesos/case) is
-    therefore unit-consistent. KNOWN LIMITATION (documented, not a
-    blocked/null condition): this deliberately excludes quantity_pieces
-    (the loose-piece remainder that doesn't make a full case) —
-    quantity_on_hand's own defined scope is cases only, so this is
-    under-counting a small remainder, not a wrong unit. Null (with
+    therefore unit-consistent. SUPERSEDED 2026-09-23: that product is now
+    only the FALLBACK. The source file's own extended total,
+    Inventory_Fact.valuation, is used when present — it equals
+    cases x unit_cost + pieces x (unit_cost / pack_size) on 689 of 689 rows
+    of the 2026-03 snapshot, i.e. it prices the loose-piece remainder this
+    app was dropping. The old "known limitation" of under-counting that
+    remainder was worth PHP 709,344 (21,991,481 vs the file's 22,700,826,
+    3.2%) and is closed: the dashboard now agrees with the SOH file rather
+    than quietly disagreeing with it. Null (with
     soh_value_blocked_reason) only when Inventory_Fact_Real has no rows
     at all for the resolved period — NOT when the unit is unconfirmed (it
     is confirmed, see above). If a future change to ssis_soh's
@@ -288,10 +308,27 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.data_mode import (
+    PREVIEW,
+    REAL,
+    REAL_UNILEVER_DEMAND,
+    abc_relation,
+    abc_single,
+    forecast_source,
+    get_data_mode,
+    lp_source,
+    placeholder_window,
+    predictive_preview,
+    preview_block,
+    unilever_demand,
+)
 from backend.deps import TokenPayload, get_current_user, get_db
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle
+from backend.lp_cycle import freshness as lp_freshness
 from backend.principals import PrincipalQuery, latest_abc_period, normalize_principal
-from backend.routers.recommendations import _SELECT_ONE as _RECOMMENDATION_SELECT_ONE
+from backend.routers.recommendations import select_one as _recommendation_select_one
 from backend.routers.recommendations import _to_item as _to_recommendation_item
+from backend.stock_units import STOCK_AT_PERIOD_SQL
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -496,7 +533,7 @@ def _query_period_sums(db: Session, sql: str, periods: list[str]) -> dict[str, f
 
 
 def _sales_by_period(
-    db: Session, periods: list[str], principal: str = "unilever"
+    db: Session, periods: list[str], principal: str = "unilever", mode: str = REAL
 ) -> dict[str, float | None]:
     """SUM(net_amount) per period, from each principal's own product-mart
     demand fact: Unilever_SKU_Demand_Fact_Real for Unilever,
@@ -505,11 +542,14 @@ def _sales_by_period(
     Del Monte deliberately reads SellOut_Fact_Real and NOT Sales_Fact —
     Sales_Fact is Del Monte-only INVOICE grain (DEC-10) with no
     per-period demand-comparable shape. That choice is inherited from the
-    pre-2026-09 implementation, not re-litigated here."""
+    pre-2026-09 implementation, not re-litigated here.
+
+    mode='preview' adds Unilever's 2021-22 placeholder months
+    (backend/data_mode.py); Del Monte is real in either mode."""
     unilever = (
-        _query_period_sums(db, """
+        _query_period_sums(db, f"""
             SELECT calendar_month AS period, SUM(net_amount) AS total
-            FROM Unilever_SKU_Demand_Fact_Real
+            FROM {unilever_demand(mode)}
             WHERE calendar_month = ANY(:periods)
             GROUP BY calendar_month
         """, periods)
@@ -597,12 +637,50 @@ def _soh_value_by_period(
         # Structurally blocked — every period stays None.
         return {p: None for p in periods}
     scope = "" if principal == "all" else f" AND principal = '{principal}'"
+    # Inventory_Fact.valuation is the SOURCE FILE's own extended peso total
+    # and already prices the loose-piece remainder; the multiplication is
+    # only a fallback for rows without it. Verified 2026-09-23 against the
+    # live 2026-03 snapshot: valuation = cases x unit_cost + pieces x
+    # (unit_cost / pack_size) for 689 of 689 rows. Computing it here instead
+    # under-reported stock by the remainder — PHP 21,991,481 against the
+    # file's own 22,700,826, a 3.2% gap this app had no reason to invent.
     return _query_period_sums(db, f"""
-        SELECT _period AS period, SUM(quantity_on_hand * unit_cost_per_case) AS total
+        SELECT _period AS period,
+               SUM(COALESCE(valuation, quantity_on_hand * unit_cost_per_case)) AS total
         FROM Inventory_Fact_Real
         WHERE _period = ANY(:periods){scope}
         GROUP BY _period
     """, periods)
+
+
+def _stock_valuation_coverage(db: Session, period: str | None, principal: str = "unilever") -> list[str]:
+    """Which principals actually contribute a peso stock valuation at
+    `period`, within `principal`'s scope.
+
+    Exists because 'all' is not the same as 'both' here. Del Monte rows
+    carry no unit_cost_per_case and no valuation at all, and its latest
+    snapshot is 2025-12 while Unilever's is 2026-03, so an unlabelled 'all'
+    stock figure is Unilever's alone. kpis.weeks_of_cover used to divide
+    that Unilever-only stock by BOTH principals' demand — 2.24 weeks
+    against Unilever's own 2.93, a number that belonged to neither scope.
+    Returning the covered set lets the caller line the denominator up with
+    the numerator and say which principals the answer is about."""
+    if period is None:
+        return []
+    rows = db.execute(
+        text("""
+            SELECT principal
+            FROM Inventory_Fact_Real
+            WHERE _period = :period
+            GROUP BY principal
+            HAVING SUM(COALESCE(valuation, quantity_on_hand * unit_cost_per_case)) IS NOT NULL
+        """),
+        {"period": period},
+    ).mappings().all()
+    covered = sorted(r["principal"] for r in rows if r["principal"])
+    # Narrowed in Python rather than in the HAVING clause so the scoped and
+    # unscoped answers come from one query with identical semantics.
+    return covered if principal == "all" else [p for p in covered if p == principal]
 
 
 def _latest_abc_period(db: Session, principal: str = "unilever") -> str | None:
@@ -703,6 +781,7 @@ def get_dashboard(
         ),
     ),
     principal: str | None = PrincipalQuery,
+    mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ):
@@ -721,31 +800,47 @@ def get_dashboard(
 
     # ---- ORIGINAL FIELDS (unchanged) ----------------------------------
 
+    # The LP's CURRENT cycle only (2026-09-23, backend/lp_cycle.py). This
+    # counted every pending row regardless of cycle, so it read 429 — 250
+    # current rows plus 179 leftovers from 33 runs going back to 2023-05 —
+    # under a card captioned "awaiting a decision". Resolved once here and
+    # reused by every LP read below so they can never disagree about which
+    # cycle the page is showing.
+    lp_freshness_info = lp_freshness(db, scope, mode)
+    lp_cycle = current_cycle(db, scope, mode)
+    lp_cycle_filter = CURRENT_CYCLE_CLAUSE if lp_cycle is not None else " AND 1=0"
+    # The LP's rows and the forecasts: the stored tables, or in preview with
+    # built outputs the five-year what-if's (backend/data_mode.py). Every
+    # predictive and prescriptive read below goes through these two.
+    lp_src, lp_params = lp_source(mode)
+    fc_src, fc_params = forecast_source(mode)
+
     reco_row = db.execute(
         text(f"""
             SELECT COUNT(*) AS product_count
-            FROM LP_Recommendation lr
+            FROM {lp_src} lr
             JOIN Product_Dimension pd ON pd.product_key = lr.product_key
-            WHERE lr.status = 'pending' {principal_filter}
-        """)
+            WHERE lr.status = 'pending' {principal_filter} {lp_cycle_filter}
+        """),
+        {"current_cycle": lp_cycle, **lp_params},
     ).mappings().first()
     product_count = int(reco_row["product_count"])
 
     forecast_row = db.execute(
         text(f"""
             WITH latest AS (
-                SELECT MAX(forecast_date) AS forecast_date FROM Forecast_Result
+                SELECT MAX(forecast_date) AS forecast_date FROM {fc_src}
             )
             SELECT
                 COUNT(*) AS total_count,
                 COUNT(fr.mase) AS evaluated_count,
                 COUNT(*) FILTER (WHERE fr.mase >= :mase_gate) AS unreliable_count
-            FROM Forecast_Result fr
+            FROM {fc_src} fr
             JOIN Product_Dimension pd ON pd.product_key = fr.product_key
             JOIN latest ON fr.forecast_date = latest.forecast_date
             WHERE 1=1 {principal_filter}
         """),
-        {"mase_gate": MASE_UNRELIABLE_GATE},
+        {"mase_gate": MASE_UNRELIABLE_GATE, **fc_params},
     ).mappings().first()
     total_count = int(forecast_row["total_count"])
     evaluated_count = int(forecast_row["evaluated_count"])
@@ -765,7 +860,7 @@ def get_dashboard(
         if start_period is not None
         else _last_12_periods(db, period, scope)
     )
-    sales_by_period = _sales_by_period(db, periods, scope)
+    sales_by_period = _sales_by_period(db, periods, scope, mode)
     # Walk backward from the picker's applied end month to the nearest
     # period WITHIN the selected range that actually has a real sales row,
     # rather than requiring an exact match on the range's literal end —
@@ -827,30 +922,33 @@ def get_dashboard(
     ss_rows: list = []
     comparable: list = []
     if abc_period is not None:
+        # current_stock is PIECES (backend/stock_units.py), the same unit as
+        # ss_i. Until 2026-09-23 this summed quantity_on_hand — CASES —
+        # and compared it with a piece-scale safety stock, which reported
+        # 109 of 120 measurable Category A SKUs as below safety stock when
+        # 36 are. ss_i is pinned to the LP's current cycle too, so a
+        # three-year-old pending row can't supply it.
         ss_rows = db.execute(
             text(f"""
                 SELECT
                     ac.product_key,
                     ac.revenue_share AS revenue_share,
-                    inv.current_stock AS current_stock,
+                    inv.stock_pieces AS current_stock,
                     rop.ss_i AS ss_i
                 FROM ABC_Classification ac
                 LEFT JOIN (
-                    SELECT product_key, SUM(quantity_on_hand) AS current_stock
-                    FROM Inventory_Fact_Real
-                    WHERE _period = :inv_period
-                    GROUP BY product_key
+                    {STOCK_AT_PERIOD_SQL}
                 ) inv ON inv.product_key = ac.product_key
                 LEFT JOIN (
-                    SELECT DISTINCT ON (product_key) product_key, ss_i
-                    FROM LP_Recommendation
-                    WHERE status = 'pending'
-                    ORDER BY product_key, planning_cycle_date DESC
+                    SELECT DISTINCT ON (lr.product_key) lr.product_key, lr.ss_i
+                    FROM {lp_src} lr
+                    WHERE lr.status = 'pending' {lp_cycle_filter}
+                    ORDER BY lr.product_key, lr.planning_cycle_date DESC
                 ) rop ON rop.product_key = ac.product_key
                 WHERE ac.classification_period = :period AND ac.tier = 'A'
                       AND ac.method = 'single' {abc_scope}
             """),
-            {"period": abc_period, "inv_period": inventory_period},
+            {"period": abc_period, "inv_period": inventory_period, "current_cycle": lp_cycle, **lp_params},
         ).mappings().all()
         comparable = [
             r for r in ss_rows
@@ -865,6 +963,30 @@ def get_dashboard(
                 "No Category A product has both an inventory figure and a pending "
                 "LP_Recommendation to compare (LP_Recommendation may be empty)."
             )
+
+    # ---- preview: the ABC month the descriptive widgets show --------------
+    # abc_period is the stored run the LP-based figures above and below
+    # (safety stock, its exposure) are pinned to, and preview leaves it
+    # alone. abc_mix, abc_coverage, abc_revenue and tier_stock read
+    # abc_source at abc_display_period instead. Those are ABC_Classification
+    # and abc_period in real mode, and in preview for any month a stored run
+    # covers. Only a preview end month inside the placeholder window — no
+    # stored run covers one — gets tiers computed now from the placeholder
+    # demand (backend/data_mode.abc_single, the ABC run's own steps).
+    abc_display_period = abc_period
+    abc_source, abc_source_params = "ABC_Classification", {}
+    if mode == PREVIEW and scope in ("all", "unilever") and abc_period is None and period is not None:
+        window = placeholder_window(db)
+        if window and period >= window["start"]:
+            month = min(period, window["end"])
+            computed = abc_single(db, [month], PREVIEW)
+            if not computed.empty:
+                abc_display_period = month
+                abc_source, abc_source_params = abc_relation(computed, with_stored=False)
+                safety_stock_rate_blocked_reason = (
+                    f"{month} is a placeholder month. Safety stock comes from the LP, which runs on "
+                    f"real data only — pick an end month from {window['first_real_month']} on."
+                )
 
     # ---- safety_stock_exposure (band 2 headline) --------------------------
     # Same `comparable` rows as the rate above, so the headline and the KPI
@@ -893,16 +1015,32 @@ def get_dashboard(
     # section above for the full reasoning. Reuses soh_by_period (already
     # carrying UNILEVER_SOH_UNIT_CONFIRMED) and sales_by_period — no new
     # queries.
-    stock = soh_by_period.get(inventory_period) if inventory_period is not None else None
+    # Numerator and denominator must describe the SAME principals. Under
+    # 'all' the stock valuation is Unilever's alone (Del Monte carries no
+    # unit cost), so the demand side is re-read for exactly the principals
+    # the stock figure covers instead of both — see
+    # _stock_valuation_coverage. `cover_scope` is what the answer is about,
+    # and is returned so the card can say so rather than implying 'all'.
+    stock_coverage = _stock_valuation_coverage(db, inventory_period, scope)
+    cover_scope = stock_coverage[0] if len(stock_coverage) == 1 else scope
+    if cover_scope == scope:
+        stock = soh_by_period.get(inventory_period) if inventory_period is not None else None
+        cover_demand = sales_by_period
+    else:
+        stock = _soh_value_by_period(db, [inventory_period], cover_scope).get(inventory_period)
+        cover_demand = _sales_by_period(db, periods, cover_scope, mode)
     stock_reason = (
-        "Inventory_Fact_Real has no rows for unilever at all." if inventory_period is None
+        f"Inventory_Fact_Real has no rows for {_scope_label(scope)} at all." if inventory_period is None
         else _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON if not UNILEVER_SOH_UNIT_CONFIRMED
-        else f"No Inventory_Fact_Real rows with quantity_on_hand x unit_cost_per_case populated for unilever in {inventory_period}."
+        else f"No Inventory_Fact_Real rows with a stock valuation for {_scope_label(scope)} in {inventory_period}."
     )
-    weekly_demand, demand_reason = _avg_weekly_demand(sales_by_period)
+    weekly_demand, demand_reason = _avg_weekly_demand(cover_demand)
     weeks_of_cover_value, weeks_of_cover_reason = _weeks_of_cover(
         stock, stock_reason, weekly_demand, demand_reason
     )
+    # Months that actually carried a demand figure — a 12-month window with
+    # 6 real months averages over 6, and the card should be able to say so.
+    cover_months_used = sum(1 for v in cover_demand.values() if v is not None)
 
     # ---- sales_vs_stock series -------------------------------------------
 
@@ -920,16 +1058,35 @@ def get_dashboard(
 
     # ---- abc_mix -----------------------------------------------------
 
+    # Which principals the ABC period actually contains. The latest run
+    # (2026-02) holds Unilever rows only, so under 'all' the donut, its
+    # centre total and tier_stock are one principal's — true, but it never
+    # said so. Returned so the card can label itself.
+    abc_coverage: list[str] = []
+    if abc_display_period is not None:
+        abc_coverage = sorted(
+            r["principal"] for r in db.execute(
+                text(f"""
+                    SELECT principal FROM {abc_source}
+                    WHERE classification_period = :period AND method = 'single'
+                    GROUP BY principal
+                """),
+                {"period": abc_display_period, **abc_source_params},
+            ).mappings().all() if r["principal"]
+        )
+        if scope != "all":
+            abc_coverage = [p for p in abc_coverage if p == scope]
+
     abc_mix: list[dict] = []
-    if abc_period is not None:
+    if abc_display_period is not None:
         mix_rows = db.execute(
             text(f"""
                 SELECT tier, COUNT(*) AS cnt, SUM(revenue_share) AS rev_share_sum
-                FROM ABC_Classification
+                FROM {abc_source}
                 WHERE classification_period = :period AND method = 'single' {abc_scope_bare}
                 GROUP BY tier
             """),
-            {"period": abc_period},
+            {"period": abc_display_period, **abc_source_params},
         ).mappings().all()
         abc_mix = [
             {
@@ -943,31 +1100,31 @@ def get_dashboard(
     # ---- abc_revenue (donut centre) -------------------------------------
     # The revenue the ring's shares are shares of — same per-principal
     # source and both-sides-real rule as kpis.sales, for the ABC period.
-    if abc_period is None:
+    if abc_display_period is None:
         abc_revenue = {"period": None, "total": None,
                        "blocked_reason": f"ABC_Classification has no rows for {_scope_label(scope)} yet."}
     else:
-        abc_total = _sales_by_period(db, [abc_period], scope).get(abc_period)
+        abc_total = _sales_by_period(db, [abc_display_period], scope, mode).get(abc_display_period)
         abc_revenue = {
-            "period": abc_period,
+            "period": abc_display_period,
             "total": _to_float(abc_total),
             "blocked_reason": (
                 None if abc_total is not None
-                else f"No sales rows for {_scope_label(scope)} in {abc_period} to total."
+                else f"No sales rows for {_scope_label(scope)} in {abc_display_period} to total."
             ),
         }
 
     # ---- tier_stock ----------------------------------------------------
 
     tier_stock: list[dict] = []
-    if abc_period is not None:
+    if abc_display_period is not None:
         ts_rows = db.execute(
             text(f"""
                 SELECT
                     ac.tier,
                     inv.any_active AS any_active,
                     inv.any_inactive AS any_inactive
-                FROM ABC_Classification ac
+                FROM {abc_source} ac
                 LEFT JOIN (
                     SELECT
                         product_key,
@@ -979,7 +1136,7 @@ def get_dashboard(
                 ) inv ON inv.product_key = ac.product_key
                 WHERE ac.classification_period = :period AND ac.method = 'single' {abc_scope}
             """),
-            {"period": abc_period, "inv_period": inventory_period},
+            {"period": abc_display_period, "inv_period": inventory_period, **abc_source_params},
         ).mappings().all()
         buckets: dict[str, dict[str, int]] = {}
         for r in ts_rows:
@@ -1000,12 +1157,13 @@ def get_dashboard(
         pending_rows = db.execute(
             text(f"""
                 SELECT ac.tier, COUNT(DISTINCT lr.product_key) AS cnt
-                FROM ABC_Classification ac
-                JOIN LP_Recommendation lr ON lr.product_key = ac.product_key AND lr.status = 'pending'
+                FROM {abc_source} ac
+                JOIN {lp_src} lr ON lr.product_key = ac.product_key AND lr.status = 'pending'
                 WHERE ac.classification_period = :period AND ac.method = 'single' {abc_scope}
+                      {lp_cycle_filter}
                 GROUP BY ac.tier
             """),
-            {"period": abc_period},
+            {"period": abc_display_period, "current_cycle": lp_cycle, **abc_source_params, **lp_params},
         ).mappings().all()
         pending_by_tier = {r["tier"]: int(r["cnt"]) for r in pending_rows}
 
@@ -1016,7 +1174,9 @@ def get_dashboard(
 
     # ---- portfolio_forecast --------------------------------------------
 
-    latest_forecast_date_row = db.execute(text("SELECT MAX(forecast_date) AS d FROM Forecast_Result")).mappings().first()
+    latest_forecast_date_row = db.execute(
+        text(f"SELECT MAX(forecast_date) AS d FROM {fc_src}"), fc_params
+    ).mappings().first()
     latest_forecast_date = latest_forecast_date_row["d"] if latest_forecast_date_row else None
 
     gated_rows: list = []
@@ -1025,14 +1185,14 @@ def get_dashboard(
             text(f"""
                 SELECT fr.product_key, fr.forecast_date, fr.forecast_value,
                        fr.confidence_lower, fr.confidence_upper, fr.mape, pd.principal
-                FROM Forecast_Result fr
+                FROM {fc_src} fr
                 JOIN Product_Dimension pd ON pd.product_key = fr.product_key
                 WHERE fr.forecast_date = :forecast_date
                   AND fr.status = 'ok'
                   AND fr.mape < :mape_gate
                   {principal_filter}
             """),
-            {"forecast_date": latest_forecast_date, "mape_gate": MAPE_PORTFOLIO_GATE},
+            {"forecast_date": latest_forecast_date, "mape_gate": MAPE_PORTFOLIO_GATE, **fc_params},
         ).mappings().all()
 
     gated_sku_count = len({r["product_key"] for r in gated_rows})
@@ -1050,11 +1210,11 @@ def get_dashboard(
     if latest_forecast_date is not None and not gated_rows:
         scoped_forecast_count = db.execute(
             text(f"""
-                SELECT COUNT(*) FROM Forecast_Result fr
+                SELECT COUNT(*) FROM {fc_src} fr
                 JOIN Product_Dimension pd ON pd.product_key = fr.product_key
                 WHERE fr.forecast_date = :forecast_date {principal_filter}
             """),
-            {"forecast_date": latest_forecast_date},
+            {"forecast_date": latest_forecast_date, **fc_params},
         ).scalar() or 0
     if gated_rows:
         # Says which principals the figure actually covers, from the rows
@@ -1088,10 +1248,13 @@ def get_dashboard(
         gated_product_keys = sorted({r["product_key"] for r in gated_rows})
 
         actual_totals: dict[str, float] = {}
+        # The history the forecasts were made from: five years in a preview
+        # built from it, the real months otherwise.
+        forecast_demand = unilever_demand(mode) if predictive_preview(mode) else REAL_UNILEVER_DEMAND
         rows = db.execute(
-            text("""
+            text(f"""
                 SELECT calendar_month AS period, SUM(quantity_sold) AS qty
-                FROM Unilever_SKU_Demand_Fact_Real
+                FROM {forecast_demand}
                 WHERE product_key = ANY(:keys)
                 GROUP BY calendar_month
             """),
@@ -1143,7 +1306,11 @@ def get_dashboard(
 
     # ---- reorder_preview -------------------------------------------------
 
-    rp_query = _RECOMMENDATION_SELECT_ONE + f" WHERE lr.status = 'pending' {principal_filter}"
+    # Current cycle only, like every other LP read on this page — the
+    # critical/urgent counts below are a portfolio summary and must not
+    # include rows superseded by a later run.
+    rp_select, rp_select_params = _recommendation_select_one(mode)
+    rp_query = rp_select + f" WHERE lr.status = 'pending' {principal_filter} {lp_cycle_filter}"
     # Both anchors are bound, not inlined, so reorder_preview resolves them
     # under the SAME scope as the rows it shows. `inventory_period` is the
     # already-scoped value from :763. The ABC anchor is the scoped LATEST,
@@ -1151,7 +1318,12 @@ def get_dashboard(
     # picker's applied end month, and reorder_preview answers "order now".
     rp_rows = db.execute(
         text(rp_query),
-        {"inv_period": inventory_period, "abc_period": latest_abc_period(db, scope)},
+        {
+            "inv_period": inventory_period,
+            "abc_period": latest_abc_period(db, scope),
+            "current_cycle": lp_cycle,
+            **rp_select_params,
+        },
     ).mappings().all()
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
     rp_items_sorted = sorted(rp_items, key=lambda it: _URGENCY_RANK.get(it.urgency, 99))
@@ -1180,16 +1352,15 @@ def get_dashboard(
     policy_rows = db.execute(
         text(f"""
             SELECT lr.planning_cycle_date, lr.ss_i, fr.forecast_value
-            FROM LP_Recommendation lr
+            FROM {lp_src} lr
             JOIN Product_Dimension pd ON pd.product_key = lr.product_key
-            JOIN Forecast_Result fr
+            JOIN {fc_src} fr
               ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
             WHERE lr.status = 'pending'
-              AND lr.planning_cycle_date = (
-                  SELECT MAX(planning_cycle_date) FROM LP_Recommendation WHERE status = 'pending'
-              )
+              {lp_cycle_filter}
               {principal_filter}
-        """)
+        """),
+        {"current_cycle": lp_cycle, **lp_params, **fc_params},
     ).mappings().all()
     policy_rows = [r for r in policy_rows if r["forecast_value"] is not None and r["ss_i"] is not None]
     if policy_rows:
@@ -1222,10 +1393,14 @@ def get_dashboard(
             ),
         }
 
-    return {
+    payload = {
         "principal": scope,  # the scope this payload answers: 'all' | 'unilever' | 'delmonte'
         "period": None,
-        "inventory": {"value": None, "weeks_of_cover": None, "policy_weeks": POLICY_WEEKS},
+        "inventory": {
+            "value": _to_float(soh_value),
+            "weeks_of_cover": None,
+            "policy_weeks": POLICY_WEEKS,
+        },
         "recommendations": {"order_value": None, "product_count": product_count},
         "forecast": {
             "unreliable_count": unreliable_count,
@@ -1238,17 +1413,37 @@ def get_dashboard(
         "kpis": {
             "sales": _to_float(sales),
             "sales_blocked_reason": sales_blocked_reason,
+            # The month this figure is actually for. The card used to read
+            # "This period's total sales" while the value could be any
+            # earlier month the walk-back landed on — under 'all' that is
+            # 2025-12 (Del Monte's last month) while Unilever alone shows
+            # 2026-02, so the same card silently changed month with the
+            # principal filter and never said which.
+            "sales_period": current_period,
             "soh_value": _to_float(soh_value),
             "soh_value_blocked_reason": soh_value_blocked_reason,
+            "soh_period": inventory_period,
+            "soh_coverage": stock_coverage,
             "safety_stock_rate": safety_stock_rate,
             "safety_stock_rate_blocked_reason": safety_stock_rate_blocked_reason,
             "weeks_of_cover": {
                 "value": weeks_of_cover_value,
                 "blocked_reason": weeks_of_cover_reason,
+                # The principals this ratio describes, which under 'all' is
+                # NOT necessarily both — see _stock_valuation_coverage.
+                "coverage": stock_coverage,
+                "months_used": cover_months_used,
+                "stock_period": inventory_period,
             },
         },
+        # Which LP run the page is showing, and whether it can still be
+        # trusted (backend/lp_cycle.py). Every LP-derived figure above is
+        # pinned to this cycle; superseded_pending_count says how many
+        # older pending rows were withheld.
+        "lp": lp_freshness_info,
         "sales_vs_stock": sales_vs_stock,
         "abc_mix": abc_mix,
+        "abc_coverage": abc_coverage,
         "abc_revenue": abc_revenue,
         "safety_stock_exposure": safety_stock_exposure,
         "policy_comparison": policy_comparison,
@@ -1256,3 +1451,13 @@ def get_dashboard(
         "portfolio_forecast": portfolio_forecast,
         "reorder_preview": reorder_preview,
     }
+    # Preview only, so a real-mode payload is exactly what it was. Stock and
+    # purchases have no placeholder rows to add; the rest are predictive or
+    # prescriptive, which read real data only (backend/data_mode.py).
+    if mode == PREVIEW:
+        real_only = ["kpis.soh_value", "sales_vs_stock.stock_on_hand", "sales_vs_stock.received", "latest_data_period"]
+        if not predictive_preview(mode):
+            real_only += ["kpis.safety_stock_rate", "safety_stock_exposure", "recommendations", "forecast",
+                          "portfolio_forecast", "reorder_preview", "policy_comparison", "lp"]
+        payload["data_mode"] = preview_block(db, real_only=real_only)
+    return payload

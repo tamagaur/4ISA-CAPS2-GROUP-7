@@ -80,20 +80,44 @@ What is NOT merged across periods: revenue_share / cumulative_share /
 boundary_flag are per-run facts, so tier_summary.revenue_share_total sums
 current-run rows only. The default view is unchanged, so existing callers
 and tests see exactly what they did before.
+
+PREVIEW (2026-09-23, X-Data-Mode: preview, backend/data_mode.py): no stored
+run covers Unilever's 2021-22 placeholder months, so for those months the
+tiers are computed on request with the ABC run's own steps and never
+written. A month in the window resolves to that month's computed run;
+last_known also sees each product's newest placeholder tier, so a product
+whose only tiers are placeholder ones is listed, labelled by its
+tier_period. A month a stored run covers reads the stored run, unchanged.
+Stock and reorder points stay real — there is no placeholder stock.
 """
 from __future__ import annotations
 
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.data_mode import (
+    PREVIEW,
+    REAL,
+    abc_relation,
+    abc_single,
+    get_data_mode,
+    latest_per_product,
+    placeholder_months,
+    lp_source,
+    placeholder_window,
+    preview_block,
+)
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import (
     PrincipalQuery,
     latest_abc_period,
     latest_inventory_period,
+    normalize_principal,
     principal_clause,
 )
 from backend.schemas.abc import ABCItem, ABCResponse, TierSummary
@@ -133,12 +157,36 @@ def get_abc(
         description="'period' (default): only SKUs ranked in that run. "
         "'last_known': every product's most recent tier at or before it, with tier_period.",
     ),
+    mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> ABCResponse:
+    # The placeholder is Unilever's, so a Del Monte-only request has nothing
+    # to add and reads exactly as in real mode.
+    window = (
+        placeholder_window(db)
+        if mode == PREVIEW and normalize_principal(principal) in (None, "unilever")
+        else None
+    )
     if view == "last_known":
-        return _get_abc_last_known(db, classification_period, principal)
+        return _with_data_mode(_get_abc_last_known(db, classification_period, principal, window, mode), db, mode)
+    return _with_data_mode(_get_abc_period(db, classification_period, principal, window, mode), db, mode)
 
+
+def _with_data_mode(response: ABCResponse, db: Session, mode: str):
+    """Real mode returns the model untouched. Preview adds the data_mode
+    block beside it, so a preview payload says so and a real one is
+    unchanged."""
+    if mode != PREVIEW:
+        return response
+    return JSONResponse({**jsonable_encoder(response), "data_mode": preview_block(db)})
+
+
+def _get_abc_period(
+    db: Session, classification_period: str | None, principal: str | None, window: dict | None = None,
+    mode: str = REAL,
+) -> ABCResponse:
+    """view=period — the SKUs ranked in one run."""
     # The row query reads under the same principal scope the period is
     # resolved under — resolving the latest period under a different scope
     # than the rows are read under is exactly how an empty page gets
@@ -152,10 +200,22 @@ def get_abc(
     # request instead — the same helper view=last_known already uses; with
     # no month given it is the plain latest period, as before.
     period = latest_abc_period(db, principal, at_or_before=classification_period)
+    abc_source, source_params = "abc_classification", {}
+    # Preview: no stored run at or before a placeholder month, so that
+    # month's run is computed now (backend/data_mode.abc_single).
+    if period is None and window and classification_period and classification_period >= window["start"]:
+        month = min(classification_period, window["end"])
+        computed = abc_single(db, [month], PREVIEW)
+        if not computed.empty:
+            period = month
+            abc_source, source_params = abc_relation(computed, with_stored=False)
     if period is None:
         return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[])
+    # The reorder point each row's stock status is judged against: the LP's
+    # own, or in preview with built outputs the five-year what-if's.
+    lp_src, lp_params = lp_source(mode, "lp_recommendation")
 
-    query = """
+    query = f"""
         SELECT
             ac.product_key,
             COALESCE(pd.sku_code, pd.category_path, '') AS sku_id,
@@ -167,7 +227,7 @@ def get_abc(
             ac.boundary_flag,
             inv.current_stock AS current_stock,
             rop.rop_i AS reorder_point
-        FROM abc_classification ac
+        FROM {abc_source} ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN (
             SELECT product_key, SUM(quantity_on_hand) AS current_stock
@@ -177,7 +237,7 @@ def get_abc(
         ) inv ON inv.product_key = ac.product_key
         LEFT JOIN (
             SELECT DISTINCT ON (product_key) product_key, rop_i
-            FROM lp_recommendation
+            FROM {lp_src}
             WHERE status = 'pending'
             ORDER BY product_key, planning_cycle_date DESC
         ) rop ON rop.product_key = ac.product_key
@@ -190,6 +250,8 @@ def get_abc(
         "period": period,
         "inv_period": latest_inventory_period(db, principal),
         **scope_params,
+        **source_params,
+        **lp_params,
     }
 
     rows = db.execute(text(query), params).mappings().all()
@@ -228,7 +290,8 @@ def get_abc(
 
 
 def _get_abc_last_known(
-    db: Session, classification_period: str | None, principal: str | None
+    db: Session, classification_period: str | None, principal: str | None, window: dict | None = None,
+    mode: str = REAL,
 ) -> ABCResponse:
     """view=last_known — every product's most recent 'single' tier at or
     before the anchor period, the same rule GET /sku uses.
@@ -240,6 +303,17 @@ def _get_abc_last_known(
     no tier from a later run can appear.
     """
     period = latest_abc_period(db, principal, at_or_before=classification_period)
+    abc_source, source_params = "abc_classification", {}
+    # Preview: every product's newest placeholder tier joins the stored runs.
+    # Stored runs are all later than the placeholder, so a product with a
+    # stored tier keeps it; the anchor only falls back to a placeholder month
+    # when no stored run is at or before the request.
+    if window:
+        computed = latest_per_product(abc_single(db, placeholder_months(window, classification_period), PREVIEW))
+        if not computed.empty:
+            abc_source, source_params = abc_relation(computed, with_stored=True)
+            if period is None:
+                period = computed["classification_period"].max()
 
     pd_scope_sql, pd_scope_params = principal_clause(principal, "pd.principal")
     # Never-ranked products: counted, not listed. Listing them would add
@@ -247,13 +321,13 @@ def _get_abc_last_known(
     # tells the reader how much of the product master ABC does not cover.
     unclassified_sql = (
         "SELECT COUNT(*) AS n FROM product_dimension pd WHERE NOT EXISTS ("
-        " SELECT 1 FROM abc_classification a WHERE a.product_key = pd.product_key"
+        f" SELECT 1 FROM {abc_source} a WHERE a.product_key = pd.product_key"
         " AND a.method = 'single'"
         " AND (CAST(:period AS TEXT) IS NULL OR a.classification_period <= CAST(:period AS TEXT)))"
         + pd_scope_sql
     )
     unclassified = db.execute(
-        text(unclassified_sql), {"period": period, **pd_scope_params}
+        text(unclassified_sql), {"period": period, **pd_scope_params, **source_params}
     ).mappings().first()
     unclassified_count = int(unclassified["n"]) if unclassified else 0
 
@@ -264,6 +338,7 @@ def _get_abc_last_known(
         )
 
     ac_scope_sql, ac_scope_params = principal_clause(principal, "principal")
+    lp_src, lp_params = lp_source(mode, "lp_recommendation")
     # method='single' inside the DISTINCT ON is what keeps this one row per
     # product_key (migration 0017) — see the module docstring.
     query = f"""
@@ -271,7 +346,7 @@ def _get_abc_last_known(
             SELECT DISTINCT ON (product_key)
                    product_key, principal, tier, revenue_share,
                    cumulative_share, boundary_flag, classification_period
-            FROM abc_classification
+            FROM {abc_source}
             WHERE method = 'single' AND classification_period <= :period{ac_scope_sql}
             ORDER BY product_key, classification_period DESC
         )
@@ -297,7 +372,7 @@ def _get_abc_last_known(
         ) inv ON inv.product_key = ac.product_key
         LEFT JOIN (
             SELECT DISTINCT ON (product_key) product_key, rop_i
-            FROM lp_recommendation
+            FROM {lp_src}
             WHERE status = 'pending'
             ORDER BY product_key, planning_cycle_date DESC
         ) rop ON rop.product_key = ac.product_key
@@ -310,6 +385,8 @@ def _get_abc_last_known(
         "period": period,
         "inv_period": latest_inventory_period(db, principal),
         **ac_scope_params,
+        **source_params,
+        **lp_params,
     }
     rows = db.execute(text(query), params).mappings().all()
 

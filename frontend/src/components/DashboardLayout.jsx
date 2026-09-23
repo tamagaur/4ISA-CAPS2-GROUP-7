@@ -1,14 +1,18 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, FlaskConical } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { preloadPages } from '../pageLoaders';
 import { invalidateCache } from '../api/cache';
+import { getDataModeInfo } from '../api/dataMode';
 import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
-import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal } from '../principals';
+import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal, labelForPrincipal } from '../principals';
 import { LATEST_DATA_PERIOD } from '../dataCoverage';
+import {
+  DATA_MODES, PLACEHOLDER_PRINCIPAL, PLACEHOLDER_START, getDataMode, isPreviewMode, setDataMode as storeDataMode,
+} from '../dataMode';
 import './DashboardLayout.css';
 
 const PageLoadingFallback = () => (
@@ -75,9 +79,13 @@ const DEFAULT_MONTHS_BACK = 6;
 // "what you see with no changes" are the same order of magnitude.
 const MIN_RANGE_MONTHS = 6;
 
-const getDefaultDateRange = () => {
+// Preview (src/dataMode.js) exists to show the whole span, so its default
+// range is all of it: the first placeholder month through "today".
+const getDefaultDateRange = (mode = DATA_MODES.REAL) => {
   const today = getCurrentRealWorldPeriod();
-  const start = subtractMonths(today.month, today.year, DEFAULT_MONTHS_BACK);
+  const start = isPreviewMode(mode)
+    ? PLACEHOLDER_START
+    : subtractMonths(today.month, today.year, DEFAULT_MONTHS_BACK);
   return { startMonth: start.month, startYear: start.year, endMonth: today.month, endYear: today.year };
 };
 
@@ -103,7 +111,18 @@ const DashboardLayout = () => {
   useEffect(() => startSessionHeartbeat(), []);
 
   const realWorldPeriod = getCurrentRealWorldPeriod();
-  const defaultRange = getDefaultDateRange();
+
+  // Real data, or preview with the 2021-22 placeholder (src/dataMode.js).
+  // Held here as state so the Topbar, the banner and every page re-render
+  // on a flip; the module copy is what apiFetch reads.
+  const [dataMode, setDataModeState] = useState(getDataMode);
+  const defaultRange = getDefaultDateRange(dataMode);
+
+  // What preview means right now (GET /data-mode): the placeholder window
+  // and, when scripts/build_preview_outputs.py has run, `outputs` — the
+  // what-if forecasts and LP the predictive and prescriptive cards show.
+  // Null in real mode, and while the request is in flight.
+  const [previewInfo, setPreviewInfo] = useState(null);
 
   // Persistent Applied State (defaulting to the 3-month range ending "today")
   const [startMonth, setStartMonth] = useState(defaultRange.startMonth);
@@ -149,6 +168,19 @@ const DashboardLayout = () => {
     invalidateCache();
     setRefreshKey((k) => k + 1);
   };
+
+  // Refetched on every mode flip and Refresh, like the pages themselves.
+  useEffect(() => {
+    if (!isPreviewMode(dataMode)) {
+      setPreviewInfo(null);
+      return undefined;
+    }
+    let cancelled = false;
+    getDataModeInfo()
+      .then((info) => { if (!cancelled) setPreviewInfo(info); })
+      .catch(() => { if (!cancelled) setPreviewInfo(null); });
+    return () => { cancelled = true; };
+  }, [dataMode, refreshKey]);
 
   // Evaluates to true only when pending selection differs from applied period
   const isPending =
@@ -204,8 +236,25 @@ const DashboardLayout = () => {
   // defined below) rather than staging a pending change that still needs
   // a separate Save.
   const handleResetToToday = () => {
-    const range = getDefaultDateRange();
+    const range = getDefaultDateRange(dataMode);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
+  };
+
+  // Flipping the mode resets the range to that mode's default: all of Jan
+  // 2021 – today in preview, the usual window in real mode (whose picker
+  // can't show 2021-22 at all). Turning preview on also switches to
+  // Unilever, the one principal with placeholder months — under All, the
+  // both-principals-or-nothing rule leaves those months blank. Every cached
+  // response is dropped and the page remounts, like the Refresh button.
+  const handleDataModeChange = (next) => {
+    if (next === dataMode) return;
+    const mode = storeDataMode(next);
+    setDataModeState(mode);
+    const range = getDefaultDateRange(mode);
+    updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
+    if (isPreviewMode(mode)) setPrincipal(PLACEHOLDER_PRINCIPAL);
+    invalidateCache();
+    setRefreshKey((k) => k + 1);
   };
 
   // Intercept Sidebar module clicks if period is pending
@@ -282,7 +331,30 @@ const DashboardLayout = () => {
           realWorldYear={realWorldPeriod.year}
           principal={principal}
           setPrincipal={setPrincipal}
+          dataMode={dataMode}
+          onDataModeChange={handleDataModeChange}
         />
+        {/* On every page for as long as preview is on — a placeholder month
+            must never be readable as SSM's own figure. */}
+        {isPreviewMode(dataMode) && (
+          <div className="preview-banner" role="status">
+            <FlaskConical size={16} aria-hidden="true" className="preview-banner-icon" />
+            <p className="preview-banner-text">
+              <strong>Preview: Jan 2021 – Dec 2022 is placeholder data, not SSM&apos;s.</strong>{' '}
+              Those months are synthetic Unilever sales, added so the dashboard can be seen over five years.
+              {previewInfo?.outputs
+                ? <> Forecasts, reorder recommendations and safety stock are a what-if run of the same models on that
+                  five-year history (built {String(previewInfo.outputs.built_at).slice(0, 10)}) — never saved, not for decisions.</>
+                : <> Forecasts, reorder recommendations and safety stock still use real data only.</>}
+              {principal !== PLACEHOLDER_PRINCIPAL && (
+                <> The placeholder is Unilever&apos;s, so under {labelForPrincipal(principal)} those months stay empty.</>
+              )}
+            </p>
+            <button type="button" className="preview-banner-btn" onClick={() => handleDataModeChange(DATA_MODES.REAL)}>
+              Back to real data
+            </button>
+          </div>
+        )}
         <Suspense fallback={<PageLoadingFallback />}>
           <Outlet key={refreshKey} context={{
             startMonth, startYear, endMonth, endYear,
@@ -294,6 +366,7 @@ const DashboardLayout = () => {
             handleApplyPeriod, handleResetToToday,
             updatePeriodImmediately, realWorldPeriod,
             principal, setPrincipal,
+            dataMode, previewInfo,
           }} />
         </Suspense>
       </div>

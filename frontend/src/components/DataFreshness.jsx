@@ -11,9 +11,11 @@ const formatAge = (fetchedAt, now) => {
   return `Updated ${new Date(fetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 };
 
-// Shows how old the figures on the current page are. Responses are cached
-// for up to 5 minutes (api/cache.js), so a page can show data fetched a few
-// minutes ago; Refresh drops the cache and reloads the page's data.
+// Shows how old the figures on the current page are. Since 2026-09-23 the
+// response cache retains nothing (api/cache.js), so this reads "Updated
+// just now" on every page open by design — it is now a confirmation that
+// the figures came from this visit, not a cache-age indicator. Refresh
+// reloads the page's data.
 //
 // `navKey` changes on every navigation or refresh. Only responses served
 // after that point count, so a previous page's fetch time never shows here.

@@ -31,18 +31,18 @@ each derived only from real columns:
                   single-period run (DISTINCT ON product_key). None when the
                   product was never classified (19 of the 250 live rows).
   stockout_gap    max(0, rop_i - current_stock) when the stock row exists.
-  priority_score  revenue_share x stockout_gap — the sort key. UNIT CAVEAT,
-                  stated rather than hidden: rop_i/ss_i/q_i are on the
-                  demand series' scale (quantity_sold is PIECES, per
-                  config/column_maps/unilever_sku.yaml's sale_quantity_pieces
-                  note) while quantity_on_hand is CASES (see
-                  backend/routers/dashboard.py's kpis.soh_value evidence).
-                  Product_Dimension.pack_size is TEXT and the column map
-                  records cases x pack_size agreeing with pieces only ~84% of
-                  the time, so there is no honest conversion to apply. The
-                  urgency thresholds below inherit the same mismatch (they
-                  predate this change). priority_score is therefore a
-                  ranking index, not a quantity, and the schema says so.
+  priority_score  revenue_share x stockout_gap — the sort key.
+
+UNITS RECONCILED (2026-09-23). This file used to compare quantity_on_hand
+(CASES) against rop_i (PIECES) and said so in a caveat, on the grounds that
+pack_size agreed with the pieces column "only ~84% of the time". That was
+wrong in a way that mattered: it made 215 of 429 pending rows CRITICAL and
+0 URGENT. current_stock now comes from backend/stock_units.py, which
+converts the snapshot to pieces (cases x pack_size + the loose remainder)
+and returns NULL — urgency 'NO DATA' with a reason — when a product has no
+usable pack size, rather than comparing two different units. That module
+documents the three live checks that justify trusting pack_size. On the
+same data the split becomes 185 CRITICAL / 13 URGENT / 20 PLANNED.
   days_of_cover   The one cover figure that IS unit-consistent: stock at
                   cost (SUM quantity_on_hand x unit_cost_per_case, pesos,
                   latest snapshot) / average daily sales value (pesos/day) —
@@ -71,6 +71,8 @@ from __future__ import annotations
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -82,10 +84,14 @@ from backend.principals import (
     principal_clause,
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
+from backend.data_mode import PREVIEW, REAL, get_data_mode, lp_source, predictive_preview, preview_block
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle
+from backend.lp_cycle import freshness as lp_freshness
+from backend.stock_units import NO_PACK_SIZE_REASON, STOCK_AT_PERIOD_SQL
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
-_SELECT_ONE = """
+_SELECT_ONE = f"""
     SELECT
         lr.recommendation_key,
         COALESCE(pd.sku_code, pd.category_path) AS sku_id,
@@ -96,19 +102,15 @@ _SELECT_ONE = """
         lr.rop_i,
         lr.ss_i,
         lr.status,
-        inv.current_stock AS current_stock,
+        inv.stock_pieces AS current_stock,
+        inv.stock_cases AS current_stock_cases,
         inv.stock_value_pesos AS stock_value_pesos,
         abc.revenue_share AS revenue_share,
         sales.avg_monthly_sales_pesos AS avg_monthly_sales_pesos
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
     LEFT JOIN (
-        SELECT product_key,
-               SUM(quantity_on_hand) AS current_stock,
-               SUM(quantity_on_hand * unit_cost_per_case) AS stock_value_pesos
-        FROM inventory_fact_real
-        WHERE _period = :inv_period
-        GROUP BY product_key
+        {STOCK_AT_PERIOD_SQL}
     ) inv ON inv.product_key = lr.product_key
     LEFT JOIN (
         SELECT DISTINCT ON (product_key) product_key, revenue_share
@@ -130,6 +132,18 @@ _SELECT_ONE = """
         GROUP BY product_key
     ) sales ON sales.product_key = lr.product_key
 """
+
+_LP_FROM = "FROM lp_recommendation lr"
+assert _SELECT_ONE.count(_LP_FROM) == 1
+
+
+def select_one(mode: str = REAL) -> tuple[str, dict]:
+    """_SELECT_ONE and its extra params for `mode`: in preview with built
+    outputs its one LP read comes from backend/data_mode.lp_source(); every
+    other join (stock, ABC, recent sales) is the real one either way."""
+    lp, params = lp_source(mode, "lp_recommendation")
+    return (_SELECT_ONE if lp == "lp_recommendation" else _SELECT_ONE.replace(_LP_FROM, f"FROM {lp} lr")), params
+
 
 # Average days per calendar month (365.25 / 12) — the same "documented
 # convention, not a fabricated number" that dashboard.py's
@@ -156,10 +170,21 @@ def _cover(stock_value: float | None, avg_monthly_sales: float | None) -> tuple[
 
 
 def _to_item(r) -> RecommendationItem:
+    # current_stock is PIECES (backend/stock_units.py), the same unit as
+    # rop_i. Until 2026-09-23 this read quantity_on_hand — CASES — straight
+    # off the snapshot and compared it with a piece-scale ROP, which made
+    # almost every row CRITICAL. Two different reasons produce no figure,
+    # and they are reported apart rather than both as a bare "NO DATA".
     stock = None if r["current_stock"] is None else float(r["current_stock"])
+    stock_cases = _opt_float(r, "current_stock_cases")
     rop = float(r["rop_i"])
+    stock_blocked_reason = None
     if stock is None:
         urgency = "NO DATA"
+        stock_blocked_reason = (
+            NO_PACK_SIZE_REASON if stock_cases is not None
+            else "no Inventory_Fact_Real row for this product at the latest snapshot"
+        )
     else:
         urgency = "CRITICAL" if stock < rop * 0.5 else ("URGENT" if stock < rop else "PLANNED")
 
@@ -183,6 +208,8 @@ def _to_item(r) -> RecommendationItem:
         ss_i=float(r["ss_i"]),
         status=r["status"],
         current_stock=stock,
+        current_stock_cases=stock_cases,
+        stock_blocked_reason=stock_blocked_reason,
         urgency=urgency,
         revenue_share=revenue_share,
         stockout_gap=stockout_gap,
@@ -195,9 +222,20 @@ def _to_item(r) -> RecommendationItem:
 @router.get("", response_model=RecommendationsResponse)
 def get_recommendations(
     status: str | None = Query(None, description="Filter to 'pending' | 'accepted' | 'dismissed'. Omit for all."),
+    cycle: str = Query(
+        "current",
+        pattern="^(current|all)$",
+        description=(
+            "'current' (default) returns only the LP's current planning cycle — the most recent "
+            "cycle that still has pending rows. Superseded pending rows from earlier runs are "
+            "withheld and counted in `superseded_count`. 'all' returns every cycle, for an audit "
+            "view. See backend/lp_cycle.py."
+        ),
+    ),
     from_date: str | None = Query(None, alias="from", description="'YYYY-MM-DD'. The shared date-range picker's applied start. Must be given with 'to' or not at all — filters on lr.planning_cycle_date."),
     to_date: str | None = Query(None, alias="to", description="'YYYY-MM-DD'. The shared date-range picker's applied end. Must be given with 'from' or not at all."),
     principal: str | None = PrincipalQuery,
+    mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> RecommendationsResponse:
@@ -206,7 +244,8 @@ def get_recommendations(
     # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte
     # honestly returns an empty list until the LP is run for Del Monte.
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
-    query = _SELECT_ONE + " WHERE 1=1" + scope_sql
+    select_sql, lp_params = select_one(mode)
+    query = select_sql + " WHERE 1=1" + scope_sql
     # Both anchors resolve under the SAME scope as the rows. The ABC anchor
     # replaces a per-product "latest classification_period" walk, which
     # quietly mixed classification vintages: a SKU last classified months
@@ -217,6 +256,7 @@ def get_recommendations(
         "inv_period": latest_inventory_period(db, principal),
         "abc_period": latest_abc_period(db, principal),
         **scope_params,
+        **lp_params,
     }
     if status:
         query += " AND lr.status = :status"
@@ -228,11 +268,46 @@ def get_recommendations(
         query += " AND lr.planning_cycle_date >= :from_date AND lr.planning_cycle_date <= :to_date"
         params["from_date"] = from_date
         params["to_date"] = to_date
+
+    # Superseded cycles never reach a screen (2026-09-23) — see
+    # backend/lp_cycle.py. A leftover `pending` row from a 2023 run is not a
+    # recommendation anyone should act on today, and mixing it into this
+    # list was what made the dashboard's pending count read 429 instead of
+    # 250. `cycle=all` is the deliberate audit escape hatch.
+    freshness = lp_freshness(db, principal, mode)
+    if cycle == "current":
+        current = current_cycle(db, principal, mode)
+        if current is None:
+            # Nothing pending at all: 'current' has nothing to scope to, so
+            # returning every decided row would contradict the filter's
+            # promise. An empty list with the reason is the honest answer.
+            return _with_data_mode(RecommendationsResponse(
+                items=[], count=0, planning_cycle_date=None,
+                superseded_count=0, freshness=freshness,
+            ), db, mode)
+        query += CURRENT_CYCLE_CLAUSE
+        params["current_cycle"] = current
     query += " ORDER BY lr.planning_cycle_date DESC, lr.rop_i DESC"
 
     rows = db.execute(text(query), params).mappings().all()
     items = [_to_item(r) for r in rows]
-    return RecommendationsResponse(items=items, count=len(items))
+    return _with_data_mode(RecommendationsResponse(
+        items=items,
+        count=len(items),
+        planning_cycle_date=freshness["cycle_date"],
+        superseded_count=freshness["superseded_pending_count"] if cycle == "current" else 0,
+        freshness=freshness,
+    ), db, mode)
+
+
+def _with_data_mode(response: RecommendationsResponse, db: Session, mode: str):
+    """Real mode: the model untouched. Preview: the data_mode block beside it,
+    saying whether these rows are the five-year what-if (never saved, not
+    decidable) or, with no preview files built, still the real ones."""
+    if mode != PREVIEW:
+        return response
+    block = preview_block(db, real_only=None if predictive_preview(mode) else ["items"])
+    return JSONResponse({**jsonable_encoder(response), "data_mode": block})
 
 
 @router.patch("/{recommendation_key}", response_model=RecommendationItem)

@@ -28,13 +28,37 @@ convention for the coefficient of variation of monthly demand (not a
 pipeline output): under 0.5 reads as steady, 0.5-1.0 as variable, 1.0 and
 above as erratic. The raw cv is returned beside the band so the label
 never replaces the number.
+
+PREVIEW (2026-09-23, X-Data-Mode: preview, backend/data_mode.py): the same
+cohort, with its demand-series traits (history, first sale, run length,
+trend, CV, ADI, restart) recomputed over the placeholder start through the
+cohort month instead of the run's 2023-01 start, by the same
+analytics.segmentation.traits functions, and the bins that depend only on
+them rebuilt with orchestrate_segment.SCHEME_BUILDERS. Nothing is written.
+stability_group (stability_v1) and revenue_share_2026_02 stay the stored
+values: they come from the ABC runs, and stability's groups are defined
+against the 38 real periods ('all_38'), so extending them is a method
+change, not a display one. The payload's data_mode.real_only says so.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from analytics.segmentation.orchestrate_segment import SCHEME_BUILDERS
+from backend.data_mode import (
+    PREVIEW,
+    demand_matrix,
+    get_data_mode,
+    placeholder_window,
+    preview_block,
+    series_traits,
+)
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import (
     PrincipalQuery,
@@ -70,10 +94,26 @@ def _to_float(val) -> float | None:
     return None if val is None else float(val)
 
 
+# Bins built from the demand series alone, so preview can rebuild them.
+# stability_v1 is left out: it reads the ABC runs (see the module docstring).
+_SERIES_SCHEMES = ("length_v1", "length_v2", "trend_v1", "volatility_v1", "combined_v1")
+_PREVIEW_REAL_ONLY = ["traits.stability_group", "traits.revenue_share_2026_02", "segments.stability_v1"]
+
+
+def _preview_payload(response, db: Session, window: dict, cohort_period: str, **extra):
+    """The response plus the data_mode block naming the traits window, and
+    any `extra` fields for that block."""
+    block = preview_block(db, real_only=_PREVIEW_REAL_ONLY)
+    block["traits_window"] = {"start": window["start"], "end": cohort_period}
+    block.update(extra)
+    return JSONResponse({**jsonable_encoder(response), "data_mode": block})
+
+
 @router.get("", response_model=SegmentResponse)
 def get_segment(
     sku: str = Query(..., description="Product_Dimension.sku_code of the SKU to read diagnostics for."),
     principal: str | None = PrincipalQuery,
+    mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> SegmentResponse:
@@ -114,6 +154,22 @@ def get_segment(
         {"product_key": product_key},
     ).mappings().all()
 
+    # Preview: this cohort member's series traits and series-based bins,
+    # recomputed over the placeholder start through its cohort month.
+    window = placeholder_window(db) if mode == PREVIEW and traits_row is not None else None
+    if window:
+        cohort_period = traits_row["cohort_period"]
+        matrices, periods = demand_matrix(db, [product_key], window["start"], cohort_period, PREVIEW)
+        traits_row = {**traits_row, **series_traits(matrices[product_key], periods)}
+        recomputed = SimpleNamespace(stability_group=traits_row["stability_group"], tier_a_periods=None, **{
+            k: traits_row[k] for k in ("history_months", "trend", "trend_pvalue", "trend_slope", "cv")
+        })
+        segment_rows = [
+            {**r, **dict(zip(("bin", "bin_reason"), SCHEME_BUILDERS[r["scheme"]](recomputed)))}
+            if r["scheme"] in _SERIES_SCHEMES and r["cohort_period"] == cohort_period else r
+            for r in segment_rows
+        ]
+
     traits = None
     if traits_row is not None:
         cv = _to_float(traits_row["cv"])
@@ -147,7 +203,7 @@ def get_segment(
     ]
 
     analyzed = traits is not None or bool(segments)
-    return SegmentResponse(
+    response = SegmentResponse(
         sku_id=sku,
         product_name=product["product_name"],
         principal=product["principal"],
@@ -160,6 +216,9 @@ def get_segment(
         traits=traits,
         segments=segments,
     )
+    if window:
+        return _preview_payload(response, db, window, traits_row["cohort_period"])
+    return response
 
 
 # Declared BEFORE the "" route would shadow it? No — FastAPI matches the
@@ -167,6 +226,7 @@ def get_segment(
 @router.get("/summary", response_model=SegmentSummary)
 def get_segment_summary(
     principal: str | None = PrincipalQuery,
+    mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> SegmentSummary:
@@ -227,6 +287,37 @@ def get_segment_summary(
         {"cohort": cohort, **scope_params},
     ).mappings().all()
 
+    # Preview: the same cohort, cv and trend recomputed over the placeholder
+    # start through the cohort month (revenue_share stays the stored one).
+    window = placeholder_window(db) if mode == PREVIEW and rows else None
+    if window:
+        members = db.execute(
+            text(
+                "SELECT st.product_key, st.revenue_share_2026_02 AS revenue_share "
+                "FROM sku_traits st WHERE st.cohort_period = :cohort"
+                + principal_clause(principal, "st.principal")[0]
+            ),
+            {"cohort": cohort, **scope_params},
+        ).mappings().all()
+        keys = [int(m["product_key"]) for m in members]
+        matrices, periods = demand_matrix(db, keys, window["start"], cohort, PREVIEW)
+        first_real = periods.index(window["first_real_month"])
+        rows = []
+        # A SKU whose real sales start after the first real month but which
+        # has a placeholder sale or two: traits run from first sale, so the
+        # empty months between the two read as volatility. Measured
+        # 2026-09-23: all 53 SKUs preview puts in the high band are these
+        # (85 in the cohort). Counted so the panel can say the band comes
+        # from the placeholder, not from SSM's sales.
+        gap_skus = gap_high = 0
+        for m in members:
+            qty = matrices[int(m["product_key"])]
+            t = series_traits(qty, periods)
+            rows.append({"cv": t["cv"], "trend": t["trend"], "revenue_share": m["revenue_share"]})
+            if (qty[:first_real] > 0).any() and not qty[first_real] > 0:
+                gap_skus += 1
+                gap_high += cv_band(t["cv"]) == "high"
+
     if not rows:
         return SegmentSummary(
             cohort_period=cohort,
@@ -254,7 +345,7 @@ def get_segment_summary(
     band_order = {"high": 0, "medium": 1, "low": 2, "unknown": 3}
     trend_order = {"up": 0, "none": 1, "down": 2}
 
-    return SegmentSummary(
+    summary = SegmentSummary(
         cohort_period=cohort,
         analyzed_count=len(rows),
         volatility=[
@@ -272,3 +363,9 @@ def get_segment_summary(
             for t, n in sorted(trends.items(), key=lambda kv: trend_order.get(kv[0], 9))
         ],
     )
+    if window:
+        return _preview_payload(
+            summary, db, window, cohort,
+            placeholder_gap_skus={"count": gap_skus, "high_volatility": gap_high},
+        )
+    return summary

@@ -169,9 +169,20 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
     ?? data.segments?.find((s) => s.scheme === 'length_v2')
     ?? null;
 
+  // Preview mode (GET /segment's data_mode): the traits and the STL were
+  // measured over the placeholder months too; the stability group was not.
+  const previewWindow = data.data_mode?.traits_window;
+
   return (
     <section className={`sku-diag${compact ? ' sku-diag-compact' : ''}`}>
       {heading}
+
+      {previewWindow && (
+        <p className="chart-placeholder-note">
+          Measured {formatMonth(previewWindow.start)} – {formatMonth(previewWindow.end)}, including the 2021–22
+          placeholder months (not SSM&apos;s sales). The stability group comes from the real ABC runs and is unchanged.
+        </p>
+      )}
 
       {t && (
         <div className="sku-diag-tiles">

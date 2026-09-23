@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown, ChevronRight, CheckCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
@@ -15,6 +16,9 @@ import { formatUnits, exactUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
 // The cycle selector reuses DateFilter's control styles without the component.
 import './DateFilter.css';
+// .dash-stale-note — the LP freshness notice, defined once with the
+// Dashboard's styles and reused here so both pages warn identically.
+import './Dashboard.css';
 import './ReorderRecommendations.css';
 
 // Helper to format SKU to 5 digits (SKU-#####)
@@ -46,7 +50,8 @@ const BULK_CONCURRENCY = 5;
 
 const COVER_BASIS_NOTE =
   'Stock at cost (₱) ÷ average daily sales value (₱/day, last 3 sales months) — the same peso basis the Dashboard’s '
-  + 'weeks of cover uses, because stock is counted in cases and demand in pieces. Understates cover by the margin.';
+  + 'weeks of cover uses. Understates cover by the margin, since stock is valued at last purchase cost while sales '
+  + 'are at selling price.';
 
 const ReorderRecommendations = () => {
   // Shared principal scope (Topbar's segmented control). lp_recommendation
@@ -67,6 +72,12 @@ const ReorderRecommendations = () => {
   const [rawItems, setRawItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Which LP cycle this list is, how many undecided rows from earlier runs
+  // were withheld, and whether the run predates its own forecasts
+  // (backend/lp_cycle.py). The list is the CURRENT cycle only — a leftover
+  // 2023 row is not something to act on today — so the page has to say
+  // that rather than quietly showing fewer rows than the database holds.
+  const [meta, setMeta] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('RECOMMENDATIONS');
@@ -90,6 +101,14 @@ const ReorderRecommendations = () => {
       .then((res) => {
         if (cancelled) return;
         setRawItems(res.items || []);
+        setMeta({
+          cycleDate: res.planning_cycle_date || null,
+          supersededCount: res.superseded_count || 0,
+          freshness: res.freshness || null,
+          // Preview with the what-if LP (backend/data_mode.py): these rows
+          // were never saved, so there is nothing to accept or dismiss.
+          whatIf: Boolean(res.data_mode?.outputs),
+        });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -362,6 +381,16 @@ const ReorderRecommendations = () => {
       );
     }
 
+    if (meta?.whatIf) {
+      return (
+        <div className="action-status-container">
+          <span className="reorder-pending-label" title="A what-if row from the preview, never saved — nothing to decide">
+            What-if
+          </span>
+        </div>
+      );
+    }
+
     // Staff: the row's state instead of buttons — the one-line note above
     // the table says why there's nothing to click.
     if (!isAdmin) {
@@ -509,12 +538,18 @@ const ReorderRecommendations = () => {
           Ranked by revenue share × units below the reorder point. Cover is in days on a peso basis
           (stock at cost ÷ daily sales value).
         </p>
-        {!isAdmin && (
+        {meta?.whatIf && (
+          <p className="chart-placeholder-note">
+            Preview: these recommendations are a what-if run of the LP on the five-year history, 2021–22 placeholder
+            months included. They are never saved, so they can&apos;t be accepted or dismissed.
+          </p>
+        )}
+        {!isAdmin && !meta?.whatIf && (
           <p className="reorder-view-only-note">
             View only — accepting or dismissing reorders is limited to admin accounts.
           </p>
         )}
-        {isAdmin && (
+        {isAdmin && !meta?.whatIf && (
           <button
             className="reorder-bulk-btn"
             onClick={() => setPendingBulk({ rows: bulkTargets })}
@@ -662,7 +697,26 @@ const ReorderRecommendations = () => {
           <p className="reorder-page-subtitle">
             LP-optimized purchase quantities for Category A SKUs. Minimizes total inventory cost while preventing stockouts.
             {' '}Each planning cycle is one optimization run, for the month after the latest sales data.
+            {meta?.supersededCount > 0 && (
+              <>
+                {' '}Showing the current cycle only — {meta.supersededCount.toLocaleString()} undecided
+                {' '}row{meta.supersededCount === 1 ? '' : 's'} from earlier runs {meta.supersededCount === 1 ? 'is' : 'are'} superseded and not listed.
+              </>
+            )}
           </p>
+          {/* Same freshness notice as the Dashboard's, for the page where
+              the affected numbers (q_i, rop_i) are actually acted on. */}
+          {meta?.freshness?.is_stale && (
+            <div className="dash-stale-note" role="status">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>
+                <strong>
+                  {meta.freshness.stale_row_count < meta.freshness.row_count ? 'Some of these quantities are' : 'These quantities are'}
+                  {' '}from an older LP run.
+                </strong> {meta.freshness.reason}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Tab Navigation */}

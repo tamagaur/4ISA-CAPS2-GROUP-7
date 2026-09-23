@@ -32,6 +32,14 @@ def test_rerun_only_updates_rows_still_pending():
     assert normalized.endswith("WHERE LP_Recommendation.status = 'pending'")
 
 
+def test_rerun_restamps_the_rows_it_refreshes():
+    # generated_at's DEFAULT now() fires only on INSERT. Live on 2026-09-23
+    # every product in the pool already had a row in its cycle, so a rerun
+    # was all UPDATEs and backend/lp_cycle.py still dated the LP to the old run.
+    normalized = " ".join(UPSERT_QUERY.split())
+    assert "generated_at = now()" in normalized
+
+
 @pytest.mark.parametrize("raw", ["0", "-1", "-0.5"])
 def test_protection_days_must_be_positive(raw):
     with pytest.raises(argparse.ArgumentTypeError):

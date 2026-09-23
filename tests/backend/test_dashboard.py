@@ -101,6 +101,23 @@ class FakeSession:
         portfolio_actual: dict | None = None,
         reco_preview_rows: list | None = None,
         policy_rows: list | None = None,
+        # LP cycle scoping (2026-09-23, backend/lp_cycle.py). Default None =
+        # "nothing pending", which is what the existing fixtures below model;
+        # the matchers ignore the cycle filter, so those fixtures keep
+        # returning their rows exactly as before.
+        lp_cycle_date=None,
+        lp_superseded_pending: int = 0,
+        lp_generated_at=None,
+        forecast_generated_at=None,
+        # Pending rows in the LP cycle, and how many predate the forecasts.
+        # None = every row is as old as lp_generated_at (one run wrote them).
+        lp_row_count: int = 1,
+        lp_stale_rows: int | None = None,
+        # Principals that actually carry a stock valuation / an ABC run at
+        # the resolved period. Empty = "don't narrow", which leaves
+        # weeks_of_cover on the requested scope as it was before.
+        stock_coverage: list | None = None,
+        abc_coverage: list | None = None,
     ):
         self.recommendation_count = recommendation_count
         self.forecast_total = forecast_total
@@ -130,17 +147,58 @@ class FakeSession:
         self.reco_preview_rows = reco_preview_rows or []
         # policy_comparison rows: [{planning_cycle_date, ss_i, forecast_value}]
         self.policy_rows = policy_rows or []
+        self.lp_cycle_date = lp_cycle_date
+        self.lp_superseded_pending = lp_superseded_pending
+        self.lp_generated_at = lp_generated_at
+        self.forecast_generated_at = forecast_generated_at
+        self.lp_row_count = lp_row_count
+        self.lp_stale_rows = lp_stale_rows
+        self.stock_coverage = stock_coverage or []
+        self.abc_coverage = abc_coverage or []
+        # Every (sql, params) issued, so a test can assert on the query text
+        # itself — the only way to check scope/unit handling that lives in
+        # SQL rather than in Python (see this module's docstring).
+        self.calls: list[tuple[str, dict]] = []
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
+        self.calls.append((sql, dict(params)))
 
-        # Checked FIRST: recommendations._SELECT_ONE (reused verbatim by
-        # reorder_preview) now embeds its own SUM(quantity_on_hand *
-        # unit_cost_per_case) subquery, which the SOH matcher below would
-        # otherwise claim.
+        # LP cycle + freshness (backend/lp_cycle.py) — checked BEFORE the
+        # _SELECT_ONE matcher below, which would otherwise claim these:
+        # they read the same table with the same status predicate.
+        if "MAX(lr.planning_cycle_date) AS d" in sql:
+            return FakeResult([{"d": self.lp_cycle_date}])
+
+        if "MAX(lr.generated_at) AS t" in sql:
+            stale = self.lp_stale_rows
+            if stale is None:
+                fc_at = params.get("fc_at")
+                one_old_run = self.lp_generated_at is not None and fc_at is not None and self.lp_generated_at < fc_at
+                stale = self.lp_row_count if one_old_run else 0
+            return FakeResult([{"t": self.lp_generated_at, "row_count": self.lp_row_count, "stale_count": stale}])
+
+        if "MAX(generated_at) AS t FROM forecast_result" in sql:
+            return FakeResult([self.forecast_generated_at])
+
+        if "lr.planning_cycle_date < :cycle" in sql:
+            return FakeResult([self.lp_superseded_pending])
+
+        # Checked FIRST among the row queries: recommendations._SELECT_ONE
+        # (reused verbatim by reorder_preview) embeds its own stock
+        # subquery, which the SOH matcher below would otherwise claim.
         if "FROM lp_recommendation lr" in sql and "WHERE lr.status = 'pending'" in sql:
             return FakeResult(self.reco_preview_rows)
+
+        # Which principals carry a stock valuation at the resolved period —
+        # what keeps weeks_of_cover's numerator and denominator on the same
+        # principals (_stock_valuation_coverage).
+        if "HAVING SUM(COALESCE(valuation" in sql:
+            return FakeResult([{"principal": p} for p in self.stock_coverage])
+
+        if "SELECT principal FROM ABC_Classification" in sql:
+            return FakeResult([{"principal": p} for p in self.abc_coverage])
 
         if "COUNT(*) AS product_count" in sql:
             return FakeResult([{"product_count": self.recommendation_count}])
@@ -178,7 +236,10 @@ class FakeSession:
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult([{"p": self.latest_inventory_period}])
 
-        if "SUM(quantity_on_hand * unit_cost_per_case)" in sql:
+        # Inventory_Fact.valuation (the source file's own extended total) is
+        # preferred over the multiplication since 2026-09-23 — it prices the
+        # loose-piece remainder the old product dropped.
+        if "SUM(COALESCE(valuation, quantity_on_hand * unit_cost_per_case))" in sql:
             periods = params["periods"]
             return FakeResult([
                 {"period": p, "total": v} for p, v in self.soh.items() if p in periods and v is not None
@@ -879,3 +940,143 @@ def test_reorder_preview_no_stock_row_is_no_data_not_critical():
     assert by_key[2]["urgency"] == "CRITICAL"
     assert preview["critical_count"] == 1
     assert preview["no_data_count"] == 1
+
+
+# ─── Units, LP cycle scoping and self-labelling (2026-09-23) ──────────────
+# These three fixes changed what the page REPORTS, not just how it reads, so
+# each is pinned here. The unit and scope logic lives in SQL (see this
+# module's docstring on why such assertions read the query text).
+
+
+def _sql_for(session, needle):
+    """The one issued query containing `needle`, with its params."""
+    return next((s, p) for s, p in session.calls if needle in s)
+
+
+def test_safety_stock_compares_pieces_with_pieces_not_cases():
+    """quantity_on_hand is CASES and ss_i is PIECES. Comparing them directly
+    reported 109 of 120 measurable Category A SKUs below safety stock when
+    36 are — the conversion must be in the query."""
+    session = FakeSession(latest_abc_period="2024-02", latest_inventory_period="2024-02")
+    with make_client(session) as c:
+        c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    sql, _ = _sql_for(session, "rop.ss_i AS ss_i")
+    assert "stock_pieces" in sql, "safety stock must compare the converted figure"
+    assert "pack_size" in sql, "cases are converted to pieces via pack_size"
+    # And never the raw case count: that is the bug this guards.
+    assert "SUM(inv.quantity_on_hand) AS current_stock" not in sql
+
+
+def test_every_lp_read_is_pinned_to_the_current_cycle():
+    """Leftover `pending` rows from earlier runs (179 live, back to 2023-05)
+    must not reach the page: they made the pending count read 429 not 250."""
+    session = FakeSession(lp_cycle_date=datetime.date(2026, 3, 1), latest_abc_period="2024-02")
+    with make_client(session) as c:
+        c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    for needle in ("COUNT(*) AS product_count",            # the KPI card
+                   "rop.ss_i AS ss_i",                      # safety stock
+                   "fr.forecast_date = lr.planning_cycle_date",  # policy comparison
+                   "COUNT(DISTINCT lr.product_key) AS cnt"):     # tier_stock
+        sql, params = _sql_for(session, needle)
+        assert ":current_cycle" in sql, f"{needle} is not pinned to the LP cycle"
+        assert params.get("current_cycle") == datetime.date(2026, 3, 1)
+
+
+def test_lp_block_reports_the_cycle_and_its_staleness():
+    session = FakeSession(
+        lp_cycle_date=datetime.date(2026, 3, 1),
+        lp_superseded_pending=179,
+        lp_generated_at=datetime.datetime(2026, 8, 24, 7, 12),
+        forecast_generated_at=datetime.datetime(2026, 9, 21, 10, 8),
+    )
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    lp = body["lp"]
+    assert lp["cycle_date"] == "2026-03-01"
+    assert lp["superseded_pending_count"] == 179
+    assert lp["is_stale"] is True, "an LP older than the forecasts it used must be flagged"
+    assert "rerun" in lp["reason"].lower()
+
+
+def test_lp_not_stale_when_run_after_the_forecasts():
+    session = FakeSession(
+        lp_cycle_date=datetime.date(2026, 3, 1),
+        lp_generated_at=datetime.datetime(2026, 9, 22, 9, 0),
+        forecast_generated_at=datetime.datetime(2026, 9, 21, 10, 8),
+    )
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["lp"]["is_stale"] is False
+    assert body["lp"]["reason"] is None
+
+
+def test_lp_rerun_that_left_rows_behind_is_still_flagged():
+    """A rerun refreshes only the products in that run and leaves the
+    cycle's other pending rows as they were. Judged by its newest row, the
+    cycle read fresh while 177 of its 250 rows still carried the old
+    forecasts — and "rerun to clear this" would not have cleared them."""
+    session = FakeSession(
+        lp_cycle_date=datetime.date(2026, 3, 1),
+        lp_generated_at=datetime.datetime(2026, 9, 23, 9, 0),
+        forecast_generated_at=datetime.datetime(2026, 9, 21, 10, 8),
+        lp_row_count=250,
+        lp_stale_rows=177,
+    )
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    lp = body["lp"]
+    assert lp["is_stale"] is True
+    assert (lp["row_count"], lp["stale_row_count"]) == (250, 177)
+    assert "177 of the 250 rows" in lp["reason"]
+    assert "rerun will not change them" in lp["reason"].lower()
+
+    # Counted against the forecast run, within the page's own principal.
+    sql, params = _sql_for(session, "MAX(lr.generated_at) AS t")
+    assert params["fc_at"] == datetime.datetime(2026, 9, 21, 10, 8)
+    assert params["principal"] == "unilever" and ":principal" in sql
+
+
+def test_sales_card_reports_the_month_it_is_actually_showing():
+    """The caption said "This period's total sales" while the value could be
+    any earlier month the walk-back landed on."""
+    periods = _periods()
+    session = FakeSession(sales={periods[-3]: 1000.0})  # newest two months missing
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["kpis"]["sales"] == 1000.0
+    assert body["kpis"]["sales_period"] == periods[-3]
+
+
+def test_weeks_of_cover_denominator_follows_the_stock_coverage():
+    """Under 'all' the stock valuation is Unilever's alone, so the demand
+    side must be Unilever's too — not both principals, which produced a
+    ratio belonging to neither scope."""
+    periods = _periods()
+    session = FakeSession(
+        latest_inventory_period=periods[-1],
+        soh={periods[-1]: 1_000_000.0},
+        sales={p: 100_000.0 for p in periods},
+        stock_coverage=["unilever"],
+    )
+    session.delmonte_sales = {periods[-1]: 500_000.0}
+    session.delmonte_latest_sales_period = periods[-1]
+    with make_client(session) as c:
+        body = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    wc = body["kpis"]["weeks_of_cover"]
+    assert wc["coverage"] == ["unilever"], "the card must say which principals it covers"
+    expected = 1_000_000.0 / (100_000.0 / AVG_WEEKS_PER_MONTH)
+    assert wc["value"] == pytest.approx(round(expected, 2)), "Del Monte demand must not enter a Unilever-only ratio"
+
+
+def test_stock_value_prefers_the_sources_own_valuation():
+    """Inventory_Fact.valuation already prices the loose-piece remainder;
+    recomputing cases x cost dropped it (a 3.2% under-count live)."""
+    session = FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 22_700_825.83})
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    # Needle is the projection itself: "AS total" alone also matches the
+    # forecast card's "AS total_count".
+    _sql_for(session, "SUM(COALESCE(valuation, quantity_on_hand * unit_cost_per_case))")
+    assert body["kpis"]["soh_value"] == 22_700_825.83
+    # The legacy field documented as "impossible" now carries the same figure.
+    assert body["inventory"]["value"] == 22_700_825.83

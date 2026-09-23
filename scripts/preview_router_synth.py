@@ -33,7 +33,7 @@ import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from analytics.forecasting.baseline import MIN_MONTHS_WITH_SALES
-from analytics.forecasting.diagnostic_metrics import mase, naive_scale, wape
+from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rmse, wape
 from analytics.forecasting.global_model import GlobalForecaster, with_placeholder
 from analytics.forecasting.router import rolling_one_step, route
 from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
@@ -74,7 +74,11 @@ def preview(series_by_key: dict, target: pd.Timestamp) -> pd.DataFrame:
         n_placeholder = int(series.index.isin(list(series.attrs.get("placeholder_months", ()))).sum())
         base = {"product_key": pk, "placeholder_months": n_placeholder, "bin": None, "served_model": None,
                 "forecast": None, "ma3_forecast": None, "holdout_mase": None, "holdout_wape": None, "backup_fired": None,
-                "ma3_holdout_mase": None, "ma3_holdout_wape": None}
+                "ma3_holdout_mase": None, "ma3_holdout_wape": None,
+                # Added 2026-09-24 for the app's preview mode (scripts/build_preview_outputs.py): the rest of
+                # what the live runner stores per SKU, from the same route() result and holdout arrays.
+                "holdout_mape": None, "holdout_rmse": None, "holdout_months": None, "sales_months": None,
+                "backup_reason": None, "xgb_component": None, "tsb_component": None}
         if int((series > 0).sum()) < MIN_MONTHS_WITH_SALES:
             observed = series[series > 0]
             rows.append({**base, "status": "insufficient_data", "bin": "insufficient", "served_model": "trailing_average",
@@ -92,7 +96,10 @@ def preview(series_by_key: dict, target: pd.Timestamp) -> pd.DataFrame:
                      "ma3_forecast": max(0.0, r["ma3_value"]), "holdout_mase": mase(a, p, scale),
                      "holdout_wape": wape(a, p), "backup_fired": r["backup_fired"],
                      # MA3, the benchmark, on the same holdout months and the same real-month scale
-                     "ma3_holdout_mase": mase(a, p3, scale), "ma3_holdout_wape": wape(a, p3)})
+                     "ma3_holdout_mase": mase(a, p3, scale), "ma3_holdout_wape": wape(a, p3),
+                     "holdout_mape": mape(a, p), "holdout_rmse": rmse(a, p), "holdout_months": len(a),
+                     "sales_months": r["sales_months"], "backup_reason": r["backup_reason"],
+                     "xgb_component": r["components"].get("xgb"), "tsb_component": r["components"].get("tsb")})
     return pd.DataFrame(rows)
 
 
