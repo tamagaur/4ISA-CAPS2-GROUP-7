@@ -913,3 +913,43 @@ quarantine-only and change no fact-table total, so 3–4 can safely run before t
 Pre-run hygiene that must be repeated before each resume: check `pg_stat_activity` for an orphaned
 `idle in transaction` backend and terminate it (see 17.1) — a dead pooled client leaves its server session, and
 its locks, behind.
+
+### 17.3 Product master cleanup queue — QUEUED, do not act now (2026-09-23)
+
+Recon only; nothing below has been applied. Evidence: `reports/diagnostics/` (fit review, incident check) and
+the exhaustive staged-file scan described in step 3.
+
+**Finding.** `product_dimension` has **7 Del Monte rows whose `sku_code` is a source section heading**, not a
+code: `CONTADINA`, `KIKKOMAN`, `MR. MILK YOGHURT`, `NEW PRODUCTS`, `PROMO PACK`, `QUICK N EASY`, `VINA MILK`
+(product_keys 18554, 18540, 18560, 18583, 18576, 18526, 18565). All 7 come from one workbook —
+`data/raw/Del Monte/MONTHLY REPORT - AUGUST 2023/DELMONTE_INVENTORY SIGN OFF_PANGASINAN & ILOCOS _AUGUST 2023.xlsx`,
+`_period` 2023-08, header row 7 — staged as two sheets, `ACTUAL 090423` (205 rows) and `ILO 090223` (206 rows),
+each carrying all 7 banners at identical row ordinals (110, 124, 138, 144, 149, 160, 167) = **14 source rows**.
+Raw shape is uniform: `ITEM CODE` = the brand name, `ITEM DESCRIPTION` NULL, every price/quantity column NULL or
+0, and the row immediately below begins that brand's product block (ordinal 124 `KIKKOMAN` → ordinal 125
+`11858 KIKKOMAN FANCY GRD SOY SAUCE 12/600ML`).
+
+**Zero facts attach.** Checked by `product_key` across `inventory_fact`, `sellout_fact`, `sku_segment`,
+`abc_classification`, `forecast_result`, `sku_traits`, `unilever_sku_demand_fact`, `unilever_inventory_monthly`,
+and again by `sku_code` across every table that has one: **0 rows everywhere** except the 7 dimension rows
+themselves. **No fact reassignment is required** — this is a dimension-only cleanup with no restatement.
+
+**Confinement verified, not assumed.** An exhaustive scan of every staged parquet across all 10 families
+(`inventory_sign_off`, `sell_out`, `sales_register`, `sales_return`, `purchase_order`, `rmr_gs_bo`, `ssis_soh`,
+`ssis_soh_inventory_fact`, `ssis_summary`, `unilever_sku`) finds those 7 strings **only** in the two August 2023
+sign-off sheets — 7 labels × 2 sheets = 14 rows, nothing anywhere else.
+
+#### The queue
+
+| # | action | detail |
+|---|---|---|
+| 1 | **Quarantine the 7 dimension rows** | rule `banner_row_no_item_description`; record all **14** source rows in `raw_values` with `_src_file`/`_src_sheet`/`_row_ordinal`. 0 facts attach, no reassignment. Delete is wrong (destroys the evidence); correct-from-source is wrong (a banner has no code to correct *to* — inventing one is fabrication). |
+| 2 | **Then add the `sku_code` format CHECKs** | Unilever **strictly** `^[0-9]{8}$` — 2,098 of 2,098 pass, 0 rejects, the format is uniform. Del Monte **deliberately loose**: reject only what is clearly not a code — contains whitespace, **or** contains no digit at all. A tight pattern fitted to today's observed shapes (`9AAA99999`, `AAA99999`, `999`–`99999`, `AAAA9999`, `9AAA9999`) would fail a rebuild the first time Del Monte issues a genuinely new code family. **This, not a template rule, is the durable guard.** Must run **after** item 1 or the constraint will not create. |
+| 3 | **Note only — do not build** | A Transform banner rule for the sign-off template (`ITEM CODE` has no digit **AND** `ITEM DESCRIPTION` is NULL) would catch this class at load time. **One occurrence in 52 staged files does not justify building it.** Revisit only if the pattern recurs in a later delivery. |
+| 4 | **Provenance gap — list with the others** | The 7 rows carry `product_name` values that **cannot** come from their source rows, because `ITEM DESCRIPTION` is NULL there — e.g. `KIKKOMAN` → "Del Monte Tomato Paste 240ml", `PROMO PACK` → "Del Monte Mango Juice 1kg". Some later backfill wrote them and the values look unrelated to the banner. Same class as **P3** (public Unilever demand `net_amount` has no committed writer) and the **38 Unilever SKUs labelled SOH-sourced in public** with no source in loaded SOH — all three are values in `public` with no identifiable writer. Trace them together, not one at a time. |
+
+**State note (2026-09-23).** `public.etl_quarantine` **now exists and is empty** (0 rows) — batch 1 of the
+recovery cutover created it (§17.2, migrations 0024–0027). Item 1 is therefore no longer blocked on that
+migration. Earlier notes in `reports/diagnostics/README.md` and `WHY_SOME_SKUS_ARE_UNFIT.md` state that
+`etl_quarantine` is absent from `public`; that was true when written, earlier the same day, and is now stale —
+those two files need the line corrected.
