@@ -878,15 +878,28 @@ def copy_preview_inputs(src: str) -> None:
         shutil.copyfile(os.path.join(src, f), os.path.join(DATA_DIR, f))
 
 
-def load_backup_options(src: str):
-    """backup_options.json, if the model-list decision has produced one; else None
-    ('pending decision' in both modes). Never computed here."""
-    for d in (DATA_DIR, src):
-        p = os.path.join(d, "backup_options.json")
-        if os.path.isfile(p):
-            with open(p, encoding="utf-8") as fh:
-                return json.load(fh)
-    return None
+BACKUP_OPTIONS = os.path.join(REPO, "analytics", "forecasting", "backup_options.json")
+
+
+def load_backup_options():
+    """analytics/forecasting/backup_options.json - DEC-28's machine-readable copy.
+
+    Hard-fails if the file is missing or if a router bin has no entry. A viewer
+    that quietly printed "pending decision" over a decision that HAS been made
+    would misreport the record, so the build stops instead. Nothing is computed
+    or defaulted here: the served model, the ordered backup list and the long
+    bin's watch list are carried through exactly as the file gives them."""
+    if not os.path.isfile(BACKUP_OPTIONS):
+        raise SystemExit(f"backup options missing: {BACKUP_OPTIONS}" + chr(10) +
+                         f"DEC-28 (ARCHITECTURE.md) is the source; this build will not produce a page "
+                         f"that shows the Backup options column as undecided.")
+    with open(BACKUP_OPTIONS, encoding="utf-8") as fh:
+        bo = json.load(fh)
+    missing = [b for b in ROUTER_ORDER if b not in bo.get("bins", {})]
+    if missing:
+        raise SystemExit(f"BUILD FAILED: {BACKUP_OPTIONS} has no entry for router bin(s) {missing}")
+    bo["file"] = os.path.relpath(BACKUP_OPTIONS, REPO).replace("\\", "/")
+    return bo
 
 
 def assemble_preview(skus: list[dict]) -> dict:
@@ -1024,7 +1037,7 @@ def main():
     payload["fit"] = load_fit_review(payload)
     payload["etl"] = ETL_NODES
     payload["preview"] = assemble_preview(payload["skus"])
-    payload["backup_options"] = load_backup_options(args.preview_src)
+    payload["backup_options"] = load_backup_options()
     data = json.dumps(payload, separators=(",", ":"), allow_nan=False, default=str).replace("</", "<\\/")
     html = TEMPLATE.replace("__DATA__", data)
     out = os.path.join(HERE, "dsd_dev_viewer.html")
@@ -1078,7 +1091,8 @@ def main():
         pvc[s["router_bin"]] = pvc.get(s["router_bin"], 0) + 1
     print(f"preview: bins={pvc} placeholder_skus={pv['placeholder_skus']} placeholder_rows={pv['placeholder_rows']} "
           f"file check, MA3-served SKUs with served MASE == ma3_holdout_mase: {pv['checks']['ma3_equal']} of {pv['checks']['ma3_total']} "
-          f"backup_options={'loaded' if payload['backup_options'] else 'none (pending decision)'}")
+          f"backup_options={payload['backup_options']['file']} "
+          f"({', '.join(b + ' ' + str(len(payload['backup_options']['bins'][b]['backups'])) for b in ROUTER_ORDER)} backups)")
     print(f"problems={m['problems'] or 'none'}")
     print(f"source={dsn}  query seconds={timing}  db total={t_db:.2f}s  band evidence={t_band:.2f}s  "
           f"build total={time.perf_counter() - t0:.2f}s  html={os.path.getsize(out) / 1024:.0f} KB")
@@ -1719,11 +1733,31 @@ function metricCell(s, k){
   const v = s[k], f = (k === 'mase' || k === 'ma3_mase') && v != null && v >= 1;
   return `<td class="num${f ? ' flag' : ''}"${f ? ' title="MASE ≥ 1: worse than the in-sample naive scale on this holdout"' : ''}>${fmt(v)}</td>`;
 }
+// DEC-28, read from analytics/forecasting/backup_options.json. The bin is the
+// LIVE router bin in real mode and the PREVIEW router bin in preview mode -
+// s.router_bin is already whichever of the two the mode is showing, so the same
+// lookup serves both. No fallback text: the build fails if a bin has no entry.
+const BO = bin => D.backup_options.bins[bin] || null;
 function backupOptions(s){
-  const bo = D.backup_options;
-  const list = bo && (bo[s.router_bin] || (bo.bins && bo.bins[s.router_bin]));
-  if (!Array.isArray(list)) return '<span class="ph">pending decision</span>';
-  return `${esc(list.join(', '))} <span class="muted">(${esc(s.router_bin)} bin)</span>`;
+  const b = BO(s.router_bin);
+  if (!b) return `<span class="ph">no entry for the ${esc(s.router_bin)} bin</span>`;
+  if (!b.backups.length) return `<span class="ph">none</span> <span class="muted">(${esc(s.router_bin)} bin)</span>`;
+  return `${esc(b.backups.join(' → '))} <span class="muted">(${esc(s.router_bin)} bin)</span>`;
+}
+// The per-SKU panel: ordered list, then the watch list where the bin has one.
+function backupPanel(s){
+  const b = BO(s.router_bin);
+  if (!b) return `<div class="ph">no entry for the ${esc(s.router_bin)} bin</div>`;
+  const ord = b.backups.length
+    ? `<ol style="margin:4px 0 0;padding-left:18px">${b.backups.map(x => `<li>${esc(x)}</li>`).join('')}</ol>`
+    : `<div class="ph">none</div>`;
+  return `<div>served: <b style="color:var(--ink-2)">${esc(b.served)}</b></div>${ord}`
+    + (b.note ? `<div class="muted" style="margin-top:5px">${esc(b.note)}</div>` : '')
+    + (b.watch && b.watch.length
+        ? `<div style="margin-top:8px"><b>Watch list</b><div style="font-family:var(--mono);font-size:11px;color:var(--ink-2);margin-top:3px">${esc(b.watch.join(', '))}</div>`
+          + (b.watch_note ? `<div class="muted" style="margin-top:4px">${esc(b.watch_note)}</div>` : '') + `</div>`
+        : '')
+    + `<div class="muted" style="margin-top:8px">${esc(D.backup_options.decision)} · ${esc(D.backup_options.file)}</div>`;
 }
 
 // ---------------- chart ----------------
@@ -2138,7 +2172,7 @@ function drawFocus(){
     + verdictBlock(s)
     + topTiles(s)
     + `<div class="focus"><div><div class="chart">${chart(s, 1100, 300, 'big')}</div>${legendBox(s)}</div>`
-    + `<div class="backupbox"><b>Backup options${V.pv ? ` · preview bin: ${esc(s.router_bin)}` : ''}</b><div class="bo">${backupOptions(s)}</div><div style="margin-top:6px">Live fallback today: MA3. MA3 backup: ${esc(s.backup)}.</div></div></div>`
+    + `<div class="backupbox"><b>Backup options${V.pv ? ` · preview bin: ${esc(s.router_bin)}` : ` · ${esc(s.router_bin)} bin`}</b><div class="bo">${backupPanel(s)}</div><div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px">Live fallback today: MA3. MA3 backup: ${esc(s.backup)}.</div></div></div>`
     + skuSections(s);
   bindSecs('#focus');
   const lg = $('#focus details.legendbox');
