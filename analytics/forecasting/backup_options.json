@@ -1,0 +1,38 @@
+{
+  "decision": "DEC-28",
+  "decided": "2026-09-23",
+  "source": "ARCHITECTURE.md DEC-28",
+  "scope": "Unilever Tier A only. '@A' means fitted on the Tier A cohort; only @A variants are eligible.",
+  "framing": "The challengers TIE with MA3 (DEC-25, DEC-26). Nothing here beats MA3.",
+  "bin_order": ["insufficient", "short", "medium", "long"],
+  "bins": {
+    "insufficient": {
+      "served": "Provisional trailing average",
+      "backups": [],
+      "note": "None. The provisional trailing average is itself the fallback, so it has nothing to fall back to."
+    },
+    "short": {
+      "served": "MA3",
+      "backups": ["shrink_cat"],
+      "note": "One listed alternative, not a ranked chain."
+    },
+    "medium": {
+      "served": "TSB",
+      "backups": ["MA3", "comb_simple", "MA12"],
+      "note": "Ordered: MA3 first, then comb_simple, then MA12."
+    },
+    "long": {
+      "served": "XGBoost + MA3 avg",
+      "backups": ["MA3"],
+      "watch": ["lgbm@A", "lgbm_q50@A", "comb_inv_err", "xgb_abs@A", "ridge@A", "xgb_raw@A", "sba"],
+      "watch_note": "Re-test when a third block is testable. The long bin cannot reach FIT with only 2 testable blocks."
+    }
+  },
+  "excluded": [
+    "@ABC variants - models are Tier A only.",
+    "ADIDA = IMAPA = SES-equivalent on this cohort, so they add nothing distinct.",
+    "OTM - hand-coded and unvalidated, not eligible.",
+    "chronos_bolt - not run; the environment blocks torch."
+  ],
+  "rule_relaxed": false
+}

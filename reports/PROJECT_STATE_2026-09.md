@@ -879,36 +879,44 @@ Scratch cleanup the same day: dropped `ssm_recovery_rehearsal`, `ssm_recovery_or
 `ssm_abc_repro`. Database went 417.2 MB -> 200.5 MB (relpages basis) against the 500 MB cap. Each `DROP SCHEMA
 CASCADE` took under a second; the earlier 18-minute hang was the size query, not the drops.
 
-### 17.2 RESUME POINT — cutover to `public` is PART-APPLIED, stopped after batch 1 (2026-09-23)
+### 17.2 RESUME POINT — cutover to `public` is PART-APPLIED, stopped after batch 4 (2026-09-23)
 
-**Batch 1 of 12 is applied to `public` and committed. Batches 2–12 are not.** The run is resumable; the ledger,
-not this file, is the source of truth.
+**Batches 1–4 of 12 are applied to `public` and committed. Batches 5–12 are not.** The run is resumable; the
+ledger, not this file, is the source of truth.
 
 | item | value |
 |---|---|
 | run id / ledger | `real_recovery_20260923T022354Z`, in `public.etl_cutover_ledger` |
 | backup | `backups/real_recovery_20260923T022354Z/` — 9 tables + `etl_quarantine` recorded absent, **10/10 manifest md5 verified**, identity sequences captured |
-| ledger rows | batch 0 `baseline` (full-table fingerprints + backup), batch 1 `done` 4/4 |
+| ledger rows | batch 0 `baseline` (full-table fingerprints + backup); batch 1 `done` 4/4, batch 2 `done` 14/14, batch 3 `done` 18/18, batch 4 `done` 7,773/7,773 |
 | applied | migrations 0024–0027, all four recorded against `public`: `etl_quarantine` created, `sales_fact.quantity_cases/quantity_pieces`, `sellout_fact.net_amount_tax_inclusive`, purchase unique key rebuilt to include `invoice_date` |
-| unchanged | real `sales_fact` 17,947 rows / ₱211,698,330.64 — batch 1 is additive DDL only, every new column NULL |
-| remaining | batches 2–12 |
+| sales restated | real `sales_fact` **17,933 rows / ₱208,794,370.90** — batch 2 removed the 14 FAKE BOOKING invoices (−₱2,903,959.74). Every live figure quoted before 2026-09-23 sits on the old ₱211,698,330.64 basis. |
+| quarantine | `public.etl_quarantine` **7,805 rows** = 14 (b2) + 18 (b3) + 7,773 (b4); batch 4's F1 check passed against the source's full real set |
+| unchanged after batch 4 | `inventory_fact` 32,446, `unilever_sku_demand_fact` 24,906, `product_dimension` 17,406, real `purchase_fact` 499 |
+| remaining | batches 5–12 |
 
 Resume with:
 
-    python -m scripts.apply_real_recovery_to_public --source ssm_synth_v2 --target public --i-have-approval --from 2
+    python -m scripts.apply_real_recovery_to_public --source ssm_synth_v2 --target public --i-have-approval --from 5
 
 `--status` prints the ledger; `--restore backups/real_recovery_20260923T022354Z --i-have-approval` puts every
 backed-up table back and clears the run's ledger rows.
 
-**STOP — batch 2 needs the team warned before it runs.** Batch 2 deletes the 14 FAKE BOOKING invoices from
-`sales_fact` and moves them to `etl_quarantine`: **−₱2,903,959.74**, taking real sales from ₱211,698,330.64 to
-₱208,794,370.90. It is the **first batch that changes any reported sales total**, and every figure already
-quoted from the live DB — manuscript, dashboard screenshots, defense slides — moves the moment it commits.
-Nobody should re-run a number across that boundary without knowing which side of it they are on.
+**DONE 2026-09-23 — batch 2 ran with Yuan's explicit go.** Batch 2 deleted the 14 FAKE BOOKING invoices from
+`sales_fact` and moved them to `etl_quarantine`: **−₱2,903,959.74**, taking real sales from ₱211,698,330.64 to
+₱208,794,370.90 (verified on `public` after the commit). It is the **first batch that changed any reported sales
+total**, and every figure already quoted from the live DB — manuscript, dashboard screenshots, defense slides —
+is now on the old basis. Nobody should re-run a number across that boundary without knowing which side of it
+they are on.
 
 Note on numbering: in Yuan's original ten-item list the 57 ONE PAGER invoices were "batch 4"; in the implemented
 twelve-batch list they are **batch 5**, and batch 4 is the 7,773-row quarantine remainder. Batches 3 and 4 are
-quarantine-only and change no fact-table total, so 3–4 can safely run before the batch 2 decision is made.
+quarantine-only and change no fact-table total, but **they cannot run before batch 2** — corrected 2026-09-23,
+an earlier note here claimed they could. Two independent reasons, both in the implemented script:
+`apply_real_recovery_to_public.py:880-882` refuses any batch whose predecessors are not `done` (on `--batch N` as
+well as `--from N`), and batch 4's F1 check (`:558-559`) compares `public.etl_quarantine` against the source's
+**full** real quarantine set of 7,805 rows — without batch 2's 14 rows it sees 7,791 and rolls batch 4 back.
+Batch order is strict: 2 → 3 → 4.
 
 Pre-run hygiene that must be repeated before each resume: check `pg_stat_activity` for an orphaned
 `idle in transaction` backend and terminate it (see 17.1) — a dead pooled client leaves its server session, and
