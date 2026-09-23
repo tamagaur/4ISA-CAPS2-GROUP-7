@@ -699,6 +699,117 @@ def add_band_evidence(payload: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Fit review - is the served forecast fit to use on this SKU?
+# --------------------------------------------------------------------------- #
+FIT_REVIEW = os.path.join(REPO, "reports", "diagnostics", "fit_review_common_2026-09-23.csv")
+
+# CAUSE GROUPS come from the CSV's own cause_group column, with every threshold
+# recorded in reports/diagnostics/README.md. Nothing is derived here: the earlier
+# volatility_v1 substitute and the "cause not on record" fallback are gone, and
+# "none of the above" is the CSV's own label for a SKU where no rule fires - a
+# real result, not a gap. The rules are not exclusive; cause_group is the FIRST
+# match, so a SKU can carry other cause_is_* flags too, and the SKU note lists them.
+CAUSE_ORDER = ["level shift", "spiky", "high volatility", "intermittent", "tiny scale",
+               "trend reversal", "none of the above"]
+CAUSE_FLAGS = {"cause_is_level_shift": "level shift", "cause_is_spiky": "spiky",
+               "cause_is_high_volatility": "high volatility", "cause_is_intermittent": "intermittent",
+               "cause_is_tiny_scale": "tiny scale", "cause_is_trend_reversal": "trend reversal"}
+CAUSE_THRESHOLDS = [
+    ("level shift", "mean(last 6) / mean(prior 12) outside 0.7-1.3; needs >=18 months"),
+    ("spiky", ">=1 month more than 3 x MAD from the SKU's median (MAD raw/unscaled)"),
+    ("high volatility", "CV(last 12) > cohort p75 = 0.4365 (measured over the 119 scored SKUs)"),
+    ("intermittent", "zero-or-missing share >= 0.30 or longest zero run >= 3 months"),
+    ("tiny scale", "median monthly units <= cohort lower quartile = 812.5 units (measured)"),
+    ("trend reversal", "sign(Theil-Sen slope, last 12) != sign(Theil-Sen slope, full history)"),
+]
+VERDICT_ORDER = ["clean", "borderline", "not fit", "no verdict (never scored)"]
+# The guardrail sentence every not-fit SKU carries, per Yuan 2026-09-23. The
+# "0 of 51" is his figure, quoted as given; it is not recomputed here.
+NO_BETTER_MODEL = ("No other model is known to fix this: 0 of 51 candidates passed. "
+                   "Treat it as a SKU to review, not a model to swap.")
+
+
+def load_fit_review(payload: dict) -> dict:
+    """reports/diagnostics/fit_review_common_2026-09-23.csv, merged per SKU.
+
+    Hard-fails if the file is missing: a viewer that silently drops the fit
+    verdicts would show every SKU as unlabelled and look like good news.
+
+    Nothing is recomputed from it - the verdict, its flags, both scorings and
+    MA3's are carried through as the CSV gives them. What IS checked: that the
+    CSV covers the cohort exactly, and that its mase_pipeline and
+    band_width_over_forecast_stored agree with what this build read from the
+    database. A disagreement means the CSV and the DB are describing different
+    runs, and main() prints it."""
+    import csv
+
+    if not os.path.isfile(FIT_REVIEW):
+        raise SystemExit(f"fit review missing: {FIT_REVIEW}\n"
+                         f"The Unfit view cannot be built without it and this build will not "
+                         f"produce a page that quietly omits the verdicts.")
+    with open(FIT_REVIEW, encoding="utf-8-sig", newline="") as fh:
+        rows = {int(r["product_key"]): r for r in csv.DictReader(fh)}
+
+    def num(v):
+        try:
+            return None if v in (None, "") else round(float(v), 4)
+        except ValueError:
+            return None
+
+    cohort = {s_["pk"] for s_ in payload["skus"]}
+    agree = {"n": 0, "mase": 0, "bw": 0}
+    counts = {"verdict": {}, "cause": {}, "cause_verdict": {}, "by_bin": {}}
+    for sku in payload["skus"]:
+        r = rows.get(sku["pk"])
+        if r is None:
+            sku.update(verdict="not in the fit review", cause="no verdict", assessable=None)
+            continue
+        scored = r["verdict"] in ("clean", "borderline", "not fit")
+        cause = r["cause_group"]
+        sku.update(
+            causes_all=[label for col, label in CAUSE_FLAGS.items() if r.get(col) == "1"],
+            cause_level_shift=num(r["cause_level_shift"]), cause_cv=num(r["cause_cv_last12"]),
+            cause_median_units=num(r["cause_median_units"]), cause_spikes=num(r["cause_n_spikes"]),
+            verdict=r["verdict"], cause=cause,
+            assessable=r["assessable"] == "yes", assessable_reason=r["assessable_reason"],
+            verdict_source=r["verdict_source"],
+            mase_common=num(r["mase_common"]), mase_pipeline=num(r["mase_pipeline"]),
+            ma3_mase_common=num(r["ma3_mase_common"]),
+            ma3_fails=r["ma3_also_fails_common"] == "1",
+            rlr_fit=num(r["recent_level_ratio"]),
+            bw_csv=num(r["band_width_over_forecast_stored"]),
+            flags=[k[5:].replace("_", " ") for k in
+                   ("flag_mase_not_fit", "flag_mase_borderline", "flag_recent_level", "flag_diverges_from_ma3")
+                   if r[k] == "1"],
+        )
+        counts["verdict"][r["verdict"]] = counts["verdict"].get(r["verdict"], 0) + 1
+        counts["cause"][cause] = counts["cause"].get(cause, 0) + 1
+        counts["cause_verdict"].setdefault(cause, {})
+        counts["cause_verdict"][cause][r["verdict"]] = counts["cause_verdict"][cause].get(r["verdict"], 0) + 1
+        counts["by_bin"].setdefault(sku["router_bin"], {})
+        counts["by_bin"][sku["router_bin"]][r["verdict"]] = counts["by_bin"][sku["router_bin"]].get(r["verdict"], 0) + 1
+        if scored:
+            agree["n"] += 1
+            if sku["mase"] is not None and sku["mase_pipeline"] is not None and abs(sku["mase"] - sku["mase_pipeline"]) <= 0.0011:
+                agree["mase"] += 1
+            if sku["bw"] is not None and sku["bw_csv"] is not None and abs(sku["bw"] - sku["bw_csv"]) <= 0.0011:
+                agree["bw"] += 1
+    return {
+        "file": os.path.relpath(FIT_REVIEW, REPO).replace("\\", "/"),
+        "rows": len(rows), "missing": sorted(cohort - set(rows)), "extra": sorted(set(rows) - cohort),
+        "agree": agree, "counts": counts,
+        "verdict_order": VERDICT_ORDER, "cause_order": CAUSE_ORDER, "no_better_model": NO_BETTER_MODEL,
+        "thresholds": CAUSE_THRESHOLDS,
+        "cause_note": ("Cause group is the CSV's own cause_group column; every threshold is recorded in "
+                       "reports/diagnostics/README.md. The rules are NOT exclusive - cause_group is the "
+                       "first match, and a SKU's other fired rules are listed on its own page. "
+                       "'none of the above' means no rule fired, which is a result, not a gap. "
+                       "A CAUSE IS NOT A VERDICT: the same causes fire on clean SKUs too, and every "
+                       "cause below carries its clean count next to its not-fit count."),
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Preview mode: "with 2021-22 placeholder" (what-if, never evidence)
 # --------------------------------------------------------------------------- #
 PREVIEW_FILES = ("router_preview_synth.csv", "series_synth.csv", "preview_summary.csv")
@@ -869,6 +980,7 @@ def main():
     t_band = time.perf_counter()
     payload["band"] = add_band_evidence(payload)
     t_band = time.perf_counter() - t_band
+    payload["fit"] = load_fit_review(payload)
     payload["etl"] = ETL_NODES
     payload["preview"] = assemble_preview(payload["skus"])
     payload["backup_options"] = load_backup_options(args.preview_src)
@@ -902,6 +1014,20 @@ def main():
     for meth, blk in b["by_model"].items():
         print(f"  {meth}: n={blk['n']} median coverage={blk['cov']} below={blk['below']} "
               f"median width/forecast={blk['bw']} | MA3 median coverage={blk['cov3']} below={blk['below3']}")
+    f = payload["fit"]
+    print(f"fit review: {f['file']} \u2014 {f['rows']} rows, "
+          f"missing from CSV {len(f['missing'])}, not in cohort {len(f['extra'])}; "
+          f"agrees with the DB read: mase_pipeline {f['agree']['mase']}/{f['agree']['n']}, "
+          f"band width/forecast {f['agree']['bw']}/{f['agree']['n']}")
+    print(f"  verdict={f['counts']['verdict']}")
+    print(f"  cause={f['counts']['cause']}")
+    for cs in f["cause_order"]:
+        cv = f["counts"]["cause_verdict"].get(cs)
+        if cv:
+            print(f"    {cs}: " + ", ".join(f"{k} {v}" for k, v in cv.items()))
+    for bn in ("short", "medium", "long", "insufficient"):
+        if bn in f["counts"]["by_bin"]:
+            print(f"  {bn}: {f['counts']['by_bin'][bn]}")
     pv = payload["preview"]
     pvc = {}
     for s in pv["skus"].values():
@@ -1097,6 +1223,15 @@ dl.kv dd{margin:0;font-family:var(--mono);word-break:break-word}
 .outmark{stroke:var(--bad);fill:none;stroke-width:1.8}
 .sw-corr{width:14px;height:10px;border-radius:2px;display:inline-block;opacity:.3}
 .sw-out{width:10px;height:10px;border-radius:50%;display:inline-block;border:2px solid var(--bad)}
+.sw-clip{width:14px;height:0;border-top:2px dotted var(--ink-2);display:inline-block}
+.clipnote{fill:var(--ink-2);font-size:10px}
+.bandregion{fill:var(--ink-3);font-size:10px;letter-spacing:.02em}
+.widenote{border-left:3px solid var(--bad);background:rgba(229,72,77,.09);color:#f1a3a6;padding:8px 12px;
+  border-radius:0 8px 8px 0;font-size:12px;margin:8px 0}
+.unfitnote{border-left:3px solid var(--flag-ink);background:var(--flag-bg);color:var(--flag-ink);padding:8px 12px;
+  border-radius:0 8px 8px 0;font-size:12px;margin:8px 0}
+.unfitnote b{color:#ffd98a}
+.v-clean{color:var(--ok)} .v-borderline{color:var(--warn)} .v-notfit{color:var(--bad);font-weight:600}
 .banddef dl.kv dt{min-width:118px}
 .lightbox{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--ink-2)}
 .lightbox span{display:inline-flex;gap:6px;align-items:center}
@@ -1152,6 +1287,8 @@ dl.kv dd{margin:0;font-family:var(--mono);word-break:break-word}
       <div class="ac" id="acF"></div>
       <div class="seg" id="binSeg"></div>
       <div class="seg" id="modelSeg"></div>
+      <div class="seg" id="verdictSeg" title="Fit verdict, from the fit review CSV"></div>
+      <div class="seg" id="causeSeg" title="Cause group, built only from signals already on record"></div>
       <div class="seg" id="viewSeg"></div>
       <span class="count" id="gcount"></span>
     </div>
@@ -1206,6 +1343,37 @@ const B = D.band;
 const pctv = (v, d=1) => v == null ? '\u2014' : (v * 100).toFixed(d) + '%';
 const LVL = B.level_nominal, LVLL = B.level_label;
 const hpoint = (s, i) => s.hpath ? s.hpath.find(p => p.i === i) : null;
+const F = D.fit;
+const VCLASS = {'clean':'v-clean', 'borderline':'v-borderline', 'not fit':'v-notfit'};
+const vcell = v => `<span class="${VCLASS[v] || 'muted'}">${esc(v || '\u2014')}</span>`;
+// A cause is not a verdict: the same rules fire on clean SKUs. Every place a
+// cause appears shows its clean count beside its not-fit count.
+const causeSplit = (rows, c) => ({
+  unfit: rows.filter(s => s.cause === c && s.verdict === 'not fit').length,
+  clean: rows.filter(s => s.cause === c && s.verdict === 'clean').length,
+  n: rows.filter(s => s.cause === c).length,
+});
+const causeTag = (rows, c) => { const k = causeSplit(rows, c); return `${c} ${k.unfit} not fit / ${k.clean} clean`; };
+const WIDE_BAND = 2;
+// A band wider than twice the forecast carries no usable information, whatever
+// the fit verdict says - 64861486 is clean and still 4.3x.
+const bandNote = s => s.bw != null && s.bw > WIDE_BAND
+  ? `<div class="widenote">Band width / forecast is <b>${fmt(s.bw)}</b> \u2014 band wider than 2\u00d7 the forecast `
+    + `\u2014 the interval is too wide to be informative here. Stored band ${fmt(s.lo, 0)}\u2013${fmt(s.hi, 0)} `
+    + `around a forecast of ${fmt(s.served, 0)}.</div>` : '';
+// Every not-fit SKU says why, in the SKU's own numbers, and says plainly that
+// swapping the model is not the answer (Yuan, 2026-09-23).
+const unfitNote = s => s.verdict !== 'not fit' ? '' :
+  `<div class="unfitnote"><b>Not fit to use on this SKU.</b> Cause group: <b>${esc(s.cause)}</b>`
+  + (s.cause === 'none of the above' ? ' (no cause rule fires on this SKU)' : '')
+  + (s.causes_all && s.causes_all.length > 1 ? ` (first match; also fired: ${esc(s.causes_all.filter(c => c !== s.cause).join(', '))})` : '')
+  + `. Recent level ratio (3 / 12 mo) <b>${fmt(s.rlr_fit != null ? s.rlr_fit : s.rlr)}</b>`
+  + `. MASE ${fmt(s.mase_common)} on the common window`
+  + (s.ma3_fails ? `, and <b>MA3 also fails on this SKU</b> (MA3 MASE ${fmt(s.ma3_mase_common)})` : '')
+  + `. ${esc(F.no_better_model)}`
+  + (s.flags && s.flags.length ? ` Verdict flags: ${esc(s.flags.join(', '))}.` : '')
+  + ` <span class="muted">${esc(s.cause)}: ${esc((F.thresholds.find(t => t[0] === s.cause) || [,'no rule fired'])[1])}`
+  + ` \u00b7 across the cohort ${causeTag(V.skus, s.cause)}.</span></div>`;
 function drawBandCard(){
   const a = B.all, rows = Object.entries(B.by_model);
   $('#bandCard').innerHTML = `<h2>The stored confidence band \u2014 what it is, and whether it holds</h2>`
@@ -1222,6 +1390,10 @@ function drawBandCard(){
           + `${B.agree.rmse}/${B.agree.n} RMSE, ${B.agree.months}/${B.agree.n} holdout-month counts match what the `
           + `pipeline stored` + (B.derived_rmse ? ` \u00b7 \u03c3 inverted from the stored band for ${B.derived_rmse} SKUs` : '')],
         ['coverage granularity', esc(B.granularity)],
+        ['fit review', `<b>${esc(F.file)}</b> \u2014 verdict, cause group and both scorings are carried through as `
+          + `the CSV gives them. ${esc(F.cause_note)}`],
+        ['cause thresholds', F.thresholds.map(([c, t]) => `<b>${esc(c)}</b>: ${esc(t)}`).join('<br>')
+          + `<br><span class="muted">recorded in reports/diagnostics/README.md</span>`],
       ])
     + (V.pv ? `<div class="pvnote">Preview mode carries no corridor: the preview file holds one forecast per SKU, not a `
       + `per-month path. Coverage columns read \u2014 here. Switch to <b>Real only</b> for them.</div>` : '')
@@ -1304,11 +1476,22 @@ const GEOM = {};
 function chart(s, W, H, mode){
   const P = V.periods.concat([fcMonth]), n = P.length, big = mode === 'big', spark = mode === 'spark';
   const corr = spark || !s.hpath ? [] : s.hpath.filter(p => p.i != null && p.lo != null);
-  const cand = s.monthly.concat(spark ? [s.served] : [s.served, s.ma3, s.hi, s.lo])
-    .concat(corr.flatMap(p => [p.hi, p.lo, p.v])).filter(v => v != null);
-  const ymax = Math.max(1, ...cand) * 1.08, ymin = Math.min(0, ...cand);
+  // The axis is capped at 1.5x the largest actual so a band several times the
+  // forecast cannot flatten the series into a line at the bottom. The cap never
+  // hides an actual or a point forecast - only band bounds are allowed to clip,
+  // and every clipped bound is drawn as a clipped edge with its true value.
+  const acts = s.monthly.filter(v => v != null);
+  const pts = [s.served, s.ma3, ...corr.map(p => p.v)].filter(v => v != null);
+  const bands = spark ? [] : [s.hi, s.lo, ...corr.flatMap(p => [p.hi, p.lo])].filter(v => v != null);
+  const natural = Math.max(1, ...acts, ...pts, ...bands) * 1.08;
+  const cap = Math.max((acts.length ? Math.max(...acts) : 0) * 1.5, Math.max(1, ...pts) * 1.08);
+  const ymax = spark ? natural : Math.min(natural, cap);
+  const ymin = Math.min(0, ...acts, ...pts);
+  const clipTop = [];
   const L = big ? 56 : spark ? 2 : 6, R = spark ? 5 : big ? 18 : 12, T = spark ? 3 : 8, B = spark ? 3 : big ? 26 : 16;
   const X = i => L + i * (W - L - R) / (n - 1), Y = v => T + (H - T - B) * (1 - (v - ymin) / (ymax - ymin));
+  const clip = v => { if (v > ymax){ clipTop.push(v); return ymax; } return v; };
+  const Yc = v => Y(clip(v));
   const id = mode + s.pk + V.mode;
   GEOM[id] = {L, R, W, n};
   const isPh = i => s.ph && i >= s.ph[0] && i <= s.ph[1];
@@ -1332,7 +1515,7 @@ function chart(s, W, H, mode){
   // one-step forecast, not a flat line around the final forecast. Computed at
   // build time (nothing stores a per-month band) - see D.band.corridor.
   if (corr.length){
-    const up = corr.map(p => `${X(p.i).toFixed(1)},${Y(p.hi).toFixed(1)}`);
+    const up = corr.map(p => `${X(p.i).toFixed(1)},${Yc(p.hi).toFixed(1)}`);
     const dn = corr.map(p => `${X(p.i).toFixed(1)},${Y(Math.max(ymin, p.lo)).toFixed(1)}`);
     if (corr.length > 1){
       g += `<polygon class="corr" points="${up.concat(dn.slice().reverse()).join(' ')}" fill="${COLOR[s.method]}" opacity=".17"/>`
@@ -1341,9 +1524,15 @@ function chart(s, W, H, mode){
         + `<polyline points="${corr.map(p => `${X(p.i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ')}" fill="none" stroke="${COLOR[s.method]}" stroke-width="1.6"/>`;
     } else {
       const p = corr[0], w = big ? 9 : 6;
-      g += `<rect x="${X(p.i) - w / 2}" y="${Y(p.hi)}" width="${w}" height="${Math.max(1, Y(Math.max(ymin, p.lo)) - Y(p.hi))}" rx="3" fill="${COLOR[s.method]}" opacity=".22"/>`
+      g += `<rect x="${X(p.i) - w / 2}" y="${Yc(p.hi)}" width="${w}" height="${Math.max(1, Y(Math.max(ymin, p.lo)) - Yc(p.hi))}" rx="3" fill="${COLOR[s.method]}" opacity=".22"/>`
         + `<circle cx="${X(p.i)}" cy="${Y(p.v)}" r="${big ? 3 : 2}" fill="${COLOR[s.method]}"/>`;
     }
+    // a clipped bound is a dotted edge at the cap, not a line pretending to be the top
+    corr.filter(p => p.hi > ymax).forEach(p => {
+      g += `<line x1="${X(p.i) - 6}" x2="${X(p.i) + 6}" y1="${Y(ymax)}" y2="${Y(ymax)}" stroke="${COLOR[s.method]}" stroke-width="2" stroke-dasharray="2 2"/>`
+        + `<path d="M${X(p.i) - 4},${Y(ymax) + 5} l4,-5 l4,5" fill="none" stroke="${COLOR[s.method]}" stroke-width="1.4"/>`
+        + `<title>${p.m}: band top ${fmt(p.hi, 0)}, above the axis cap</title>`;
+    });
     corr.filter(p => p.out).forEach(p => {
       const r = big ? 5 : 3.5;
       g += `<circle class="outmark" cx="${X(p.i)}" cy="${Y(p.a)}" r="${r}"><title>${p.m}: actual ${fmt(p.a, 1)} outside the band ${fmt(p.lo, 0)}\u2013${fmt(p.hi, 0)}</title></circle>`;
@@ -1370,11 +1559,27 @@ function chart(s, W, H, mode){
         : `<circle cx="${X(i)}" cy="${y0}" r="${r}" fill="var(--surface-1)" stroke="var(--ink-3)" stroke-width="1.5"><title>${P[i]}: no row</title></circle>`;
     }
   const fx = X(n - 1), c = COLOR[s.method];
-  if (!spark && s.lo != null && s.hi != null) g += `<rect x="${fx - 4}" y="${Y(s.hi)}" width="8" height="${Math.max(1, Y(Math.max(ymin, s.lo)) - Y(s.hi))}" rx="4" fill="${c}" opacity=".28"/>`;
+  if (!spark && s.lo != null && s.hi != null){
+    const top = Yc(s.hi);
+    g += `<rect x="${fx - 4}" y="${top}" width="8" height="${Math.max(1, Y(Math.max(ymin, s.lo)) - top)}" rx="4" fill="${c}" opacity=".28"/>`;
+    if (s.hi > ymax) g += `<line x1="${fx - 7}" x2="${fx + 7}" y1="${Y(ymax)}" y2="${Y(ymax)}" stroke="${c}" stroke-width="2.4" stroke-dasharray="2 2"/>`
+      + `<path d="M${fx - 5},${Y(ymax) + 6} l5,-6 l5,6" fill="none" stroke="${c}" stroke-width="1.6"/>`;
+  }
   const last = s.monthly[n - 2];
   if (s.served != null && last != null) g += `<line x1="${X(n - 2)}" y1="${Y(last)}" x2="${fx}" y2="${Y(s.served)}" stroke="${c}" stroke-width="1.5" stroke-dasharray="3 3"/>`;
   if (!spark && s.ma3 != null && s.method !== 'ma3') g += `<circle cx="${fx}" cy="${Y(s.ma3)}" r="${big ? 5.5 : 4}" fill="none" stroke="var(--m-ma3)" stroke-width="2"/>`;
   if (s.served != null) g += `<circle cx="${fx}" cy="${Y(s.served)}" r="${big ? 6 : spark ? 2.8 : 4}" fill="${c}" stroke="var(--surface-1)" stroke-width="${spark ? 1 : 2}"/>`;
+  // the band region says what it is on the chart itself, not only in the legend
+  if (big && (corr.length || s.lo != null)){
+    const x0 = corr.length ? X(corr[0].i - .5) : X(n - 1.5);
+    g += `<line x1="${x0}" x2="${X(n - 1) + R - 2}" y1="${T + 30}" y2="${T + 30}" stroke="${c}" stroke-width="1" opacity=".45"/>`
+      + `<text class="bandregion" x="${x0 + 4}" y="${T + 26}" style="fill:${c};opacity:.95">band over holdout + forecast month</text>`;
+  }
+  if (!spark && clipTop.length){
+    const top = Math.max(...clipTop);
+    g += `<line x1="${L}" x2="${W - R}" y1="${Y(ymax)}" y2="${Y(ymax)}" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="2 3" opacity=".7"/>`
+      + (big ? `<text class="clipnote" x="${W - R - 2}" y="${Y(ymax) - 5}" text-anchor="end">axis capped at 1.5\u00d7 max actual \u00b7 band reaches ${fmt(top, 0)}</text>` : '');
+  }
   if (!spark) g += `<line class="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/><rect x="${L}" y="0" width="${W - L}" height="${H}" fill="transparent"/>`;
   return g + '</svg>';
 }
@@ -1422,6 +1627,7 @@ const LEGEND = s => `<div class="legend"><span><i class="sw-line" style="backgro
   + (s.lo != null ? `<span><i class="sw-band" style="background:${COLOR[s.method]}"></i>Band (${esc(fcMonth)}, stored)</span>` : '')
   + (s.hpath && s.hpath.length ? `<span><i class="sw-corr" style="background:${COLOR[s.method]}"></i>Band over the holdout (computed)</span>`
     + `<span><i class="sw-out"></i>Actual outside the band</span>` : '')
+  + `<span><i class="sw-clip"></i>Axis capped at 1.5\u00d7 max actual; a clipped band edge is dotted, true value labelled</span>`
   + (s.holdout ? `<span><i class="sw-hold"></i>Holdout months</span>` : '') + `</div>`;
 function statTiles(s){
   const p = PROV(s);
@@ -1448,7 +1654,7 @@ function detailHTML(s, W){
   return `<div class="dhead"><div class="code">${esc(s.code)}</div><div class="nm">${esc(s.name)}</div>`
     + `<div class="tags">${modelPill(s.method)}<span class="pill">router: ${esc(s.router_bin)}</span>${V.pv ? `<span class="pill">real bin: ${esc(s.real_bin)}</span>` : ''}<span class="pill">combined_v1: ${esc(s.combined)}</span></div></div>`
     + skuNotes(s)
-    + `<div class="chart">${chart(s, W || 420, 230, 'big')}</div>` + LEGEND(s) + statTiles(s)
+    + `<div class="chart">${chart(s, W || 420, 230, 'big')}</div>` + LEGEND(s) + bandNote(s) + unfitNote(s) + statTiles(s)
     + `<details open><summary>Routing</summary>` + kv([
       ['status', esc(s.status)],
       ['router bin', esc(s.router_bin) + (s.sales_months != null ? ` (${s.sales_months} sales months${V.pv ? ', incl. placeholder' : ''})` : '')],
@@ -1512,6 +1718,16 @@ const C = {
     r: s => PROV(s) ? `<td class="num muted">${NT}</td>`
       : `<td class="num${s.ma3_cov != null && s.ma3_cov < LVL ? ' flag' : ''}">${pctv(s.ma3_cov)}</td>`},
   ma3_bw: {k:'ma3_bw', l:'MA3 band width / forecast', num:1, r: s => PROV(s) ? `<td class="num muted">${NT}</td>` : `<td class="num">${fmt(s.ma3_bw)}</td>`},
+  verdict: {k:'verdict', l:'Fit verdict', tip:'From ' + D.fit.file + ', carried through as given - not recomputed here',
+    v: s => D.fit.verdict_order.indexOf(s.verdict), r: s => `<td>${vcell(s.verdict)}</td>`},
+  cause: {k:'cause', l:'Cause group', tip:D.fit.cause_note,
+    v: s => D.fit.cause_order.indexOf(s.cause), r: s => `<td class="${s.cause === 'none of the above' ? 'muted' : ''}">${esc(s.cause)}</td>`},
+  mase_common: {k:'mase_common', l:'MASE (common window)', num:1, tip:'The fit review\u2019s common-window scoring, the one the verdict is made on',
+    r: s => `<td class="num${s.mase_common >= 1 ? ' flag' : ''}">${fmt(s.mase_common)}</td>`},
+  mase_pipeline: {k:'mase_pipeline', l:'MASE (pipeline 20%)', num:1, tip:'The stored pipeline scoring, for comparison with the common window',
+    r: s => `<td class="num${s.mase_pipeline >= 1 ? ' flag' : ''}">${fmt(s.mase_pipeline)}</td>`},
+  assessable: {k:'assessable', l:'Assessable', tip:'Whether the SKU has enough history to be judged at all',
+    r: s => `<td class="${s.assessable ? '' : 'muted'}">${s.assessable == null ? '\u2014' : s.assessable ? 'yes' : 'no'}</td>`},
 };
 
 // ---------------- tabs ----------------
@@ -1638,7 +1854,7 @@ function autocomplete(host, placeholder, onPick){
 }
 
 // ================= FORECASTS =================
-let gBin = 'all', gModel = 'all', gView = 'table';
+let gBin = 'all', gModel = 'all', gView = 'table', gVerdict = 'all', gCause = 'all';
 const fState = {k:'gap', d:-1};
 let fSel = null, fOrder = [];
 function seg(el, opts, get, set, noRedraw){
@@ -1647,12 +1863,20 @@ function seg(el, opts, get, set, noRedraw){
 }
 function initSegs(){
   seg($('#binSeg'), [['all', 'All bins'], ...D.router_order.map(b => [b, `${b} · ${V.counts.router[b]}`])], () => gBin, v => gBin = v);
+  const vn = v => V.skus.filter(s => s.verdict === v).length;
+  seg($('#verdictSeg'), [['all', 'All'], ...F.verdict_order.filter(vn).map(v => [v, `${v} · ${vn(v)}`])], () => gVerdict, v => gVerdict = v);
+  const cn = c => V.skus.filter(s => s.cause === c).length;
+  seg($('#causeSeg'), [['all', 'All causes'], ...F.cause_order.filter(cn).map(c => {
+    const k = causeSplit(V.skus, c);
+    return [c, `${c} · ${k.n} (${k.unfit} not fit / ${k.clean} clean)`];
+  })], () => gCause, v => gCause = v);
   seg($('#modelSeg'), [['all', 'All models'], ...MODEL_KEYS.map(m => [m, mlabel(m), COLOR[m]])], () => gModel, v => gModel = v);
   seg($('#viewSeg'), [['table', 'Table view'], ['grid', 'Grid view']], () => gView, v => gView = v);
 }
 const acF = autocomplete($('#acF'), 'Find a SKU by code or product…', pk => { fSel = pk; drawForecasts(); });
 const F_COLS = () => [C.code, C.name, C.method, C.spark, C.served, C.ma3, C.gap, ...(V.pv ? [C.change, C.ph] : []),
-  C.mase, C.ma3_mase, C.wape, ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw]), C.rlr];
+  ...(V.pv ? [] : [C.verdict, C.cause]), C.mase, C.mase_common, C.mase_pipeline, C.ma3_mase, C.wape,
+  ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw, C.assessable]), C.rlr];
 function drawFocus(){
   const s = V.byPk.get(fSel), i = fOrder.findIndex(x => x.pk === fSel);
   if (!s){ $('#focus').innerHTML = '<div class="empty">Select a SKU.</div>'; return; }
@@ -1661,7 +1885,7 @@ function drawFocus(){
     + `<div class="focusnav"><span class="muted">${i >= 0 ? `${i + 1} of ${fOrder.length} in filter` : 'outside the current filter'}</span>`
     + `<button class="btn" id="fPrev" ${i <= 0 ? 'disabled' : ''}>← Prev</button><button class="btn" id="fNext" ${i < 0 || i >= fOrder.length - 1 ? 'disabled' : ''}>Next →</button></div></div>`
     + skuNotes(s)
-    + `<div class="focus"><div><div class="chart">${chart(s, 1100, 300, 'big')}</div>${LEGEND(s)}</div>`
+    + `<div class="focus"><div><div class="chart">${chart(s, 1100, 300, 'big')}</div>${LEGEND(s)}${bandNote(s)}${unfitNote(s)}</div>`
     + `<div class="backupbox"><b>Backup options${V.pv ? ` · preview bin: ${esc(s.router_bin)}` : ''}</b><div class="bo">${backupOptions(s)}</div><div style="margin-top:6px">Live fallback today: MA3. MA3 backup: ${esc(s.backup)}.</div></div></div>`
     + statTiles(s);
   if (i > 0) $('#fPrev').onclick = () => { fSel = fOrder[i - 1].pk; drawForecasts(); };
@@ -1669,7 +1893,8 @@ function drawFocus(){
 }
 function drawForecasts(){
   if (fSel == null) fSel = (sortRows(V.skus.filter(s => s.gap != null), absGap, -1)[0] || V.skus[0]).pk;
-  const rows = V.skus.filter(s => (gBin === 'all' || s.router_bin === gBin) && (gModel === 'all' || s.method === gModel));
+  const rows = V.skus.filter(s => (gBin === 'all' || s.router_bin === gBin) && (gModel === 'all' || s.method === gModel)
+    && (gVerdict === 'all' || s.verdict === gVerdict) && (gCause === 'all' || s.cause === gCause));
   $('#gcount').textContent = `${rows.length} of ${V.skus.length} SKUs`;
   $('#fTableCard').hidden = gView !== 'table'; $('#grid').hidden = gView !== 'grid';
   const onRow = pk => { fSel = pk; drawForecasts(); };
@@ -1713,6 +1938,17 @@ function etlNode(id, row, col, lane){
   return {id, row, col, lane, etl:true, title:e.title, sub:e.sub, source:e.source, io:e.io,
           mline:e.mline, checks:e.checks, tag:'reports/', rows: () => e.rows, has: () => true, cols};
 }
+const vcount = rows => {
+  const c = {};
+  F.verdict_order.forEach(v => c[v] = rows.filter(s => s.verdict === v).length);
+  return c;
+};
+const causeLine = rows => {
+  const fired = F.cause_order.filter(c => rows.some(s => s.cause === c && s.verdict === 'not fit'));
+  if (!fired.length) return 'none';
+  return fired.map(c => causeTag(rows, c)).join('; ')
+    + ' \u2014 the clean counts are there because the same cause fires on SKUs the review passed.';
+};
 function buildPN(){
   const E = V.expected, S = V.skus, scored = S.filter(s => s.status === 'ok');
   const rowsOut = S.reduce((a, s) => a + s.view_rows, 0);
@@ -1773,21 +2009,27 @@ function buildPN(){
       const blk = B.by_model[m];
       return {id:'model:' + m, row:1, col:3, mrow:i, lane:'out', model:m, title:mlabel(m), sub:mnote(m),
         source:'analytics/forecasting/router.py LIVE_MODEL (DEC-26); coverage computed by this build (D.band)',
-        mline: m === 'provisional' ? null
-          : `MASE≥1 ${hi.length}/${sc.length} · cover ${blk ? pctv(blk.cov, 0) : '—'}`,
+        mline: (() => { const v = vcount(mine); return m === 'provisional' ? null
+          : `${v['not fit']} not fit / ${v.borderline} borderline / ${v.clean} clean`; })(),
         io:[`in ${V.counts.router[bin]} (${bin})`, `out ${mine.length}`],
         checks:[{ok:mine.length === E.model[m], text:`${mine.length} SKUs (expected ${E.model[m]}${src ? ' ' + src : ''})`},
-          ...(m === 'provisional' ? [{ok:null, text:'No holdout, no band, no coverage: under 3 sales months there is nothing to score.'}]
-            : [{warn:hi.length > 0, text:maseLine(mine)},
+          ...(m === 'provisional' ? [{ok:null, text:`No holdout, no band, no coverage, and no fit verdict: under 3 sales months there is nothing to score. All ${mine.length} read "${F.verdict_order[3]}".`}]
+            : [(() => { const v = vcount(mine); return {warn:v['not fit'] > 0,
+                 text:`Fit review on this bin: ${v['not fit']} not fit / ${v.borderline} borderline / ${v.clean} clean `
+                   + `(${bin} bin, ${mine.length} SKUs). Cause groups among the not-fit: ${causeLine(mine)}. `
+                   + `The table below lists them - sort or filter on Fit verdict. ${F.no_better_model}`}; })(),
+               {ok:null, text:F.cause_note},
+               {warn:hi.length > 0, text:maseLine(mine)},
                ...(blk ? [{warn:blk.below > 0, text:`Band coverage on this cohort: median ${pctv(blk.cov)}, `
                    + `${blk.below} of ${blk.scored} below ${LVLL}, median band width / forecast ${fmt(blk.bw)}. `
                    + `MA3 on the same months (computed, no MA3 band is stored): median ${pctv(blk.cov3)}, ${blk.below3} below.`},
                   {ok:null, text:B.granularity}]
                  : [{ok:null, text:'Coverage is not available in preview mode.'}])]),
           ...(V.pv && m === 'xgb_ma3_avg' ? [{ok:null, text:`${LONG_NOTE} ${mine.filter(s => s.change != null && Math.abs(s.change) > 0).length} of ${mine.length} changed.`}] : [])],
-        rows:() => mine, has:s => s.method === m,
-        cols:[C.code, C.name, C.served, ...(V.pv ? [C.change] : []), C.ma3, C.gap, C.mase, C.ma3_mase, C.wape,
-          ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw])]};
+        rows:() => mine, has:s => s.method === m, sortDefault:V.pv ? null : {k:'verdict', d:-1},
+        cols:[C.code, C.name, ...(V.pv ? [] : [C.verdict, C.cause, C.assessable]), C.served,
+          ...(V.pv ? [C.change] : []), C.ma3, C.gap, C.mase, ...(V.pv ? [] : [C.mase_common, C.mase_pipeline]),
+          C.ma3_mase, C.wape, ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw])]};
     }),
     {id:'holdout', row:1, col:4, lane:'out', title:'Holdout evaluation', sub:V.pv ? 'as given in the preview file' : 'rolling one-step, served model',
      source:'DEC-25 (ARCHITECTURE.md:95); metrics read live from model_params.holdout_metrics_served, coverage computed by this build',
@@ -1795,6 +2037,9 @@ function buildPN(){
      checks:[{ok:scored.length === E.router.short + E.router.medium + E.router.long, text:`${scored.length} routed SKUs (expected ${E.router.short + E.router.medium + E.router.long} = short + medium + long)`},
        {ok:scored.every(s => s.mase != null), text:`${scored.filter(s => s.mase == null).length} routed SKUs without a MASE`},
        {warn:maseHigh(scored).length > 0, text:maseLine(scored)},
+       (() => { const v = vcount(scored); return {warn:v['not fit'] > 0,
+          text:`Fit review across all scored SKUs: ${v['not fit']} not fit / ${v.borderline} borderline / `
+            + `${v.clean} clean. Cause groups among the not-fit: ${causeLine(scored)}.`}; })(),
        ...(V.pv ? [{ok:null, text:'Coverage is not available in preview mode — the preview file holds no per-month path.'}]
          : [{ok:B.agree.mase === B.agree.n && B.agree.wape === B.agree.n && B.agree.rmse === B.agree.n && B.agree.months === B.agree.n,
              text:`Recomputed holdout path agrees with what was stored: MASE ${B.agree.mase}/${B.agree.n}, WAPE ${B.agree.wape}/${B.agree.n}, `
@@ -1804,7 +2049,7 @@ function buildPN(){
             {ok:null, text:B.granularity}])],
      rows:() => scored, has:s => s.status === 'ok',
      cols:[C.code, C.name, C.method, {k:'holdout_months', l:'Holdout months', num:1, r:s => `<td class="num">${fmt(s.holdout_months, 0)}</td>`}, C.mase,
-       C.ma3_mase, C.wape, C.ma3_wape, ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw])]},
+       C.ma3_mase, C.wape, C.ma3_wape, ...(V.pv ? [] : [C.verdict, C.cause, C.mase_common, C.mase_pipeline, C.cov, C.bw, C.ma3_cov, C.ma3_bw])]},
     {id:'fr', row:1, col:5, lane:'db', title:V.pv ? 'Preview forecasts' : 'forecast_result', sub:V.pv ? 'router_preview_synth.csv (not Forecast_Result)' : `forecast_date ${D.meta.forecast_date}`,
      source:V.pv ? 'reports/preview/router_preview_synth.csv' : 'read live by this build; band definition DEC-25 + scripts/run_baseline_forecast.py:821-840',
      io:[`in ${S.length}`, `out ${S.filter(s => s.status).length} rows`],
@@ -1963,7 +2208,7 @@ function drawPipeline(){
 }
 function drawPanel(){
   const n = PN.find(x => x.id === pSel);
-  const st = pStates[n.id] || (pStates[n.id] = {k:n.etl ? 'c0' : 'code', d:1});
+  const st = pStates[n.id] || (pStates[n.id] = n.sortDefault ? {...n.sortDefault} : {k:n.etl ? 'c0' : 'code', d:1});
   const cols = typeof n.cols === 'function' ? n.cols() : n.cols;
   if (!cols.find(c => c.k === st.k)) { st.k = cols[0].k; st.d = 1; }
   $('#pPanel').innerHTML = `<div class="pnode"><i class="lamp" style="background:${LAMP[n.light]}"></i><h3>${esc(n.title)}</h3>`
