@@ -5,11 +5,10 @@ import DateFilter from './DateFilter';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
-  DemandVolatilityWidget, formatCompactPesos,
+  formatCompactPesos,
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
-import { getSegmentSummary } from '../api/segment';
-import { DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
+import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
 import { staleCoverageNotice } from '../dataCoverage';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
@@ -64,7 +63,7 @@ const periodLabel = (period) => {
 const PRINCIPAL_NAMES = { unilever: 'Unilever', delmonte: 'Del Monte' };
 const coverageNote = (coverage, pagePrincipal) => {
   if (!coverage || coverage.length === 0) return null;
-  if (pagePrincipal !== DEFAULT_PRINCIPAL) return null;
+  if (pagePrincipal !== ALL_PRINCIPALS) return null;
   if (coverage.length > 1) return null;
   return `${PRINCIPAL_NAMES[coverage[0]] || coverage[0]} only`;
 };
@@ -84,12 +83,14 @@ const safetyStockMetricType = (rate) => {
 };
 
 // One continuous page: no numbered sections, no per-section explanation.
-// Each widget is tagged with the kind of analytics it answers, so the four
-// types are demonstrable at a glance without a paragraph above each one.
+// Each widget is tagged with the kind of analytics it answers, so the three
+// types in the analytical mapping (reports/PROJECT_DIAGNOSIS_2026-09-21.md
+// §3) are demonstrable at a glance without a paragraph above each one.
 //   Descriptive — what happened
-//   Diagnostic  — why it happened
 //   Predictive  — what happens next
 //   Prescriptive— what to do about it
+// The mapping has no diagnostic questions, so there is no Diagnostic card
+// (removed 2026-09-24 together with GET /segment/summary).
 // `realOnly` (preview mode only) tags a predictive or prescriptive widget
 // that preview deliberately leaves on real data (backend/data_mode.py), so
 // the page says which cards the placeholder months reach and which not.
@@ -98,7 +99,7 @@ const Slot = ({ kind, realOnly = false, children }) => (
     <span className="dash-kind-row">
       <span className="dash-kind">{kind}</span>
       {realOnly && (
-        <span className="dash-real-only" title="Preview adds placeholder months to descriptive and diagnostic views only. This card reads real data.">
+        <span className="dash-real-only" title="Preview adds placeholder months to the descriptive views only. This card reads real data.">
           Real data only
         </span>
       )}
@@ -122,9 +123,9 @@ const DashboardSkeleton = () => (
         </div>
       ))}
     </div>
-    {['dash-row-wide-narrow', 'dash-row-narrow-wide', 'dash-row-even', 'dash-row-single'].map((rowClass) => (
+    {['dash-row-trend', 'dash-row-abc', 'dash-row-even', 'dash-row-single'].map((rowClass) => (
       <div className={`dash-row ${rowClass}`} key={rowClass}>
-        {(rowClass === 'dash-row-single' ? [0] : [0, 1]).map((k) => (
+        {(rowClass === 'dash-row-single' || rowClass === 'dash-row-trend' ? [0] : [0, 1]).map((k) => (
           <div className="chart-widget skeleton-card" key={k}>
             <div className="skeleton-line skeleton-line-title" />
             <div className="skeleton-chart-body" />
@@ -147,9 +148,7 @@ const Dashboard = () => {
   // untouched, so the request was never issued and the dashboard kept
   // showing the previous principal's numbers. Nothing remounted it
   // either — DashboardLayout's <Outlet key={refreshKey}> only changes on
-  // the Topbar's Refresh. The segmentation panel below refetches on
-  // [principal] with no such guard, so the page rendered one principal's
-  // diagnostic beside another principal's KPIs.
+  // the Topbar's Refresh.
   const requestKey = `${period ?? ''}|${startPeriod ?? ''}|${principal ?? ''}`;
 
   // `loaded` remembers WHICH range its data belongs to. When the range
@@ -164,20 +163,6 @@ const Dashboard = () => {
   const [error, setError] = useState(null); // { key, message }
   const loadedKey = loaded?.key;
 
-  // Segmentation summary (the diagnostic panel) is its own request: it is
-  // cohort-scoped, not range-scoped, so it must NOT refetch when the date
-  // picker moves — only when the principal does. A failure here leaves the
-  // panel in its honest "no segmentation data" state and never blocks the
-  // rest of the dashboard.
-  const [segmentSummary, setSegmentSummary] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    getSegmentSummary({ principal })
-      .then((res) => { if (!cancelled) setSegmentSummary(res); })
-      .catch(() => { if (!cancelled) setSegmentSummary(null); });
-    return () => { cancelled = true; };
-  }, [principal]);
-
   // The portfolio forecast card has its OWN principal filter, independent
   // of the Topbar's page-wide one — switching it re-scopes that card only.
   // When the two match, the card reads the page's own payload; otherwise
@@ -186,8 +171,8 @@ const Dashboard = () => {
   // refetches a scope already loaded this session.
   //
   // Deliberately not remembered (no localStorage, unlike the Topbar's
-  // filter): every visit to the dashboard starts this card on All
-  // principals, and the card's Reset button returns it there.
+  // filter): every visit to the dashboard starts this card on the default
+  // scope, Unilever (principals.js), and its Reset button returns it there.
   const pagePrincipal = principal ?? DEFAULT_PRINCIPAL;
   const [forecastPrincipal, setForecastPrincipal] = useState(DEFAULT_PRINCIPAL);
   const forecastKey = `${period ?? ''}|${startPeriod ?? ''}|${forecastPrincipal}`;
@@ -422,31 +407,10 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* The LP's own freshness. q_i and rop_i are solved against the
-              forecasts of the day the LP ran; when the forecasts are later
-              rewritten (they were, on 2026-09-21, while the LP last ran
-              2026-08-24) those two are built on numbers the table no longer
-              holds. Safety stock is unaffected — it comes from demand
-              history, not from a model. Stated on the page rather than
-              left for someone to discover in a report. */}
-          {lp.is_stale && (
-            <div className="dash-stale-note" role="status">
-              <AlertTriangle size={14} aria-hidden="true" />
-              <span>
-                <strong>
-                  {lp.stale_row_count < lp.row_count ? 'Some reorder quantities' : 'Reorder quantities'}
-                  {' '}are from an older LP run.
-                </strong>{' '}
-                {lp.reason}{' '}
-                {lp.superseded_pending_count > 0 && (
-                  <>
-                    {lp.superseded_pending_count.toLocaleString()} undecided rows from earlier cycles
-                    are not counted here.
-                  </>
-                )}
-              </span>
-            </div>
-          )}
+          {/* The LP freshness notice ("Reorder quantities are from an older
+              LP run") was taken off the page 2026-09-24 at Audrey's request.
+              GET /dashboard still reports lp.is_stale and lp.reason, so it
+              can return without backend work. */}
 
           {/* Hero strip — the four figures that answer "what is happening
               right now": money in, money parked, service risk, and work
@@ -480,20 +444,19 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* DESCRIPTIVE — what happened */}
-          <div className="dash-row dash-row-wide-narrow">
+          {/* DESCRIPTIVE — what happened: the sales trend across the full
+              row, then the ABC mix beside each tier's warehouse status. */}
+          <div className="dash-row dash-row-trend">
             <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} /></Slot>
+          </div>
+
+          <div className="dash-row dash-row-abc">
             <Slot kind="Descriptive">
               <ABCDonutWidget data={abcMix} revenue={data.abc_revenue} note={placeholderNote(data.abc_revenue?.period)} />
             </Slot>
-          </div>
-
-          {/* DESCRIPTIVE + DIAGNOSTIC — the state, then why it looks that way */}
-          <div className="dash-row dash-row-narrow-wide">
             <Slot kind="Descriptive">
               <CategoryStockBarWidget data={tierStock} note={placeholderNote(data.abc_revenue?.period)} />
             </Slot>
-            <Slot kind="Diagnostic"><DemandVolatilityWidget summary={segmentSummary} /></Slot>
           </div>
 
           {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}

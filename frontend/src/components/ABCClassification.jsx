@@ -280,7 +280,7 @@ const ABCClassification = () => {
 
   // GET /abc has no brand field; this was hardcoded 'Unilever' (the
   // principal) on every row. Real brand comes from the product master.
-  const brandLookup = useBrandLookup();
+  const brandLookup = useBrandLookup(principal);
 
   // Map API shape -> the row shape the rest of this page renders.
   const sourceData = useMemo(

@@ -20,7 +20,7 @@ import { getForecast } from '../api/forecast';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { describeServedModel, describeFallbackReason } from '../utils/forecastModel';
 import DateFilter from './DateFilter';
-import SkuDiagnosticsPanel from './SkuDiagnosticsPanel';
+import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
 import { isPreviewMode } from '../dataMode';
 import './SKUForecast.css';
@@ -269,7 +269,7 @@ const SKUForecast = () => {
   // GET /abc has no brand field; this used to print 'Unilever' (the
   // principal) as every SKU's brand. Real brand comes from the product
   // master, same lookup ABC Classification and Reorder Recs use.
-  const brandLookup = useBrandLookup();
+  const brandLookup = useBrandLookup(principal);
 
   // Map ABC classification rows -> the SKU-picker shape this page renders.
   const sourceSKUs = useMemo(
@@ -289,7 +289,7 @@ const SKUForecast = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Selected SKU. The page opens with NOTHING selected: no chart, no
-  // diagnostics, just the prompt to pick one. It used to auto-select the
+  // demand pattern, just the prompt to pick one. It used to auto-select the
   // top Category A SKU by revenue, which meant the first thing a user saw
   // was a forecast for a product they hadn't asked about — easy to read as
   // "this is my data" when it was only a placeholder.
@@ -842,7 +842,7 @@ const SKUForecast = () => {
             {realFloor && (
               <p className="chart-placeholder-note">
                 Preview is on, but forecasts are made from real data only, so this chart starts no earlier than
-                Jan {FIRST_DATA_YEAR}. The &ldquo;Why this SKU behaves this way&rdquo; panel below does include the
+                Jan {FIRST_DATA_YEAR}. The &ldquo;Demand pattern&rdquo; panel below does include the
                 2021–22 placeholder months.
               </p>
             )}
@@ -1155,15 +1155,15 @@ const SKUForecast = () => {
               </div>
             </div>
 
-            {/* Why this SKU behaves this way — the Phase-2 diagnostic layer,
-                placed between the identity card and the chart so it reads
-                as part of the SKU's story, not a footnote under the graph.
+            {/* Demand pattern (trend and variability, D4), placed between
+                the identity card and the chart so it reads as part of the
+                SKU's story, not a footnote under the graph.
                 Keyed on the SKU for the same reason the chart below is:
                 the remount replays the card's entrance, so switching
                 products visibly rebuilds the explanation instead of
                 silently swapping the words inside a static box. */}
-            <SkuDiagnosticsPanel
-              key={`diag-${selectedSKU.code}`}
+            <SkuDemandPatternPanel
+              key={`pattern-${selectedSKU.code}`}
               skuId={selectedSKU.code}
               principal={principal}
             />

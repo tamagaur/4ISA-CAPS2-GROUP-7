@@ -255,8 +255,8 @@
   }
 }
 
-/* Phase-2 diagnostics block inside the modal (SkuDiagnosticsPanel, compact). */
-.reorder-diag-section {
+/* Demand-pattern block inside the modal (SkuDemandPatternPanel, compact). */
+.reorder-pattern-section {
   margin-bottom: 1.5rem;
 }
 

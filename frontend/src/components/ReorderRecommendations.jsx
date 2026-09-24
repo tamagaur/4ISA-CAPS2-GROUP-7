@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown, ChevronRight, CheckCheck,
-  AlertTriangle,
 } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
@@ -16,9 +15,6 @@ import { formatUnits, exactUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
 // The cycle selector reuses DateFilter's control styles without the component.
 import './DateFilter.css';
-// .dash-stale-note — the LP freshness notice, defined once with the
-// Dashboard's styles and reused here so both pages warn identically.
-import './Dashboard.css';
 import './ReorderRecommendations.css';
 
 // Helper to format SKU to 5 digits (SKU-#####)
@@ -104,7 +100,6 @@ const ReorderRecommendations = () => {
         setMeta({
           cycleDate: res.planning_cycle_date || null,
           supersededCount: res.superseded_count || 0,
-          freshness: res.freshness || null,
           // Preview with the what-if LP (backend/data_mode.py): these rows
           // were never saved, so there is nothing to accept or dismiss.
           whatIf: Boolean(res.data_mode?.outputs),
@@ -127,7 +122,7 @@ const ReorderRecommendations = () => {
   // looked up at render time rather than mapped into `data` below: `data`
   // resets localData, so the lookup arriving late would wipe any
   // accept/dismiss state already applied to the rows.
-  const brandLookup = useBrandLookup();
+  const brandLookup = useBrandLookup(principal);
 
   // Map API shape -> the row shape the rest of this page renders. actionStatus/
   // loadingAction are local-only UI state layered on top of each real row.
@@ -704,19 +699,8 @@ const ReorderRecommendations = () => {
               </>
             )}
           </p>
-          {/* Same freshness notice as the Dashboard's, for the page where
-              the affected numbers (q_i, rop_i) are actually acted on. */}
-          {meta?.freshness?.is_stale && (
-            <div className="dash-stale-note" role="status">
-              <AlertTriangle size={14} aria-hidden="true" />
-              <span>
-                <strong>
-                  {meta.freshness.stale_row_count < meta.freshness.row_count ? 'Some of these quantities are' : 'These quantities are'}
-                  {' '}from an older LP run.
-                </strong> {meta.freshness.reason}
-              </span>
-            </div>
-          )}
+          {/* LP freshness notice removed 2026-09-24 with the Dashboard's
+              (see Dashboard.jsx); GET /recommendations still returns it. */}
         </div>
 
         {/* Tab Navigation */}

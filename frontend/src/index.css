@@ -339,7 +339,19 @@ table td.table-center {
 .table-pagination-controls {
   display: flex;
   align-items: center;
+  /* Wraps instead of running off a phone screen: the full button row is
+     ~350px, wider than a 375px phone once the bar's padding is taken. */
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.5rem;
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .table-pagination-row {
+    justify-content: center;
+    padding: 0.6rem 0.75rem;
+  }
 }
 
 .table-pagination-btn {

@@ -1,15 +1,20 @@
 """
 backend.routers.segment — GET /segment?sku=<sku_code>
 
-The Phase-2 diagnostic layer (reports/BINNING_ROUND1_2026-09.md, migration
-0018) is the only "why does this SKU behave this way" content in the
-schema: sku_traits holds the measured facts (history length, Mann-Kendall
+A SKU's demand pattern, its trend and variability (question D4 of the
+analytical mapping, reports/PROJECT_DIAGNOSIS_2026-09-21.md §3), from the
+Phase-2 segmentation layer (reports/BINNING_ROUND1_2026-09.md, migration
+0018): sku_traits holds the measured facts (history length, Mann-Kendall
 trend, coefficient of variation, stability group, restart flag) and
 sku_segment holds the bin each scheme put the SKU in, with a human-
 readable bin_reason. Both were fully populated (132 rows each) but had no
 endpoint, so nothing in the app could show them. This reads them for one
 SKU at a time — the SKU Forecast page and the Reorder detail modal each
 show one product, so a per-SKU read is the natural grain.
+
+GET /segment/summary, the portfolio rollup behind the dashboard's
+Diagnostic card, was removed 2026-09-24 with that card: the analytical
+mapping has descriptive, predictive and prescriptive questions only.
 
 Resolution: sku_code -> Product_Dimension, scoped by ?principal= exactly as
 GET /forecast/{sku_id} does (sku_code is not unique across principals).
@@ -62,16 +67,12 @@ from backend.data_mode import (
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import (
     PrincipalQuery,
-    normalize_principal,
     principal_clause,
 )
 from backend.schemas.segment import (
     SegmentResponse,
-    SegmentSummary,
     SkuSegmentRow,
     SkuTraits,
-    TrendBucket,
-    VolatilityBucket,
 )
 
 router = APIRouter(prefix="/segment", tags=["segment"])
@@ -111,7 +112,7 @@ def _preview_payload(response, db: Session, window: dict, cohort_period: str, **
 
 @router.get("", response_model=SegmentResponse)
 def get_segment(
-    sku: str = Query(..., description="Product_Dimension.sku_code of the SKU to read diagnostics for."),
+    sku: str = Query(..., description="Product_Dimension.sku_code of the SKU whose demand pattern to read."),
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
@@ -219,153 +220,3 @@ def get_segment(
     if window:
         return _preview_payload(response, db, window, traits_row["cohort_period"])
     return response
-
-
-# Declared BEFORE the "" route would shadow it? No — FastAPI matches the
-# literal path first, so order here is for readability only.
-@router.get("/summary", response_model=SegmentSummary)
-def get_segment_summary(
-    principal: str | None = PrincipalQuery,
-    mode: str = Depends(get_data_mode),
-    db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
-) -> SegmentSummary:
-    """Cohort rollup of sku_traits for the dashboard's diagnostic panel.
-
-    Answers "why is this portfolio hard to forecast" at portfolio grain:
-    how many SKUs sit in each volatility band and which way their demand
-    trends. Both come straight from sku_traits (cv, trend) — the same
-    columns GET /segment returns per SKU, so the panel and the per-SKU
-    drill-down can never disagree.
-
-    Banding uses this module's cv_band() rather than SQL CASE, so the
-    thresholds exist in exactly one place.
-
-    Scoped to the LATEST cohort_period only. Mixing cohorts would sum two
-    different runs' populations into one bar. An empty cohort for the
-    requested principal returns analyzed_count=0 with a reason, never an
-    empty chart that reads as "no volatility".
-    """
-    # Resolve the cohort ONCE, in scope, and reuse it for the rows. The
-    # previous shape resolved the reported cohort_period and the rows it
-    # counted in two separate queries under two different scopes, so the
-    # header could name a period the rows did not come from.
-    scope_sql, scope_params = principal_clause(principal, "principal")
-    cohort = db.execute(
-        text("SELECT MAX(cohort_period) AS p FROM sku_traits WHERE 1=1" + scope_sql),
-        scope_params,
-    ).scalar()
-
-    if cohort is None:
-        # Nothing for this scope. Distinguish "no run at all" from "the run
-        # exists but does not cover you" — the unscoped query this replaced
-        # returned Unilever's cohort for a Del Monte request, which made the
-        # message accidentally informative; going silent here would have
-        # replaced it with a claim that is simply false.
-        global_cohort = db.execute(
-            text("SELECT MAX(cohort_period) AS p FROM sku_traits")
-        ).scalar()
-        return SegmentSummary(
-            cohort_period=None,
-            analyzed_count=0,
-            blocked_reason=(
-                f"The segmentation run's only cohort (Unilever Tier A as of "
-                f"{global_cohort}) does not include {normalize_principal(principal)}."
-                if global_cohort else "The segmentation run has not been executed yet."
-            ),
-        )
-
-    rows = db.execute(
-        text(
-            """
-            SELECT st.cv, st.trend, st.revenue_share_2026_02 AS revenue_share
-            FROM sku_traits st
-            WHERE st.cohort_period = :cohort
-            """
-            + principal_clause(principal, "st.principal")[0]
-        ),
-        {"cohort": cohort, **scope_params},
-    ).mappings().all()
-
-    # Preview: the same cohort, cv and trend recomputed over the placeholder
-    # start through the cohort month (revenue_share stays the stored one).
-    window = placeholder_window(db) if mode == PREVIEW and rows else None
-    if window:
-        members = db.execute(
-            text(
-                "SELECT st.product_key, st.revenue_share_2026_02 AS revenue_share "
-                "FROM sku_traits st WHERE st.cohort_period = :cohort"
-                + principal_clause(principal, "st.principal")[0]
-            ),
-            {"cohort": cohort, **scope_params},
-        ).mappings().all()
-        keys = [int(m["product_key"]) for m in members]
-        matrices, periods = demand_matrix(db, keys, window["start"], cohort, PREVIEW)
-        first_real = periods.index(window["first_real_month"])
-        rows = []
-        # A SKU whose real sales start after the first real month but which
-        # has a placeholder sale or two: traits run from first sale, so the
-        # empty months between the two read as volatility. Measured
-        # 2026-09-23: all 53 SKUs preview puts in the high band are these
-        # (85 in the cohort). Counted so the panel can say the band comes
-        # from the placeholder, not from SSM's sales.
-        gap_skus = gap_high = 0
-        for m in members:
-            qty = matrices[int(m["product_key"])]
-            t = series_traits(qty, periods)
-            rows.append({"cv": t["cv"], "trend": t["trend"], "revenue_share": m["revenue_share"]})
-            if (qty[:first_real] > 0).any() and not qty[first_real] > 0:
-                gap_skus += 1
-                gap_high += cv_band(t["cv"]) == "high"
-
-    if not rows:
-        return SegmentSummary(
-            cohort_period=cohort,
-            analyzed_count=0,
-            blocked_reason=(
-                "No segmentation rows for this scope — the run covers one cohort "
-                f"(Unilever Tier A as of {cohort}) so far."
-            ),
-        )
-
-    vol: dict[str, dict] = {}
-    for r in rows:
-        band = cv_band(_to_float(r["cv"])) or "unknown"
-        entry = vol.setdefault(band, {"sku_count": 0, "revenue_share": 0.0, "any_share": False})
-        entry["sku_count"] += 1
-        share = _to_float(r["revenue_share"])
-        if share is not None:
-            entry["revenue_share"] += share
-            entry["any_share"] = True
-
-    trends: dict[str, int] = {}
-    for r in rows:
-        trends[r["trend"] or "none"] = trends.get(r["trend"] or "none", 0) + 1
-
-    band_order = {"high": 0, "medium": 1, "low": 2, "unknown": 3}
-    trend_order = {"up": 0, "none": 1, "down": 2}
-
-    summary = SegmentSummary(
-        cohort_period=cohort,
-        analyzed_count=len(rows),
-        volatility=[
-            VolatilityBucket(
-                band=b,
-                sku_count=v["sku_count"],
-                # Left null, not 0.0, when no SKU in the band carried a share —
-                # "not recorded" and "0% of revenue" are different facts.
-                revenue_share=round(v["revenue_share"], 4) if v["any_share"] else None,
-            )
-            for b, v in sorted(vol.items(), key=lambda kv: band_order.get(kv[0], 9))
-        ],
-        trend=[
-            TrendBucket(trend=t, sku_count=n)
-            for t, n in sorted(trends.items(), key=lambda kv: trend_order.get(kv[0], 9))
-        ],
-    )
-    if window:
-        return _preview_payload(
-            summary, db, window, cohort,
-            placeholder_gap_skus={"count": gap_skus, "high_volatility": gap_high},
-        )
-    return summary

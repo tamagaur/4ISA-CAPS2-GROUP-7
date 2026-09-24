@@ -36,7 +36,7 @@ function tierFor(metricType, direction, isOverTarget) {
   if (metricType === 'gap') return isOverTarget ? 'loss' : 'healthy';
   if (direction === 'worse') return 'loss';
   if (direction === 'better') return 'healthy';
-  return 'diagnostic';
+  return 'neutral';
 }
 
 // Card accent colours — the SEMANTIC tokens directly, so a card's border
@@ -48,7 +48,7 @@ const CARD_ACCENT_COLORS = {
   danger:     SEMANTIC.act,
   loss:       SEMANTIC.watch,
   healthy:    SEMANTIC.healthy,
-  diagnostic: SEMANTIC.noData,
+  neutral:    SEMANTIC.noData,
   action:     SEMANTIC.recommendation,
 };
 

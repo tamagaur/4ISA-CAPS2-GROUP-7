@@ -47,9 +47,6 @@ ROUTES: list[tuple[str, int | None]] = [
     ("/sku", 1),
     ("/sku?principal=unilever", 1),
     ("/sku?principal=delmonte", 1),
-    ("/segment/summary", None),
-    ("/segment/summary?principal=unilever", None),
-    ("/segment/summary?principal=delmonte", None),  # correctly null cohort_period
     ("/recommendations", None),
     ("/inventory/current", 1),
     ("/inventory/movement", 1),
@@ -102,17 +99,12 @@ def main() -> int:
         failures += bool(problems)
         print(f"{path:42s} {resp.status_code:>5d} {('' if n is None else n):>7}  {verdict}")
 
-    # The Del Monte shapes the frontend has to tolerate. If these ever stop being
-    # null the frontend is fine, but someone has run ABC/segmentation for Del Monte
-    # and the "no data" copy on those panels is now wrong.
+    # The Del Monte shape the frontend has to tolerate. If it ever changes,
+    # the "no data" copy on the ABC page is now wrong.
     print()
     abc_dm = client.get("/abc?principal=delmonte", headers=headers).json()
-    seg_dm = client.get("/segment/summary?principal=delmonte", headers=headers).json()
     print(f"Del Monte ABC        : count={abc_dm.get('count')}, "
           f"classification_period={abc_dm.get('classification_period')!r}  (category-grain rows expected since the 2026-09-21 Del Monte ABC run; empty/None = a regression)")
-    print(f"Del Monte segmentation: cohort_period={seg_dm.get('cohort_period')!r}  (None = expected)")
-    if seg_dm.get("blocked_reason"):
-        print(f"  blocked_reason: {seg_dm['blocked_reason']}")
 
     print()
     if failures:

@@ -1,7 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import Modal from './Modal';
-import SkuDiagnosticsPanel from './SkuDiagnosticsPanel';
+import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import { formatMonth } from '../utils/formatDate';
 import { CHART_COLORS } from '../theme/colors';
 import './ReorderModal.css';
@@ -77,17 +77,16 @@ const ReorderModal = ({ isOpen, onClose, data, principal }) => {
           </div>
         </div>
 
-        {/* Why this SKU behaves this way — Phase-2 diagnostics (sku_traits /
-            sku_segment). Ahead of the LP weights on purpose: the weights
-            are the same for every SKU, this is the part that is about
-            THIS one. */}
-        <div className="reorder-diag-section">
-          <SkuDiagnosticsPanel skuId={data.sku} principal={principal} compact />
+        {/* Demand pattern (sku_traits / sku_segment). Ahead of the LP
+            weights on purpose: the weights are the same for every SKU,
+            this is the part that is about THIS one. */}
+        <div className="reorder-pattern-section">
+          <SkuDemandPatternPanel skuId={data.sku} principal={principal} compact />
         </div>
 
-        {/* Why this recommendation — Story #80 */}
+        {/* How the LP arrived at this quantity — Story #80 */}
         <div className="reorder-why-section">
-          <h4 className="reorder-section-title">Why this recommendation</h4>
+          <h4 className="reorder-section-title">How this recommendation was made</h4>
           <p className="reorder-why-intro">
             The LP model weighs three objectives when solving for this SKU's order quantity:
           </p>

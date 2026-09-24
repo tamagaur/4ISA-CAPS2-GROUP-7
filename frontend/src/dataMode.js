@@ -4,8 +4,9 @@
 // Asked for 2026-09-23: see the dashboard over five years before SSM's real
 // 2021-22 files arrive. The placeholder rows are synthetic (is_demo), so
 // preview is opt-in, labelled on every page while it is on, and limited to
-// what it can honestly change: the descriptive and diagnostic views.
-// Forecasts, reorder recommendations and safety stock stay on real data.
+// what it can honestly change: the descriptive views, recomputed per
+// request, and, once scripts/build_preview_outputs.py has run, a what-if
+// copy of the forecasts and LP results that is never saved.
 //
 // Kept for the browser tab only (sessionStorage): a new tab, or the next
 // session, opens on real data, so nobody lands in preview without choosing it.

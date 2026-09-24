@@ -12,7 +12,9 @@ export const PRINCIPALS = [
 
 export const PRINCIPAL_KEYS = PRINCIPALS.map((p) => p.key);
 
-// Default scope on first load: 'all'.
+// The combined scope. Named, so the checks that mean "all principals" say
+// so instead of leaning on DEFAULT_PRINCIPAL (which was 'all' until
+// 2026-09-24).
 //
 // Note: under 'all' the backend applies its honest-null rule
 // (backend/routers/dashboard.py's _combine_principal_sums) — a period only
@@ -20,9 +22,18 @@ export const PRINCIPAL_KEYS = PRINCIPALS.map((p) => p.key);
 // Unilever's demand runs through 2026-02 while Del Monte's sellout stops
 // at 2025-12, so periods in that gap will show as blank under 'all' rather
 // than falling back to a single principal's data.
-export const DEFAULT_PRINCIPAL = 'all';
+export const ALL_PRINCIPALS = 'all';
 
-export const PRINCIPAL_STORAGE_KEY = 'san2_principal';
+// Default scope on first load: Unilever (2026-09-24, Audrey). The combined
+// All principals figures are still being fixed, so no page opens on them;
+// All principals and Del Monte stay one click away in the Topbar.
+export const DEFAULT_PRINCIPAL = 'unilever';
+
+// Bumped from 'san2_principal' with the default change. A scope saved under
+// the old key could be All principals, the view this change keeps people
+// off, so everyone starts once on the new default; choices made from here
+// on are remembered as before.
+export const PRINCIPAL_STORAGE_KEY = 'san2_principal_v2';
 
 export function isValidPrincipal(value) {
   return PRINCIPAL_KEYS.includes(value);
@@ -38,6 +49,6 @@ export function labelForPrincipal(key) {
 // and because the response cache is keyed by path, an inconsistent
 // spelling here would silently split the cache.
 export function appendPrincipal(query, principal) {
-  if (principal && principal !== 'all') query.append('principal', principal);
+  if (principal && principal !== ALL_PRINCIPALS) query.append('principal', principal);
   return query;
 }

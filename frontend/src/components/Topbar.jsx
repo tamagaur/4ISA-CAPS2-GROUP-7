@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { Check, Calendar, FlaskConical } from 'lucide-react';
-import { PRINCIPALS } from '../principals';
+import { DEFAULT_PRINCIPAL, PRINCIPALS } from '../principals';
 import { DATA_MODES, isPreviewMode } from '../dataMode';
 import './Topbar.css';
 
@@ -25,7 +25,7 @@ const Topbar = ({
   handleResetToToday,
   realWorldMonth = 'Aug',
   realWorldYear = '2026',
-  principal = 'all',
+  principal = DEFAULT_PRINCIPAL,
   setPrincipal = () => {},
   dataMode = DATA_MODES.REAL,
   onDataModeChange = () => {},
@@ -93,9 +93,8 @@ const Topbar = ({
         )}
 
         {/* Preview mode (src/dataMode.js): adds Unilever's 2021-22
-            placeholder months to the descriptive and diagnostic views.
-            Same pages as the principal filter; the banner under this bar
-            says what it changes whenever it is on. */}
+            placeholder months. Same pages as the principal filter; the
+            banner under this bar says what it changes whenever it is on. */}
         {showPrincipalFilter && (
           <button
             type="button"
@@ -106,7 +105,7 @@ const Topbar = ({
             onClick={() => onDataModeChange(preview ? DATA_MODES.REAL : DATA_MODES.PREVIEW)}
             title={preview
               ? 'On: Jan 2021 – Dec 2022 is placeholder data. Click to go back to real data only.'
-              : 'See the dashboard over five years, with Jan 2021 – Dec 2022 filled by placeholder (synthetic) Unilever data in the descriptive and diagnostic views.'}
+              : 'See the dashboard over five years, with Jan 2021 – Dec 2022 filled by placeholder (synthetic) Unilever data. For viewing only, not for decisions.'}
           >
             <FlaskConical size={14} aria-hidden="true" />
             <span className="data-mode-toggle-label">5-year preview</span>

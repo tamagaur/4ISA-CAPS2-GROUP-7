@@ -572,7 +572,11 @@
 .abc-filter-controls {
   display: flex;
   align-items: center;
+  /* Brand, movement, class toggle and "This run only" wrap onto a second
+     line rather than being cut off below ~1300px. */
+  flex-wrap: wrap;
   gap: 0.6rem;
+  min-width: 0;
 }
 
 .abc-filter-select-wrapper {

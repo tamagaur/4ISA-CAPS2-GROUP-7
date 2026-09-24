@@ -51,7 +51,7 @@ export const SEMANTIC = {
 export const STATUS_TIERS = {
   loss: SEMANTIC.act,          // TYPE 1/2: worsening direction, or a gap over target
   healthy: SEMANTIC.healthy,   // TYPE 2: at or under target
-  diagnostic: SEMANTIC.noData, // no inherent good/bad direction, or nothing to judge
+  neutral: SEMANTIC.noData,    // no inherent good/bad direction, or nothing to judge
   action: SEMANTIC.recommendation, // TYPE 3: a recommendation the system is outputting
 };
 

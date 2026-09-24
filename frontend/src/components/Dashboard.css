@@ -343,9 +343,9 @@
    One uninterrupted page: no numbered sections, no dividers, no paragraph
    of explanation above each block. The hero strip carries the four figures
    that answer "what is happening right now"; every row below is evidence,
-   each tagged with the kind of analytics it answers so all four
-   (descriptive / diagnostic / predictive / prescriptive) are demonstrable
-   without prose. Replaces the banded layout whose per-band headline +
+   each tagged with the kind of analytics it answers so all three in the
+   analytical mapping (descriptive / predictive / prescriptive) are
+   demonstrable without prose. Replaces the banded layout whose per-band headline +
    reason repeated on screen what the widgets already showed. */
 .kpi-strip {
   display: grid;
@@ -369,11 +369,11 @@
   min-width: 0;
 }
 
-/* Trend chart and ABC card share the row evenly: the ABC card needs 448px
+/* The sales trend takes the full row, so long ranges keep readable months. */
+.dash-row-trend       { grid-template-columns: 1fr; }
+/* ABC card and tier bars share the row evenly: the ABC card needs 448px
    inside it for the 180px donut, a 28px gap and its 240px tier card. */
-.dash-row-wide-narrow { grid-template-columns: 1fr 1fr; }
-/* Three thin tier bars narrow, the diagnostic bars wide. */
-.dash-row-narrow-wide { grid-template-columns: 1fr 1.4fr; }
+.dash-row-abc         { grid-template-columns: 1fr 1fr; }
 .dash-row-even        { grid-template-columns: 1fr 1fr; }
 .dash-row-single      { grid-template-columns: 1fr; }
 
@@ -419,14 +419,29 @@
   text-transform: uppercase;
 }
 
+/* A floor, not a fixed height, on a flex-basis of auto. It used to be
+   height: 360px on flex: 1 (a 0% basis): .dash-slot is a column with no set
+   height, so the card was only as tall as its header and the chart inside
+   got 0px wherever no neighbour stretched the row (every row at phone
+   width). A fixed height instead clips cards whose content runs longer,
+   like the reorder table. Cards now grow to fit and still match a taller
+   neighbour. */
 .dash-slot > .chart-widget {
-  flex: 1;
-  height: 360px;
+  flex: 1 0 auto;
+  min-height: 360px;
   min-width: 0;
+}
+
+/* The chart itself never drops below this, so a card whose fixed parts
+   (title, filters, stats) fill its floor grows instead of squeezing the
+   plot to nothing — the portfolio forecast card at phone width. */
+.dash-slot .chart-container {
+  min-height: 200px;
 }
 
 .dash-row-single .dash-slot > .chart-widget {
   height: auto;
+  min-height: 0;
 }
 
 /* Widgets whose body is a handful of flex rows (donut, tier bars, the
@@ -490,10 +505,10 @@
 }
 
 /* Below this the ABC card is too narrow for the donut and its tier card
-   side by side, so the trend chart and the ABC card each get a full row
+   side by side, so the ABC card and the tier bars each get a full row
    instead. */
 @media (max-width: 1350px) {
-  .dash-row-wide-narrow {
+  .dash-row-abc {
     grid-template-columns: 1fr;
   }
 }
@@ -509,7 +524,6 @@
   .kpi-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .dash-row-narrow-wide,
   .dash-row-even {
     grid-template-columns: 1fr;
   }
@@ -517,7 +531,7 @@
 
 @media (max-width: 768px) {
   .dash-slot > .chart-widget {
-    height: 320px;
+    min-height: 320px;
   }
 }
 
@@ -567,10 +581,9 @@
    every sibling DIV — the hero strip is one, so nth-of-type(1) matched
    the SECOND row and the last two cards fell through to 0ms, entering
    before the rows above them. Row classes are stable and explicit. */
-.dash-row-wide-narrow .dash-slot:nth-child(1) { --enter-delay: 240ms; }
-.dash-row-wide-narrow .dash-slot:nth-child(2) { --enter-delay: 300ms; }
-.dash-row-narrow-wide .dash-slot:nth-child(1) { --enter-delay: 340ms; }
-.dash-row-narrow-wide .dash-slot:nth-child(2) { --enter-delay: 400ms; }
+.dash-row-trend .dash-slot:nth-child(1)       { --enter-delay: 240ms; }
+.dash-row-abc .dash-slot:nth-child(1)         { --enter-delay: 340ms; }
+.dash-row-abc .dash-slot:nth-child(2)         { --enter-delay: 400ms; }
 .dash-row-even .dash-slot:nth-child(1)        { --enter-delay: 440ms; }
 .dash-row-even .dash-slot:nth-child(2)        { --enter-delay: 500ms; }
 .dash-row-single .dash-slot:nth-child(1)      { --enter-delay: 540ms; }

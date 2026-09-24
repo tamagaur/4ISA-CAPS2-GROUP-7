@@ -4,13 +4,15 @@ import { getSegment } from '../api/segment';
 import { getDecomposition } from '../api/analytics';
 import { formatMonth } from '../utils/formatDate';
 import { SEMANTIC } from '../theme/colors';
-import './SkuDiagnosticsPanel.css';
+import './SkuDemandPatternPanel.css';
 
-// "Why this SKU behaves this way" — the Phase-2 diagnostic layer
-// (sku_traits + sku_segment, migration 0018), read through GET /segment.
-// Shown on the SKU Forecast page and inside the Reorder detail modal, so
-// the one place a planner looks at a single SKU also says WHY its demand
-// looks the way it does. Everything here is printed from a real column;
+// "Demand pattern" — the SKU's trend and variability, question D4 of the
+// analytical mapping (reports/PROJECT_DIAGNOSIS_2026-09-21.md §3): the
+// Phase-2 segmentation traits (sku_traits + sku_segment, migration 0018)
+// read through GET /segment, and STL seasonality from GET /decomposition.
+// Descriptive: it measures the SKU's own history. Shown on the SKU
+// Forecast page and inside the Reorder detail modal, the two places a
+// planner looks at one SKU. Everything here is printed from a real column;
 // the only labels this component adds are the volatility band (from the
 // backend's cv_band, with the raw cv always beside it), the plain-
 // language gloss on each stability_group code, the plain name of the
@@ -80,7 +82,7 @@ const seasonalityBand = (strength) => {
   return 'Weak seasonality';
 };
 
-const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
+const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
 
   useEffect(() => {
@@ -94,7 +96,7 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setState({ status: 'error', data: null, error: err.message || 'Failed to load SKU diagnostics' });
+        setState({ status: 'error', data: null, error: err.message || 'Failed to load the demand pattern' });
       });
     return () => { cancelled = true; };
   }, [skuId, principal]);
@@ -114,13 +116,13 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
   }, [skuId, principal]);
 
   const heading = (
-    <div className="sku-diag-header">
-      <h4 className="sku-diag-title">
+    <div className="sku-pattern-header">
+      <h4 className="sku-pattern-title">
         <Activity size={15} aria-hidden="true" />
-        Why this SKU behaves this way
+        Demand pattern
       </h4>
       {state.data?.traits?.cohort_period && (
-        <span className="sku-diag-cohort" title="The ABC classification period this SKU's diagnostics were computed for">
+        <span className="sku-pattern-cohort" title="The ABC classification period this SKU's demand pattern was measured for">
           Cohort {formatMonth(state.data.traits.cohort_period)}
         </span>
       )}
@@ -129,18 +131,18 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
 
   if (state.status === 'loading') {
     return (
-      <section className={`sku-diag${compact ? ' sku-diag-compact' : ''}`} aria-busy="true">
+      <section className={`sku-pattern${compact ? ' sku-pattern-compact' : ''}`} aria-busy="true">
         {heading}
-        <p className="sku-diag-note" role="status">Loading diagnostics…</p>
+        <p className="sku-pattern-note" role="status">Loading demand pattern…</p>
       </section>
     );
   }
 
   if (state.status === 'error') {
     return (
-      <section className={`sku-diag${compact ? ' sku-diag-compact' : ''}`}>
+      <section className={`sku-pattern${compact ? ' sku-pattern-compact' : ''}`}>
         {heading}
-        <p className="sku-diag-note" role="alert">Could not load diagnostics: {state.error}</p>
+        <p className="sku-pattern-note" role="alert">Could not load the demand pattern: {state.error}</p>
       </section>
     );
   }
@@ -150,12 +152,12 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
   // plainly. Never a placeholder band or trend.
   if (!data || !data.analyzed) {
     return (
-      <section className={`sku-diag sku-diag-unanalyzed${compact ? ' sku-diag-compact' : ''}`}>
+      <section className={`sku-pattern sku-pattern-unanalyzed${compact ? ' sku-pattern-compact' : ''}`}>
         {heading}
-        <p className="sku-diag-empty-title">Not yet analyzed</p>
-        <p className="sku-diag-note">
+        <p className="sku-pattern-empty-title">Not yet analyzed</p>
+        <p className="sku-pattern-note">
           {data?.not_analyzed_reason
-            || `No diagnostic record exists for ${skuId} — it isn't in any segmentation cohort yet.`}
+            || `No demand-pattern record exists for ${skuId} — it isn't in any segmentation cohort yet.`}
         </p>
       </section>
     );
@@ -174,7 +176,7 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
   const previewWindow = data.data_mode?.traits_window;
 
   return (
-    <section className={`sku-diag${compact ? ' sku-diag-compact' : ''}`}>
+    <section className={`sku-pattern${compact ? ' sku-pattern-compact' : ''}`}>
       {heading}
 
       {previewWindow && (
@@ -185,34 +187,34 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
       )}
 
       {t && (
-        <div className="sku-diag-tiles">
+        <div className="sku-pattern-tiles">
           {/* Volatility: the band is the headline, the raw cv sits under
               it so the label never replaces the measurement. */}
-          <div className="sku-diag-tile" style={{ '--tile-accent': band?.color || SEMANTIC.noData }}>
-            <span className="sku-diag-tile-label">Volatility</span>
-            <span className="sku-diag-tile-value">{band ? band.label : 'Not measured'}</span>
-            <span className="sku-diag-tile-desc">
+          <div className="sku-pattern-tile" style={{ '--tile-accent': band?.color || SEMANTIC.noData }}>
+            <span className="sku-pattern-tile-label">Volatility</span>
+            <span className="sku-pattern-tile-value">{band ? band.label : 'Not measured'}</span>
+            <span className="sku-pattern-tile-desc">
               {t.cv != null ? `CV ${t.cv.toFixed(2)} · ${band.gloss}` : 'no coefficient of variation stored'}
             </span>
           </div>
 
-          <div className="sku-diag-tile sku-diag-tile-trend">
-            <span className="sku-diag-tile-label">Trend</span>
-            <span className="sku-diag-tile-value">
-              {TrendIcon && <TrendIcon size={18} aria-hidden="true" className="sku-diag-trend-icon" />}
+          <div className="sku-pattern-tile sku-pattern-tile-trend">
+            <span className="sku-pattern-tile-label">Trend</span>
+            <span className="sku-pattern-tile-value">
+              {TrendIcon && <TrendIcon size={18} aria-hidden="true" className="sku-pattern-trend-icon" />}
               {trend ? trend.label : '—'}
             </span>
-            <span className="sku-diag-tile-desc">{trend ? `${trend.gloss} (Mann-Kendall, p < 0.05)` : ''}</span>
+            <span className="sku-pattern-tile-desc">{trend ? `${trend.gloss} (Mann-Kendall, p < 0.05)` : ''}</span>
           </div>
 
-          <div className="sku-diag-tile">
-            <span className="sku-diag-tile-label">
+          <div className="sku-pattern-tile">
+            <span className="sku-pattern-tile-label">
               <CalendarRange size={11} aria-hidden="true" /> History
             </span>
-            <span className="sku-diag-tile-value">
+            <span className="sku-pattern-tile-value">
               {t.history_months} selling month{t.history_months === 1 ? '' : 's'}
             </span>
-            <span className="sku-diag-tile-desc" title={`stability_group: ${t.stability_group}`}>
+            <span className="sku-pattern-tile-desc" title={`stability_group: ${t.stability_group}`}>
               {STABILITY_GLOSS[t.stability_group] || t.stability_group}
               {t.first_sale_period ? ` · first sale ${formatMonth(t.first_sale_period)}` : ''}
               {` · longest run ${t.longest_run}`}
@@ -222,14 +224,14 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
 
           {/* Seasonality: STL decomposition of the SKU's monthly demand. */}
           {principal !== 'delmonte' && (
-            <div className="sku-diag-tile" title="STL decomposition (period 12, robust) of monthly demand from the first sale">
-              <span className="sku-diag-tile-label">
+            <div className="sku-pattern-tile" title="STL decomposition (period 12, robust) of monthly demand from the first sale">
+              <span className="sku-pattern-tile-label">
                 <Waves size={11} aria-hidden="true" /> Seasonality
               </span>
-              <span className="sku-diag-tile-value">
+              <span className="sku-pattern-tile-value">
                 {!stl ? '…' : stl.available ? seasonalityBand(stl.seasonal_strength) : 'Not enough history'}
               </span>
-              <span className="sku-diag-tile-desc">
+              <span className="sku-pattern-tile-desc">
                 {!stl
                   ? 'Decomposing…'
                   : !stl.available
@@ -250,9 +252,9 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
           words and keeps the scheme and code in the tooltip. GET /segment's
           revenue_share_2026_02 is still unread here. */}
       {binSegment && (
-        <p className="sku-diag-bin" title={`${binSegment.scheme}: ${binSegment.bin}`}>
-          <span className="sku-diag-bin-label">Bin</span>
-          <span className="sku-diag-bin-name">{BIN_LABELS[binSegment.bin] || binSegment.bin}</span>
+        <p className="sku-pattern-bin" title={`${binSegment.scheme}: ${binSegment.bin}`}>
+          <span className="sku-pattern-bin-label">Bin</span>
+          <span className="sku-pattern-bin-name">{BIN_LABELS[binSegment.bin] || binSegment.bin}</span>
           {binSegment.bin_reason ? ` — ${binSegment.bin_reason}` : ''}
         </p>
       )}
@@ -260,4 +262,4 @@ const SkuDiagnosticsPanel = ({ skuId, principal, compact = false }) => {
   );
 };
 
-export default SkuDiagnosticsPanel;
+export default SkuDemandPatternPanel;

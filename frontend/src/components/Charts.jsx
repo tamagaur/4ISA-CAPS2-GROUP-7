@@ -11,7 +11,7 @@ import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
 import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, EDGE_LABEL_MARGIN } from './ChartZoom';
-import { DEFAULT_PRINCIPAL, PRINCIPALS } from '../principals';
+import { DEFAULT_PRINCIPAL, PRINCIPALS, labelForPrincipal } from '../principals';
 import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import './Charts.css';
@@ -1022,13 +1022,15 @@ export const PortfolioForecastWidget = ({
                 </button>
               ))}
             </div>
-            {/* Back to All principals, where this card starts on every visit. */}
+            {/* Back to the default scope (Unilever), where this card starts on every visit. */}
             <button
               type="button"
               className="card-filter-reset"
               onClick={() => onPrincipalChange(DEFAULT_PRINCIPAL)}
               disabled={principal === DEFAULT_PRINCIPAL}
-              title={principal === DEFAULT_PRINCIPAL ? 'Already showing all principals' : 'Reset to all principals'}
+              title={principal === DEFAULT_PRINCIPAL
+                ? `Already showing ${labelForPrincipal(DEFAULT_PRINCIPAL)}`
+                : `Reset to ${labelForPrincipal(DEFAULT_PRINCIPAL)}`}
             >
               <RotateCcw size={12} aria-hidden="true" />
               Reset
@@ -1464,122 +1466,6 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
             period it was run with (scripts/run_lp.py --protection-days; the default is 1 business day, with no
             review period or lead time). The comparison is sensitive to that setting, which is still an open
             planning decision.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ── Diagnostic: why this portfolio is hard to forecast ───────────────────
-// The dashboard's only "why did it happen" widget. Reads GET /segment/
-// summary, which rolls up the SAME sku_traits columns (cv, trend) that the
-// per-SKU panel on SKU Forecast shows, so the portfolio view and the
-// drill-down can never disagree.
-//
-// Volatility bands are a display convention over the coefficient of
-// variation of monthly demand, defined once in backend/routers/segment.py
-// (cv < 0.5 steady, < 1.0 variable, else erratic) — never re-derived here.
-// Colour follows the app's semantic rule: erratic is the "act" red because
-// it is the band that explains missed forecasts, steady is healthy green.
-const VOLATILITY_META = {
-  high: { label: 'Erratic', color: SEMANTIC.act, hint: 'CV ≥ 1.0 — month-to-month demand swings wildly' },
-  medium: { label: 'Variable', color: SEMANTIC.watch, hint: 'CV 0.5–1.0 — noticeable swings' },
-  low: { label: 'Steady', color: SEMANTIC.healthy, hint: 'CV < 0.5 — predictable month to month' },
-  unknown: { label: 'Not measured', color: SEMANTIC.noData, hint: 'No CV recorded for these SKUs' },
-};
-
-const TREND_META = {
-  up: { label: 'Rising', arrow: '↗' },
-  none: { label: 'No clear trend', arrow: '→' },
-  down: { label: 'Falling', arrow: '↘' },
-};
-
-export const DemandVolatilityWidget = ({ summary, emptyReason }) => {
-  const s = summary || {};
-  const buckets = s.volatility || [];
-  const hasData = (s.analyzed_count ?? 0) > 0 && buckets.length > 0;
-  const total = buckets.reduce((sum, b) => sum + (b.sku_count || 0), 0);
-  // Preview (GET /segment/summary's data_mode): the same cohort measured
-  // over the placeholder months too. gap.high_volatility counts the erratic
-  // SKUs whose real sales start after the placeholder but which have a sale
-  // or two inside it — the empty months between read as volatility, so the
-  // band is the placeholder's doing, and the card must say so.
-  const preview = s.data_mode;
-  const gap = preview?.placeholder_gap_skus;
-  const erratic = buckets.find((b) => b.band === 'high')?.sku_count ?? 0;
-
-  return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
-      <div className="chart-header">
-        <div className="chart-title-area">
-          <h4>Why demand is hard to forecast</h4>
-          <p>
-            How steady each Category A SKU&apos;s monthly demand is (coefficient of variation) and which way
-            it trends — the measured reasons behind the forecast accuracy above.
-          </p>
-        </div>
-      </div>
-
-      {!hasData ? (
-        <p className="dashboard-empty-note">{emptyReason || s.blocked_reason || 'No segmentation data for this scope'}</p>
-      ) : (
-        <div className="chart-widget-body">
-          <div className="policy-bars">
-            {buckets.map((b) => {
-              const meta = VOLATILITY_META[b.band] || VOLATILITY_META.unknown;
-              const pct = total > 0 ? (b.sku_count / total) * 100 : 0;
-              const revPct = b.revenue_share != null ? Math.round(b.revenue_share * 100) : null;
-              return (
-                <div className="policy-bar-row" key={b.band} title={meta.hint}>
-                  <span className="policy-bar-label">{meta.label}</span>
-                  <div
-                    className="policy-bar-track"
-                    role="img"
-                    aria-label={`${meta.label}: ${b.sku_count} SKUs`}
-                  >
-                    <span style={{ width: `${pct}%`, backgroundColor: meta.color }} />
-                  </div>
-                  <span className="policy-bar-value">
-                    {b.sku_count} SKUs
-                    {/* Revenue share is what makes the band actionable: 60
-                        erratic SKUs matter differently if they carry 25% of
-                        revenue than if they carry 2%. Omitted, not zeroed,
-                        when no SKU in the band recorded a share. */}
-                    {revPct != null && <span className="volatility-rev"> · {revPct}% rev</span>}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="volatility-trend-row">
-            {(s.trend || []).map((t) => {
-              const meta = TREND_META[t.trend] || { label: t.trend, arrow: '·' };
-              return (
-                <span className="volatility-trend-chip" key={t.trend}>
-                  <span className="volatility-trend-arrow" aria-hidden="true">{meta.arrow}</span>
-                  <strong>{t.sku_count}</strong> {meta.label}
-                </span>
-              );
-            })}
-          </div>
-
-          {gap?.high_volatility > 0 && (
-            <p className="chart-placeholder-note">
-              {gap.high_volatility === erratic ? `All ${erratic}` : `${gap.high_volatility} of the ${erratic}`} erratic
-              SKUs first sold for real after {formatMonth(preview.placeholder?.first_real_month)} but have a sale or two in
-              the placeholder years, so the empty months in between read as swings. That comes from the placeholder,
-              not from SSM&apos;s sales.
-            </p>
-          )}
-
-          <p className="dashboard-chart-footnote">
-            {s.analyzed_count} Category A SKUs in the {formatMonth(s.cohort_period)} cohort · trend from
-            Mann-Kendall (p &lt; 0.05)
-            {preview?.traits_window
-              ? ` · measured ${formatMonth(preview.traits_window.start)} – ${formatMonth(preview.traits_window.end)}, placeholder months included`
-              : ''}. Open a SKU on SKU Forecast for its own reason.
           </p>
         </div>
       )}

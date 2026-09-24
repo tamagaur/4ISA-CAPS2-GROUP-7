@@ -1,6 +1,6 @@
 """
 backend.data_mode — PREVIEW mode: real data plus Unilever's 2021-22
-placeholder months, for the dashboard's descriptive and diagnostic views.
+placeholder months, for a five-year view of the dashboard.
 
 Asked for 2026-09-23 (Audrey): see what the dashboard looks like over five
 years before SSM's real 2021-22 files arrive. The database already holds
@@ -23,10 +23,10 @@ The bound is read live from the real data (MIN of the `_Real` view). When
 SSM's own 2021-22 files load (DEC-27 anticipates them), real history starts
 earlier and the placeholder drops out with no code change.
 
-DESCRIPTIVE AND DIAGNOSTIC figures are sums and statistics of the demand
-history — the sales trend, ABC mix, category trends, Pareto, FSN, STL
-decomposition, the volatility / trend diagnostics — so preview recomputes
-them per request from the relation above.
+DESCRIPTIVE figures are sums and statistics of the demand history — the
+sales trend, ABC mix, category trends, Pareto, FSN, STL decomposition, a
+SKU's volatility and trend — so preview recomputes them per request from
+the relation above.
 
 PREDICTIVE AND PRESCRIPTIVE figures (added 2026-09-24) come from files, not
 per request: the forecast router refuses placeholder rows everywhere except
@@ -79,8 +79,8 @@ def get_data_mode(
     x_data_mode: str | None = Header(
         None,
         alias=DATA_MODE_HEADER,
-        description="'preview' adds Unilever's 2021-22 placeholder months to descriptive and "
-        "diagnostic figures. Omit (or 'real') for real data only.",
+        description="'preview' adds Unilever's 2021-22 placeholder months. "
+        "Omit (or 'real') for real data only.",
     ),
 ) -> str:
     """FastAPI dependency. Anything other than real/preview is a 400, the
