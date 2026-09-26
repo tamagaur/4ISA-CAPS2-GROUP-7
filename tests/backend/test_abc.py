@@ -363,3 +363,24 @@ def test_period_view_resolves_requested_month_to_latest_classified_period_per_pr
     assert _get(session, "classification_period=2026-02&principal=unilever")["classification_period"] == "2026-02"
     empty = _get(session, "classification_period=2025-10&principal=delmonte")
     assert empty["count"] == 0 and empty["classification_period"] is None
+
+
+def test_response_carries_rules_shares_and_pareto_check(client):
+    """The page states the run's rules and measured shares from the API, not
+    from its own copy (2026-09-25)."""
+    from analytics.classification.abc import abc_rules
+    body = client.get("/abc", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["rules"] == abc_rules()
+    summary = {t["tier"]: t for t in body["tier_summary"]}
+    assert summary["A"]["sku_share"] == pytest.approx(1 / 3)
+    assert sum(t["sku_share"] for t in body["tier_summary"]) == pytest.approx(1.0, abs=1e-5)
+    assert body["pareto_check"]["ranked_count"] == 3
+    assert body["pareto_check"]["top_count"] == 1
+
+
+def test_last_known_shares_count_only_this_run(last_known_session):
+    body = _get(last_known_session, "view=last_known&classification_period=2026-02&principal=unilever")
+    summary = {t["tier"]: t for t in body["tier_summary"]}
+    ranked = sum(t["sku_count"] - t["carried_forward_count"] for t in body["tier_summary"])
+    assert summary["A"]["sku_share"] == pytest.approx((summary["A"]["sku_count"] - summary["A"]["carried_forward_count"]) / ranked)
+    assert body["pareto_check"]["ranked_count"] == ranked

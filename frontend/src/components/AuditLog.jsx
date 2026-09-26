@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getAuditLog, getAuditUserSummary } from '../api/auditLog';
 import { formatDateTime } from '../utils/formatDate';
+import { LoadingStatus, SkeletonTable } from './Skeleton';
 import './AuditLog.css';
 
 const RECENT_CHANGES_LIMIT = 10;
@@ -82,8 +83,19 @@ const useSection = (load) => {
 const loadUsers = () => getAuditUserSummary();
 const loadChanges = () => getAuditLog({ excludeActions: SIGN_IN_ACTIONS, limit: RECENT_CHANGES_LIMIT });
 
-const SectionStatus = ({ loading, error }) => {
-  if (loading) return <p className="audit-section-status">Loading…</p>;
+// While loading, the section's table as a skeleton in the same wrapper, sized
+// to that table's own column count.
+const SectionStatus = ({ loading, error, label, columns, rows = 4 }) => {
+  if (loading) {
+    return (
+      <>
+        <LoadingStatus>Loading {label}…</LoadingStatus>
+        <div className="audit-table-wrapper">
+          <SkeletonTable rows={rows} columns={columns} />
+        </div>
+      </>
+    );
+  }
   if (error) return <p className="audit-section-status audit-section-error">Couldn&apos;t load this section: {error}</p>;
   return null;
 };
@@ -121,7 +133,7 @@ const AuditLog = () => {
             A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
             30 minutes without activity. Older sign-ins have no measured length.
           </p>
-          <SectionStatus loading={users.loading} error={users.error} />
+          <SectionStatus loading={users.loading} error={users.error} label="sign-ins by user" columns={5} />
           {!users.loading && !users.error && (
             <div className="audit-table-wrapper">
               <table className="audit-table audit-table-stack">
@@ -174,7 +186,7 @@ const AuditLog = () => {
             <span className="audit-section-count">Latest {RECENT_CHANGES_LIMIT}</span>
           </div>
           <p className="audit-section-note">SKU edits, reorder decisions and user account changes, newest first.</p>
-          <SectionStatus loading={changes.loading} error={changes.error} />
+          <SectionStatus loading={changes.loading} error={changes.error} label="recent changes" columns={4} rows={6} />
           {!changes.loading && !changes.error && (
             <div className="audit-table-wrapper">
               <table className="audit-table audit-table-stack">

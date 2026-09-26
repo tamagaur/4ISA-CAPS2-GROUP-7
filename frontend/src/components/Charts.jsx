@@ -6,14 +6,16 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
-import { HelpCircle, ArrowRight, RotateCcw } from 'lucide-react';
+import { HelpCircle, ArrowRight, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
-import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, EDGE_LABEL_MARGIN } from './ChartZoom';
+import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
+import { ChartTable, ChartViewToggle } from './ChartTable';
 import { DEFAULT_PRINCIPAL, PRINCIPALS, labelForPrincipal } from '../principals';
 import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
+import { LoadingStatus, SkeletonChart } from './Skeleton';
 import './Charts.css';
 
 // Legend entry for the placeholder band (utils/placeholderBand.jsx).
@@ -104,7 +106,7 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
           <div className="chart-container">
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
@@ -177,10 +179,10 @@ const AllocationTooltip = ({ active, payload }) => {
       <p style={{ fontWeight: 700, color: '#1a202c', margin: '0 0 0.3rem 0', fontSize: '0.8rem' }}>{row.sku}</p>
       <p style={{ margin: '0.1rem 0', fontSize: '0.75rem', color: '#4a5568' }}>Allocation: {row.allocationCases} cases</p>
       <p style={{ margin: '0.1rem 0', fontSize: '0.75rem', color: '#4a5568' }}>Forecast: {row.forecastCases} cases</p>
-      <p style={{
-        margin: '0.35rem 0 0 0', fontSize: '0.78rem', fontWeight: 700,
-        color: shortfall ? COLORS.critical : COLORS.warning,
-      }}>
+      {/* Ink text with the status swatch beside it — the colour marks the
+          direction, the words stay readable. */}
+      <p className="chart-tooltip-row" style={{ marginTop: '0.35rem', fontWeight: 700 }}>
+        <span className="chart-tooltip-swatch" style={{ backgroundColor: shortfall ? COLORS.critical : COLORS.warning }} aria-hidden="true" />
         {shortfall ? '−' : '+'}{Math.abs(row.varianceCases)} cases · {shortfall ? '−' : '+'}{formatCompactPesos(row.variancePesos)}
       </p>
     </div>
@@ -253,7 +255,7 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
             barCategoryGap={BAR_GAP}
             margin={{ top: 10, right: 60, left: 0, bottom: 5 }}
           >
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={CHART_COLORS.gridline} />
+            <CartesianGrid vertical horizontal={false} stroke={CHART_COLORS.gridline} strokeWidth={1} />
             <XAxis
               type="number"
               domain={domain}
@@ -292,8 +294,8 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
 
 const SalesStockTooltip = ({ active, payload, label, placeholder }) => {
   if (!active || !payload || !payload.length) return null;
-  // Every series is now drawn twice — the Line, plus the Area shading under
-  // it — so the raw payload carries each value twice over. The fills declare
+  // The stock series is drawn twice — the Line, plus the wash under it —
+  // so the raw payload can carry that value twice over. The fill declares
   // tooltipType="none", which Recharts passes through as `type` on the
   // entry; dropping those leaves exactly one row per real series.
   const rows = payload.filter((p) => p.type !== 'none');
@@ -301,9 +303,12 @@ const SalesStockTooltip = ({ active, payload, label, placeholder }) => {
   return (
     <div className="chart-tooltip">
       <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(label)}</p>
+      {/* Swatch + ink text: the mark beside the words carries identity —
+          text never wears the series colour. */}
       {rows.map((p) => (
-        <p key={p.dataKey} style={{ margin: '0.1rem 0', color: p.color }}>
-          {p.name}: {formatCompactPesos(p.value)}
+        <p key={p.dataKey} className="chart-tooltip-row">
+          <span className="chart-tooltip-swatch" style={{ backgroundColor: p.color }} aria-hidden="true" />
+          {p.name}: <strong>{formatCompactPesos(p.value)}</strong>
         </p>
       ))}
       {isPlaceholderPeriod(label, placeholder) && (
@@ -335,12 +340,26 @@ const RECEIVED_LABEL = 'Purchases received';
 // kpis.soh_value and sales_vs_stock[].received docstring sections). No
 // flat ReferenceLine for `received`: it varies per period like the other
 // two series, so it's a dashed Line, not a constant.
-export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null }) => {
+//
+// `insight` is GET /dashboard's sales_vs_stock_insight: the one-sentence
+// takeaway under the title and the peak/low sales months this chart
+// labels — computed by the backend from the same rows, never typed here.
+export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null, insight = null }) => {
   const hasData = data.length > 0;
   // Windows over whatever range the page's date filter fetched. At a wide
   // range that is 38 months, far more than the XAxis can label without
   // skipping — narrowing the window is what puts every month back on screen.
   const zoom = useChartZoom(data);
+  const [view, setView] = useState('chart');
+  // Hovering one legend entry or line pulls that series forward and drops
+  // the others back — with three peso lines on one axis, this is how a
+  // reader isolates the one they're tracing.
+  const [focusKey, setFocusKey] = useState(null);
+  const dimmable = (key) => (focusKey && focusKey !== key ? 0.25 : 1);
+  const focusHandlers = (key) => ({
+    onMouseEnter: () => setFocusKey(key),
+    onMouseLeave: () => setFocusKey(null),
+  });
   // A legend entry with no drawn series is a phantom. Live,
   // Purchase_Fact_Real holds Del Monte rows only, so `received` is null
   // for every Unilever period: the "Fixed Allocation" line never drew a
@@ -353,6 +372,56 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null 
   const bandSpan = placeholderSpan(zoom.view, placeholder);
   const hasPlaceholder = placeholderSpan(data, placeholder) != null;
 
+  // Direct labels: each line's latest value at its end, plus the backend's
+  // peak/low sales months. Selective by design — never a number on every
+  // point. End labels drop out (legend + tooltip take over) when the two
+  // lines finish too close together to label without overlap, measured
+  // against the window's own value span.
+  const labels = useMemo(() => {
+    const rows = zoom.view;
+    const lastWith = (key) => [...rows].reverse().find((pt) => pt[key] != null) ?? null;
+    const lastSales = lastWith('sales');
+    const lastStock = lastWith('stockOnHand');
+    const values = rows.flatMap((pt) => [pt.sales, pt.stockOnHand, hasReceived ? pt.received : null])
+      .filter((v) => v != null);
+    const span = values.length ? Math.max(...values) - Math.min(...values) : 0;
+    const collide = lastSales && lastStock && lastSales.period === lastStock.period && span > 0
+      && Math.abs(lastSales.sales - lastStock.stockOnHand) / span < 0.09;
+    const salesEntries = [];
+    if (lastSales && !collide) {
+      salesEntries.push({
+        period: lastSales.period,
+        text: `Sales ${formatCompactPesos(lastSales.sales)}`,
+        below: lastStock && lastSales.sales < (lastStock.stockOnHand ?? -Infinity),
+      });
+    }
+    // The backend's peak/low sales months — skipped at the line's end,
+    // where the end label already carries that value.
+    for (const mark of [insight?.peak, insight?.low]) {
+      if (mark && mark.period !== lastSales?.period) {
+        salesEntries.push({ period: mark.period, text: mark.label, below: mark === insight?.low });
+      }
+    }
+    const stockEntries = lastStock && !collide
+      ? [{
+          period: lastStock.period,
+          text: `Stock ${formatCompactPesos(lastStock.stockOnHand)}`,
+          below: !(lastSales && lastSales.sales < (lastStock.stockOnHand ?? -Infinity)),
+        }]
+      : [];
+    return {
+      sales: pointLabels(rows, salesEntries),
+      stock: pointLabels(rows, stockEntries),
+    };
+  }, [zoom.view, hasReceived, insight]);
+
+  const tableColumns = [
+    { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
+    { key: 'sales', label: 'Sales', format: (v) => formatCompactPesos(v) },
+    { key: 'stockOnHand', label: 'Stock on hand', format: (v) => formatCompactPesos(v) },
+    ...(hasReceived ? [{ key: 'received', label: RECEIVED_LABEL, format: (v) => formatCompactPesos(v) }] : []),
+  ];
+
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
@@ -364,22 +433,57 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null 
               ? ' The purchases-received line stands in for the supplier allocation schedule, which SSM has not yet provided — it is what was bought, not an allocation.'
               : ' No purchase records exist for this scope, so no purchases line is drawn.'}
           </p>
+          {/* The backend's takeaway sentence, from the same rows this
+              chart plots (sales_vs_stock_insight). */}
+          {insight?.text && <p className="chart-insight">{insight.text}</p>}
         </div>
+        {hasData && <ChartViewToggle view={view} onChange={setView} label="Sales vs stock: chart or table" />}
       </div>
 
       {!hasData ? (
         <p className="dashboard-empty-note">{emptyReason || 'No data available for this range'}</p>
+      ) : view === 'table' ? (
+        <ChartTable
+          columns={tableColumns}
+          rows={data}
+          caption="Sales versus stock on hand by month, in pesos"
+        />
       ) : (
         <>
+          <ul className="custom-legend custom-legend-top">
+            <li
+              className="legend-item"
+              {...focusHandlers('sales')}
+            >
+              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
+              Sales
+            </li>
+            <li
+              className="legend-item"
+              {...focusHandlers('stockOnHand')}
+            >
+              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.stockSeries }} />
+              Stock on hand
+            </li>
+            {hasReceived && (
+              <li className="legend-item" {...focusHandlers('received')}>
+                <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
+                {RECEIVED_LABEL}
+              </li>
+            )}
+            {hasPlaceholder && <PlaceholderLegendItem />}
+          </ul>
           <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={zoom.view} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
                 <defs>
-                  <SeriesFill id="fill-sales" color={CHART_COLORS.salesSeries} />
+                  {/* ONE wash, under stock only — two overlapping gradients
+                      turned muddy where the lines crossed, and the wash's
+                      job (tie the band to its line) needs only the series
+                      that reads as a level rather than a flow. */}
                   <SeriesFill id="fill-stock" color={CHART_COLORS.stockSeries} />
-                  {hasReceived && <SeriesFill id="fill-received" color={COLORS.forecast} />}
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                <CartesianGrid {...GRID_PROPS} />
                 {renderPlaceholderBand(bandSpan)}
                 {/* Interval comes from the zoom window, not Recharts' own
                     crowding heuristic: 0 draws every month once the window is
@@ -392,69 +496,71 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null 
                   tickFormatter={(v) => formatCompactPesos(v)}
                 />
                 <Tooltip content={<SalesStockTooltip placeholder={placeholder} />} />
-                {/* Fills are declared ahead of the Lines so every line paints
-                    on top of every wash, including where two series overlap.
-                    baseValue="dataMin" anchors them to the axis floor rather
-                    than to zero, which keeps the Y domain exactly as it was. */}
-                <Area type="monotone" dataKey="sales" stroke="none" fill="url(#fill-sales)" baseValue="dataMin" legendType="none" tooltipType="none" {...zoom.zoomAnim(0)} />
-                <Area type="monotone" dataKey="stockOnHand" stroke="none" fill="url(#fill-stock)" baseValue="dataMin" legendType="none" tooltipType="none" {...zoom.zoomAnim(1)} />
-                {hasReceived && (
-                  <Area type="monotone" dataKey="received" stroke="none" fill="url(#fill-received)" baseValue="dataMin" legendType="none" tooltipType="none" {...zoom.zoomAnim(2)} />
-                )}
+                {/* The wash is declared ahead of the Lines so both lines
+                    paint on top of it. baseValue="dataMin" anchors it to the
+                    axis floor rather than to zero, which keeps the Y domain
+                    exactly as it was. */}
+                <Area
+                  type="linear"
+                  dataKey="stockOnHand"
+                  stroke="none"
+                  fill="url(#fill-stock)"
+                  baseValue="dataMin"
+                  legendType="none"
+                  tooltipType="none"
+                  opacity={dimmable('stockOnHand')}
+                  {...zoom.zoomAnim(1)}
+                />
+                {/* Straight segments (linear), not smoothed curves: these
+                    are monthly totals, and a curve suggests values between
+                    the months that don't exist. */}
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="sales"
                   name="Sales"
                   stroke={CHART_COLORS.salesSeries}
                   strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeOpacity={dimmable('sales')}
                   dot={seriesDot({ color: CHART_COLORS.salesSeries })}
-                  activeDot={{ r: 5 }}
+                  activeDot={{ r: 6 }}
+                  label={labels.sales}
+                  {...focusHandlers('sales')}
                   {...zoom.zoomAnim(0)}
                 />
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="stockOnHand"
                   name="Stock on hand"
                   stroke={CHART_COLORS.stockSeries}
                   strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeOpacity={dimmable('stockOnHand')}
                   dot={seriesDot({ color: CHART_COLORS.stockSeries })}
-                  activeDot={{ r: 5 }}
+                  activeDot={{ r: 6 }}
+                  label={labels.stock}
+                  {...focusHandlers('stockOnHand')}
                   {...zoom.zoomAnim(1)}
                 />
                 {hasReceived && (
                   <Line
-                    type="monotone"
+                    type="linear"
                     dataKey="received"
                     name={RECEIVED_LABEL}
                     stroke={COLORS.forecast}
                     strokeDasharray="7 5"
-                    strokeWidth={2.5}
+                    strokeWidth={2}
+                    strokeOpacity={dimmable('received')}
                     dot={seriesDot({ color: COLORS.forecast })}
-                    activeDot={{ r: 5 }}
+                    activeDot={{ r: 6 }}
+                    {...focusHandlers('received')}
                     {...zoom.zoomAnim(2)}
                   />
                 )}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <ChartZoomSlider zoom={zoom} />
-          <ul className="custom-legend">
-            <li className="legend-item">
-              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
-              Sales
-            </li>
-            <li className="legend-item">
-              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.stockSeries }} />
-              Stock on hand
-            </li>
-            {hasReceived && (
-              <li className="legend-item">
-                <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
-                {RECEIVED_LABEL}
-              </li>
-            )}
-            {hasPlaceholder && <PlaceholderLegendItem />}
-          </ul>
+          <ChartZoomSlider zoom={zoom} zoomInRight />
         </>
       )}
     </div>
@@ -463,6 +569,17 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null 
 
 const ABC_TIER_COLORS = { A: COLORS.abcA, B: COLORS.abcB, C: COLORS.abcC };
 const abcTierColor = (tier) => ABC_TIER_COLORS[tier] || CHART_COLORS.abcRamp[0];
+
+// What each tier is called and what it means for the rest of the app, in
+// plain words — the manuscript's own tier table (3.4.1.2): A gets the full
+// predictive and prescriptive treatment, B descriptive monitoring only, C
+// minimal monitoring. Without this the card showed "A / B / C" and left the
+// reader to guess why a tier matters.
+const ABC_TIER_ROLE = {
+  A: { name: 'Top sellers', role: 'The only tier the app forecasts and plans reorders for.' },
+  B: { name: 'Middle sellers', role: 'Watched on this dashboard only — not forecast, no reorder plan.' },
+  C: { name: 'Long tail', role: 'Lowest revenue — kept on minimal monitoring.' },
+};
 
 // The ring is plain SVG so each segment can be a real keyboard button. Same
 // layout the Recharts ring had: it starts at 3 o'clock, runs
@@ -521,12 +638,16 @@ const AbcTierCard = ({ facts }) => {
   const x = facts.skuPct.toFixed(0);
   const y = facts.revenuePct != null ? facts.revenuePct.toFixed(0) : null;
   const revenueKnown = facts.amount != null && y != null;
+  const role = ABC_TIER_ROLE[facts.tier];
   return (
     <div className="abc-tier-card" aria-live="polite">
       <p className="abc-tier-card-name">
         <span className="legend-color" style={{ backgroundColor: abcTierColor(facts.tier) }} aria-hidden="true" />
-        Tier {facts.tier}
+        Tier {facts.tier}{role && <span className="abc-tier-card-alias">· {role.name}</span>}
       </p>
+      {/* What the tier is FOR, before any number: the one line that says
+          why a reader should care which tier a SKU is in. */}
+      {role && <p className="abc-tier-card-role">{role.role}</p>}
       {/* Stacked when the card is narrow; side by side as it widens (see
           the container queries in Charts.css). Reading order stays SKUs,
           then revenue, then the sentence at every width. */}
@@ -553,6 +674,9 @@ const AbcTierCard = ({ facts }) => {
           </p>
         )}
       </div>
+      <Link to="/abc" className="abc-tier-card-link">
+        See every SKU and its tier <ArrowRight size={12} aria-hidden="true" />
+      </Link>
     </div>
   );
 };
@@ -630,11 +754,18 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 
 // ABC classification — `data` is [{ tier: 'A'|'B'|'C', count, sharePct }],
 // `revenue` is GET /dashboard's abc_revenue {period, total, blocked_reason}.
-// The ring encodes each tier's share of revenue and its centre stays empty;
-// clicking a segment or its legend item picks the tier the card beside it
-// describes (Tier A on load, never nothing). The paired bars underneath put
-// all three tiers' share of revenue next to their share of SKUs.
-export const ABCDonutWidget = ({ data = [], revenue, emptyReason, note }) => {
+// The ring encodes each tier's share of revenue, with the selected tier's
+// share written in its centre; clicking a segment or its legend item picks
+// the tier the card beside it describes (Tier A on load, never nothing). The
+// paired bars underneath put all three tiers' share of revenue next to their
+// share of SKUs.
+//
+// The subtitle says what the card is FOR and how a tier is decided (the
+// 80 / 95% revenue cutoffs) and for which month — the ring alone answered
+// "how big is each slice" but not "why should I care", and without the
+// month the 132 here read as contradicting the ABC page's carried-forward
+// total.
+export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note }) => {
   const [selectedTier, setSelectedTier] = useState('A');
   const [hover, setHover] = useState(null);
   const ringRef = useRef(null);
@@ -661,6 +792,9 @@ export const ABCDonutWidget = ({ data = [], revenue, emptyReason, note }) => {
   const selected = data.find((d) => d.tier === selectedTier) || data.find((d) => d.tier === 'A') || data[0];
   const hovered = hover ? data.find((d) => d.tier === hover.tier) : null;
   const segments = abcSegments(data);
+  const selectedFacts = selected ? factsFor(selected) : null;
+  const rankedMonth = revenue?.period ? formatMonth(revenue.period) : null;
+  const centre = ABC_DONUT_SIZE / 2;
 
   const selectOnKey = (tier) => (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -677,7 +811,17 @@ export const ABCDonutWidget = ({ data = [], revenue, emptyReason, note }) => {
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>ABC classification</h4>
-          <p>Ring: each tier's share of revenue. Click a tier to see its details.</p>
+          {/* The cutoffs are GET /dashboard's abc_rules (the ABC run's own
+              constants), never restated here. */}
+          <p>
+            Which products earn the most. SKUs are ranked by revenue{rankedMonth ? ` in ${rankedMonth}` : ''}
+            {rules
+              ? `: Tier A makes up the first ${Math.round(rules.tier_a_cutoff * 100)}%, `
+                + `B the next ${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, `
+                + `C the last ${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`
+              : '.'}
+            {' '}Click a tier for details.
+          </p>
           {note && <p className="chart-placeholder-note">{note}</p>}
         </div>
       </div>
@@ -714,6 +858,24 @@ export const ABCDonutWidget = ({ data = [], revenue, emptyReason, note }) => {
                     onPointerLeave={() => setHover(null)}
                   />
                 ))}
+                {/* The selected tier's headline number, where the eye lands
+                    first. Revenue share when it can be trusted, else the SKU
+                    count (the tier card beside it says why). */}
+                {selectedFacts && (
+                  <g className="abc-donut-centre" aria-hidden="true">
+                    <text x={centre} y={centre - 18} textAnchor="middle" className="abc-donut-centre-tier">
+                      Tier {selectedFacts.tier}
+                    </text>
+                    <text x={centre} y={centre + 9} textAnchor="middle" className="abc-donut-centre-value">
+                      {selectedFacts.revenuePct != null
+                        ? `${selectedFacts.revenuePct.toFixed(0)}%`
+                        : selectedFacts.count.toLocaleString()}
+                    </text>
+                    <text x={centre} y={centre + 27} textAnchor="middle" className="abc-donut-centre-label">
+                      {selectedFacts.revenuePct != null ? 'of revenue' : 'SKUs'}
+                    </text>
+                  </g>
+                )}
               </svg>
               <ul className="abc-legend">
                 {data.map((d) => (
@@ -722,11 +884,12 @@ export const ABCDonutWidget = ({ data = [], revenue, emptyReason, note }) => {
                       type="button"
                       className={`abc-legend-btn${d.tier === selected.tier ? ' is-selected' : ''}`}
                       aria-pressed={d.tier === selected.tier}
-                      aria-label={`Tier ${d.tier}`}
+                      aria-label={`Tier ${d.tier}${ABC_TIER_ROLE[d.tier] ? `, ${ABC_TIER_ROLE[d.tier].name}` : ''}`}
                       onClick={() => setSelectedTier(d.tier)}
                     >
                       <span className="legend-color" style={{ backgroundColor: abcTierColor(d.tier) }} aria-hidden="true" />
-                      {d.tier}
+                      <span className="abc-legend-tier">{d.tier}</span>
+                      {ABC_TIER_ROLE[d.tier] && <span className="abc-legend-name">{ABC_TIER_ROLE[d.tier].name}</span>}
                     </button>
                   </li>
                 ))}
@@ -798,10 +961,12 @@ const WAREHOUSE_STATUS_COLORS = {
 // they measure. Legend entries appear only for segments that actually have
 // a non-zero count somewhere in the data — live, no ABC-classified product
 // is flagged Inactive, so a "Dead stock" swatch was pointing at nothing.
-export const CategoryStockBarWidget = ({ data = [], emptyReason, note }) => {
+export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = null }) => {
   const hasData = data.length > 0;
   const hasDead = data.some((row) => (row.deadStock || 0) > 0);
   const hasPending = data.some((row) => (row.pendingReorderCount || 0) > 0);
+  // Every count that could be flagged, for the all-clear line below.
+  const flaggedTotal = data.reduce((sum, row) => sum + (row.inStock || 0) + (row.deadStock || 0), 0);
   // Same "off entirely, not just shorter" reduced-motion rule motion.js's
   // chartAnim() uses for the Recharts-based widgets — this one is plain
   // CSS (no Recharts here), so it's applied by hand rather than picked up
@@ -826,6 +991,19 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note }) => {
         <p className="dashboard-empty-note">{emptyReason || 'No stock status data available'}</p>
       ) : (
         <div className="chart-widget-body">
+          {/* When no tier has a single Inactive product, the bars alone
+              just read "everything is green" — say the finding outright.
+              The month is GET /dashboard's tier_stock_period (the snapshot
+              the flags were read at), never typed here. */}
+          {!hasDead && flaggedTotal > 0 && (
+            <p className="tier-stock-note">
+              <CheckCircle2 size={15} aria-hidden="true" />
+              <span>
+                No dead stock flagged{period ? ` in ${formatMonth(period)}` : ''} — every one of the{' '}
+                {flaggedTotal.toLocaleString()} classified products with a stock record is marked Active.
+              </span>
+            </p>
+          )}
           <div className="tier-stock-bars">
             {data.map((row, index) => {
               const inStock = row.inStock || 0;
@@ -908,13 +1086,35 @@ const PortfolioForecastTooltip = ({ active, payload, label }) => {
     <div className="chart-tooltip">
       <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(label)}</p>
       {row.actual != null && (
-        <p style={{ margin: '0.1rem 0', color: CHART_COLORS.salesSeries }}>Actual demand: {Math.round(row.actual).toLocaleString()} units</p>
+        <p className="chart-tooltip-row">
+          <span className="chart-tooltip-swatch" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />
+          Actual demand: <strong>{Math.round(row.actual).toLocaleString()} units</strong>
+        </p>
       )}
       {row.forecast != null && (
-        <p style={{ margin: '0.1rem 0', color: COLORS.forecast }}>Forecast: {Math.round(row.forecast).toLocaleString()} units</p>
+        <p className="chart-tooltip-row">
+          <span className="chart-tooltip-swatch" style={{ backgroundColor: COLORS.forecast }} aria-hidden="true" />
+          Forecast: <strong>{Math.round(row.forecast).toLocaleString()} units</strong>
+        </p>
+      )}
+      {row.confidenceBase != null && row.confidenceBand != null && row.confidenceBand > 0 && (
+        <p className="chart-tooltip-row">
+          <span className="chart-tooltip-swatch" style={{ backgroundColor: COLORS.forecastBg }} aria-hidden="true" />
+          Range: <strong>
+            {Math.round(row.confidenceBase).toLocaleString()} – {Math.round(row.confidenceBase + row.confidenceBand).toLocaleString()}
+          </strong>
+        </p>
       )}
     </div>
   );
+};
+
+// 236k / 1.2M / 940 — the same compaction the pieces axis uses.
+const formatCompactQty = (value) => {
+  const n = Math.abs(value);
+  if (n >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (n >= 1_000) return `${Math.round(value / 1_000)}k`;
+  return `${Math.round(value)}`;
 };
 
 // Portfolio-level aggregate forecast — sums forecast_value across every
@@ -940,13 +1140,19 @@ export const PortfolioForecastWidget = ({
   onPrincipalChange,
   isUpdating = false,
   reliability = null,
+  insight = null,
+  mapeGate = null,
 }) => {
   const hasData = series.length > 0;
+  const [view, setView] = useState('chart');
   // GET /dashboard's forecast block: evaluated = SKU forecasts with a
-  // holdout MASE, unreliable = those at MASE >= 1. Shown as how many beat
-  // a naive forecast, the pass gate the LP uses too.
+  // holdout MASE, unreliable = those at MASE >= gate. Shown as how many
+  // beat a naive forecast, the pass gate the LP uses too. Both gates come
+  // from the payload (mape_gate / mase_gate), so the labels below state
+  // the backend's constants rather than restating them here.
   const evaluated = reliability?.evaluated_count ?? 0;
   const beatNaive = evaluated > 0 && reliability?.unreliable_count != null ? evaluated - reliability.unreliable_count : null;
+  const maseGate = reliability?.mase_gate ?? null;
 
   // Same base/excess stacking trick as CoverTrendWidget's policy shading:
   // an invisible area up to confidenceLower, then a visible band on top
@@ -991,6 +1197,29 @@ export const PortfolioForecastWidget = ({
   // range instead of being recalculated for whatever window is showing.
   const zoom = useChartZoom(chartData);
 
+  // "Forecast starts" divider: the bridge month, where the last actual
+  // hands over to the projection — drawn only while it is in the window.
+  const forecastStart = useMemo(() => {
+    const bridge = chartData.filter((pt) => pt.actual != null && pt.forecast != null).pop();
+    return bridge && zoom.view.some((pt) => pt.period === bridge.period) ? bridge.period : null;
+  }, [chartData, zoom.view]);
+
+  // The projection's value, labelled at the end of its line.
+  const forecastLabels = useMemo(() => {
+    const last = [...zoom.view].reverse().find((pt) => pt.forecast != null);
+    return pointLabels(zoom.view, last && last.actual == null
+      ? [{ period: last.period, text: `Forecast ${formatCompactQty(last.forecast)}` }]
+      : []);
+  }, [zoom.view]);
+
+  const tableColumns = [
+    { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
+    { key: 'actual', label: 'Actual (pieces)', format: (v) => Math.round(v).toLocaleString() },
+    { key: 'forecast', label: 'Forecast (pieces)', format: (v) => Math.round(v).toLocaleString() },
+    { key: 'confidenceLower', label: 'Range low', format: (v) => Math.round(v).toLocaleString() },
+    { key: 'confidenceUpper', label: 'Range high', format: (v) => Math.round(v).toLocaleString() },
+  ];
+
   return (
     <div className={`chart-widget${onPrincipalChange ? ' chart-widget-filterable' : ''}${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
@@ -999,6 +1228,9 @@ export const PortfolioForecastWidget = ({
               y-axis reads "120k" in both, so it is named in the heading. */}
           <h4>Portfolio-level aggregate forecast <span className="chart-unit">pieces</span></h4>
           <p>Summed demand across gated Category A SKUs vs. forecast</p>
+          {/* The card's takeaway, composed by the backend from this same
+              series (portfolio_forecast.insight). */}
+          {insight?.text && <p className="chart-insight">{insight.text}</p>}
         </div>
         {/* Card-scoped principal filter — re-scopes THIS card only, never
             the page (the Topbar's filter does that). Rendered in the empty
@@ -1008,6 +1240,7 @@ export const PortfolioForecastWidget = ({
             for the topbar, not a card. */}
         {onPrincipalChange && (
           <div className="card-filter-controls">
+            {hasData && <ChartViewToggle view={view} onChange={setView} label="Portfolio forecast: chart or table" />}
             <div className="card-principal-filter" role="radiogroup" aria-label="Forecast principal">
               {PRINCIPALS.map((p) => (
                 <button
@@ -1039,16 +1272,21 @@ export const PortfolioForecastWidget = ({
         )}
       </div>
 
-      {!hasData ? (
-        <p className={`dashboard-empty-note${isUpdating ? ' is-refreshing' : ''}`}>
-          {isUpdating ? 'Loading forecast…' : emptyReason || 'No forecast data available'}
-        </p>
+      {!hasData && isUpdating ? (
+        <>
+          <LoadingStatus>Loading forecast…</LoadingStatus>
+          <SkeletonChart variant="line" />
+        </>
+      ) : !hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || 'No forecast data available'}</p>
       ) : (
         <div className={`portfolio-forecast-body${isUpdating ? ' is-refreshing' : ''}`} aria-busy={isUpdating}>
           <div className="portfolio-stat-row">
             <div className="portfolio-stat">
               <span className="portfolio-stat-label">
-                Gated SKUs (MAPE &lt; 20%)
+                {/* The gate is the payload's own mape_gate — the constant
+                    the backend filtered by, not a number retyped here. */}
+                Gated SKUs{mapeGate != null ? ` (MAPE < ${Math.round(mapeGate)}%)` : ''}
                 {' '}
                 <PriorityInfo text="MAPE here is each SKU's error on a rolling one-month-ahead holdout: its served model forecasts each held-out month from the months before it, and is scored against what actually sold." />
               </span>
@@ -1061,9 +1299,9 @@ export const PortfolioForecastWidget = ({
             {beatNaive != null && (
               <div className="portfolio-stat">
                 <span className="portfolio-stat-label">
-                  Beat naive (MASE &lt; 1)
+                  Beat naive{maseGate != null ? ` (MASE < ${maseGate})` : ''}
                   {' '}
-                  <PriorityInfo text="How many SKU forecasts beat a naive 'same as last month' forecast on their own rolling one-month-ahead holdout (MASE below 1). Forecasts at or above 1 are flagged unreliable. Counted over every evaluated forecast in this scope, not only the gated ones charted here." />
+                  <PriorityInfo text="How many SKU forecasts beat a naive 'same as last month' forecast on their own rolling one-month-ahead holdout (MASE below the gate). Forecasts at or above it are flagged unreliable. Counted over every evaluated forecast in this scope, not only the gated ones charted here." />
                 </span>
                 <span className="portfolio-stat-value">{beatNaive} / {evaluated}</span>
               </div>
@@ -1074,79 +1312,96 @@ export const PortfolioForecastWidget = ({
             </div>
           </div>
 
-          <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
-            <ResponsiveContainer width="99%" height="100%">
-              <ComposedChart data={zoom.view} margin={{ top: 10, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
-                <defs>
-                  <SeriesFill id="fill-actual" color={CHART_COLORS.salesSeries} />
-                  <SeriesFill id="fill-forecast" color={COLORS.forecast} />
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                {/* A numeric interval from the zoom window, replacing the
-                    earlier equidistantPreserveStart. That was here because
-                    Recharts' default preserveEnd skips labels counting
-                    backward from the END and so silently dropped the first
-                    point's label on a wide range; a numeric interval counts
-                    forward from index 0, which keeps the first label by
-                    construction, and drops to 0 (every month labelled) as
-                    soon as the window is narrow enough to fit them. */}
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  domain={['auto', 'auto']}
-                  tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
-                  tickFormatter={(v) => `${Math.round(v / 1000)}k`}
-                />
-                <Tooltip content={<PortfolioForecastTooltip />} />
-                <Area type="monotone" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" {...zoom.zoomAnim(0)} />
-                <Area type="monotone" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} {...zoom.zoomAnim(0)} />
-                {/* Series washes sit above the confidence band but below both
-                    lines. No stackId — these are independent fills, and
-                    joining the band's stack would add their values to it. */}
-                <Area type="monotone" dataKey="actual" stroke="none" fill="url(#fill-actual)" baseValue="dataMin" legendType="none" tooltipType="none" connectNulls={false} {...zoom.zoomAnim(1)} />
-                <Area type="monotone" dataKey="forecast" stroke="none" fill="url(#fill-forecast)" baseValue="dataMin" legendType="none" tooltipType="none" connectNulls={false} {...zoom.zoomAnim(2)} />
-                <Line
-                  type="monotone"
-                  dataKey="actual"
-                  name="Actual demand"
-                  stroke={CHART_COLORS.salesSeries}
-                  strokeWidth={2}
-                  dot={seriesDot({ color: CHART_COLORS.salesSeries })}
-                  activeDot={{ r: 5 }}
-                  connectNulls={false}
-                  {...zoom.zoomAnim(1)}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="forecast"
-                  name="Forecast"
-                  stroke={COLORS.forecast}
-                  strokeDasharray="5 3"
-                  strokeWidth={2}
-                  dot={seriesDot({ color: COLORS.forecast, skip: (p) => p?.actual != null })}
-                  activeDot={{ r: 5 }}
-                  connectNulls={false}
-                  {...zoom.zoomAnim(2)}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <ChartZoomSlider zoom={zoom} />
-          <ul className="custom-legend">
-            <li className="legend-item">
-              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
-              Actual demand
-            </li>
-            <li className="legend-item">
-              <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
-              Forecast
-            </li>
-            <li className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
-              Confidence band
-            </li>
-          </ul>
+          {view === 'table' ? (
+            <ChartTable
+              columns={tableColumns}
+              rows={series}
+              caption="Actual demand and forecast by month, in pieces"
+            />
+          ) : (
+            <>
+              <ul className="custom-legend custom-legend-top">
+                <li className="legend-item">
+                  <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
+                  Actual demand
+                </li>
+                <li className="legend-item">
+                  <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
+                  Forecast
+                </li>
+                <li className="legend-item">
+                  <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
+                  Confidence band
+                </li>
+              </ul>
+              <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
+                <ResponsiveContainer width="99%" height="100%">
+                  <ComposedChart data={zoom.view} margin={{ top: 10, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
+                    <CartesianGrid {...GRID_PROPS} />
+                    {/* A numeric interval from the zoom window, replacing the
+                        earlier equidistantPreserveStart. That was here because
+                        Recharts' default preserveEnd skips labels counting
+                        backward from the END and so silently dropped the first
+                        point's label on a wide range; a numeric interval counts
+                        forward from index 0, which keeps the first label by
+                        construction, and drops to 0 (every month labelled) as
+                        soon as the window is narrow enough to fit them. */}
+                    <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      domain={['auto', 'auto']}
+                      tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                      tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                    />
+                    <Tooltip content={<PortfolioForecastTooltip />} />
+                    {/* The uncertainty cone is this chart's ONE fill — the
+                        series washes that used to sit under both lines
+                        muddied it, and the cone is the fill that carries
+                        real information. */}
+                    <Area type="linear" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" {...zoom.zoomAnim(0)} />
+                    <Area type="linear" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} {...zoom.zoomAnim(0)} />
+                    {/* Where history hands over to projection — the divider
+                        the dashed line style is then read against. */}
+                    {forecastStart && (
+                      <ReferenceLine
+                        x={forecastStart}
+                        stroke={CHART_COLORS.axisLabel}
+                        strokeDasharray="4 4"
+                        label={{ value: 'Forecast starts', position: 'insideTopRight', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                      />
+                    )}
+                    <Line
+                      type="linear"
+                      dataKey="actual"
+                      name="Actual demand"
+                      stroke={CHART_COLORS.salesSeries}
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      dot={seriesDot({ color: CHART_COLORS.salesSeries })}
+                      activeDot={{ r: 6 }}
+                      connectNulls={false}
+                      {...zoom.zoomAnim(1)}
+                    />
+                    <Line
+                      type="linear"
+                      dataKey="forecast"
+                      name="Forecast"
+                      stroke={COLORS.forecast}
+                      strokeDasharray="5 3"
+                      strokeWidth={2}
+                      dot={seriesDot({ color: COLORS.forecast, skip: (p) => p?.actual != null })}
+                      activeDot={{ r: 6 }}
+                      connectNulls={false}
+                      label={forecastLabels}
+                      {...zoom.zoomAnim(2)}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <ChartZoomSlider zoom={zoom} zoomInRight />
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1178,39 +1433,32 @@ const URGENCY_STYLES = {
 // updated, the widget shows an explicit "not re-solved" note the moment
 // the sliders diverge from the solver's real weights.
 //
-// `blurb` is placeholder copy for each priority's hover tooltip — meant to
-// be replaced with the real methodology wording from the manuscript.
+// `blurb` states each weight's term in the LP objective as
+// analytics/optimization/lp.py actually defines it (Step 19's
+// Z = w1·TC − w2·SL + w3·SC) — real methodology wording, replacing the
+// "Placeholder:" copy that shipped before 2026-09-26.
+//
+// One colour for all three rows (CHART_COLORS.lpWeight, the model-output
+// indigo): they are co-equal weights of a single objective, not three
+// categories, so three hues implied a difference in kind that isn't
+// there — and the labels carry identity on their own.
 const LP_PRIORITY_ROWS = [
   {
     key: 'cost',
-    // Was COLORS.critical (red). Cost, Service level, and Storage are three
-    // co-equal trade-off weights in one multi-objective LP — none of them
-    // is inherently more alarming than the others, so giving Cost the same
-    // red used for genuine alerts elsewhere (Reorder Recs' CRITICAL badge,
-    // a rate line elsewhere in the app) implied a severity that isn't there. Teal
-    // keeps it visually distinct from Service level (indigo) and Storage
-    // (amber) without borrowing red's meaning.
     label: 'Cost',
-    color: CHART_COLORS.lpWeights.cost,
-    blurb: 'Placeholder: how strongly the optimizer favours minimizing total purchase and holding cost when choosing order quantities.',
+    blurb: 'The weight on total procurement cost in the LP objective — how strongly the solver favours cheaper order quantities. Cost is minimized: the sum of each SKU’s procurement cost times its order quantity.',
   },
   {
     key: 'service_level',
     label: 'Service level',
-    color: CHART_COLORS.lpWeights.service_level,
-    blurb: 'Placeholder: how strongly the optimizer favours avoiding stockouts, so demand can be met from stock on hand.',
+    blurb: 'The weight on service level — total ordered quantity relative to total reorder-point demand. It enters the objective negatively, so the solver is rewarded for covering more of the demand and avoiding stockouts.',
   },
   {
     key: 'storage',
     label: 'Storage',
-    color: CHART_COLORS.lpWeights.storage,
-    blurb: 'Placeholder: how strongly the optimizer favours keeping within warehouse space and limiting spoilage risk.',
+    blurb: 'The weight on storage cost — each SKU’s storage cost per unit times its order quantity, minimized so orders stay within what the warehouse can affordably hold.',
   },
 ];
-
-// The solver's real defaults (analytics/optimization/lp.py W1/W2/W3),
-// used to seed the sliders whenever the API hasn't sent weights.
-const LP_DEFAULT_PCT = { cost: 45, service_level: 35, storage: 20 };
 
 // Small "?" affordance — hover (or keyboard focus) reveals the blurb.
 // Pure CSS visibility off :hover/:focus-within, so there's no popover
@@ -1249,9 +1497,13 @@ export const ReorderRecommendationWidget = ({
   // used to back a set of what-if sliders; removed rather than left
   // decorative, since a control that visibly moves but never changes the
   // list below it reads as broken, not as a deliberate design choice.
+  //
+  // No hardcoded fallback percentages: the API always sends lp_weights
+  // (tests pin that), and if a weight ever went missing the row shows an
+  // honest null rather than a number this file made up.
   const solverPct = useMemo(() => {
     const read = (key) =>
-      typeof weights?.[key] === 'number' ? Math.round(weights[key] * 100) : LP_DEFAULT_PCT[key];
+      typeof weights?.[key] === 'number' ? Math.round(weights[key] * 100) : null;
     return { cost: read('cost'), service_level: read('service_level'), storage: read('storage') };
   }, [weights]);
 
@@ -1320,15 +1572,12 @@ export const ReorderRecommendationWidget = ({
             {LP_PRIORITY_ROWS.map((p) => (
               <div className="reorder-priority-row" key={p.key}>
                 <div className="reorder-priority-row-top">
-                  <span className="reorder-priority-label">
-                    <span className="reorder-priority-swatch" style={{ backgroundColor: p.color }} />
-                    {p.label}
-                  </span>
+                  <span className="reorder-priority-label">{p.label}</span>
                   <PriorityInfo text={p.blurb} />
-                  <span className="reorder-priority-pct">{solverPct[p.key]}%</span>
+                  <span className="reorder-priority-pct">{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</span>
                 </div>
-                <div className="reorder-priority-bar" role="img" aria-label={`${p.label}: ${solverPct[p.key]}%`}>
-                  <span style={{ width: `${solverPct[p.key]}%`, backgroundColor: p.color }} />
+                <div className="reorder-priority-bar" role="img" aria-label={`${p.label}: ${solverPct[p.key] == null ? 'not available' : `${solverPct[p.key]}%`}`}>
+                  <span style={{ width: `${solverPct[p.key] ?? 0}%`, backgroundColor: CHART_COLORS.lpWeight }} />
                 </div>
               </div>
             ))}
@@ -1445,7 +1694,14 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
             {rows.map((r) => (
               <div className="policy-bar-row" key={r.key}>
                 <span className="policy-bar-label">{r.label}</span>
-                <div className="policy-bar-track" role="img" aria-label={`${r.label}: ${Math.round(r.value).toLocaleString()} units`}>
+                {/* Meter rule: the unfilled track is a lighter step of the
+                    fill's own hue, so each bar reads as one meter. */}
+                <div
+                  className="policy-bar-track"
+                  role="img"
+                  aria-label={`${r.label}: ${Math.round(r.value).toLocaleString()} units`}
+                  style={{ background: `color-mix(in srgb, ${r.color} 12%, var(--color-surface))` }}
+                >
                   <span style={{ width: `${(r.value / max) * 100}%`, backgroundColor: r.color }} />
                 </div>
                 <span className="policy-bar-value">{Math.round(r.value).toLocaleString()} units</span>

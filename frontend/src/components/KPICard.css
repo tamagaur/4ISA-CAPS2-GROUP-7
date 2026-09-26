@@ -48,6 +48,21 @@
   letter-spacing: -0.5px;
 }
 
+/* Value + sparkline on one row: the number leads, the 12-point history
+   sits quietly at the right (stat-tile contract — trend in a de-emphasis
+   hue, the current period marked in the series hue). */
+.kpi-value-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.kpi-sparkline {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
 .kpi-footer {
   display: flex;
   flex-direction: column;
@@ -63,6 +78,36 @@
 
 .kpi-trend-icon {
   flex-shrink: 0;
+}
+
+/* Month-over-month change as a shaded pill: green when the figure rose,
+   red when it fell, gray when flat. The arrow repeats the direction, so the
+   pill never relies on colour alone (greyscale, colour-blind readers). */
+.kpi-delta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.kpi-delta-pill.is-positive {
+  background-color: var(--color-success-bg-alt);
+  color: var(--color-success-text);
+}
+
+.kpi-delta-pill.is-negative {
+  background-color: var(--color-danger-bg-strong);
+  color: var(--color-danger-text);
+}
+
+.kpi-delta-pill.is-neutral {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
 }
 
 .kpi-context {

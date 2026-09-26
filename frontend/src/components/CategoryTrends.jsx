@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import {
+  Area,
   ComposedChart,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
+  ReferenceLine,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
@@ -15,9 +17,12 @@ import { labelForPrincipal } from '../principals';
 import { formatMonth } from '../utils/formatDate';
 import { formatCompactPesos } from '../utils/formatters';
 import { CHART_COLORS, COLORS } from '../theme/colors';
+import { GRID_PROPS, pointLabels, seriesDot } from './ChartZoom';
+import { ChartTable, ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import RefreshingNote from './RefreshingNote';
+import { LoadingStatus, SkeletonChart, SkeletonLine, SkeletonTable } from './Skeleton';
 import './CategoryTrends.css';
 
 // "What are the projected growth and decline trajectories for each product
@@ -51,14 +56,20 @@ const TrendTooltip = ({ active, payload, label, placeholder }) => {
       {p.actual != null && <p>Revenue: {formatCompactPesos(p.actual)}</p>}
       {p.fitted != null && <p>Trend line: {formatCompactPesos(p.fitted)}</p>}
       {p.projection != null && p.actual == null && <p>Projected trend: {formatCompactPesos(p.projection)}</p>}
+      {p.bandLow != null && p.bandHigh != null && p.bandHigh > p.bandLow && p.actual == null && (
+        <p>Likely range: {formatCompactPesos(p.bandLow)} – {formatCompactPesos(p.bandHigh)}</p>
+      )}
       {isPlaceholderPeriod(label, placeholder) && <p className="ct-tooltip-placeholder">Placeholder month — not SSM&apos;s data</p>}
     </div>
   );
 };
 
 // `placeholder` is the payload's data_mode.placeholder window — set only in
-// preview mode (src/dataMode.js), so real mode draws no band.
-const CategoryChart = ({ category, placeholder = null }) => {
+// preview mode (src/dataMode.js), so real mode draws no band. `method` is
+// GET /category-trends' method block: every number this page states about
+// the method comes from it, never from this file.
+const CategoryChart = ({ category, method, placeholder = null }) => {
+  const [view, setView] = useState('chart');
   const data = useMemo(() => {
     const history = category.history || [];
     const fitted = category.fitted || [];
@@ -68,43 +79,138 @@ const CategoryChart = ({ category, placeholder = null }) => {
       actual: h.revenue,
       fitted: i >= offset ? fitted[i - offset] : null,
       projection: null,
+      bandLow: null,
+      bandBase: null,
+      bandSpanV: null,
+      bandHigh: null,
     }));
     if (category.available && rows.length) {
-      // Start the projection at the line's last value so it reads as one line.
-      rows[rows.length - 1].projection = rows[rows.length - 1].fitted;
+      // Start the projection at the line's last value so it reads as one
+      // line, and collapse the likely-range band to zero width there —
+      // uncertainty is nil at the last known month and widens from it.
+      const last = rows[rows.length - 1];
+      last.projection = last.fitted;
+      last.bandLow = last.bandHigh = last.fitted;
+      last.bandBase = last.fitted;
+      last.bandSpanV = 0;
       (category.projection_periods || []).forEach((period, i) => {
-        rows.push({ period, actual: null, fitted: null, projection: category.projection[i] });
+        // projection_low/high are the slope's confidence bounds extended
+        // over the projection months (analytics/forecasting/
+        // category_trend.py) — the backend's numbers, drawn as a band.
+        const low = category.projection_low?.[i] ?? null;
+        const high = category.projection_high?.[i] ?? null;
+        rows.push({
+          period,
+          actual: null,
+          fitted: null,
+          projection: category.projection[i],
+          bandLow: low,
+          bandHigh: high,
+          bandBase: low,
+          bandSpanV: low != null && high != null ? high - low : null,
+        });
       });
     }
     return rows;
   }, [category]);
   const bandSpan = placeholderSpan(data, placeholder);
+  const hasRange = category.available && data.some((r) => (r.bandSpanV ?? 0) > 0);
+  // The divider month: where history ends and the projection begins.
+  const lastActualPeriod = category.available && (category.history || []).length
+    ? category.history[category.history.length - 1].period
+    : null;
+
+  // Selective direct labels: the last actual month's revenue, and the
+  // projected level at the end of the trend line.
+  const actualLabels = useMemo(() => {
+    const lastActual = [...data].reverse().find((r) => r.actual != null);
+    return pointLabels(data, lastActual
+      ? [{ period: lastActual.period, text: formatCompactPesos(lastActual.actual) }]
+      : []);
+  }, [data]);
+  const projectionLabels = useMemo(() => {
+    const end = [...data].reverse().find((r) => r.projection != null && r.actual == null);
+    return pointLabels(data, end
+      ? [{ period: end.period, text: `Trend ${formatCompactPesos(end.projection)}` }]
+      : []);
+  }, [data]);
 
   return (
     <div className="ct-chart">
-      <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={data} margin={{ top: 10, right: 16, left: 4, bottom: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-          {renderPlaceholderBand(bandSpan)}
-          <XAxis dataKey="period" tickFormatter={axisMonth} minTickGap={24} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} />
-          <YAxis tickFormatter={formatCompactPesos} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} width={56} />
-          <Tooltip content={<TrendTooltip placeholder={placeholder} />} />
-          <Line dataKey="actual" name="Revenue" stroke={CHART_COLORS.salesSeries} strokeWidth={2} dot={{ r: 2 }} connectNulls={false} isAnimationActive={false} />
-          <Line dataKey="fitted" name="Trend line" stroke={CHART_COLORS.cumulativeCurve} strokeWidth={1.5} strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />
-          <Line dataKey="projection" name="Projected trend" stroke={COLORS.forecast} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} isAnimationActive={false} />
-        </ComposedChart>
-      </ResponsiveContainer>
-      <div className="ct-legend">
-        <span><i className="ct-swatch ct-swatch-actual" />Monthly revenue</span>
-        <span><i className="ct-swatch ct-swatch-fitted" />Trend line (last {category.points ?? 24} months)</span>
-        {category.available && <span><i className="ct-swatch ct-swatch-projection" />Trend, next 12 months</span>}
-        {bandSpan && <span><i className="ct-swatch ct-swatch-placeholder" />Placeholder months — not SSM&apos;s data</span>}
+      <div className="ct-chart-tools">
+        <ChartViewToggle view={view} onChange={setView} label="Category trend: chart or table" />
       </div>
+      {view === 'table' ? (
+        <ChartTable
+          caption={`Monthly revenue and trend projection`}
+          columns={[
+            { key: 'period', label: 'Month', format: (v) => axisMonth(v), align: 'left' },
+            { key: 'actual', label: 'Revenue', format: (v) => formatCompactPesos(v) },
+            { key: 'fitted', label: 'Trend line', format: (v) => formatCompactPesos(v) },
+            { key: 'projection', label: 'Projected trend', format: (v) => formatCompactPesos(v) },
+            ...(hasRange ? [
+              { key: 'bandLow', label: 'Range low', format: (v) => formatCompactPesos(v) },
+              { key: 'bandHigh', label: 'Range high', format: (v) => formatCompactPesos(v) },
+            ] : []),
+          ]}
+          rows={data}
+        />
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={data} margin={{ top: 10, right: 16, left: 4, bottom: 8 }}>
+              <CartesianGrid {...GRID_PROPS} />
+              {renderPlaceholderBand(bandSpan)}
+              <XAxis dataKey="period" tickFormatter={axisMonth} minTickGap={24} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} />
+              <YAxis tickFormatter={formatCompactPesos} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} width={56} />
+              <Tooltip content={<TrendTooltip placeholder={placeholder} />} />
+              {/* The projection's likely range: an invisible base up to the
+                  low bound, then the visible band on top of it (the same
+                  stacking the portfolio forecast's cone uses), so the
+                  shading covers exactly [low, high]. */}
+              {hasRange && (
+                <>
+                  <Area dataKey="bandBase" stackId="ctBand" stroke="none" fill="transparent" isAnimationActive={false} />
+                  <Area dataKey="bandSpanV" stackId="ctBand" stroke="none" fill={COLORS.forecast} fillOpacity={0.10} isAnimationActive={false} />
+                </>
+              )}
+              {/* Where history hands over to the projected trend. */}
+              {lastActualPeriod && (
+                <ReferenceLine
+                  x={lastActualPeriod}
+                  stroke={CHART_COLORS.axisLabel}
+                  strokeDasharray="4 4"
+                  label={{ value: 'Projection starts', position: 'insideTopRight', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                />
+              )}
+              <Line dataKey="actual" name="Revenue" stroke={CHART_COLORS.salesSeries} strokeWidth={2} strokeLinecap="round" dot={seriesDot({ color: CHART_COLORS.salesSeries, r: 3 })} connectNulls={false} isAnimationActive={false} label={actualLabels} />
+              <Line dataKey="fitted" name="Trend line" stroke={CHART_COLORS.cumulativeCurve} strokeWidth={1.5} strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />
+              <Line dataKey="projection" name="Projected trend" stroke={COLORS.forecast} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} isAnimationActive={false} label={projectionLabels} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <div className="ct-legend">
+            <span><i className="ct-swatch ct-swatch-actual" />Monthly revenue</span>
+            {category.available && (
+              <span><i className="ct-swatch ct-swatch-fitted" />Trend line (last {category.points} months)</span>
+            )}
+            {category.available && method && (
+              <span><i className="ct-swatch ct-swatch-projection" />Trend, next {method.projection_months} months</span>
+            )}
+            {hasRange && method && (
+              <span>
+                <i className="ct-swatch ct-swatch-band" />
+                Likely range ({Math.round(method.slope_confidence * 100)}% slope bounds)
+              </span>
+            )}
+            {bandSpan && <span><i className="ct-swatch ct-swatch-placeholder" />Placeholder months — not SSM&apos;s data</span>}
+          </div>
+        </>
+      )}
     </div>
   );
 };
 
-const PrincipalSection = ({ section, placeholder = null }) => {
+const PrincipalSection = ({ section, method, placeholder = null }) => {
   const categories = section.categories || [];
   const [selected, setSelected] = useState(() => categories.find((c) => c.available)?.category ?? categories[0]?.category);
   const current = categories.find((c) => c.category === selected) ?? categories[0];
@@ -119,16 +225,16 @@ const PrincipalSection = ({ section, placeholder = null }) => {
           {observed.length
             ? `${observed.length} month${observed.length === 1 ? '' : 's'} with data, ${formatMonth(observed[0])} – ${formatMonth(observed[observed.length - 1])}.`
             : 'No revenue data loaded.'}
-          {section.principal === 'delmonte' &&
-            ' Only months since Del Monte regrouped its categories in Jan 2025 count — the older sub-categories are different categories.'}
-          {section.principal === placeholder?.principal && observed.some((m) => isPlaceholderPeriod(m, placeholder)) &&
+          {section.series_start &&
+            ` Only months since ${labelForPrincipal(section.principal)} regrouped its categories in ${formatMonth(section.series_start)} count — the older sub-categories are different categories.`}
+          {method && section.principal === placeholder?.principal && observed.some((m) => isPlaceholderPeriod(m, placeholder)) &&
             ` ${formatMonth(placeholder.start)} – ${formatMonth(placeholder.end)} is placeholder data (preview), not SSM's.`
-            + ' The trend line and projection use only the last 24 months, all real, so they are the same as without it.'}
+            + ` The trend line and projection use only the last ${method.window_months} months, all real, so they are the same as without it.`}
         </p>
       </div>
-      {!anyProjection && categories.length > 0 && (
+      {!anyProjection && categories.length > 0 && method && (
         <p className="ct-note">
-          No category has the {12} months with data a projection needs yet, so this shows history only.
+          No category has the {method.min_points} months with data a projection needs yet, so this shows history only.
         </p>
       )}
       {categories.length > 0 && (
@@ -137,10 +243,15 @@ const PrincipalSection = ({ section, placeholder = null }) => {
             <thead>
               <tr>
                 <th>Category</th>
-                <th className="table-num">Revenue, last 12 months</th>
+                <th className="table-num">Revenue, last {method?.trailing_months} months</th>
                 <th>Trend</th>
-                <th className="table-num" title="The next 12 months on the trend line against the last 12 on the same line">Next 12 months vs last 12</th>
-                <th className="table-num" title="Mann–Kendall p-value; below 0.05 the direction is statistically real">Significance</th>
+                <th
+                  className="table-num"
+                  title={`The next ${method?.projection_months} months on the trend line against the last ${method?.trailing_months} on the same line`}
+                >
+                  Next {method?.projection_months} months vs last {method?.trailing_months}
+                </th>
+                <th className="table-num" title={`Mann–Kendall p-value; below ${method?.significance_alpha} the direction is statistically real`}>Significance</th>
               </tr>
             </thead>
             <tbody>
@@ -162,7 +273,9 @@ const PrincipalSection = ({ section, placeholder = null }) => {
                       {c.available ? (
                         <span className={`ct-dir ${dir.className}`}>{DirIcon && <DirIcon size={14} aria-hidden="true" />}{dir.label}</span>
                       ) : (
-                        <span className="ct-dir ct-dir-none">Not enough months</span>
+                        // The backend's own short status: "Not enough
+                        // months" or "No recent sales".
+                        <span className="ct-dir ct-dir-none" title={c.reason}>{c.label}</span>
                       )}
                     </td>
                     <td className="table-num">
@@ -171,8 +284,10 @@ const PrincipalSection = ({ section, placeholder = null }) => {
                           <strong>{signed(c.change_pct)}</strong>
                           <span className="ct-range"> ({signed(c.change_pct_low)} to {signed(c.change_pct_high)})</span>
                         </>
+                      ) : c.points > 0 && method ? (
+                        <span className="ct-muted">{c.points} of {method.min_points} months</span>
                       ) : (
-                        <span className="ct-muted">{c.points} of 12 months</span>
+                        <span className="ct-muted">—</span>
                       )}
                     </td>
                     <td className="table-num">{c.mk_p == null ? '—' : c.mk_p < 0.001 ? 'p < 0.001' : `p = ${c.mk_p.toFixed(3)}`}</td>
@@ -194,7 +309,7 @@ const PrincipalSection = ({ section, placeholder = null }) => {
               </span>
             )}
           </h4>
-          <CategoryChart category={current} placeholder={placeholder} />
+          <CategoryChart category={current} method={method} placeholder={placeholder} />
           {!current.available && <p className="ct-note">{current.reason}</p>}
         </div>
       )}
@@ -224,11 +339,31 @@ const CategoryTrends = () => {
             Category <span className="page-title-accent">trends</span>
           </h2>
           <p className="ct-subtitle">
-            Monthly revenue by product category, and where its trend points over the next 12 months.
+            Monthly revenue by product category, and where its trend points
+            {data?.method ? ` over the next ${data.method.projection_months} months.` : '.'}
           </p>
         </div>
 
-        {state.status === 'loading' && !data && <p className="ct-note" role="status">Loading category trends…</p>}
+        {/* One principal card in the loaded order: header, the 5-column
+            category table, then the selected category's 300px chart. */}
+        {state.status === 'loading' && !data && (
+          <>
+            <LoadingStatus>Loading category trends…</LoadingStatus>
+            <section className="ct-card" aria-hidden="true">
+              <div className="ct-card-header skeleton-page-header">
+                <SkeletonLine width="9rem" height="1.1rem" />
+                <SkeletonLine width="60%" height="0.75rem" />
+              </div>
+              <div className="data-table-card ct-table-card">
+                <SkeletonTable rows={6} columns={5} />
+              </div>
+              <div className="ct-detail">
+                <SkeletonLine width="14rem" height="0.9rem" />
+                <SkeletonChart variant="line" height={300} />
+              </div>
+            </section>
+          </>
+        )}
         {state.status === 'loading' && data && <RefreshingNote>Updating {labelForPrincipal(principal)}…</RefreshingNote>}
         {state.status === 'error' && <p className="ct-note" role="alert">Could not load category trends: {state.error}</p>}
 
@@ -236,18 +371,23 @@ const CategoryTrends = () => {
           <PrincipalSection
             key={`${section.principal}|${principal ?? ''}`}
             section={section}
+            method={data.method}
             placeholder={data.data_mode?.placeholder ?? null}
           />
         ))}
 
-        {data && (
+        {/* Every figure here is GET /category-trends' method block
+            (analytics/forecasting/category_trend.py) — no fallbacks, so a
+            number on this page can't disagree with the one the backend used. */}
+        {data?.method && (
           <p className="ct-method">
             <strong>How this is measured.</strong> A trend projection, not a validated forecast: a Theil–Sen line through
-            the last {data.method?.window_months ?? 24} months of revenue with data, extended{' '}
-            {data.method?.projection_months ?? 12} months. The direction counts as real only when a Mann–Kendall test gives
-            p &lt; 0.05. The percentage compares the next 12 months on the line with the last 12 on the same line; the range
-            in brackets uses the slope&apos;s 95% confidence bounds. A category needs {data.method?.min_points ?? 12} months
-            with data before it gets a projection.
+            the last {data.method.window_months} months of revenue with data, starting at the category&apos;s first sale,
+            extended {data.method.projection_months} months. The direction counts as real only when a Mann–Kendall test
+            gives p &lt; {data.method.significance_alpha}. The percentage compares the next {data.method.projection_months} months
+            on the line with the last {data.method.trailing_months} on the same line; the range in brackets uses the
+            slope&apos;s {Math.round(data.method.slope_confidence * 100)}% confidence bounds. A category needs{' '}
+            {data.method.min_points} months with data from its first sale before it gets a projection.
           </p>
         )}
       </div>

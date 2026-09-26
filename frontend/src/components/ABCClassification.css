@@ -142,6 +142,37 @@
 /* Del Monte notes (ranked by product category; the Jan 2025 regrouping) —
    same raised-surface small print as the grain note below, with a slate
    left rule so they read as context about the data, not a warning. */
+/* The manuscript's Pareto validation for this run (GET /abc pareto_check):
+   same note shape as .abc-principal-note, edged green when the run passes
+   and amber when it falls outside the band. */
+.abc-pareto-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  background-color: var(--color-surface-raised);
+  border-left: 3px solid var(--color-success);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--color-text-body);
+  line-height: 1.45;
+}
+
+.abc-pareto-check svg {
+  flex: none;
+  margin-top: 0.1rem;
+  color: var(--color-success);
+}
+
+.abc-pareto-check.is-fail {
+  border-left-color: var(--color-warning);
+}
+
+.abc-pareto-check.is-fail svg {
+  color: var(--color-warning);
+}
+
 .abc-principal-note {
   margin: 0.6rem 0 0 0;
   padding: 0.6rem 0.9rem;
@@ -214,17 +245,26 @@
   flex-shrink: 0;
 }
 
-/* Mirrors the chart's #criticalHatch SVG pattern so the legend swatch
-   carries the same texture cue, not just a flat red square — see the
-   colorblind-safety comment above the stock-status BarChart. */
+/* Texture is OPT-IN (design pass 2026-09-26): by default the CRITICAL
+   swatch is the flat status red — the 2px surface gaps and the legend
+   already separate it from IN STOCK — and the 45° hatch comes back only
+   when the reader has asked for a non-colour channel (high-contrast or
+   forced-colors mode), mirroring the chart's own #criticalHatch, which
+   ABCClassification.jsx switches on under the same media queries. */
 .abc-pareto-legend-swatch--critical {
-  background-image: repeating-linear-gradient(
-    45deg,
-    var(--color-critical) 0,
-    var(--color-critical) 2px,
-    rgba(255, 255, 255, 0.6) 2px,
-    rgba(255, 255, 255, 0.6) 4px
-  );
+  background-color: var(--color-critical);
+}
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  .abc-pareto-legend-swatch--critical {
+    background-image: repeating-linear-gradient(
+      45deg,
+      var(--color-critical) 0,
+      var(--color-critical) 2px,
+      rgba(255, 255, 255, 0.6) 2px,
+      rgba(255, 255, 255, 0.6) 4px
+    );
+  }
 }
 
 .abc-pareto-legend-line {

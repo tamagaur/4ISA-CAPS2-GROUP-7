@@ -11,6 +11,7 @@ import { getCurrentUser } from '../auth';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
 import { formatMonth } from '../utils/formatDate';
 import Pagination from './Pagination';
+import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 import './SKUManagement.css';
 
 // Product names render verbatim. A helper used to pull a pack size out onto
@@ -369,8 +370,11 @@ const SKUManagement = () => {
           )}
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Cards — skeletons until the list lands: the counts are
+            derived from it, so before then they would read 0, a number
+            rather than a wait. */}
         <div className="sku-summary-grid">
+          {loading ? <SkeletonStatCards count={4} cardClassName="sku-summary-card" /> : (<>
           <div className="sku-summary-card summary-total">
             <span className="summary-label">TOTAL SKUS</span>
             <span className="summary-value">{totalSKUs.toLocaleString()}</span>
@@ -394,9 +398,20 @@ const SKUManagement = () => {
             <span className="summary-value">{noBrandSKUs.toLocaleString()}</span>
             <span className="summary-desc">brand missing in the product master</span>
           </div>
+          </>)}
         </div>
 
-        {loading && <p className="sku-page-subtitle">Loading SKUs…</p>}
+        {loading && (
+          <>
+            <LoadingStatus>Loading SKUs…</LoadingStatus>
+            <div className="sku-filters-row" aria-hidden="true">
+              <SkeletonLine width="100%" height="2.25rem" />
+            </div>
+            <div className="data-table-card">
+              <SkeletonTable rows={8} columns={7} />
+            </div>
+          </>
+        )}
         {error && <p className="sku-page-subtitle">Error: {error}</p>}
 
         {!loading && !error && (

@@ -173,6 +173,114 @@
   gap: 1.5rem;
 }
 
+/* Legend under the chart TITLE (design pass 2026-09-26) — the reader meets
+   the key before the plot instead of hunting below the zoom slider for it.
+   Same items, same swatches; only the position and alignment change. */
+.custom-legend-top {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin: -0.25rem 0 0.6rem;
+}
+
+/* The backend's one-sentence takeaway under a chart title ("what to
+   notice"), generated from the data — never hardcoded copy. */
+.chart-insight {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.chart-insight strong {
+  color: var(--color-text);
+}
+
+/* Direct end-of-line labels (ChartZoom.jsx endLabel). Phone widths have no
+   room beside the line's end, so the legend + tooltip take over there. */
+@media (max-width: 640px) {
+  .chart-end-label {
+    display: none;
+  }
+}
+
+/* Chart / Table view toggle — same quiet segmented look as the ABC page's
+   .abcb-toggle, sized for a card header. */
+.chart-view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 8px;
+  background-color: var(--color-surface-sunken);
+  flex-shrink: 0;
+}
+
+.chart-view-toggle button {
+  border: none;
+  background: transparent;
+  padding: 0.26rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.chart-view-toggle button.active {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* The table twin of a chart (ChartTable.jsx): the same rows the plot
+   draws, scrollable within the card so a 38-month range doesn't stretch
+   the dashboard grid. */
+.chart-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.chart-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.chart-table th,
+.chart-table td {
+  padding: 0.4rem 0.65rem;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.chart-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface-raised);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  text-align: left;
+  z-index: 1;
+}
+
+.chart-table thead th.table-num {
+  text-align: right;
+}
+
+.chart-table td {
+  color: var(--color-text-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
 .custom-legend-vertical {
   list-style: none;
   padding: 0;
@@ -227,6 +335,29 @@
   padding: 0.5rem 0.75rem;
   font-size: 0.75rem;
   color: var(--color-text);
+}
+
+/* One tooltip row: a swatch in the series colour beside INK text — text
+   never wears the data colour (a light series hue is illegible as text on
+   the white bubble; the mark beside it carries identity). */
+.chart-tooltip-row {
+  margin: 0.14rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--color-text-body);
+}
+
+.chart-tooltip-row strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.chart-tooltip-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .chart-tooltip-placeholder {
@@ -476,13 +607,14 @@
   color: var(--color-text-body);
 }
 
-/* Thicker — was 18px, leaving most of the row's own height as dead space
-   once .tier-stock-bars filled the donut's 180px. 40px lets three rows
-   plus their gaps actually use that height instead of floating in it. */
+/* 24px — the bar-thickness cap every bar on these pages now shares
+   (design pass 2026-09-26; was 40px, which read as a heavy block). The
+   row's leftover height is air, which is what keeps the composition bars
+   from dominating the card. */
 .tier-stock-track {
   flex: 1 1 auto;
-  height: 40px;
-  border-radius: 6px;
+  height: 24px;
+  border-radius: 4px;
   overflow: hidden;
   display: flex;
   background: var(--color-surface-sunken);
@@ -490,6 +622,32 @@
 
 .tier-stock-track span {
   height: 100%;
+  box-sizing: border-box;
+}
+
+/* 2px SURFACE gap between touching segments — white does the separating,
+   never a stroke drawn around the marks. Flex shrinks the percent widths
+   by the couple of pixels the margins add. */
+.tier-stock-track span + span {
+  margin-left: 2px;
+}
+
+/* "No dead stock" reading of the tier bars, stated instead of implied —
+   the month comes from the backend's tier_stock_period, never typed here. */
+.tier-stock-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.tier-stock-note svg {
+  flex-shrink: 0;
+  margin-top: 0.12rem;
+  color: var(--color-success);
 }
 
 /* Grow-in on mount, staggered per tier — durations/delay come from
@@ -808,7 +966,10 @@
   width: 100%;
   height: 6px;
   border-radius: 3px;
-  background: var(--color-surface-muted);
+  /* Meter rule: the unfilled track is a LIGHTER STEP of the fill's own
+     hue (indigo on pale indigo), so the whole bar reads as one meter
+     rather than a coloured chip on unrelated gray. */
+  background: color-mix(in srgb, var(--color-sales-trend) 12%, var(--color-surface));
   overflow: hidden;
 }
 
@@ -899,13 +1060,44 @@
   stroke-linejoin: round;
 }
 
+/* One tier per line, letter then plain name ("A  Top sellers"): a row of
+   bare letters said nothing about what a tier is. */
 .abc-legend {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
-  justify-content: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+}
+
+.abc-legend-tier {
+  min-width: 0.7rem;
+  font-weight: 700;
+}
+
+.abc-legend-name {
+  white-space: nowrap;
+}
+
+/* The selected tier's share in the ring's hole. Drawn by the SVG, so the
+   type is set here rather than inherited. */
+.abc-donut-centre {
+  pointer-events: none;
+}
+
+.abc-donut-centre-tier,
+.abc-donut-centre-label {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--color-text-muted);
+}
+
+.abc-donut-centre-value {
+  font-size: 26px;
+  font-weight: 700;
+  fill: var(--color-text);
 }
 
 .abc-legend-btn {
@@ -981,6 +1173,35 @@
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--color-text);
+}
+
+.abc-tier-card-alias {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.abc-tier-card-role {
+  margin: 0 0 0.65rem;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--color-text-body);
+}
+
+.abc-tier-card-link {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  text-decoration: none;
+}
+
+.abc-tier-card-link:hover,
+.abc-tier-card-link:focus-visible {
+  text-decoration: underline;
 }
 
 .abc-tier-card-skus {
@@ -1207,15 +1428,19 @@
 
 .policy-bar-track {
   height: 22px;
-  border-radius: 6px;
+  border-radius: 4px;
+  /* Overridden per row from the JSX with a lighter step of that row's own
+     fill (the meter rule) — this is only the fallback. */
   background: var(--color-surface-sunken);
   overflow: hidden;
 }
 
+/* Rounded at the DATA end (right, where the value stops), square at the
+   baseline it grows from. */
 .policy-bar-track span {
   display: block;
   height: 100%;
-  border-radius: 6px;
+  border-radius: 0 4px 4px 0;
 }
 
 .policy-bar-value {

@@ -5,16 +5,32 @@ export const COLORS = {
   warning: '#F5A623',        // Amber: Warnings, under investigation, low stock
   success: '#2E9E5B',        // Green: Good, resolved, positive trends, received units
   salesTrend: '#5B5FEF',     // Indigo: Sales trend / primary metric lines
-  dispatched: '#14919B',     // Teal: Dispatched / secondary flow metrics
+  // Teal: sales / actual-demand lines. Was #14919B, which measured just
+  // under the palette validator's saturation floor (chroma 0.099 < 0.10)
+  // and read slightly gray on the white card; #0E96A1 passes every check
+  // against both #2563EB (stock) and #A855F7 (forecast) — see
+  // reports/CHART_DESIGN_PLAN_2026-09.md's appendix.
+  dispatched: '#0E96A1',
   forecast: '#A855F7',       // Violet: Forecast / projected values
   forecastBg: '#F3E8FF',     // Light Violet tint: 90% CI uncertainty band
 
   // ABC Classification Single-Hue Plum Ramp (Ordinal by value)
   abcA: '#6B2C5F',          // Category A - Top 20% / 80% revenue (darkest plum)
   abcB: '#B565A0',          // Category B - Middle tier (medium plum)
-  abcC: '#EBC9E1',          // Category C - Long tail (lightest plum)
+  // Category C - Long tail (lightest plum). Was #EBC9E1: 1.5:1 contrast on
+  // the white card, so the C slice/segment barely registered. #D6A0C8
+  // measures 2.16:1 and keeps the ramp's light-to-dark order.
+  abcC: '#D6A0C8',
 
 };
+
+// ── Hue-pair rule (2026-09-26, measured, not judged by eye) ─────────────
+// Blue (#2563EB), indigo (#5B5FEF) and violet (#A855F7) collapse into one
+// colour for red-blind viewers (protan ΔE ≈ 2–3 where ≥ 8 is the target),
+// so NO TWO of them may appear in the same chart. Pair any one of them
+// with teal (COLORS.dispatched) instead — teal–blue, teal–indigo and
+// teal–violet all validate. This is why every "actual" line app-wide is
+// teal, never indigo, next to the violet forecast.
 
 // ── Colour discipline (2026-09-18) ──────────────────────────────────────
 // Two rules, app-wide:
@@ -59,9 +75,13 @@ export const STATUS_TIERS = {
 // line on a trend chart can never be misread as a verdict. stockSeries
 // used to alias COLORS.warning (amber), which made the stock-on-hand line
 // read as "watch" on the same dashboard where amber meant "low stock";
-// it's now a neutral blue that no status uses. lpWeights are three
-// co-equal categorical hues for the solver's cost/service/storage split
-// (Storage used to be amber, implying a severity it doesn't have).
+// it's now a neutral blue that no status uses. lpWeight (singular,
+// 2026-09-26): the solver's cost/service/storage split is three co-equal
+// weights of ONE model, not three categories — three hues implied a
+// difference in kind that isn't there, and Storage's slate doubled as the
+// app-wide "no data" colour. All three bars now wear the one
+// model-output indigo (SEMANTIC.recommendation), and the row labels
+// carry identity.
 export const CHART_COLORS = {
   salesSeries: COLORS.dispatched,
   stockSeries: '#2563EB',
@@ -72,9 +92,5 @@ export const CHART_COLORS = {
   // Tint behind placeholder months in preview mode (src/dataMode.js). Its
   // one meaning is "not SSM's data"; mirrors --color-placeholder.
   placeholder: '#94A3B8',
-  lpWeights: {
-    cost: COLORS.dispatched,
-    service_level: COLORS.salesTrend,
-    storage: '#475569',
-  },
+  lpWeight: SEMANTIC.recommendation,
 };

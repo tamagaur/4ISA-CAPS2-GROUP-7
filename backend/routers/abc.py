@@ -120,9 +120,32 @@ from backend.principals import (
     normalize_principal,
     principal_clause,
 )
-from backend.schemas.abc import ABCItem, ABCResponse, TierSummary
+from analytics.classification.abc import abc_rules, pareto_check
+from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
 
 router = APIRouter(prefix="/abc", tags=["abc"])
+
+
+def _summarize(items: list[ABCItem], period: str | None) -> tuple[list[TierSummary], ParetoCheck | None]:
+    """tier_summary plus the run's Pareto check (manuscript §3.4.4.2.2).
+    Only CURRENT-run rows feed shares: a carried-forward row's revenue_share
+    is a fraction of another month's revenue. The check needs one principal —
+    two principals' shares are fractions of two different totals."""
+    summary: dict[str, TierSummary] = {}
+    current = [i for i in items if i.tier_period == period]
+    for item in items:
+        entry = summary.setdefault(item.tier, TierSummary(tier=item.tier, sku_count=0, revenue_share_total=0.0))
+        entry.sku_count += 1
+        if item.tier_period == period:
+            entry.revenue_share_total += item.revenue_share or 0.0
+        else:
+            entry.carried_forward_count += 1
+    one_principal = len({i.principal for i in current}) == 1
+    for entry in summary.values():
+        ranked_here = entry.sku_count - entry.carried_forward_count
+        entry.sku_share = round(ranked_here / len(current), 6) if current and one_principal else None
+    check = pareto_check(i.revenue_share for i in current) if one_principal else None
+    return sorted(summary.values(), key=lambda t: t.tier), (ParetoCheck(**check) if check else None)
 
 
 def _stock_status(current_stock: float | None, reorder_point: float | None) -> str:
@@ -210,7 +233,7 @@ def _get_abc_period(
             period = month
             abc_source, source_params = abc_relation(computed, with_stored=False)
     if period is None:
-        return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[])
+        return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[], rules=ABCRules(**abc_rules()))
     # The reorder point each row's stock status is judged against: the LP's
     # own, or in preview with built outputs the five-year what-if's.
     lp_src, lp_params = lp_source(mode, "lp_recommendation")
@@ -275,17 +298,14 @@ def _get_abc_period(
         for r in rows
     ]
 
-    tier_summary: dict[str, TierSummary] = {}
-    for item in items:
-        entry = tier_summary.setdefault(item.tier, TierSummary(tier=item.tier, sku_count=0, revenue_share_total=0.0))
-        entry.sku_count += 1
-        entry.revenue_share_total += item.revenue_share or 0.0
-
+    tier_summary, check = _summarize(items, period)
     return ABCResponse(
         items=items,
         count=len(items),
         classification_period=period,
-        tier_summary=sorted(tier_summary.values(), key=lambda t: t.tier),
+        tier_summary=tier_summary,
+        rules=ABCRules(**abc_rules()),
+        pareto_check=check,
     )
 
 
@@ -333,7 +353,7 @@ def _get_abc_last_known(
 
     if period is None:
         return ABCResponse(
-            items=[], count=0, classification_period=None, tier_summary=[],
+            items=[], count=0, classification_period=None, tier_summary=[], rules=ABCRules(**abc_rules()),
             unclassified_count=unclassified_count,
         )
 
@@ -410,19 +430,13 @@ def _get_abc_last_known(
         for r in rows
     ]
 
-    tier_summary: dict[str, TierSummary] = {}
-    for item in items:
-        entry = tier_summary.setdefault(item.tier, TierSummary(tier=item.tier, sku_count=0, revenue_share_total=0.0))
-        entry.sku_count += 1
-        if item.tier_period == period:
-            entry.revenue_share_total += item.revenue_share or 0.0
-        else:
-            entry.carried_forward_count += 1
-
+    tier_summary, check = _summarize(items, period)
     return ABCResponse(
         items=items,
         count=len(items),
         classification_period=period,
-        tier_summary=sorted(tier_summary.values(), key=lambda t: t.tier),
+        tier_summary=tier_summary,
         unclassified_count=unclassified_count,
+        rules=ABCRules(**abc_rules()),
+        pareto_check=check,
     )

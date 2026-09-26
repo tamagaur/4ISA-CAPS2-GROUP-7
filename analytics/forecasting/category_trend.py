@@ -22,6 +22,17 @@ Fewer than MIN_POINTS observed months gives no projection, with the reason:
 a line through a handful of months says more about the gaps than the
 category (Del Monte's categories restart at the Jan 2025 regrouping).
 
+The line starts at the category's FIRST SALE inside the window (2026-09-25).
+Months before a category existed are not zero demand: fitting them tilted a
+young category's slope upward, while its Mann–Kendall test (trend_stats)
+already started at the first sale — two different series behind one
+verdict. A category with no revenue anywhere in the window gets no line and
+says so, instead of reading as a flat trend.
+
+Every number the page states about the method (window, projection length,
+minimum months, significance level, confidence level) is a constant here,
+sent through GET /category-trends' `method` block.
+
 Pure function, no DB.
 """
 from __future__ import annotations
@@ -29,11 +40,27 @@ from __future__ import annotations
 import numpy as np
 from scipy import stats
 
-from analytics.segmentation.traits import trend_stats
+from analytics.segmentation.traits import MANN_KENDALL_ALPHA, trend_stats
 
 TREND_WINDOW_MONTHS = 24
 PROJECTION_MONTHS = 12
 MIN_POINTS = 12
+# "Revenue, last N months" and the base the change is measured against.
+TRAILING_MONTHS = 12
+# Confidence level of the Theil–Sen slope bounds behind the change range.
+SLOPE_CONFIDENCE = 0.95
+
+
+def method_constants() -> dict:
+    """The method's numbers, for the API to send and the page to state."""
+    return {
+        "window_months": TREND_WINDOW_MONTHS,
+        "projection_months": PROJECTION_MONTHS,
+        "min_points": MIN_POINTS,
+        "trailing_months": TRAILING_MONTHS,
+        "significance_alpha": MANN_KENDALL_ALPHA,
+        "slope_confidence": SLOPE_CONFIDENCE,
+    }
 
 
 def _line(slope: float, y: np.ndarray, x: np.ndarray) -> float:
@@ -42,34 +69,58 @@ def _line(slope: float, y: np.ndarray, x: np.ndarray) -> float:
 
 
 def _change_pct(slope: float, intercept: float, n: int) -> float | None:
-    past = np.clip(intercept + slope * np.arange(n - 12, n), 0, None).sum()
+    past = np.clip(intercept + slope * np.arange(n - TRAILING_MONTHS, n), 0, None).sum()
     ahead = np.clip(intercept + slope * np.arange(n, n + PROJECTION_MONTHS), 0, None).sum()
     return round((ahead - past) / past * 100, 1) if past > 0 else None
 
 
 def project_category(values: list[float]) -> dict:
     """values: the category's monthly revenue over its observed months,
-    oldest first. Returns {available, reason?, points, direction, mk_p,
-    slope_per_month, slope_ci, trailing_12, projected_12, change_pct,
-    change_pct_low, change_pct_high, fitted, projection}."""
-    y_all = np.asarray(values, dtype=float)
-    y = y_all[-TREND_WINDOW_MONTHS:]
+    oldest first. Returns {available, label?, reason?, points, direction,
+    mk_p, slope_per_month, slope_ci, trailing_12, projected_12, change_pct,
+    change_pct_low, change_pct_high, fitted, projection, projection_low,
+    projection_high}. projection_low/high shade the chart's likely range —
+    the slope's SLOPE_CONFIDENCE bounds extended over the projection
+    months. `label` is the short status for a table cell when no
+    projection is available; `reason` is the sentence behind it."""
+    window = np.asarray(values, dtype=float)[-TREND_WINDOW_MONTHS:]
+    sold = np.flatnonzero(window > 0)
+    if sold.size == 0:
+        return {
+            "available": False,
+            "points": 0,
+            "label": "No recent sales",
+            "reason": f"No revenue in the last {len(window)} observed months, so there is no trend to project.",
+        }
+    y = window[sold[0]:]
     n = len(y)
     if n < MIN_POINTS:
         return {
             "available": False,
             "points": int(n),
-            "reason": f"A projection needs {MIN_POINTS} observed months; this category has {n}.",
+            "label": "Not enough months",
+            "reason": f"A projection needs {MIN_POINTS} observed months from the first sale; this category has {n}.",
         }
 
     x = np.arange(n, dtype=float)
-    slope, intercept, lo, hi = stats.theilslopes(y, x, 0.95)
+    slope, intercept, lo, hi = stats.theilslopes(y, x, SLOPE_CONFIDENCE)
     direction, mk_p, _ = trend_stats(y)
     label = {"up": "growing", "down": "declining"}.get(direction, "flat")
     lo_line, hi_line = _line(lo, y, x), _line(hi, y, x)
     change = _change_pct(slope, intercept, n)
     bounds = sorted(v for v in (_change_pct(lo, lo_line, n), _change_pct(hi, hi_line, n)) if v is not None)
-    ahead = np.clip(intercept + slope * np.arange(n, n + PROJECTION_MONTHS), 0, None)
+    x_ahead = np.arange(n, n + PROJECTION_MONTHS)
+    ahead = np.clip(intercept + slope * x_ahead, 0, None)
+    # The projection's likely range, month by month: the same two
+    # slope-confidence lines the change range above is computed from,
+    # extended over the projection months. Each line pairs a bound slope
+    # with its own Theil–Sen intercept, so near the window's end they can
+    # cross — the band takes the per-month min/max so low <= high always,
+    # and clips at zero exactly like the projection itself.
+    ahead_lo = lo_line + lo * x_ahead
+    ahead_hi = hi_line + hi * x_ahead
+    band_low = np.clip(np.minimum(ahead_lo, ahead_hi), 0, None)
+    band_high = np.clip(np.maximum(ahead_lo, ahead_hi), 0, None)
 
     return {
         "available": True,
@@ -78,11 +129,13 @@ def project_category(values: list[float]) -> dict:
         "mk_p": None if mk_p is None else round(float(mk_p), 4),
         "slope_per_month": round(float(slope), 2),
         "slope_ci": [round(float(lo), 2), round(float(hi), 2)],
-        "trailing_12": round(float(y[-12:].sum()), 2),
+        "trailing_12": round(float(y[-TRAILING_MONTHS:].sum()), 2),
         "projected_12": round(float(ahead.sum()), 2),
         "change_pct": change,
         "change_pct_low": bounds[0] if bounds else None,
         "change_pct_high": bounds[-1] if bounds else None,
         "fitted": [round(float(v), 2) for v in np.clip(intercept + slope * x, 0, None)],
         "projection": [round(float(v), 2) for v in ahead],
+        "projection_low": [round(float(v), 2) for v in band_low],
+        "projection_high": [round(float(v), 2) for v in band_high],
     }

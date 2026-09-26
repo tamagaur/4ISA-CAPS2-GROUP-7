@@ -8,13 +8,16 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  ReferenceLine,
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
 import { COLORS, CHART_COLORS } from '../theme/colors';
-import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, EDGE_LABEL_MARGIN } from './ChartZoom';
+import { useChartZoom, ChartZoomSlider, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
+import { ChartTable, ChartViewToggle } from './ChartTable';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import RefreshingNote from './RefreshingNote';
+import { LoadingStatus, SkeletonChart, SkeletonLine } from './Skeleton';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
 import { useBrandLookup } from '../utils/useBrandLookup';
@@ -156,7 +159,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             );
           }
           return (
-            <p key={index} className="tooltip-item" style={{ color: entry.color }}>
+            <p key={index} className="tooltip-item">
               <span className="tooltip-dot" style={{ backgroundColor: entry.color }}></span>
               {entry.name}: {qty(entry.value)} units
             </p>
@@ -765,6 +768,19 @@ const SKUForecast = () => {
   // run well past what the X axis can label without skipping months.
   const zoom = useChartZoom(chartData);
 
+  // Chart or its table twin ("view as table", design pass 2026-09-26).
+  const [chartView, setChartView] = useState('chart');
+
+  // Direct label at the projection's end — the number the page is FOR,
+  // repeated where the dashed line stops. Skipped when the point leaves
+  // the zoom window.
+  const forecastEndLabels = useMemo(() => {
+    const end = [...zoom.view].reverse().find((pt) => pt.forecast != null && pt.actual == null);
+    return pointLabels(zoom.view, end
+      ? [{ period: end.label, text: `Forecast ${formatAxisQty(end.forecast)}` }]
+      : [], { key: 'label' });
+  }, [zoom.view]);
+
   // The last month the chart plots an actual for — the end of what the
   // partial-range banner reports as "Showing …". Not skuCoverage.end: when
   // the range ends before the SKU's last sale, the chart stops at the range.
@@ -1102,7 +1118,18 @@ const SKUForecast = () => {
         </div>
         )}
 
-        {!isDelMonte && listLoading && <p className="forecast-subtitle">Loading SKU list…</p>}
+        {/* In the shape of the "pick a SKU" panel the page rests on once
+            the list lands, so that panel replaces this one in place. */}
+        {!isDelMonte && listLoading && (
+          <>
+            <LoadingStatus>Loading SKU list…</LoadingStatus>
+            <div className="forecast-empty-state" aria-hidden="true">
+              <SkeletonLine className="skeleton-circle" width="56px" height="56px" />
+              <SkeletonLine width="18rem" height="1rem" />
+              <SkeletonLine width="26rem" height="0.75rem" />
+            </div>
+          </>
+        )}
         {!isDelMonte && listError && <p className="forecast-subtitle">Error: {listError}</p>}
 
         {/* The page's resting state until the user picks a SKU — nothing is
@@ -1189,7 +1216,28 @@ const SKUForecast = () => {
               key={`chart-${selectedSKU?.code || 'none'}`}
               aria-busy={isForecastRefreshing}
             >
-              {isForecastColdLoad && <p className="forecast-subtitle">Loading forecast…</p>}
+              {/* First load for this SKU: the headline stat row, the "how
+                  this forecast was made" box and the 420px chart, in the
+                  loaded card's own classes. */}
+              {isForecastColdLoad && (
+                <>
+                  <LoadingStatus>Loading forecast…</LoadingStatus>
+                  <div className="forecast-accuracy-row" aria-hidden="true">
+                    {[0, 1, 2, 3].map((k) => (
+                      <div className="forecast-stat-block" key={k}>
+                        <SkeletonLine width="7rem" height="0.65rem" />
+                        <SkeletonLine width="5.5rem" height="1.6rem" />
+                        <SkeletonLine width="8rem" height="0.65rem" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="forecast-howmade" aria-hidden="true">
+                    <SkeletonLine width="10rem" height="0.65rem" />
+                    <SkeletonLine width="80%" height="0.75rem" />
+                  </div>
+                  <SkeletonChart variant="line" height={420} />
+                </>
+              )}
               {isForecastRefreshing && <RefreshingNote>Updating {selectedSKU.code}…</RefreshingNote>}
               {forecastError && <p className="forecast-subtitle">Error: {forecastError}</p>}
 
@@ -1343,6 +1391,7 @@ const SKUForecast = () => {
                       <span className="forecast-stat-value forecast-stat-value-forecast">
                         {derivedForecast ? (
                           <>
+                            <span className="forecast-stat-swatch" style={{ backgroundColor: COLORS.forecast }} aria-hidden="true" />
                             <span className="forecast-stat-number">
                               {Math.round(derivedForecast.value).toLocaleString()}
                             </span>
@@ -1400,6 +1449,7 @@ const SKUForecast = () => {
                           <div className="forecast-stat-block">
                             <span className="forecast-stat-label">Likely range</span>
                             <span className="forecast-stat-value forecast-stat-value-range">
+                              <span className="forecast-stat-swatch forecast-stat-swatch-band" aria-hidden="true" />
                               <span className="range-low">
                                 {Math.round(derivedForecast.confidenceLower).toLocaleString()}
                               </span>
@@ -1567,18 +1617,76 @@ const SKUForecast = () => {
                     </p>
                   )}
 
-                  {/* Chart */}
+                  {/* Chart, or its table twin. The legend sits ABOVE the
+                      plot (under the stat rows), so the key is met before
+                      the marks — same order as the dashboard's charts. */}
+                  <div className="forecast-chart-tools">
+                    <ChartViewToggle view={chartView} onChange={setChartView} label="Forecast: chart or table" />
+                  </div>
+                  {chartView === 'table' ? (
+                    <ChartTable
+                      caption="Actual sales and forecast by month, in units"
+                      columns={[
+                        { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
+                        { key: 'actualV', label: 'Actual (units)', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'forecastV', label: 'Forecast (units)', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'ciLow', label: 'Range low', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'ciHigh', label: 'Range high', format: (v) => Math.round(v).toLocaleString() },
+                      ]}
+                      rows={chartData.map((pt) => ({
+                        period: pt.label,
+                        actualV: pt.actual ?? null,
+                        // The bridge point borrows the last actual purely so
+                        // the lines join — the table stays honest and shows
+                        // the forecast only for its own month.
+                        forecastV: pt.actual == null ? pt.forecast ?? null : null,
+                        ciLow: pt.actual == null && Array.isArray(pt.ci) ? pt.ci[0] : null,
+                        ciHigh: pt.actual == null && Array.isArray(pt.ci) ? pt.ci[1] : null,
+                      }))}
+                    />
+                  ) : (
+                  <>
+                  <div className="chart-legend">
+                    {chartData.some((pt) => pt.actual != null) && (
+                      <div className="legend-item">
+                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={CHART_COLORS.salesSeries} strokeWidth="2.5" strokeLinecap="round" />
+                        </svg>
+                        <span className="legend-label">Actual Sales</span>
+                      </div>
+                    )}
+                    {/* Forecast and band entries follow what is actually
+                        plotted: no forecast point goes on the chart for a SKU
+                        outside Category A, a provisional / no-order row, or
+                        an earlier cutoff showing the stored value unplotted. */}
+                    {chartData.some((pt) => pt.forecast != null) && (
+                      <div className="legend-item">
+                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={COLORS.forecast} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4" />
+                        </svg>
+                        <span className="legend-label">Forecast</span>
+                      </div>
+                    )}
+                    {chartData.some((pt) => Array.isArray(pt.ci) && pt.ci[0] !== pt.ci[1]) && (
+                      <div className="legend-item">
+                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                          <rect
+                            x="1" y="1.5" width="26" height="9" rx="2.5"
+                            fill={COLORS.forecast} fillOpacity="0.16"
+                            stroke={COLORS.forecast} strokeOpacity="0.35" strokeWidth="1"
+                          />
+                        </svg>
+                        <span className="legend-label">Confidence Interval</span>
+                      </div>
+                    )}
+                  </div>
                   <div className={`chart-wrapper${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
                     {/* height 420 + bottom margin 32: the X tick row sits
                         INSIDE the SVG, so with bottom:0 the month labels were
                         being clipped off the bottom edge on load. */}
                     <ResponsiveContainer width="100%" height={420}>
                       <ComposedChart data={zoom.view} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 8, bottom: 32 }}>
-                        <defs>
-                          <SeriesFill id="fill-sku-actual" color={CHART_COLORS.salesSeries} />
-                          <SeriesFill id="fill-sku-forecast" color={COLORS.forecast} />
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                        <CartesianGrid {...GRID_PROPS} />
                         <XAxis
                           dataKey="label"
                           axisLine={true}
@@ -1617,12 +1725,25 @@ const SKUForecast = () => {
                         />
                         <Tooltip content={<CustomTooltip />} />
 
+                        {/* Where actuals hand over to the forecast — the
+                            divider the dashed style is read against. Only
+                            while the bridge month is inside the window. */}
+                        {derivedForecast?.plotted && lastPlottedActualPeriod &&
+                          zoom.view.some((pt) => pt.label === lastPlottedActualPeriod) && (
+                          <ReferenceLine
+                            x={lastPlottedActualPeriod}
+                            stroke={CHART_COLORS.axisLabel}
+                            strokeDasharray="4 4"
+                            label={{ value: 'Forecast starts', position: 'insideTopRight', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                          />
+                        )}
+
                         {/* Drawn before the lines so the band sits behind
                             them. A faint stroke gives the cone a readable
                             edge — the pale fill alone washed out against the
                             white card at this opacity. */}
                         <Area
-                          type="monotone"
+                          type="linear"
                           dataKey="ci"
                           stroke={COLORS.forecast}
                           strokeOpacity={0.35}
@@ -1634,32 +1755,10 @@ const SKUForecast = () => {
                           connectNulls={false}
                         />
 
-                        {/* Series washes: above the confidence band, below
-                            both lines. baseValue="dataMin" anchors them to
-                            the axis floor rather than to zero, leaving the
-                            Y domain exactly as it was. */}
-                        <Area
-                          type="monotone"
-                          dataKey="actual"
-                          stroke="none"
-                          fill="url(#fill-sku-actual)"
-                          baseValue="dataMin"
-                          legendType="none"
-                          tooltipType="none"
-                          connectNulls
-                          {...zoom.zoomAnim(1)}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="forecast"
-                          stroke="none"
-                          fill="url(#fill-sku-forecast)"
-                          baseValue="dataMin"
-                          legendType="none"
-                          tooltipType="none"
-                          connectNulls
-                          {...zoom.zoomAnim(2)}
-                        />
+                        {/* No washes under these lines (design pass
+                            2026-09-26): the CI cone above is the one fill
+                            that carries information, and the gradients
+                            muddied it where the series overlapped. */}
 
                         {/* Teal, not the old indigo: indigo sat too close to
                             the forecast's violet to tell apart in a small
@@ -1668,7 +1767,7 @@ const SKUForecast = () => {
                             separates actual from forecast, so the two pages
                             now agree. */}
                         <Line
-                          type="monotone"
+                          type="linear"
                           dataKey="actual"
                           stroke={CHART_COLORS.salesSeries}
                           strokeWidth={2}
@@ -1680,7 +1779,7 @@ const SKUForecast = () => {
                         />
 
                         <Line
-                          type="monotone"
+                          type="linear"
                           dataKey="forecast"
                           stroke={COLORS.forecast}
                           strokeWidth={2}
@@ -1688,6 +1787,7 @@ const SKUForecast = () => {
                           dot={seriesDot({ color: COLORS.forecast, r: 4, skip: (p) => p?.actual != null })}
                           activeDot={{ r: 6 }}
                           name="Forecast"
+                          label={forecastEndLabels}
                           {...zoom.zoomAnim(2)}
                           connectNulls
                         />
@@ -1706,41 +1806,8 @@ const SKUForecast = () => {
                       the dash via a background gradient rendered as a lumpy
                       bowtie at this size. */}
                   <ChartZoomSlider zoom={zoom} />
-
-                  <div className="chart-legend">
-                    {chartData.some((pt) => pt.actual != null) && (
-                      <div className="legend-item">
-                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <line x1="1" y1="6" x2="27" y2="6" stroke={CHART_COLORS.salesSeries} strokeWidth="2.5" strokeLinecap="round" />
-                        </svg>
-                        <span className="legend-label">Actual Sales</span>
-                      </div>
-                    )}
-                    {/* Forecast and band entries follow what is actually
-                        plotted: no forecast point goes on the chart for a SKU
-                        outside Category A, a provisional / no-order row, or
-                        an earlier cutoff showing the stored value unplotted. */}
-                    {chartData.some((pt) => pt.forecast != null) && (
-                      <div className="legend-item">
-                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <line x1="1" y1="6" x2="27" y2="6" stroke={COLORS.forecast} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4" />
-                        </svg>
-                        <span className="legend-label">Forecast</span>
-                      </div>
-                    )}
-                    {chartData.some((pt) => Array.isArray(pt.ci) && pt.ci[0] !== pt.ci[1]) && (
-                      <div className="legend-item">
-                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <rect
-                            x="1" y="1.5" width="26" height="9" rx="2.5"
-                            fill={COLORS.forecast} fillOpacity="0.16"
-                            stroke={COLORS.forecast} strokeOpacity="0.35" strokeWidth="1"
-                          />
-                        </svg>
-                        <span className="legend-label">Confidence Interval</span>
-                      </div>
-                    )}
-                  </div>
+                  </>
+                  )}
                 </>
               )}
             </div>

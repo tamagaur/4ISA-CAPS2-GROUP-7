@@ -52,10 +52,49 @@ const CARD_ACCENT_COLORS = {
   action:     SEMANTIC.recommendation,
 };
 
+// 12-point sparkline beside the value (stat-tile contract): the history
+// in a recessive gray, the CURRENT period as the one accented dot in the
+// series' own hue — a shape cue, not a second chart, so no axes and no
+// tooltip. `points` are the backend's real months only (nulls already
+// dropped); under 2 points there is no shape to draw, so nothing renders.
+const SPARK_W = 76;
+const SPARK_H = 26;
+
+const Sparkline = ({ points, color }) => {
+  if (!points || points.length < 2) return null;
+  const recent = points.slice(-12);
+  const values = recent.map((p) => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const step = SPARK_W / (recent.length - 1);
+  const xy = values.map((v, i) => [i * step, SPARK_H - ((v - min) / span) * (SPARK_H - 4) - 2]);
+  const path = xy.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+  const [lastX, lastY] = xy[xy.length - 1];
+  return (
+    <svg
+      className="kpi-sparkline"
+      width={SPARK_W}
+      height={SPARK_H}
+      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+      aria-hidden="true"
+    >
+      <path d={path} fill="none" stroke="#CBD5E1" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastX} cy={lastY} r={3} fill={color} stroke="var(--color-surface, #fff)" strokeWidth={1.5} />
+    </svg>
+  );
+};
+
 // contextLine: always-muted supporting line (raw values, no arrow) —
 // rendered first when present.
 // deltaLine: tier-coloured supporting line, paired with the arrow so the
 // comparison survives in greyscale — rendered after contextLine.
+// trend: { points: [{period, value}], color } — the card's own metric,
+// month by month, straight from the backend (kpis.sales_trend /
+// kpis.soh_trend); cards without monthly history simply pass nothing.
+// deltaTone: 'positive' | 'negative' | 'neutral' — renders deltaLine as a
+// shaded pill coloured by the change itself, independent of the card's
+// accent tier. Without it, deltaLine keeps the tier-coloured text line.
 const KPICard = ({
   title,
   value,
@@ -66,7 +105,9 @@ const KPICard = ({
   trendDirection,
   contextLine,
   deltaLine,
+  deltaTone,
   tooltip,
+  trend,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
   const accentColor = CARD_ACCENT_COLORS[tier]; // card chrome (border, icon)
@@ -84,10 +125,21 @@ const KPICard = ({
         <h3 className="kpi-title">{title}</h3>
         {icon && <div className="kpi-icon" style={{ color: accentColor }}>{icon}</div>}
       </div>
-      <div className="kpi-value">{value}</div>
+      <div className="kpi-value-row">
+        <div className="kpi-value">{value}</div>
+        {trend && <Sparkline points={trend.points} color={trend.color} />}
+      </div>
       <div className="kpi-footer">
         {contextLine && <div className="kpi-context">{contextLine}</div>}
-        {deltaLine && (
+        {deltaLine && deltaTone && (
+          <span className={`kpi-delta-pill is-${deltaTone}`}>
+            {TrendIcon && <TrendIcon size={12} className="kpi-trend-icon" aria-hidden="true" />}
+            {/* The arrow is decorative to a screen reader; say it. */}
+            {trendDirection && <span className="visually-hidden">{trendDirection === 'up' ? 'Up ' : 'Down '}</span>}
+            {deltaLine}
+          </span>
+        )}
+        {deltaLine && !deltaTone && (
           <div className="kpi-subtext" style={{ color: statusColor }}>
             {TrendIcon && <TrendIcon size={12} className="kpi-trend-icon" />}
             {deltaLine}

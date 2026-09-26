@@ -149,15 +149,6 @@
   cursor: not-allowed;
 }
 
-/* Shown inside the content area while a lazily loaded page's code arrives
-   (see App.jsx / pageLoaders.js); the sidebar and top bar stay rendered. */
-.page-chunk-loading {
-  margin: 0;
-  padding: 2rem 2.5rem;
-  font-size: 0.85rem;
-  color: var(--color-text-subtle);
-}
-
 /* ── Preview banner ───────────────────────────────────────────────────
    Shown on every page while preview mode is on (src/dataMode.js). Neutral
    chrome, not a status colour: preview is a mode the user chose, not a

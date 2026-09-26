@@ -7,6 +7,7 @@ import { listUsers, createUser, updateUser, deleteUser } from '../utils/usersApi
 import { logAction } from '../utils/auditLogger';
 import { getCurrentUser } from '../auth';
 import { formatDate } from '../utils/formatDate';
+import { LoadingStatus, SkeletonTableRows } from './Skeleton';
 import './UserManagement.css';
 
 const getInitials = (name) => {
@@ -115,6 +116,7 @@ const UserManagement = () => {
           </div>
         )}
 
+        {loading && <LoadingStatus>Loading users…</LoadingStatus>}
         <div className="user-mgmt-table-wrapper">
           <table className="user-mgmt-table">
             <thead>
@@ -128,9 +130,7 @@ const UserManagement = () => {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan="5" className="user-mgmt-empty">Loading users...</td>
-                </tr>
+                <SkeletonTableRows rows={4} columns={5} />
               ) : users.length > 0 ? (
                 users.map((user) => (
                   <tr key={user.user_id}>

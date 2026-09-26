@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity } from 'lucide-react';
+import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2 } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { COLORS, CHART_COLORS, SEMANTIC } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
+import { GRID_PROPS, usePrefersTexture } from './ChartZoom';
 import { getABCClassification } from '../api/abc';
 import { getFsn } from '../api/analytics';
 import { ParetoCard, AbcFsnMatrix } from './AbcBreakdowns';
@@ -23,14 +24,22 @@ import { labelForPrincipal } from '../principals';
 import { isPlaceholderPeriod } from '../dataMode';
 import Pagination from './Pagination';
 import RefreshingNote from './RefreshingNote';
+import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
-// Tier cutoffs are 80% and 95% cumulative revenue (§3.4.1.2). The backend
-// (backend/routers/abc.py) already computes boundary_flag server-side, so
-// this constant is display-only (used in the legend copy).
-const BOUNDARY_TOLERANCE_PP = 3;
+// Every rule this page states — the tier cutoffs and the boundary margin —
+// comes from GET /abc's `rules` (analytics/classification/abc.py), the
+// same numbers the run applied. The legend used to hard-code "3pp" while
+// the stored flags used 2pp; stating the backend's own value can't drift.
+// Fractions (0-1) from the backend, as a percent: "80%", "18.6%".
+const asPct = (fraction, digits = 1) => `${Number((fraction * 100).toFixed(digits))}%`;
+const asPp = (fraction) => `${Number((fraction * 100).toFixed(1))}pp`;
+// "A makes up the first 80% of revenue, B the next 15%, C the last 5%."
+const tierRuleText = (rules) =>
+  `Category A makes up the first ${asPct(rules.tier_a_cutoff, 0)} of revenue, `
+  + `B the next ${asPct(rules.tier_b_cutoff - rules.tier_a_cutoff, 0)}, C the last ${asPct(1 - rules.tier_b_cutoff, 0)}.`;
 
 // Del Monte regrouped its product categories in Jan 2025 (about 63
 // sub-categories became 4-5). In a run from then on, a Del Monte row last
@@ -121,24 +130,23 @@ const STOCK_STATUS_COLORS = {
 const ClassAggregateTooltip = ({ active, payload }) => {
   if (active && payload && payload.length) {
     const point = payload[0].payload;
+    // Swatch + ink rows: the coloured square carries identity, the words
+    // stay in text ink (a light status hue is illegible as text on the
+    // white bubble).
+    const row = (color, label, value) => (
+      <p className="chart-tooltip-row">
+        <span className="chart-tooltip-swatch" style={{ backgroundColor: color }} aria-hidden="true" />
+        {label}: <strong>{value}</strong>
+      </p>
+    );
     return (
       <div className="abc-pareto-tooltip">
         <p className="abc-pareto-tooltip-title">{point.label}</p>
-        <p className="abc-pareto-tooltip-line" style={{ color: COLORS[`abc${point.cat}`] }}>
-          Revenue share: {point.revenueTotal.toFixed(1)}%
-        </p>
-        <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS['IN STOCK'] }}>
-          {statusLabel('IN STOCK')}: {point.inStockPct.toFixed(0)}%
-        </p>
-        <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS.LOW }}>
-          {statusLabel('LOW')}: {point.lowPct.toFixed(0)}%
-        </p>
-        <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS.CRITICAL }}>
-          {statusLabel('CRITICAL')}: {point.criticalPct.toFixed(0)}%
-        </p>
-        <p className="abc-pareto-tooltip-line" style={{ color: STOCK_STATUS_COLORS['NO DATA'] }}>
-          {statusLabel('NO DATA')}: {point.noDataPct.toFixed(0)}%
-        </p>
+        {row(COLORS[`abc${point.cat}`], 'Revenue share', `${point.revenueTotal.toFixed(1)}%`)}
+        {row(STOCK_STATUS_COLORS['IN STOCK'], statusLabel('IN STOCK'), `${point.inStockPct.toFixed(0)}%`)}
+        {row(STOCK_STATUS_COLORS.LOW, statusLabel('LOW'), `${point.lowPct.toFixed(0)}%`)}
+        {row(STOCK_STATUS_COLORS.CRITICAL, statusLabel('CRITICAL'), `${point.criticalPct.toFixed(0)}%`)}
+        {row(STOCK_STATUS_COLORS['NO DATA'], statusLabel('NO DATA'), `${point.noDataPct.toFixed(0)}%`)}
         <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.axisLabel }}>
           {point.skuCount} {point.skuCount === 1 ? 'item' : 'items'} ({point.skuSharePct.toFixed(0)}% of total)
         </p>
@@ -148,27 +156,33 @@ const ClassAggregateTooltip = ({ active, payload }) => {
   return null;
 };
 
-// Cold-load placeholder in the shape of the real page — four summary cards
-// and the two analysis panels — so the layout doesn't jump when the rows
-// arrive. Mirrors DashboardSkeleton's approach with this page's classes.
+// Cold-load placeholder in the shape of the real page, top to bottom: four
+// summary cards, the Pareto chart and its drill-down, the brand Pareto and
+// movement matrix, the filter bar and the 8-column SKU table — so the
+// layout doesn't jump when the rows arrive. Mirrors DashboardSkeleton's
+// approach with this page's classes.
 const ABCSkeleton = () => (
   <div className="abc-body" aria-hidden="true">
     <div className="abc-summary-grid">
-      {[0, 1, 2, 3].map((k) => (
-        <div className="abc-summary-card skeleton-card" key={k}>
-          <div className="skeleton-line skeleton-line-title" />
-          <div className="skeleton-line skeleton-line-value" />
-          <div className="skeleton-line skeleton-line-subtext" />
-        </div>
-      ))}
+      <SkeletonStatCards count={4} cardClassName="abc-summary-card" />
     </div>
     <div className="abc-analysis-row">
-      {[0, 1].map((k) => (
-        <div className="abc-pareto-container skeleton-card" key={k}>
-          <div className="skeleton-line skeleton-line-title" />
-          <div className="skeleton-chart-body" />
-        </div>
-      ))}
+      <SkeletonChartCard className="abc-pareto-container abc-analysis-chart" variant="bars" height={260} />
+      <SkeletonChartCard className="abc-pareto-container abc-analysis-drilldown" variant="list" rows={3} height={260} />
+    </div>
+    <div className="abc-breakdown-row">
+      <SkeletonChartCard className="abcb-card" variant="bars" height={220} />
+      <div className="abcb-card skeleton-card">
+        <SkeletonLine variant="title" />
+        <SkeletonLine width="62%" height="0.7rem" />
+        <SkeletonTable rows={3} columns={4} />
+      </div>
+    </div>
+    <div className="abc-filters-row">
+      <SkeletonLine width="100%" height="2.25rem" />
+    </div>
+    <div className="data-table-card">
+      <SkeletonTable rows={8} columns={8} />
     </div>
   </div>
 );
@@ -204,6 +218,12 @@ const ABCClassification = () => {
   // sales in any run) — counted by the backend, not listed, since they have
   // no tier to show.
   const [unclassifiedCount, setUnclassifiedCount] = useState(null);
+  // The run's rules, per-tier measured shares and the manuscript's Pareto
+  // check (§3.4.4.2.2), all from GET /abc — nothing on this page restates
+  // them in its own copy.
+  const [rules, setRules] = useState(null);
+  const [tierSummary, setTierSummary] = useState([]);
+  const [paretoCheck, setParetoCheck] = useState(null);
   // Which request the rows currently on screen came from — null until the
   // first one lands. Distinguishes "nothing to show yet" (cold load, needs
   // a skeleton) from "showing the previous answer while a new one loads"
@@ -229,11 +249,14 @@ const ABCClassification = () => {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Which class's stock-status drill-down is showing below the chart.
-  // Defaults to 'A' — Category A is the highest-value tier (top 20% of
-  // SKUs, ~80% of revenue) and the one a reviewer most wants to see on
+  // Defaults to 'A' — Category A is the highest-value tier (the first 80%
+  // of revenue) and the one a reviewer most wants to see on
   // first load, not the long-tail Class C. Still swappable via any
   // class's bar or the tab buttons.
   const [selectedClass, setSelectedClass] = useState('A');
+  // Hatch the CRITICAL segments only when the reader asked for a
+  // non-colour channel (high-contrast / forced-colors) — see ChartZoom.
+  const wantsTexture = usePrefersTexture();
 
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
   const [highlightedSKUId, setHighlightedSKUId] = useState(null);
@@ -264,6 +287,9 @@ const ABCClassification = () => {
         setClassificationPeriod(res.classification_period || null);
         setPlaceholder(res.data_mode?.placeholder ?? null);
         setUnclassifiedCount(res.unclassified_count ?? null);
+        setRules(res.rules ?? null);
+        setTierSummary(res.tier_summary || []);
+        setParetoCheck(res.pareto_check ?? null);
         setLoadedKey(`${requestedPeriod ?? ''}|${principal ?? ''}`);
       })
       .catch((err) => {
@@ -382,8 +408,18 @@ const ABCClassification = () => {
   const isDelMonte = principal === 'delmonte';
   const hasDelMonteRows = sourceData.some((d) => d.principal === 'delmonte');
   const rowNoun = isDelMonte
-    ? { one: 'category', header: 'Category', count: 'Category Count', CAPS: 'CATEGORIES' }
-    : { one: 'SKU', header: hasDelMonteRows ? 'SKU / Category' : 'SKU', count: 'SKU Count', CAPS: 'SKUS' };
+    ? { one: 'category', many: 'categories', header: 'Category', count: 'Category Count', CAPS: 'CATEGORIES' }
+    : { one: 'SKU', many: 'SKUs', header: hasDelMonteRows ? 'SKU / Category' : 'SKU', count: 'SKU Count', CAPS: 'SKUS' };
+
+  // This run's measured shares for one tier, from GET /abc's tier_summary.
+  // sku_share is null when the rows span both principals (their revenue
+  // shares are fractions of two different totals), so nothing is stated then.
+  const measuredShares = (tier) => {
+    const s = tierSummary.find((t) => t.tier === tier);
+    return s?.sku_share != null
+      ? `${asPct(s.sku_share)} of ${rowNoun.many} · ${asPct(s.revenue_share_total)} of revenue`
+      : null;
+  };
 
   // Carried-forward Del Monte rows from before the Jan 2025 regrouping —
   // explained in a Del Monte-only note, but only for a run after the
@@ -595,18 +631,20 @@ const ABCClassification = () => {
       <p className="abc-page-subtitle">
         {isDelMonte ? (
           <>
-            Product categories ranked by sales value. Category A = the categories driving roughly 80% of revenue.
+            Product categories ranked by sales value.{rules && <> {tierRuleText(rules)}</>}
             {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}{periodPlaceholderNote}.</>}
             {' '}Categories with no sales that month keep their most recent tier, shown faded with the month it was set.
           </>
         ) : (
           <>
-            Products ranked by sales value. Category A = the top 20% of SKUs driving roughly 80% of revenue.
+            Products ranked by sales value.{rules && <> {tierRuleText(rules)}</>}
             {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}{periodPlaceholderNote}.</>}
             {' '}SKUs with no sales that month keep their most recent category, shown faded with the month it was set.
           </>
         )}
-        <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a {rowNoun.one} within {BOUNDARY_TOLERANCE_PP}pp of a tier cutoff — likely to reclassify next review cycle.</span>
+        {rules && (
+          <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a {rowNoun.one} within {asPp(rules.boundary_margin)} of a tier cutoff — likely to reclassify next review cycle.</span>
+        )}
       </p>
       {/* Del Monte's rows are product categories, not SKUs. Said once, up
           front, and it also separates the two meanings of "category" on
@@ -644,7 +682,7 @@ const ABCClassification = () => {
       <div className="abc-page">
         <div className="abc-content">
           {header}
-          <p className="visually-hidden" role="status">Loading ABC classification data…</p>
+          <LoadingStatus>Loading ABC classification data…</LoadingStatus>
           <ABCSkeleton />
         </div>
       </div>
@@ -696,7 +734,7 @@ const ABCClassification = () => {
             <div className="abc-summary-card abc-card-a">
               <span className="abc-card-label">CATEGORY A</span>
               <span className="abc-card-value">{catACount.toLocaleString()}</span>
-              <span className="abc-card-desc">Top 20% · 80% of revenue</span>
+              {measuredShares('A') && <span className="abc-card-desc">{measuredShares('A')}</span>}
               {carriedCountOf('A') > 0 && (
                 <span className="abc-card-desc">{carriedCountOf('A').toLocaleString()} carried forward</span>
               )}
@@ -704,7 +742,7 @@ const ABCClassification = () => {
             <div className="abc-summary-card abc-card-b">
               <span className="abc-card-label">CATEGORY B</span>
               <span className="abc-card-value">{catBCount.toLocaleString()}</span>
-              <span className="abc-card-desc">Middle tier · 15% of revenue</span>
+              {measuredShares('B') && <span className="abc-card-desc">{measuredShares('B')}</span>}
               {carriedCountOf('B') > 0 && (
                 <span className="abc-card-desc">{carriedCountOf('B').toLocaleString()} carried forward</span>
               )}
@@ -712,7 +750,7 @@ const ABCClassification = () => {
             <div className="abc-summary-card abc-card-c">
               <span className="abc-card-label">CATEGORY C</span>
               <span className="abc-card-value">{catCCount.toLocaleString()}</span>
-              <span className="abc-card-desc">Long tail · 5% of revenue</span>
+              {measuredShares('C') && <span className="abc-card-desc">{measuredShares('C')}</span>}
               {carriedCountOf('C') > 0 && (
                 <span className="abc-card-desc">{carriedCountOf('C').toLocaleString()} carried forward</span>
               )}
@@ -735,6 +773,25 @@ const ABCClassification = () => {
               )}
             </div>
           </div>
+
+          {/* The manuscript's validation of the classification (§3.4.4.2.2),
+              computed by the backend for this run: the revenue earned by the
+              top fifth of ranked rows, against the range it has to fall in. */}
+          {paretoCheck && (
+            <p className={`abc-pareto-check${paretoCheck.passes ? ' is-pass' : ' is-fail'}`}>
+              {paretoCheck.passes
+                ? <CheckCircle2 size={14} aria-hidden="true" />
+                : <AlertTriangle size={14} aria-hidden="true" />}
+              <span>
+                <strong>Pareto check {paretoCheck.passes ? 'passes' : 'fails'}:</strong>{' '}
+                the top {asPct(paretoCheck.top_fraction, 0)} of {rowNoun.many} ({paretoCheck.top_count.toLocaleString()} of{' '}
+                {paretoCheck.ranked_count.toLocaleString()}) earn {asPct(paretoCheck.revenue_share)} of
+                {classificationPeriod ? ` ${formatMonth(classificationPeriod)}` : ''} revenue —{' '}
+                {paretoCheck.passes ? 'inside' : 'outside'} the {asPct(paretoCheck.band_low, 0)}–{asPct(paretoCheck.band_high, 0)} range
+                a valid classification should fall in.
+              </span>
+            </p>
+          )}
 
           {/* Why most Del Monte rows read "carried forward": the old
               sub-categories stopped receiving sales under those names when
@@ -815,10 +872,10 @@ const ABCClassification = () => {
                           <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,255,255,0.6)" strokeWidth="3" />
                         </pattern>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
+                      <CartesianGrid {...GRID_PROPS} />
                       <XAxis
                         dataKey="label"
-                        axisLine={true}
+                        axisLine={{ stroke: CHART_COLORS.gridline }}
                         tickLine={false}
                         tick={{ fill: CHART_COLORS.axisLabel, fontSize: 12, fontWeight: 600 }}
                       />
@@ -826,8 +883,8 @@ const ABCClassification = () => {
                         domain={[0, 100]}
                         ticks={[0, 20, 40, 60, 80, 100]}
                         tickFormatter={(v) => `${v}%`}
-                        axisLine={true}
-                        tickLine={true}
+                        axisLine={{ stroke: CHART_COLORS.gridline }}
+                        tickLine={{ stroke: CHART_COLORS.gridline }}
                         tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                       />
                       <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
@@ -838,8 +895,8 @@ const ABCClassification = () => {
                           percentage on one axis (per-class stock composition
                           vs. share-of-portfolio-revenue), which invited a
                           false comparison, and it duplicated what the 4 KPI
-                          cards above already say ("Top 20% · 80% of
-                          revenue"). This chart now has one job: stock-status
+                          cards above already say (each tier's measured share
+                          of revenue). This chart now has one job: stock-status
                           composition, stacked to 100%. NO DATA sits at the
                           base since it's usually the largest segment right
                           now (partial inventory load) — putting it first
@@ -847,24 +904,24 @@ const ABCClassification = () => {
                           status segment is on top. Each stacked segment is
                           clickable and outlines the whole column for
                           whichever class is selected. */}
-                      <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={54} {...chartAnim(0)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={28} {...chartAnim(0)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
-                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
+                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="criticalPct" stackId="stockMix" fill="url(#criticalHatch)" barSize={54} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="criticalPct" stackId="stockMix" fill={wantsTexture ? "url(#criticalHatch)" : STOCK_STATUS_COLORS.CRITICAL} barSize={28} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
-                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
+                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={54} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={28} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
-                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
+                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[6, 6, 0, 0]} barSize={54} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[4, 4, 0, 0]} barSize={28} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
-                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={entry.cat === selectedClass ? 2 : 1} />
+                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -874,8 +931,13 @@ const ABCClassification = () => {
                 <div className="abc-class-summary-row">
                   {panel.classAggregates.map((entry) => (
                     <div key={entry.cat} className="abc-class-summary-item">
+                      {/* The run's measured shares from GET /abc — the same
+                          figures as the cards. The old caption paired a share
+                          of ALL classified rows (carried forward included,
+                          ~10% for A) with THIS run's revenue (~80%), two
+                          populations that overstated the concentration. */}
                       <span className="abc-class-summary-headline">
-                        ~{entry.skuSharePct.toFixed(0)}% {rowNoun.count} · ~{entry.revenueTotal.toFixed(0)}% of {classificationPeriod ? formatMonth(classificationPeriod) : 'this run'} Revenue
+                        {measuredShares(entry.cat) ?? `${entry.skuCount.toLocaleString()} ${rowNoun.many}`}
                       </span>
                       <span className="abc-class-summary-archetype">{CLASS_ARCHETYPE[entry.cat]}</span>
                     </div>
@@ -1208,7 +1270,7 @@ const ABCClassification = () => {
                               className="abc-boundary-icon"
                               aria-label="Near a tier boundary"
                             >
-                              <title>{`Cumulative revenue ${item.cumulativePct.toFixed(1)}% — within ${BOUNDARY_TOLERANCE_PP}pp of a tier cutoff`}</title>
+                              <title>{`Cumulative revenue ${item.cumulativePct.toFixed(1)}%${rules ? ` — within ${asPp(rules.boundary_margin)} of a tier cutoff` : ' — near a tier cutoff'}`}</title>
                             </AlertTriangle>
                           )}
                         </span>

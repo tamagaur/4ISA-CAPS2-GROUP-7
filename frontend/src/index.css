@@ -518,7 +518,7 @@ table td.table-center {
   --color-warning: #F5A623;
   --color-success: #2E9E5B;
   --color-sales-trend: #5B5FEF;
-  --color-dispatched: #14919B;
+  --color-dispatched: #0E96A1; /* mirrors COLORS.dispatched — see theme/colors.js */
   --color-forecast: #A855F7;
   --color-forecast-bg: #F3E8FF;
   /* Placeholder months in preview mode (src/dataMode.js): a neutral tint
@@ -529,7 +529,7 @@ table td.table-center {
   /* ABC Single-Hue Plum Ramp */
   --color-abc-a: #6B2C5F;
   --color-abc-b: #B565A0;
-  --color-abc-c: #EBC9E1;
+  --color-abc-c: #D6A0C8; /* was #EBC9E1 — 1.5:1 on white; this passes 2:1 */
 
   /* Brand Chrome — sampled directly from public/logo.png (the swoosh is
      #C74E3D), replacing the cooler #c53030 the UI drifted to. Accent/hover
@@ -621,12 +621,14 @@ table td.table-center {
   --color-danger-bg-strong: #fee2e2;
   --color-danger-border: #feb2b2;
   --color-danger-border-alt: #fca5a5;
+  --color-danger-text: #991b1b; /* ink on --color-danger-bg-strong, 5.4:1+ */
 
   /* Feedback — success */
   --color-success-ui: #38a169;
   --color-success-deep: #2f855a;
   --color-success-bg: #f0fff4;
   --color-success-bg-alt: #dcfce7;
+  --color-success-text: #166534; /* ink on --color-success-bg-alt, same pair as the FSN "Fast" badge */
 
   /* Feedback — warning */
   --color-warning-deep: #d69e2e;
@@ -861,10 +863,17 @@ html, body, #root, .App {
 }
 
 .skeleton-line {
+  /* Lines sized in rem must still fit a phone-width card. */
+  max-width: 100%;
   background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 37%, var(--color-surface-muted) 63%);
   background-size: 400% 100%;
   animation: skeleton-shimmer 1.4s ease infinite;
   border-radius: 6px;
+}
+
+.skeleton-circle {
+  flex: none;
+  border-radius: 50%;
 }
 
 .skeleton-line-title {
@@ -890,26 +899,230 @@ html, body, #root, .App {
   margin-top: 1rem;
 }
 
-.skeleton-chart-body {
-  flex: 1;
-  min-height: 180px;
-  margin-top: 1.25rem;
-  border-radius: 8px;
-  background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 37%, var(--color-surface-muted) 63%);
-  background-size: 400% 100%;
-  animation: skeleton-shimmer 1.4s ease infinite;
-}
-
 @keyframes skeleton-shimmer {
   0% { background-position: 100% 50%; }
   100% { background-position: 0 50%; }
 }
 
+/* Chart, table and page skeletons (components/Skeleton.jsx). Same two greys
+   as .skeleton-line, so every page's placeholder reads as one family. A
+   chart's shapes stay still and one sheen sweeps across the whole card —
+   per-shape shimmers on a dozen bars read as noise, not "loading". */
+.skeleton-panel {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.skeleton-panel-flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.skeleton-chart {
+  position: relative;
+  flex: 1;
+  display: flex;
+  margin-top: 1.25rem;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.skeleton-chart::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.65) 50%, transparent 100%);
+  animation: skeleton-sweep 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+
+/* Gridlines and a baseline, like the real charts' CartesianGrid and axis. */
+.skeleton-chart-line,
+.skeleton-chart-bars {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(25% - 1px),
+    var(--color-surface-muted) calc(25% - 1px),
+    var(--color-surface-muted) 25%
+  );
+  border-bottom: 2px solid var(--color-surface-muted);
+}
+
+.skeleton-chart-svg {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 88%;
+}
+
+.skeleton-chart-area {
+  fill: var(--color-surface-muted);
+  opacity: 0.7;
+}
+
+.skeleton-chart-stroke {
+  fill: none;
+  stroke: var(--color-border-strong);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.skeleton-bars {
+  position: absolute;
+  inset: 12% 3% 0 3%;
+  display: flex;
+  align-items: flex-end;
+  gap: 3%;
+}
+
+.skeleton-bar {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+  background-color: var(--color-surface-muted);
+}
+
+.skeleton-hbars,
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 0.9rem;
+  width: 100%;
+  padding: 0.25rem 0;
+}
+
+.skeleton-hbar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.skeleton-hbar-label {
+  flex: none;
+  width: 1.25rem;
+  height: 0.75rem;
+  border-radius: 4px;
+  background-color: var(--color-surface-muted);
+}
+
+.skeleton-hbar {
+  height: 1.6rem;
+  border-radius: 6px;
+  background-color: var(--color-surface-muted);
+}
+
+.skeleton-donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.skeleton-donut {
+  flex: none;
+  width: 140px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 22px solid var(--color-surface-muted);
+}
+
+.skeleton-donut-legend {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.skeleton-chart-block {
+  background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 37%, var(--color-surface-muted) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+.skeleton-chart-block::after {
+  display: none;
+}
+
+.skeleton-table {
+  width: 100%;
+}
+
+.skeleton-table-row {
+  display: grid;
+  grid-template-columns: repeat(var(--skeleton-cols, 5), minmax(0, 1fr));
+  gap: 1rem;
+  align-items: center;
+  padding: 0.95rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.skeleton-table-row:last-child {
+  border-bottom: none;
+}
+
+.skeleton-table-head {
+  padding-block: 0.75rem;
+  background-color: var(--color-surface-sunken);
+}
+
+/* Route-level fallback: page padding follows the real pages' content
+   wrappers (.abc-content, .audit-content, …) at each breakpoint. */
+.skeleton-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem 3rem 3rem;
+}
+
+.skeleton-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.skeleton-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 1300px) {
+  .skeleton-page {
+    padding: 1.5rem 1.5rem 1.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .skeleton-page {
+    padding: 1rem 1rem 1.5rem;
+  }
+  .skeleton-donut {
+    width: 110px;
+    border-width: 18px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skeleton-line,
-  .skeleton-chart-body,
+  .skeleton-chart-block,
   .view-refreshing-dot {
     animation: none;
+  }
+  .skeleton-chart::after {
+    display: none;
   }
   .is-refreshing {
     transition: none;

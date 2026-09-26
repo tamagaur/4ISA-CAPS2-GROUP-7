@@ -4,6 +4,7 @@ import { getSegment } from '../api/segment';
 import { getDecomposition } from '../api/analytics';
 import { formatMonth } from '../utils/formatDate';
 import { SEMANTIC } from '../theme/colors';
+import { LoadingStatus, SkeletonLine } from './Skeleton';
 import './SkuDemandPatternPanel.css';
 
 // "Demand pattern" — the SKU's trend and variability, question D4 of the
@@ -129,11 +130,22 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
     </div>
   );
 
+  // The four tiles the loaded panel shows (volatility, trend, history,
+  // seasonality), in the same tile class, so the panel keeps its height.
   if (state.status === 'loading') {
     return (
       <section className={`sku-pattern${compact ? ' sku-pattern-compact' : ''}`} aria-busy="true">
         {heading}
-        <p className="sku-pattern-note" role="status">Loading demand pattern…</p>
+        <LoadingStatus>Loading demand pattern…</LoadingStatus>
+        <div className="sku-pattern-tiles" aria-hidden="true">
+          {[0, 1, 2, 3].map((k) => (
+            <div className="sku-pattern-tile" key={k}>
+              <SkeletonLine width="4.5rem" height="0.6rem" />
+              <SkeletonLine width="8rem" height="1rem" />
+              <SkeletonLine width="90%" height="0.65rem" />
+            </div>
+          ))}
+        </div>
       </section>
     );
   }

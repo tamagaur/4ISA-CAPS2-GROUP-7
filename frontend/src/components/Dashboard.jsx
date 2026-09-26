@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext, Link } from 'react-router-dom';
 import KPICard from './KPICard';
 import DateFilter from './DateFilter';
@@ -8,11 +8,14 @@ import {
   formatCompactPesos,
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
+import { CHART_COLORS } from '../theme/colors';
 import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
 import { staleCoverageNotice } from '../dataCoverage';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
+import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
+import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
 import { Package, Wallet, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
@@ -68,6 +71,26 @@ const coverageNote = (coverage, pagePrincipal) => {
   return `${PRINCIPAL_NAMES[coverage[0]] || coverage[0]} only`;
 };
 
+// Sparkline + "vs last month" extras for a value card, from GET
+// /dashboard's kpis.sales_trend / kpis.soh_trend (backend/chart_insights
+// .py) — every number and month here is the backend's. The change renders
+// as a shaded pill coloured by direction (Audrey's call, 2026-09-26):
+// green when the figure rose, red when it fell, gray when flat — with the
+// arrow repeating the direction so it never relies on colour alone.
+const trendExtras = (trend, color) => {
+  if (!trend) return {};
+  const extras = {};
+  if ((trend.points?.length ?? 0) >= 2) {
+    extras.trend = { points: trend.points, color };
+  }
+  if (trend.delta_pct != null && trend.prev_period) {
+    extras.deltaLine = `${Math.abs(trend.delta_pct).toFixed(1)}% vs ${periodLabel(trend.prev_period)}`;
+    extras.trendDirection = trend.delta_pct > 0 ? 'up' : trend.delta_pct < 0 ? 'down' : undefined;
+    extras.deltaTone = trend.delta_pct > 0 ? 'positive' : trend.delta_pct < 0 ? 'negative' : 'neutral';
+  }
+  return extras;
+};
+
 // "Share of Category A SKUs at/above safety stock" — display thresholds
 // for the card's colour, not a pipeline rule: below 60% is an act-now
 // signal (red), below 90% a watch (amber), otherwise healthy. The 9% live
@@ -111,30 +134,124 @@ const Slot = ({ kind, realOnly = false, children }) => (
 // Same outer structure and card classes as the loaded page below, so every
 // block lands at its final size — nothing jumps when the real data replaces
 // it. Replaces a lone "Loading dashboard data…" line that left the page
-// blank for the whole /dashboard request (measured 5.4–7.1s).
+// blank for the whole /dashboard request (measured 5.4–7.1s). Each card sits
+// in a .dash-slot like the real ones (that is where their 360px minimum
+// height comes from) and takes its widget's shape, in page order: sales
+// trend; ABC ring and tier bars; portfolio forecast and reorder list; policy
+// bars.
+const DASHBOARD_SKELETON_ROWS = [
+  ['dash-row-trend', [{ variant: 'line' }]],
+  ['dash-row-abc', [{ variant: 'donut' }, { variant: 'hbars', rows: 3 }]],
+  ['dash-row-even', [{ variant: 'line' }, { variant: 'list', rows: 3 }]],
+  ['dash-row-single', [{ variant: 'hbars', rows: 2, height: 120 }]],
+];
+
 const DashboardSkeleton = () => (
   <div className="dashboard-body" aria-hidden="true">
     <div className="kpi-strip kpi-strip-hero">
-      {[0, 1, 2, 3].map((k) => (
-        <div className="kpi-card skeleton-card" key={k}>
-          <div className="skeleton-line skeleton-line-title" />
-          <div className="skeleton-line skeleton-line-value" />
-          <div className="skeleton-line skeleton-line-subtext" />
-        </div>
-      ))}
+      <SkeletonStatCards count={4} cardClassName="kpi-card" />
     </div>
-    {['dash-row-trend', 'dash-row-abc', 'dash-row-even', 'dash-row-single'].map((rowClass) => (
+    {DASHBOARD_SKELETON_ROWS.map(([rowClass, cards]) => (
       <div className={`dash-row ${rowClass}`} key={rowClass}>
-        {(rowClass === 'dash-row-single' || rowClass === 'dash-row-trend' ? [0] : [0, 1]).map((k) => (
-          <div className="chart-widget skeleton-card" key={k}>
-            <div className="skeleton-line skeleton-line-title" />
-            <div className="skeleton-chart-body" />
+        {cards.map((card, k) => (
+          <div className="dash-slot" key={k}>
+            <span className="dash-kind-row"><SkeletonLine width="5.5rem" height="1.1rem" /></span>
+            <SkeletonChartCard className="chart-widget" {...card} />
           </div>
         ))}
       </div>
     ))}
   </div>
 );
+
+// The sticky section menu's jump targets, in page order — the page's own
+// story: the headline numbers, what happened, what's next, what to do. Each
+// id sits on the row it names; the hint (the chip's tooltip) says which part
+// of that story the section tells.
+const DASH_SECTIONS = [
+  { id: 'dash-summary', label: 'Summary', hint: 'The four headline numbers' },
+  { id: 'dash-sales', label: 'Sales & stock', hint: 'What happened: monthly sales against stock on hand' },
+  { id: 'dash-abc', label: 'ABC tiers', hint: 'What happened: which products earn the most, and their stock status' },
+  { id: 'dash-forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast and the reorder list" },
+  { id: 'dash-policy', label: 'Safety stock', hint: 'What to do: the LP safety stock against the blanket 3-week rule' },
+];
+const DASH_SECTION_IDS = DASH_SECTIONS.map((s) => s.id);
+
+// Which section is being read, and whether the toolbar has stuck under the
+// top bar. Both are read off `.dashboard` — the element that scrolls on this
+// page; the top bar sits outside it — once per frame while it scrolls.
+// `enabled` is false until the sections exist (skeleton, error).
+function useSectionSpy(toolbarRef, enabled) {
+  const [active, setActive] = useState(DASH_SECTION_IDS[0]);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const bar = toolbarRef.current;
+    const scroller = bar?.closest('.dashboard');
+    if (!bar || !scroller) return undefined;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const barRect = bar.getBoundingClientRect();
+      setStuck(scroller.scrollTop > 0 && barRect.top <= scroller.getBoundingClientRect().top + 1);
+      if (!enabled) return;
+      // The last section whose top has reached the toolbar is the one being
+      // read. At the very bottom the last one wins, even though it is too
+      // short to ever scroll up to the toolbar.
+      let current = DASH_SECTION_IDS[0];
+      DASH_SECTION_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top - barRect.bottom <= 24) current = id;
+      });
+      const scrollable = scroller.scrollHeight > scroller.clientHeight + 2;
+      const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+      setActive(scrollable && atEnd ? DASH_SECTION_IDS[DASH_SECTION_IDS.length - 1] : current);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    measure();
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      cancelAnimationFrame(frame);
+    };
+  }, [toolbarRef, enabled]);
+  return { active, stuck };
+}
+
+// One chip per section; the current one is filled. Chips are buttons, not
+// #hash links: a hash would land the section under the sticky toolbar and
+// push a history entry per click.
+const DashSectionNav = ({ active, enabled }) => {
+  const jumpTo = (id) => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  };
+  return (
+    <nav className="dash-section-nav" aria-label="Dashboard sections">
+      {DASH_SECTIONS.map((s) => {
+        const current = enabled && active === s.id;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            className={`dash-section-chip${current ? ' is-active' : ''}`}
+            aria-current={current ? 'true' : undefined}
+            title={s.hint}
+            disabled={!enabled}
+            onClick={() => jumpTo(s.id)}
+          >
+            {s.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+};
 
 const Dashboard = () => {
   const { startMonth, startYear, endMonth, endYear, principal, dataMode } = useOutletContext() || {};
@@ -219,19 +336,36 @@ const Dashboard = () => {
   const enterCycle = useEntranceReplay(loaded?.key ?? '');
   const currentError = error?.key === requestKey ? error.message : null;
 
+  // Also above the early returns (hooks). The section chips only work once
+  // the sections exist, so they stay disabled under the skeleton or an error.
+  const sectionsReady = Boolean(loaded) && !currentError;
+  const toolbarRef = useRef(null);
+  const { active: activeSection, stuck: toolbarStuck } = useSectionSpy(toolbarRef, sectionsReady);
+
   // Header is rendered in every state — loading, error and loaded — rather
   // than only on success. The date picker lives inside it, so blanking the
   // whole page on load meant the control the user had just changed
   // disappeared underneath them on every single refetch, and an error left
   // them with no way to pick a different range to recover.
+  //
+  // The date picker sits in a toolbar with the section menu that sticks
+  // under the top bar once the title scrolls away (2026-09-25), so the range
+  // stays in reach however far down the page someone has read. The
+  // principal filter needs no such help: it is in the top bar, which never
+  // scrolls.
   const header = (
-    <div className="dashboard-header">
-      <div className="dashboard-title-row">
-        <h2>Inventory <span className="page-title-accent">pulse</span></h2>
+    <>
+      <div className="dashboard-header">
+        <div className="dashboard-title-row">
+          <h2>Inventory <span className="page-title-accent">pulse</span></h2>
+        </div>
+        <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
+      </div>
+      <div className={`dash-toolbar${toolbarStuck ? ' is-stuck' : ''}`} ref={toolbarRef}>
+        <DashSectionNav active={activeSection} enabled={sectionsReady} />
         <DateFilter />
       </div>
-      <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
-    </div>
+    </>
   );
 
   if (currentError) {
@@ -250,7 +384,7 @@ const Dashboard = () => {
       <div className="dashboard">
         <div className="dashboard-content">
           {header}
-          <p className="visually-hidden" role="status">Loading dashboard data…</p>
+          <LoadingStatus>Loading dashboard data…</LoadingStatus>
           <DashboardSkeleton />
         </div>
       </div>
@@ -415,18 +549,24 @@ const Dashboard = () => {
           {/* Hero strip — the four figures that answer "what is happening
               right now": money in, money parked, service risk, and work
               waiting. */}
-          <div className="kpi-strip kpi-strip-hero">
+          <div className="kpi-strip kpi-strip-hero dash-section-anchor" id="dash-summary">
             <KPICard
               title="Sales"
               value={sales.value}
+              // Green accent (top bar + icon) for money coming in — card
+              // chrome only; the pill below carries the month's direction.
+              // Slate, like every blocked card, when there is no figure.
+              metricType={sales.value === '—' ? undefined : 'healthy'}
               contextLine={sales.contextLine}
               icon={<Wallet size={20} />}
+              {...(sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {})}
             />
             <KPICard
               title="Stock on hand value"
               value={sohValue.value}
               contextLine={sohValue.contextLine}
               icon={<Package size={20} />}
+              {...(sohValue.value !== '—' ? trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries) : {})}
             />
             <KPICard
               title="Below safety stock"
@@ -446,21 +586,21 @@ const Dashboard = () => {
 
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
-          <div className="dash-row dash-row-trend">
-            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} /></Slot>
+          <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
+            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} /></Slot>
           </div>
 
-          <div className="dash-row dash-row-abc">
+          <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
             <Slot kind="Descriptive">
-              <ABCDonutWidget data={abcMix} revenue={data.abc_revenue} note={placeholderNote(data.abc_revenue?.period)} />
+              <ABCDonutWidget data={abcMix} revenue={data.abc_revenue} rules={data.abc_rules} note={placeholderNote(data.abc_revenue?.period)} />
             </Slot>
             <Slot kind="Descriptive">
-              <CategoryStockBarWidget data={tierStock} note={placeholderNote(data.abc_revenue?.period)} />
+              <CategoryStockBarWidget data={tierStock} note={placeholderNote(data.abc_revenue?.period)} period={data.tier_stock_period} />
             </Slot>
           </div>
 
           {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
-          <div className="dash-row dash-row-even">
+          <div className="dash-row dash-row-even dash-section-anchor" id="dash-forecast">
             <Slot kind="Predictive" realOnly={portfolioRealOnly}>
               <PortfolioForecastWidget
                 series={portfolioSeries}
@@ -483,6 +623,8 @@ const Dashboard = () => {
                 onPrincipalChange={setForecastPrincipal}
                 isUpdating={forecastUpdating}
                 reliability={forecastReliability}
+                insight={portfolioForecast.insight}
+                mapeGate={portfolioForecast.mape_gate}
               />
             </Slot>
             <Slot kind="Prescriptive" realOnly={preview && realOnly.has('reorder_preview')}>
@@ -497,7 +639,7 @@ const Dashboard = () => {
           </div>
 
           {/* PRESCRIPTIVE — the policy question this project exists to answer */}
-          <div className="dash-row dash-row-single">
+          <div className="dash-row dash-row-single dash-section-anchor" id="dash-policy">
             <Slot kind="Prescriptive" realOnly={preview && realOnly.has('policy_comparison')}>
               <PolicyComparisonWidget comparison={data.policy_comparison} />
             </Slot>

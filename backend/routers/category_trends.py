@@ -25,7 +25,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from analytics.forecasting.category_trend import MIN_POINTS, PROJECTION_MONTHS, TREND_WINDOW_MONTHS, project_category
+from analytics.forecasting.category_trend import (
+    MANN_KENDALL_ALPHA, PROJECTION_MONTHS, TRAILING_MONTHS, method_constants, project_category,
+)
 from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import PrincipalQuery, normalize_principal
@@ -53,6 +55,13 @@ _QUERIES = {
 }
 
 
+def _series_start(principal: str) -> str | None:
+    """The first month a principal's series may use, when it is cut: Del
+    Monte's categories start at the regrouping, so the page can say so from
+    this value instead of naming the month in its own copy."""
+    return DEL_MONTE_REGROUP_PERIOD if principal == "delmonte" else None
+
+
 def _next_month(period: str) -> str:
     y, m = map(int, period.split("-"))
     return f"{y + 1:04d}-01" if m == 12 else f"{y:04d}-{m + 1:02d}"
@@ -62,7 +71,7 @@ def trends_for(db: Session, principal: str, mode: str = REAL) -> dict:
     rows = db.execute(text(_QUERIES[principal].format(demand=unilever_demand(mode)))).mappings().all()
     observed = sorted({r["period"] for r in rows})
     if not observed:
-        return {"principal": principal, "observed_months": [], "categories": []}
+        return {"principal": principal, "observed_months": [], "categories": [], "series_start": _series_start(principal)}
     series: dict[str, dict[str, float]] = {}
     for r in rows:
         series.setdefault(r["category"], {})[r["period"]] = float(r["revenue"] or 0)
@@ -79,13 +88,16 @@ def trends_for(db: Session, principal: str, mode: str = REAL) -> dict:
         projection = project_category(values)
         categories.append({
             "category": name,
-            "revenue_last_12": round(sum(values[-12:]), 2),
+            # The field keeps its name for its callers; the span is
+            # TRAILING_MONTHS, the same one the method block reports.
+            "revenue_last_12": round(sum(values[-TRAILING_MONTHS:]), 2),
             "history": [{"period": m, "revenue": round(v, 2)} for m, v in zip(observed, values)],
             "projection_periods": ahead if projection.get("available") else [],
             **projection,
         })
     categories.sort(key=lambda c: c["revenue_last_12"], reverse=True)
-    return {"principal": principal, "observed_months": observed, "categories": categories}
+    return {"principal": principal, "observed_months": observed, "categories": categories,
+            "series_start": _series_start(principal)}
 
 
 @router.get("")
@@ -98,10 +110,8 @@ def get_category_trends(
     scope = normalize_principal(principal)
     payload = {
         "method": {
-            "name": "Theil–Sen trend line, Mann–Kendall significance (p < 0.05)",
-            "window_months": TREND_WINDOW_MONTHS,
-            "projection_months": PROJECTION_MONTHS,
-            "min_points": MIN_POINTS,
+            "name": f"Theil–Sen trend line, Mann–Kendall significance (p < {MANN_KENDALL_ALPHA})",
+            **method_constants(),
             "note": "A trend projection, not a validated forecast.",
         },
         "principals": [trends_for(db, p, mode) for p in ([scope] if scope else ["unilever", "delmonte"])],

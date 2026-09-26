@@ -57,6 +57,31 @@ class TierSummary(BaseModel):
     # How many of sku_count are carried forward (view=last_known); always 0
     # in the default view.
     carried_forward_count: int = 0
+    # This tier's share of the items RANKED in the current run (carried-
+    # forward rows excluded, like revenue_share_total) — the measured
+    # counterpart of "A is about a fifth of SKUs", so the UI shows the real
+    # figure rather than a stock phrase.
+    sku_share: float | None = None
+
+
+class ABCRules(BaseModel):
+    """The rules the run applied (analytics/classification/abc.py), sent so
+    every page states them from the source instead of repeating them."""
+    tier_a_cutoff: float
+    tier_b_cutoff: float
+    boundary_margin: float
+
+
+class ParetoCheck(BaseModel):
+    """Manuscript §3.4.4.2.2 for the current run: revenue earned by the top
+    `top_fraction` of ranked items, and whether it falls in the valid band."""
+    top_fraction: float
+    top_count: int
+    ranked_count: int
+    revenue_share: float
+    band_low: float
+    band_high: float
+    passes: bool
 
 
 class ABCResponse(BaseModel):
@@ -64,6 +89,11 @@ class ABCResponse(BaseModel):
     count: int
     classification_period: str | None = None  # 'YYYY-MM'
     tier_summary: list[TierSummary] = []
+    rules: ABCRules | None = None
+    # None when nothing was ranked, or when the rows span both principals —
+    # their shares are fractions of two different revenues and can't be
+    # ranked against each other.
+    pareto_check: ParetoCheck | None = None
     # view=last_known only: products in scope with no 'single' classification
     # at or before classification_period — never ranked, so they have no tier
     # to show. None in the default view, which does not compute it.

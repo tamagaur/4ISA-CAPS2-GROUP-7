@@ -132,6 +132,13 @@
   width: 100%;
 }
 
+/* Chart/table toggle row, right-aligned above the plot. */
+.ct-chart-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.35rem;
+}
+
 .ct-legend {
   display: flex;
   flex-wrap: wrap;
@@ -154,9 +161,19 @@
   border-top: 2px solid;
 }
 
-.ct-swatch-actual { border-color: #14919B; }
+.ct-swatch-actual { border-color: var(--color-dispatched); }
 .ct-swatch-fitted { border-color: #475569; border-top-style: dashed; }
-.ct-swatch-projection { border-color: #A855F7; border-top-style: dashed; }
+.ct-swatch-projection { border-color: var(--color-forecast); border-top-style: dashed; }
+/* Projection band swatch — same tint as the chart's likely-range Area. */
+.ct-swatch-band {
+  width: 14px;
+  height: 10px;
+  border: none;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-forecast) 14%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--color-forecast) 35%, transparent);
+  vertical-align: middle;
+}
 /* Preview mode's placeholder band, as a block swatch — same tint and
    alpha as the chart's ReferenceArea (Charts.jsx renderPlaceholderBand). */
 .ct-swatch-placeholder {

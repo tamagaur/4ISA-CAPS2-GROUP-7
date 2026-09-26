@@ -11,15 +11,15 @@ import './ReorderModal.css';
 // weight split itself is real config (analytics/optimization/lp.py), not
 // per-SKU fabrication.
 //
-// Colors match the Dashboard's own cost/service level/storage priority
+// Colour matches the Dashboard's own cost/service level/storage priority
 // bars (LP_PRIORITY_ROWS in Charts.jsx) one-for-one via
-// CHART_COLORS.lpWeights — three categorical hues, none of them a status
-// colour (Storage used to be amber, which reads as "watch" everywhere
-// else in the app).
+// CHART_COLORS.lpWeight — ONE model-output indigo for all three: they are
+// co-equal weights of a single solver objective, not three categories,
+// and the row labels carry identity (see theme/colors.js).
 const OBJECTIVE_WEIGHTS = [
-  { key: 'cost', label: 'Cost minimization', weight: 45, color: CHART_COLORS.lpWeights.cost },
-  { key: 'service', label: 'Service level ≥ 95%', weight: 35, color: CHART_COLORS.lpWeights.service_level },
-  { key: 'capacity', label: 'Warehouse capacity', weight: 20, color: CHART_COLORS.lpWeights.storage },
+  { key: 'cost', label: 'Cost minimization', weight: 45, color: CHART_COLORS.lpWeight },
+  { key: 'service', label: 'Service level ≥ 95%', weight: 35, color: CHART_COLORS.lpWeight },
+  { key: 'capacity', label: 'Warehouse capacity', weight: 20, color: CHART_COLORS.lpWeight },
 ];
 
 const COVER_BASIS_NOTE =

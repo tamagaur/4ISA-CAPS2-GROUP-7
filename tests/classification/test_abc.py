@@ -123,3 +123,30 @@ def test_boundary_flag_false_for_all_zero_revenue():
     df = pd.DataFrame({"sku_id": ["SKU-1", "SKU-2"], "total_revenue": [0, 0]})
     result = classify_abc(df)
     assert (result["boundary_flag"] == False).all()  # noqa: E712 (explicit bool check, not truthiness)
+
+
+def test_pareto_check_uses_the_top_fifth_and_the_manuscript_band():
+    """Manuscript §3.4.4.2.2: valid when the top 20% of items earn 75-85%."""
+    from analytics.classification.abc import PARETO_VALID_BAND, pareto_check
+    shares = [0.45, 0.35] + [0.025] * 8  # top 2 of 10 earn 80%
+    check = pareto_check(shares)
+    assert check["top_count"] == 2
+    assert check["ranked_count"] == 10
+    assert check["revenue_share"] == pytest.approx(0.80)
+    assert (check["band_low"], check["band_high"]) == PARETO_VALID_BAND
+    assert check["passes"] is True
+
+
+def test_pareto_check_fails_outside_the_band():
+    from analytics.classification.abc import pareto_check
+    assert pareto_check([0.1] * 10)["passes"] is False  # top 20% earn only 20%
+
+
+def test_pareto_check_is_none_for_an_empty_run():
+    from analytics.classification.abc import pareto_check
+    assert pareto_check([]) is None
+
+
+def test_abc_rules_are_the_constants_the_run_applies():
+    from analytics.classification.abc import BOUNDARY_MARGIN, TIER_A_CUTOFF, TIER_B_CUTOFF, abc_rules
+    assert abc_rules() == {"tier_a_cutoff": TIER_A_CUTOFF, "tier_b_cutoff": TIER_B_CUTOFF, "boundary_margin": BOUNDARY_MARGIN}

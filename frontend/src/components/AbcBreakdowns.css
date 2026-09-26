@@ -85,6 +85,14 @@
   box-shadow: inset 0 -2px 0 var(--color-abc-a);
 }
 
+.abcb-headline-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .abcb-headline {
   margin: 0;
   font-size: 0.85rem;
@@ -218,8 +226,8 @@
 }
 
 .abcb-class-A { background-color: var(--color-abc-a); }
-.abcb-class-B { background-color: #B565A0; }
-.abcb-class-C { background-color: #EBC9E1; }
+.abcb-class-B { background-color: var(--color-abc-b); }
+.abcb-class-C { background-color: var(--color-abc-c); }
 
 /* FSN badge in the SKU table (ABCClassification.jsx). */
 .fsn-badge {

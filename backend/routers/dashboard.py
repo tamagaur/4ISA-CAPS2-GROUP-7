@@ -322,6 +322,8 @@ from backend.data_mode import (
     preview_block,
     unilever_demand,
 )
+from analytics.classification.abc import abc_rules
+from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle
 from backend.lp_cycle import freshness as lp_freshness
@@ -1056,6 +1058,17 @@ def get_dashboard(
         for p in periods
     ]
 
+    # ---- chart story fields (backend/chart_insights.py) -----------------
+    # The hero chart's one-sentence takeaway + its peak/low sales months,
+    # and each value card's sparkline points + month-over-month delta —
+    # all computed from the SAME dicts the chart/cards above read, so a
+    # sentence can never disagree with the plot under it.
+    svs_insight = sales_vs_stock_insight(sales_vs_stock)
+    sales_trend = kpi_trend(sales_by_period, current_period)
+    soh_trend = kpi_trend(
+        {p: soh_by_period.get(p) for p in soh_periods}, inventory_period
+    )
+
     # ---- abc_mix -----------------------------------------------------
 
     # Which principals the ABC period actually contains. The latest run
@@ -1297,11 +1310,19 @@ def get_dashboard(
             entry["confidence_lower"] = b["lower"] if b["lower_seen"] else None
             entry["confidence_upper"] = b["upper"] if b["upper_seen"] else None
 
+    portfolio_series = [series_by_period[p] for p in sorted(series_by_period.keys())]
     portfolio_forecast = {
-        "series": [series_by_period[p] for p in sorted(series_by_period.keys())],
+        "series": portfolio_series,
         "gated_sku_count": gated_sku_count,
         "avg_mape": avg_mape,
         "scope_label": scope_label,
+        # The gate the count above was filtered by, so the card's label
+        # ("Gated SKUs (MAPE < N%)") states the constant from here rather
+        # than hardcoding 20 in the JSX.
+        "mape_gate": MAPE_PORTFOLIO_GATE,
+        # One sentence comparing the forecast bucket with the last actual
+        # month — the card renders it verbatim (backend/chart_insights.py).
+        "insight": portfolio_forecast_insight(portfolio_series),
     }
 
     # ---- reorder_preview -------------------------------------------------
@@ -1406,6 +1427,9 @@ def get_dashboard(
             "unreliable_count": unreliable_count,
             "evaluated_count": evaluated_count,
             "total_count": total_count,
+            # The pass gate unreliable_count was counted against, so the
+            # card's "Beat naive (MASE < N)" label states it from here.
+            "mase_gate": MASE_UNRELIABLE_GATE,
         },
         "latest_data_period": max(filter(None, latest_by_principal.values()), default=None),
         "latest_data_period_by_principal": latest_by_principal,
@@ -1426,6 +1450,12 @@ def get_dashboard(
             "soh_coverage": stock_coverage,
             "safety_stock_rate": safety_stock_rate,
             "safety_stock_rate_blocked_reason": safety_stock_rate_blocked_reason,
+            # Sparkline + month-over-month delta for the two value cards
+            # (backend/chart_insights.py). Points are real months only; a
+            # missing month is dropped, never zero-filled. Null when the
+            # scope has nothing real to plot.
+            "sales_trend": sales_trend,
+            "soh_trend": soh_trend,
             "weeks_of_cover": {
                 "value": weeks_of_cover_value,
                 "blocked_reason": weeks_of_cover_reason,
@@ -1442,12 +1472,22 @@ def get_dashboard(
         # older pending rows were withheld.
         "lp": lp_freshness_info,
         "sales_vs_stock": sales_vs_stock,
+        # {text, peak, low} — the hero chart's takeaway sentence and the
+        # sales months it should label, from the same rows it plots.
+        "sales_vs_stock_insight": svs_insight,
         "abc_mix": abc_mix,
+        # The cutoffs the ABC run applied, so the card states them from the
+        # source (analytics/classification/abc.py) rather than in its copy.
+        "abc_rules": abc_rules(),
         "abc_coverage": abc_coverage,
         "abc_revenue": abc_revenue,
         "safety_stock_exposure": safety_stock_exposure,
         "policy_comparison": policy_comparison,
         "tier_stock": tier_stock,
+        # The stock snapshot month tier_stock's Active/Inactive flags were
+        # read at — the card's "no dead stock flagged in <month>" line
+        # names this, never a month typed in the frontend.
+        "tier_stock_period": inventory_period if tier_stock else None,
         "portfolio_forecast": portfolio_forecast,
         "reorder_preview": reorder_preview,
     }

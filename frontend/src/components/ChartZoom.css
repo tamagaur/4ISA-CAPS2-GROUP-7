@@ -29,8 +29,9 @@
   border-radius: 999px;
   cursor: ew-resize;
   outline: none;
-  /* Filled portion = how much of the full range is in view, so the handle's
-     position doubles as a quiet gauge. --zoom-pct is set inline. */
+  /* Filled portion runs up to the handle, so its position doubles as a
+     quiet gauge: how much of the range is in view, or — with zoomInRight —
+     how far in the zoom has gone. --zoom-pct is set inline. */
   background: linear-gradient(
     to right,
     var(--color-slate-400) 0 var(--zoom-pct, 100%),

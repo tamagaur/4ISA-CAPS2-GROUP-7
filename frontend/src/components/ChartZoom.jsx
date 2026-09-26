@@ -179,23 +179,71 @@ export function useChartZoom(data, { minWindow = MIN_WINDOW } = {}) {
  * legend, and it stays faint so overlapping bands remain readable where
  * the series cross.
  *
+ * ~10% at the top (design pass 2026-09-26; was 0.22): a wash, never a
+ * saturated block — at 0.22 two overlapping washes turned muddy where the
+ * lines crossed, so charts now also keep at most ONE wash each.
+ *
  * Goes inside the chart's <defs>; the series then references it as
  * fill="url(#<id>)". Ids are global to the document, so charts that can
  * appear on the same page need distinct ones.
  */
 export const SeriesFill = ({ id, color }) => (
   <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+    <stop offset="0%" stopColor={color} stopOpacity={0.12} />
     <stop offset="100%" stopColor={color} stopOpacity={0.02} />
   </linearGradient>
 );
 
+// Solid hairline gridlines, one shade off the surface — shared by every
+// chart so "what does the grid look like" has one answer. Dashing is
+// reserved for the marks that MEAN "projected / reference", which is why
+// the grid itself must never dash (it used to, and the forecast lines'
+// dashes stopped standing out against it).
+export const GRID_PROPS = {
+  vertical: false,
+  stroke: '#E2E8F0',
+  strokeWidth: 1,
+};
+
+// Texture (hatching) as the backup identity channel is OPT-IN: on when
+// the reader has asked their OS/browser for a non-colour cue
+// (high-contrast or forced-colors mode) or when printing, off otherwise —
+// dense angled fills read as noise by default. Charts that carry a status
+// hatch (the ABC page's CRITICAL segment) key it off this, and the
+// matching legend swatches switch via the same media queries in CSS.
+const TEXTURE_QUERIES = ['(prefers-contrast: more)', '(forced-colors: active)'];
+
+export function usePrefersTexture() {
+  const [wants, setWants] = useState(() =>
+    typeof window !== 'undefined' && 'matchMedia' in window
+      ? TEXTURE_QUERIES.some((q) => window.matchMedia(q).matches)
+      : false
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('matchMedia' in window)) return undefined;
+    const lists = TEXTURE_QUERIES.map((q) => window.matchMedia(q));
+    const update = () => setWants(lists.some((l) => l.matches));
+    lists.forEach((l) => l.addEventListener?.('change', update));
+    return () => lists.forEach((l) => l.removeEventListener?.('change', update));
+  }, []);
+  return wants;
+}
+
+// Below this per-point spacing (px) a dot on every month reads as a rope
+// of beads and the dots start touching; the line alone carries the shape,
+// with dots kept only where they carry information nothing else does
+// (isolated points, and the latest observation).
+const DOT_MIN_SPACING_PX = 14;
+
 /**
  * Per-point dot renderer for a Line, passed as its `dot` prop.
  *
- * Every point gets a dot, at every zoom level: the curve is type="monotone",
- * so everything between two points is interpolation, and the dots are the
- * only thing marking which values are real observations.
+ * Dots mark REAL observations (everything between two points is
+ * interpolation), so every month gets one — 8px (r=4) with a 2px ring in
+ * the surface colour, which keeps a dot legible where it crosses the other
+ * series' line. When the zoom window packs points tighter than
+ * DOT_MIN_SPACING_PX, per-month dots drop out and only the latest point
+ * and isolated points keep theirs.
  *
  * An isolated point is drawn slightly larger. Recharts needs two adjacent
  * non-null points to draw a segment, so a month whose neighbours are both
@@ -210,7 +258,7 @@ export const SeriesFill = ({ id, color }) => (
  * Recharts supplies the key on its own wrapper (see component/Dots.js), so
  * returning null here simply omits that dot.
  */
-export function seriesDot({ color, r = 3, skip }) {
+export function seriesDot({ color, r = 4, skip }) {
   return ({ cx, cy, index, points, dataKey, payload }) => {
     // A null month has no coordinates — nothing to mark.
     if (cx == null || cy == null) return null;
@@ -223,14 +271,68 @@ export function seriesDot({ color, r = 3, skip }) {
     };
     const isolated = valueAt(index - 1) == null && valueAt(index + 1) == null;
 
+    // The last point of this series that has a value at all — its dot
+    // stays at every density (it anchors the end label / latest reading).
+    let lastIdx = (points?.length ?? 0) - 1;
+    while (lastIdx >= 0 && valueAt(lastIdx) == null) lastIdx -= 1;
+
+    const spacing = points && points.length > 1 && points[0]?.x != null && points[points.length - 1]?.x != null
+      ? Math.abs(points[points.length - 1].x - points[0].x) / (points.length - 1)
+      : Infinity;
+    if (spacing < DOT_MIN_SPACING_PX && !isolated && index !== lastIdx) return null;
+
     return (
       <circle
         cx={cx}
         cy={cy}
         r={isolated ? r + 1 : r}
         fill={color}
-        stroke="none"
+        stroke="var(--color-surface, #fff)"
+        strokeWidth={2}
       />
+    );
+  };
+}
+
+/**
+ * Selective direct labels ON the line — the series' latest value at its
+ * end, or a marked month (a peak, a low), where the eye already is.
+ * Passed as a Line's `label` prop.
+ *
+ * `entries` name the months to label: [{ period, text, below }] — matched
+ * against the plotted rows by `key`, so a label simply drops out when its
+ * month is zoomed/panned out of the window, and never a label on every
+ * point (that is chaos, and goes unread).
+ *
+ * Drawn INSIDE the plot: anchored to the point, pulled left at the last
+ * point and right at the first so the text can't leave the SVG. Ink text,
+ * never the series colour — the line the label touches carries identity.
+ * The .chart-end-label class hides them all at phone widths, where the
+ * legend + tooltip take over.
+ */
+export function pointLabels(view, entries, { key = 'period' } = {}) {
+  const list = (entries || []).filter((e) => e && e.text != null);
+  if (!list.length) return false;
+  return (props) => {
+    const { x, y, index, value } = props;
+    if (x == null || y == null || value == null) return null;
+    const period = view[index]?.[key];
+    const match = list.find((e) => e.period === period);
+    if (!match) return null;
+    const anchor = index >= view.length - 1 ? 'end' : index === 0 ? 'start' : 'middle';
+    const dx = anchor === 'end' ? 6 : anchor === 'start' ? -4 : 0;
+    return (
+      <text
+        x={x + dx}
+        y={match.below ? y + 20 : y - 12}
+        textAnchor={anchor}
+        className="chart-end-label"
+        fill="var(--color-text, #1a202c)"
+        fontSize={10.5}
+        fontWeight={600}
+      >
+        {match.text}
+      </text>
     );
   };
 }
@@ -246,16 +348,26 @@ export function seriesDot({ color, r = 3, skip }) {
  * Left narrows the window (fewer months, more shape per point), right opens
  * it back out to the full range. Double-click resets. The month count lives
  * in the native tooltip and the ARIA value text rather than on screen.
+ *
+ * `zoomInRight` flips that to the way a zoom control usually reads: the
+ * handle rests at the LEFT with the whole range in view (compressed), and
+ * dragging right zooms in (fewer months across the same width, so the
+ * chart gets larger); dragging back left compresses it again. Opt-in while
+ * it is tried on the Dashboard's line charts.
  */
-export function ChartZoomSlider({ zoom, label = 'Date range zoom' }) {
+export function ChartZoomSlider({ zoom, label = 'Date range zoom', zoomInRight = false }) {
   const { size, total, minWindow, setSize, reset, isZoomed, canZoom, setIsAdjusting } = zoom;
 
   if (!canZoom) return null;
 
-  // Proportion of the full range in view, so the filled part of the track
-  // doubles as a quiet gauge of how far the zoom has gone.
+  // The input's own value runs the other way when right zooms in: it counts
+  // how far in the zoom has gone rather than how many months are shown.
+  // Either way the filled part of the track runs up to the handle, so it
+  // doubles as a quiet gauge of the zoom.
+  const toValue = (months) => (zoomInRight ? total + minWindow - months : months);
+  const value = toValue(size);
   const span = Math.max(1, total - minWindow);
-  const pct = ((size - minWindow) / span) * 100;
+  const pct = ((value - minWindow) / span) * 100;
 
   return (
     <div className={`chart-zoom${isZoomed ? ' is-zoomed' : ''}`}>
@@ -265,12 +377,16 @@ export function ChartZoomSlider({ zoom, label = 'Date range zoom' }) {
         min={minWindow}
         max={total}
         step={1}
-        value={size}
+        value={value}
         style={{ '--zoom-pct': `${pct}%` }}
         aria-label={label}
         aria-valuetext={`${size} of ${total} months`}
-        title={`${size} of ${total} months — drag to zoom, double-click to reset`}
-        onChange={(e) => setSize(Number(e.target.value))}
+        title={zoomInRight
+          ? `${size} of ${total} months — drag right to zoom in, left to zoom out, double-click to reset`
+          : `${size} of ${total} months — drag to zoom, double-click to reset`}
+        // toValue is its own inverse (a mirror across the track), so it
+        // also turns the handle's position back into a month count.
+        onChange={(e) => setSize(toValue(Number(e.target.value)))}
         onDoubleClick={reset}
         onPointerDown={() => setIsAdjusting(true)}
         onPointerUp={() => setIsAdjusting(false)}

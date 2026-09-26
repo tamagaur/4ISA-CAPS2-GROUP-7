@@ -48,3 +48,62 @@ def test_too_few_months_gives_the_reason_not_a_line():
 def test_projection_never_goes_negative():
     p = project_category([1200 - 100 * i for i in range(12)])
     assert min(p["projection"]) >= 0
+
+
+def test_line_starts_at_the_first_sale():
+    """Months before a category existed are not zero demand: the line and the
+    Mann–Kendall test both start at the first sale (MINI MEALS, 2026-09-25)."""
+    ramp = [100 + 10 * i for i in range(18)]
+    p = project_category([0.0] * 6 + ramp)
+    assert p["available"] is True
+    assert p["points"] == 18
+    assert len(p["fitted"]) == 18
+    assert p["slope_per_month"] == pytest.approx(10.0)
+
+
+def test_no_sales_in_the_window_is_labelled_not_flat():
+    p = project_category([500.0] * 6 + [0.0] * 24)
+    assert p["available"] is False
+    assert p["points"] == 0
+    assert p["label"] == "No recent sales"
+
+
+def test_young_category_counts_months_from_its_first_sale():
+    p = project_category([0.0] * 20 + [10.0, 12.0, 14.0, 16.0])
+    assert p["available"] is False
+    assert p["points"] == 4
+    assert p["label"] == "Not enough months"
+
+
+def test_method_constants_are_the_ones_applied():
+    from analytics.forecasting.category_trend import PROJECTION_MONTHS, TREND_WINDOW_MONTHS, method_constants
+    m = method_constants()
+    assert m["window_months"] == TREND_WINDOW_MONTHS
+    assert m["projection_months"] == PROJECTION_MONTHS
+    assert m["min_points"] == MIN_POINTS
+    assert {"trailing_months", "significance_alpha", "slope_confidence"} <= m.keys()
+
+
+def test_projection_band_brackets_the_line_and_never_goes_negative():
+    """projection_low/high are the slope-confidence lines extended over the
+    projection months: ordered, clipped at zero, one value per month."""
+    p = project_category([1000 + 20 * i + (5 if i % 2 else -5) for i in range(24)])
+    assert len(p["projection_low"]) == len(p["projection"]) == len(p["projection_high"]) == 12
+    for lo, hi in zip(p["projection_low"], p["projection_high"]):
+        assert 0 <= lo <= hi
+
+
+def test_projection_band_collapses_onto_a_noiseless_line():
+    """With zero noise the slope CI is the slope itself, so the band IS the
+    projection — no invented uncertainty."""
+    p = project_category([1000.0 + 20 * i for i in range(24)])
+    for lo, mid, hi in zip(p["projection_low"], p["projection"], p["projection_high"]):
+        assert lo == pytest.approx(mid, abs=0.05)
+        assert hi == pytest.approx(mid, abs=0.05)
+
+
+def test_projection_band_clips_at_zero_for_a_steep_decline():
+    p = project_category([2400 - 200 * i for i in range(12)])
+    assert p["available"] is True
+    assert min(p["projection_low"]) == 0.0
+    assert all(v >= 0 for v in p["projection_high"])

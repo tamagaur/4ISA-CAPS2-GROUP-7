@@ -337,7 +337,7 @@ def test_original_fields_unchanged():
     assert body["principal"] == "unilever"
     assert body["inventory"] == {"value": None, "weeks_of_cover": None, "policy_weeks": 3}
     assert body["recommendations"] == {"order_value": None, "product_count": 5}
-    assert body["forecast"] == {"unreliable_count": 3, "evaluated_count": 8, "total_count": 10}
+    assert body["forecast"] == {"unreliable_count": 3, "evaluated_count": 8, "total_count": 10, "mase_gate": 1.0}
     # latest real sales month, overall and per principal (no Del Monte sales in this fixture)
     assert body["latest_data_period"] == FIXED_ANCHOR
     assert body["latest_data_period_by_principal"] == {"unilever": FIXED_ANCHOR, "delmonte": None}
@@ -742,6 +742,8 @@ def test_portfolio_forecast_empty_when_nothing_passes_the_gate():
         "gated_sku_count": 0,
         "avg_mape": None,
         "scope_label": "No products currently meet the MAPE < 20% gate.",
+        "mape_gate": 20.0,
+        "insight": None,
     }
 
 
@@ -1080,3 +1082,103 @@ def test_stock_value_prefers_the_sources_own_valuation():
     assert body["kpis"]["soh_value"] == 22_700_825.83
     # The legacy field documented as "impossible" now carries the same figure.
     assert body["inventory"]["value"] == 22_700_825.83
+
+
+# ---- chart story fields (backend/chart_insights.py, 2026-09-26) ---------
+
+def test_kpi_sales_trend_points_and_month_over_month_delta():
+    """Sparkline points are the REAL months only, and the delta compares
+    the card's month with the nearest earlier month that has data."""
+    periods = _periods()
+    session = FakeSession(sales={periods[-4]: 120_000.0, periods[-2]: 200_000.0, periods[-1]: 150_000.0})
+    with make_client(session) as c:
+        kpis = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["kpis"]
+    trend = kpis["sales_trend"]
+    assert [pt["period"] for pt in trend["points"]] == [periods[-4], periods[-2], periods[-1]]
+    assert trend["latest_period"] == periods[-1]
+    assert trend["prev_period"] == periods[-2]
+    assert trend["delta_pct"] == pytest.approx(-25.0)
+
+
+def test_kpi_soh_trend_follows_the_inventory_snapshots():
+    periods = _periods()
+    session = FakeSession(
+        latest_inventory_period=periods[-1],
+        soh={periods[-2]: 40_000_000.0, periods[-1]: 46_000_000.0},
+    )
+    with make_client(session) as c:
+        kpis = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["kpis"]
+    trend = kpis["soh_trend"]
+    assert trend["latest_period"] == periods[-1]
+    assert trend["delta_pct"] == pytest.approx(15.0)
+
+
+def test_sales_vs_stock_insight_sentence_and_highlights():
+    """The hero chart's sentence states the real month-over-month move and
+    the highlights mark the window's true peak and low sales months."""
+    periods = _periods()
+    session = FakeSession(
+        sales={periods[-3]: 37_300_000.0, periods[-2]: 41_000_000.0, periods[-1]: 27_900_000.0},
+        latest_inventory_period=periods[-1],
+        soh={periods[-1]: 46_600_000.0},
+    )
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    insight = body["sales_vs_stock_insight"]
+    assert "fell 32" in insight["text"]          # (27.9 - 41.0) / 41.0 = -31.95…%
+    assert "₱27.9M" in insight["text"]
+    assert "₱46.6M" in insight["text"]
+    assert insight["peak"]["period"] == periods[-2]
+    assert insight["low"]["period"] == periods[-1]
+    assert insight["peak"]["value"] == pytest.approx(41_000_000.0)
+
+
+def test_insight_and_trends_are_null_when_nothing_real_exists():
+    session = FakeSession()
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["sales_vs_stock_insight"] is None
+    assert body["kpis"]["sales_trend"] is None
+    assert body["kpis"]["soh_trend"] is None
+    assert body["tier_stock_period"] is None
+
+
+def test_portfolio_forecast_insight_compares_forecast_with_last_actual():
+    latest_date = datetime.date(2024, 3, 1)
+    gated_rows = [
+        {"product_key": 1, "forecast_date": latest_date, "forecast_value": 100.0,
+         "confidence_lower": 80.0, "confidence_upper": 120.0, "mape": 10.0},
+        {"product_key": 2, "forecast_date": latest_date, "forecast_value": 50.0,
+         "confidence_lower": 40.0, "confidence_upper": 60.0, "mape": 15.0},
+    ]
+    session = FakeSession(
+        latest_forecast_date=latest_date,
+        gated_forecast_rows=gated_rows,
+        portfolio_actual={"2024-01": 90.0, "2024-02": 120.0},
+    )
+    with make_client(session) as c:
+        pf = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["portfolio_forecast"]
+    assert pf["mape_gate"] == 20.0
+    # 150 forecast vs 120 actual = +25%
+    assert pf["insight"]["text"] == "The Mar 2024 forecast is 150 pieces — 25.0% above the 120 sold in Feb 2024."
+    assert pf["insight"]["forecast_period"] == "2024-03"
+
+
+def test_forecast_block_reports_its_mase_gate():
+    session = FakeSession(forecast_total=10, forecast_evaluated=8, forecast_unreliable=3)
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["forecast"]["mase_gate"] == 1.0
+
+
+def test_tier_stock_period_names_the_snapshot_month():
+    tier_stock_rows = [
+        {"product_key": 1, "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": False},
+    ]
+    session = FakeSession(
+        latest_abc_period="2024-02", tier_stock_rows=tier_stock_rows,
+        latest_inventory_period="2024-03",
+    )
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["tier_stock_period"] == "2024-03"

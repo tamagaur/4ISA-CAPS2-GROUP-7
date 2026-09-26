@@ -36,6 +36,118 @@
   gap: 0.75rem;
 }
 
+/* Sticky toolbar (2026-09-25): the section menu and the date range, pinned
+   under the top bar once the title scrolls away. .dashboard is the element
+   that scrolls, so top: 0 is the top bar's bottom edge. The negative side
+   margins match .dashboard-content's padding at each width (2.5rem, 1.5rem
+   under 1280px), so the toolbar's background reaches the page's edges and
+   cards sliding underneath never show at its sides. */
+.dash-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: -1rem -2.5rem 0;
+  padding: 0.55rem 2.5rem;
+  background-color: var(--color-surface-raised);
+  transition: box-shadow 160ms ease-out;
+}
+
+/* Only once it is actually pinned: at rest it is part of the header. */
+.dash-toolbar.is-stuck {
+  box-shadow: 0 1px 0 var(--color-border), 0 8px 14px -10px rgba(15, 23, 42, 0.22);
+}
+
+/* The chips give up space before the date picker does, scrolling sideways
+   instead of wrapping — a second row would double the pinned strip. */
+.dash-section-nav {
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dash-section-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.dash-section-chip {
+  flex: none;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+  cursor: pointer;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out;
+}
+
+.dash-section-chip:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.dash-section-chip.is-active {
+  background: var(--color-brand-primary);
+  border-color: var(--color-brand-primary);
+  color: #fff;
+}
+
+.dash-section-chip:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.dash-section-chip:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* A jump lands the section just below the pinned toolbar, not under it. */
+.dash-section-anchor {
+  scroll-margin-top: 4.75rem;
+}
+
+@media (max-width: 1280px) {
+  .dash-toolbar {
+    margin: -1rem -1.5rem 0;
+    padding: 0.55rem 1.5rem;
+  }
+}
+
+/* On a phone the toolbar would pin the chips AND the two-line date picker —
+   about a fifth of the screen over the content. There it scrolls with the
+   page; the chips still jump. */
+@media (max-width: 768px) {
+  .dash-toolbar {
+    position: static;
+    flex-direction: column;
+    align-items: stretch;
+    margin: -0.75rem 0 0;
+    padding: 0;
+  }
+  .dash-toolbar.is-stuck {
+    box-shadow: none;
+  }
+  .dash-section-anchor {
+    scroll-margin-top: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-toolbar,
+  .dash-section-chip {
+    transition: none;
+  }
+}
+
 .dashboard-title-row h2 {
   font-size: 1.75rem;
   font-weight: 700;

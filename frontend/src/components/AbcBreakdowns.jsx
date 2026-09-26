@@ -8,6 +8,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
@@ -16,6 +17,9 @@ import { labelForPrincipal } from '../principals';
 import { formatMonth } from '../utils/formatDate';
 import { formatCompactPesos } from '../utils/formatters';
 import { CHART_COLORS } from '../theme/colors';
+import { GRID_PROPS } from './ChartZoom';
+import { ChartTable, ChartViewToggle } from './ChartTable';
+import { LoadingStatus, SkeletonChart, SkeletonTable } from './Skeleton';
 import './AbcBreakdowns.css';
 
 // Two cards under the ABC class chart, one per analytical-mapping question
@@ -27,6 +31,14 @@ import './AbcBreakdowns.css';
 //                 with their ABC class (GET /fsn, via the page's rows).
 
 const TIER_COLOR = { A: CHART_COLORS.abcRamp[0], B: CHART_COLORS.abcRamp[1], C: CHART_COLORS.abcRamp[2] };
+// Emphasis, not eight colours: the Pareto's whole story is "the A tier is
+// the revenue", so only Class A bars keep the plum — B and C recede into
+// grays (design pass 2026-09-26). The legend uses the same map, so a gray
+// swatch beside "Class B" is a statement, not a mismatch. The two grays
+// are one hue, one visible lightness step apart, and the lighter one
+// still clears the 2:1 on-white floor (palette validator, 2026-09-26) —
+// muted must never mean invisible.
+const PARETO_BAR_COLOR = { A: TIER_COLOR.A, B: '#8E99A9', C: '#ACB5C3' };
 const titleCase = (name) => (name || '').toLowerCase().replace(/(^|[\s/&-])\S/g, (c) => c.toUpperCase());
 
 const ParetoTooltip = ({ active, payload }) => {
@@ -46,6 +58,7 @@ export const ParetoCard = ({ principal, period }) => {
   const [months, setMonths] = useState(1);
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
   const [sectionIndex, setSectionIndex] = useState(0);
+  const [view, setView] = useState('chart');
 
   // Del Monte has no brand at all — land on the category view for it.
   useEffect(() => {
@@ -69,6 +82,14 @@ export const ParetoCard = ({ principal, period }) => {
   );
   const tierCounts = rows.reduce((acc, r) => ({ ...acc, [r.tier]: (acc[r.tier] || 0) + 1 }), {});
   const aShare = rows.filter((r) => r.tier === 'A').reduce((sum, r) => sum + r.revenue_share, 0);
+  // The ABC run's own cutoffs, from GET /pareto's payload — the reference
+  // lines state the constants the ranking used, not numbers retyped here.
+  const cutoffs = state.data?.cutoffs || null;
+  const aCutPct = cutoffs ? cutoffs.A * 100 : null;
+  const bCutPct = cutoffs ? cutoffs.B * 100 : null;
+  // Where the cumulative curve first clears the A cutoff — the visual
+  // anchor for the headline's "N of M make up 80%".
+  const crossing = aCutPct != null ? rows.find((r) => r.cumPct >= aCutPct) : null;
 
   return (
     <section className="abcb-card abcb-pareto">
@@ -107,47 +128,92 @@ export const ParetoCard = ({ principal, period }) => {
         </div>
       )}
 
-      {state.status === 'loading' && !state.data && <p className="abcb-note">Loading…</p>}
+      {state.status === 'loading' && !state.data && (
+        <>
+          <LoadingStatus>Loading the Pareto…</LoadingStatus>
+          <SkeletonChart variant="bars" height={260} />
+        </>
+      )}
       {state.status === 'error' && <p className="abcb-note" role="alert">Could not load the Pareto: {state.error}</p>}
       {section?.blocked_reason && <p className="abcb-note">{section.blocked_reason}</p>}
 
       {rows.length > 0 && (
         <>
-          <p className="abcb-headline">
-            <strong>{tierCounts.A || 0} of {rows.length}</strong> {grain === 'brand' ? 'brands' : 'categories'} make up{' '}
-            <strong>{(aShare * 100).toFixed(0)}%</strong> of {labelForPrincipal(section.principal)} revenue
-            {months === 1 ? ` in ${formatMonth(section.period)}` : ` from ${formatMonth(section.window_start)} to ${formatMonth(section.period)}`}.
-          </p>
-          <div className="abcb-chart">
-            <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 48 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.gridline} />
-                <XAxis
-                  dataKey="name"
-                  tickFormatter={titleCase}
-                  interval={0}
-                  angle={-40}
-                  textAnchor="end"
-                  height={56}
-                  tick={{ fill: CHART_COLORS.axisLabel, fontSize: 10 }}
-                />
-                <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} width={40} />
-                <Tooltip content={<ParetoTooltip />} cursor={{ fill: '#f7fafc' }} />
-                <ReferenceLine y={80} stroke={CHART_COLORS.cumulativeCurve} strokeDasharray="4 3" label={{ value: 'A 80%', position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }} />
-                <ReferenceLine y={95} stroke={CHART_COLORS.cumulativeCurve} strokeDasharray="2 3" label={{ value: 'B 95%', position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }} />
-                <Bar dataKey="sharePct" name="Revenue share" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-                  {rows.map((r) => <Cell key={r.name} fill={TIER_COLOR[r.tier]} />)}
-                </Bar>
-                <Line dataKey="cumPct" name="Cumulative share" stroke={CHART_COLORS.cumulativeCurve} strokeWidth={2} dot={{ r: 2 }} isAnimationActive={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+          <div className="abcb-headline-row">
+            <p className="abcb-headline">
+              <strong>{tierCounts.A || 0} of {rows.length}</strong> {grain === 'brand' ? 'brands' : 'categories'} make up{' '}
+              <strong>{(aShare * 100).toFixed(0)}%</strong> of {labelForPrincipal(section.principal)} revenue
+              {months === 1 ? ` in ${formatMonth(section.period)}` : ` from ${formatMonth(section.window_start)} to ${formatMonth(section.period)}`}.
+            </p>
+            <ChartViewToggle view={view} onChange={setView} label="Pareto: chart or table" />
           </div>
-          <div className="abcb-legend">
-            {['A', 'B', 'C'].map((t) => (
-              <span key={t}><i style={{ backgroundColor: TIER_COLOR[t] }} />Class {t}: {tierCounts[t] || 0}</span>
-            ))}
-            <span><i className="abcb-legend-line" />Cumulative share</span>
-          </div>
+          {view === 'table' ? (
+            <ChartTable
+              caption={`Revenue Pareto by ${grain}`}
+              columns={[
+                { key: 'name', label: grain === 'brand' ? 'Brand' : 'Category', format: (v) => titleCase(v), align: 'left' },
+                { key: 'tier', label: 'Class', align: 'left' },
+                { key: 'revenue', label: 'Revenue', format: (v) => formatCompactPesos(v) },
+                { key: 'sharePct', label: 'Share', format: (v) => `${v.toFixed(1)}%` },
+                { key: 'cumPct', label: 'Cumulative', format: (v) => `${v.toFixed(1)}%` },
+                { key: 'products', label: 'Products' },
+              ]}
+              rows={rows.map((r) => ({ ...r, key: r.name }))}
+            />
+          ) : (
+            <>
+              <div className="abcb-legend">
+                {['A', 'B', 'C'].map((t) => (
+                  <span key={t}><i style={{ backgroundColor: PARETO_BAR_COLOR[t] }} />Class {t}: {tierCounts[t] || 0}</span>
+                ))}
+                <span><i className="abcb-legend-line" />Cumulative share</span>
+              </div>
+              <div className="abcb-chart">
+                <ResponsiveContainer width="100%" height={260}>
+                  <ComposedChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 48 }}>
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis
+                      dataKey="name"
+                      tickFormatter={titleCase}
+                      interval={0}
+                      angle={-40}
+                      textAnchor="end"
+                      height={56}
+                      tick={{ fill: CHART_COLORS.axisLabel, fontSize: 10 }}
+                    />
+                    <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} width={40} />
+                    <Tooltip content={<ParetoTooltip />} cursor={{ fill: '#f7fafc' }} />
+                    {/* The run's own cutoffs (GET /pareto payload) — drawn
+                        only when the API sent them, never a retyped 80/95. */}
+                    {aCutPct != null && (
+                      <ReferenceLine y={aCutPct} stroke={CHART_COLORS.cumulativeCurve} strokeDasharray="4 3" label={{ value: `A ${Math.round(aCutPct)}%`, position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }} />
+                    )}
+                    {bCutPct != null && (
+                      <ReferenceLine y={bCutPct} stroke={CHART_COLORS.cumulativeCurve} strokeDasharray="2 3" label={{ value: `B ${Math.round(bCutPct)}%`, position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }} />
+                    )}
+                    <Bar dataKey="sharePct" name="Revenue share" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                      {rows.map((r) => <Cell key={r.name} fill={PARETO_BAR_COLOR[r.tier]} />)}
+                    </Bar>
+                    <Line dataKey="cumPct" name="Cumulative share" stroke={CHART_COLORS.cumulativeCurve} strokeWidth={2} dot={{ r: 2 }} isAnimationActive={false} />
+                    {/* The month's Pareto moment: where the cumulative curve
+                        clears the A cutoff — the dot the headline sentence
+                        is pointing at. */}
+                    {crossing && (
+                      <ReferenceDot
+                        x={crossing.name}
+                        y={crossing.cumPct}
+                        r={5}
+                        fill={CHART_COLORS.cumulativeCurve}
+                        stroke="var(--color-surface, #fff)"
+                        strokeWidth={2}
+                        isFront
+                      />
+                    )}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
         </>
       )}
     </section>
@@ -171,6 +237,15 @@ export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded }) => {
     return m;
   }, [rows, fsnOf, loaded]);
   const colTotals = ['F', 'S', 'N'].map((f) => ['A', 'B', 'C'].reduce((sum, t) => sum + matrix[t][f], 0));
+  // Heatmap shading: ONE neutral hue, deeper where the count is larger,
+  // so the matrix's shape (where the SKUs pile up) reads at a glance
+  // before any number is read. Sequential = single hue, light -> dark;
+  // zero cells stay unshaded (a blank is a fact here, not a low value).
+  const maxCount = Math.max(1, ...['A', 'B', 'C'].flatMap((t) => ['F', 'S', 'N'].map((f) => matrix[t][f])));
+  const heat = (count) =>
+    count > 0
+      ? { backgroundColor: `color-mix(in srgb, #475569 ${Math.round((count / maxCount) * 26) + 4}%, var(--color-surface))` }
+      : undefined;
 
   return (
     <section className="abcb-card abcb-matrix">
@@ -183,7 +258,10 @@ export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded }) => {
         </div>
       </div>
       {!loaded ? (
-        <p className="abcb-note">Loading movement classes…</p>
+        <>
+          <LoadingStatus>Loading movement classes…</LoadingStatus>
+          <SkeletonTable rows={3} columns={4} />
+        </>
       ) : (
         <>
           <table className="abcb-matrix-table">
@@ -198,7 +276,9 @@ export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded }) => {
                 <tr key={t}>
                   <th scope="row"><span className={`abcb-class-dot abcb-class-${t}`} />Class {t}</th>
                   {['F', 'S', 'N'].map((f) => (
-                    <td key={f} className={matrix[t][f] === 0 ? 'is-zero' : `fsn-cell-${f}`}>{matrix[t][f].toLocaleString()}</td>
+                    <td key={f} className={matrix[t][f] === 0 ? 'is-zero' : `fsn-cell-${f}`} style={heat(matrix[t][f])}>
+                      {matrix[t][f].toLocaleString()}
+                    </td>
                   ))}
                 </tr>
               ))}
@@ -208,12 +288,23 @@ export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded }) => {
               </tr>
             </tbody>
           </table>
-          <p className="abcb-note">
-            <strong>Fast</strong>: sold regularly (average gap between sales ≤ {rules?.fast_adi_max ?? 1.32} months, at least{' '}
-            {rules?.min_fast_sales_months ?? 3} months of sales). <strong>Slow</strong>: sold, but intermittently.{' '}
-            <strong>Non-moving</strong>: no sale in the last {rules?.non_moving_months ?? 6} months with data — the same rule
-            the forecast uses for a dead SKU. Class A items that are slow or non-moving are the ones to question first.
-          </p>
+          {/* Every threshold below is GET /fsn's rules block — no local
+              fallback numbers, so the note can never state a rule the
+              backend didn't apply. Without rules, no thresholds are
+              claimed at all. */}
+          {rules ? (
+            <p className="abcb-note">
+              <strong>Fast</strong>: sold regularly (average gap between sales ≤ {rules.fast_adi_max} months, at least{' '}
+              {rules.min_fast_sales_months} months of sales). <strong>Slow</strong>: sold, but intermittently.{' '}
+              <strong>Non-moving</strong>: no sale in the last {rules.non_moving_months} months with data — the same rule
+              the forecast uses for a dead SKU. Class A items that are slow or non-moving are the ones to question first.
+            </p>
+          ) : (
+            <p className="abcb-note">
+              <strong>Fast</strong> sells regularly, <strong>Slow</strong> intermittently, <strong>Non-moving</strong> not
+              recently. Class A items that are slow or non-moving are the ones to question first.
+            </p>
+          )}
         </>
       )}
     </section>

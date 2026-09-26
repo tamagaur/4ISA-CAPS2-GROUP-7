@@ -13,6 +13,7 @@ import { getRecommendations, decideRecommendation } from '../api/recommendations
 import { formatDateTime, formatMonth } from '../utils/formatDate';
 import { formatUnits, exactUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
+import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 // The cycle selector reuses DateFilter's control styles without the component.
 import './DateFilter.css';
 import './ReorderRecommendations.css';
@@ -721,7 +722,28 @@ const ReorderRecommendations = () => {
           </button>
         </div>
 
-        {loading && <p className="reorder-page-subtitle">Loading recommendations…</p>}
+        {loading && (
+          <>
+            <LoadingStatus>Loading recommendations…</LoadingStatus>
+            {activeTab === 'RECOMMENDATIONS' ? (
+              <>
+                <div className="reorder-summary-grid">
+                  <SkeletonStatCards count={4} cardClassName="reorder-summary-card" />
+                </div>
+                <div className="reorder-table-toolbar" aria-hidden="true">
+                  <SkeletonLine width="58%" height="0.8rem" />
+                </div>
+                <div className="data-table-card">
+                  <SkeletonTable rows={8} columns={13} />
+                </div>
+              </>
+            ) : (
+              <div className="data-table-card">
+                <SkeletonTable rows={6} columns={7} />
+              </div>
+            )}
+          </>
+        )}
         {error && <p className="reorder-page-subtitle">Error: {error}</p>}
         {!loading && !error && (activeTab === 'RECOMMENDATIONS' ? renderRecommendationsTab() : renderDecisionLogTab())}
       </div>

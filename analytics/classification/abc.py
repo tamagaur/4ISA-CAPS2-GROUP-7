@@ -46,6 +46,8 @@ number the manuscript already specifies).
 """
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 
 REQUIRED_INPUT_COLUMNS = ("sku_id", "total_revenue")
@@ -54,6 +56,42 @@ OUTPUT_COLUMNS = ["sku_id", "total_revenue", "revenue_share", "cumulative_share"
 TIER_A_CUTOFF = 0.80
 TIER_B_CUTOFF = 0.95
 BOUNDARY_MARGIN = 0.02  # UNCONFIRMED against manuscript Sec.3.6 — see module docstring
+
+# Manuscript §3.4.4.2.2 (Pareto Principle Validation): the classification is
+# valid when the top 20% of items earn between 75% and 85% of revenue.
+PARETO_TOP_FRACTION = 0.20
+PARETO_VALID_BAND = (0.75, 0.85)
+
+
+def abc_rules() -> dict:
+    """The cutoffs and margins every ABC screen describes, as numbers the UI
+    reads instead of restating them in its own copy."""
+    return {
+        "tier_a_cutoff": TIER_A_CUTOFF,
+        "tier_b_cutoff": TIER_B_CUTOFF,
+        "boundary_margin": BOUNDARY_MARGIN,
+    }
+
+
+def pareto_check(revenue_shares) -> dict | None:
+    """The manuscript's 80/20 validation over ONE run's revenue shares: the
+    revenue earned by the top PARETO_TOP_FRACTION of ranked items, and whether
+    it falls inside PARETO_VALID_BAND. None when nothing was ranked."""
+    shares = sorted((float(s) for s in revenue_shares if s is not None), reverse=True)
+    if not shares:
+        return None
+    top = math.ceil(PARETO_TOP_FRACTION * len(shares))
+    share = sum(shares[:top])
+    low, high = PARETO_VALID_BAND
+    return {
+        "top_fraction": PARETO_TOP_FRACTION,
+        "top_count": top,
+        "ranked_count": len(shares),
+        "revenue_share": round(share, 6),
+        "band_low": low,
+        "band_high": high,
+        "passes": low <= share <= high,
+    }
 
 
 def classify_abc(revenue_df: pd.DataFrame) -> pd.DataFrame:

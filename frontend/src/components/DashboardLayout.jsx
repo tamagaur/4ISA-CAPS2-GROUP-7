@@ -8,6 +8,7 @@ import { invalidateCache } from '../api/cache';
 import { getDataModeInfo } from '../api/dataMode';
 import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
+import { LoadingStatus, PageSkeleton } from './Skeleton';
 import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal, labelForPrincipal } from '../principals';
 import { LATEST_DATA_PERIOD } from '../dataCoverage';
 import {
@@ -16,7 +17,10 @@ import {
 import './DashboardLayout.css';
 
 const PageLoadingFallback = () => (
-  <p className="page-chunk-loading" role="status">Loading page…</p>
+  <>
+    <LoadingStatus>Loading page…</LoadingStatus>
+    <PageSkeleton />
+  </>
 );
 
 // "Today" is pinned to February 2026, not the machine's actual clock — the
