@@ -486,6 +486,20 @@ def _classify_inventory_sku_shape(group: pd.DataFrame) -> str:
     prefix anywhere in that sheet."""
     if "ITEM CODE" in group.columns and group["ITEM CODE"].notna().any():
         return "C"
+    # Shape E (2026-09-28): two blocks side by side - a count block (A-E: code, description, pack, pieces,
+    # cases; no cost) and the sign-off block (G code, H numeric core, I "CODE DESCRIPTION", J-R quantity,
+    # cost, valuation, CAS, PCS ...). Every mapped value comes from the sign-off block, so the code has to
+    # as well: I's leading token, which equals G on the sheet's rows. Checked before B/D because the count
+    # block's __col1__ can carry codes of its own (August 2023 ILOCOS-ACTUAL: a different SKU than the
+    # same row's J-R values on 138 of 142 rows) or none at all (PANGASINAN-ACTUAL).
+    if {"__col6__", "__col8__"}.issubset(group.columns):
+        i_cells = group["__col8__"].dropna().astype(str)
+        i_cells = i_cells[~i_cells.str.strip().str.upper().isin({"TOTAL", "DESCRIPTION"})]
+        if not i_cells.empty:
+            lead = i_cells.str.strip().str.split().str[0]
+            g = group.loc[i_cells.index, "__col6__"].astype(str).str.strip()
+            if ((lead == g) & lead.str.contains(r"\d")).mean() > 0.5:
+                return "E"
     has_col1_mapped = "sku_description_raw" in group.columns and group["sku_description_raw"].notna().any()
     if has_col1_mapped:
         candidates = group["sku_description_raw"].dropna().astype(str)
@@ -532,6 +546,9 @@ def route_inventory_sku_shapes(df: pd.DataFrame) -> tuple[pd.DataFrame, Inventor
             out["sku_description_raw"] = pd.NA
         out.loc[mask_a, "sku_description_raw"] = out.loc[mask_a, "__col0__"]
         shape_a_routed = int(mask_a.sum())
+    mask_e = shape_by_row == "E"
+    if mask_e.any():
+        out.loc[mask_e, "sku_description_raw"] = out.loc[mask_e, "__col8__"]
 
     return out, InventoryShapeRoutingReport(
         shape_counts=shape_by_row.value_counts().to_dict(),
