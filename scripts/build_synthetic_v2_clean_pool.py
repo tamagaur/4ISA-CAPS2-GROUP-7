@@ -24,6 +24,10 @@ Blocks
   uni_inventory  2021-01..2022-12: each SKU of the v2 2021-22 demand placeholder, for the months between its first
                  and last placeholder month, gets its real 2023 row of the same month-of-year (no 2023 row, no
                  synthetic row); snapshot_date shifted back by the year difference. Same columns as real rows.
+  dm_inventory_forward, dm_purchases_forward
+                 the 2026-04..08 forward blocks generate_synthetic_backfill.py wrote from staging pools (inventory pool
+                 42% price-list rows; purchases pool held the 18 quarantined Sept-2025 lines), regenerated the same way
+                 from the clean pools: same months, same grain.
 Not generated here (decided 2026-09-28): anything in 2026-09, Del Monte returns in 2023+ gap months, Del Monte
 purchases 2025-09, Unilever purchases or returns.
 
@@ -84,6 +88,7 @@ POOLS = {  # (principal, table): SQL counting the clean pool the block resamples
     ("delmonte", "inventory_fact"): f"SELECT COUNT(*) FROM public.inventory_fact_real WHERE principal = 'delmonte' AND {ALPHA}",
     ("delmonte", "salesreturn_fact"): "SELECT COUNT(*) FROM public.salesreturn_fact_real WHERE principal = 'delmonte' AND source IS NULL",
     ("unilever", "inventory_fact"): "SELECT COUNT(*) FROM public.inventory_fact_real WHERE principal = 'unilever' AND _period ~ '^2023-'",
+    ("delmonte", "purchase_fact"): "SELECT COUNT(*) FROM public.purchase_fact_real WHERE principal = 'delmonte'",
 }
 
 
@@ -144,13 +149,29 @@ def dm_inventory(cur) -> dict:
     cur.execute(f"""DELETE FROM {V2}.inventory_fact WHERE principal = 'delmonte' AND is_demo AND _period = ANY(%s)
                     RETURNING sku_code, _period, region, _src_file""", (targets,))
     removed = cur.fetchall()
+    return {"months": len(targets), "removed": removed, "inserted": _dm_inventory_months(cur, targets), "targets": targets}
+
+
+FORWARD = [f"2026-{m:02d}" for m in range(4, 9)]  # the forward block generate_synthetic_backfill.py wrote from staging pools
+
+
+def dm_inventory_forward(cur) -> dict:
+    """The 2026-04..08 forward block, regenerated from the clean pool (same months, SKU x snapshot x site grain)."""
+    stale = rows(cur, f"""SELECT COUNT(*) FROM {V2}.inventory_fact WHERE principal = 'delmonte' AND _period = ANY(%s)
+                          AND NOT (is_demo AND _src_file ~ '^{TAG}inventory_sign_off_')""", (FORWARD,))[0][0]
+    if stale:
+        raise RuntimeError(f"dm_inventory_forward: {stale} rows in 2026-04..08 that are not generated synthetic rows")
+    cur.execute(f"DELETE FROM {V2}.inventory_fact WHERE principal = 'delmonte' AND is_demo AND _period = ANY(%s)", (FORWARD,))
+    return {"months": len(FORWARD), "replaced": cur.rowcount, "inserted": _dm_inventory_months(cur, FORWARD)}
+
+
+def _dm_inventory_months(cur, targets: list[str]) -> int:
     real = {site: [r[0] for r in rows(cur, f"""SELECT DISTINCT _period FROM public.inventory_fact_real
                    WHERE principal = 'delmonte' AND region = %s AND {ALPHA} ORDER BY 1""", (site,))] for site in SITES}
-    inserted, templates = 0, {}
+    inserted = 0
     for m in targets:
         for site in SITES:
             t = template_month(m, real[site])
-            templates[f"{m} {site}"] = t
             cur.execute(f"""
                 INSERT INTO {V2}.inventory_fact (product_key, sku_code, snapshot_date, _period, principal, region, quantity_on_hand,
                        quantity_pieces, is_demo, _src_file, _src_sheet, valuation, cost, unit_cost_per_case, blocked_qty_cases,
@@ -173,7 +194,44 @@ def dm_inventory(cur) -> dict:
             if got != want:
                 raise RuntimeError(f"dm_inventory {m} {site}: inserted {got}, template {t} has {want} codes")
             inserted += got
-    return {"months": len(targets), "removed": removed, "inserted": inserted, "targets": targets}
+    return inserted
+
+
+def dm_purchases_forward(cur) -> dict:
+    """The 2026-04..08 forward purchase block, regenerated from public's real purchases (the 18 quarantined Sept-2025
+    lines are in etl_quarantine, not in the pool). Per site: n = a real monthly count of the nearest month-of-year,
+    rows from those months without replacement, synthetic bill numbers, day of month kept (clipped). Real purchases
+    carry no supplier (supplier_key NULL on every row), so neither do these."""
+    stale = rows(cur, f"""SELECT COUNT(*) FROM {V2}.purchase_fact WHERE principal = 'delmonte' AND _period = ANY(%s)
+                          AND NOT (is_demo AND _src_file ~ '^{TAG}purchase_order_')""", (FORWARD,))[0][0]
+    if stale:
+        raise RuntimeError(f"dm_purchases_forward: {stale} rows in 2026-04..08 that are not generated synthetic rows")
+    cur.execute(f"DELETE FROM {V2}.purchase_fact WHERE principal = 'delmonte' AND is_demo AND _period = ANY(%s)", (FORWARD,))
+    replaced, inserted = cur.rowcount, 0
+    for site in SITES:
+        real = dict(rows(cur, "SELECT _period, COUNT(*) FROM public.purchase_fact_real WHERE principal = 'delmonte' AND region = %s GROUP BY 1", (site,)))
+        for m in FORWARD:
+            pool = nearest_moy(m, sorted(real))
+            n = int(rng("dm_purchases", m, site).choice([real[p] for p in pool]))
+            y, mo = _ym(m)
+            cur.execute(f"""
+                INSERT INTO {V2}.purchase_fact (invoice_num, invoice_date, principal, region, supplier_key, net_amount, tax_amount,
+                       units_received, is_demo, _src_file, _src_sheet, _period)
+                SELECT 'GEN-BILL/' || %(m)s || '/' || %(s)s || lpad(row_number() OVER (ORDER BY r.h)::text, 4, '0'),
+                       CASE WHEN r.invoice_date IS NOT NULL THEN make_date(%(y)s, %(mo)s, LEAST(EXTRACT(day FROM r.invoice_date)::int,
+                            EXTRACT(day FROM make_date(%(y)s, %(mo)s, 1) + interval '1 month - 1 day')::int)) END,
+                       'delmonte', %(site)s, vs.supplier_key, r.net_amount, r.tax_amount, r.units_received, true, %(src)s, 'GENERATED', %(m)s
+                FROM (SELECT f.*, md5('dm_purchases|' || %(m)s || '|' || %(site)s || '|' || f.purchase_key) AS h
+                      FROM public.purchase_fact_real f WHERE f.principal = 'delmonte' AND f.region = %(site)s AND f._period = ANY(%(pool)s)
+                      ORDER BY h LIMIT %(n)s) r
+                LEFT JOIN public.supplier_dimension ps ON ps.supplier_key = r.supplier_key
+                LEFT JOIN {V2}.supplier_dimension vs ON vs.supplier_name = ps.supplier_name""",
+                        {"m": m, "s": site[0].upper(), "site": site, "pool": pool, "n": n, "y": y, "mo": mo,
+                         "src": f"{TAG}purchase_order_{m}_{site}"})
+            if cur.rowcount != n:
+                raise RuntimeError(f"dm_purchases_forward {m} {site}: inserted {cur.rowcount}, drew {n}")
+            inserted += n
+    return {"months": len(FORWARD), "replaced": replaced, "inserted": inserted}
 
 
 def dm_returns(cur) -> dict:
@@ -231,7 +289,8 @@ def uni_inventory(cur) -> dict:
     return {"months": len(MONTHS_2122), "inserted": inserted, "skus": skus}
 
 
-BLOCKS = {"dm_sales": dm_sales, "dm_inventory": dm_inventory, "dm_returns": dm_returns, "uni_inventory": uni_inventory}
+BLOCKS = {"dm_sales": dm_sales, "dm_inventory": dm_inventory, "dm_returns": dm_returns, "uni_inventory": uni_inventory,
+          "dm_inventory_forward": dm_inventory_forward, "dm_purchases_forward": dm_purchases_forward}
 
 
 # --- the simulated cutover: public real rows + v2 synthetic rows (apply_synth_v2_to_public replaces every public
