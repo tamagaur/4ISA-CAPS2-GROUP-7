@@ -60,6 +60,7 @@ def main() -> int:
         from fastapi.testclient import TestClient
 
         from backend.auth_utils import create_access_token
+        from backend.deps import get_current_user, get_token_payload
         from backend.main import app
     except Exception as exc:
         print(f"IMPORT FAILED: {type(exc).__name__}: {exc}")
@@ -72,6 +73,10 @@ def main() -> int:
         "Authorization": "Bearer "
         + create_access_token(user_id=1, email="smoke@local", role="admin", full_name="Smoke Test")
     }
+    # The minted token has no sign-in session behind it (opening one would be
+    # a write), so skip the per-request session check and trust the signature
+    # alone. The routes are what this script tests; tests/backend covers auth.
+    app.dependency_overrides[get_current_user] = get_token_payload
     client = TestClient(app)
 
     print(f"{'route':42s} {'code':>5s} {'items':>7s}  result")

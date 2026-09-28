@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowLeft, CheckCircle2, XCircle } from 'lucide-react';
+import { X, ArrowLeft, XCircle } from 'lucide-react';
 import Modal from './Modal';
+import SaveResult from './SaveResult';
+import { useSaveResult } from '../utils/useSaveResult';
 import './EditSKUModal.css';
 
 // Helper to format SKU Code (e.g. SKU-10234)
@@ -35,7 +37,7 @@ const parseProductComponents = (fullProduct) => {
 };
 
 const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
-  const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM' | 'SUCCESS'
+  const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM'; the result after saving is SaveResult's
 
   const [form, setForm] = useState({
     productNameOnly: '',
@@ -48,7 +50,8 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     status: 'ACTIVE'
   });
   const [saveError, setSaveError] = useState('');
-  const [saving, setSaving] = useState(false);
+  // Also the double-click guard against two PATCH /sku/:id requests.
+  const { saving, result, run } = useSaveResult();
 
   // Populate form state when sku prop changes
   useEffect(() => {
@@ -120,12 +123,9 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
 
   const changedFields = getChangedFields();
 
-  // Confirm changes and save
-  const handleConfirmChanges = async () => {
-    // Guard against a double-click firing two PATCH /sku/:id requests — see
-    // the matching guard in AddSKUModal's handleConfirmSave.
-    if (saving) return;
-
+  // Confirm changes and save — a green check then close, or a red X then
+  // back to this step with the reason.
+  const handleConfirmChanges = () => {
     // Only product name and brand are stored by PATCH /sku; everything else
     // keeps the SKU's current values.
     const updatedSKU = {
@@ -135,23 +135,11 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     };
 
     setSaveError('');
-    setSaving(true);
-    try {
-      if (onSave) {
-        await onSave(updatedSKU);
-      }
-    } catch (err) {
-      setSaveError(err.message || 'Failed to save changes');
-      setSaving(false);
-      return;
-    }
-    setSaving(false);
-
-    setStep('SUCCESS');
-
-    setTimeout(() => {
-      handleClose();
-    }, 1500);
+    run(() => onSave?.(updatedSKU), {
+      onSaved: handleClose,
+      onFailed: setSaveError,
+      fallbackError: 'Failed to save changes',
+    });
   };
 
   return (
@@ -161,8 +149,18 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
       label={`Edit SKU ${sku.code}`}
       overlayClassName="edit-sku-modal-overlay"
       containerClassName="edit-sku-modal-card"
+      closeOnOverlayClick={!saving}
+      closeOnEscape={!saving}
     >
-        {step === 'FORM' ? (
+        {result ? (
+          <SaveResult
+            ok={result.ok}
+            title={result.ok ? 'Changes saved' : "Couldn't save the changes"}
+            message={result.ok
+              ? <>Product details for <strong>{formatSKU(sku.code)}</strong> were updated.</>
+              : result.message}
+          />
+        ) : step === 'FORM' ? (
           /* STEP 1: EDIT SKU FORM */
           <>
             <div className="edit-sku-modal-header">
@@ -374,18 +372,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
               </button>
             </div>
           </>
-        ) : (
-          /* STEP 3: IN-MODAL ANIMATED CHECKMARK SUCCESS VIEW */
-          <div className="success-anim-container">
-            <div className="success-checkmark-circle">
-              <CheckCircle2 size={40} strokeWidth={2.2} />
-            </div>
-            <h3 className="success-title">Changes Saved!</h3>
-            <p className="success-subtitle">
-              Product details for <strong>{formatSKU(sku.code)}</strong> were updated successfully.
-            </p>
-          </div>
-        )}
+        ) : null}
     </Modal>
   );
 };

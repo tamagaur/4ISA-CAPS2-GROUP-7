@@ -13,6 +13,7 @@ const SIGN_IN_ACTIONS = ['Login', 'Logout'];
 const ACTION_LABELS = {
   'Reorder Recommendation Accepted': 'Reorder accepted',
   'Reorder Recommendation Dismissed': 'Reorder dismissed',
+  'Password Reset Requested': 'Reset requested',
 };
 
 const getInitials = (name) => {
@@ -52,17 +53,22 @@ const longestSessionTitle = (row) => {
     `${row.timed_session_count} of ${row.login_count} sign-ins have a measured length`;
 };
 
-const UserBadge = ({ name, email }) => (
-  <div className="audit-user-info">
-    <div className="audit-avatar" style={{ backgroundColor: getAvatarColor(name) }} aria-hidden="true">
-      {getInitials(name)}
+const UserBadge = ({ name, email }) => {
+  // An entry from a signed-out page (a "Forgot password?" request, a sign-in
+  // lockout) may carry no user at all.
+  if (!name) return '—';
+  return (
+    <div className="audit-user-info">
+      <div className="audit-avatar" style={{ backgroundColor: getAvatarColor(name) }} aria-hidden="true">
+        {getInitials(name)}
+      </div>
+      <div className="audit-user-details">
+        <span className="audit-user-name">{name}</span>
+        {email && email !== name && <span className="audit-user-handle">{email}</span>}
+      </div>
     </div>
-    <div className="audit-user-details">
-      <span className="audit-user-name">{name}</span>
-      {email && email !== name && <span className="audit-user-handle">{email}</span>}
-    </div>
-  </div>
-);
+  );
+};
 
 // Loads one section's data; each section fails or loads on its own, so a
 // problem with one never blanks the other.
@@ -185,7 +191,9 @@ const AuditLog = () => {
             <h3 id="audit-changes-heading" className="audit-section-title">Recent changes</h3>
             <span className="audit-section-count">Latest {RECENT_CHANGES_LIMIT}</span>
           </div>
-          <p className="audit-section-note">SKU edits, reorder decisions and user account changes, newest first.</p>
+          <p className="audit-section-note">
+            SKU edits, reorder decisions, user account changes and password or sign-in events, newest first.
+          </p>
           <SectionStatus loading={changes.loading} error={changes.error} label="recent changes" columns={4} rows={6} />
           {!changes.loading && !changes.error && (
             <div className="audit-table-wrapper">

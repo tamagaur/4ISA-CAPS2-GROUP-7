@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RecommendationItem(BaseModel):
@@ -80,3 +80,6 @@ class RecommendationsResponse(BaseModel):
 
 class RecommendationDecision(BaseModel):
     status: str  # 'accepted' | 'dismissed'
+    # The admin's reason from the decision dialog; it goes into the audit log
+    # entry the server writes for the decision.
+    reason: str | None = Field(default=None, max_length=500)

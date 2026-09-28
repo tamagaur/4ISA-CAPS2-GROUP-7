@@ -5,7 +5,6 @@ import AddSKUModal from './AddSKUModal';
 import { useToast } from './ToastProvider';
 import ViewSKUModal from './ViewSKUModal';
 import EditSKUModal from './EditSKUModal';
-import { logAction } from '../utils/auditLogger';
 import { getSKUs, createSKU, updateSKU } from '../api/sku';
 import { getCurrentUser } from '../auth';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
@@ -227,6 +226,8 @@ const SKUManagement = () => {
   // an invented category is worse than an honest gap.
   const notClassifiedSKUs = skus.filter(s => !s.cat).length;
 
+  // The Audit Log entries for adding and editing a SKU are written by the
+  // server as part of POST/PATCH /sku, not from here.
   const handleAddSKU = async (formData) => {
     // Only fields POST /sku actually stores (see backend/routers/sku.py's
     // INSERT); unit price, lead time and notes have no column yet.
@@ -238,7 +239,6 @@ const SKUManagement = () => {
     });
 
     await loadSKUs();
-    logAction('Add SKU', `Added new SKU: ${created.sku_id} (${created.product_name})`);
     // Outlives the modal's own success screen, which auto-dismisses after 1.5s.
     toast.success(`SKU ${created.sku_id} created`);
   };
@@ -269,13 +269,6 @@ const SKUManagement = () => {
   const handleSaveSKU = async (updatedSKU) => {
     const previousSKU = skus.find(s => s.id === updatedSKU.id);
 
-    // Determine what changed for the audit log
-    const changes = [];
-    if (previousSKU) {
-      if (previousSKU.product !== updatedSKU.product) changes.push(`Product Name: ${previousSKU.product} -> ${updatedSKU.product}`);
-      if ((previousSKU.brand || '') !== (updatedSKU.brand || '')) changes.push(`Brand: ${previousSKU.brand || '—'} -> ${updatedSKU.brand || '—'}`);
-    }
-
     // PATCH /sku only persists product_name, pack_size and brand (unit price,
     // lead time, status and notes have no column yet, so the edit form locks
     // them). Brand is sent only when it actually changed, so saving an
@@ -288,12 +281,6 @@ const SKUManagement = () => {
 
     await loadSKUs();
     setSelectedSKU(updatedSKU);
-
-    const details = changes.length > 0
-      ? `Updated SKU ${updatedSKU.code}. Changes: ${changes.join(', ')}`
-      : `Updated SKU ${updatedSKU.code} (minor details)`;
-
-    logAction('Edit SKU', details);
     toast.success(`SKU ${updatedSKU.code} updated`);
   };
 

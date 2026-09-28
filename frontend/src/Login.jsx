@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { login, SESSION_EXPIRED_KEY } from './auth';
 import './Login.css';
 
 const Login = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  // A confirmation from the page that sent the user here (SetPassword:
+  // "Your password is set..."). Kept in state, then cleared from the history
+  // entry below so a reload or Back doesn't show it again.
+  const [notice] = useState(() => location.state?.notice || '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -26,7 +32,11 @@ const Login = () => {
     } catch { /* storage unavailable — just skip the notice */ }
   }, []);
 
-  const navigate = useNavigate();
+  useEffect(() => {
+    if (location.state?.notice) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,7 +72,10 @@ const Login = () => {
           <p className="subtitle">Sign in with your assigned account</p>
 
           <form onSubmit={handleSubmit} className="login-form">
-            {sessionExpired && !error && (
+            {notice && !error && (
+              <div className="auth-success-message" role="status">{notice}</div>
+            )}
+            {sessionExpired && !notice && !error && (
               <div className="session-expired-message" role="status">
                 Your session expired, so you were signed out. Please log in again.
               </div>
@@ -104,6 +117,10 @@ const Login = () => {
                   </svg>
                 )}
               </button>
+            </div>
+
+            <div className="login-forgot-row">
+              <Link to="/forgot-password" className="auth-link">Forgot password?</Link>
             </div>
 
             <button type="submit" className={`submit-btn ${isSubmitting ? 'submitting' : ''}`} disabled={isSubmitting}>

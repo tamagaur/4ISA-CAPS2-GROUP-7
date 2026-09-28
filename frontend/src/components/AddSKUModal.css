@@ -263,59 +263,7 @@
   font-style: italic;
 }
 
-/* In-Modal Animated Checkmark Success Window */
-.add-success-anim-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 3.2rem 1.8rem;
-  gap: 0.9rem;
-  text-align: center;
-  animation: addSuccessFadeIn 0.3s ease;
-}
-
-@keyframes addSuccessFadeIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-.add-success-checkmark-circle {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background-color: var(--color-success-bg-alt);
-  color: #16a34a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 15px rgba(22, 163, 74, 0.2);
-  animation: popCheckmark 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-@keyframes popCheckmark {
-  0% { transform: scale(0); opacity: 0; }
-  70% { transform: scale(1.18); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-.add-success-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.add-success-subtitle {
-  font-size: 0.85rem;
-  color: var(--color-slate-500);
-  margin: 0;
-  line-height: 1.4;
-}
-
-.add-success-subtitle strong {
-  color: var(--color-slate-800);
-}
+/* The saved / not-saved screen after Confirm is SaveResult (SaveResult.css). */
 
 /* Responsive */
 @media (max-width: 600px) {

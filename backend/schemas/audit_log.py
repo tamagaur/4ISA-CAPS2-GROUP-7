@@ -1,4 +1,5 @@
-"""backend.schemas.audit_log — Pydantic models for GET/POST /audit-log."""
+"""backend.schemas.audit_log — Pydantic models for GET /audit-log. Entries
+are written by the server itself (backend/audit.py); there is no POST."""
 from __future__ import annotations
 
 import datetime
@@ -19,11 +20,6 @@ class AuditLogEntry(BaseModel):
 class AuditLogListResponse(BaseModel):
     items: list[AuditLogEntry]
     count: int
-
-
-class AuditLogCreate(BaseModel):
-    action: str
-    details: str | None = None
 
 
 class AuditUserSummary(BaseModel):

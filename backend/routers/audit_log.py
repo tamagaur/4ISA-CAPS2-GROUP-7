@@ -1,21 +1,19 @@
 """
-backend.routers.audit_log — GET/POST /audit-log
+backend.routers.audit_log — GET /audit-log, GET /audit-log/users
 
-Persists the application audit trail to Supabase, replacing the previous
-localStorage-only implementation (frontend/src/utils/auditLogger.js), which
-never left the reporting browser. Requires
+Reads the application audit trail from Supabase. Requires
 analytics/db/migrations/0003_add_audit_log.sql to have been applied.
 
-user_email/user_name/role are taken from the caller's JWT, never from the
-request body — an audit log entry can't be filed under a different user's
-name than whoever is actually authenticated.
+Entries are written by the endpoints that make each change, in the same
+transaction (backend/audit.py). POST /audit-log, which let the browser file
+entries itself, was removed 2026-09-28: a change made by calling the API
+directly left no entry, and any signed-in user could post any text.
 
 GET /audit-log/users (2026-09-21) is what the Audit Log page shows: one row
 per user — sign-in count and longest session — instead of one row per
 sign-in. It reads user_session (migration 0023), not audit_log.
 
-Reading the log (both GETs) is admin-only — staff never need it. POST stays
-open to any signed-in user so the app can record what they do.
+Reading the log (both GETs) is admin-only — staff never need it.
 """
 from __future__ import annotations
 
@@ -24,9 +22,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend.deps import TokenPayload, get_current_user, get_db, require_admin
+from backend.deps import TokenPayload, get_db, require_admin
 from backend.schemas.audit_log import (
-    AuditLogCreate,
     AuditLogEntry,
     AuditLogListResponse,
     AuditUserSummary,
@@ -120,32 +117,3 @@ def get_audit_log(
         db.rollback()
         items = []
     return AuditLogListResponse(items=items, count=len(items))
-
-
-@router.post("", response_model=AuditLogEntry, status_code=201)
-def create_audit_log_entry(
-    payload: AuditLogCreate,
-    db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
-) -> AuditLogEntry:
-    try:
-        row = db.execute(
-            text("""
-                INSERT INTO audit_log (user_email, user_name, role, action, details)
-                VALUES (:user_email, :user_name, :role, :action, :details)
-                RETURNING *
-            """),
-            {
-                "user_email": current_user.email,
-                "user_name": current_user.full_name or None,
-                "role": current_user.role,
-                "action": payload.action,
-                "details": payload.details,
-            },
-        ).mappings().first()
-        db.commit()
-        return AuditLogEntry(**dict(row))
-    except Exception:
-        db.rollback()
-        from fastapi import HTTPException
-        raise HTTPException(status_code=503, detail="Audit log table not available.")

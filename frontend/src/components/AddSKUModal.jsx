@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { X, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { X, ArrowLeft } from 'lucide-react';
 import Modal from './Modal';
+import SaveResult from './SaveResult';
+import { useSaveResult } from '../utils/useSaveResult';
 import './AddSKUModal.css';
 
 const initialFormState = {
@@ -23,11 +25,14 @@ const SKU_CODE_LENGTH = 8;
 const SKU_CODE_PATTERN = /^\d{8}$/;
 
 const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
-  const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM' | 'SUCCESS'
+  const [step, setStep] = useState('FORM'); // 'FORM' | 'CONFIRM'; the result after saving is SaveResult's
   const [form, setForm] = useState({ ...initialFormState });
   const [errors, setErrors] = useState({});
   const [saveError, setSaveError] = useState('');
-  const [saving, setSaving] = useState(false);
+  // Also the double-click guard: a second POST /sku before the first resolves
+  // would come back as a confusing 409 "already exists" for the SKU the first
+  // call just created.
+  const { saving, result, run } = useSaveResult();
 
   if (!isOpen) return null;
 
@@ -101,39 +106,24 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
     setStep('CONFIRM');
   };
 
-  // Step 2: Confirm & Save New SKU
-  const handleConfirmSave = async () => {
-    // Guard against a double-click firing two POST /sku requests before the
-    // first resolves — the second would come back as a confusing 409
-    // "already exists" for the SKU the first call just created.
-    if (saving) return;
-
+  // Step 2: Confirm & Save New SKU — a green check then close, or a red X
+  // then back to this step with the reason.
+  const handleConfirmSave = () => {
     const fullProduct = (form.sizeVal || '').trim()
       ? `${(form.productName || '').trim()} ${(form.sizeVal || '').trim()}${form.sizeUnit || ''}`
       : (form.productName || '').trim();
 
     setSaveError('');
-    setSaving(true);
-    try {
-      await onAdd({
-        ...form,
-        productName: fullProduct
-      });
-    } catch (err) {
-      setSaveError(err.message || 'Failed to add SKU');
-      setSaving(false);
-      return;
-    }
-    setSaving(false);
-
-    setStep('SUCCESS');
-
-    setTimeout(() => {
-      setForm({ ...initialFormState });
-      setErrors({});
-      setStep('FORM');
-      onClose();
-    }, 1500);
+    run(() => onAdd({ ...form, productName: fullProduct }), {
+      onSaved: () => {
+        setForm({ ...initialFormState });
+        setErrors({});
+        setStep('FORM');
+        onClose();
+      },
+      onFailed: setSaveError,
+      fallbackError: 'Failed to add SKU',
+    });
   };
 
   const handleBackToForm = () => {
@@ -158,8 +148,18 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
       label="Add new SKU"
       overlayClassName="modal-overlay"
       containerClassName="modal-card"
+      closeOnOverlayClick={!saving}
+      closeOnEscape={!saving}
     >
-        {step === 'FORM' ? (
+        {result ? (
+          <SaveResult
+            ok={result.ok}
+            title={result.ok ? 'SKU added' : "Couldn't add the SKU"}
+            message={result.ok
+              ? <>New SKU <strong>{form.skuCode}</strong> has been saved to the master ledger.</>
+              : result.message}
+          />
+        ) : step === 'FORM' ? (
           /* STEP 1: ADD SKU FORM */
           <>
             <div className="modal-header">
@@ -283,7 +283,7 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
               </div>
             </form>
           </>
-        ) : step === 'CONFIRM' ? (
+        ) : (
           /* STEP 2: CONFIRMATION WINDOW */
           <>
             <div className="modal-header centered-header">
@@ -327,17 +327,6 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
               </button>
             </div>
           </>
-        ) : (
-          /* STEP 3: ANIMATED CHECKMARK SUCCESS WINDOW */
-          <div className="add-success-anim-container">
-            <div className="add-success-checkmark-circle">
-              <CheckCircle2 size={40} strokeWidth={2.2} />
-            </div>
-            <h3 className="add-success-title">SKU Added Successfully!</h3>
-            <p className="add-success-subtitle">
-              New SKU <strong>{form.skuCode}</strong> has been saved to the master ledger.
-            </p>
-          </div>
         )}
     </Modal>
   );

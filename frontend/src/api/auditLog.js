@@ -1,5 +1,9 @@
 import { apiFetch } from '../auth';
 
+// Read-only. The browser never writes audit entries: the server records each
+// one itself as part of the action (user, SKU, reorder and password changes),
+// so an entry can't be skipped or made up from the client.
+
 export async function getAuditLog({ action, excludeActions, userEmail, limit } = {}) {
   const query = new URLSearchParams();
   if (action) query.append('action', action);
@@ -10,17 +14,6 @@ export async function getAuditLog({ action, excludeActions, userEmail, limit } =
   const res = await apiFetch(`/audit-log?${query.toString()}`);
   if (!res.ok) {
     throw new Error('Failed to fetch audit log');
-  }
-  return res.json();
-}
-
-export async function postAuditLogEntry(action, details) {
-  const res = await apiFetch('/audit-log', {
-    method: 'POST',
-    body: JSON.stringify({ action, details }),
-  });
-  if (!res.ok) {
-    throw new Error('Failed to record audit log entry');
   }
   return res.json();
 }

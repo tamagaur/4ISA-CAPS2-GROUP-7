@@ -11,8 +11,11 @@ tokens with a guessable fallback secret.
 """
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 
 from dotenv import load_dotenv
 from jose import JWTError, jwt
@@ -30,6 +33,35 @@ def hash_password(plain_password: str) -> str:
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
     return _pwd_context.verify(plain_password, password_hash)
+
+
+PASSWORD_MIN_LENGTH = 8
+# bcrypt reads only the first 72 bytes of a password; a longer one would be
+# silently cut, so backend/schemas/auth.py refuses it instead.
+PASSWORD_MAX_BYTES = 72
+
+
+@lru_cache(maxsize=1)
+def _throwaway_hash() -> str:
+    return _pwd_context.hash(secrets.token_urlsafe(16))
+
+
+def spend_password_check_time(plain_password: str) -> None:
+    """Runs one bcrypt check against a throwaway hash. Sign-in calls it when
+    the email has no usable password, so that answer takes as long as a wrong
+    password and the response time can't reveal which emails have accounts."""
+    _pwd_context.verify(plain_password, _throwaway_hash())
+
+
+def hash_link_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def new_link_token() -> tuple[str, str]:
+    """A one-time link token and the hash stored in its place (see
+    backend/account_links.py)."""
+    token = secrets.token_urlsafe(32)
+    return token, hash_link_token(token)
 
 
 def _get_secret_key() -> str:
@@ -111,9 +143,14 @@ def decode_access_token(token: str) -> TokenPayload:
 
 __all__ = [
     "JWTError",
+    "PASSWORD_MAX_BYTES",
+    "PASSWORD_MIN_LENGTH",
     "TokenPayload",
     "create_access_token",
     "decode_access_token",
+    "hash_link_token",
     "hash_password",
+    "new_link_token",
+    "spend_password_check_time",
     "verify_password",
 ]

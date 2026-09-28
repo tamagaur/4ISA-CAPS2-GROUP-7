@@ -26,11 +26,17 @@ export function getRecommendations({ status, from, to, principal } = {}) {
   });
 }
 
-export async function decideRecommendation(recommendationKey, status) {
+// `reason` (optional, at most 500 characters) is why the decision was made;
+// the server records it in the decision's Audit Log entry. Left out when
+// empty.
+export async function decideRecommendation(recommendationKey, status, reason) {
+  const body = { status };
+  const trimmedReason = reason?.trim();
+  if (trimmedReason) body.reason = trimmedReason;
   const res = await apiFetch(`/recommendations/${recommendationKey}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     throw new Error('Failed to update recommendation');

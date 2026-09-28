@@ -1,0 +1,106 @@
+/* The saved / not saved moment inside a dialog — see SaveResult.jsx. */
+
+.save-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 220px;
+  padding: 2.25rem 1.5rem;
+  text-align: center;
+  outline: none;
+  animation: save-result-in 0.2s ease-out;
+}
+
+.save-result.is-ok {
+  --save-result-color: var(--color-success-ui);
+  --save-result-fill: var(--color-success-bg);
+}
+
+.save-result.is-failed {
+  --save-result-color: var(--color-danger-text);
+  --save-result-fill: var(--color-danger-bg);
+}
+
+.save-result-icon {
+  width: 76px;
+  height: 76px;
+  margin-bottom: 0.6rem;
+}
+
+/* The ring draws itself (circumference 2π·25 ≈ 157), then the mark does. */
+.save-result-ring {
+  fill: var(--save-result-fill);
+  stroke: var(--save-result-color);
+  stroke-width: 3;
+  stroke-dasharray: 158;
+  stroke-dashoffset: 158;
+  animation: save-result-draw 0.45s ease-out forwards;
+}
+
+.save-result-mark {
+  fill: none;
+  stroke: var(--save-result-color);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: save-result-draw 0.3s 0.4s ease-out forwards;
+}
+
+/* The X's second stroke follows its first. */
+.save-result-mark-second {
+  animation-delay: 0.55s;
+}
+
+/* A failure gives one small shake once the X is drawn. */
+.save-result.is-failed .save-result-icon {
+  animation: save-result-shake 0.4s 0.85s ease-in-out;
+}
+
+.save-result-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.save-result-message {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+@keyframes save-result-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes save-result-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes save-result-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+/* Reduced motion: the finished icon, no drawing and no shake. */
+@media (prefers-reduced-motion: reduce) {
+  .save-result,
+  .save-result-ring,
+  .save-result-mark,
+  .save-result.is-failed .save-result-icon {
+    animation: none;
+  }
+
+  .save-result-ring,
+  .save-result-mark {
+    stroke-dashoffset: 0;
+  }
+}

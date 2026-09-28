@@ -297,8 +297,11 @@
 
 /* Explains an involuntary sign-out (expired/rejected token). Deliberately
    informational blue rather than .error-message's red — the user didn't do
-   anything wrong, their session simply timed out. */
-.session-expired-message {
+   anything wrong, their session simply timed out. .auth-info-message is the
+   same notice on the password pages (a reset request received, a dead link):
+   nothing the person did wrong there either. */
+.session-expired-message,
+.auth-info-message {
   color: #1e40af;
   background-color: #eff6ff;
   border: 1px solid #bfdbfe;
@@ -307,5 +310,79 @@
   font-size: 0.9rem;
   width: 100%;
   box-sizing: border-box;
+  text-align: left;
+}
+
+/* A confirmation handed to the login page by the page before it ("Your
+   password is set..."). Same shape as the notice above, in the success
+   green the toasts use. */
+.auth-success-message {
+  color: var(--color-success-text);
+  background-color: var(--color-success-bg);
+  border: 1px solid #9ae6b4;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+/* Password pages (Forgot password, Set password) reuse this card. */
+.subtitle strong {
+  color: var(--color-text-heading);
+  overflow-wrap: anywhere;
+}
+
+/* "Forgot password?" sits tight under the password field — the form's
+   1.25rem gap would leave it floating between the field and the button. */
+.login-forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.6rem;
+}
+
+.auth-link {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+.auth-link:hover {
+  color: var(--color-brand-primary);
+  text-decoration: underline;
+}
+
+.auth-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* The way out of a password page (Back to sign in, Forgot password?). */
+.auth-links {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 1.75rem 0 0 0;
+}
+
+/* A notice standing in for the form (reset requested, link unusable), so
+   it takes the subtitle's place under the heading. */
+.auth-card-message {
+  margin-top: 1.5rem;
+}
+
+/* Alone in the card while a link is checked — no form under it to space. */
+.subtitle.auth-checking {
+  margin: 0;
+}
+
+.auth-hint {
+  color: var(--color-text-subtle);
+  font-size: 0.85rem;
+  margin: -0.5rem 0 0 0;
   text-align: left;
 }

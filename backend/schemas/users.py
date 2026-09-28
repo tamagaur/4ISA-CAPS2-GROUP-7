@@ -1,17 +1,15 @@
 """
-backend.schemas.users — Pydantic models for GET/PATCH/DELETE /users
-(admin-only user management).
+backend.schemas.users — Pydantic models for the admin-only /users routes.
 
-UserCreate mirrors RegisterRequest (backend/schemas/auth.py) rather than
-importing it — POST /auth/register stays the create path (Story #89), this
-module only covers list/update.
+Creating an account goes through POST /auth/register (backend/schemas/auth.py
+RegisterRequest); this module covers list/update.
 """
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserOut(BaseModel):
@@ -19,11 +17,17 @@ class UserOut(BaseModel):
     email: EmailStr
     full_name: str
     role: str
+    # 'invited' until the person sets a password through their invite link.
+    status: Literal["active", "invited"] = "active"
     created_at: datetime
 
 
 class UserUpdate(BaseModel):
+    """Admins change name, email and role. Since 2026-09-28 only the account's
+    owner sets its password, through an emailed link (POST
+    /users/{id}/send-link), so a `password` field is refused (422)."""
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr | None = None
-    full_name: str | None = Field(default=None, min_length=1)
+    full_name: str | None = Field(default=None, min_length=1, max_length=200)
     role: Literal["admin", "staff"] | None = None
-    password: str | None = Field(default=None, min_length=8)

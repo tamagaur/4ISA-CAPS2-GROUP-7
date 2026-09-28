@@ -76,6 +76,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend import audit
 from backend.deps import TokenPayload, get_current_user, get_db, require_admin
 from backend.principals import (
     PrincipalQuery,
@@ -320,11 +321,13 @@ def update_recommendation(
     if decision.status not in ("accepted", "dismissed"):
         raise HTTPException(status_code=400, detail="status must be 'accepted' or 'dismissed'")
 
-    result = db.execute(
+    decided = db.execute(
         text("""
             UPDATE lp_recommendation
             SET status = :status, decided_at = :decided_at, decided_by = :decided_by
             WHERE recommendation_key = :key
+            RETURNING (SELECT COALESCE(pd.sku_code, pd.category_path) FROM product_dimension pd
+                        WHERE pd.product_key = lp_recommendation.product_key) AS sku
         """),
         {
             "status": decision.status,
@@ -332,10 +335,16 @@ def update_recommendation(
             "decided_by": current_user.email,
             "key": recommendation_key,
         },
-    )
-    if result.rowcount == 0:
+    ).mappings().first()
+    if decided is None:
         db.rollback()
         raise HTTPException(status_code=404, detail="Recommendation not found")
+    audit.record(
+        db,
+        f"Reorder Recommendation {'Accepted' if decision.status == 'accepted' else 'Dismissed'}",
+        f"SKU {decided['sku']}" + (f": {decision.reason}" if decision.reason else ""),
+        actor=current_user,
+    )
     db.commit()
 
     # Single row pinned by recommendation_key; scope left unfiltered (None

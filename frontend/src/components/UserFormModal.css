@@ -152,9 +152,21 @@
   padding-right: 2rem;
 }
 
+.form-input:disabled {
+  background-color: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
 .error-text {
   font-size: 0.72rem;
   color: var(--color-brand-accent);
+  margin-top: -0.1rem;
+}
+
+.form-hint {
+  font-size: 0.72rem;
+  color: var(--color-text-subtle);
   margin-top: -0.1rem;
 }
 

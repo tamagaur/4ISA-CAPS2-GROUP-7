@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend import audit
 from backend.deps import TokenPayload, get_current_user, get_db, require_admin
 from backend.principals import (
     PrincipalQuery,
@@ -200,6 +201,7 @@ def create_sku(
             "brand": payload.brand,
         },
     ).mappings().first()
+    audit.record(db, "Add SKU", f"Added SKU {payload.sku_code} ({payload.product_name})", actor=current_user)
     db.commit()
 
     result = db.execute(
@@ -239,14 +241,31 @@ def update_sku(
             raise HTTPException(status_code=404, detail="SKU not found")
         return _to_item(row)
 
+    before = db.execute(
+        text("SELECT product_name, pack_size, brand FROM product_dimension WHERE product_key = :key"),
+        {"key": product_key},
+    ).mappings().first()
+    if before is None:
+        raise HTTPException(status_code=404, detail="SKU not found")
+    # Only what actually changed goes in the audit entry; the edit form sends
+    # every field whether or not it was touched.
+    changes = ", ".join(
+        f"{key}: {before[key]} → {value}" for key, value in fields.items() if before[key] != value
+    )
     set_clause = ", ".join(f"{key} = :{key}" for key in fields)
     fields["key"] = product_key
-    result = db.execute(
-        text(f"UPDATE product_dimension SET {set_clause} WHERE product_key = :key"), fields
-    )
-    if result.rowcount == 0:
+    updated = db.execute(
+        text(
+            f"UPDATE product_dimension SET {set_clause} WHERE product_key = :key "
+            "RETURNING COALESCE(sku_code, category_path) AS sku_id"
+        ),
+        fields,
+    ).mappings().first()
+    if updated is None:
         db.rollback()
         raise HTTPException(status_code=404, detail="SKU not found")
+    if changes:
+        audit.record(db, "Edit SKU", f"SKU {updated['sku_id']}: {changes}", actor=current_user)
     db.commit()
 
     row = db.execute(

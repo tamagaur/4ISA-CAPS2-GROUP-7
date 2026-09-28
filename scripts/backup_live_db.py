@@ -15,6 +15,11 @@ Writes:
     <table>.parquet         - one per base table, full data
     ddl_snapshot.json       - reflected column/type/constraint info per table
 
+Other schemas: create_backup(engine, schema="ssm_synth_v2") dumps any schema
+the same way. scripts/backup_everything.py uses it for every schema of ours
+and adds the full table structure (views, indexes, keys, permissions), which
+ddl_snapshot.json does not hold.
+
 Usage:
     python -m scripts.backup_live_db            # create the backup
     python -m scripts.backup_live_db --verify PATH   # restore-test an
@@ -44,30 +49,37 @@ def _p(msg: str) -> None:
     print(msg, flush=True)
 
 
-def _list_base_tables(conn) -> list[str]:
+def _list_base_tables(conn, schema: str = "public") -> list[str]:
     rows = conn.execute(text(
         "SELECT table_name FROM information_schema.tables "
-        "WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name"
-    )).fetchall()
+        "WHERE table_schema = :schema AND table_type='BASE TABLE' ORDER BY table_name"
+    ), {"schema": schema}).fetchall()
     return [r[0] for r in rows]
 
 
-def create_backup(engine, out_dir: Path | None = None) -> Path:
+def _qcol(name: str) -> str:
+    # Quoted column name; a colon is escaped so text() doesn't read it as a bind param.
+    return '"' + name.replace('"', '""').replace(":", "\\:") + '"'
+
+
+def create_backup(
+    engine, out_dir: Path | None = None, schema: str = "public", json_as_text: bool = False
+) -> Path:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     if out_dir is None:
         out_dir = BACKUP_ROOT / f"live_backup_{ts}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    manifest: dict = {"created_utc": ts, "schema": "public", "tables": {}}
+    manifest: dict = {"created_utc": ts, "schema": schema, "tables": {}}
 
     insp = inspect(engine)
 
     with engine.connect() as conn:
-        tables = _list_base_tables(conn)
-        _p(f"Dumping {len(tables)} base tables from public -> {out_dir}")
+        tables = _list_base_tables(conn, schema)
+        _p(f"Dumping {len(tables)} base tables from {schema} -> {out_dir}")
 
         for t in tables:
-            pk_cols = set(insp.get_pk_constraint(t, schema="public").get("constrained_columns", []))
+            pk_cols = set(insp.get_pk_constraint(t, schema=schema).get("constrained_columns", []))
             # NOT pd.read_sql() - found 2026-09-14, first real
             # verify-restore: its own numpy dtype inference upgrades an
             # all-Decimal NUMERIC column to float64 whenever every value
@@ -82,7 +94,21 @@ def create_backup(engine, out_dir: Path | None = None) -> Path:
             # psycopg2 returned (Decimal('NaN') stays a Decimal, None stays
             # None) in an object-dtype column, so the Decimal-detection
             # string-cast below can actually see and preserve it.
-            rows = conn.execute(text(f'SELECT * FROM public."{t}"')).mappings().all()
+            select = "*"
+            if json_as_text:
+                # JSON/JSONB columns as the database's own text of each value.
+                # Without this, psycopg2 parses them into dicts (numbers become
+                # floats and can lose digits), pyarrow's struct inference adds
+                # keys a row never had back as nulls, and the string-cast
+                # fallback below writes Python reprs ({'a': None}) that are not
+                # valid JSON - found 2026-09-28 in etl_quarantine.raw_values and
+                # etl_cutover_ledger.change_log.
+                select = ", ".join(
+                    f"{_qcol(c['name'])}::text AS {_qcol(c['name'])}"
+                    if str(c["type"]).upper() in ("JSON", "JSONB") else _qcol(c["name"])
+                    for c in insp.get_columns(t, schema=schema)
+                )
+            rows = conn.execute(text(f'SELECT {select} FROM "{schema}"."{t}"')).mappings().all()
             df = pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
 
             # Explicitly string-cast every Decimal-holding column BEFORE
@@ -163,8 +189,8 @@ def create_backup(engine, out_dir: Path | None = None) -> Path:
         insp = inspect(engine)
         ddl_snapshot = {}
         for t in tables:
-            cols = insp.get_columns(t, schema="public")
-            pk = insp.get_pk_constraint(t, schema="public")
+            cols = insp.get_columns(t, schema=schema)
+            pk = insp.get_pk_constraint(t, schema=schema)
             ddl_snapshot[t] = {
                 "columns": [
                     {"name": c["name"], "type": str(c["type"]), "nullable": c["nullable"]}

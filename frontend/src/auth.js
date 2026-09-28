@@ -132,6 +132,56 @@ export async function login(email, password) {
   return data;
 }
 
+// ── Password links (invites and "Forgot password?") ──────────────────────
+// Public endpoints: the person using them has no session. Plain fetch, not
+// apiFetch — its 401 handling would bounce them to /login mid-flow. Errors
+// carry the HTTP status so a page can tell "this link is dead" (400) from
+// "the server couldn't be reached".
+async function postPublic(path, payload, fallbackError) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const err = new Error(extractErrorMessage(body, fallbackError));
+    err.status = res.status;
+    throw err;
+  }
+  return res;
+}
+
+// Resolves to the server's message, which is the same whether or not the
+// email has an account — so this can't be used to find out who does.
+export async function requestPasswordReset(email) {
+  const res = await postPublic(
+    '/auth/forgot-password',
+    { email },
+    'Could not send the reset link. Please try again.'
+  );
+  const body = await res.json().catch(() => null);
+  return body?.detail || 'If that email has an account, a link to reset its password is on its way.';
+}
+
+// { purpose: 'invite' | 'reset', email, full_name, expires_at }
+export async function getLinkInfo(token) {
+  const res = await postPublic(
+    '/auth/link-info',
+    { token },
+    'This link has expired or has already been used.'
+  );
+  return res.json();
+}
+
+export async function setPasswordWithLink(token, password) {
+  await postPublic(
+    '/auth/set-password',
+    { token, password },
+    'Could not set your password. Please try again.'
+  );
+}
+
 export function logout() {
   // Fired before clearSession() so it still carries this session's token;
   // keepalive lets it finish while the page navigates to /login.

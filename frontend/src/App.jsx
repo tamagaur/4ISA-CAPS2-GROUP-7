@@ -1,6 +1,8 @@
 import React, { lazy, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Login from './Login';
+import ForgotPassword from './ForgotPassword';
+import SetPassword from './SetPassword';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import DashboardLayout from './components/DashboardLayout';
@@ -23,6 +25,8 @@ const UserManagement = lazy(pageLoaders.users);
 
 const routeTitles = {
   '/login': 'SAN2 | Login',
+  '/forgot-password': 'SAN2 | Reset Password',
+  '/set-password': 'SAN2 | Set Password',
   '/': 'SAN2 | Dashboard',
   '/sku-management': 'SAN2 | SKU Management',
   '/abc': 'SAN2 | ABC Classification',
@@ -50,6 +54,9 @@ function App() {
       <DynamicTitle />
       <Routes>
         <Route path="/login" element={<Login />} />
+        {/* Public like /login: whoever uses these has no session yet. */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/set-password" element={<SetPassword />} />
         <Route
           path="/"
           element={

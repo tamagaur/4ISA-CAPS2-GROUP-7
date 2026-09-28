@@ -70,11 +70,19 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# APP_ENV=production hides the interactive docs (/docs, /redoc) and the
+# /openapi.json map of every route: useful on a laptop, only a map for
+# strangers on a public server. Every route still needs a token either way.
+_SHOW_DOCS = os.environ.get("APP_ENV", "").strip().lower() != "production"
+
 app = FastAPI(
     title="SSM Decision Support Dashboard API",
     description="Read-only API over Supabase-stored ETL/ABC/MA3-forecast/LP pipeline outputs.",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if _SHOW_DOCS else None,
+    redoc_url="/redoc" if _SHOW_DOCS else None,
+    openapi_url="/openapi.json" if _SHOW_DOCS else None,
 )
 
 app.add_middleware(

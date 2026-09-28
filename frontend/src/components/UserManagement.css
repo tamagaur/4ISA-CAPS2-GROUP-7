@@ -87,7 +87,7 @@
 
 .user-mgmt-table {
   width: 100%;
-  min-width: 700px;
+  min-width: 820px;
   border-collapse: collapse;
   font-size: 0.85rem;
 }
@@ -179,9 +179,31 @@
   color: var(--color-text-body);
 }
 
-.user-mgmt-actions-col {
+/* Invite pending: the account exists but its owner hasn't set a password,
+   so nobody can sign in with it yet. Amber — waiting on someone, not
+   broken. Sentence case so it doesn't shout next to the role badge. */
+.user-mgmt-status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-warning-border);
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  font-size: 0.72rem;
+  font-weight: 600;
   white-space: nowrap;
-  text-align: right;
+}
+
+.user-mgmt-status-active {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+/* Scoped under the table so it outranks `.user-mgmt-table th`'s left
+   alignment: the header and its buttons sit on the same centre line. */
+.user-mgmt-table .user-mgmt-actions-col {
+  white-space: nowrap;
+  text-align: center;
 }
 
 .user-mgmt-icon-btn {
@@ -195,24 +217,73 @@
   background-color: var(--color-surface);
   color: var(--color-text-body);
   cursor: pointer;
-  margin-left: 0.5rem;
   transition: all 0.15s;
 }
 
-.user-mgmt-icon-btn:hover {
+/* Gap between buttons only, so the centred group has no stray left margin. */
+.user-mgmt-icon-btn + .user-mgmt-icon-btn {
+  margin-left: 0.5rem;
+}
+
+.user-mgmt-icon-btn:hover:not(:disabled) {
   background-color: var(--color-surface-raised);
   border-color: var(--color-border-strong);
 }
 
-.user-mgmt-icon-btn.danger:hover:not(:disabled) {
+/* One colour per kind of action, readable at a glance: blue sends a link
+   (invite or password reset), amber edits, red deletes. */
+.user-mgmt-icon-btn.link {
+  color: var(--color-info);
+  background-color: color-mix(in srgb, var(--color-info) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-info) 35%, var(--color-border));
+}
+
+.user-mgmt-icon-btn.link:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-info) 16%, var(--color-surface));
+  border-color: var(--color-info);
+}
+
+.user-mgmt-icon-btn.edit {
+  color: var(--color-warning-text);
+  background-color: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+}
+
+.user-mgmt-icon-btn.edit:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-surface));
+  border-color: var(--color-warning-deep);
+}
+
+.user-mgmt-icon-btn.danger {
+  color: var(--color-brand-primary);
   background-color: var(--color-danger-bg);
   border-color: var(--color-danger-border);
-  color: var(--color-brand-primary);
+}
+
+.user-mgmt-icon-btn.danger:hover:not(:disabled) {
+  background-color: var(--color-danger-bg-strong);
+  border-color: var(--color-danger-border-alt);
 }
 
 .user-mgmt-icon-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.user-mgmt-icon-btn[aria-busy='true'] {
+  cursor: progress;
+}
+
+.user-mgmt-spin {
+  animation: user-mgmt-spin 1s linear infinite;
+}
+
+@keyframes user-mgmt-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .user-mgmt-spin { animation: none; }
 }
 
 .user-mgmt-empty {
@@ -290,7 +361,8 @@
   margin-top: 0.6rem;
 }
 
-.user-mgmt-confirm-delete-btn {
+.user-mgmt-confirm-delete-btn,
+.user-mgmt-share-done-btn {
   background-color: var(--color-brand-primary);
   color: var(--color-surface);
   border: none;
@@ -302,8 +374,97 @@
   transition: background-color 0.15s ease;
 }
 
-.user-mgmt-confirm-delete-btn:hover {
+.user-mgmt-confirm-delete-btn:hover,
+.user-mgmt-share-done-btn:hover {
   background-color: var(--color-brand-hover);
+}
+
+/* Share-link dialog — the invite/reset link when its email didn't go out.
+   Wider than the delete confirmation so the link itself stays readable. */
+.user-mgmt-share-card {
+  max-width: 480px;
+  width: calc(100% - 2rem);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.user-mgmt-share-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem auto;
+}
+
+/* The server's reason the email failed, verbatim. */
+.user-mgmt-share-problem {
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  color: var(--color-warning-text);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  margin: 0 0 1rem 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.user-mgmt-share-field {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0 0 1rem 0;
+}
+
+.user-mgmt-share-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-surface-raised);
+  color: var(--color-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.user-mgmt-share-input:focus {
+  outline: none;
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+}
+
+.user-mgmt-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.user-mgmt-copy-btn:hover {
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+}
+
+.user-mgmt-share-hint {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin: -0.5rem 0 1rem 0;
+  text-align: left;
 }
 
 .btn-cancel {
@@ -348,5 +509,17 @@
     flex-direction: column;
     align-items: stretch;
     gap: 0.8rem;
+  }
+
+  .user-mgmt-share-card {
+    padding: 1.5rem;
+  }
+
+  .user-mgmt-share-field {
+    flex-direction: column;
+  }
+
+  .user-mgmt-copy-btn {
+    justify-content: center;
   }
 }

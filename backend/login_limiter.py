@@ -114,3 +114,8 @@ def _ip_key(ip: str) -> str:
 
 # The one limiter POST /auth/login uses.
 login_limiter = LoginLimiter()
+
+# POST /auth/forgot-password counts every request here (not just failures):
+# at most 5 reset emails per address, and 20 per IP, every 15 minutes, so the
+# form can't be used to flood someone's inbox.
+reset_limiter = LoginLimiter()

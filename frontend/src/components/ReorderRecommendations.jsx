@@ -6,9 +6,10 @@ import {
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
 import Modal from './Modal';
+import SaveResult from './SaveResult';
 import { useToast } from './ToastProvider';
+import { useSaveResult } from '../utils/useSaveResult';
 import { getCurrentUser } from '../auth';
-import { logAction } from '../utils/auditLogger';
 import { getRecommendations, decideRecommendation } from '../api/recommendations';
 import { formatDateTime, formatMonth } from '../utils/formatDate';
 import { formatUnits, exactUnits, wholeUnits } from '../utils/formatNumber';
@@ -44,6 +45,9 @@ const URGENCY_RANK = { CRITICAL: 0, URGENT: 1, PLANNED: 2, 'NO DATA': 3 };
 // Fire at most this many PATCHes at once during a bulk accept — there is
 // no bulk endpoint, so this is N sequential-ish writes against Supabase.
 const BULK_CONCURRENCY = 5;
+
+// Accept needs no typed reason; this is the one recorded for it.
+const ACCEPT_REASON = 'Accepted the LP-recommended order quantity as-is.';
 
 const COVER_BASIS_NOTE =
   'Stock at cost (₱) ÷ average daily sales value (₱/day, last 3 sales months) — the same peso basis the Dashboard’s '
@@ -85,6 +89,12 @@ const ReorderRecommendations = () => {
   const [pendingAccept, setPendingAccept] = useState(null); // the item awaiting Accept confirmation
   const [pendingBulk, setPendingBulk] = useState(null); // { rows } awaiting bulk-accept confirmation
   const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkDone, setBulkDone] = useState(0); // rows answered so far, for the dialog's progress
+  // The Accept and bulk-Accept dialogs show their result in place: a green
+  // check then close, or a red X with the reason.
+  const acceptSave = useSaveResult();
+  const bulkSave = useSaveResult();
+  const [acceptError, setAcceptError] = useState('');
   // Accept/Dismiss is admin-only (backend: require_admin on PATCH
   // /recommendations); staff can review every recommendation but not act.
   const isAdmin = getCurrentUser()?.role === 'admin';
@@ -229,6 +239,8 @@ const ReorderRecommendations = () => {
     setIsModalOpen(true);
   };
 
+  // This session's decision history (the Decision Log tab). The Audit Log
+  // entry is the server's: PATCH /recommendations records it, reason and all.
   const logDecision = (item, action, reason) => {
     const user = getCurrentUser();
     setDecisionLog(prev => [
@@ -243,20 +255,18 @@ const ReorderRecommendations = () => {
       },
       ...prev,
     ]);
-
-    // Also push to the global audit log
-    logAction(`Reorder Recommendation ${action === 'ACCEPTED' ? 'Accepted' : 'Dismissed'}`, `SKU ${item.sku}: ${reason}`);
   };
 
-  // Writes one decision. Returns true on success. `silent` skips the
-  // per-row toast so a bulk accept can report once at the end.
-  const applyAction = async (id, actionType, { silent = false } = {}) => {
+  // Writes one decision, with its reason. Returns true on success. `silent`
+  // skips the per-row toast so a bulk accept can report once at the end;
+  // `rethrow` passes a failure on to a dialog that shows it itself.
+  const applyAction = async (id, actionType, { silent = false, reason, rethrow = false } = {}) => {
     setLocalData(prev => prev.map(item =>
       item.id === id ? { ...item, loadingAction: actionType } : item
     ));
 
     try {
-      await decideRecommendation(id, actionType === 'ACCEPTED' ? 'accepted' : 'dismissed');
+      await decideRecommendation(id, actionType === 'ACCEPTED' ? 'accepted' : 'dismissed', reason);
       setLocalData(prev => prev.map(item =>
         item.id === id ? { ...item, loadingAction: null, actionStatus: actionType } : item
       ));
@@ -270,6 +280,7 @@ const ReorderRecommendations = () => {
       setLocalData(prev => prev.map(item =>
         item.id === id ? { ...item, loadingAction: null } : item
       ));
+      if (rethrow) throw err;
       if (!silent) {
         setError(err.message || 'Failed to update recommendation');
         toast.error(err.message || 'Failed to update recommendation');
@@ -287,6 +298,8 @@ const ReorderRecommendations = () => {
       // page. This confirm is deliberately lighter than Dismiss's (no typed
       // reason): accepting the LP's own recommendation is the expected
       // path, it just shouldn't be a single unguarded click.
+      acceptSave.reset();
+      setAcceptError('');
       setPendingAccept(item);
       return;
     }
@@ -297,47 +310,70 @@ const ReorderRecommendations = () => {
   const handleConfirmAccept = () => {
     const item = pendingAccept;
     if (!item) return;
-    applyAction(item.id, 'ACCEPTED');
-    logDecision(item, 'ACCEPTED', 'Accepted the LP-recommended order quantity as-is.');
-    setPendingAccept(null);
+    setAcceptError('');
+    acceptSave.run(async () => {
+      await applyAction(item.id, 'ACCEPTED', { reason: ACCEPT_REASON, silent: true, rethrow: true });
+      logDecision(item, 'ACCEPTED', ACCEPT_REASON);
+    }, {
+      onSaved: () => setPendingAccept(null),
+      onFailed: setAcceptError,
+      fallbackError: 'Failed to update recommendation',
+    });
   };
 
-  const handleConfirmOverride = (reason) => {
+  // OverrideReasonModal shows the check or X itself; a throw here is its X.
+  const handleConfirmOverride = async (reason) => {
     const { item, action } = pendingOverride;
-    applyAction(item.id, action);
+    await applyAction(item.id, action, { reason, silent: true, rethrow: true });
     logDecision(item, action, reason);
-    setPendingOverride(null);
   };
 
   // Bulk accept — every pending row currently in view (the Act-now list,
   // or the whole cycle once Review later is expanded). Runs in small
-  // batches; each success is logged individually so the decision log and
-  // audit log read the same as if the rows had been accepted one by one.
-  const handleConfirmBulk = async () => {
+  // batches; each row is its own PATCH, carrying the same reason, so the
+  // decision log and audit log read the same as if the rows had been
+  // accepted one by one. The dialog stays open with a count while it runs,
+  // then shows a check, or an X when any row failed. Rows that did save stay
+  // saved, so after a failure it closes rather than offering to re-run them.
+  const handleConfirmBulk = () => {
     const rows = pendingBulk?.rows || [];
-    setPendingBulk(null);
-    if (rows.length === 0) return;
-    setBulkRunning(true);
-    let accepted = 0;
-    let failed = 0;
-    for (let i = 0; i < rows.length; i += BULK_CONCURRENCY) {
-      const batch = rows.slice(i, i + BULK_CONCURRENCY);
-      const results = await Promise.all(batch.map((r) => applyAction(r.id, 'ACCEPTED', { silent: true })));
-      results.forEach((ok, idx) => {
-        if (ok) {
-          accepted += 1;
-          logDecision(batch[idx], 'ACCEPTED', `Accepted in bulk ("Accept all in view", ${formatMonth(selectedCycle)} cycle).`);
-        } else {
-          failed += 1;
+    if (rows.length === 0) {
+      setPendingBulk(null);
+      return;
+    }
+    setBulkDone(0);
+    bulkSave.run(async () => {
+      setBulkRunning(true);
+      const reason = `Accepted in bulk ("Accept all in view", ${formatMonth(selectedCycle)} cycle).`;
+      let accepted = 0;
+      let failed = 0;
+      try {
+        for (let i = 0; i < rows.length; i += BULK_CONCURRENCY) {
+          const batch = rows.slice(i, i + BULK_CONCURRENCY);
+          const results = await Promise.all(batch.map((r) => applyAction(r.id, 'ACCEPTED', { silent: true, reason })));
+          results.forEach((ok, idx) => {
+            if (ok) {
+              accepted += 1;
+              logDecision(batch[idx], 'ACCEPTED', reason);
+            } else {
+              failed += 1;
+            }
+          });
+          setBulkDone(accepted + failed);
         }
-      });
-    }
-    setBulkRunning(false);
-    if (failed === 0) {
-      toast.success(`${accepted} reorder${accepted === 1 ? '' : 's'} accepted`);
-    } else {
-      toast.error(`${accepted} accepted, ${failed} failed — the failed rows are still pending`);
-    }
+      } finally {
+        setBulkRunning(false);
+      }
+      if (failed > 0) {
+        throw new Error(`${accepted} accepted, ${failed} failed. The failed rows are still pending, so you can accept them again.`);
+      }
+      return accepted;
+    }, {
+      onSaved: () => setPendingBulk(null),
+      // Stays in the corner after the dialog closes, for the rows to redo.
+      onFailed: (message) => toast.error(message),
+      afterFailed: () => setPendingBulk(null),
+    });
   };
 
   const getUrgencyBadge = (urgency) => {
@@ -548,7 +584,10 @@ const ReorderRecommendations = () => {
         {isAdmin && !meta?.whatIf && (
           <button
             className="reorder-bulk-btn"
-            onClick={() => setPendingBulk({ rows: bulkTargets })}
+            onClick={() => {
+              bulkSave.reset();
+              setPendingBulk({ rows: bulkTargets });
+            }}
             disabled={bulkTargets.length === 0 || bulkRunning}
             title={bulkTargets.length === 0 ? 'No pending rows in view' : undefined}
           >
@@ -772,24 +811,39 @@ const ReorderRecommendations = () => {
           label="Confirm reorder acceptance"
           overlayClassName="reorder-accept-overlay"
           containerClassName="reorder-accept-card"
+          closeOnOverlayClick={!acceptSave.saving}
+          closeOnEscape={!acceptSave.saving}
         >
-          <div className="reorder-accept-icon">
-            <CheckCircle2 size={20} />
-          </div>
-          <h3 className="reorder-accept-title">Accept this reorder?</h3>
-          <p className="reorder-accept-body">
-            Order <strong>{formatUnits(pendingAccept.orderQty)}</strong> units of{' '}
-            <strong>{formatSKU(pendingAccept.sku)}</strong>
-            {pendingAccept.product ? ` — ${pendingAccept.product}` : ''}, as recommended by the LP optimizer.
-          </p>
-          <div className="reorder-accept-actions">
-            <button className="reorder-accept-cancel" onClick={() => setPendingAccept(null)}>
-              Cancel
-            </button>
-            <button className="reorder-accept-confirm" onClick={handleConfirmAccept}>
-              Accept Reorder
-            </button>
-          </div>
+          {acceptSave.result ? (
+            <SaveResult
+              ok={acceptSave.result.ok}
+              title={acceptSave.result.ok ? 'Reorder accepted' : "Couldn't accept the reorder"}
+              message={acceptSave.result.ok
+                ? <><strong>{formatUnits(pendingAccept.orderQty)}</strong> units of <strong>{formatSKU(pendingAccept.sku)}</strong> are in the decision log.</>
+                : acceptSave.result.message}
+            />
+          ) : (
+            <>
+              <div className="reorder-accept-icon">
+                <CheckCircle2 size={20} />
+              </div>
+              <h3 className="reorder-accept-title">Accept this reorder?</h3>
+              <p className="reorder-accept-body">
+                Order <strong>{formatUnits(pendingAccept.orderQty)}</strong> units of{' '}
+                <strong>{formatSKU(pendingAccept.sku)}</strong>
+                {pendingAccept.product ? ` — ${pendingAccept.product}` : ''}, as recommended by the LP optimizer.
+              </p>
+              {acceptError && <p className="reorder-accept-error" role="alert">{acceptError}</p>}
+              <div className="reorder-accept-actions">
+                <button className="reorder-accept-cancel" onClick={() => setPendingAccept(null)} disabled={acceptSave.saving}>
+                  Cancel
+                </button>
+                <button className="reorder-accept-confirm" onClick={handleConfirmAccept} disabled={acceptSave.saving}>
+                  {acceptSave.saving ? 'Accepting…' : 'Accept Reorder'}
+                </button>
+              </div>
+            </>
+          )}
         </Modal>
       )}
 
@@ -800,26 +854,42 @@ const ReorderRecommendations = () => {
           label="Confirm bulk acceptance"
           overlayClassName="reorder-accept-overlay"
           containerClassName="reorder-accept-card"
+          closeOnOverlayClick={!bulkSave.saving}
+          closeOnEscape={!bulkSave.saving}
         >
-          <div className="reorder-accept-icon">
-            <CheckCheck size={20} />
-          </div>
-          <h3 className="reorder-accept-title">Accept all {pendingBulk.rows.length} in view?</h3>
-          <p className="reorder-accept-body">
-            This accepts every pending recommendation currently shown
-            {showReviewLater ? ' (Act now and Review later)' : ' in the Act-now list'} for the{' '}
-            <strong>{formatMonth(selectedCycle)}</strong> cycle — <strong>{bulkQty.toLocaleString()}</strong> units
-            across <strong>{pendingBulk.rows.length}</strong> SKUs, at the LP-recommended quantities. Each one is
-            logged individually.
-          </p>
-          <div className="reorder-accept-actions">
-            <button className="reorder-accept-cancel" onClick={() => setPendingBulk(null)}>
-              Cancel
-            </button>
-            <button className="reorder-accept-confirm" onClick={handleConfirmBulk}>
-              Accept {pendingBulk.rows.length} reorders
-            </button>
-          </div>
+          {bulkSave.result ? (
+            <SaveResult
+              ok={bulkSave.result.ok}
+              title={bulkSave.result.ok ? 'Reorders accepted' : 'Some reorders failed'}
+              message={bulkSave.result.ok
+                ? `${bulkSave.result.value} reorder${bulkSave.result.value === 1 ? '' : 's'} accepted for the ${formatMonth(selectedCycle)} cycle.`
+                : bulkSave.result.message}
+            />
+          ) : (
+            <>
+              <div className="reorder-accept-icon">
+                <CheckCheck size={20} />
+              </div>
+              <h3 className="reorder-accept-title">Accept all {pendingBulk.rows.length} in view?</h3>
+              <p className="reorder-accept-body">
+                This accepts every pending recommendation currently shown
+                {showReviewLater ? ' (Act now and Review later)' : ' in the Act-now list'} for the{' '}
+                <strong>{formatMonth(selectedCycle)}</strong> cycle — <strong>{bulkQty.toLocaleString()}</strong> units
+                across <strong>{pendingBulk.rows.length}</strong> SKUs, at the LP-recommended quantities. Each one is
+                logged individually.
+              </p>
+              <div className="reorder-accept-actions">
+                <button className="reorder-accept-cancel" onClick={() => setPendingBulk(null)} disabled={bulkSave.saving}>
+                  Cancel
+                </button>
+                <button className="reorder-accept-confirm" onClick={handleConfirmBulk} disabled={bulkSave.saving}>
+                  {bulkSave.saving
+                    ? `Accepting… ${bulkDone} of ${pendingBulk.rows.length}`
+                    : `Accept ${pendingBulk.rows.length} reorders`}
+                </button>
+              </div>
+            </>
+          )}
         </Modal>
       )}
     </div>

@@ -1,6 +1,8 @@
 // frontend/src/utils/usersApi.js — admin-only user management calls.
 // Create goes through /auth/register (the account that's already wired for
-// admin-only + duplicate-email checks); list/update/delete hit /users.
+// admin-only + duplicate-email checks); list/update/delete/send-link hit
+// /users. Admins never set or see a password: new accounts get an emailed
+// one-time link and choose their own (see SetPassword.jsx).
 import { apiFetch } from '../auth';
 
 async function parseErrorOrThrow(res, fallback) {
@@ -21,27 +23,39 @@ export async function listUsers() {
   return res.json();
 }
 
-export async function createUser({ email, password, fullName, role }) {
+// -> { user, email_sent, setup_link, expires_at, email_problem }. The
+// server emails the invite itself; setup_link is only filled in when that
+// email didn't go out, so the admin can pass the link on by hand.
+export async function createUser({ email, fullName, role }) {
   const res = await apiFetch('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ email, password, full_name: fullName, role }),
+    body: JSON.stringify({ email, full_name: fullName, role }),
   });
   await parseErrorOrThrow(res, 'Failed to create user.');
   return res.json();
 }
 
-export async function updateUser(userId, { email, password, fullName, role }) {
+export async function updateUser(userId, { email, fullName, role }) {
   const body = {};
   if (email !== undefined) body.email = email;
   if (fullName !== undefined) body.full_name = fullName;
   if (role !== undefined) body.role = role;
-  if (password) body.password = password;
 
   const res = await apiFetch(`/users/${userId}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
   });
   await parseErrorOrThrow(res, 'Failed to update user.');
+  return res.json();
+}
+
+// Emails a fresh one-time link: an invite while the account has no password
+// yet, a reset link once it has one. -> { purpose: 'invite' | 'reset',
+// email_sent, setup_link, expires_at, email_problem }, same rule for
+// setup_link as createUser.
+export async function sendUserLink(userId) {
+  const res = await apiFetch(`/users/${userId}/send-link`, { method: 'POST' });
+  await parseErrorOrThrow(res, 'Failed to send the link.');
   return res.json();
 }
 

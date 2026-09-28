@@ -6,14 +6,17 @@ Covers:
   - auth_utils: password hashing round-trip, token creation/decoding,
     configurable expiry (default 8h / custom), tampered-signature
     rejection, missing-secret failure.
-  - deps.get_current_user: missing/malformed Authorization header.
-  - POST /auth/login: success, wrong password, unknown email (identical
-    error for both, so the endpoint doesn't leak which emails exist).
-  - POST /auth/register: requires auth, admin-only, duplicate email conflict.
+  - deps.get_token_payload: missing/malformed Authorization header.
+  - POST /auth/login: success, wrong password, unknown email and invite
+    pending (identical error for all, and the same bcrypt work, so the
+    endpoint doesn't leak which emails exist).
+  - POST /auth/register: requires auth, admin-only, duplicate email
+    conflict, no password accepted, invite emailed or handed back as a link.
 
 get_db is overridden with a FakeSession so these tests never touch a real
 Supabase instance — backend/deps.py's get_db() raises RuntimeError without
-SUPABASE_DB_URL, which CI/local runs won't have set.
+SUPABASE_DB_URL, which CI/local runs won't have set. The limiters are reset
+and emails captured by tests/backend/conftest.py.
 """
 from __future__ import annotations
 
@@ -25,10 +28,11 @@ from fastapi.testclient import TestClient
 from jose import jwt
 from sqlalchemy.exc import ProgrammingError
 
-from backend import auth_utils
-from backend.deps import get_current_user, get_db
-from backend.login_limiter import MAX_FAILURES_PER_EMAIL, login_limiter
+from backend import auth_utils, mailer
+from backend.deps import get_db, get_token_payload
+from backend.login_limiter import MAX_FAILURES_PER_EMAIL
 from backend.main import app
+from backend.routers import auth as auth_router
 
 
 @pytest.fixture(autouse=True)
@@ -36,15 +40,6 @@ def jwt_env(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret-do-not-use-in-prod")
     monkeypatch.setenv("JWT_ALGORITHM", "HS256")
     monkeypatch.setenv("JWT_EXPIRY_HOURS", "1")
-
-
-@pytest.fixture(autouse=True)
-def fresh_login_limiter():
-    # Every TestClient request comes from the same address, so failed-login
-    # counts would otherwise carry from one test into the next.
-    login_limiter.reset()
-    yield
-    login_limiter.reset()
 
 
 class FakeResult:
@@ -72,6 +67,9 @@ class FakeSession:
         self.session_updates: list[tuple[str, dict]] = []
         # Simulates migration 0023 not being applied yet.
         self.fail_session_insert = False
+        # Invite links (auth_token, migration 0028) and audit entries written.
+        self.tokens: list[dict] = []
+        self.audit: list[dict] = []
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
@@ -86,16 +84,26 @@ class FakeSession:
             new_user = {
                 "user_id": len(self.users) + 1,
                 "email": params["email"],
-                "password_hash": params["password_hash"],
+                "password_hash": None,  # invite pending until the link is used
                 "full_name": params["full_name"],
                 "role": params["role"],
             }
             self.users.append(new_user)
             return FakeResult({
                 "user_id": new_user["user_id"],
-                "role": new_user["role"],
+                "email": new_user["email"],
                 "full_name": new_user["full_name"],
+                "role": new_user["role"],
+                "created_at": datetime(2026, 9, 28, tzinfo=timezone.utc),
             })
+        if "INSERT INTO auth_token" in sql:
+            self.tokens.append(dict(params))
+            return FakeResult({"expires_at": datetime.now(timezone.utc) + timedelta(minutes=params["minutes"])})
+        if "UPDATE auth_token" in sql:
+            return FakeResult(None)
+        if "INSERT INTO audit_log" in sql:
+            self.audit.append(dict(params))
+            return FakeResult(None)
         if "INSERT INTO user_session" in sql:
             if self.fail_session_insert:
                 raise ProgrammingError(sql, params, Exception('relation "user_session" does not exist'))
@@ -222,24 +230,25 @@ def test_missing_secret_key_raises(monkeypatch):
         )
 
 
-# --- deps.get_current_user --------------------------------------------
+# --- deps.get_token_payload (the signature half of get_current_user;
+# the database half is tested in test_accounts.py) --------------------------
 
 
-def test_get_current_user_rejects_missing_header():
+def test_token_payload_rejects_missing_header():
     with pytest.raises(HTTPException) as exc_info:
-        get_current_user(authorization=None)
+        get_token_payload(authorization=None)
     assert exc_info.value.status_code == 401
 
 
-def test_get_current_user_rejects_malformed_header():
+def test_token_payload_rejects_malformed_header():
     with pytest.raises(HTTPException) as exc_info:
-        get_current_user(authorization="not-a-bearer-token")
+        get_token_payload(authorization="not-a-bearer-token")
     assert exc_info.value.status_code == 401
 
 
-def test_get_current_user_accepts_valid_token():
+def test_token_payload_accepts_valid_token():
     token = admin_token()
-    payload = get_current_user(authorization=f"Bearer {token}")
+    payload = get_token_payload(authorization=f"Bearer {token}")
     assert payload.role == "admin"
     assert payload.email == "admin@ssmcapstone.com"
 
@@ -280,48 +289,91 @@ def test_login_unknown_email_same_error_as_wrong_password(client):
     assert resp.json()["detail"] == wrong_pw_resp.json()["detail"]
 
 
+def test_unknown_email_still_costs_a_password_check(client, monkeypatch):
+    """Skipping bcrypt for unknown emails made them answer ~0.2s faster than
+    real ones, which gave away which emails have accounts."""
+    spent = []
+    monkeypatch.setattr(auth_router, "spend_password_check_time", spent.append)
+    client.post("/auth/login", json={"email": "nobody@ssmcapstone.com", "password": "whatever123"})
+    assert spent == ["whatever123"]
+
+
+def test_invited_account_cannot_sign_in_before_setting_a_password(client, fake_users, monkeypatch):
+    fake_users.append({"user_id": 2, "email": "invited@ssmcapstone.com", "password_hash": None,
+                       "full_name": "Invited User", "role": "staff"})
+    spent = []
+    monkeypatch.setattr(auth_router, "spend_password_check_time", spent.append)
+    resp = client.post("/auth/login", json={"email": "invited@ssmcapstone.com", "password": "anything123"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Incorrect email or password."
+    assert spent  # the same bcrypt work as a wrong password
+
+
 # --- POST /auth/register -------------------------------------------------
+
+NEW_USER = {"email": "new@ssmcapstone.com", "full_name": "New User", "role": "staff"}
 
 
 def test_register_requires_auth(client):
-    resp = client.post(
-        "/auth/register",
-        json={"email": "new@ssmcapstone.com", "password": "supersecret1", "full_name": "New User"},
-    )
+    resp = client.post("/auth/register", json=NEW_USER)
     assert resp.status_code == 401
 
 
 def test_register_forbidden_for_non_admin(client):
     resp = client.post(
-        "/auth/register",
-        json={"email": "new@ssmcapstone.com", "password": "supersecret1", "full_name": "New User"},
-        headers={"Authorization": f"Bearer {staff_token()}"},
+        "/auth/register", json=NEW_USER, headers={"Authorization": f"Bearer {staff_token()}"}
     )
     assert resp.status_code == 403
 
 
-def test_register_success_for_admin(client, fake_users):
+def test_register_invites_without_a_password(client, fake_session, fake_users, outbox):
     resp = client.post(
-        "/auth/register",
-        json={
-            "email": "new@ssmcapstone.com",
-            "password": "supersecret1",
-            "full_name": "New User",
-            "role": "staff",
-        },
-        headers={"Authorization": f"Bearer {admin_token()}"},
+        "/auth/register", json=NEW_USER, headers={"Authorization": f"Bearer {admin_token()}"}
     )
     assert resp.status_code == 201
     body = resp.json()
-    assert body["role"] == "staff"
-    assert body["full_name"] == "New User"
-    assert any(u["email"] == "new@ssmcapstone.com" for u in fake_users)
+    assert body["user"]["role"] == "staff"
+    assert body["user"]["full_name"] == "New User"
+    assert body["user"]["status"] == "invited"
+    # Emailed, so the admin never sees the link.
+    assert body["email_sent"] is True and body["setup_link"] is None
+    assert "access_token" not in body  # the admin no longer gets a login token for the new account
+    new = next(u for u in fake_users if u["email"] == "new@ssmcapstone.com")
+    assert new["password_hash"] is None
+    assert [m["to"] for m in outbox] == ["new@ssmcapstone.com"]
+    assert "/set-password#token=" in outbox[0]["body"] and "48 hours" in outbox[0]["body"]
+    assert fake_session.tokens[0]["purpose"] == "invite" and fake_session.tokens[0]["created_by"] == 1
+    assert fake_session.audit[-1]["action"] == "Add User"
+    assert fake_session.audit[-1]["user_email"] == "admin@ssmcapstone.com"
+
+
+def test_register_hands_back_the_link_when_email_fails(client, monkeypatch):
+    def fail(to, subject, body):
+        raise mailer.MailError("Email isn't set up on the server yet, so nothing was sent.")
+
+    monkeypatch.setattr(mailer, "send", fail)
+    body = client.post(
+        "/auth/register", json=NEW_USER, headers={"Authorization": f"Bearer {admin_token()}"}
+    ).json()
+    assert body["email_sent"] is False
+    assert "/set-password#token=" in body["setup_link"]
+    assert body["email_problem"] == "Email isn't set up on the server yet, so nothing was sent."
+
+
+def test_register_refuses_a_password(client):
+    """Admins no longer choose passwords for other people."""
+    resp = client.post(
+        "/auth/register",
+        json={**NEW_USER, "password": "supersecret1"},
+        headers={"Authorization": f"Bearer {admin_token()}"},
+    )
+    assert resp.status_code == 422
 
 
 def test_register_conflict_on_existing_email(client):
     resp = client.post(
         "/auth/register",
-        json={"email": "admin@ssmcapstone.com", "password": "supersecret1", "full_name": "Dupe"},
+        json={**NEW_USER, "email": "admin@ssmcapstone.com"},
         headers={"Authorization": f"Bearer {admin_token()}"},
     )
     assert resp.status_code == 409
@@ -330,21 +382,7 @@ def test_register_conflict_on_existing_email(client):
 def test_register_rejects_invalid_role(client):
     resp = client.post(
         "/auth/register",
-        json={
-            "email": "new@ssmcapstone.com",
-            "password": "supersecret1",
-            "full_name": "New User",
-            "role": "superuser",
-        },
-        headers={"Authorization": f"Bearer {admin_token()}"},
-    )
-    assert resp.status_code == 422
-
-
-def test_register_rejects_short_password(client):
-    resp = client.post(
-        "/auth/register",
-        json={"email": "new@ssmcapstone.com", "password": "short", "full_name": "New User"},
+        json={**NEW_USER, "role": "superuser"},
         headers={"Authorization": f"Bearer {admin_token()}"},
     )
     assert resp.status_code == 422
@@ -353,7 +391,7 @@ def test_register_rejects_short_password(client):
 def test_register_rejects_blank_full_name(client):
     resp = client.post(
         "/auth/register",
-        json={"email": "new@ssmcapstone.com", "password": "supersecret1", "full_name": ""},
+        json={**NEW_USER, "full_name": ""},
         headers={"Authorization": f"Bearer {admin_token()}"},
     )
     assert resp.status_code == 422
@@ -380,13 +418,16 @@ def test_login_opens_a_session_and_the_token_carries_its_id(client, fake_session
     assert auth_utils.decode_access_token(token).session_id == opened["session_id"]
 
 
-def test_login_still_succeeds_when_the_session_table_is_missing(client, fake_session):
-    """Session tracking is best-effort: an unapplied migration must not lock
-    everyone out. The token just carries no session id."""
+def test_login_is_refused_when_its_session_cannot_be_recorded(client, fake_session):
+    """Every request now checks the session, so a token without one could
+    never be signed out; refusing the sign-in is the safe answer."""
     fake_session.fail_session_insert = True
-    token = _login(client)
+    resp = client.post(
+        "/auth/login",
+        json={"email": "admin@ssmcapstone.com", "password": "correct-horse-battery-staple"},
+    )
+    assert resp.status_code == 503
     assert fake_session.rolled_back
-    assert auth_utils.decode_access_token(token).session_id is None
 
 
 def test_heartbeat_closes_an_idle_session_first_then_extends_it(client, fake_session):
@@ -426,13 +467,17 @@ GOOD = {"email": "admin@ssmcapstone.com", "password": "correct-horse-battery-sta
 BAD = {"email": "admin@ssmcapstone.com", "password": "wrong-password"}
 
 
-def test_fifth_wrong_password_locks_the_email(client):
+def test_fifth_wrong_password_locks_the_email(client, fake_session):
     for _ in range(MAX_FAILURES_PER_EMAIL - 1):
         assert client.post("/auth/login", json=BAD).status_code == 401
     locked = client.post("/auth/login", json=BAD)
     assert locked.status_code == 429
     assert locked.json()["detail"] == "Too many failed sign-in attempts. Try again in 15 minutes."
     assert locked.headers["Retry-After"] == "900"
+    # The lock is on the record for admins, under the email that was tried.
+    assert [(a["action"], a["user_email"]) for a in fake_session.audit] == [
+        ("Sign-in Locked", "admin@ssmcapstone.com")
+    ]
 
 
 def test_correct_password_is_refused_while_locked(client, fake_session):
