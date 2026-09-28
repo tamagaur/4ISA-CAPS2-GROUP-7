@@ -1,4 +1,11 @@
--- analytics/db/migrations/0028_account_invites_and_session_revocation.sql
+-- analytics/db/migrations/0029_account_invites_and_session_revocation.sql
+--
+-- Numbered 0029: written as 0028 alongside kelvin-etl's
+-- 0028_value_source_rmr_returns_dm_brand_rule.sql, which reached the public
+-- ledger first (2026-09-28). run_canonical_load.py refuses two files with one
+-- number. This file was applied to public by hand in the SQL Editor on
+-- 2026-09-28 under its old name, so the ledger has no row for it; it is safe
+-- to run again (see the last paragraph below).
 --
 -- Backs the 2026-09-28 sign-in changes (Part D of the security review):
 --

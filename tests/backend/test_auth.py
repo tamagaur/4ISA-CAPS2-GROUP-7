@@ -67,7 +67,7 @@ class FakeSession:
         self.session_updates: list[tuple[str, dict]] = []
         # Simulates migration 0023 not being applied yet.
         self.fail_session_insert = False
-        # Invite links (auth_token, migration 0028) and audit entries written.
+        # Invite links (auth_token, migration 0029) and audit entries written.
         self.tokens: list[dict] = []
         self.audit: list[dict] = []
 

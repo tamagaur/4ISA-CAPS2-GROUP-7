@@ -29,7 +29,7 @@ CLOSE_IF_IDLE_SQL = """
        AND last_seen_at < now() - make_interval(mins => :idle_minutes)
 """
 
-# end_reason 'revoked' needs migration 0028.
+# end_reason 'revoked' needs migration 0029.
 REVOKE_USER_SESSIONS_SQL = """
     UPDATE user_session SET ended_at = now(), end_reason = 'revoked'
      WHERE user_id = :user_id AND ended_at IS NULL
