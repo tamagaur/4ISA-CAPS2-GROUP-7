@@ -283,15 +283,48 @@ def coerce_is_demo_column(df: pd.DataFrame) -> pd.DataFrame:
     not fabrication of an unknown value, just making a known fact
     insertable. `caught via the actual first real-load attempt against
     unilever_sku_demand_fact - NotNullViolation on a real 2023-01 La Union
-    row (sku_code 20292808), not a hypothetical."""
+    row (sku_code 20292808), not a hypothetical.
+
+    PROVENANCE GUARD (2026-09-28): the cell is not trusted for a row whose
+    source is synthetic (_src_file under data/raw/Synthetic Data/, or a
+    generator's GENERATED_BACKFILL_* name - SYNTHETIC_SOURCE_RE). Such a row
+    loads as is_demo = true whatever the cell says, and a synthetic row with
+    NO is_demo value raises: "absent = real" holds for real files only, so a
+    blank flag on a synthetic source is a broken source, never a real row."""
+    synthetic = is_synthetic_source(df)
     if "is_demo" not in df.columns:
+        if synthetic.any():
+            raise SyntheticProvenanceError(_blank_flag_message(df, synthetic))
         return df
     out = df.copy()
     col = out["is_demo"]
+    blank = col.isna() | col.astype(str).str.strip().isin({"", "nan", "None", "<NA>"})
+    if (synthetic & blank).any():
+        raise SyntheticProvenanceError(_blank_flag_message(df, synthetic & blank))
     is_true = col.astype(str).str.strip().str.lower().isin({"true", "1", "yes"})
     out["is_demo"] = False
-    out.loc[is_true, "is_demo"] = True
+    out.loc[is_true | synthetic, "is_demo"] = True
     return out
+
+
+SYNTHETIC_SOURCE_RE = re.compile(r"^(?:data[/\\]raw[/\\]Synthetic Data[/\\]|GENERATED_BACKFILL_)")
+
+
+class SyntheticProvenanceError(ValueError):
+    """A row from a synthetic source carries no is_demo value."""
+
+
+def is_synthetic_source(df: pd.DataFrame) -> pd.Series:
+    """True where the row's _src_file is a synthetic source (see SYNTHETIC_SOURCE_RE)."""
+    if "_src_file" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["_src_file"].astype(str).str.match(SYNTHETIC_SOURCE_RE)
+
+
+def _blank_flag_message(df: pd.DataFrame, mask: pd.Series) -> str:
+    files = sorted(df.loc[mask, "_src_file"].astype(str).unique())
+    return (f"{int(mask.sum())} row(s) from a synthetic source have no is_demo value - refusing to load them as real: "
+            f"{files[:5]}{' ...' if len(files) > 5 else ''}")
 
 
 def backfill_provenance_fields(df: pd.DataFrame, fields: tuple[str, ...] = ("principal", "region")) -> pd.DataFrame:
