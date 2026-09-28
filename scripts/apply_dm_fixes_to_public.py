@@ -225,12 +225,35 @@ def undo(cur, T: str, log: dict) -> None:
         for r in entry["old"]:
             cur.execute(f"UPDATE {T}.{t} SET {', '.join(f'{c} = %s' for c in entry['cols'])} WHERE {entry['key']} = %s", (*r[1:], r[0]))
     for t, rows in log.get("deleted", {}).items():
+        if isinstance(rows, dict) and "restore_from_backup" in rows:
+            restore_rows_from_backup(cur, T, Path(log["backup_dir"]), t, rows)
+            continue
         if rows:
             cols = list(rows[0])
             cur.execute(f"""INSERT INTO {T}.{t} ({', '.join(cols)}) OVERRIDING SYSTEM VALUE
                             SELECT {', '.join(cols)} FROM json_populate_recordset(NULL::{T}.{t}, %s::json)""", (json.dumps(rows),))
     if log.get("migrations_applied"):
         cur.execute(f"DELETE FROM {T}.schema_migrations WHERE filename = ANY(%s)", (log["migrations_applied"],))
+
+
+def restore_rows_from_backup(cur, T: str, backup_dir: Path, t: str, entry: dict) -> None:
+    """Re-inserts deleted rows from the batch's own CSV backup (an upload - the pooler stalls large downloads, so a
+    batch that deletes thousands of rows logs {"restore_from_backup": <where>, "rows": n[, "key", "keys"]} instead of
+    returning the rows). Original keys kept (OVERRIDING SYSTEM VALUE); the count must match the log."""
+    m = json.loads((backup_dir / "manifest.json").read_text(encoding="utf-8"))["tables"][t]
+    cols = ", ".join(m["columns"])
+    cur.execute(f"CREATE TEMP TABLE bk_restore (LIKE {T}.{t}) ON COMMIT DROP")
+    with open(backup_dir / f"{t}.csv", encoding="utf-8", newline="") as fh:
+        cur.copy_expert(f"COPY bk_restore ({cols}) FROM STDIN WITH (FORMAT csv, HEADER true, NULL '\\N')", fh)
+    where = entry["restore_from_backup"]
+    if entry.get("keys") is not None:
+        cur.execute(f"INSERT INTO {T}.{t} ({cols}) OVERRIDING SYSTEM VALUE SELECT {cols} FROM bk_restore "
+                    f"WHERE ({where}) AND {entry['key']} = ANY(%s)", (entry["keys"],))
+    else:
+        cur.execute(f"INSERT INTO {T}.{t} ({cols}) OVERRIDING SYSTEM VALUE SELECT {cols} FROM bk_restore WHERE {where}")
+    if cur.rowcount != entry["rows"]:
+        raise RuntimeError(f"restore {t}: re-inserted {cur.rowcount} rows from the backup, the change log has {entry['rows']}")
+    cur.execute("DROP TABLE bk_restore")
 
 
 def compare(cur, A: str, B: str, t: str) -> list[int]:
@@ -581,22 +604,26 @@ BATCHES = {
 
 # --- runner -------------------------------------------------------------------------------------------------
 
-def run_batch(conn, cur, T: str, batch_id: int, rehearse: bool, against: str | None) -> int:
-    description, writes, fn = BATCHES[batch_id]
+def run_batch(conn, cur, T: str, batch_id: int, rehearse: bool, against: str | None,
+              batches: dict | None = None, prefix: str | None = None) -> int:
+    """`batches` / `prefix`: another runner's batch list and ledger run_id prefix (scripts/apply_synth_v2_cutover.py);
+    default this module's."""
+    batches, prefix = batches or BATCHES, prefix or RUN_PREFIX
+    description, writes, fn = batches[batch_id]
     ensure_ledger(conn, cur, T)
-    mine = [r for r in ledger_rows(cur, T) if r["run_id"].startswith(RUN_PREFIX)]
+    mine = [r for r in ledger_rows(cur, T) if r["run_id"].startswith(prefix)]
     run_id = max((r["run_id"] for r in mine), default=None) or \
-        f"{RUN_PREFIX}{'rehearsal_' if rehearse else ''}{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        f"{prefix}{'rehearsal_' if rehearse else ''}{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     done = {r["batch_id"] for r in mine if r["run_id"] == run_id and r["status"] == "done"}
     if batch_id in done:
         print(f"batch {batch_id} already done on {run_id}, skipped")
         return 0
-    if [b for b in BATCHES if b < batch_id and b not in done]:
+    if [b for b in batches if b < batch_id and b not in done]:
         sys.exit(f"refusing batch {batch_id}: earlier batches not done on {run_id}")
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = REPO / "backups" / run_id / f"b{batch_id}_{stamp}"
     if not rehearse:
-        rehearsed = [r for r in ledger_rows(cur, against) if r["run_id"].startswith(RUN_PREFIX) and r["batch_id"] == batch_id and r["status"] == "done"]
+        rehearsed = [r for r in ledger_rows(cur, against) if r["run_id"].startswith(prefix) and r["batch_id"] == batch_id and r["status"] == "done"]
         if not rehearsed:
             sys.exit(f"refusing: batch {batch_id} has not been rehearsed on {against}")
         scratch_backup = Path(rehearsed[-1]["change_log"]["backup_dir"])
@@ -621,7 +648,7 @@ def run_batch(conn, cur, T: str, batch_id: int, rehearse: bool, against: str | N
                   csv_md5_without(backup_dir / f"{t}.csv", drop), csv_md5_without(scratch_backup / f"{t}.csv", drop))
 
     def apply() -> dict:
-        log = {"inserted": {}, "updated": {}, "deleted": {}, "migrations_applied": []}
+        log = {"inserted": {}, "updated": {}, "deleted": {}, "migrations_applied": [], "backup_dir": str(backup_dir)}
         before = isolation(cur, T, writes)
         expected, applied = fn(cur, T, check, log)
         check(f"batch {batch_id} rows applied", applied, expected)
@@ -665,6 +692,11 @@ def run_batch(conn, cur, T: str, batch_id: int, rehearse: bool, against: str | N
         conn.commit()
         return 1
     log["_checks"], log["backup_dir"] = checks, str(backup_dir)
+    # the full undo log goes to disk BEFORE the commit; the ledger keeps it too, except that a deleted-row list over
+    # 1,000 rows is replaced there by its count and md5 (rollback() reads changes.json)
+    (backup_dir / "changes.json").write_text(json.dumps(log, indent=2, default=str), encoding="utf-8")
+    ledger_log = {**log, "deleted": {t: v if len(v) <= 1000 else {"rows": len(v), "md5": hashlib.md5(json.dumps(v, default=str).encode()).hexdigest(),
+                                                                   "full_list": "changes.json"} for t, v in log["deleted"].items()}}
     after_md5 = hashlib.md5(json.dumps({t: fingerprint(cur, T, t, "TRUE") for t in writes}).encode()).hexdigest()
     cur.execute(f"""INSERT INTO {T}.{LEDGER} (run_id, target_schema, batch_id, description, table_name, expected_rows, applied_rows,
                     checksum_before, checksum_after, started_at, finished_at, status, change_log)
@@ -672,9 +704,8 @@ def run_batch(conn, cur, T: str, batch_id: int, rehearse: bool, against: str | N
                     SET expected_rows = EXCLUDED.expected_rows, applied_rows = EXCLUDED.applied_rows, checksum_before = EXCLUDED.checksum_before,
                         checksum_after = EXCLUDED.checksum_after, finished_at = now(), status = 'done', change_log = EXCLUDED.change_log""",
                 (run_id, T, batch_id, description, ",".join(writes), log["_expected"], log["_applied"],
-                 "|".join(f"{t}:{m['md5']}" for t, m in manifest["tables"].items()), after_md5, started, json.dumps(log, default=str)))
+                 "|".join(f"{t}:{m['md5']}" for t, m in manifest["tables"].items()), after_md5, started, json.dumps(ledger_log, default=str)))
     conn.commit()
-    (backup_dir / "changes.json").write_text(json.dumps(log, indent=2, default=str), encoding="utf-8")
     for name, got, want, _ in checks:
         print(f"  ok  {name}: {got}")
     print(f"batch {batch_id} {description}: {log['_applied']}/{log['_expected']} rows, {len(checks)} checks ok, committed ({run_id})")
