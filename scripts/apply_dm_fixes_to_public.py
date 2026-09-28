@@ -78,15 +78,25 @@ def pk_of(cur, T: str, t: str) -> str:
                         WHERE i.indrelid = '{T}.{t}'::regclass AND i.indisprimary""")
 
 
-def fingerprint(cur, T: str, t: str, where: str) -> list:
+def fingerprint(cur, T: str, t: str, where: str, cols: list[str] | None = None) -> list:
+    """[rows, md5 over every matching row in primary-key order] - over the named columns when given, so a column a
+    migration adds does not change the fingerprint of rows whose values did not change."""
     pk = pk_of(cur, T, t)
-    cur.execute(f"SELECT COUNT(*), md5(COALESCE(string_agg(md5(x::text), '' ORDER BY x.{pk}), '')) FROM {T}.{t} x WHERE {where}")
+    row = "x::text" if cols is None else "ROW(" + ", ".join(f'x."{c}"' for c in cols) + ")::text"
+    cur.execute(f"SELECT COUNT(*), md5(COALESCE(string_agg(md5({row}), '' ORDER BY x.{pk}), '')) FROM {T}.{t} x WHERE {where}")
     return list(cur.fetchone())
 
 
-def isolation(cur, T: str, writes: list[str]) -> dict:
-    return {f"{t}|{w}": fingerprint(cur, T, t, w) for t, w in ISOLATION
-            if t not in writes and one(cur, "SELECT to_regclass(%s) IS NOT NULL", (f"{T}.{t}",))}
+def isolation(cur, T: str, writes: list[str], cols: dict | None = None) -> dict:
+    """{"table|where": [cols, fingerprint]} for every ISOLATION table the batch does not write to. `cols` pins the
+    column list to the one taken before the batch (a migration may have added columns since)."""
+    out = {}
+    for t, w in ISOLATION:
+        if t in writes or not one(cur, "SELECT to_regclass(%s) IS NOT NULL", (f"{T}.{t}",)):
+            continue
+        c = (cols or {}).get(f"{t}|{w}") or columns(cur, T, t)
+        out[f"{t}|{w}"] = [c, fingerprint(cur, T, t, w, c)]
+    return out
 
 
 def build_scratch(cur, R: str) -> None:
@@ -340,6 +350,210 @@ def b2_signoff_block_codes(cur, T, check, log):
     return 138 + 184 + 184, len(keys) + len(ins) + len(gone)
 
 
+MIGRATION_0028 = "0028_value_source_rmr_returns_dm_brand_rule.sql"
+
+
+def apply_migration(cur, T: str, name: str, log: dict) -> None:
+    """Same ledger discipline as apply_real_recovery_to_public.apply_migrations: sha256 of the raw file recorded in
+    the same transaction; an already-recorded file is skipped, an edited one aborts."""
+    from scripts.run_canonical_load import _strip_sql_file
+    path = REPO / "analytics" / "db" / "migrations" / name
+    checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+    hit = _rows(cur, f"SELECT checksum FROM {T}.schema_migrations WHERE filename = %s", (name,))
+    if hit:
+        if hit[0][0] != checksum:
+            raise RuntimeError(f"{name} is recorded in {T}.schema_migrations with a different checksum")
+        return
+    cur.execute(f"SET LOCAL search_path TO {T}, public")
+    cur.execute(_strip_sql_file(path.read_text(encoding="utf-8")))
+    cur.execute("SET LOCAL search_path TO public")
+    cur.execute(f"INSERT INTO {T}.schema_migrations (filename, checksum, applied_at, applied_by, target_schema) VALUES (%s, %s, now(), %s, %s)",
+                (name, checksum, "apply_dm_fixes_to_public", T))
+    log["migrations_applied"].append(name)
+
+
+def b3_valuation_from_cost(cur, T, check, log):
+    apply_migration(cur, T, MIGRATION_0028, log)
+    check("B3 migration 0028 recorded", one(cur, f"SELECT COUNT(*) FROM {T}.schema_migrations WHERE filename = %s", (MIGRATION_0028,)), 1)
+    check("B3 real Del Monte rows carrying both valuation and cost where they differ",
+          one(cur, f"SELECT COUNT(*) FROM {T}.inventory_fact WHERE NOT is_demo AND principal = 'delmonte' AND valuation <> cost"), 0)
+    rows = _rows(cur, f"""SELECT inventory_key, valuation, valuation_source FROM {T}.inventory_fact
+                          WHERE valuation IS NULL AND cost IS NOT NULL ORDER BY inventory_key""")
+    keys = [r[0] for r in rows]
+    check("B3 target rows that are real Del Monte", one(cur, f"SELECT COUNT(*) FROM {T}.inventory_fact WHERE inventory_key = ANY(%s) AND NOT is_demo AND principal = 'delmonte'", (keys,)), 209)
+    log["updated"]["inventory_fact"] = {"key": "inventory_key", "cols": ["valuation", "valuation_source"], "old": [list(r) for r in rows]}
+    cur.execute(f"UPDATE {T}.inventory_fact SET valuation = cost, valuation_source = 'derived_cost' WHERE inventory_key = ANY(%s)", (keys,))
+    n = cur.rowcount
+    check("B3 valuation of the derived rows", one(cur, f"SELECT SUM(valuation)::text FROM {T}.inventory_fact WHERE inventory_key = ANY(%s)", (keys,)), "3279006.23")
+    check("B3 derived rows per sheet", dict(_rows(cur, f"""SELECT _src_sheet, COUNT(*) FROM {T}.inventory_fact WHERE valuation_source = 'derived_cost'
+                                                            GROUP BY 1 ORDER BY 1""")), {"ILOCOS INVENTORY SIGNOFF": 200, "PANGASINAN INVENTORY SIGNOFF": 9})
+    check("B3 rows still with cost but no valuation", one(cur, f"SELECT COUNT(*) FROM {T}.inventory_fact WHERE valuation IS NULL AND cost IS NOT NULL"), 0)
+    return 209, n
+
+
+RMR_PERIODS = ("2025-10", "2025-11")
+
+
+def rmr_return_lines():
+    """The GS and BO sheets of the real Oct/Nov 2025 RMR GS & BO exports (the ONE PAGER is their union, not loaded),
+    through rmr_gs_bo's column map. A line is a row with a parsable Invoice Date and a numeric Net Amount - the rest
+    are each sheet's TOTAL, 'Prepared by' and signature rows. Returns (lines with a Return Slip #, lines without)."""
+    import pandas as pd
+    from analytics.etl import transform
+    from scripts.run_canonical_load import STAGING_DIR
+    files = [f for f in sorted((STAGING_DIR / "rmr_gs_bo").glob("*.parquet")) if not f.name.startswith("SYNTH")]
+    raw = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    raw = raw[raw["_period"].isin(RMR_PERIODS) & raw["_sheet_role"].isin(["gs", "bo"])]
+    mapped, _ = transform.apply_column_map(raw, "rmr_gs_bo", transform.DEFAULT_CONFIG_DIR)
+    amount = pd.to_numeric(mapped["net_amount"], errors="coerce")
+    date = pd.to_datetime(mapped["invoice_date"], errors="coerce")
+    lines = mapped[amount.notna() & date.notna()].copy()
+    lines["net_amount"], lines["invoice_date"] = amount[lines.index], date[lines.index].dt.date
+    return lines[lines["return_slip_num"].notna()], lines[lines["return_slip_num"].isna()]
+
+
+def b4_rmr_returns(cur, T, check, log):
+    from scripts.run_canonical_load import _json_safe_row
+    lines, no_slip = rmr_return_lines()
+    check("B4 real return rows already in Oct/Nov 2025", one(cur, f"SELECT COUNT(*) FROM {T}.salesreturn_fact WHERE NOT is_demo AND _period = ANY(%s)", (list(RMR_PERIODS),)), 0)
+    check("B4 RMR slips already in salesreturn_fact", one(cur, f"SELECT COUNT(*) FROM {T}.salesreturn_fact WHERE return_slip_num = ANY(%s)", (list(lines["return_slip_num"]),)), 0)
+    check("B4 lines whose Return Type differs from their sheet (GS/BO)", int((lines["return_type"].str.upper() != lines["_sheet_role"].str.upper()).sum()), 0)
+    check("B4 lines whose invoice month differs from the export month", int((lines["invoice_date"].map(lambda x: x.strftime("%Y-%m")) != lines["_period"]).sum()), 0)
+    keys = []
+    for r in lines.to_dict("records"):
+        cur.execute(f"""INSERT INTO {T}.salesreturn_fact (return_slip_num, invoice_num, return_type, return_date, principal, region, net_amount,
+                            bo_units, _src_file, _src_sheet, _period, is_demo, quantity_cases, quantity_pieces, source, _row_ordinal, invoice_date, customer_name)
+                        VALUES (%s, NULL, %s, NULL, 'delmonte', %s, %s, NULL, %s, %s, %s, false, NULL, NULL, 'rmr', %s, %s, %s) RETURNING return_key""",
+                    (r["return_slip_num"], r["return_type"].upper(), r["_region"], r["net_amount"], r["_src_file"], r["_src_sheet"], r["_period"],
+                     int(r["_row_ordinal"]), r["invoice_date"], r["customer_name"]))
+        keys.append(cur.fetchone()[0])
+    log["inserted"]["salesreturn_fact"] = keys
+    new = f"SELECT * FROM {T}.salesreturn_fact WHERE return_key = ANY(%s)"
+    check("B4 RMR lines inserted", len(keys), 224)
+    check("B4 net_amount of the inserted lines", one(cur, f"SELECT SUM(net_amount)::text FROM ({new}) x", (keys,)), "1439087.79")
+    check("B4 inserted lines per month / type", {f"{p} {t}": n for p, t, n in _rows(cur, f"SELECT _period, return_type, COUNT(*) FROM ({new}) x GROUP BY 1, 2 ORDER BY 1, 2", (keys,))},
+          {"2025-10 BO": 64, "2025-10 GS": 72, "2025-11 BO": 20, "2025-11 GS": 68})
+    check("B4 inserted lines per region", dict(_rows(cur, f"SELECT region, COUNT(*) FROM ({new}) x GROUP BY 1 ORDER BY 1", (keys,))),
+          {"ilocos": int((lines["_region"] == "ilocos").sum()), "pangasinan": int((lines["_region"] == "pangasinan").sum())})
+    check("B4 duplicate RMR line keys", one(cur, f"""SELECT COUNT(*) FROM (SELECT 1 FROM {T}.salesreturn_fact WHERE source = 'rmr'
+                                                     GROUP BY _src_file, _src_sheet, _row_ordinal, invoice_date, customer_name, net_amount HAVING COUNT(*) > 1) x"""), 0)
+    q = []
+    for _, r in no_slip.iterrows():
+        cur.execute(f"""INSERT INTO {T}.etl_quarantine (run_id, table_name, rule, reason, _src_file, _src_sheet, _row_ordinal, is_demo, raw_values)
+                        VALUES ('dm_fixes_2026-09-28/b4', 'salesreturn_fact', 'rmr_line_without_return_slip', %s, %s, %s, %s, false, %s::jsonb)
+                        RETURNING quarantine_key""",
+                    ("RMR GS & BO line with no Return Slip #: the dedupe rule against a later sales-return file keys on the slip "
+                     "(migration 0028), so the line is held rather than loaded; it also appears on the export's ONE PAGER",
+                     r["_src_file"], r["_src_sheet"], int(r["_row_ordinal"]), _json_safe_row(r)))
+        q.append(cur.fetchone()[0])
+    log["inserted"]["etl_quarantine"] = q
+    check("B4 RMR lines without a Return Slip # quarantined", len(q), 2)
+    check("B4 net_amount of the quarantined lines", f"{no_slip['net_amount'].sum():.2f}", "1203.60")
+    return 226, len(keys) + len(q)
+
+
+def b5_pack_size(cur, T, check, log):
+    """CASE PACK from the price list (the 'Sheet1' of the 2025 inventory workbooks, six identical copies), on
+    EXACT sku_code = PRODUCT/ SKU CODE text matches only - no 5-digit-core matching."""
+    import pandas as pd
+    from scripts.run_canonical_load import STAGING_DIR, _pack_size_text
+    copies = [pd.read_parquet(f) for f in sorted((STAGING_DIR / "inventory_sign_off").glob("2025_*__Sheet1.parquet"))]
+    lists = [dict(zip(c["PRODUCT/ SKU CODE"].astype(str).str.strip(), c["CASE PACK"])) for c in copies]
+    check("B5 price-list copies, all identical on code -> CASE PACK", [len(copies), all(x == lists[0] for x in lists)], [6, True])
+    price = {k: _pack_size_text(v) for k, v in lists[0].items()}
+    rows = _rows(cur, f"""SELECT product_key, sku_code, pack_size FROM {T}.product_dimension
+                          WHERE principal = 'delmonte' AND grain = 'sku' AND sku_code = ANY(%s) ORDER BY product_key""", (list(price),))
+    check("B5 Del Monte SKUs whose sku_code equals a price-list code exactly", len(rows), 187)
+    check("B5 of those, pack_size already set (would be overwritten)", sum(1 for r in rows if r[2] is not None), 0)
+    log["updated"]["product_dimension"] = {"key": "product_key", "cols": ["pack_size"], "old": [[k, p] for k, _, p in rows]}
+    n = 0
+    for k, code, _ in rows:
+        cur.execute(f"UPDATE {T}.product_dimension SET pack_size = %s WHERE product_key = %s", (price[code], k))
+        n += cur.rowcount
+    got = dict(sorted(_rows(cur, f"SELECT pack_size, COUNT(*) FROM {T}.product_dimension WHERE product_key = ANY(%s) GROUP BY 1",
+                            ([r[0] for r in rows],))))
+    want = pd.Series([price[c] for _, c, _ in rows]).value_counts().sort_index().to_dict()
+    check("B5 pack sizes set, by value", got, dict(sorted(want.items())))
+    check("B5 updated rows referenced by real inventory", one(cur, f"""SELECT COUNT(*) FROM {T}.product_dimension p WHERE p.product_key = ANY(%s)
+        AND EXISTS (SELECT 1 FROM {T}.inventory_fact f WHERE f.product_key = p.product_key AND NOT f.is_demo)""", ([r[0] for r in rows],)), 187)
+    return 187, n
+
+
+DM_BRAND_ALIAS = REPO / "config" / "alias_tables" / "delmonte_brand.csv"
+_DM_BRAND_SKIP = __import__("re").compile(r"^(?:[0-9A-Z]{3,4}\d{5}|\d+|-)$")
+DM_BRAND_EXPECTED = {"CONTADINA": 6, "DEL MONTE": 457, "FIT 'N RIGHT": 40, "KIKKOMAN": 30, "MM": 6, "QNE": 1, "SIGNATURE": 1, "TODAY'S": 13}
+
+
+def dm_brand(name: str, alias: dict) -> str | None:
+    """First word of the product name, uppercased; an embedded SKU code, bare number or '-' ahead of the name is
+    skipped. Through config/alias_tables/delmonte_brand.csv: a blank canonical is a descriptive word (brand NULL)."""
+    for word in (name or "").upper().split():
+        if not _DM_BRAND_SKIP.match(word):
+            return alias.get(word, word) or None
+    return None
+
+
+def b6_dm_brand(cur, T, check, log):
+    import csv as _csv
+    with open(DM_BRAND_ALIAS, encoding="utf-8", newline="") as fh:
+        alias = {r["raw"]: r["canonical"] for r in _csv.DictReader(fh)}
+    rows = _rows(cur, f"""SELECT p.product_key, p.product_name, p.brand, p.brand_source FROM {T}.product_dimension p
+                          WHERE p.principal = 'delmonte' AND p.grain = 'sku'
+                            AND EXISTS (SELECT 1 FROM {T}.inventory_fact f WHERE f.product_key = p.product_key AND NOT f.is_demo)
+                          ORDER BY p.product_key""")
+    check("B6 real Del Monte SKUs in scope", len(rows), 597)
+    check("B6 of those, brand or brand_source already set", sum(1 for r in rows if r[2] is not None or r[3] is not None), 0)
+    target = [(k, dm_brand(name, alias)) for k, name, _, _ in rows]
+    target = [(k, b) for k, b in target if b]
+    log["updated"]["product_dimension"] = {"key": "product_key", "cols": ["brand", "brand_source"],
+                                           "old": [[k, b, s] for k, _, b, s in rows if k in {x for x, _ in target}]}
+    n = 0
+    for k, b in target:
+        cur.execute(f"UPDATE {T}.product_dimension SET brand = %s, brand_source = 'dm_name_first_token_rule' WHERE product_key = %s", (b, k))
+        n += cur.rowcount
+    keys = [r[0] for r in rows]
+    check("B6 brands set, per brand", dict(_rows(cur, f"""SELECT brand, COUNT(*) FROM {T}.product_dimension WHERE product_key = ANY(%s)
+                                                           AND brand IS NOT NULL GROUP BY 1 ORDER BY 1""", (keys,))), DM_BRAND_EXPECTED)
+    check("B6 SKUs left without a brand (descriptive first word)", one(cur, f"SELECT COUNT(*) FROM {T}.product_dimension WHERE product_key = ANY(%s) AND brand IS NULL", (keys,)), 43)
+    check("B6 brand_source on the branded rows", dict(_rows(cur, f"""SELECT brand_source, COUNT(*) FROM {T}.product_dimension
+                                                                      WHERE product_key = ANY(%s) GROUP BY 1 ORDER BY 1 NULLS LAST""", (keys,))),
+          {"dm_name_first_token_rule": 554, None: 43})
+    return 554, n
+
+
+H1_SHEET = "PANGASINAN SALES REGISTER (2)"
+
+
+def b7_hold_sheet2_april(cur, T, check, log):
+    """The kept rows of the April-2025 workbook's 'PANGASINAN SALES REGISTER (2)' sheet leave sales_fact for
+    etl_quarantine, NOT re-dated: every invoice on it is dated 2024-09-03..2024-09-30, so it is suspected to be
+    September-2024 data filed under 2025-04, pending SSM. raw_values is the row as loaded, with the customer and
+    salesman names in place of their surrogate keys."""
+    where = f"NOT s.is_demo AND s.principal = 'delmonte' AND s._src_sheet = '{H1_SHEET}' AND s._period = '2025-04'"
+    april = f"SELECT COUNT(*)::text || ' / ' || SUM(net_amount)::text FROM {T}.sales_fact WHERE NOT is_demo AND principal = 'delmonte' AND _period = '2025-04'"
+    check("B7 real Del Monte sales 2025-04 before", one(cur, april), "1526 / 14632089.75")
+    check("B7 invoice dates on the sheet", [str(x) for x in _rows(cur, f"SELECT MIN(invoice_date), MAX(invoice_date) FROM {T}.sales_fact s WHERE {where}")[0]],
+          ["2024-09-03", "2024-09-30"])
+    cur.execute(f"""INSERT INTO {T}.etl_quarantine (run_id, table_name, rule, reason, _src_file, _src_sheet, _row_ordinal, is_demo, raw_values)
+                    SELECT 'dm_fixes_2026-09-28/b7', 'sales_fact', 'hold_pending_ssm[sales_register]',
+                           'sheet ''{H1_SHEET}'' of the April-2025 workbook: every invoice dated 2024-09-03..2024-09-30 - suspected September-2024 '
+                           || 'data filed under 2025-04, awaiting SSM; not re-dated', s._src_file, s._src_sheet, NULL, false,
+                           (to_jsonb(s) - 'sales_key' - 'customer_key' - 'salesman_key')
+                             || jsonb_build_object('customer_name', c.customer_name, 'salesman_name', m.salesman_name)
+                    FROM {T}.sales_fact s LEFT JOIN {T}.customer_dimension c ON c.customer_key = s.customer_key
+                    LEFT JOIN {T}.salesman_dimension m ON m.salesman_key = s.salesman_key
+                    WHERE {where} ORDER BY s.sales_key RETURNING quarantine_key""")
+    log["inserted"]["etl_quarantine"] = [r[0] for r in cur.fetchall()]
+    cur.execute(f"DELETE FROM {T}.sales_fact s WHERE {where} RETURNING row_to_json(s)::text")
+    gone = [json.loads(r[0]) for r in cur.fetchall()]
+    log["deleted"]["sales_fact"] = gone
+    check("B7 rows moved to etl_quarantine", [len(log["inserted"]["etl_quarantine"]), len(gone)], [564, 564])
+    check("B7 net_amount moved", f"{sum(float(r['net_amount']) for r in gone):.2f}", "4932185.22")
+    check("B7 real Del Monte sales 2025-04 after", one(cur, april), "962 / 9699904.53")
+    check("B7 rows of the sheet left in sales_fact (any period)", one(cur, f"SELECT COUNT(*) FROM {T}.sales_fact WHERE NOT is_demo AND _src_sheet = %s", (H1_SHEET,)), 0)
+    return 564 + 564, len(gone) + len(log["inserted"]["etl_quarantine"])
+
+
 def _rows(cur, sql, args=None):
     cur.execute(sql, args)
     return cur.fetchall()
@@ -348,6 +562,11 @@ def _rows(cur, sql, args=None):
 BATCHES = {
     1: ("quarantine record: April-2023 duplicate sales-return file", ["etl_quarantine"], b1_duplicate_return_file),
     2: ("Aug-2023 sign-off sheets keyed on the sign-off block's code (col G/I)", ["inventory_fact", "etl_quarantine"], b2_signoff_block_codes),
+    3: ("migration 0028; valuation = cost where valuation is NULL (valuation_source = 'derived_cost')", ["inventory_fact"], b3_valuation_from_cost),
+    4: ("Oct/Nov 2025 RMR GS & BO return lines into salesreturn_fact (source = 'rmr')", ["salesreturn_fact", "etl_quarantine"], b4_rmr_returns),
+    5: ("Del Monte pack_size from the price list CASE PACK, exact code matches", ["product_dimension"], b5_pack_size),
+    6: ("Del Monte brand / brand_source by the name first-token rule", ["product_dimension"], b6_dm_brand),
+    7: ("hold the 564 'PANGASINAN SALES REGISTER (2)' rows filed under 2025-04", ["sales_fact", "etl_quarantine"], b7_hold_sheet2_april),
 }
 
 
@@ -386,23 +605,31 @@ def run_batch(conn, cur, T: str, batch_id: int, rehearse: bool, against: str | N
             raise RuntimeError("; ".join(f"{n}: got {g}, expected {w}" for n, g, w, _ in failed))
 
     if not rehearse:
-        for t in tables:
-            check(f"{t} before the batch: md5 equals the rehearsal's pre-batch md5 (load timestamps excluded)",
-                  csv_md5_without(backup_dir / f"{t}.csv", SKIP_COMPARE), csv_md5_without(scratch_backup / f"{t}.csv", SKIP_COMPARE))
+        # same columns as compare(): surrogate keys can differ (a failed attempt still advances a sequence)
+        for t in writes:
+            drop = SKIP_COMPARE | {IDENT[t]}
+            check(f"{t} before the batch: md5 equals the rehearsal's pre-batch md5 (identity key and load timestamps excluded)",
+                  csv_md5_without(backup_dir / f"{t}.csv", drop), csv_md5_without(scratch_backup / f"{t}.csv", drop))
 
     def apply() -> dict:
         log = {"inserted": {}, "updated": {}, "deleted": {}, "migrations_applied": []}
         before = isolation(cur, T, writes)
         expected, applied = fn(cur, T, check, log)
         check(f"batch {batch_id} rows applied", applied, expected)
-        after = isolation(cur, T, writes)
-        for k in before:
-            check(f"{k}: untouched", after[k], before[k])
+        after = isolation(cur, T, writes, {k: c for k, (c, _) in before.items()})
+        for k, (c, fp) in before.items():
+            check(f"{k}: untouched", after[k][1], fp)
+            t, w = k.split("|", 1)
+            added = [x for x in columns(cur, T, t) if x not in c]
+            if added:
+                check(f"{t} [{w}]: columns added by this batch {added} hold no value",
+                      one(cur, f"SELECT COUNT(*) FROM {T}.{t} WHERE ({w}) AND (" + " OR ".join(f"{x} IS NOT NULL" for x in added) + ")"), 0)
         log["_expected"], log["_applied"] = expected, applied
         return log
 
     started = datetime.datetime.now(datetime.timezone.utc)
     try:
+        raise_if_failed()  # a failed pre-check stops before the batch writes anything
         log = apply()
         raise_if_failed()
         if rehearse:
