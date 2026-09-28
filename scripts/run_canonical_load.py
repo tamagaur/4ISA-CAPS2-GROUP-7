@@ -801,6 +801,33 @@ def _loader_stage_exclusions(before: pd.DataFrame, after: pd.DataFrame, table_na
     return _quarantine_records(before[~before[QID].isin(set(after[QID]))], table_name, rule, reason)
 
 
+def known_duplicate_file_records() -> list[dict]:
+    """Quarantine records for the rows of every file Extract skips as a confirmed byte-identical duplicate
+    (analytics/etl/extract/sales_return.py KNOWN_DUPLICATES). The skip happens at file selection, so without
+    this the copy's rows exist nowhere in the database. Each copy is run through the same Extract and
+    Transform as the file that IS loaded, and byte-identity with that original ("<name>" without " (1)") is
+    re-checked here - a copy that has drifted raises instead of being recorded as a duplicate."""
+    from analytics.etl.extract._shared import process_file
+    from analytics.etl.extract.sales_return import DOC_TYPE, KNOWN_DUPLICATES
+
+    records: list[dict] = []
+    for name in sorted(KNOWN_DUPLICATES):
+        copy = next((REPO_ROOT / "data" / "raw").rglob(name))
+        original = copy.with_name(name.replace(" (1)", ""))
+        md5_copy, md5_original = (hashlib.md5(p.read_bytes()).hexdigest() for p in (copy, original))
+        if md5_copy != md5_original:
+            raise RuntimeError(f"{name} is no longer byte-identical to {original.name} ({md5_copy} vs {md5_original})")
+        staged = pd.concat([df for df, _ in process_file(copy, DOC_TYPE).dfs], ignore_index=True)
+        staged[QID] = range(len(staged))
+        rows, _ = transform_fact(staged, DOC_TYPE, "delmonte", DEFAULT_CONFIG_DIR, amount_col="net_amount")
+        records += _quarantine_records(
+            rows, "salesreturn_fact", f"extract_known_duplicate_file[{DOC_TYPE}]",
+            f"byte-identical copy (md5 {md5_copy}) of '{original.name}', whose rows are loaded; "
+            f"Extract skips the copy (analytics/etl/extract/sales_return.py KNOWN_DUPLICATES)",
+        )
+    return records
+
+
 def write_quarantine(engine: Engine, run_id: str, records: list[dict], dry_run: bool, batch_size: int = 1000) -> int:
     """`engine` is the schema-translating scratch engine. Returns rows written."""
     if dry_run or not records:
@@ -2005,6 +2032,9 @@ def main() -> int:
         print(f"\n[run] run_id={run_id} (etl_quarantine.run_id)")
         for item in FACT_PLAN:
             results.append(_run_one_fact(item, scratch_engine, args.dry_run, limit_rows=args.limit_rows, run_id=run_id))
+        dup_records = known_duplicate_file_records()
+        n_dup = write_quarantine(scratch_engine, run_id, dup_records, args.dry_run)
+        print(f"  [salesreturn_fact] {len(dup_records)} rows of Extract's known duplicate files, {n_dup} written to {QUARANTINE_TABLE}")
         # ssis_soh — separate path, not source_of_truth.yaml-driven
         soh_result = transform_ssis_soh(staging_dir=STAGING_DIR, real_sku_codes=None)
         soh_df = soh_result.inventory_fact_df
