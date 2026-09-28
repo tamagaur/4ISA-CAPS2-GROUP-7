@@ -283,15 +283,48 @@ def coerce_is_demo_column(df: pd.DataFrame) -> pd.DataFrame:
     not fabrication of an unknown value, just making a known fact
     insertable. `caught via the actual first real-load attempt against
     unilever_sku_demand_fact - NotNullViolation on a real 2023-01 La Union
-    row (sku_code 20292808), not a hypothetical."""
+    row (sku_code 20292808), not a hypothetical.
+
+    PROVENANCE GUARD (2026-09-28): the cell is not trusted for a row whose
+    source is synthetic (_src_file under data/raw/Synthetic Data/, or a
+    generator's GENERATED_BACKFILL_* name - SYNTHETIC_SOURCE_RE). Such a row
+    loads as is_demo = true whatever the cell says, and a synthetic row with
+    NO is_demo value raises: "absent = real" holds for real files only, so a
+    blank flag on a synthetic source is a broken source, never a real row."""
+    synthetic = is_synthetic_source(df)
     if "is_demo" not in df.columns:
+        if synthetic.any():
+            raise SyntheticProvenanceError(_blank_flag_message(df, synthetic))
         return df
     out = df.copy()
     col = out["is_demo"]
+    blank = col.isna() | col.astype(str).str.strip().isin({"", "nan", "None", "<NA>"})
+    if (synthetic & blank).any():
+        raise SyntheticProvenanceError(_blank_flag_message(df, synthetic & blank))
     is_true = col.astype(str).str.strip().str.lower().isin({"true", "1", "yes"})
     out["is_demo"] = False
-    out.loc[is_true, "is_demo"] = True
+    out.loc[is_true | synthetic, "is_demo"] = True
     return out
+
+
+SYNTHETIC_SOURCE_RE = re.compile(r"^(?:data[/\\]raw[/\\]Synthetic Data[/\\]|GENERATED_BACKFILL_)")
+
+
+class SyntheticProvenanceError(ValueError):
+    """A row from a synthetic source carries no is_demo value."""
+
+
+def is_synthetic_source(df: pd.DataFrame) -> pd.Series:
+    """True where the row's _src_file is a synthetic source (see SYNTHETIC_SOURCE_RE)."""
+    if "_src_file" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["_src_file"].astype(str).str.match(SYNTHETIC_SOURCE_RE)
+
+
+def _blank_flag_message(df: pd.DataFrame, mask: pd.Series) -> str:
+    files = sorted(df.loc[mask, "_src_file"].astype(str).unique())
+    return (f"{int(mask.sum())} row(s) from a synthetic source have no is_demo value - refusing to load them as real: "
+            f"{files[:5]}{' ...' if len(files) > 5 else ''}")
 
 
 def backfill_provenance_fields(df: pd.DataFrame, fields: tuple[str, ...] = ("principal", "region")) -> pd.DataFrame:
@@ -486,6 +519,20 @@ def _classify_inventory_sku_shape(group: pd.DataFrame) -> str:
     prefix anywhere in that sheet."""
     if "ITEM CODE" in group.columns and group["ITEM CODE"].notna().any():
         return "C"
+    # Shape E (2026-09-28): two blocks side by side - a count block (A-E: code, description, pack, pieces,
+    # cases; no cost) and the sign-off block (G code, H numeric core, I "CODE DESCRIPTION", J-R quantity,
+    # cost, valuation, CAS, PCS ...). Every mapped value comes from the sign-off block, so the code has to
+    # as well: I's leading token, which equals G on the sheet's rows. Checked before B/D because the count
+    # block's __col1__ can carry codes of its own (August 2023 ILOCOS-ACTUAL: a different SKU than the
+    # same row's J-R values on 138 of 142 rows) or none at all (PANGASINAN-ACTUAL).
+    if {"__col6__", "__col8__"}.issubset(group.columns):
+        i_cells = group["__col8__"].dropna().astype(str)
+        i_cells = i_cells[~i_cells.str.strip().str.upper().isin({"TOTAL", "DESCRIPTION"})]
+        if not i_cells.empty:
+            lead = i_cells.str.strip().str.split().str[0]
+            g = group.loc[i_cells.index, "__col6__"].astype(str).str.strip()
+            if ((lead == g) & lead.str.contains(r"\d")).mean() > 0.5:
+                return "E"
     has_col1_mapped = "sku_description_raw" in group.columns and group["sku_description_raw"].notna().any()
     if has_col1_mapped:
         candidates = group["sku_description_raw"].dropna().astype(str)
@@ -532,6 +579,9 @@ def route_inventory_sku_shapes(df: pd.DataFrame) -> tuple[pd.DataFrame, Inventor
             out["sku_description_raw"] = pd.NA
         out.loc[mask_a, "sku_description_raw"] = out.loc[mask_a, "__col0__"]
         shape_a_routed = int(mask_a.sum())
+    mask_e = shape_by_row == "E"
+    if mask_e.any():
+        out.loc[mask_e, "sku_description_raw"] = out.loc[mask_e, "__col8__"]
 
     return out, InventoryShapeRoutingReport(
         shape_counts=shape_by_row.value_counts().to_dict(),

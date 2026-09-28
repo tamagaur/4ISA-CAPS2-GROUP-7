@@ -10,7 +10,7 @@ that have no raw synthetic file at all, using distributions/rosters/
 conventions derived directly from real staged data. Writes only to
 staging_synthetic/ - never staging/. Read-only on staging/.
 
-Usage: python scripts/generate_synthetic_backfill.py
+Usage: python scripts/generate_synthetic_backfill.py [--dry-run] [--unilever-only] [--seasonal-residuals]
 """
 from __future__ import annotations
 
@@ -66,14 +66,51 @@ def _seed_for(*parts: str) -> np.random.Generator:
 
 
 # ================================================================
-# 1. unilever_sku backfill — 2021-01..2022-12, 2026-03..2026-08
+# 1. unilever_sku backfill v2 — 2021-01..2022-12, 2026-03..2026-08
 # ================================================================
+#
+# PURPOSE (locked 2026-09-21): these rows are a PLACEHOLDER for 2021-22 data
+# SSM has not delivered. v2 exists for existence-correctness only: v1 gave a
+# SKU rows in every backfill month at its all-time presence rate, so 695 SKUs
+# whose first real row is in 2024 or later carried 4,408 invented pre-2023
+# rows. Nothing here is tuned against a forecast metric, and no synthetic
+# value is ever adjusted to improve one. Success means: (a) the files can be
+# replaced by real 2021-22 files with no code change (same names, columns and
+# dtypes as v1, which the loader already reads), (b) every row is
+# is_demo=true, (c) nothing reading a _Real view can see any of it.
+#
+# EXISTENCE comes from the 2021-22 SSIS SOH sheets, used ONLY as a witness
+# that a SKU was listed (data/processed/soh_witness_2021_2022.parquet, built
+# by scripts/profile_soh_witness.py; period = the FILE's period). Stock
+# quantities are never read, and absence from a sheet is not evidence that a
+# SKU did not exist - it only means there is no witness to justify a row.
+#
+# VALUE = anchor x residual, both from the SKU's own real history:
+#   anchor    median of its first 3 positive real months (its level at debut;
+#             no launch ramp - the measured ramp's IQR straddled 1.0 at every
+#             month since debut)
+#   residual  a real month divided by that SKU's own local median (the
+#             window from 6 months before to 5 months after, needing 6+
+#             positive months) - i.e. how far a month sits from the SKU's
+#             level at the time. A SKU with fewer than 6 residuals gets no
+#             synthetic rows: there is not enough of its own history to draw
+#             from, and borrowing another SKU's would be inventing it.
 
 UNILEVER_BACKFILL_PERIODS = (
     [f"2021-{m:02d}" for m in range(1, 13)]
     + [f"2022-{m:02d}" for m in range(1, 13)]
     + [f"2026-{m:02d}" for m in range(3, 9)]
 )
+PRE_REAL_END = "2022-12"
+FIRST_REAL_PERIOD = "2023-01"
+WITNESS_PATH = REPO_ROOT / "data" / "processed" / "soh_witness_2021_2022.parquet"
+
+MIN_RESIDUALS = 6                 # D6
+RESIDUAL_WINDOW = (-6, 5)         # months around a month that define its local median
+ANCHOR_MONTHS = 3                 # D2
+ANCHOR_FALLBACK_WINDOW = 6        # D2 fallback: positive months within the first 6 from debut
+POOL_TRIM = (5, 95)               # percentiles; one untrimmed residual reached 86.4
+DEAD_TAIL_MONTHS = 6              # scripts/run_baseline_forecast.py:309-318
 
 CAL_MONTH_COL = "Calendar\r\n  Month"
 PRODUCT_COL = "Product"
@@ -87,109 +124,236 @@ NUMERIC_COLS = [QTY_CS_COL, QTY_PC_COL, GSV_COL, AMT_COL]
 
 
 def load_real_unilever_sku() -> pd.DataFrame:
-    files = sorted(REAL_STAGING_DIR.glob("unilever_sku/*.parquet"))
-    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    """Every REAL staged unilever_sku row. staging/unilever_sku/ also holds
+    materialised copies of this script's own SYNTH__ output (the canonical
+    load reads them from there), so rows flagged is_demo are dropped - without
+    that, a re-run would profile its own previous output as if it were real."""
+    frames = []
+    for f in sorted(REAL_STAGING_DIR.glob("unilever_sku/*.parquet")):
+        df = pd.read_parquet(f)
+        if "is_demo" in df.columns:
+            df = df[~df["is_demo"].fillna(False).astype(bool)]
+        if len(df):
+            frames.append(df)
+    return pd.concat(frames, ignore_index=True)
 
 
-def derive_unilever_seasonality(real_df: pd.DataFrame) -> dict:
-    """Real total PC-quantity by calendar month-of-year, normalized to a
-    multiplier around 1.0 - derived from all 38 real months (2023-01
-    through 2026-02), not invented."""
-    month_num = real_df["_period"].str[5:7]
-    qty = pd.to_numeric(real_df[QTY_PC_COL], errors="coerce")
-    totals = qty.groupby(month_num).sum()
-    return (totals / totals.mean()).to_dict()
+def _months(start: str, end: str) -> list[str]:
+    return [str(p) for p in pd.period_range(start, end, freq="M")] if start <= end else []
 
 
-def derive_unilever_sku_roster(real_df: pd.DataFrame) -> dict:
-    """Per real SKU (1,807 distinct Product codes - the exact real
-    roster, never invented): static attributes (description, pack size)
-    plus every real historical row's numeric-field tuple, plus its real
-    presence rate across the 38 real months. Backfill/forward generation
-    draws SKU identity and quantity/GSV/amount magnitudes only from this -
-    no SKU code and no numeric value that didn't really occur."""
-    roster = {}
-    n_real_months = real_df["_period"].nunique()
-    for sku, group in real_df.groupby(PRODUCT_COL):
-        roster[sku] = {
-            "description": group[DESC_COL].mode().iloc[0] if not group[DESC_COL].mode().empty else group[DESC_COL].iloc[0],
-            "pack_size": group[PACK_SIZE_COL].mode().iloc[0] if not group[PACK_SIZE_COL].mode().empty else group[PACK_SIZE_COL].iloc[0],
-            "presence_rate": len(group) / n_real_months,
-            "real_rows": group[NUMERIC_COLS].to_dict(orient="records"),
+def load_witness(path: Path = WITNESS_PATH) -> tuple[pd.DataFrame, dict]:
+    """(sku, period) existence pairs, plus how much adjacent files overlap.
+
+    Every file counts as a genuine snapshot of its own period, including
+    2021-07, whose SOH sheet is labelled "SOH(JUNE 30, 2021)". A rule that
+    discarded July as a duplicate of June (93.5% of its articles are also in
+    June) was tried and withdrawn 2026-09-21: adjacent months share a median
+    95.1% of their articles (16 of 17 pairs at 85% or more, 12 of 17 at
+    93.5% or more), and July's stock values match June's for 24.2% of shared
+    articles against a median 23.5% - an ordinary consecutive month, not a
+    copy. The overlap summary is returned so a dry run shows it."""
+    w = pd.read_parquet(path)[["sku", "period"]].astype(str).drop_duplicates()
+    periods = sorted(w.period.unique())
+    by_period = {p: set(w.loc[w.period == p, "sku"]) for p in periods}
+    adjacent = [len(by_period[a] & by_period[b]) / len(by_period[b]) for a, b in zip(periods, periods[1:])
+                if (pd.Period(b, freq="M") - pd.Period(a, freq="M")).n == 1]
+    report = {"files": len(periods), "adjacent_pairs": len(adjacent),
+              "adjacent_overlap_median": round(float(np.median(adjacent)), 4) if adjacent else None,
+              "adjacent_overlap_min": round(float(min(adjacent)), 4) if adjacent else None, "files_discarded": 0}
+    return w.reset_index(drop=True), report
+
+
+def _residuals(months: list[str], qty: np.ndarray) -> list[tuple[str, float]]:
+    """(month, q / local median) for each positive month whose window holds 6+ positive months."""
+    idx = pd.PeriodIndex(months, freq="M")
+    pos = qty > 0
+    out = []
+    for i in np.nonzero(pos)[0]:
+        lo, hi = idx[i] + RESIDUAL_WINDOW[0], idx[i] + RESIDUAL_WINDOW[1]
+        window = qty[pos & (idx >= lo) & (idx <= hi)]
+        if len(window) >= MIN_RESIDUALS:
+            out.append((months[i], float(qty[i] / np.median(window))))
+    return out
+
+
+def derive_sku_profile(real_df: pd.DataFrame, witness: pd.DataFrame) -> dict:
+    """Everything generation needs, per real SKU, from that SKU's own real
+    rows plus the existence witness. No value here comes from another SKU."""
+    df = real_df.copy()
+    df["_q"] = pd.to_numeric(df[QTY_PC_COL], errors="coerce")
+    last_real = df["_period"].max()
+    w = witness.groupby("sku").period.agg(["min", "max"])
+    last_witness = witness.period.max()
+
+    profile = {}
+    for sku, g0 in df.groupby(PRODUCT_COL):
+        g = g0.dropna(subset=["_q"]).sort_values("_period")
+        by_month = g.groupby("_period")["_q"].sum()
+        months, qty = list(by_month.index), by_month.to_numpy(dtype=float)
+        pos_months = [m for m, q in zip(months, qty) if q > 0]
+        desc, pack = g0[DESC_COL].mode(), g0[PACK_SIZE_COL].mode()
+        p = {
+            "description": desc.iloc[0] if not desc.empty else None, "pack_size": pack.iloc[0] if not pack.empty else None,
+            "witness_first": w.loc[sku, "min"] if sku in w.index else None, "witness_last": w.loc[sku, "max"] if sku in w.index else None,
+            "debut": pos_months[0] if pos_months else None, "last_row": months[-1] if months else None,
+            "returns_dominated": bool(qty.sum() <= 0), "anchor": None, "anchor_rung": "none",
         }
-    return roster
+        # D2 anchor ladder
+        pos_q = [q for q in qty if q > 0]
+        if len(pos_q) >= ANCHOR_MONTHS:
+            p["anchor"], p["anchor_rung"] = float(np.median(pos_q[:ANCHOR_MONTHS])), "first_3_positive"
+        elif pos_months:
+            horizon = str(pd.Period(p["debut"], freq="M") + (ANCHOR_FALLBACK_WINDOW - 1))
+            early = [q for m, q in zip(months, qty) if q > 0 and m <= horizon]
+            if early:
+                p["anchor"], p["anchor_rung"] = float(np.median(early)), "positives_in_first_6"
+
+        res = _residuals(months, qty)
+        p["n_residuals"] = len(res)
+        if res:
+            vals = np.array([r for _, r in res])
+            lo, hi = np.percentile(vals, POOL_TRIM)
+            p["pool"] = [(m, r) for m, r in res if lo <= r <= hi]
+        else:
+            p["pool"] = []
+
+        # active window = debut .. last real row; months inside it are positive, negative or absent
+        if p["debut"]:
+            span = len(_months(p["debut"], p["last_row"]))
+            in_win = [(m, q) for m, q in zip(months, qty) if m >= p["debut"]]
+            p["presence_rate"] = sum(q > 0 for _, q in in_win) / span
+            p["negative_rate"] = sum(q < 0 for _, q in in_win) / span
+        else:
+            p["presence_rate"] = p["negative_rate"] = 0.0
+        p["negative_values"] = [float(q) for q in qty if q < 0]
+        p["min_positive"], p["max_qty"] = (float(min(pos_q)), float(max(pos_q))) if pos_q else (None, None)
+
+        # dead = scripts/run_baseline_forecast.py:309-318's rule (no positive sum in the last 6 months), evaluated on the
+        # series zero-filled THROUGH the last real month. The runner's own series stops at the SKU's last row, so there a
+        # SKU that simply stopped appearing never reads as dead; for a forward placeholder that would invent a live SKU.
+        full = pd.Series(0.0, index=_months(months[0], last_real)) if months else pd.Series(dtype=float)
+        for m, q in zip(months, qty):
+            full[m] = q
+        p["dead"] = bool(len(full) >= DEAD_TAIL_MONTHS and full.iloc[-DEAD_TAIL_MONTHS:].sum() <= 0) or not months
+        own = full.loc[:months[-1]] if months else full            # what the runner's build_series() sees
+        p["dead_by_runner_series"] = bool(len(own) >= DEAD_TAIL_MONTHS and own.iloc[-DEAD_TAIL_MONTHS:].sum() <= 0)
+
+        per_piece = g[g["_q"] > 0]
+        for key, col in (("cs_per_pc", QTY_CS_COL), ("gsv_per_pc", GSV_COL), ("amt_per_pc", AMT_COL)):
+            ratio = (pd.to_numeric(per_piece[col], errors="coerce") / per_piece["_q"]).replace([np.inf, -np.inf], np.nan).dropna()
+            p[key] = float(ratio.median()) if len(ratio) else None
+
+        # existence window before the real era
+        p["pre_window"] = []
+        if p["witness_first"] is not None:
+            relisted_after_gap = p["witness_last"] < last_witness and (p["debut"] is None or p["debut"] > FIRST_REAL_PERIOD)
+            end = p["witness_last"] if relisted_after_gap else PRE_REAL_END     # gone-then-relisted: stop, no bridging
+            p["pre_window"] = _months(p["witness_first"], min(end, PRE_REAL_END))
+
+        if p["returns_dominated"]:
+            p["excluded"] = "returns_dominated"
+        elif p["anchor"] is None:
+            p["excluded"] = "no_anchor"
+        elif p["n_residuals"] < MIN_RESIDUALS or not p["pool"]:
+            p["excluded"] = "fewer_than_6_residuals"
+        else:
+            p["excluded"] = None
+        profile[sku] = p
+    return profile
 
 
-def generate_unilever_sku_period(roster: dict, seasonal: dict, period: str) -> pd.DataFrame:
-    year, month_num = period.split("-")
-    scale = seasonal.get(month_num, 1.0)
-    rng = _seed_for("unilever_sku", period)
-
-    records = []
-    for sku, info in roster.items():
-        if rng.random() >= info["presence_rate"]:
-            continue  # real per-SKU absence rate, not every SKU appears every month
-        real_row = info["real_rows"][int(rng.integers(0, len(info["real_rows"])))]
-        rec = {
-            CAL_MONTH_COL: f"{month_num}.{year}",
-            PRODUCT_COL: sku,
-            DESC_COL: info["description"],
-            PACK_SIZE_COL: info["pack_size"],
-        }
-        for col in NUMERIC_COLS:
-            val = real_row[col]
-            # real values round-trip as decimal.Decimal; coerce to float
-            # before scaling (same class of bug as clean.flag_iqr_outliers
-            # earlier this session).
-            rec[col] = (float(val) * scale) if pd.notna(val) else val
-        rec.update({
-            "_src_file": f"GENERATED_BACKFILL_unilever_sku_{period}",  # no real source file - see report note
-            "_src_sheet": "sheet1",
-            "_header_row": 11,
-            "_row_ordinal": len(records),
-            "_principal": "unilever",
-            "_region": "la_union",
-            "_period": period,
-            "_doc_type": "unilever_sku",
-            "_sheet_role": "data",
-            "_grain": "monthly-sku",
-            "_checksum_status": "unverified",
-            "_checksum_column": None,
-            "_checksum_expected": None,
-            "_checksum_got": None,
-            "_checksum_diff": None,
-            "is_demo": True,
+def generate_sku_series(sku: str, p: dict, seasonal_residuals: bool = False) -> list[dict]:
+    """Synthetic rows for one SKU: its witnessed pre-2023 months, plus 2026-03..08 if it is not dead.
+    Each (sku, month) has its own seeded generator, so a row never depends on which other rows exist."""
+    if p["excluded"]:
+        return []
+    forward = [] if p["dead"] else [m for m in UNILEVER_BACKFILL_PERIODS if m > PRE_REAL_END]
+    rows = []
+    for period in p["pre_window"] + forward:
+        rng = _seed_for("unilever_sku_v2", sku, period)
+        u = rng.random()
+        if u < p["presence_rate"]:
+            pool = p["pool"]
+            if seasonal_residuals:
+                same_month = [x for x in pool if x[0][5:7] == period[5:7]]
+                pool = same_month if len(same_month) >= 2 else pool
+            residual = pool[int(rng.integers(0, len(pool)))][1]
+            qty = float(np.clip(round(p["anchor"] * residual), p["min_positive"], p["max_qty"]))
+        elif p["negative_values"] and u < p["presence_rate"] + p["negative_rate"]:
+            qty = p["negative_values"][int(rng.integers(0, len(p["negative_values"])))]
+        else:
+            continue
+        year, month_num = period.split("-")
+        rows.append({
+            CAL_MONTH_COL: f"{month_num}.{year}", PRODUCT_COL: sku, DESC_COL: p["description"], PACK_SIZE_COL: p["pack_size"],
+            QTY_CS_COL: None if p["cs_per_pc"] is None else round(qty * p["cs_per_pc"], 3), QTY_PC_COL: qty,
+            GSV_COL: None if p["gsv_per_pc"] is None else round(qty * p["gsv_per_pc"], 2),
+            AMT_COL: None if p["amt_per_pc"] is None else round(qty * p["amt_per_pc"], 2),
+            "_src_file": f"GENERATED_BACKFILL_unilever_sku_{period}",  # no real source file
+            "_src_sheet": "sheet1", "_header_row": 11, "_row_ordinal": 0, "_principal": "unilever", "_region": "la_union",
+            "_period": period, "_doc_type": "unilever_sku", "_sheet_role": "data", "_grain": "monthly-sku",
+            "_checksum_status": "unverified", "_checksum_column": None, "_checksum_expected": None,
+            "_checksum_got": None, "_checksum_diff": None, "is_demo": True,
         })
-        records.append(rec)
-    return pd.DataFrame(records)
+    return rows
 
 
-def run_unilever_sku_backfill() -> dict:
+def plan_unilever_sku_backfill(profile: dict, seasonal_residuals: bool = False) -> tuple[pd.DataFrame, dict]:
+    """All v2 rows plus the per-rule counts the dry run prints. Writes nothing."""
+    rows = [r for sku in sorted(profile) for r in generate_sku_series(sku, profile[sku], seasonal_residuals)]
+    cols = [CAL_MONTH_COL, PRODUCT_COL, DESC_COL, PACK_SIZE_COL, QTY_CS_COL, QTY_PC_COL, GSV_COL, AMT_COL]
+    out = pd.DataFrame(rows)
+    if len(out):  # match the real column order exactly, as v1 did
+        out = out[cols + [c for c in PROVENANCE_COLUMNS if c in out.columns] + ["is_demo"]]
+    P = profile.values()
+    witnessed = [p for p in P if p["witness_first"] is not None]
+    pre = out[out["_period"] <= PRE_REAL_END] if len(out) else out
+    counts = {
+        "real_skus": len(profile), "witnessed": len(witnessed), "unwitnessed_no_pre_rows": len(profile) - len(witnessed),
+        "anchor_first_3_positive": sum(p["anchor_rung"] == "first_3_positive" for p in P),
+        "anchor_positives_in_first_6": sum(p["anchor_rung"] == "positives_in_first_6" for p in P),
+        "anchor_none": sum(p["anchor_rung"] == "none" for p in P),
+        "witnessed_excluded_returns_dominated": sum(p["excluded"] == "returns_dominated" for p in witnessed),
+        "witnessed_excluded_no_anchor": sum(p["excluded"] == "no_anchor" for p in witnessed),
+        "witnessed_excluded_fewer_than_6_residuals": sum(p["excluded"] == "fewer_than_6_residuals" for p in witnessed),
+        "witnessed_eligible": sum(p["excluded"] is None for p in witnessed),
+        "witnessed_gone_then_relisted": sum(bool(p["pre_window"]) and p["pre_window"][-1] < PRE_REAL_END for p in witnessed),
+        "dead": sum(p["dead"] for p in P), "dead_by_runner_series": sum(p["dead_by_runner_series"] for p in P),
+        "forward_eligible": sum(p["excluded"] is None and not p["dead"] for p in P),
+        "pre_2023_skus": int(pre[PRODUCT_COL].nunique()) if len(out) else 0, "pre_2023_rows": int(len(pre)),
+        "forward_skus": int(out.loc[out["_period"] > PRE_REAL_END, PRODUCT_COL].nunique()) if len(out) else 0,
+        "forward_rows": int((out["_period"] > PRE_REAL_END).sum()) if len(out) else 0, "total_rows": int(len(out)),
+    }
+    return out, counts
+
+
+def run_unilever_sku_backfill(dry_run: bool = False, seasonal_residuals: bool = False) -> dict:
     real_df = load_real_unilever_sku()
-    seasonal = derive_unilever_seasonality(real_df)
-    roster = derive_unilever_sku_roster(real_df)
+    witness, july = load_witness()
+    profile = derive_sku_profile(real_df, witness)
+    out, counts = plan_unilever_sku_backfill(profile, seasonal_residuals)
+    excluded = {reason: sorted(s for s, p in profile.items() if p["excluded"] == reason and p["witness_first"] is not None)
+                for reason in ("returns_dominated", "no_anchor", "fewer_than_6_residuals")}
+    result = {"family": "unilever_sku", "version": 2, "dry_run": dry_run, "seasonal_residuals": seasonal_residuals,
+              "witness_files": july, **counts, "excluded_witnessed_skus": excluded}
+    if dry_run:
+        return result
 
     out_dir = OUT_DIR / "unilever_sku"
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    total_rows = 0
+    written = 0
     for period in UNILEVER_BACKFILL_PERIODS:
-        df = generate_unilever_sku_period(roster, seasonal, period)
-        # match real column order exactly
-        real_cols = [CAL_MONTH_COL, PRODUCT_COL, DESC_COL, PACK_SIZE_COL, QTY_CS_COL, QTY_PC_COL, GSV_COL, AMT_COL]
-        ordered = real_cols + [c for c in PROVENANCE_COLUMNS if c in df.columns] + ["is_demo"]
-        df = df[ordered]
-        out_path = out_dir / f"SYNTH__UNILEVER_SKU_{period}.parquet"
-        df.to_parquet(out_path, index=False, engine="pyarrow")
-        total_rows += len(df)
-
-    return {
-        "family": "unilever_sku",
-        "periods": len(UNILEVER_BACKFILL_PERIODS),
-        "total_rows": total_rows,
-        "real_sku_count": len(roster),
-        "seasonal_index": seasonal,
-    }
+        path = out_dir / f"SYNTH__UNILEVER_SKU_{period}.parquet"      # loader contract: unchanged naming
+        df = out[out["_period"] == period].reset_index(drop=True) if len(out) else out
+        if df.empty:
+            path.unlink(missing_ok=True)                                # never leave a stale v1 file standing in for "no rows"
+            continue
+        df["_row_ordinal"] = range(len(df))
+        df.to_parquet(path, index=False, engine="pyarrow")
+        written += 1
+    result["files_written"] = written
+    return result
 
 
 # ================================================================
@@ -222,17 +386,56 @@ FAMILY_BUSINESS_COLS = {
 INVOICE_FAMILIES = {"sales_register", "purchase_order"}
 
 
+DRY_RUN = False        # set by --dry-run: every generator below computes its rows but writes no file
+POOL_REPORT: dict = {}  # family -> what load_real_family_template() dropped, printed by the dry run
+
+
+def _is_demo(df: pd.DataFrame) -> pd.Series:
+    """True for synthetic rows. staging/<family>/ also holds materialised copies of synthetic output
+    (SYNTH__ files, and the raw synthetic xlsx staged by Extract), some with is_demo as the string 'True'."""
+    if "is_demo" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["is_demo"].fillna(False).astype(str).str.lower().isin(["true", "1"])
+
+
 def load_real_family_template(family: str) -> pd.DataFrame:
+    """The 2025 resample pool: REAL rows only, and for the invoice families only rows whose Net Amount is a
+    number.
+
+    Two defects fixed 2026-09-21. (1) The pool read every parquet under staging/<family>/, which includes
+    synthetic copies, so synthetic rows were being resampled into new synthetic rows. (2) The pool is read by
+    the RAW column names in FAMILY_BUSINESS_COLS, and 5,007 of the 14,682 real 2025 sales_register rows have
+    nothing under the raw "Net Amount" header: 2,224 sit on ONE PAGER cross-check sheets, 2,316 are the
+    Oct-Nov 2025 files, which use a different header vocabulary (AMOUNT / NET VALUE / REFERENCE #), and 467
+    are footer, signature-block and blank lines. None of this is a defect in the real data - Transform maps
+    the second vocabulary (config/column_maps/sales_register.yaml) and those months load in full - but
+    resampling such a row here yields a synthetic row with no Net Amount, which the loader can only drop
+    (scripts/run_canonical_load.py _drop_rows_violating_other_not_null: 197 at the first real load). There is
+    no correct Net Amount to invent, so the row is left out of the pool rather than filled. Consequence,
+    stated: the pool holds no Oct-Nov 2025 rows."""
     files = sorted(REAL_STAGING_DIR.glob(f"{family}/*.parquet"))
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-    return df[df["_period"].str.startswith(DELMONTE_TEMPLATE_YEAR_PREFIX)]
+    df = df[df["_period"].str.startswith(DELMONTE_TEMPLATE_YEAR_PREFIX)]
+    demo = _is_demo(df)
+    report = {"rows_2025": int(len(df)), "dropped_is_demo": int(demo.sum())}
+    df = df[~demo]
+    if "Net Amount" in df.columns and family in INVOICE_FAMILIES:
+        bad = pd.to_numeric(df["Net Amount"], errors="coerce").isna()
+        report["dropped_real_rows_without_net_amount"] = int(bad.sum())
+        df = df[~bad]
+    report["pool_rows"] = int(len(df))
+    POOL_REPORT[family] = report
+    return df
 
 
 def real_row_count_pool(family: str, region: str) -> list[int]:
+    """Row counts of the REAL 2025 files for this region (synthetic copies in staging/ are skipped)."""
     files = sorted(REAL_STAGING_DIR.glob(f"{family}/*.parquet"))
     counts = []
     for f in files:
-        meta = pd.read_parquet(f, columns=["_period", "_region"])
+        meta = pd.read_parquet(f)
+        if _is_demo(meta).any():
+            continue
         if meta["_period"].iloc[0].startswith(DELMONTE_TEMPLATE_YEAR_PREFIX) and meta["_region"].iloc[0] == region:
             counts.append(len(meta))
     return counts or [30]
@@ -255,8 +458,22 @@ def generate_del_monte_family(family: str) -> dict:
                 continue
             row_counts = real_row_count_pool(family, region)
             n = int(rng.choice(row_counts))
-            sample_idx = rng.integers(0, len(pool), size=n)
+            if family == "sell_out":
+                # natural key = (category_path, region, _period): one row per category. Drawing rows with
+                # replacement put the same category in a file twice (46 rows in 19 keys), which the loader can
+                # only resolve by discarding one. Categories are drawn WITHOUT replacement, then one real row
+                # of each chosen category is taken.
+                category = pool["__col0__"].astype(str).str.strip()
+                distinct = sorted(category.unique())
+                n = min(n, len(distinct))
+                chosen = rng.choice(distinct, size=n, replace=False)
+                sample_idx = [int(rng.choice(np.nonzero((category == c).to_numpy())[0])) for c in chosen]
+            else:
+                sample_idx = rng.integers(0, len(pool), size=n)
             rows = pool.iloc[sample_idx][business_cols].reset_index(drop=True).copy()
+            if family == "sell_out" and rows["__col0__"].astype(str).str.strip().duplicated().any():
+                raise ValueError(f"sell_out {period} {region}: duplicate category in one (region, period) - "
+                                 "the (category_path, region, _period) key must be unique")
 
             if family in INVOICE_FAMILIES:
                 # Fresh sequential invoice numbers/dates for this period -
@@ -319,11 +536,15 @@ def generate_del_monte_family(family: str) -> dict:
 
             rows = normalize_mixed_dtype_columns(rows, exclude={"Invoice Num", "Return Slip #"})
             out_path = out_dir / f"SYNTH__{family.upper()}_{period}_{region.upper()}.parquet"
-            rows.to_parquet(out_path, index=False, engine="pyarrow")
+            if "Net Amount" in rows.columns and pd.to_numeric(rows["Net Amount"], errors="coerce").isna().any():
+                raise ValueError(f"{family} {period} {region}: a generated row has no Net Amount")
+            if not DRY_RUN:
+                rows.to_parquet(out_path, index=False, engine="pyarrow")
             total_rows += len(rows)
             files_written += 1
 
-    return {"family": family, "files_written": files_written, "total_rows": total_rows}
+    return {"family": family, "files_written": files_written, "total_rows": total_rows, "dry_run": DRY_RUN,
+            "pool": POOL_REPORT.get(family)}
 
 
 # ================================================================
@@ -383,7 +604,16 @@ def _normalize_money_dtype(rows: pd.DataFrame) -> pd.DataFrame:
 def generate_sales_return() -> dict:
     files = sorted(REAL_STAGING_DIR.glob("sales_return/*.parquet"))
     real_df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-    real_2025 = real_df[real_df["_period"].str.startswith("2025")]
+    real_df = real_df[~_is_demo(real_df)]  # staging/ also holds synthetic copies - never resample those
+    real_2025_all = real_df[real_df["_period"].str.startswith("2025")]
+    # Same guard load_real_family_template() applies to the invoice families (2026-09-21): the real sheets
+    # carry header rows, Good/Bad Stock markers and blank lines that Transform excludes
+    # (SALES_RETURN_FOOTER_CHECKS). Resampling one yields a synthetic return with no Net Amount - 6 such rows
+    # reached the scratch load. There is no correct amount to invent, so those rows leave the pool. File row
+    # counts below still come from the whole files, as they do for the invoice families.
+    real_2025 = real_2025_all[pd.to_numeric(real_2025_all["Net Amount"], errors="coerce").notna()]
+    POOL_REPORT["sales_return"] = {"rows_2025": int(len(real_2025_all)), "pool_rows": int(len(real_2025)),
+                                   "dropped_real_rows_without_net_amount": int(len(real_2025_all) - len(real_2025))}
 
     out_dir = OUT_DIR / "sales_return"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -398,10 +628,12 @@ def generate_sales_return() -> dict:
                 pool = real_2025[(real_2025["_region"] == region) & (real_2025["_sheet_role"] == role)]
                 if pool.empty:
                     continue
-                row_count_pool = real_2025[(real_2025["_region"] == region) & (real_2025["_sheet_role"] == role)].groupby("_src_file").size().tolist() or [10]
+                row_count_pool = real_2025_all[(real_2025_all["_region"] == region) & (real_2025_all["_sheet_role"] == role)].groupby("_src_file").size().tolist() or [10]
                 n = int(rng.choice(row_count_pool))
                 sample_idx = rng.integers(0, len(pool), size=n)
                 rows = pool.iloc[sample_idx][SALES_RETURN_BUSINESS_COLS].reset_index(drop=True).copy()
+                if pd.to_numeric(rows["Net Amount"], errors="coerce").isna().any():
+                    raise ValueError(f"sales_return {period} {region} {role}: a generated row has no Net Amount")
 
                 day = 1 + (np.arange(n) % 28)
                 rows["Invoice Date"] = pd.to_datetime({"year": int(year), "month": int(month_num), "day": day})
@@ -434,7 +666,8 @@ def generate_sales_return() -> dict:
 
                 rows = normalize_mixed_dtype_columns(rows, exclude={"Invoice Num", "Return Slip #"})
                 out_path = out_dir / f"SYNTH__SALES_RETURN_{period}_{region.upper()}_{role.upper()}.parquet"
-                rows.to_parquet(out_path, index=False, engine="pyarrow")
+                if not DRY_RUN:
+                    rows.to_parquet(out_path, index=False, engine="pyarrow")
                 total_rows += len(rows)
                 files_written += 1
 
@@ -462,6 +695,7 @@ RMR_GS_BO_BUSINESS_COLS = [
 def generate_rmr_gs_bo() -> dict:
     files = sorted(REAL_STAGING_DIR.glob("rmr_gs_bo/*.parquet"))
     real_df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)  # real Oct-Nov 2025 only
+    real_df = real_df[~_is_demo(real_df)]  # staging/ also holds synthetic copies - never resample those
 
     out_dir = OUT_DIR / "rmr_gs_bo"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -504,7 +738,8 @@ def generate_rmr_gs_bo() -> dict:
 
                 rows = normalize_mixed_dtype_columns(rows)
                 out_path = out_dir / f"SYNTH__RMR_GS_BO_{period}_{region.upper()}_{role.upper()}.parquet"
-                rows.to_parquet(out_path, index=False, engine="pyarrow")
+                if not DRY_RUN:
+                    rows.to_parquet(out_path, index=False, engine="pyarrow")
                 total_rows += len(rows)
                 files_written += 1
 
@@ -512,304 +747,50 @@ def generate_rmr_gs_bo() -> dict:
 
 
 # ================================================================
-# 5. Del Monte fine-grained sell_out bridge (2025-01..2026-08) — closes
-# the "no category spans past 2024-12" gap (reports/COMPLETENESS_DISCOVERY.md
-# §A/§E). The 42 fine-grained categories with full 48-month continuity
-# (2021-01..2024-12, verified fresh against live sellout_fact before
-# writing this list) never recur in real data after 2024-12 — real Del
-# Monte sell_out switches to a disjoint 5-category coarse vocabulary
-# starting 2025-01 (confirmed, not guessed — §A2/§A4 of that report).
-# Those coarse 2025+ rows are real and untouched by this function; it
-# ADDS a second, coexisting vocabulary for the same months. One row per
-# (category, region, period), matching sellout_fact's own natural key
-# (UNIQUE(category_path, region, _period)) — no conflict with the coarse
-# rows, which use entirely different category_path strings.
+# 5. (retired 2026-09-21) Del Monte fine-grained sell_out bridge
 #
-# Unlike generate_del_monte_family()'s per-invoice resampling, sell_out
-# is one-row-per-(category,region,period) at its natural key, so this
-# generates exactly one target value per combination — derived from each
-# (category, region)'s OWN 48-month trend + seasonality + residual noise,
-# never a global average or a flat extrapolation of the 2024 mean
-# (explicit instruction). sell_out's schema is minimal (no invoice-level
-# fields like Town Display/Salesman to preserve realism for), so no
-# literal row-template resampling step is needed the way sales_register/
-# purchase_order require it — every generated number is grounded in that
-# category's own real 2021-2024 history (which is itself built from the
-# real 2023-2024 months plus Thea's original 2021-2022/era-filling
-# synthetic months, the same 48-month corpus the roster itself is
-# defined against), not invented or drawn from an unrelated pool.
+# This section used to generate 2025-01..2026-08 sell-out rows for the 42
+# pre-2025 fine-grained categories from a trend + month-of-year fit. It was
+# retired at Gate C: the fit ran on history that included synthetic rows, and
+# refitting on real rows only is not possible - real post-Jan-2025 sell-out
+# covers 6 months (2025-03, 04, 06, 08, 09, 12), in a different, coarse
+# category vocabulary (BEVERAGE / CULINARY / FRUITS / INNOVATION / DAIRY).
+# The code is in git history (last present in c7ca212).
+#
+# LIMITATIONS of the Del Monte placeholder, stated for the TA explainer:
+#   - Del Monte 2025 sell-out has 6 real months; missing months are not
+#     filled, because the category vocabulary changed and 6 months cannot
+#     support a fit.
+#   - Del Monte has no stock-on-hand witness for 2021-22, so no claim can be
+#     made about which products existed when. Del Monte placeholder rows are
+#     therefore not launch-aware, unlike Unilever's.
 # ================================================================
-
-FINEGRAINED_BRIDGE_PERIODS = [f"2025-{m:02d}" for m in range(1, 13)] + [f"2026-{m:02d}" for m in range(1, 9)]
-
-FINEGRAINED_BRIDGE_HISTORY_MONTHS = (
-    [f"2021-{m:02d}" for m in range(1, 13)] + [f"2022-{m:02d}" for m in range(1, 13)]
-    + [f"2023-{m:02d}" for m in range(1, 13)] + [f"2024-{m:02d}" for m in range(1, 13)]
-)
-
-# The 42 categories confirmed continuous 2021-01..2024-12 in live
-# sellout_fact this session (reports/COMPLETENESS_DISCOVERY.md §A1) —
-# excludes the 9 "False"/"False (n)" artifacts and the 5 coarse names,
-# neither of which is part of this 48-month-continuous set anyway.
-FINEGRAINED_BRIDGE_ROSTER = [
-    "/TIDBITS/BASE", "/ORIGINAL TOMATO SAUCE/BASE", "/TOTAL 100% JUICES/ACE - BASE REGULAR",
-    "/SWEET SPAG SAUCE/PROMO", "/TODAY'S/BASE", "/TOM PASTE/BASE", "/ACE/BASE",
-    "/KETCHUPS/OTHER SAUCES - BASE", "/TOM SAUCE/ORIGINAL TOMATO SAUCE - BASE REGULAR",
-    "/CRUSHED/BASE", "/ORIGINAL BLEND/BASE", "/CHUNKS/BASE", "/SLICED/BASE", "/TETRA/BASE",
-    "/OTHER SAUCES/NPI", "/TOTAL 100% JUICES/FIBER - BASE REGULAR",
-    "/TOTAL 100% JUICES/HEARTSMART - BASE REGULAR", "/STANDARD GRADE SOY SOUCE/BASE",
-    "/MACARONI/BASE", "/GRO/FS/DAIRY", "/SPAG SAUCE/FILIPINO SPAG SAUCE - BASE",
-    "/FILIPINO TOMATO SAUCE/BASE", "/FILIPINO SPAG SAUCE/PROMO",
-    "/TOM SAUCE/FILIPINO TOMATO SAUCE - BASE REGULAR", "/RECIPE MIX/BASE", "/ACE/NPI",
-    "/FIESTA/BASE", "/PASTA/SPAGHETTI PASTA - BASE", "/SPAG SAUCE/ITALIAN SPAG SAUCE - BASE REGULAR",
-    "/FIBER/NPI", "/VINEGAR/BASE", "/MR MILK/NPI", "/HEARTSMART/NPI", "/SWEET SPAG SAUCE/BASE",
-    "/SPAG SAUCE/GOURMET SPAG SAUCE - BASE REGULAR", "/FILIPINO SPAG SAUCE/BASE", "/TIPCO/BASE",
-    "/TERIYAKI MARINADE/BASE", "/SWEET BLEND/BASE", "/SWEET SPICY/BASE", "/CHUNKS/NPI",
-    "/TOTAL 100% JUICES/BONESMART - BASE REGULAR",
-]
-
-# real 2.1442% (33/1,539 non-"Total" rows) — the figure this project has
-# actually measured and documented (reports/SYNTHETIC_STAGING_CONVERSION.md
-# §3b), reused as-is via inject_sell_out_negatives(). The instruction
-# citing "2.0979%" doesn't match anything measured in this repo; using
-# the documented, already-tested real rate rather than a figure that
-# doesn't trace to a source, flagged here rather than silently chasing it.
-#
-# The instruction's "Net Amount duplicate clustering (52.53%)" is a
-# different family's metric — that 52.5316% figure (and
-# inject_net_amount_duplicates()'s real pool) is measured specifically
-# from staging/sales_register/*.parquet's "Net Amount" column
-# (reports/SYNTHETIC_STAGING_CONVERSION.md §3c) and has never been
-# measured for sell_out's money field ("Total Without Tax"/"Total With
-# Tax" — real files use both column names across eras). Applying
-# sales_register's real pool/rate to sell_out would inject invoice-scale
-# values into a category-aggregate field — not a preservation of a real
-# pattern, an error. Measured sell_out's OWN real duplicate rate instead
-# (live sellout_fact, is_demo=false, clean category_path): 153/1,345 =
-# 11.3755%. Used that instead, via a sell_out-specific pool/injector
-# below — flagged as a substitution, not silently applied as if 52.53%
-# were correct for this family.
-SELLOUT_OWN_DUP_RATE = 153 / 1345  # 11.3755%, measured live this session — see note above
-SELLOUT_DUP_RESAMPLE_FRACTION = 0.11  # not micro-calibrated, same "not tuned further" precedent as NET_AMOUNT_RESAMPLE_FRACTION
-
-
-def _sell_out_amount_column(df: pd.DataFrame) -> pd.Series:
-    """Real sell_out files use either 'Total Without Tax' or 'Total With
-    Tax' depending on era (both seen directly in staging/sell_out/*.parquet
-    this session) - coalesce whichever is present into one numeric Series,
-    never assuming a single real column name."""
-    if "Total Without Tax" in df.columns:
-        return pd.to_numeric(df["Total Without Tax"], errors="coerce")
-    if "Total With Tax" in df.columns:
-        return pd.to_numeric(df["Total With Tax"], errors="coerce")
-    return pd.Series([pd.NA] * len(df), index=df.index)
-
-
-_SELLOUT_DUP_POOL_CACHE: list | None = None
-
-
-def _derive_sellout_dup_pool() -> list:
-    """Real sell_out amount pool for the duplicate-clustering injection -
-    every non-null value from real (data/raw/Del Monte-sourced) staged
-    rows, natural frequency preserved, same resampling-not-fabricating
-    design as derive_net_amount_pool()."""
-    global _SELLOUT_DUP_POOL_CACHE
-    if _SELLOUT_DUP_POOL_CACHE is not None:
-        return _SELLOUT_DUP_POOL_CACHE
-    files = sorted(REAL_STAGING_DIR.glob("sell_out/*.parquet"))
-    pool = []
-    for f in files:
-        df = pd.read_parquet(f)
-        if not df["_src_file"].iloc[0].startswith("data/raw/Del Monte"):
-            continue
-        pool.extend(_sell_out_amount_column(df).dropna().tolist())
-    _SELLOUT_DUP_POOL_CACHE = pool
-    return pool
-
-
-def inject_sellout_amount_duplicates(df: pd.DataFrame, seed_key: str) -> tuple[pd.DataFrame, int]:
-    """sell_out-specific analog of inject_net_amount_duplicates() (that
-    function's real pool/rate is sales_register-specific — see the
-    module-level note above). Overwrites SELLOUT_DUP_RESAMPLE_FRACTION of
-    rows' 'Total Without Tax' with values drawn (with replacement) from
-    the real sell_out pool. Row count unchanged."""
-    pool = _derive_sellout_dup_pool()
-    if not pool:
-        return df, 0
-    out = df.copy()
-    seed = int(hashlib.sha256(seed_key.encode()).hexdigest()[:8], 16)
-    rng = np.random.default_rng(seed)
-    n_replace = int(round(len(out) * SELLOUT_DUP_RESAMPLE_FRACTION))
-    if n_replace == 0:
-        return out, 0
-    replace_idx = rng.choice(out.index, size=n_replace, replace=False)
-    replacement_vals = rng.choice(pool, size=n_replace)
-    out.loc[replace_idx, "Total Without Tax"] = [f"{v:.2f}" for v in replacement_vals]
-    return out, n_replace
-
-
-def _fit_trend_seasonality(series_by_period: dict, months: list) -> dict:
-    """OLS trend (degree-1 polyfit) + multiplicative month-of-year
-    seasonal index + residual std, derived from THIS category/region's
-    own history only — no global average (explicit instruction). Gaps
-    (a month this category+region genuinely has no row for) are skipped,
-    not zero-filled, so a real absence doesn't drag the fit toward zero."""
-    idx = [i for i, m in enumerate(months) if m in series_by_period]
-    if len(idx) < 6:
-        vals = list(series_by_period.values())
-        mean_val = float(np.mean(vals)) if vals else 0.0
-        return {"slope": 0.0, "intercept": mean_val, "seasonal": {m: 1.0 for m in range(1, 13)}, "resid_std": 0.0}
-
-    y = np.array([series_by_period[months[i]] for i in idx], dtype=float)
-    x = np.array(idx, dtype=float)
-    slope, intercept = np.polyfit(x, y, 1)
-    trend_pred = slope * x + intercept
-
-    cal_month = np.array([int(months[i].split("-")[1]) for i in idx])
-    seasonal = {}
-    detrended = np.divide(y, trend_pred, out=np.ones_like(y), where=trend_pred != 0)
-    for cm in range(1, 13):
-        mask = cal_month == cm
-        seasonal[cm] = float(np.mean(detrended[mask])) if mask.any() else 1.0
-    seasonal_mean = np.mean(list(seasonal.values()))
-    if seasonal_mean > 0:
-        seasonal = {k: v / seasonal_mean for k, v in seasonal.items()}
-
-    seasonal_pred = trend_pred * np.array([seasonal[cm] for cm in cal_month])
-    resid_std = float(np.std(y - seasonal_pred))
-    return {"slope": float(slope), "intercept": float(intercept), "seasonal": seasonal, "resid_std": resid_std}
-
-
-def _load_sell_out_full_history() -> pd.DataFrame:
-    """Every staged sell_out row (real + Thea's original synthetic +
-    this session's earlier 2026-04..08 backfill) - category/region/period
-    plus both numeric fields as float, amount column coalesced per
-    _sell_out_amount_column(). Source for each category's OWN 48-month
-    trend/seasonality/variance - deliberately the full corpus, not the
-    real-only subset, matching how the 42-category roster itself was
-    defined (48-month continuity across real+Thea-synthetic combined)."""
-    files = sorted(REAL_STAGING_DIR.glob("sell_out/*.parquet"))
-    frames = []
-    for f in files:
-        df = pd.read_parquet(f)
-        amount = _sell_out_amount_column(df)
-        frames.append(pd.DataFrame({
-            "category": df["__col0__"].astype(str).str.strip(),
-            "region": df["_region"],
-            "period": df["_period"],
-            "amount": amount,
-            "quantity": pd.to_numeric(df["Product Quantity"], errors="coerce"),
-        }))
-    return pd.concat(frames, ignore_index=True)
-
-
-def generate_delmonte_finegrained_bridge() -> dict:
-    full_history = _load_sell_out_full_history()
-
-    out_dir = OUT_DIR / "sell_out"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    fits: dict = {}
-    for cat in FINEGRAINED_BRIDGE_ROSTER:
-        for region in REGIONS:
-            sub = full_history[(full_history["category"] == cat) & (full_history["region"] == region)]
-            amt_by_period = sub.groupby("period")["amount"].sum().to_dict()
-            qty_by_period = sub.groupby("period")["quantity"].sum().to_dict()
-            fits[(cat, region)] = {
-                "amt": _fit_trend_seasonality(amt_by_period, FINEGRAINED_BRIDGE_HISTORY_MONTHS),
-                "qty": _fit_trend_seasonality(qty_by_period, FINEGRAINED_BRIDGE_HISTORY_MONTHS),
-            }
-
-    total_rows = 0
-    files_written = 0
-    total_neg = 0
-    total_dup = 0
-    for period_offset, period in enumerate(FINEGRAINED_BRIDGE_PERIODS):
-        month_index = 48 + period_offset  # continues the 0..47 history index
-        cal_month = int(period.split("-")[1])
-        for region in REGIONS:
-            rng = _seed_for("finegrained_bridge", period, region)
-            records = []
-            for cat in FINEGRAINED_BRIDGE_ROSTER:
-                amt_fit = fits[(cat, region)]["amt"]
-                qty_fit = fits[(cat, region)]["qty"]
-
-                amt_trend = amt_fit["slope"] * month_index + amt_fit["intercept"]
-                amt_target = amt_trend * amt_fit["seasonal"].get(cal_month, 1.0)
-                if amt_fit["resid_std"] > 0:
-                    amt_target += rng.normal(0, amt_fit["resid_std"])
-                # Revenue never goes negative in the established real
-                # convention - only Product Quantity does (see
-                # REAL_SELL_OUT_NEGATIVE_VALUES / inject_sell_out_negatives()
-                # above, which only ever touches Product Quantity). Clip
-                # here so trend+noise can't organically manufacture a
-                # negative-revenue phenomenon that has no real precedent.
-                amt_target = max(0.0, amt_target)
-
-                qty_trend = qty_fit["slope"] * month_index + qty_fit["intercept"]
-                qty_target = qty_trend * qty_fit["seasonal"].get(cal_month, 1.0)
-                if qty_fit["resid_std"] > 0:
-                    qty_target += rng.normal(0, qty_fit["resid_std"])
-                # Clip to non-negative for the same reason - negative
-                # quantity is a real, but rare (2.14%), phenomenon
-                # introduced ONLY by inject_sell_out_negatives() below at
-                # its calibrated real rate, never by uncontrolled noise.
-                qty_target = max(0.0, qty_target)
-
-                records.append({"__col0__": cat, "Total Without Tax": f"{amt_target:.2f}", "Product Quantity": float(qty_target)})
-
-            rows = pd.DataFrame(records)
-            n = len(rows)
-
-            for col in PROVENANCE_COLUMNS:
-                if col == "_src_file":
-                    rows[col] = f"GENERATED_BACKFILL_finegrained_bridge_{period}_{region}"
-                elif col == "_src_sheet":
-                    rows[col] = f"{region.upper()} SELL OUT FINEGRAINED BRIDGE"
-                elif col == "_header_row":
-                    rows[col] = 1
-                elif col == "_row_ordinal":
-                    rows[col] = np.arange(n)
-                elif col == "_principal":
-                    rows[col] = "delmonte"
-                elif col == "_region":
-                    rows[col] = region
-                elif col == "_period":
-                    rows[col] = period
-                elif col == "_doc_type":
-                    rows[col] = "sell_out"
-                elif col == "_sheet_role":
-                    rows[col] = "data"
-                elif col == "_grain":
-                    rows[col] = "category"
-                elif col.startswith("_checksum"):
-                    rows[col] = None
-            rows["is_demo"] = True
-
-            rows, n_neg = inject_sell_out_negatives(rows, seed_key=f"finegrained_bridge_{period}_{region}")
-            rows, n_dup = inject_sellout_amount_duplicates(rows, seed_key=f"finegrained_bridge_{period}_{region}")
-            total_neg += n_neg
-            total_dup += n_dup
-
-            rows["Product Quantity"] = pd.to_numeric(rows["Product Quantity"], errors="coerce").astype("float64")
-            rows = normalize_mixed_dtype_columns(rows)
-            out_path = out_dir / f"SYNTH__SELL_OUT_FINEGRAINED_BRIDGE_{period}_{region.upper()}.parquet"
-            rows.to_parquet(out_path, index=False, engine="pyarrow")
-            total_rows += len(rows)
-            files_written += 1
-
-    return {
-        "family": "sell_out_finegrained_bridge", "files_written": files_written, "total_rows": total_rows,
-        "categories": len(FINEGRAINED_BRIDGE_ROSTER), "negative_injected": total_neg, "dup_injected": total_dup,
-    }
 
 
 if __name__ == "__main__":
-    result = run_unilever_sku_backfill()
-    print(result)
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--dry-run", action="store_true", help="print rows per family and per rule, write nothing")
+    parser.add_argument("--delmonte-only", action="store_true", help="skip the unilever_sku backfill")
+    parser.add_argument("--unilever-only", action="store_true", help="skip the Del Monte families")
+    parser.add_argument("--seasonal-residuals", action="store_true", default=False,
+                        help="draw a month's residual from the same calendar month when the SKU has 2+ such residuals. "
+                             "OFF by default: seasonality is not detectable in 38 months of this data")
+    args = parser.parse_args()
+
+    DRY_RUN = args.dry_run
+    if not args.delmonte_only:
+        result = run_unilever_sku_backfill(dry_run=args.dry_run, seasonal_residuals=args.seasonal_residuals)
+        listed = result.pop("excluded_witnessed_skus")
+        print(json.dumps(result, indent=2, default=str))
+        for reason, skus in listed.items():
+            print(f"excluded witnessed SKUs - {reason}: {len(skus)}" + (f"  e.g. {skus[:8]}" if skus else ""))
+    if args.unilever_only:
+        sys.exit(0)
     print()
     for fam in ["sales_register", "purchase_order", "sell_out", "inventory_sign_off"]:
         print(generate_del_monte_family(fam))
     print(generate_sales_return())
     print(generate_rmr_gs_bo())
-    print(generate_delmonte_finegrained_bridge())

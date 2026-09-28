@@ -1,0 +1,28 @@
+raw,canonical,evidence
+DM,DEL MONTE,Del Monte's own prefix: 'DM Fiber Enriched 100% Pineapple Juice 240mL 6-Pack' / 'DM 100% PA Juice w/ Vit ACE 240mL 6-Pack'; cf. 'DMR55929 DEL MONTE SPAGHETTI 2.5KG - ROYCE'; 368 SKUs
+DEL,DEL MONTE,first word of the two-word brand: 'Del Monte Carbonara 200g' / 'Del Monte Carbonara 400g'; 38 SKUs
+DMJD,DEL MONTE,Del Monte's own prefix + JD (juice drink): 'DMJD Four Seasons 202 6-Pack' / 'DMJD WHITE GRAPE 1L TETRA X 12'; cf. 'DM FOUR SEASONS JD 202'; 10 SKUs
+DMHS,DEL MONTE,Del Monte's own prefix + HS: 'DMHS ORANGE JUICE DRINK 24 X 240ML'; 2 SKUs
+DMSS,DEL MONTE,Del Monte's own prefix + SS (Sarap Savers): 'DMSS WEEKEND MERIENDA COMBO - SWEET 500G' / 'DMSS WEEKEND MERIENDA COMBO - FIL 500G'; cf. 'FS-DMSS Sarap Savers Party Pack - Sweet'; 15 SKUs
+FS-DMSS,DEL MONTE,food-service DMSS: 'FS-DMSS Sarap Savers Party Pack - Sweet' / 'FS-DMSS Sarap Savers Party Pack - Fil'; 2 SKUs
+DMV,DEL MONTE,Del Monte's own prefix + V: 'DMV 100% Fresh 48/180ml'; 2 SKUs
+DMV-IQS,DEL MONTE,Del Monte's own prefix + V line IQS: 'DMV-IQS Vanilla 48/180ml' / 'DMV-IQS Strawberry 48/180ml'; 12 SKUs
+DMV-DKY,DEL MONTE,Del Monte's own prefix + V line DKY: 'DMV-DKY Strawberry 48/110ml' / 'DMV-DKY Mixed Fruits 48/110ml'; 6 SKUs
+DMV-MT,DEL MONTE,Del Monte's own prefix + V line MT: 'DMV-MT Wintermelon 48/180ml'; 2 SKUs
+FIT,FIT 'N RIGHT,first word of the brand: 'FIT 'N RIGHT APPLE JUICE DRINK 330ML' / 'FIT 'N RIGHT PINEAPPLE JUICE DRINK 330ML'; 35 SKUs
+FNR,FIT 'N RIGHT,"abbreviation, same 330ml juice-drink line: 'FNR CTRL Orange Pomegranate 330ml' / 'FNR CTRL Pineapple Passionfruit 330ml'; 5 SKUs"
+TODAYS,TODAY'S,apostrophe dropped in source: 'TODAYS FRUIT COCKTAIL 432G IN ELS' / 'TODAYS FRUIT COCKTAIL 3033g in  ELS'; 6 SKUs
+ELBOW,,"descriptive word, not a brand - brand left NULL: 'ELBOW MACARONI 10/1K' / 'ELBOW MACARONI 1K / 10'; 8 SKUs"
+SALAD,,"descriptive word, not a brand - brand left NULL: 'SALAD MACARONI 25/400G' / 'SALAD MACARONI10/1K'; 6 SKUs"
+SWT,,"descriptive word, not a brand - brand left NULL: 'SWT PINE JUICE CONC DP IN 1L SUP 6PK/CAS' / 'SWT FOUR SEASONS CONCENTRATE DP 1L SUPX6'; 5 SKUs"
+100%,,"descriptive word, not a brand - brand left NULL: '100% PJ 2T  W/ VIT ACE (HN)' / '100% Heart Smart PJ 202 W/ REDUCOL (HN)'; 5 SKUs"
+PINEAPPLE,,"descriptive word, not a brand - brand left NULL: 'PINEAPPLE BLUEBERRY 12 X 1L TETRA' / 'Pineapple Strawberry 12 X 1L Tetra'; 3 SKUs"
+STRAWBERRY,,"descriptive word, not a brand - brand left NULL: 'DMP58386 Strawberry Yoghurt - Flavored Milk Drink' / 'Strawberry 48/180ml'; 3 SKUs"
+HOT,,"descriptive word, not a brand - brand left NULL: 'HOT SAUCE 7g x 250'; 2 SKUs"
+MIXED,,"descriptive word, not a brand - brand left NULL: 'Mixed Fruits 48/180ml'; 1 SKUs"
+CARBONARA,,"descriptive word, not a brand - brand left NULL: 'Carbonara Merienda Pack'; 1 SKUs"
+MANGO,,"descriptive word, not a brand - brand left NULL: 'DMP58305 Mango Yoghurt - Flavored Milk Drink' / 'Mango Yoghurt - Flavored Milk Drink'; 2 SKUs"
+PLAIN,,"descriptive word, not a brand - brand left NULL: 'DMP58385 Plain Yoghurt - Flavored Milk Drink' / 'Plain Yoghurt - Flavored Milk Drink'; 2 SKUs"
+GREEN,,"descriptive word, not a brand - brand left NULL: 'DMP58387 Green Apple Yoghurt- Flavored Milk Drink' / 'Green Apple Yoghurt- Flavored Milk Drink'; 2 SKUs"
+ORANGE,,"descriptive word, not a brand - brand left NULL: 'Orange Yoghurt - Flavored Milk Drink'; 1 SKUs"
+FS,,"descriptive word, not a brand - brand left NULL: 'FS PASTA SPAGHETTI 1Kg x 20'; 2 SKUs"

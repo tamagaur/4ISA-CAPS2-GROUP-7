@@ -879,28 +879,51 @@ Scratch cleanup the same day: dropped `ssm_recovery_rehearsal`, `ssm_recovery_or
 `ssm_abc_repro`. Database went 417.2 MB -> 200.5 MB (relpages basis) against the 500 MB cap. Each `DROP SCHEMA
 CASCADE` took under a second; the earlier 18-minute hang was the size query, not the drops.
 
-### 17.2 RESUME POINT — cutover to `public` is PART-APPLIED, stopped after batch 4 (2026-09-23)
+### 17.2 COMPLETE — recovery cutover to `public` is fully applied (2026-09-23)
 
-**Batches 1–4 of 12 are applied to `public` and committed. Batches 5–12 are not.** The run is resumable; the
-ledger, not this file, is the source of truth.
+**All 12 batches are applied to `public` and committed. 42/42 checks passed.** The ledger, not this file, is the
+source of truth. Nothing is left to resume; the next action on this run would be an undo, not a continuation.
 
 | item | value |
 |---|---|
 | run id / ledger | `real_recovery_20260923T022354Z`, in `public.etl_cutover_ledger` |
 | backup | `backups/real_recovery_20260923T022354Z/` — 9 tables + `etl_quarantine` recorded absent, **10/10 manifest md5 verified**, identity sequences captured |
-| ledger rows | batch 0 `baseline` (full-table fingerprints + backup); batch 1 `done` 4/4, batch 2 `done` 14/14, batch 3 `done` 18/18, batch 4 `done` 7,773/7,773 |
+| ledger rows | batch 0 `baseline`; 1 `done` 4/4, 2 `done` 14/14, 3 `done` 18/18, 4 `done` 7,773/7,773, 5 `done` 57/57, 6 `done` 1,888/1,888, 7 `done` 227/227, 8 `done` 122/122, 9 `done` 199/199, 10 `done` 291/291, 11 `done` 381/381, 12 `done` (reads only, 22 checks) |
 | applied | migrations 0024–0027, all four recorded against `public`: `etl_quarantine` created, `sales_fact.quantity_cases/quantity_pieces`, `sellout_fact.net_amount_tax_inclusive`, purchase unique key rebuilt to include `invoice_date` |
 | sales restated | real `sales_fact` **17,933 rows / ₱208,794,370.90** — batch 2 removed the 14 FAKE BOOKING invoices (−₱2,903,959.74). Every live figure quoted before 2026-09-23 sits on the old ₱211,698,330.64 basis. |
 | quarantine | `public.etl_quarantine` **7,805 rows** = 14 (b2) + 18 (b3) + 7,773 (b4); batch 4's F1 check passed against the source's full real set |
 | unchanged after batch 4 | `inventory_fact` 32,446, `unilever_sku_demand_fact` 24,906, `product_dimension` 17,406, real `purchase_fact` 499 |
-| remaining | batches 5–12 |
+| remaining | none |
 
-Resume with:
+Nothing to resume. `--status` prints the ledger. To undo:
 
-    python -m scripts.apply_real_recovery_to_public --source ssm_synth_v2 --target public --i-have-approval --from 5
+    python -m scripts.apply_real_recovery_to_public --rollback backups/real_recovery_20260923T022354Z --i-have-approval
+    python -m scripts.apply_real_recovery_to_public --restore  backups/real_recovery_20260923T022354Z --i-have-approval
 
-`--status` prints the ledger; `--restore backups/real_recovery_20260923T022354Z --i-have-approval` puts every
-backed-up table back and clears the run's ledger rows.
+`--rollback` walks the change log; `--restore` puts every backed-up table back row for row. Both re-hash against
+the backup's md5, reset the identity sequences and clear this run's ledger rows.
+
+**Final figures on `public` after batch 12** — real rows unless noted:
+
+| table | before the cutover | after | what moved |
+|---|---|---|---|
+| `sales_fact` | 17,947 / ₱211,698,330.64 | **17,990 / ₱209,353,740.22** | −14 FAKE BOOKING (−₱2,903,959.74), +57 ONE PAGER (+₱559,369.32); 1,888 rows given `quantity_cases`/`quantity_pieces` |
+| `inventory_fact` | 32,446 | **32,639** | +193 Ilocos stock lines, 6 region re-tags (`ILO 090223`) |
+| `etl_quarantine` | absent → 0 | **7,805** | 14 + 18 + 7,773 |
+| `salesreturn_fact` | — | 227 rows given quantities | `bo_units` still NULL |
+| `sellout_fact` | — | 122 `net_amount` set | 122 TRUE / 1,245 FALSE on `net_amount_tax_inclusive` |
+| `product_dimension` | 17,406 | **17,406** | Unilever SKU only: 291 `pack_size`, 380 `brand_source`, 1 `brand`; 0 rows added |
+| `purchase_fact` | 499 | **499** | the 18 Sept-2025 lines were quarantined, not inserted (D12) |
+| `unilever_sku_demand_fact` | 24,906 | **24,906** | unchanged |
+| `forecast_result` / `sku_segment` / `sku_traits` | 132 / 792 / 132 | unchanged | md5 identical |
+| `abc_classification` | 23,896 `single` + 25,437 other | unchanged | fingerprinted per method, never as one union |
+
+Batch 12 also confirmed **0 differences in both directions** between the real rows of all six fact tables and the
+scratch build, on every column including the new ones, and that the synthetic rows of every fact table are
+byte-identical to their pre-migration fingerprints.
+
+Per-schema size after the run: `public` 97 MB, `ssm_synth_v2` 86 MB (`pg_total_relation_size` summed per schema —
+the whole-DB scan is the query that hung for 18 minutes on 2026-09-23, do not run it).
 
 **DONE 2026-09-23 — batch 2 ran with Yuan's explicit go.** Batch 2 deleted the 14 FAKE BOOKING invoices from
 `sales_fact` and moved them to `etl_quarantine`: **−₱2,903,959.74**, taking real sales from ₱211,698,330.64 to
