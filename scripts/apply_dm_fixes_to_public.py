@@ -3,9 +3,18 @@ scripts/apply_real_recovery_to_public.py (whose helpers it reuses): expected cou
 backup + checksum, apply, verify both directions, ledger entry, rollback proven.
 
 Batches (each its own transaction, recorded in <target>.etl_cutover_ledger under a run_id starting 'dm_fixes_'):
-  1  etl_quarantine   the 37 rows of the byte-identical April-2023 sales-return copy       expect +37, 0 fact changes
-The rows each batch writes come from the same code the canonical loader runs (scripts/run_canonical_load.py), so a
-scratch rebuild of the loader reproduces them.
+  1  etl_quarantine     the 37 rows of the byte-identical April-2023 sales-return copy     expect +37, 0 fact changes
+  2  inventory_fact     Aug-2023 "-ACTUAL" sheets keyed on the sign-off block's code (G/I)  expect +172 Pangasinan, +12 Ilocos,
+                        138 Ilocos rows re-keyed, 4 unchanged; etl_quarantine -184 (the 2 Total rows stay)
+  3  inventory_fact     migration 0028; valuation = cost where valuation is NULL            expect 209, valuation_source 'derived_cost'
+  4  salesreturn_fact   Oct/Nov 2025 RMR GS & BO lines, source = 'rmr'                        expect +224 / P1,439,087.79;
+                        etl_quarantine +2 (lines with no Return Slip #)
+  5  product_dimension  Del Monte pack_size from the price list CASE PACK, exact code match   expect 187
+  6  product_dimension  Del Monte brand by the name first-token rule (delmonte_brand.csv)    expect 554 branded, 43 NULL
+  7  sales_fact         the 564 'PANGASINAN SALES REGISTER (2)' rows filed under 2025-04 ->   expect 564 / P4,932,185.22 moved
+                        etl_quarantine, not re-dated (suspected 2024-09 data, pending SSM)
+Batches 1 and 2 come from the canonical loader's own code (run_canonical_load.known_duplicate_file_records, the shape-E
+Transform), so a loader rebuild reproduces them. Batches 3-7 are applied here only; a loader rebuild does not repeat them.
 
 Per batch:
   --rehearse SCHEMA  a scratch copy of the live tables (built once from public, server-side) -> backup of the
