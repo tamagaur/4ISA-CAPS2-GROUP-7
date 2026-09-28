@@ -209,6 +209,21 @@ REAL_STAGING_DIR = REPO_ROOT / "staging"
 _TOWN_BRANCH_MAP_CACHE: dict | None = None
 
 
+def _read_real_staged(family: str) -> pd.DataFrame:
+    """Every REAL staged row of a family. staging/<family>/ also holds copies of synthetic output, and a "real"
+    pool that includes them makes this script's output depend on whichever synthetic copies happen to be
+    present - synthetic breeding synthetic. Found 2026-09-21: the town/branch map, the salesman remap and the
+    Net Amount pool all read the whole folder."""
+    frames = []
+    for f in sorted(REAL_STAGING_DIR.glob(f"{family}/*.parquet")):
+        df = pd.read_parquet(f)
+        if "is_demo" in df.columns:
+            df = df[~df["is_demo"].fillna(False).astype(str).str.lower().isin(["true", "1"])]
+        if len(df):
+            frames.append(df)
+    return pd.concat(frames, ignore_index=True)
+
+
 def derive_town_branch_map() -> dict:
     """Real (Town Display, Branch Code) co-occurrence, scoped by region -
     derived from staging/sales_register/*.parquet only, never invented.
@@ -225,8 +240,7 @@ def derive_town_branch_map() -> dict:
     if _TOWN_BRANCH_MAP_CACHE is not None:
         return _TOWN_BRANCH_MAP_CACHE
 
-    files = sorted(REAL_STAGING_DIR.glob("sales_register/*.parquet"))
-    df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    df = _read_real_staged("sales_register")
     sub = df[["Town Display", "Branch Code", "_region"]].dropna(subset=["Town Display", "Branch Code"])
 
     result = {}
@@ -285,8 +299,7 @@ def derive_salesman_remap() -> dict:
     if _SALESMAN_REMAP_CACHE is not None:
         return _SALESMAN_REMAP_CACHE
 
-    files = sorted(REAL_STAGING_DIR.glob("sales_register/*.parquet"))
-    df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    df = _read_real_staged("sales_register")
     real = df[["Salesman", "_region"]].dropna(subset=["Salesman"])
     region_of = real.groupby("Salesman")["_region"].agg(lambda s: sorted(set(s)))
     real_single_region = {
@@ -342,8 +355,7 @@ def derive_net_amount_pool() -> list:
     global _NET_AMOUNT_POOL_CACHE
     if _NET_AMOUNT_POOL_CACHE is not None:
         return _NET_AMOUNT_POOL_CACHE
-    files = sorted(REAL_STAGING_DIR.glob("sales_register/*.parquet"))
-    df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    df = _read_real_staged("sales_register")
     _NET_AMOUNT_POOL_CACHE = pd.to_numeric(df["Net Amount"], errors="coerce").dropna().tolist()
     return _NET_AMOUNT_POOL_CACHE
 
@@ -414,6 +426,50 @@ def inject_sell_out_negatives(df: pd.DataFrame, seed_key: str) -> tuple[pd.DataF
     return out, n_negative
 
 
+DRY_RUN = False                        # set by --dry-run: convert and count, write nothing
+PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+REAL_EVIDENCE_SKUS: set | None = None  # loaded once from the DB on first use; tests inject a set
+
+
+def load_real_evidence_skus() -> set:
+    """Del Monte SKU codes that REAL data vouches for: product_dimension rows (grain 'sku') that have at least
+    one Inventory_Fact_Real row - 597 as of 2026-09-21, the set scripts/apply_dm_fix_to_public.py step 3
+    upserted from the real inventory_sign_off files. Read-only. data/delmonte_real_skus.txt is NOT used: it
+    lists 269 codes and predates that fix."""
+    import os
+    import psycopg2
+    from dotenv import load_dotenv
+    load_dotenv(REPO_ROOT / ".env")
+    conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"])
+    try:
+        conn.set_session(readonly=True)
+        with conn.cursor() as cur:
+            cur.execute("""SELECT DISTINCT pd.sku_code FROM product_dimension pd
+                           JOIN inventory_fact_real i ON i.product_key = pd.product_key
+                           WHERE pd.principal = 'delmonte' AND pd.grain = 'sku' AND pd.sku_code IS NOT NULL""")
+            return {r[0] for r in cur.fetchall()}
+    finally:
+        conn.close()
+
+
+def restrict_inventory_to_real_evidence(df: pd.DataFrame, evidence: set) -> tuple[pd.DataFrame, dict]:
+    """Drop synthetic inventory rows whose SKU code no real file has ever carried.
+
+    The raw synthetic inventory xlsx invent their own SKU codes (14,5xx of them), and each one becomes a
+    Product_Dimension row with no stock, tier or reorder point behind it. Del Monte has no SOH-style witness
+    of what existed when, so no existence claim can be made for a SKU real data never shows; such rows are
+    left out rather than loaded as products. The match is on the FULL code the loader would store: a
+    trailing-digit match is not enough, because the loader would still create a product under the invented
+    full code. Rows with no SKU-like code (banners, blanks) pass through for Transform to judge."""
+    if "__col0__" not in df.columns:
+        return df, {"excluded_rows": 0, "excluded_codes": []}
+    code = df["__col0__"].map(lambda v: (_SKU_CODE_RE.match(str(v)) or [None, None])[1] if pd.notna(v) else None)
+    has_code = code.notna() & code.astype(str).str.contains(r"\d", na=False)
+    drop = has_code & ~code.isin(evidence)
+    return df.loc[~drop].copy(), {"excluded_rows": int(drop.sum()), "excluded_codes": sorted(set(code[drop])),
+                                  "kept_sku_rows": int((has_code & ~drop).sum())}
+
+
 def parse_filename(name: str) -> tuple[str, str, str] | None:
     """(doc_type, period, region) from the filename alone - explicit
     prefix map, not profile_files.py's buggy regex."""
@@ -461,6 +517,10 @@ def convert_file(path: Path) -> dict | None:
     if parsed is None:
         return {"skipped": path.name, "reason": "filename doesn't match <PREFIX>_<YYYY-MM>_<REGION>.xlsx"}
     doc_type, period_from_name, region_from_name = parsed
+    if not PERIOD_RE.match(period_from_name):
+        # A row with no real month cannot be placed on the calendar, and 'unknown' is a legal TEXT value the
+        # loader would accept (117 such purchase rows reached the live table through another path).
+        return {"skipped": path.name, "reason": f"period '{period_from_name}' is not a YYYY-MM month - rejected, not staged"}
 
     df = pd.read_excel(path, sheet_name=0, header=0)
     real_sheet_name = pd.ExcelFile(path).sheet_names[0]
@@ -521,6 +581,22 @@ def convert_file(path: Path) -> dict | None:
         schema_notes.append(f"_sheet_role baked-in={sorted(baked_in_roles)} != set value '{correct_role}'")
     df["_sheet_role"] = correct_role
     df["_doc_type"] = doc_type
+
+    # --- inventory_sign_off: only SKUs real data vouches for (before the shape step rewrites __col0__) ---
+    evidence_report = None
+    if doc_type == "inventory_sign_off":
+        global REAL_EVIDENCE_SKUS
+        if REAL_EVIDENCE_SKUS is None:
+            REAL_EVIDENCE_SKUS = load_real_evidence_skus()
+        df, evidence_report = restrict_inventory_to_real_evidence(df, REAL_EVIDENCE_SKUS)
+        if evidence_report["excluded_rows"]:
+            schema_notes.append(f"excluded {evidence_report['excluded_rows']} rows: SKU code has no real evidence")
+        if evidence_report.get("kept_sku_rows", 0) == 0:
+            stale = OUT_DIR / doc_type / f"SYNTH__{sanitize_filename(path.stem)}.parquet"
+            if not DRY_RUN:
+                stale.unlink(missing_ok=True)      # never leave the v1 file standing in for "no rows"
+            return {"skipped": path.name, "reason": "inventory_sign_off: no SKU in this file has real evidence",
+                    "evidence": evidence_report, "doc_type": doc_type}
 
     # --- era-faithful inventory_sign_off shape ---
     shape_applied = None
@@ -636,7 +712,10 @@ def convert_file(path: Path) -> dict | None:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_name = f"SYNTH__{sanitize_filename(path.stem)}.parquet"
     out_path = out_dir / out_name
-    df.to_parquet(out_path, index=False, engine="pyarrow")
+    if (df["_period"].astype(str) == "unknown").any() or not df["_period"].astype(str).map(lambda p: bool(PERIOD_RE.match(p))).all():
+        return {"skipped": path.name, "reason": "a row carries a _period that is not a YYYY-MM month - rejected, not staged"}
+    if not DRY_RUN:
+        df.to_parquet(out_path, index=False, engine="pyarrow")
 
     checksum_status = df["_checksum_status"].iloc[0] if "_checksum_status" in df.columns and len(df) else "unverified"
     checksum_column = df["_checksum_column"].iloc[0] if "_checksum_column" in df.columns and len(df) else None
@@ -668,14 +747,21 @@ def convert_file(path: Path) -> dict | None:
         "row_count": len(df),
         "out_path": str(out_path.relative_to(REPO_ROOT)),
         "shape": shape_applied,
+        "evidence": evidence_report,
         "schema_notes": schema_notes,
         "manifest_entry": manifest_entry,
     }
 
 
-def main():
+def main(argv=None):
+    import argparse
+    global DRY_RUN
+    parser = argparse.ArgumentParser(description="Convert the raw synthetic xlsx into staging_synthetic/ parquet.")
+    parser.add_argument("--dry-run", action="store_true", help="convert and count, write nothing")
+    DRY_RUN = parser.parse_args(argv).dry_run
+
     files = sorted(RAW_SYNTH_DIR.glob("*.xlsx"))
-    print(f"Found {len(files)} files in {RAW_SYNTH_DIR}")
+    print(f"Found {len(files)} files in {RAW_SYNTH_DIR}" + ("  [DRY RUN - nothing is written]" if DRY_RUN else ""))
 
     converted, skipped = [], []
     for f in files:
@@ -687,9 +773,18 @@ def main():
         else:
             converted.append(result)
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    fragment = {"staged": [r["manifest_entry"] for r in converted], "reject": []}
-    (OUT_DIR / "_manifest_fragment.json").write_text(json.dumps(fragment, indent=2, sort_keys=True), encoding="utf-8")
+    fragment = {"staged": [r["manifest_entry"] for r in converted],
+                "reject": [{"file": s["skipped"], "reason": s["reason"]} for s in skipped]}
+    if not DRY_RUN:
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        (OUT_DIR / "_manifest_fragment.json").write_text(json.dumps(fragment, indent=2, sort_keys=True), encoding="utf-8")
+
+    ev = [r["evidence"] for r in converted + skipped if r.get("evidence")]
+    excluded_codes = set().union(*[set(e["excluded_codes"]) for e in ev]) if ev else set()
+    print(f"inventory_sign_off real-evidence restriction: {sum(e['excluded_rows'] for e in ev)} rows excluded, "
+          f"{len(excluded_codes)} distinct SKU codes with no real evidence, "
+          f"{sum(e.get('kept_sku_rows', 0) for e in ev)} SKU rows kept "
+          f"(evidence set: {len(REAL_EVIDENCE_SKUS or [])} codes)")
 
     by_doctype = Counter(r["doc_type"] for r in converted)
     rows_by_doctype = Counter()
@@ -721,7 +816,7 @@ def main():
 
     manifest_path = OUT_DIR / "_manifest_fragment.json"
     print()
-    print(f"Manifest fragment written to {manifest_path.relative_to(REPO_ROOT)}")
+    print("Manifest fragment NOT written (dry run)" if DRY_RUN else f"Manifest fragment written to {manifest_path.relative_to(REPO_ROOT)}")
     return converted, skipped
 
 
