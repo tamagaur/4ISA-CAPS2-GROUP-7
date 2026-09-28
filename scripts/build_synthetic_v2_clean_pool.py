@@ -34,6 +34,10 @@ purchases 2025-09, Unilever purchases or returns.
   python -m scripts.build_synthetic_v2_clean_pool --pools            pool sizes, writes nothing
   python -m scripts.build_synthetic_v2_clean_pool --write BLOCK ...  one transaction per block
   python -m scripts.build_synthetic_v2_clean_pool --checks           the simulated cutover (public real + v2 synthetic)
+  python -m scripts.build_synthetic_v2_clean_pool --dec29-dry-run    rows a DEC-29 gap fill would write; writes nothing
+  python -m scripts.build_synthetic_v2_clean_pool --write dm_dec29_gaps --fill-dec29-gaps
+                 fill the DEC-29 intentional gaps (Del Monte returns + purchases 2025-09). OFF by default: without the
+                 flag the block refuses. Needs Yuan's approval (ARCHITECTURE.md DEC-29) and a rebuilt scratch schema.
 """
 from __future__ import annotations
 
@@ -207,10 +211,15 @@ def dm_purchases_forward(cur) -> dict:
     if stale:
         raise RuntimeError(f"dm_purchases_forward: {stale} rows in 2026-04..08 that are not generated synthetic rows")
     cur.execute(f"DELETE FROM {V2}.purchase_fact WHERE principal = 'delmonte' AND is_demo AND _period = ANY(%s)", (FORWARD,))
-    replaced, inserted = cur.rowcount, 0
+    replaced = cur.rowcount
+    return {"months": len(FORWARD), "replaced": replaced, "inserted": _dm_purchases_months(cur, FORWARD)}
+
+
+def _dm_purchases_months(cur, months: list[str]) -> int:
+    inserted = 0
     for site in SITES:
         real = dict(rows(cur, "SELECT _period, COUNT(*) FROM public.purchase_fact_real WHERE principal = 'delmonte' AND region = %s GROUP BY 1", (site,)))
-        for m in FORWARD:
+        for m in months:
             pool = nearest_moy(m, sorted(real))
             n = int(rng("dm_purchases", m, site).choice([real[p] for p in pool]))
             y, mo = _ym(m)
@@ -229,9 +238,9 @@ def dm_purchases_forward(cur) -> dict:
                         {"m": m, "s": site[0].upper(), "site": site, "pool": pool, "n": n, "y": y, "mo": mo,
                          "src": f"{TAG}purchase_order_{m}_{site}"})
             if cur.rowcount != n:
-                raise RuntimeError(f"dm_purchases_forward {m} {site}: inserted {cur.rowcount}, drew {n}")
+                raise RuntimeError(f"dm_purchases {m} {site}: inserted {cur.rowcount}, drew {n}")
             inserted += n
-    return {"months": len(FORWARD), "replaced": replaced, "inserted": inserted}
+    return inserted
 
 
 def dm_returns(cur) -> dict:
@@ -241,11 +250,15 @@ def dm_returns(cur) -> dict:
     if clash:
         raise RuntimeError(f"dm_returns: {clash} rows already in 2021-22")
     cur.execute(f"DELETE FROM {V2}.salesreturn_fact WHERE principal = 'delmonte' AND is_demo AND _period = ANY(%s)", (MONTHS_2122,))
+    return {"months": len(MONTHS_2122), "inserted": _dm_returns_months(cur, MONTHS_2122)}
+
+
+def _dm_returns_months(cur, months: list[str]) -> int:
     inserted = 0
     for site in SITES:
         real = dict(rows(cur, """SELECT _period, COUNT(*) FROM public.salesreturn_fact_real
                                  WHERE principal = 'delmonte' AND source IS NULL AND region = %s GROUP BY 1""", (site,)))
-        for m in MONTHS_2122:
+        for m in months:
             pool = nearest_moy(m, sorted(real))
             n = int(rng("dm_returns", m, site).choice([real[p] for p in pool]))
             s = site[0].upper()
@@ -263,7 +276,59 @@ def dm_returns(cur) -> dict:
             if cur.rowcount != n:
                 raise RuntimeError(f"dm_returns {m} {site}: inserted {cur.rowcount}, drew {n}")
             inserted += n
-    return {"months": len(MONTHS_2122), "inserted": inserted}
+    return inserted
+
+
+# --- DEC-29 (ARCHITECTURE.md): table-months left EMPTY on purpose until SSM's files arrive ------------------------
+# Filling any of them needs Yuan's approval, so this is OFF unless --fill-dec29-gaps is passed; --dec29-dry-run only
+# prints what it would write. Same pools, draws and seeds as dm_returns / dm_purchases_forward. Like every block here it
+# writes to the scratch schema V2 only; public gets the rows through scripts/apply_synth_v2_cutover.py. After a real
+# fill, DEC-29's list is updated (its recurring rule).
+DEC29_RETURNS = (["2023-07", "2023-10"] + [f"2024-{m:02d}" for m in range(3, 13)] + ["2025-01", "2025-02", "2025-05", "2025-07"]
+                 + [f"2026-{m:02d}" for m in (1, 2, 3)])
+DEC29_PURCHASES = ["2025-09"]
+
+
+def real_pool_counts(cur) -> tuple[dict, dict]:
+    """{site: {real month: rows}} of the clean monthly-returns pool (source IS NULL) and the clean purchases pool."""
+    returns = {s: dict(rows(cur, """SELECT _period, COUNT(*) FROM public.salesreturn_fact_real
+                                    WHERE principal = 'delmonte' AND source IS NULL AND region = %s GROUP BY 1""", (s,))) for s in SITES}
+    purchases = {s: dict(rows(cur, """SELECT _period, COUNT(*) FROM public.purchase_fact_real
+                                      WHERE principal = 'delmonte' AND region = %s GROUP BY 1""", (s,))) for s in SITES}
+    return returns, purchases
+
+
+def plan_dec29_gaps(returns_counts: dict, purchase_counts: dict) -> dict:
+    """{(table, month, site): rows} the fill would write - the draw _dm_returns_months / _dm_purchases_months make."""
+    plan = {}
+    for site in SITES:
+        for m in DEC29_RETURNS:
+            real = returns_counts[site]
+            plan[("salesreturn_fact", m, site)] = int(rng("dm_returns", m, site).choice([real[p] for p in nearest_moy(m, sorted(real))]))
+        for m in DEC29_PURCHASES:
+            real = purchase_counts[site]
+            plan[("purchase_fact", m, site)] = int(rng("dm_purchases", m, site).choice([real[p] for p in nearest_moy(m, sorted(real))]))
+    return plan
+
+
+def dm_dec29_gaps(cur, allow: bool = False, dry_run: bool = True) -> dict:
+    plan = plan_dec29_gaps(*real_pool_counts(cur))
+    totals = {t: sum(n for (tt, _, _), n in plan.items() if tt == t) for t in ("salesreturn_fact", "purchase_fact")}
+    if dry_run:
+        return {"dry_run": True, "rows": totals, "months": {"salesreturn_fact": len(DEC29_RETURNS), "purchase_fact": len(DEC29_PURCHASES)}}
+    if not allow:
+        raise RuntimeError("DEC-29: these months are empty on purpose until SSM's files arrive - filling them needs Yuan's "
+                           "approval and the explicit --fill-dec29-gaps flag")
+    for table, months in (("salesreturn_fact", DEC29_RETURNS), ("purchase_fact", DEC29_PURCHASES)):
+        real = rows(cur, f"SELECT COUNT(*) FROM public.{table} WHERE principal = 'delmonte' AND NOT is_demo AND _period = ANY(%s)", (months,))[0][0]
+        taken = rows(cur, f"SELECT COUNT(*) FROM {V2}.{table} WHERE principal = 'delmonte' AND _period = ANY(%s)", (months,))[0][0]
+        if real or taken:
+            raise RuntimeError(f"DEC-29 {table}: {real} real rows in public / {taken} rows in {V2} in the gap months - "
+                               f"a month with data is no longer a gap; update DEC-29 first")
+    written = {"salesreturn_fact": _dm_returns_months(cur, DEC29_RETURNS), "purchase_fact": _dm_purchases_months(cur, DEC29_PURCHASES)}
+    if written != totals:
+        raise RuntimeError(f"DEC-29 fill wrote {written}, planned {totals}")
+    return {"dry_run": False, "rows": written}
 
 
 def uni_inventory(cur) -> dict:
@@ -385,7 +450,10 @@ def checks(cur) -> list:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--pools", action="store_true")
-    p.add_argument("--write", nargs="+", choices=list(BLOCKS), default=None)
+    p.add_argument("--write", nargs="+", choices=list(BLOCKS) + ["dm_dec29_gaps"], default=None)
+    p.add_argument("--fill-dec29-gaps", action="store_true",
+                   help="required with --write dm_dec29_gaps: fill the DEC-29 intentional gaps (needs Yuan's approval; off by default)")
+    p.add_argument("--dec29-dry-run", action="store_true", help="print the rows a DEC-29 fill would write; writes nothing")
     p.add_argument("--checks", action="store_true")
     p.add_argument("--grid", action="store_true", help="print the simulated post-cutover grid as runs")
     args = p.parse_args()
@@ -395,8 +463,12 @@ def main() -> int:
         if args.pools:
             for k, v in pool_sizes(cur).items():
                 print(f"  pool {k}: {v}")
+        if args.dec29_dry_run:
+            print(f"  dm_dec29_gaps (dry run): {dm_dec29_gaps(cur, dry_run=True)}")
+            conn.rollback()
         for block in args.write or []:
-            result = BLOCKS[block](cur)
+            result = (dm_dec29_gaps(cur, allow=args.fill_dec29_gaps, dry_run=False) if block == "dm_dec29_gaps"
+                      else BLOCKS[block](cur))
             conn.commit()
             print(f"  {block}: committed {({k: v for k, v in result.items() if k not in ('removed', 'targets')})}"
                   + (f" removed {result['removed']}" if result.get("removed") else ""))
