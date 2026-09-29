@@ -10,8 +10,8 @@ column), not stored anywhere.
 ?from=/?to= (shared date-range picker, 2026-09) — OPTIONAL, both must be
 given together or neither is used (matching backend/routers/dashboard.py's
 own ?period=/?start_period= convention for the same shared picker, just
-under bo_monitoring.py's from/to naming since this is a plain date-bounded
-table read, not a period-anchored trend). Filters on lr.planning_cycle_date
+under from/to naming since this is a plain date-bounded table read, not a
+period-anchored trend). Filters on lr.planning_cycle_date
 falling within [from, to] inclusive — real, meaningful spread on this
 column (34 distinct pending planning_cycle_dates from 2023-05 through
 2026-03, confirmed live), unlike GET /forecast's forecast_date which is a

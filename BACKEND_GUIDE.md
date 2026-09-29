@@ -38,7 +38,7 @@ Think of it as a conveyor belt with five stops. A file drops in one end; a numbe
 
 **Stop 4 — Load.** `analytics/etl/load.py` takes Transform's clean output and writes it into our Postgres database (hosted on Supabase). This is where **DEC-09** lives: before a fact row (say, a sale) can be saved, Load looks up or creates the dimension row it points to (the customer, the salesman, the product) and gets its ID — this happens here, not in Transform, because some tables *require* that ID to exist before the row can be saved at all.
 
-**Stop 5 — The database, then the API.** Once data is in Postgres (`analytics/db/schema.sql` defines every table), separate analytics scripts read it and write derived results back: `analytics/classification/abc.py` ranks products by revenue (ABC analysis), `analytics/forecasting/sarima.py` predicts next month's demand per SKU, `analytics/optimization/lp.py` turns that forecast into a recommended order quantity. The FastAPI backend (`backend/`) then serves all of this — inventory levels, forecasts, recommendations, ABC tiers, Bad Order rates — over HTTP, for the dashboard to display. **The backend only ever reads from Supabase — it never runs the pipeline itself and never imports the `analytics` package.**
+**Stop 5 — The database, then the API.** Once data is in Postgres (`analytics/db/schema.sql` defines every table), separate analytics scripts read it and write derived results back: `analytics/classification/abc.py` ranks products by revenue (ABC analysis), `analytics/forecasting/sarima.py` predicts next month's demand per SKU, `analytics/optimization/lp.py` turns that forecast into a recommended order quantity. The FastAPI backend (`backend/`) then serves all of this — inventory levels, forecasts, recommendations, ABC tiers — over HTTP, for the dashboard to display. **The backend only ever reads from Supabase — it never runs the pipeline itself and never imports the `analytics` package.**
 
 One thing that's true of the whole project and worth knowing up front: **nothing here ever guesses.** If a value can't be honestly determined from the real data, the code leaves it blank (`NULL`) and says so, rather than inventing a plausible-looking number. You'll see this pattern — called the anti-fabrication principle — everywhere, and it explains a lot of code that might otherwise look overly defensive.
 
@@ -285,8 +285,8 @@ After these five, the rest of the file-by-file section below will make sense wit
 **Gotchas:** Auth here is a static API key, not a real per-user login — flagged in the file's own comment as a deliberate simplification (a JWT library isn't in `requirements.txt` yet), not a final decision.
 **Status:** Written and usable, but not yet actually applied to any endpoint.
 
-#### `backend/routers/inventory.py`, `forecast.py`, `recommendations.py`, `abc.py`, `bo_monitoring.py`
-**What they do:** Each defines one endpoint (`GET /inventory/current`, `GET /forecast/{sku_id}`, `GET /recommendations`, `GET /abc`, `GET /bo-monitoring`). **Every single one is a stub** — each just returns an empty list or dict, with no database query, no auth check, nothing.
+#### `backend/routers/inventory.py`, `forecast.py`, `recommendations.py`, `abc.py`
+**What they do:** Each defines one endpoint (`GET /inventory/current`, `GET /forecast/{sku_id}`, `GET /recommendations`, `GET /abc`). **Every single one is a stub** — each just returns an empty list or dict, with no database query, no auth check, nothing.
 **Why they exist:** They establish the URL shape and response format the frontend can start building against, before the real data-reading logic exists.
 **Calls / called by:** Mounted by `main.py`. None of them call `deps.py` or any database code yet.
 **Gotchas:** If you're implementing one of these for real, the matching Pydantic response schema already exists in `backend/schemas/` — read that first, it documents real quirks (see below) you'd otherwise have to rediscover.
@@ -297,8 +297,8 @@ After these five, the rest of the file-by-file section below will make sense wit
 **Gotchas:** `sku_id` here is genuinely a category path for Del Monte rows, not a SKU — a naming compromise flagged directly in the file's own comment, not a naming bug.
 **Status:** Schema defined; not yet consumed by a working endpoint.
 
-#### `backend/schemas/bo_monitoring.py`
-**What it does:** Defines the JSON shape for `GET /bo-monitoring` (`BOMonitoringItem`, `BOMonitoringResponse`).
+#### `backend/schemas/bo_monitoring.py` (removed 2026-09-29)
+**What it did:** Defined the JSON shape for `GET /bo-monitoring`. The Bad Orders page was dropped from the app on purpose, so the route, this schema and its test were deleted; the ETL still computes the Bad Order rate and `BO_Monitoring_View` still exists in the database.
 **Gotchas:** Deliberately has no `sku_id` field at all, unlike the original spec's TODO comment — Bad Order data has no SKU column anywhere upstream, so a per-SKU field would be fabricated. The response is at (company, region, month) grain instead, matching `BO_Monitoring_View`.
 **Status:** Schema defined; not yet consumed by a working endpoint.
 
@@ -415,4 +415,4 @@ The codebase doesn't record who owns which lane anywhere in Git — that assignm
 
 - **Analytics model lane**: `analytics/classification/abc.py`, `analytics/forecasting/sarima.py`, `analytics/optimization/lp.py`, and their tests. Each function is correct and tested against synthetic data; none has been run against real numbers yet because there's no orchestration script pulling real data out of the (not yet created) database and handing it to these.
 
-- **Backend/API lane** (the other biggest real gap): `backend/`. Every endpoint is currently a stub returning an empty response, with no database query and no auth actually applied despite `deps.py` having a working `get_current_user`. If your assignment is "make the API return real data," this is where you'll spend your time — read the matching `backend/schemas/*.py` file first for each endpoint, since the real-data quirks (like `bo_monitoring`'s missing `sku_id`, or `inventory`'s always-null `unit`) are already documented there.
+- **Backend/API lane** (the other biggest real gap): `backend/`. Every endpoint is currently a stub returning an empty response, with no database query and no auth actually applied despite `deps.py` having a working `get_current_user`. If your assignment is "make the API return real data," this is where you'll spend your time — read the matching `backend/schemas/*.py` file first for each endpoint, since the real-data quirks (like `inventory`'s always-null `unit`) are already documented there.

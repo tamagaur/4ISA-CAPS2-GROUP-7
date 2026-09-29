@@ -198,14 +198,14 @@ analytics/            Installable Python package — the full batch pipeline
   db/                    schema.sql, SQLAlchemy models, date-dimension seeder
   _coerce.py             Shared numeric-parsing helpers (Extract + Transform)
 
-backend/               FastAPI app — routers and Pydantic schemas exist for
-                        5 endpoint groups; each currently returns a stub
-                        response, not connected to Supabase yet
+backend/               FastAPI app — JWT-authenticated routers and Pydantic
+                        schemas reading Supabase (dashboard, forecast, ABC,
+                        reorder recommendations, SKUs, users, audit log)
 
 frontend/              Vite + React dashboard — login, sidebar, and pages for
-                        ABC Classification, SKU Forecast, Reorder
-                        Recommendations, Warehouse Movement, Bad Orders,
-                        Data Upload, SKU Management
+                        Dashboard, SKU Forecast, Category Trends,
+                        SKU Management, ABC Classification, Reorder Recs,
+                        Audit Log, Data Management, User Management
 
 config/                column_maps/*.yaml (per-doc-type header mappings),
                         source_of_truth.yaml (DEC-04 dedup rules),
