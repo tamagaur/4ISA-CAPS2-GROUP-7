@@ -40,8 +40,10 @@ class ABCItem(BaseModel):
     # the ~1,628 products present in ABC_Classification (partial ETL load,
     # more coverage expected), so "no record" and "confirmed zero stock"
     # are different facts and must not be coalesced into the same 0.
-    current_stock: float | None = None
-    stock_status: str  # 'IN STOCK' | 'LOW' | 'CRITICAL' | 'NO DATA'
+    current_stock: float | None = None  # pieces (backend/stock_units.py)
+    # 'IN STOCK' | 'LOW' | 'CRITICAL' | 'NO DATA' | 'NO ROP' — cover against
+    # the LP's current-cycle reorder point; routers/abc.py's _stock_status.
+    stock_status: str
 
 
 class TierSummary(BaseModel):

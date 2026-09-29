@@ -34,7 +34,7 @@ const Pagination = ({
   return (
     <div className="table-pagination-row">
       <span className="table-pagination-info">
-        Showing {firstRow}–{lastRow} of {totalItems}
+        Showing {firstRow.toLocaleString()}–{lastRow.toLocaleString()} of {totalItems.toLocaleString()}
       </span>
 
       <div className="table-pagination-controls">

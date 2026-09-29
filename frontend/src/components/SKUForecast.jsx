@@ -25,7 +25,8 @@ import { describeServedModel, describeFallbackReason } from '../utils/forecastMo
 import DateFilter from './DateFilter';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
-import { isPreviewMode } from '../dataMode';
+import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
+import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import './SKUForecast.css';
 
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
@@ -82,6 +83,14 @@ const monthsBetween = (a, b) => {
 // below this, the chart this page exists to show renders as 1-2
 // disconnected dots rather than a readable trend.
 const MIN_RANGE_MONTHS = 6;
+
+// The newest stored forecast row. GET /forecast/{sku} lists rows oldest
+// first and the runner keeps earlier planning months, so [0] would keep
+// serving the oldest month once a newer one is written.
+const latestForecastRow = (result) => {
+  const rows = result?.forecast;
+  return rows?.length ? rows[rows.length - 1] : null;
+};
 
 // 'YYYY-MM' minus (count-1) months, inclusive — the start of a `count`-month
 // window ending at `period`. Used by the too-short fix button to widen a
@@ -161,7 +170,7 @@ const CustomTooltip = ({ active, payload, label }) => {
           return (
             <p key={index} className="tooltip-item">
               <span className="tooltip-dot" style={{ backgroundColor: entry.color }}></span>
-              {entry.name}: {qty(entry.value)} units
+              {entry.name}: {qty(entry.value)} pieces
             </p>
           );
         })}
@@ -542,7 +551,7 @@ const SKUForecast = () => {
   // ISO date. The pipeline always writes exactly last-real-month + 1, which
   // across the whole corpus is 2026-03.
   const storedForecastPeriod = useMemo(() => {
-    const d = forecastResult?.forecast?.[0]?.forecast_date;
+    const d = latestForecastRow(forecastResult)?.forecast_date;
     return d ? String(d).slice(0, 7) : null;
   }, [forecastResult]);
 
@@ -629,7 +638,17 @@ const SKUForecast = () => {
     return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
   };
 
-  const storedForecast = forecastResult?.forecast?.[0] ?? null;
+  const storedForecast = latestForecastRow(forecastResult);
+  // The band's level, from GET /forecast's interval (backend/routers/
+  // forecast.py, pinned to the runner's CONFIDENCE_Z): forecast +/- 1.645 x
+  // the served model's holdout RMSE, a ~90% range. It was labelled a bare
+  // "confidence interval".
+  const bandLevel = forecastResult?.interval?.level_pct ?? null;
+  const bandLabel = bandLevel != null ? `~${bandLevel}% range` : 'Likely range';
+  // Preview: the payload's own placeholder window, marked on the chart and
+  // table the way the Dashboard and Category Trends mark it, so a 2021–22
+  // placeholder month is never read as SSM's actual sales.
+  const placeholder = forecastResult?.data_mode?.placeholder ?? null;
   const servedModel = useMemo(
     () => (storedForecast ? describeServedModel(storedForecast.model_params, storedForecast.status) : null),
     [storedForecast]
@@ -812,11 +831,12 @@ const SKUForecast = () => {
   // Forecast vs. that last real month — turns the raw forecast number into
   // an actionable "demand is rising/falling" read. null when either side
   // is missing (no forecast yet, no sales history), the last actual was 0
-  // (a % change against zero isn't a meaningful number), or the stored row
-  // isn't a forecast at all (provisional / no-order — no trend to read).
+  // or below (returns can make a month negative: against -1 unit a rise
+  // read "↓ 78,800%"), or the stored row isn't a forecast at all
+  // (provisional / no-order — no trend to read).
   const forecastTrendPct = useMemo(() => {
     if (!derivedForecast || servedModel?.kind !== 'forecast') return null;
-    if (!latestActualPoint || !latestActualPoint.quantity) return null;
+    if (!latestActualPoint || !(latestActualPoint.quantity > 0)) return null;
     return ((derivedForecast.value - latestActualPoint.quantity) / latestActualPoint.quantity) * 100;
   }, [derivedForecast, servedModel, latestActualPoint]);
 
@@ -825,14 +845,14 @@ const SKUForecast = () => {
   // from the run's own model_params, not recounted here.
   const describePlaceholder = () => {
     if (servedModel?.kind === 'no_order') {
-      return 'Stored as 0 units: the reorder plan orders nothing for this SKU.';
+      return 'Stored as 0 pieces: the reorder plan orders nothing for this SKU.';
     }
     const params = storedForecast?.model_params || {};
     const months = params.observed_months_used ?? params.months_with_sales;
     const needed = params.min_months_threshold ?? MIN_SALES_MONTHS;
     const basis = months != null ? `${months} month${months === 1 ? '' : 's'} of sales` : 'its sales so far';
     const value = Math.round(storedForecast?.forecast_value ?? 0).toLocaleString();
-    return `Trailing average of ${basis}: ${value} units. A forecast needs at least ${needed} months of sales.`;
+    return `Trailing average of ${basis}: ${value} pieces. A forecast needs at least ${needed} months of sales.`;
   };
 
   return (
@@ -1395,7 +1415,7 @@ const SKUForecast = () => {
                             <span className="forecast-stat-number">
                               {Math.round(derivedForecast.value).toLocaleString()}
                             </span>
-                            <span className="forecast-stat-unit">units</span>
+                            <span className="forecast-stat-unit">pieces</span>
                           </>
                         ) : (
                           '—'
@@ -1433,7 +1453,7 @@ const SKUForecast = () => {
                       )}
                       <span className="forecast-stat-desc">
                         {latestActualPoint
-                          ? `${latestActualPoint.quantity.toLocaleString()} units in ${formatPeriod(latestActualPoint.period)}`
+                          ? `${latestActualPoint.quantity.toLocaleString()} pieces in ${formatPeriod(latestActualPoint.period)}`
                           : 'no sales history yet'}
                       </span>
                     </div>
@@ -1458,7 +1478,9 @@ const SKUForecast = () => {
                                 {Math.round(derivedForecast.confidenceUpper).toLocaleString()}
                               </span>
                             </span>
-                            <span className="forecast-stat-desc">confidence interval, units</span>
+                            <span className="forecast-stat-desc">
+                              {bandLevel != null ? `${bandLabel}, from past forecast errors · pieces` : 'pieces'}
+                            </span>
                           </div>
                         </>
                       )}
@@ -1521,7 +1543,7 @@ const SKUForecast = () => {
                         {storedParams.ma3_value != null && (
                           <div className="forecast-howmade-item">
                             <dt>MA3 benchmark</dt>
-                            <dd>{Math.round(storedParams.ma3_value).toLocaleString()} units</dd>
+                            <dd>{Math.round(storedParams.ma3_value).toLocaleString()} pieces</dd>
                           </div>
                         )}
                         {/* Reliability on the same basis as the dashboard's
@@ -1532,7 +1554,10 @@ const SKUForecast = () => {
                           <div className="forecast-howmade-item">
                             <dt>Reliability</dt>
                             <dd className={storedForecast.mase < 1 ? '' : 'forecast-howmade-warn'}>
-                              MASE {storedForecast.mase.toFixed(2)} ·{' '}
+                              {/* Three decimals near 1, where two would round
+                                  0.996 up to "1.00" beside "beats a naive
+                                  forecast" (the verdict uses the stored value). */}
+                              MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)} ·{' '}
                               {storedForecast.mase < 1 ? 'beats a naive forecast' : 'no better than a naive forecast'}
                             </dd>
                           </div>
@@ -1625,11 +1650,16 @@ const SKUForecast = () => {
                   </div>
                   {chartView === 'table' ? (
                     <ChartTable
-                      caption="Actual sales and forecast by month, in units"
+                      caption="Actual sales and forecast by month, in pieces"
                       columns={[
-                        { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
-                        { key: 'actualV', label: 'Actual (units)', format: (v) => Math.round(v).toLocaleString() },
-                        { key: 'forecastV', label: 'Forecast (units)', format: (v) => Math.round(v).toLocaleString() },
+                        {
+                          key: 'period',
+                          label: 'Month',
+                          format: (v) => `${formatAxisPeriod(v)}${isPlaceholderPeriod(v, placeholder) ? ' (placeholder)' : ''}`,
+                          align: 'left',
+                        },
+                        { key: 'actualV', label: 'Actual (pieces)', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'forecastV', label: 'Forecast (pieces)', format: (v) => Math.round(v).toLocaleString() },
                         { key: 'ciLow', label: 'Range low', format: (v) => Math.round(v).toLocaleString() },
                         { key: 'ciHigh', label: 'Range high', format: (v) => Math.round(v).toLocaleString() },
                       ]}
@@ -1676,7 +1706,15 @@ const SKUForecast = () => {
                             stroke={COLORS.forecast} strokeOpacity="0.35" strokeWidth="1"
                           />
                         </svg>
-                        <span className="legend-label">Confidence Interval</span>
+                        <span className="legend-label">{bandLabel}</span>
+                      </div>
+                    )}
+                    {chartData.some((pt) => isPlaceholderPeriod(pt.label, placeholder)) && (
+                      <div className="legend-item">
+                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                          <rect x="1" y="1.5" width="26" height="9" rx="2.5" fill={CHART_COLORS.placeholder} fillOpacity="0.3" />
+                        </svg>
+                        <span className="legend-label">Placeholder months — not SSM&apos;s data</span>
                       </div>
                     )}
                   </div>
@@ -1687,6 +1725,7 @@ const SKUForecast = () => {
                     <ResponsiveContainer width="100%" height={420}>
                       <ComposedChart data={zoom.view} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 8, bottom: 32 }}>
                         <CartesianGrid {...GRID_PROPS} />
+                        {renderPlaceholderBand(placeholderSpan(zoom.view.map((pt) => ({ period: pt.label })), placeholder))}
                         <XAxis
                           dataKey="label"
                           axisLine={true}

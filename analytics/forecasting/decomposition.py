@@ -7,8 +7,12 @@ STL (Seasonal-Trend decomposition using Loess, Cleveland et al. 1990) via
 statsmodels, period 12, robust fitting so one freak month doesn't bend the
 seasonal shape. The series runs from the first sale (the months before it
 are "not launched yet", not zero demand — the router's own convention).
-Two full seasonal cycles (MIN_MONTHS) are required; a shorter series gets
-the reason instead of a fit to noise.
+Three full seasonal cycles (MIN_MONTHS) are required; a shorter series gets
+the reason instead of a fit to noise. Two were required until 2026-09-29,
+when the same stl_summary() run on pure white noise read "Strong"
+seasonality for 79% of 24-month series and 98% at 26 months (85% at 30,
+20% at 38): with so few cycles the robust fit absorbs one-off spikes into
+the seasonal shape, so the panel was reporting noise as seasonality.
 
 Strength of trend and seasonality follow Hyndman & Athanasopoulos,
 Forecasting: Principles and Practice (3rd ed.), §4.3:
@@ -24,7 +28,7 @@ import numpy as np
 from statsmodels.tsa.seasonal import STL
 
 PERIOD = 12
-MIN_MONTHS = 2 * PERIOD
+MIN_MONTHS = 3 * PERIOD
 MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
@@ -50,7 +54,10 @@ def stl_summary(periods: list[str], values: list[float]) -> dict:
     if len(y) < MIN_MONTHS:
         return {
             "available": False,
-            "reason": f"STL needs {MIN_MONTHS} months from the first sale (two seasonal cycles); this series has {len(y)}.",
+            "reason": (
+                f"Seasonality needs {MIN_MONTHS} months from the first sale (three seasonal cycles) to tell a "
+                f"repeating pattern from noise; this series has {len(y)}."
+            ),
             "months": int(len(y)),
         }
 

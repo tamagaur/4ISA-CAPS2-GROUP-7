@@ -63,6 +63,9 @@ const SKUManagement = () => {
       rawItems.map((item) => ({
         id: item.product_key,
         code: item.sku_id,
+        principal: item.principal,
+        // 'sku' (an item code) or 'category' (a Del Monte sell-out category).
+        grain: item.grain,
         // Real Product_Dimension.brand. This used to be hardcoded 'Unilever'
         // — the principal, not a brand — and because the edit flow sends
         // brand back on save, any edit would have overwritten a real brand
@@ -86,6 +89,7 @@ const SKUManagement = () => {
         reorderPt: item.reorder_point,
         status: item.status,
         currentStock: item.current_stock,
+        currentStockCases: item.current_stock_cases,
         unitPrice: item.unit_price,
         notes: item.notes,
       })),
@@ -208,19 +212,29 @@ const SKUManagement = () => {
   const totalSKUs = skus.length;
   const categoryASKUs = skus.filter(s => s.cat === 'A').length;
 
-  // The newest classification period present in this scope — i.e. the
-  // current ABC run. Anything older than this is a carried-forward tier
-  // from a month the SKU last had sales in, which the table marks so a
-  // stale category is never read as a fresh one.
-  const latestCatPeriod = useMemo(
-    () => skus.reduce((max, s) => (s.catPeriod && s.catPeriod > max ? s.catPeriod : max), ''),
+  // Each principal's newest classification period — its current ABC run.
+  // Anything older is a carried-forward tier from a month the SKU last had
+  // sales in, which the table marks so a stale category is never read as a
+  // fresh one. Per principal: Unilever's run is 2026-02 and Del Monte's
+  // 2025-12, so one latest month across both marked every Del Monte tier
+  // "carried forward, no sales since" under All principals.
+  const latestCatPeriodByPrincipal = useMemo(
+    () => skus.reduce((acc, s) => {
+      if (s.catPeriod && !(acc[s.principal] >= s.catPeriod)) acc[s.principal] = s.catPeriod;
+      return acc;
+    }, {}),
     [skus]
   );
-  const staleCatSKUs = useMemo(
-    () => skus.filter(s => s.cat && s.catPeriod && s.catPeriod !== latestCatPeriod).length,
-    [skus, latestCatPeriod]
-  );
+  const isCurrentTier = (s) => s.catPeriod === latestCatPeriodByPrincipal[s.principal];
+  // Category A's own carried-forward count — the card used to print every
+  // tier's (821 of them, 20 of which are A).
+  const categoryACarried = skus.filter(s => s.cat === 'A' && s.catPeriod && !isCurrentTier(s)).length;
   const noBrandSKUs = skus.filter(s => !s.brand).length;
+  // Del Monte's product master mixes item codes with sell-out categories
+  // (DEC-03). Categories carry no brand, and item codes are never ranked one
+  // by one (Del Monte is ranked by category), so the cards count them apart.
+  const categoryRows = skus.filter(s => s.grain === 'category').length;
+  const unrankedDelMonteItems = skus.filter(s => !s.cat && s.principal === 'delmonte' && s.grain !== 'category').length;
   // No tier in ANY run up to the latest one — not a stale tier, an absent
   // one. Shown as its own count (and filter) rather than defaulted to C:
   // an invented category is worse than an honest gap.
@@ -331,7 +345,7 @@ const SKUManagement = () => {
     if (!sku.cat) return 'No ABC classification in any period';
     if (!sku.catPeriod) return `Category ${sku.cat}`;
     const when = formatMonth(sku.catPeriod);
-    return sku.catPeriod === latestCatPeriod
+    return isCurrentTier(sku)
       ? `Category ${sku.cat} — current run (${when})`
       : `Category ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
   };
@@ -363,27 +377,41 @@ const SKUManagement = () => {
         <div className="sku-summary-grid">
           {loading ? <SkeletonStatCards count={4} cardClassName="sku-summary-card" /> : (<>
           <div className="sku-summary-card summary-total">
-            <span className="summary-label">TOTAL SKUS</span>
+            <span className="summary-label">{categoryRows > 0 ? 'TOTAL PRODUCTS' : 'TOTAL SKUS'}</span>
             <span className="summary-value">{totalSKUs.toLocaleString()}</span>
+            {categoryRows > 0 && (
+              <span className="summary-desc">
+                {(totalSKUs - categoryRows).toLocaleString()} item codes · {categoryRows.toLocaleString()} Del Monte categories
+              </span>
+            )}
           </div>
           <div className="sku-summary-card summary-cat-a">
             <span className="summary-label">CATEGORY A</span>
             <span className="summary-value">{categoryASKUs.toLocaleString()}</span>
             <span className="summary-desc">
-              {staleCatSKUs > 0
-                ? `most recent ABC run per SKU · ${staleCatSKUs.toLocaleString()} carried forward`
+              {categoryACarried > 0
+                ? `most recent ABC run per SKU · ${categoryACarried.toLocaleString()} carried forward`
                 : 'most recent ABC run per SKU'}
             </span>
           </div>
           <div className="sku-summary-card summary-not-classified">
             <span className="summary-label">NOT CLASSIFIED</span>
             <span className="summary-value">{notClassifiedSKUs.toLocaleString()}</span>
-            <span className="summary-desc">no sales in any ABC run, so never ranked</span>
+            <span className="summary-desc">
+              {unrankedDelMonteItems === 0
+                ? 'no sales in any ABC run, so never ranked'
+                : unrankedDelMonteItems === notClassifiedSKUs
+                  ? 'Del Monte item codes: Del Monte is ranked by category, not item'
+                  : `${unrankedDelMonteItems.toLocaleString()} are Del Monte item codes (ranked by category); the rest had no sales in any ABC run`}
+            </span>
           </div>
           <div className="sku-summary-card summary-no-brand">
             <span className="summary-label">NO BRAND RECORDED</span>
             <span className="summary-value">{noBrandSKUs.toLocaleString()}</span>
-            <span className="summary-desc">brand missing in the product master</span>
+            <span className="summary-desc">
+              brand missing in the product master
+              {categoryRows > 0 && ` · includes ${categoryRows.toLocaleString()} categories, which carry no brand`}
+            </span>
           </div>
           </>)}
         </div>
@@ -645,7 +673,7 @@ const SKUManagement = () => {
                           ? (
                             <span
                               className={`${getCatClass(sku.cat)}${
-                                sku.catPeriod && sku.catPeriod !== latestCatPeriod ? ' cat-stale' : ''
+                                sku.catPeriod && !isCurrentTier(sku) ? ' cat-stale' : ''
                               }`}
                             >
                               {sku.cat}

@@ -3,30 +3,48 @@ import { X } from 'lucide-react';
 import Modal from './Modal';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import { formatMonth } from '../utils/formatDate';
+import { formatUnits } from '../utils/formatNumber';
 import { CHART_COLORS } from '../theme/colors';
 import './ReorderModal.css';
 
-// Story #80: "why was this recommended" — LP objective weights are fixed
-// per DEC (w1=0.45 cost, w2=0.35 service level, w3=0.20 capacity), so the
-// weight split itself is real config (analytics/optimization/lp.py), not
-// per-SKU fabrication.
+// Story #80: "why was this recommended" — the LP objective weights are fixed
+// (w1 cost, w2 service level, w3 storage cost), so the weight split itself is
+// real config, not per-SKU fabrication. The figures come from GET
+// /recommendations' lp_model (backend/lp_cycle.py, pinned to
+// analytics/optimization/lp.py by tests), not constants retyped here: until
+// 2026-09-29 this listed "Service level ≥ 95%" and "Warehouse capacity" as
+// weights, where the solver uses a 90% service level (Z = 1.28) and w3 is
+// storage cost.
 //
 // Colour matches the Dashboard's own cost/service level/storage priority
 // bars (LP_PRIORITY_ROWS in Charts.jsx) one-for-one via
 // CHART_COLORS.lpWeight — ONE model-output indigo for all three: they are
 // co-equal weights of a single solver objective, not three categories,
 // and the row labels carry identity (see theme/colors.js).
-const OBJECTIVE_WEIGHTS = [
-  { key: 'cost', label: 'Cost minimization', weight: 45, color: CHART_COLORS.lpWeight },
-  { key: 'service', label: 'Service level ≥ 95%', weight: 35, color: CHART_COLORS.lpWeight },
-  { key: 'capacity', label: 'Warehouse capacity', weight: 20, color: CHART_COLORS.lpWeight },
-];
+const objectiveWeights = (lpModel) => {
+  const w = lpModel?.weights;
+  if (!w) return [];
+  const pct = (v) => Math.round(v * 100);
+  return [
+    { key: 'cost', label: 'Cost', weight: pct(w.cost), color: CHART_COLORS.lpWeight },
+    {
+      key: 'service',
+      label: lpModel.service_level_pct != null ? `Service level (${lpModel.service_level_pct}% target)` : 'Service level',
+      weight: pct(w.service_level),
+      color: CHART_COLORS.lpWeight,
+    },
+    { key: 'storage', label: 'Storage cost', weight: pct(w.storage), color: CHART_COLORS.lpWeight },
+  ];
+};
 
+// Stock is valued at purchase cost and sales at selling price, so cover
+// reads a little short (backend/routers/recommendations.py days_of_cover).
 const COVER_BASIS_NOTE =
-  'Stock at cost (₱) ÷ average daily sales value (₱/day, last 3 sales months). Peso basis because stock is in cases and demand in pieces.';
+  'Stock at cost (₱) ÷ average daily sales value (₱/day over the last 3 sales months; a month with no sales counts as 0). Cost against selling price, so cover reads slightly short.';
 
-const ReorderModal = ({ isOpen, onClose, data, principal }) => {
+const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
   if (!isOpen || !data) return null;
+  const weightRows = objectiveWeights(lpModel);
 
   return (
     <Modal
@@ -41,7 +59,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal }) => {
           <div>
             <h3 className="reorder-modal-title">Reorder: {data.product}</h3>
             <p className="reorder-modal-subtitle">
-              Order <strong>{Number(data.orderQty ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> units — LP optimization breakdown for this SKU's recommended order.
+              Order <strong>{formatUnits(data.orderQty)}</strong> units — LP optimization breakdown for this SKU's recommended order.
             </p>
           </div>
           <button className="reorder-modal-close" onClick={onClose} aria-label="Close modal">
@@ -95,7 +113,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal }) => {
               part-to-whole form, not three independent progress tracks. */}
           <div className="reorder-weight-stack">
             <div className="reorder-weight-stack-track">
-              {OBJECTIVE_WEIGHTS.map((obj) => (
+              {weightRows.map((obj) => (
                 <div
                   key={obj.key}
                   className="reorder-weight-segment"
@@ -105,7 +123,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal }) => {
               ))}
             </div>
             <div className="reorder-weight-legend">
-              {OBJECTIVE_WEIGHTS.map((obj) => (
+              {weightRows.map((obj) => (
                 <div className="reorder-weight-legend-item" key={obj.key}>
                   <span className="reorder-weight-swatch" style={{ backgroundColor: obj.color }} />
                   <span className="reorder-weight-legend-label">{obj.label}</span>
@@ -115,7 +133,9 @@ const ReorderModal = ({ isOpen, onClose, data, principal }) => {
             </div>
           </div>
           <p className="reorder-why-note">
-            Constraints applied: service level ≥ 95%, supplier MOQ, and warehouse capacity headroom.
+            Constraints applied: each SKU is ordered at least up to its reorder point
+            {lpModel?.z_score != null && <> (forecast + safety stock at Z = {lpModel.z_score})</>}, and the
+            cycle&apos;s total must fit the warehouse capacity and each principal&apos;s supplier limit.
           </p>
         </div>
     </Modal>

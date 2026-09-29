@@ -270,3 +270,41 @@ def test_freshness_flags_an_lp_older_than_its_forecasts(sample_rows):
                      headers={"Authorization": f"Bearer {user_token()}"}).json()
     assert body["freshness"]["is_stale"] is True
     assert body["superseded_count"] == 179
+
+
+# ---- the LP's settings, each row's tier, whole-unit totals (2026-09-29) ------
+
+def test_lp_settings_the_api_states_are_the_solvers():
+    """GET /recommendations' lp_model and GET /dashboard's lp_weights come
+    from backend/lp_cycle.py; analytics/optimization/lp.py is what solves.
+    Read as text: lp.py imports the pulp solver."""
+    import re
+    from pathlib import Path
+    from statistics import NormalDist
+
+    from backend.lp_cycle import LP_SERVICE_LEVEL_PCT, LP_SERVICE_Z, LP_WEIGHTS
+
+    source = (Path(__file__).resolve().parents[2] / "analytics/optimization/lp.py").read_text(encoding="utf-8")
+    w = re.search(r"^W1, W2, W3 = ([0-9.]+), ([0-9.]+), ([0-9.]+)", source, re.M)
+    z = re.search(r"^Z_SCORE = ([0-9.]+)", source, re.M)
+    assert w and z
+    assert [LP_WEIGHTS["cost"], LP_WEIGHTS["service_level"], LP_WEIGHTS["storage"]] == [float(v) for v in w.groups()]
+    assert LP_SERVICE_Z == float(z.group(1))
+    assert round(NormalDist().cdf(LP_SERVICE_Z) * 100) == LP_SERVICE_LEVEL_PCT
+
+
+def test_response_carries_the_lp_model_and_each_rows_tier(client):
+    body = client.get("/recommendations?principal=unilever").json()
+    assert body["lp_model"]["weights"] == {"cost": 0.45, "service_level": 0.35, "storage": 0.2}
+    assert body["lp_model"]["service_level_pct"] == 90
+    assert body["items"] and all("tier" in item for item in body["items"])
+
+
+def test_whole_units_round_up_but_ignore_float_noise():
+    """The Reorder page's rounding (formatNumber.js wholeUnits), so the
+    Dashboard's total equals the sum of the rows a planner sees."""
+    from backend.routers.recommendations import whole_units
+
+    assert whole_units(9818339.99) == 9818340
+    assert whole_units(1782.0000000002) == 1782
+    assert whole_units(10.0) == 10

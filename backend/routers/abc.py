@@ -113,13 +113,14 @@ from backend.data_mode import (
     preview_block,
 )
 from backend.deps import TokenPayload, get_current_user, get_db
+from backend.lp_cycle import current_cycle
 from backend.principals import (
     PrincipalQuery,
     latest_abc_period,
-    latest_inventory_period,
     normalize_principal,
     principal_clause,
 )
+from backend.stock_units import STOCK_AT_LATEST_SQL
 from analytics.classification.abc import abc_rules, pareto_check
 from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
 
@@ -144,27 +145,36 @@ def _summarize(items: list[ABCItem], period: str | None) -> tuple[list[TierSumma
     for entry in summary.values():
         ranked_here = entry.sku_count - entry.carried_forward_count
         entry.sku_share = round(ranked_here / len(current), 6) if current and one_principal else None
-    check = pareto_check(i.revenue_share for i in current) if one_principal else None
+    # Cumulative shares go along so the check reads the top items' share off
+    # one stored running total instead of summing ~140 separately rounded
+    # shares (see pareto_check).
+    check = (
+        pareto_check([i.revenue_share for i in current], [i.cumulative_share for i in current])
+        if one_principal else None
+    )
     return sorted(summary.values(), key=lambda t: t.tier), (ParetoCheck(**check) if check else None)
 
 
-def _stock_status(current_stock: float | None, reorder_point: float | None) -> str:
-    """Real, deterministic stock status — no simulation, no fabricated
-    zero. Mirrors GET /inventory's rule (current_stock > 100 -> IN STOCK,
-    > 0 -> LOW, else CRITICAL), but uses the SKU's own reorder_point as
-    the LOW/IN STOCK cutoff instead of the flat 100-unit default whenever
-    a pending LP_Recommendation exists for it — a real per-SKU threshold,
-    not a guess. current_stock=None means Inventory_Fact_Real simply has
-    no row for this product yet (partial load) — reported as its own
-    "NO DATA" status, never coerced into CRITICAL.
+def _stock_status(stock_pieces: float | None, reorder_point: float | None) -> str:
+    """Cover against the SKU's own reorder point, both in PIECES
+    (backend/stock_units.py). Until 2026-09-29 this compared stock in CASES
+    with rop_i in pieces, called a SKU with loose pieces but no full case
+    out of stock, and judged every SKU without a reorder point against a
+    flat 100 — so no Class A SKU could ever read as above its reorder point.
+
+    NO DATA: no stock record at the latest snapshot (or no usable pack size
+    to express it in pieces). CRITICAL: no stock at all. NO ROP: stock on
+    hand but no reorder point to judge it by — the LP's current cycle plans
+    Category A only, so most B and C products land here rather than in a
+    comparison against an invented threshold.
     """
-    if current_stock is None:
+    if stock_pieces is None:
         return "NO DATA"
-    if current_stock <= 0:
+    if stock_pieces <= 0:
         return "CRITICAL"
-    if reorder_point is not None:
-        return "IN STOCK" if current_stock > reorder_point else "LOW"
-    return "IN STOCK" if current_stock > 100 else "LOW"
+    if reorder_point is None:
+        return "NO ROP"
+    return "IN STOCK" if stock_pieces > reorder_point else "LOW"
 
 
 @router.get("", response_model=ABCResponse)
@@ -248,21 +258,15 @@ def _get_abc_period(
             ac.revenue_share,
             ac.cumulative_share,
             ac.boundary_flag,
-            inv.current_stock AS current_stock,
+            inv.stock_pieces AS current_stock,
             rop.rop_i AS reorder_point
         FROM {abc_source} ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
+        LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
         LEFT JOIN (
-            SELECT product_key, SUM(quantity_on_hand) AS current_stock
-            FROM inventory_fact_real
-            WHERE _period = :inv_period
-            GROUP BY product_key
-        ) inv ON inv.product_key = ac.product_key
-        LEFT JOIN (
-            SELECT DISTINCT ON (product_key) product_key, rop_i
+            SELECT product_key, rop_i
             FROM {lp_src}
-            WHERE status = 'pending'
-            ORDER BY product_key, planning_cycle_date DESC
+            WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
         WHERE ac.classification_period = :period AND ac.method = 'single'
     """
@@ -271,7 +275,10 @@ def _get_abc_period(
 
     params: dict = {
         "period": period,
-        "inv_period": latest_inventory_period(db, principal),
+        # The LP's current cycle only, like every other LP read
+        # (backend/lp_cycle.py): the newest pending row from ANY cycle let a
+        # three-year-old superseded run supply the reorder point.
+        "current_cycle": current_cycle(db, principal, mode),
         **scope_params,
         **source_params,
         **lp_params,
@@ -380,21 +387,15 @@ def _get_abc_last_known(
             ac.revenue_share,
             ac.cumulative_share,
             ac.boundary_flag,
-            inv.current_stock AS current_stock,
+            inv.stock_pieces AS current_stock,
             rop.rop_i AS reorder_point
         FROM latest ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
+        LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
         LEFT JOIN (
-            SELECT product_key, SUM(quantity_on_hand) AS current_stock
-            FROM inventory_fact_real
-            WHERE _period = :inv_period
-            GROUP BY product_key
-        ) inv ON inv.product_key = ac.product_key
-        LEFT JOIN (
-            SELECT DISTINCT ON (product_key) product_key, rop_i
+            SELECT product_key, rop_i
             FROM {lp_src}
-            WHERE status = 'pending'
-            ORDER BY product_key, planning_cycle_date DESC
+            WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
         ORDER BY ac.tier,
                  (ac.classification_period = :period) DESC,
@@ -403,7 +404,7 @@ def _get_abc_last_known(
     """
     params: dict = {
         "period": period,
-        "inv_period": latest_inventory_period(db, principal),
+        "current_cycle": current_cycle(db, principal, mode),
         **ac_scope_params,
         **source_params,
         **lp_params,

@@ -42,3 +42,8 @@ class ForecastResponse(BaseModel):
     principal: str
     actuals: list[ActualPoint] = []
     forecast: list[ForecastPoint] = []
+    # How confidence_lower/upper were made: {z, level_pct, basis} — forecast
+    # +/- z x the served model's holdout RMSE, floored at 0. Sent so the page
+    # names the band's level instead of calling it a bare "confidence
+    # interval".
+    interval: dict | None = None

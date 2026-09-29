@@ -91,6 +91,28 @@ STOCK_AT_PERIOD_SQL = f"""
     GROUP BY inv.product_key, pd_pack.pack_size
 """
 
+# The same three figures, one row per product at ITS OWN principal's latest
+# snapshot, for lists that can mix principals (GET /sku and GET /abc under
+# 'all'). One :inv_period cannot serve both: Unilever's latest snapshot is
+# 2026-03 and Del Monte's 2025-12, so the global latest left every Del Monte
+# product without stock under 'all' (260 products with stock -> 0, measured
+# 2026-09-29). For a single principal it resolves to exactly the snapshot
+# principals.latest_inventory_period() would.
+STOCK_AT_LATEST_SQL = f"""
+    SELECT inv.product_key,
+           {STOCK_PIECES_EXPR} AS stock_pieces,
+           {STOCK_VALUE_EXPR}  AS stock_value_pesos,
+           SUM(inv.quantity_on_hand) AS stock_cases
+    FROM inventory_fact_real inv
+    JOIN product_dimension pd_pack ON pd_pack.product_key = inv.product_key
+    JOIN (
+        SELECT principal, MAX(_period) AS latest_period
+        FROM inventory_fact_real
+        GROUP BY principal
+    ) latest_inv ON latest_inv.principal = inv.principal AND inv._period = latest_inv.latest_period
+    GROUP BY inv.product_key, pd_pack.pack_size
+"""
+
 # Why a comparison could not be made, for the UI to show instead of a number.
 NO_PACK_SIZE_REASON = (
     "stock is recorded in cases and this product has no usable pack size, so it "

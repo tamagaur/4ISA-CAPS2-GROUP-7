@@ -195,6 +195,12 @@ def main():
     cur = conn.cursor()
     cur.execute("SELECT MAX(calendar_month), MIN(calendar_month) FROM Unilever_SKU_Demand_Fact_Real")
     last_real, first_real = cur.fetchone()
+    # The placeholder these files are built on, measured exactly as
+    # backend/data_mode.placeholder_window() does, so the app can tell when
+    # the database's placeholder has since changed (data_mode._outputs_stale).
+    cur.execute("""SELECT COUNT(*), SUM(quantity_sold) FROM Unilever_SKU_Demand_Fact
+                   WHERE is_demo = true AND calendar_month < %s""", (first_real,))
+    pw_rows, pw_qty = cur.fetchone()
     target = str(pd.Period(last_real, freq="M") + 1)
     cur.execute("""SELECT MAX(classification_period) FROM ABC_Classification
                    WHERE principal = 'unilever' AND method = 'single' AND classification_period <= %s""", (last_real,))
@@ -216,6 +222,7 @@ def main():
         "placeholder_rows": int(series_df["is_placeholder"].sum()),
         "placeholder_start": series_df.loc[series_df["is_placeholder"], "month"].min(),
         "placeholder_end": series_df.loc[series_df["is_placeholder"], "month"].max(),
+        "placeholder_window": {"rows": int(pw_rows), "quantity_total": float(pw_qty or 0)},
         "forecast_status": forecasts["status"].value_counts().to_dict(),
         "lp_skus": int(len(lp)), "live_reproduction_check": check,
         "lp_limits": "non-binding (10 x total ROP); uniform unit cost 1.0 where unit_price is null",

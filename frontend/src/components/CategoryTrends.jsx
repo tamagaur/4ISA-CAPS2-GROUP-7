@@ -25,6 +25,12 @@ import RefreshingNote from './RefreshingNote';
 import { LoadingStatus, SkeletonChart, SkeletonLine, SkeletonTable } from './Skeleton';
 import './CategoryTrends.css';
 
+// formatCompactPesos is unsigned by design (callers such as "falling ₱42k a
+// month" supply the direction in words). Revenue itself can be negative when
+// returns outweigh sales in a month — Del Monte DAIRY, Apr 2025, read "₱925"
+// for -₱925 — so revenue figures carry their own sign.
+const formatRevenue = (value) => (value < 0 ? `−${formatCompactPesos(value)}` : formatCompactPesos(value));
+
 // "What are the projected growth and decline trajectories for each product
 // category over the coming year?" — the analytical mapping's P1, from GET
 // /category-trends (analytics/forecasting/category_trend.py).
@@ -53,7 +59,7 @@ const TrendTooltip = ({ active, payload, label, placeholder }) => {
   return (
     <div className="ct-tooltip">
       <p className="ct-tooltip-title">{axisMonth(label)}</p>
-      {p.actual != null && <p>Revenue: {formatCompactPesos(p.actual)}</p>}
+      {p.actual != null && <p>Revenue: {formatRevenue(p.actual)}</p>}
       {p.fitted != null && <p>Trend line: {formatCompactPesos(p.fitted)}</p>}
       {p.projection != null && p.actual == null && <p>Projected trend: {formatCompactPesos(p.projection)}</p>}
       {p.bandLow != null && p.bandHigh != null && p.bandHigh > p.bandLow && p.actual == null && (
@@ -125,7 +131,7 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
   const actualLabels = useMemo(() => {
     const lastActual = [...data].reverse().find((r) => r.actual != null);
     return pointLabels(data, lastActual
-      ? [{ period: lastActual.period, text: formatCompactPesos(lastActual.actual) }]
+      ? [{ period: lastActual.period, text: formatRevenue(lastActual.actual) }]
       : []);
   }, [data]);
   const projectionLabels = useMemo(() => {
@@ -145,7 +151,7 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
           caption={`Monthly revenue and trend projection`}
           columns={[
             { key: 'period', label: 'Month', format: (v) => axisMonth(v), align: 'left' },
-            { key: 'actual', label: 'Revenue', format: (v) => formatCompactPesos(v) },
+            { key: 'actual', label: 'Revenue', format: (v) => formatRevenue(v) },
             { key: 'fitted', label: 'Trend line', format: (v) => formatCompactPesos(v) },
             { key: 'projection', label: 'Projected trend', format: (v) => formatCompactPesos(v) },
             ...(hasRange ? [
@@ -162,7 +168,7 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
               <CartesianGrid {...GRID_PROPS} />
               {renderPlaceholderBand(bandSpan)}
               <XAxis dataKey="period" tickFormatter={axisMonth} minTickGap={24} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} />
-              <YAxis tickFormatter={formatCompactPesos} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} width={56} />
+              <YAxis tickFormatter={formatRevenue} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} width={56} />
               <Tooltip content={<TrendTooltip placeholder={placeholder} />} />
               {/* The projection's likely range: an invisible base up to the
                   low bound, then the visible band on top of it (the same
@@ -268,7 +274,7 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
                     aria-selected={c.category === current?.category}
                   >
                     <td className="ct-name">{titleCase(c.category)}</td>
-                    <td className="table-num">{formatCompactPesos(c.revenue_last_12)}</td>
+                    <td className="table-num">{formatRevenue(c.revenue_last_12)}</td>
                     <td>
                       {c.available ? (
                         <span className={`ct-dir ${dir.className}`}>{DirIcon && <DirIcon size={14} aria-hidden="true" />}{dir.label}</span>

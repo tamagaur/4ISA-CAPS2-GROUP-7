@@ -1,18 +1,22 @@
 {
-  "built_at": "2026-09-23T17:22:22+00:00",
+  "built_at": "2026-09-29T04:16:02+00:00",
   "target_month": "2026-03",
   "abc_period": "2026-02",
   "first_real_month": "2023-01",
   "last_real_month": "2026-02",
-  "series_rows": 5041,
-  "placeholder_rows": 1954,
+  "series_rows": 3875,
+  "placeholder_rows": 788,
   "placeholder_start": "2021-01",
   "placeholder_end": "2022-12",
-  "forecast_status": {
-    "ok": 126,
-    "insufficient_data": 6
+  "placeholder_window": {
+    "rows": 8444,
+    "quantity_total": 39793582.0
   },
-  "lp_skus": 71,
+  "forecast_status": {
+    "ok": 119,
+    "insufficient_data": 13
+  },
+  "lp_skus": 75,
   "live_reproduction_check": {
     "skus_live": 132,
     "skus_rebuilt": 132,

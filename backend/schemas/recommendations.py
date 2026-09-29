@@ -58,6 +58,10 @@ class RecommendationItem(BaseModel):
     # Why urgency is 'NO DATA': no snapshot row, or no usable pack size.
     stock_blocked_reason: str | None = None
     revenue_share: float | None = None
+    # The product's tier in the latest ABC run (None when that run did not
+    # rank it). The LP plans Category A, but a cycle outlives the ABC run it
+    # was solved against, so a row can be for a SKU that is no longer A.
+    tier: str | None = None
     stockout_gap: float | None = None
     priority_score: float | None = None
     days_of_cover: float | None = None
@@ -76,6 +80,10 @@ class RecommendationsResponse(BaseModel):
     #  superseded_pending_count, reason} — lets the UI warn that q_i/rop_i
     #  were solved against forecasts that have since been replaced.
     freshness: dict | None = None
+    # {weights: {cost, service_level, storage}, service_level_pct, z_score} —
+    # the solver's own settings (backend/lp_cycle.lp_model_info), so the
+    # detail view states what the LP does rather than a copy of it.
+    lp_model: dict | None = None
 
 
 class RecommendationDecision(BaseModel):

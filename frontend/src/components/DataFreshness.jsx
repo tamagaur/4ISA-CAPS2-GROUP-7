@@ -48,7 +48,9 @@ const DataFreshness = ({ navKey, onRefresh }) => {
   return (
     <div className="data-freshness">
       {fetchedAt > 0 && (
-        <span className="data-freshness-age" title="Figures are cached for up to 5 minutes.">
+        <span className="data-freshness-age" title="Figures are fetched fresh from the database each time a page opens.">
+          {/* No response cache since 2026-09-23 (api/cache.js), so the old
+              "cached for up to 5 minutes" was no longer true. */}
           {formatAge(fetchedAt, now)}
         </span>
       )}

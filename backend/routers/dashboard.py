@@ -325,11 +325,12 @@ from backend.data_mode import (
 from analytics.classification.abc import abc_rules
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
 from backend.deps import TokenPayload, get_current_user, get_db
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle
 from backend.lp_cycle import freshness as lp_freshness
 from backend.principals import PrincipalQuery, latest_abc_period, normalize_principal
 from backend.routers.recommendations import select_one as _recommendation_select_one
 from backend.routers.recommendations import _to_item as _to_recommendation_item
+from backend.routers.recommendations import whole_units
 from backend.stock_units import STOCK_AT_PERIOD_SQL
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -344,17 +345,15 @@ MASE_UNRELIABLE_GATE = 1.0
 
 # Step 19's LP objective weights (analytics/optimization/lp.py's W1/W2/W3:
 # 0.45/0.35/0.20) — hardcoded module constants there, not stored per-
-# recommendation anywhere in the schema, so mirrored here BY VALUE rather
-# than imported (same "defensible default, not fact" mirroring convention
-# AVG_WEEKS_PER_MONTH above uses for analytics/etl/granularity.py's
-# constant — not imported directly since lp.py pulls in the pulp solver,
-# a batch-job dependency this always-on API router shouldn't require just
-# to read three floats). If lp.py's W1/W2/W3 ever change, update these to
-# match by hand. See reorder_preview.lp_weights's docstring section above
-# for why this is read-only, not an adjustable control.
-LP_WEIGHT_COST = 0.45
-LP_WEIGHT_SERVICE_LEVEL = 0.35
-LP_WEIGHT_STORAGE = 0.20
+# recommendation anywhere in the schema. Mirrored once, in
+# backend/lp_cycle.LP_WEIGHTS (lp.py pulls in the pulp solver, a batch-job
+# dependency this always-on API shouldn't require just to read three
+# floats), and pinned to lp.py by tests/backend/test_recommendations.py. See
+# reorder_preview.lp_weights's docstring section above for why this is
+# read-only, not an adjustable control.
+LP_WEIGHT_COST = LP_WEIGHTS["cost"]
+LP_WEIGHT_SERVICE_LEVEL = LP_WEIGHTS["service_level"]
+LP_WEIGHT_STORAGE = LP_WEIGHTS["storage"]
 assert abs((LP_WEIGHT_COST + LP_WEIGHT_SERVICE_LEVEL + LP_WEIGHT_STORAGE) - 1.00) < 1e-9
 
 # Average days/month (365.25/12) / 7 — converts an average MONTHLY figure to
@@ -629,16 +628,28 @@ def _soh_value_by_period(
     """Peso stock-on-hand valuation per Inventory_Fact_Real period — see
     kpis.soh_value's docstring section for the unit-confirmation evidence.
 
-    LIVE CAVEAT (2026-09-17): unit_cost_per_case is 100% populated for
-    Unilever and 0% populated for Del Monte, so the Del Monte side of this
-    product is null everywhere today. `principal` is interpolated (not
-    bound) because it is already validated against a fixed allowlist by
-    normalize_principal() at the endpoint boundary — it can only ever be
-    the literal 'unilever' or 'delmonte' by the time it reaches here."""
+    Both principals carry a valuation now (Del Monte's is the source file's
+    own, e.g. PHP 6,683,837.26 at 2025-12), but their snapshots cover
+    different months. Under 'all' a period therefore gets a figure only when
+    BOTH sides have one (_combine_principal_sums, the rule sales already
+    follows). Summing whatever rows existed mixed two-principal months with
+    Unilever-only ones and drew a drop that never happened (PHP 43.0M ->
+    24.3M from 2025-12 to 2026-01, measured 2026-09-29). `principal` is
+    interpolated (not bound) because it is already validated against a
+    fixed allowlist by normalize_principal() at the endpoint boundary — it
+    can only ever be the literal 'unilever' or 'delmonte' by the time it
+    reaches the query."""
     if not UNILEVER_SOH_UNIT_CONFIRMED:
         # Structurally blocked — every period stays None.
         return {p: None for p in periods}
-    scope = "" if principal == "all" else f" AND principal = '{principal}'"
+    if principal == "all":
+        return _combine_principal_sums(
+            periods,
+            _soh_value_by_period(db, periods, "unilever"),
+            _soh_value_by_period(db, periods, "delmonte"),
+            "all",
+        )
+    scope = f" AND principal = '{principal}'"
     # Inventory_Fact.valuation is the SOURCE FILE's own extended peso total
     # and already prices the loose-piece remainder; the multiplication is
     # only a fallback for rows without it. Verified 2026-09-23 against the
@@ -659,10 +670,9 @@ def _stock_valuation_coverage(db: Session, period: str | None, principal: str = 
     """Which principals actually contribute a peso stock valuation at
     `period`, within `principal`'s scope.
 
-    Exists because 'all' is not the same as 'both' here. Del Monte rows
-    carry no unit_cost_per_case and no valuation at all, and its latest
-    snapshot is 2025-12 while Unilever's is 2026-03, so an unlabelled 'all'
-    stock figure is Unilever's alone. kpis.weeks_of_cover used to divide
+    Exists because 'all' is not the same as 'both' here. Del Monte's latest
+    snapshot is 2025-12 while Unilever's is 2026-03, so at the latest
+    snapshot an 'all' stock figure is Unilever's alone. kpis.weeks_of_cover used to divide
     that Unilever-only stock by BOTH principals' demand — 2.24 weeks
     against Unilever's own 2.93, a number that belonged to neither scope.
     Returning the covered set lets the caller line the denominator up with
@@ -889,8 +899,19 @@ def get_dashboard(
 
     inventory_period = _latest_inventory_period(db, scope)
     soh_periods = periods if inventory_period is None else sorted(set(periods) | {inventory_period})
+    # The chart's stock line. Under 'all' only months where both principals
+    # have stock (_soh_value_by_period).
     soh_by_period = _soh_value_by_period(db, soh_periods, scope)
-    soh_value = soh_by_period.get(inventory_period) if inventory_period is not None else None
+    # The card, its sparkline and weeks of cover describe the principals that
+    # actually have stock at the latest snapshot. Under 'all' at 2026-03 that
+    # is Unilever alone, and the card says so (kpis.soh_coverage) instead of
+    # going blank because Del Monte's latest snapshot is 2025-12.
+    stock_coverage = _stock_valuation_coverage(db, inventory_period, scope)
+    cover_scope = stock_coverage[0] if len(stock_coverage) == 1 else scope
+    soh_card_by_period = (
+        soh_by_period if cover_scope == scope else _soh_value_by_period(db, soh_periods, cover_scope)
+    )
+    soh_value = soh_card_by_period.get(inventory_period) if inventory_period is not None else None
     if inventory_period is None:
         soh_value_blocked_reason = f"Inventory_Fact_Real has no rows for {_scope_label(scope)} at all."
     elif not UNILEVER_SOH_UNIT_CONFIRMED:
@@ -961,9 +982,13 @@ def get_dashboard(
             safety_stock_rate = round(at_or_above / len(comparable), 4)
             safety_stock_rate_blocked_reason = None
         else:
+            # Shown on the card as is, so it names what a planner sees, not
+            # table names. The LP has never planned Del Monte (no SKU-level
+            # sales to forecast), which is the usual reason under that filter.
             safety_stock_rate_blocked_reason = (
-                "No Category A product has both an inventory figure and a pending "
-                "LP_Recommendation to compare (LP_Recommendation may be empty)."
+                "The LP does not plan Del Monte, so it has no safety stock to compare against."
+                if scope == "delmonte"
+                else "No Category A SKU has both a stock record and a safety stock in the LP's current cycle."
             )
 
     # ---- preview: the ABC month the descriptive widgets show --------------
@@ -986,8 +1011,8 @@ def get_dashboard(
                 abc_display_period = month
                 abc_source, abc_source_params = abc_relation(computed, with_stored=False)
                 safety_stock_rate_blocked_reason = (
-                    f"{month} is a placeholder month. Safety stock comes from the LP, which runs on "
-                    f"real data only — pick an end month from {window['first_real_month']} on."
+                    f"{month} is a placeholder month. Safety stock belongs to the LP's current planning "
+                    f"cycle, not to a past month — pick an end month from {window['first_real_month']} on."
                 )
 
     # ---- safety_stock_exposure (band 2 headline) --------------------------
@@ -1014,23 +1039,17 @@ def get_dashboard(
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring
-    # section above for the full reasoning. Reuses soh_by_period (already
-    # carrying UNILEVER_SOH_UNIT_CONFIRMED) and sales_by_period — no new
-    # queries.
+    # section above for the full reasoning. Reuses the stock card's figure
+    # (already carrying UNILEVER_SOH_UNIT_CONFIRMED) and sales_by_period.
     # Numerator and denominator must describe the SAME principals. Under
-    # 'all' the stock valuation is Unilever's alone (Del Monte carries no
-    # unit cost), so the demand side is re-read for exactly the principals
+    # 'all' the latest stock snapshot is Unilever's alone (Del Monte's latest
+    # is 2025-12), so the demand side is re-read for exactly the principals
     # the stock figure covers instead of both — see
-    # _stock_valuation_coverage. `cover_scope` is what the answer is about,
-    # and is returned so the card can say so rather than implying 'all'.
-    stock_coverage = _stock_valuation_coverage(db, inventory_period, scope)
-    cover_scope = stock_coverage[0] if len(stock_coverage) == 1 else scope
-    if cover_scope == scope:
-        stock = soh_by_period.get(inventory_period) if inventory_period is not None else None
-        cover_demand = sales_by_period
-    else:
-        stock = _soh_value_by_period(db, [inventory_period], cover_scope).get(inventory_period)
-        cover_demand = _sales_by_period(db, periods, cover_scope, mode)
+    # _stock_valuation_coverage. `cover_scope` (resolved with the stock card
+    # above) is what the answer is about, and is returned so the card can say
+    # so rather than implying 'all'.
+    stock = soh_value
+    cover_demand = sales_by_period if cover_scope == scope else _sales_by_period(db, periods, cover_scope, mode)
     stock_reason = (
         f"Inventory_Fact_Real has no rows for {_scope_label(scope)} at all." if inventory_period is None
         else _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON if not UNILEVER_SOH_UNIT_CONFIRMED
@@ -1065,8 +1084,10 @@ def get_dashboard(
     # sentence can never disagree with the plot under it.
     svs_insight = sales_vs_stock_insight(sales_vs_stock)
     sales_trend = kpi_trend(sales_by_period, current_period)
+    # The card's own series, so its sparkline and delta cover the same
+    # principals as its value.
     soh_trend = kpi_trend(
-        {p: soh_by_period.get(p) for p in soh_periods}, inventory_period
+        {p: soh_card_by_period.get(p) for p in soh_periods}, inventory_period
     )
 
     # ---- abc_mix -----------------------------------------------------
@@ -1110,20 +1131,36 @@ def get_dashboard(
             for r in sorted(mix_rows, key=lambda r: r["tier"])
         ]
 
+    # Two principals' revenue shares are fractions of two different totals,
+    # so a month both principals were ranked in cannot be read as one ring:
+    # summed, Class A came to ~151% under 'all' for 2025-12 (2026-09-29).
+    # The counts stay; the shares are withheld.
+    if len(abc_coverage) > 1:
+        for row in abc_mix:
+            row["revenue_share_pct"] = None
+
     # ---- abc_revenue (donut centre) -------------------------------------
     # The revenue the ring's shares are shares of — same per-principal
-    # source and both-sides-real rule as kpis.sales, for the ABC period.
+    # source as kpis.sales, for the ABC period, and for the principals the
+    # ring actually covers: under 'all' the ranked run is usually Unilever's
+    # alone, and the both-sides rule then left the centre "Revenue not
+    # available" beside an 80% share. The card labels the coverage.
     if abc_display_period is None:
         abc_revenue = {"period": None, "total": None,
                        "blocked_reason": f"ABC_Classification has no rows for {_scope_label(scope)} yet."}
+    elif len(abc_coverage) > 1:
+        abc_revenue = {"period": abc_display_period, "total": None,
+                       "blocked_reason": "Each principal's tiers are shares of its own revenue, so they are "
+                                         "not combined — pick one principal to see them."}
     else:
-        abc_total = _sales_by_period(db, [abc_display_period], scope, mode).get(abc_display_period)
+        revenue_scope = abc_coverage[0] if abc_coverage else scope
+        abc_total = _sales_by_period(db, [abc_display_period], revenue_scope, mode).get(abc_display_period)
         abc_revenue = {
             "period": abc_display_period,
             "total": _to_float(abc_total),
             "blocked_reason": (
                 None if abc_total is not None
-                else f"No sales rows for {_scope_label(scope)} in {abc_display_period} to total."
+                else f"No sales rows for {_scope_label(revenue_scope)} in {abc_display_period} to total."
             ),
         }
 
@@ -1347,7 +1384,14 @@ def get_dashboard(
         },
     ).mappings().all()
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
-    rp_items_sorted = sorted(rp_items, key=lambda it: _URGENCY_RANK.get(it.urgency, 99))
+    # Within an urgency, highest priority first — the Reorder page's own
+    # ranking (revenue share x units below the reorder point). Urgency alone
+    # left the order to the query, so the card showed an arbitrary five of
+    # the 183 CRITICAL rows (2026-09-29).
+    rp_items_sorted = sorted(
+        rp_items,
+        key=lambda it: (_URGENCY_RANK.get(it.urgency, 99), -(it.priority_score or 0)),
+    )
 
     reorder_preview = {
         "rows": [item.model_dump() for item in rp_items_sorted[:5]],
@@ -1356,7 +1400,9 @@ def get_dashboard(
         # Products with no Inventory_Fact_Real row at the latest snapshot —
         # reported as their own count, never folded into critical.
         "no_data_count": sum(1 for it in rp_items if it.urgency == "NO DATA"),
-        "total_order_qty": round(sum(it.q_i for it in rp_items), 2) if rp_items else 0,
+        # Whole units per row, summed — the Reorder page's own total, so the
+        # two screens agree (they differed by 123.6 units, 2026-09-29).
+        "total_order_qty": sum(whole_units(it.q_i) for it in rp_items) if rp_items else 0,
         "lp_weights": {
             "cost": LP_WEIGHT_COST,
             "service_level": LP_WEIGHT_SERVICE_LEVEL,

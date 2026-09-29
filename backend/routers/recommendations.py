@@ -44,22 +44,29 @@ usable pack size, rather than comparing two different units. That module
 documents the three live checks that justify trusting pack_size. On the
 same data the split becomes 185 CRITICAL / 13 URGENT / 20 PLANNED.
   days_of_cover   The one cover figure that IS unit-consistent: stock at
-                  cost (SUM quantity_on_hand x unit_cost_per_case, pesos,
-                  latest snapshot) / average daily sales value (pesos/day) —
-                  where the daily rate is the mean of the product's monthly
+                  cost (the SOH file's own valuation, backend/stock_units.py;
+                  pesos, latest snapshot) / average daily sales value
+                  (pesos/day) — where the daily rate is the product's
                   net_amount over the three most recent calendar months
-                  present in Unilever_SKU_Demand_Fact_Real (months with no
-                  row are excluded, never averaged in as 0 — same rule as
-                  dashboard.py's _avg_weekly_demand), divided by
-                  AVG_DAYS_PER_MONTH. Exactly the peso basis GET /dashboard's
-                  Unilever weeks_of_cover already uses, at SKU grain. Caveat:
-                  stock is valued at last purchase cost while sales are at
-                  selling price, so cover is understated by the margin — a
-                  known bias in one direction, disclosed in the UI tooltip.
-                  None (with cover_blocked_reason) when the stock row, the
-                  cost, or any recent sales month is missing, or when the
-                  daily rate is 0. The sales source is Unilever-only, so a
-                  Del Monte LP row (none exist live) is honestly blocked.
+                  present in Unilever_SKU_Demand_Fact_Real, divided by the
+                  number of those months and by AVG_DAYS_PER_MONTH. A month
+                  the table HAS but this product has no row in counts as 0:
+                  the table stores no zero-sale rows, so that month is a
+                  month with no sales. (A month missing from the whole table
+                  is a gap instead — DEC-29 — which is why the window only
+                  takes months the table has.) Until 2026-09-29 those months
+                  were averaged out, which overstated the daily rate and
+                  understated cover for 24 of the 250 current rows. Exactly
+                  the peso basis GET /dashboard's Unilever weeks_of_cover
+                  already uses, at SKU grain. Caveat: stock is valued at
+                  last purchase cost while sales are at selling price, so
+                  cover is understated by the margin — a known bias in one
+                  direction, disclosed in the UI tooltip. None (with
+                  cover_blocked_reason) when the stock row or its valuation
+                  is missing, when the product sold nothing in the window,
+                  or when the daily rate is 0 or below. The sales source is
+                  Unilever-only, so a Del Monte LP row (none exist live) is
+                  honestly blocked.
 
   current_stock   was COALESCE(..., 0). A product with no Inventory_Fact_Real
                   row at the latest snapshot (39 of the 250 live rows) was
@@ -69,6 +76,7 @@ same data the split becomes 185 CRITICAL / 13 URGENT / 20 PLANNED.
 from __future__ import annotations
 
 import datetime
+import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
@@ -86,9 +94,19 @@ from backend.principals import (
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
 from backend.data_mode import PREVIEW, REAL, get_data_mode, lp_source, predictive_preview, preview_block
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info
 from backend.lp_cycle import freshness as lp_freshness
 from backend.stock_units import NO_PACK_SIZE_REASON, STOCK_AT_PERIOD_SQL
+
+# Order quantities are counted in whole units rounded UP, the rule the Reorder
+# page applies to every row (frontend/src/utils/formatNumber.js wholeUnits),
+# so any total computed here equals the sum of the rows a planner sees. The
+# epsilon keeps float noise (1782.0000000002) from rounding up a whole unit.
+_WHOLE_UNIT_EPSILON = 1e-6
+
+
+def whole_units(value: float) -> int:
+    return math.ceil(value - _WHOLE_UNIT_EPSILON)
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
@@ -107,6 +125,7 @@ _SELECT_ONE = f"""
         inv.stock_cases AS current_stock_cases,
         inv.stock_value_pesos AS stock_value_pesos,
         abc.revenue_share AS revenue_share,
+        abc.tier AS tier,
         sales.avg_monthly_sales_pesos AS avg_monthly_sales_pesos
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
@@ -114,13 +133,13 @@ _SELECT_ONE = f"""
         {STOCK_AT_PERIOD_SQL}
     ) inv ON inv.product_key = lr.product_key
     LEFT JOIN (
-        SELECT DISTINCT ON (product_key) product_key, revenue_share
+        SELECT DISTINCT ON (product_key) product_key, revenue_share, tier
         FROM abc_classification
         WHERE method = 'single' AND classification_period = :abc_period
         ORDER BY product_key, classification_period DESC
     ) abc ON abc.product_key = lr.product_key
     LEFT JOIN (
-        SELECT product_key, AVG(month_total) AS avg_monthly_sales_pesos
+        SELECT recent.product_key, SUM(recent.month_total) / MAX(sales_window.months) AS avg_monthly_sales_pesos
         FROM (
             SELECT product_key, calendar_month, SUM(net_amount) AS month_total
             FROM unilever_sku_demand_fact_real
@@ -130,7 +149,13 @@ _SELECT_ONE = f"""
             )
             GROUP BY product_key, calendar_month
         ) recent
-        GROUP BY product_key
+        CROSS JOIN (
+            SELECT COUNT(*) AS months FROM (
+                SELECT DISTINCT calendar_month FROM unilever_sku_demand_fact_real
+                ORDER BY calendar_month DESC LIMIT 3
+            ) window_months
+        ) sales_window
+        GROUP BY recent.product_key
     ) sales ON sales.product_key = lr.product_key
 """
 
@@ -213,6 +238,7 @@ def _to_item(r) -> RecommendationItem:
         stock_blocked_reason=stock_blocked_reason,
         urgency=urgency,
         revenue_share=revenue_share,
+        tier=r.get("tier"),
         stockout_gap=stockout_gap,
         priority_score=priority_score,
         days_of_cover=days_of_cover,
@@ -284,7 +310,7 @@ def get_recommendations(
             # promise. An empty list with the reason is the honest answer.
             return _with_data_mode(RecommendationsResponse(
                 items=[], count=0, planning_cycle_date=None,
-                superseded_count=0, freshness=freshness,
+                superseded_count=0, freshness=freshness, lp_model=lp_model_info(),
             ), db, mode)
         query += CURRENT_CYCLE_CLAUSE
         params["current_cycle"] = current
@@ -298,6 +324,7 @@ def get_recommendations(
         planning_cycle_date=freshness["cycle_date"],
         superseded_count=freshness["superseded_pending_count"] if cycle == "current" else 0,
         freshness=freshness,
+        lp_model=lp_model_info(),
     ), db, mode)
 
 

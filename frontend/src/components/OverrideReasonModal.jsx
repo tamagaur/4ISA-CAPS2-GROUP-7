@@ -3,6 +3,7 @@ import { X, XOctagon } from 'lucide-react';
 import Modal from './Modal';
 import SaveResult from './SaveResult';
 import { useSaveResult } from '../utils/useSaveResult';
+import { formatUnits } from '../utils/formatNumber';
 import './OverrideReasonModal.css';
 
 // Story #82/#93: capturing a reason whenever a user dismisses the LP
@@ -75,7 +76,7 @@ const OverrideReasonModal = ({ isOpen, item, onCancel, onConfirm }) => {
 
           <div className="override-modal-body">
             <p className="override-modal-copy">
-              You're dismissing the LP-optimized order of <strong>{item.orderQty} units</strong>.
+              You're dismissing the LP-optimized order of <strong>{formatUnits(item.orderQty)} units</strong>.
               This deviation is recorded in the decision log against your account so the reasoning is available for review.
             </p>
 

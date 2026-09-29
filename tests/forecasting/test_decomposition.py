@@ -35,12 +35,22 @@ def test_series_shorter_than_two_cycles_is_not_decomposed():
 
 
 def test_months_before_first_sale_are_dropped():
-    periods = _periods(2023, 1, 30)
-    values = [0.0] * 6 + [100 + 10 * math.sin(i) for i in range(24)]
+    periods = _periods(2023, 1, 42)
+    values = [0.0] * 6 + [100 + 10 * math.sin(i) for i in range(36)]
     s = stl_summary(periods, values)
     assert s["available"] is True
-    assert s["months"] == 24
+    assert s["months"] == 36
     assert s["periods"][0] == "2023-07"
+
+
+def test_two_cycles_are_not_enough_to_call_seasonality():
+    """Robust STL on 24-30 months read pure noise as "Strong" seasonality
+    most of the time (2026-09-29), so a series needs three full cycles."""
+    assert MIN_MONTHS == 36
+    s = stl_summary(_periods(2023, 1, 30), [100 + 10 * math.sin(i) for i in range(30)])
+    assert s["available"] is False
+    assert s["months"] == 30
+    assert "36 months" in s["reason"]
 
 
 def test_never_sold_is_not_decomposed():

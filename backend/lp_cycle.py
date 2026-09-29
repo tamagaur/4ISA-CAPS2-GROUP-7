@@ -55,6 +55,26 @@ from backend.data_mode import REAL, forecast_source, lp_source
 # concatenate into a query string alongside the principal clause.
 CURRENT_CYCLE_CLAUSE = " AND lr.planning_cycle_date = :current_cycle"
 
+# The solver's fixed settings — analytics/optimization/lp.py's W1/W2/W3 and
+# Z_SCORE — kept here because lp.py imports the pulp solver, a batch-job
+# dependency the always-on API should not need just to read four numbers.
+# tests/backend/test_recommendations.py pins them to lp.py. Every screen that
+# describes the LP reads them from here (GET /recommendations' lp_model,
+# GET /dashboard's reorder_preview.lp_weights), so a label can't drift from
+# what the solver does.
+LP_WEIGHTS = {"cost": 0.45, "service_level": 0.35, "storage": 0.20}
+LP_SERVICE_Z = 1.28
+LP_SERVICE_LEVEL_PCT = 90  # the cycle service level Z = 1.28 stands for
+
+
+def lp_model_info() -> dict:
+    """How the LP decides, for the reorder detail view to state."""
+    return {
+        "weights": dict(LP_WEIGHTS),
+        "service_level_pct": LP_SERVICE_LEVEL_PCT,
+        "z_score": LP_SERVICE_Z,
+    }
+
 
 def current_cycle(db: Session, principal: str | None = None, mode: str = REAL) -> datetime.date | None:
     """The planning cycle the LP is currently proposing: the most recent

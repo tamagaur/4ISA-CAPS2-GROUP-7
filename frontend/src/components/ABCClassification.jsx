@@ -99,18 +99,20 @@ const CLASS_DRILLDOWN_NOTE = {
 };
 
 // GET /abc's stock_status values are a COVER-vs-REORDER-POINT test
-// (backend/routers/abc.py's _stock_status): current stock against the
-// SKU's own reorder point from its pending LP recommendation (a flat 100
-// units when it has none). They are NOT the warehouse's Active/Inactive
-// flag — that is what the Dashboard's "Active / dead stock by ABC tier
-// (warehouse status)" widget shows. Both used to say "In stock", and a
-// client could see Category A mostly green on the Dashboard and "IN STOCK:
+// (backend/routers/abc.py's _stock_status): current stock in pieces against
+// the SKU's own reorder point from the LP's current cycle. A SKU the LP does
+// not plan has no reorder point and reads NO ROP — until 2026-09-29 it was
+// judged against a flat 100 cases instead. They are NOT the warehouse's
+// Active/Inactive flag — that is what the Dashboard's "Active / dead stock by
+// ABC tier (warehouse status)" widget shows. Both used to say "In stock", and
+// a client could see Category A mostly green on the Dashboard and "IN STOCK:
 // 0 SKUs" here for the same month. The backend strings are unchanged; the
 // labels below say what each one actually means.
 const STATUS_LABELS = {
   'IN STOCK': 'Above reorder point',
   LOW: 'Below reorder point',
   CRITICAL: 'Out of stock',
+  'NO ROP': 'No reorder point',
   'NO DATA': 'No stock record',
 };
 const statusLabel = (status) => STATUS_LABELS[status] || status;
@@ -124,6 +126,7 @@ const STOCK_STATUS_COLORS = {
   'IN STOCK': SEMANTIC.healthy,
   LOW: SEMANTIC.watch,
   CRITICAL: SEMANTIC.act,
+  'NO ROP': SEMANTIC.notPlanned,
   'NO DATA': SEMANTIC.noData,
 };
 
@@ -142,10 +145,12 @@ const ClassAggregateTooltip = ({ active, payload }) => {
     return (
       <div className="abc-pareto-tooltip">
         <p className="abc-pareto-tooltip-title">{point.label}</p>
-        {row(COLORS[`abc${point.cat}`], 'Revenue share', `${point.revenueTotal.toFixed(1)}%`)}
+        {point.revenueTotal != null
+          && row(COLORS[`abc${point.cat}`], 'Revenue share', `${point.revenueTotal.toFixed(1)}%`)}
         {row(STOCK_STATUS_COLORS['IN STOCK'], statusLabel('IN STOCK'), `${point.inStockPct.toFixed(0)}%`)}
         {row(STOCK_STATUS_COLORS.LOW, statusLabel('LOW'), `${point.lowPct.toFixed(0)}%`)}
         {row(STOCK_STATUS_COLORS.CRITICAL, statusLabel('CRITICAL'), `${point.criticalPct.toFixed(0)}%`)}
+        {row(STOCK_STATUS_COLORS['NO ROP'], statusLabel('NO ROP'), `${point.noRopPct.toFixed(0)}%`)}
         {row(STOCK_STATUS_COLORS['NO DATA'], statusLabel('NO DATA'), `${point.noDataPct.toFixed(0)}%`)}
         <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.axisLabel }}>
           {point.skuCount} {point.skuCount === 1 ? 'item' : 'items'} ({point.skuSharePct.toFixed(0)}% of total)
@@ -411,14 +416,20 @@ const ABCClassification = () => {
     ? { one: 'category', many: 'categories', header: 'Category', count: 'Category Count', CAPS: 'CATEGORIES' }
     : { one: 'SKU', many: 'SKUs', header: hasDelMonteRows ? 'SKU / Category' : 'SKU', count: 'SKU Count', CAPS: 'SKUS' };
 
-  // This run's measured shares for one tier, from GET /abc's tier_summary.
+  // This run's measured shares for one tier, from GET /abc's tier_summary,
+  // naming the group they describe: the card's headline counts carried-
+  // forward rows too, while the shares are of the rows ranked in this run
+  // ("152 · 18.6% of SKUs" read as 152 of something; it was 132 of 710).
   // sku_share is null when the rows span both principals (their revenue
-  // shares are fractions of two different totals), so nothing is stated then.
+  // shares are fractions of two different totals), so only the count is
+  // stated then.
   const measuredShares = (tier) => {
     const s = tierSummary.find((t) => t.tier === tier);
-    return s?.sku_share != null
-      ? `${asPct(s.sku_share)} of ${rowNoun.many} · ${asPct(s.revenue_share_total)} of revenue`
-      : null;
+    if (!s) return null;
+    const ranked = s.sku_count - (s.carried_forward_count || 0);
+    return s.sku_share != null
+      ? `${ranked.toLocaleString()} ranked: ${asPct(s.sku_share)} of ${currentRunCount.toLocaleString()} · ${asPct(s.revenue_share_total)} of revenue`
+      : `${ranked.toLocaleString()} ranked in this run`;
   };
 
   // Carried-forward Del Monte rows from before the Jan 2025 regrouping —
@@ -451,6 +462,11 @@ const ABCClassification = () => {
   // Roll per-item revenue share + stock_status up to the 3 tiers.
   const buildClassAggregates = (items) => {
     const totalCount = items.length;
+    // Each principal's shares are fractions of its OWN revenue, so shares
+    // from two principals cannot be added (a month both principals ranked
+    // read Class A 150.9% under All principals). The cards withhold theirs
+    // the same way (GET /abc's sku_share is null then).
+    const onePrincipal = new Set(items.filter((d) => d.isCurrent).map((d) => d.principal)).size <= 1;
     return ['A', 'B', 'C'].map((cat) => {
       const catItems = items.filter((d) => d.cat === cat);
       const n = catItems.length || 1; // guard divide-by-zero for an empty tier
@@ -463,10 +479,13 @@ const ABCClassification = () => {
         // This run's revenue only — a carried-forward share is a fraction of
         // another month's revenue, and adding it would push the three
         // classes past 100% combined.
-        revenueTotal: catItems.filter((d) => d.isCurrent).reduce((sum, d) => sum + (d.revPct || 0), 0),
+        revenueTotal: onePrincipal
+          ? catItems.filter((d) => d.isCurrent).reduce((sum, d) => sum + (d.revPct || 0), 0)
+          : null,
         inStockPct: (countOf('IN STOCK') / n) * 100,
         lowPct: (countOf('LOW') / n) * 100,
         criticalPct: (countOf('CRITICAL') / n) * 100,
+        noRopPct: (countOf('NO ROP') / n) * 100,
         // Inventory_Fact_Real is a partial load (backend/routers/abc.py) —
         // most products currently have no stock record at all yet. Kept
         // as its own bucket rather than folded into CRITICAL, so the
@@ -478,7 +497,7 @@ const ABCClassification = () => {
 
   const buildStockBreakdown = (items) => {
     const total = items.length || 1;
-    return ['CRITICAL', 'LOW', 'IN STOCK', 'NO DATA'].map((status) => {
+    return ['CRITICAL', 'LOW', 'IN STOCK', 'NO ROP', 'NO DATA'].map((status) => {
       const count = items.filter((d) => d.status === status).length;
       return { status, count, pct: (count / total) * 100 };
     });
@@ -591,6 +610,7 @@ const ABCClassification = () => {
       case 'IN STOCK': return 'pill pill-success';
       case 'LOW': return 'pill pill-warning';
       case 'CRITICAL': return 'pill pill-critical';
+      case 'NO ROP': return 'pill pill-neutral';
       case 'NO DATA': return 'pill pill-neutral';
       default: return 'pill pill-neutral';
     }
@@ -764,7 +784,15 @@ const ABCClassification = () => {
                     product records, which are never ranked one by one (the
                     ranking is by category) — beside a category count it
                     would read as categories missing. */}
-                {!isDelMonte && unclassifiedCount > 0 && <> · {unclassifiedCount.toLocaleString()} never classified</>}
+                {!isDelMonte && unclassifiedCount > 0 && (
+                  <>
+                    {' · '}{unclassifiedCount.toLocaleString()} never classified
+                    {/* Under All the count is GET /abc's for both principals,
+                        and most of Del Monte's share is item codes, which are
+                        never ranked one by one. */}
+                    {hasDelMonteRows && ' (includes Del Monte item codes, which are ranked by category)'}
+                  </>
+                )}
               </span>
               {boundaryCount > 0 && (
                 <span className="abc-card-desc abc-card-desc-warning">
@@ -830,9 +858,10 @@ const ABCClassification = () => {
                         </>
                       ) : (
                         <>
-                          Compares each SKU&apos;s current stock with its own reorder point (from its pending LP
-                          recommendation; 100 units when it has none) — not the warehouse&apos;s Active/Inactive flag,
-                          which is what the Dashboard&apos;s warehouse-status chart shows.
+                          Compares each SKU&apos;s current stock, in pieces, with its own reorder point from the LP&apos;s
+                          current planning cycle. The LP plans Category A only, so most B and C SKUs have no reorder
+                          point to compare against. Not the warehouse&apos;s Active/Inactive flag, which is what the
+                          Dashboard&apos;s warehouse-status chart shows.
                         </>
                       )}
                     </p>
@@ -849,6 +878,10 @@ const ABCClassification = () => {
                     <div className="abc-pareto-legend-item">
                       <span className="abc-pareto-legend-swatch abc-pareto-legend-swatch--critical" />
                       <span>{statusLabel('CRITICAL')}</span>
+                    </div>
+                    <div className="abc-pareto-legend-item">
+                      <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['NO ROP'] }} />
+                      <span>{statusLabel('NO ROP')}</span>
                     </div>
                     <div className="abc-pareto-legend-item">
                       <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['NO DATA'] }} />
@@ -909,17 +942,22 @@ const ABCClassification = () => {
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="criticalPct" stackId="stockMix" fill={wantsTexture ? "url(#criticalHatch)" : STOCK_STATUS_COLORS.CRITICAL} barSize={28} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="noRopPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO ROP']} barSize={28} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={28} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="criticalPct" stackId="stockMix" fill={wantsTexture ? "url(#criticalHatch)" : STOCK_STATUS_COLORS.CRITICAL} barSize={28} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[4, 4, 0, 0]} barSize={28} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={28} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                        {panel.classAggregates.map((entry) => (
+                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
+                        ))}
+                      </Bar>
+                      <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[4, 4, 0, 0]} barSize={28} {...chartAnim(4)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
@@ -1003,7 +1041,13 @@ const ABCClassification = () => {
               questions the SKU table alone can't answer. */}
           <div className="abc-breakdown-row">
             <ParetoCard principal={principal} period={classificationPeriod} />
-            <AbcFsnMatrix rows={sourceData} fsnOf={fsnOf} rules={fsn.rules} loaded={fsnLoaded} />
+            <AbcFsnMatrix
+              rows={sourceData.filter((d) => d.isCurrent)}
+              carriedCount={carriedCount}
+              fsnOf={fsnOf}
+              rules={fsn.rules}
+              loaded={fsnLoaded}
+            />
           </div>
 
           {/* Searchable Combobox & Filters Bar */}

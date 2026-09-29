@@ -350,6 +350,12 @@ const DashboardLayout = () => {
                 ? <> Forecasts, reorder recommendations and safety stock are a what-if run of the same models on that
                   five-year history (built {String(previewInfo.outputs.built_at).slice(0, 10)}) — never saved, not for decisions.</>
                 : <> Forecasts, reorder recommendations and safety stock still use real data only.</>}
+              {/* GET /data-mode compares the placeholder the what-if files
+                  were built on with the one in the database now. */}
+              {previewInfo?.outputs_stale && (
+                <> <strong>That what-if run is outdated:</strong> the placeholder data has changed since it was built,
+                  so rebuild it (scripts/build_preview_outputs.py) before relying on those figures.</>
+              )}
               {principal !== PLACEHOLDER_PRINCIPAL && (
                 <> The placeholder is Unilever&apos;s, so under {labelForPrincipal(principal)} those months stay empty.</>
               )}

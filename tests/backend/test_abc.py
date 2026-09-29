@@ -60,6 +60,9 @@ class FakeSession:
         sql = str(stmt)
         params = params or {}
         self.calls.append((sql, dict(params)))
+        # lp_cycle.current_cycle(): no pending LP rows in these fixtures.
+        if "MAX(lr.planning_cycle_date)" in sql:
+            return FakeResult([{"d": None}])
         if "MAX(classification_period)" in sql:
             return FakeResult([{"p": self.latest_period}])
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
@@ -193,6 +196,9 @@ class LastKnownFakeSession:
         sql = str(stmt)
         params = params or {}
         self.calls.append((sql, dict(params)))
+        # lp_cycle.current_cycle(): no pending LP rows in these fixtures.
+        if "MAX(lr.planning_cycle_date)" in sql:
+            return FakeResult([{"d": None}])
         if "MAX(classification_period)" in sql:
             rows = self._scoped(self.abc_rows, params)
             cap = params.get("at_or_before")
@@ -331,6 +337,9 @@ class PeriodResolvingFakeSession(FakeSession):
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
+        # lp_cycle.current_cycle(): no pending LP rows in these fixtures.
+        if "MAX(lr.planning_cycle_date)" in sql:
+            return FakeResult([{"d": None}])
         if "MAX(classification_period)" in sql:
             self.calls.append((sql, dict(params)))
             scope, cap = params.get("principal"), params.get("at_or_before")
@@ -384,3 +393,35 @@ def test_last_known_shares_count_only_this_run(last_known_session):
     ranked = sum(t["sku_count"] - t["carried_forward_count"] for t in body["tier_summary"])
     assert summary["A"]["sku_share"] == pytest.approx((summary["A"]["sku_count"] - summary["A"]["carried_forward_count"]) / ranked)
     assert body["pareto_check"]["ranked_count"] == ranked
+
+
+# ---- stock status and the Pareto check (2026-09-29) -------------------------
+
+def test_stock_status_compares_pieces_and_never_invents_a_reorder_point():
+    """Stock and rop_i are both pieces now. Loose pieces are stock, and a SKU
+    the LP does not plan has no reorder point instead of a flat 100."""
+    from backend.routers.abc import _stock_status
+
+    assert _stock_status(None, 100.0) == "NO DATA"
+    assert _stock_status(0.0, 100.0) == "CRITICAL"
+    assert _stock_status(22.0, None) == "NO ROP"
+    assert _stock_status(121964.0, 9818340.0) == "LOW"
+    assert _stock_status(121964.0, 36193.0) == "IN STOCK"
+
+
+def test_pareto_check_reads_the_running_total_not_a_sum_of_rounded_shares():
+    """Unilever's 2025-12 run: 120 shares, each stored to 4 dp, summed to
+    0.8501 ("fails") while the true top-20% share was 0.8498. The stored
+    cumulative share at the cut is rounded only once."""
+    from analytics.classification.abc import pareto_check
+
+    top, rest = 0.00707, (1 - 120 * 0.00707) / 480
+    shares = [round(top, 4)] * 120 + [round(rest, 4)] * 480
+    cumulative = ([round((i + 1) * top, 4) for i in range(120)]
+                  + [round(120 * top + (j + 1) * rest, 4) for j in range(480)])
+
+    assert pareto_check(shares)["passes"] is False  # 120 x 0.0071 = 0.852, the drift
+    check = pareto_check(shares, cumulative)
+    assert check["top_count"] == 120
+    assert check["revenue_share"] == pytest.approx(0.8484)
+    assert check["passes"] is True

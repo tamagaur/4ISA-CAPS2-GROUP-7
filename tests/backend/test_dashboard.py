@@ -415,7 +415,9 @@ def test_kpis_safety_stock_rate_null_when_lp_recommendation_empty():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     kpis = resp.json()["kpis"]
     assert kpis["safety_stock_rate"] is None
-    assert "LP_Recommendation" in kpis["safety_stock_rate_blocked_reason"]
+    # Shown on the card as is, so it says what is missing in a planner's
+    # terms rather than naming the table (2026-09-29).
+    assert "safety stock in the LP's current cycle" in kpis["safety_stock_rate_blocked_reason"]
 
 
 def test_kpis_safety_stock_rate_null_when_no_abc_classification_at_all():
@@ -1182,3 +1184,76 @@ def test_tier_stock_period_names_the_snapshot_month():
     with make_client(session) as c:
         body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
     assert body["tier_stock_period"] == "2024-03"
+
+
+# ---- stock on hand under 'all', and the reorder card's order (2026-09-29) ---
+
+class _PeriodSumSession:
+    """Answers _query_period_sums per principal and refuses an unscoped sum:
+    under 'all' that is exactly what mixed the two principals' coverage."""
+
+    def __init__(self, by_principal):
+        self.by_principal = by_principal
+
+    def execute(self, stmt, params=None):
+        sql = str(stmt)
+        who = next((p for p in self.by_principal if f"principal = '{p}'" in sql), None)
+        assert who, "the 'all' figure must be built from per-principal sums"
+        return FakeResult([{"period": p, "total": v} for p, v in self.by_principal[who].items()])
+
+
+def test_soh_under_all_counts_only_months_both_principals_have():
+    """Summing whatever rows existed put PHP 43.0M (both principals) in
+    2025-12 next to PHP 24.3M (Unilever alone) in 2026-01, a drop that never
+    happened."""
+    from backend.routers.dashboard import _soh_value_by_period
+
+    session = _PeriodSumSession({
+        "unilever": {"2025-12": 36_277_133.89, "2026-01": 24_339_386.24},
+        "delmonte": {"2025-12": 6_683_837.26},
+    })
+    out = _soh_value_by_period(session, ["2025-12", "2026-01"], "all")
+    assert out["2025-12"] == pytest.approx(42_960_971.15)
+    assert out["2026-01"] is None
+
+
+def test_reorder_preview_ranks_by_priority_within_an_urgency():
+    """Urgency alone left the five to the query's order; within an urgency
+    the card now ranks like the Reorder page — revenue share x units below
+    the reorder point, highest first."""
+    shares = {1: 0.01, 4: 0.05, 5: 0.02, 6: 0.04, 8: 0.03, 9: 0.001}
+    stock = {1: 0, 4: 10, 5: 20, 6: 30, 8: 40, 9: 5}
+    rows = [{**_reco_row(k, urgency_stock=stock[k], rop_i=100), "revenue_share": shares[k]} for k in shares]
+    session = FakeSession(reco_preview_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    preview = resp.json()["reorder_preview"]
+    # priority = share x (100 - stock): 4 -> 4.5, 6 -> 2.8, 8 -> 1.8, 5 -> 1.6, 1 -> 1.0, 9 -> 0.095
+    assert [r["recommendation_key"] for r in preview["rows"]] == [4, 6, 8, 5, 1]
+
+
+
+# ---- chart story fields across gaps (2026-09-29) ----------------------------
+
+def test_kpi_trend_says_how_far_back_its_comparison_month_is():
+    """Del Monte's sell-out has no Oct-Nov 2025, so Dec 2025 compares with
+    Sep 2025; the card now says it is three months back."""
+    from backend.chart_insights import kpi_trend
+
+    t = kpi_trend({"2025-08": 7.9, "2025-09": 7.8, "2025-12": 22.1}, "2025-12")
+    assert t["prev_period"] == "2025-09"
+    assert t["months_apart"] == 3
+
+
+def test_portfolio_insight_compares_only_with_the_month_before_the_forecast():
+    """A range ending Jun 2024 read "Mar 2026 forecast ... 247.4% above the
+    25,973 sold in Jun 2024"; the forecast now stands alone then."""
+    from backend.chart_insights import portfolio_forecast_insight
+
+    series = [
+        {"period": "2024-06", "actual": 25973.0, "forecast": None},
+        {"period": "2026-03", "actual": None, "forecast": 90240.0},
+    ]
+    assert portfolio_forecast_insight(series)["text"] == "The Mar 2026 forecast is 90,240 pieces."
+    series[0]["period"] = "2026-02"
+    assert "sold in Feb 2026" in portfolio_forecast_insight(series)["text"]

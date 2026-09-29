@@ -5,9 +5,10 @@ SKU master data management, backing SKUManagement.jsx. Requires
 analytics/db/migrations/0002_add_sku_management_fields.sql to have been
 applied (unit_price/lead_time_days/status/notes on Product_Dimension).
 
-current_stock, reorder_point, and tier are read-only derived fields (latest
-Inventory_Fact_Real period, latest pending LP_Recommendation, latest
-ABC_Classification period respectively) — never written here.
+current_stock, reorder_point, and tier are read-only derived fields (stock
+in pieces at each principal's own latest Inventory_Fact_Real snapshot, the
+LP's current cycle, and the latest ABC_Classification period respectively) —
+never written here.
 
 Fixed 2026-09-17: the tier subquery had no ABC_Classification.method
 filter, so once migration 0017's t3m rows landed in public every product
@@ -16,50 +17,59 @@ to method = 'single', the deployed basis.
 """
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend import audit
 from backend.deps import TokenPayload, get_current_user, get_db, require_admin
+from backend.lp_cycle import current_cycle
 from backend.principals import (
     PrincipalQuery,
     latest_abc_period,
-    latest_inventory_period,
     principal_clause,
 )
 from backend.schemas.sku import SKUCreate, SKUItem, SKUListResponse, SKUUpdate
+from backend.stock_units import STOCK_AT_LATEST_SQL
 
 router = APIRouter(prefix="/sku", tags=["sku"])
 
-_SELECT_ONE = """
+# Product_Dimension's own CHECK (migration 0030): a Unilever sku_code is
+# exactly 8 digits. Checked here too so a bad code gets a 400 that says why,
+# not a 500 from the constraint.
+UNILEVER_SKU_CODE = re.compile(r"[0-9]{8}")
+
+# Stock is in PIECES (backend/stock_units.py), the unit reorder_point is in;
+# stock_cases rides along because it is what the warehouse counts.
+# reorder_point comes from the LP's current cycle only (backend/lp_cycle.py):
+# the newest pending row from ANY cycle showed 179 superseded rows from runs
+# as old as 2023-05 (2026-09-29).
+_SELECT_ONE = f"""
     SELECT
         pd.product_key,
         COALESCE(pd.sku_code, pd.category_path) AS sku_id,
         pd.product_name,
         pd.principal,
+        pd.grain,
         pd.pack_size,
         pd.brand,
         pd.unit_price AS unit_price,
         pd.lead_time_days AS lead_time_days,
         pd.status AS status,
         pd.notes AS notes,
-        COALESCE(inv.current_stock, NULL) AS current_stock,
+        inv.stock_pieces AS current_stock,
+        inv.stock_cases AS current_stock_cases,
         rop.rop_i AS reorder_point,
         abc.tier AS tier,
         abc.classification_period AS tier_period
     FROM product_dimension pd
+    LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = pd.product_key
     LEFT JOIN (
-        SELECT product_key, SUM(quantity_on_hand) AS current_stock
-        FROM inventory_fact_real
-        WHERE _period = :inv_period
-        GROUP BY product_key
-    ) inv ON inv.product_key = pd.product_key
-    LEFT JOIN (
-        SELECT DISTINCT ON (product_key) product_key, rop_i
+        SELECT product_key, rop_i
         FROM lp_recommendation
-        WHERE status = 'pending'
-        ORDER BY product_key, planning_cycle_date DESC
+        WHERE status = 'pending' AND planning_cycle_date = :current_cycle
     ) rop ON rop.product_key = pd.product_key
     LEFT JOIN (
         SELECT DISTINCT ON (product_key)
@@ -84,9 +94,10 @@ _SELECT_ONE = """
 # the 2026-02 anchor, while 1,531 (73.0%) carry a real classification in
 # SOME period — the other 821 were shown as uncategorised despite having
 # been ranked. DISTINCT ON ... ORDER BY classification_period DESC takes
-# each product's most recent run instead, the same shape the rop join above
-# already uses for lp_recommendation, and still yields exactly one row per
-# product_key, so the fan-out fix above is preserved.
+# each product's most recent run instead, and still yields exactly one row
+# per product_key, so the fan-out fix above is preserved. (The rop join needs
+# no DISTINCT ON: (product_key, planning_cycle_date) is LP_Recommendation's
+# upsert key, so one cycle holds at most one row per product.)
 #
 # classification_period comes back with it so callers can show HOW OLD a
 # tier is: a last-known tier is only honest if its date travels with it.
@@ -102,6 +113,7 @@ def _to_item(r) -> SKUItem:
         sku_id=r["sku_id"] or "",
         product_name=r["product_name"],
         principal=r["principal"],
+        grain=r.get("grain"),
         pack_size=r.get("pack_size"),
         brand=r.get("brand"),
         unit_price=float(r["unit_price"]) if r.get("unit_price") is not None else None,
@@ -109,6 +121,9 @@ def _to_item(r) -> SKUItem:
         status=r.get("status") or "ACTIVE",
         notes=r.get("notes"),
         current_stock=float(r["current_stock"]) if r.get("current_stock") is not None else None,
+        current_stock_cases=(
+            float(r["current_stock_cases"]) if r.get("current_stock_cases") is not None else None
+        ),
         reorder_point=float(r["reorder_point"]) if r.get("reorder_point") is not None else None,
         tier=r.get("tier"),
         tier_period=r.get("tier_period"),
@@ -125,7 +140,7 @@ def _one_row_params(db: Session, product_key: int) -> dict:
     """
     return {
         "key": product_key,
-        "inv_period": latest_inventory_period(db, None),
+        "current_cycle": current_cycle(db),
         "abc_period": latest_abc_period(db, None),
     }
 
@@ -146,12 +161,13 @@ def get_skus(
     # rows — that's the real shape of the product master, not a defect.
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     query = _SELECT_ONE + " WHERE 1=1" + scope_sql
-    # Both anchors resolve under the SAME scope as the rows. Measured
-    # 2026-09-20: unscoped they resolved to 2026-03 (Unilever's max), so
-    # every one of Del Monte's 15,308 SKUs reported current_stock NULL
-    # despite 5,164 Del Monte inventory rows existing at 2025-12.
+    # Anchors resolve under the SAME scope as the rows. Measured 2026-09-20:
+    # unscoped they resolved to 2026-03 (Unilever's max), so every Del Monte
+    # SKU reported current_stock NULL despite Del Monte inventory existing at
+    # 2025-12. Stock now resolves per principal inside the query
+    # (STOCK_AT_LATEST_SQL), which is what keeps it right under 'all' too.
     params: dict = {
-        "inv_period": latest_inventory_period(db, principal),
+        "current_cycle": current_cycle(db, principal),
         "abc_period": latest_abc_period(db, principal),
         **scope_params,
     }
@@ -178,6 +194,8 @@ def create_sku(
     # reasoning.
     if payload.principal != "unilever":
         raise HTTPException(status_code=400, detail="principal must be 'unilever'")
+    if not UNILEVER_SKU_CODE.fullmatch(payload.sku_code):
+        raise HTTPException(status_code=400, detail="SKU code must be exactly 8 digits (e.g. 20071069)")
 
     existing = db.execute(
         text("SELECT 1 FROM product_dimension WHERE principal = 'unilever' AND sku_code = :sku_code"),
@@ -208,7 +226,7 @@ def create_sku(
         text(_SELECT_ONE + " WHERE pd.product_key = :key"),
         {
             "key": row["product_key"],
-            "inv_period": latest_inventory_period(db, "unilever"),
+            "current_cycle": current_cycle(db, "unilever"),
             "abc_period": latest_abc_period(db, "unilever"),
         },
     ).mappings().first()

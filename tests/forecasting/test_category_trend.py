@@ -107,3 +107,13 @@ def test_projection_band_clips_at_zero_for_a_steep_decline():
     assert p["available"] is True
     assert min(p["projection_low"]) == 0.0
     assert all(v >= 0 for v in p["projection_high"])
+
+
+def test_no_range_around_a_change_that_has_no_value():
+    """A category whose fitted line is already at zero over the last 12
+    months has no % change, so it gets no range either — it read "— (-100.0%
+    to -100.0%)" (Dressings, 2026-09-29)."""
+    p = project_category([1100.0 - 100.0 * i for i in range(12)] + [0.0] * 12)
+    assert p["change_pct"] is None
+    assert p["change_pct_low"] is None
+    assert p["change_pct_high"] is None

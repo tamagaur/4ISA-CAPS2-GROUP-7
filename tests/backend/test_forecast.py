@@ -152,3 +152,23 @@ def test_unknown_and_out_of_scope_are_404():
     with make_client(FakeSession(PRODUCTS, FORECASTS)) as c:
         assert get(c, "/forecast/nope").status_code == 404
         assert get(c, "/forecast/21051980?principal=delmonte").status_code == 404
+
+
+
+def test_interval_level_is_the_runners_band():
+    """GET /forecast names the band's level from FORECAST_INTERVAL, which must
+    be the z scripts/run_baseline_forecast.py stores bands with (read as
+    text: the script pulls in the model libraries)."""
+    import re
+    from pathlib import Path
+    from statistics import NormalDist
+
+    from backend.routers.forecast import FORECAST_INTERVAL
+
+    source = (Path(__file__).resolve().parents[2] / "scripts/run_baseline_forecast.py").read_text(encoding="utf-8")
+    z = re.search(r"^CONFIDENCE_Z = ([0-9.]+)", source, re.M)
+    assert z and FORECAST_INTERVAL["z"] == float(z.group(1))
+    assert round((2 * NormalDist().cdf(FORECAST_INTERVAL["z"]) - 1) * 100) == FORECAST_INTERVAL["level_pct"]
+    with make_client(FakeSession(PRODUCTS, FORECASTS, ACTUALS)) as c:
+        body = get(c, "/forecast/21051980?principal=unilever").json()
+    assert body["interval"]["level_pct"] == 90

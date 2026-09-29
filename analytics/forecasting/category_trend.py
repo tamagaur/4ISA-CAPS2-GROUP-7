@@ -64,8 +64,13 @@ def method_constants() -> dict:
 
 
 def _line(slope: float, y: np.ndarray, x: np.ndarray) -> float:
-    """Theil–Sen intercept for a given slope: median of y - slope * x."""
-    return float(np.median(y - slope * x))
+    """Theil–Sen intercept for a given slope, median(y) - slope * median(x):
+    scipy.stats.theilslopes's own convention, so the two slope-bound lines
+    and the fitted line all pass through the same point. With median(y -
+    slope * x) for the bounds only (until 2026-09-29) they could sit above a
+    line that had already reached zero, and the table read "— (-100.0% to
+    -100.0%)"."""
+    return float(np.median(y) - slope * np.median(x))
 
 
 def _change_pct(slope: float, intercept: float, n: int) -> float | None:
@@ -108,15 +113,19 @@ def project_category(values: list[float]) -> dict:
     label = {"up": "growing", "down": "declining"}.get(direction, "flat")
     lo_line, hi_line = _line(lo, y, x), _line(hi, y, x)
     change = _change_pct(slope, intercept, n)
-    bounds = sorted(v for v in (_change_pct(lo, lo_line, n), _change_pct(hi, hi_line, n)) if v is not None)
+    # No range around a change that has no value: when the fitted line is
+    # already at zero over the last 12 months there is nothing to compare.
+    bounds = [] if change is None else sorted(
+        v for v in (_change_pct(lo, lo_line, n), _change_pct(hi, hi_line, n)) if v is not None
+    )
     x_ahead = np.arange(n, n + PROJECTION_MONTHS)
     ahead = np.clip(intercept + slope * x_ahead, 0, None)
     # The projection's likely range, month by month: the same two
     # slope-confidence lines the change range above is computed from,
-    # extended over the projection months. Each line pairs a bound slope
-    # with its own Theil–Sen intercept, so near the window's end they can
-    # cross — the band takes the per-month min/max so low <= high always,
-    # and clips at zero exactly like the projection itself.
+    # extended over the projection months. All three lines pivot on
+    # (median x, median y) (_line), so past the window they cannot cross;
+    # the per-month min/max is kept as a guard so low <= high always, and
+    # both clip at zero exactly like the projection itself.
     ahead_lo = lo_line + lo * x_ahead
     ahead_hi = hi_line + hi * x_ahead
     band_low = np.clip(np.minimum(ahead_lo, ahead_hi), 0, None)

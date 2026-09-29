@@ -84,7 +84,11 @@ const trendExtras = (trend, color) => {
     extras.trend = { points: trend.points, color };
   }
   if (trend.delta_pct != null && trend.prev_period) {
-    extras.deltaLine = `${Math.abs(trend.delta_pct).toFixed(1)}% vs ${periodLabel(trend.prev_period)}`;
+    // The comparison month is the nearest earlier one WITH data (backend/
+    // chart_insights.kpi_trend); months_apart says when that is not simply
+    // last month, e.g. Del Monte's Dec 2025 against Sep 2025.
+    const gap = trend.months_apart > 1 ? ` (${trend.months_apart} months earlier)` : '';
+    extras.deltaLine = `${Math.abs(trend.delta_pct).toFixed(1)}% vs ${periodLabel(trend.prev_period)}${gap}`;
     extras.trendDirection = trend.delta_pct > 0 ? 'up' : trend.delta_pct < 0 ? 'down' : undefined;
     extras.deltaTone = trend.delta_pct > 0 ? 'positive' : trend.delta_pct < 0 ? 'negative' : 'neutral';
   }
@@ -436,6 +440,16 @@ const Dashboard = () => {
     count: d.count,
     sharePct: d.revenue_share_pct,
   }));
+  // The principals the ABC run covers (GET /dashboard's abc_coverage), named
+  // when narrower than the page's filter: under All principals the latest
+  // run is usually Unilever's alone, so the ring, the warehouse-status bars
+  // and the below-safety-stock card are Unilever figures and say so.
+  const abcCoverage = coverageNote(data.abc_coverage, pagePrincipal);
+  // What one ranked row is: Del Monte is ranked by product category (DEC-03).
+  const abcCovered = data.abc_coverage || [];
+  const abcUnits = abcCovered.length === 1 && abcCovered[0] === 'delmonte'
+    ? 'categories'
+    : abcCovered.includes('delmonte') ? 'items' : 'SKUs';
 
   const tierStock = (data.tier_stock || []).map((t) => ({
     tier: t.tier,
@@ -491,7 +505,7 @@ const Dashboard = () => {
   const belowSs = kpiDisplay(
     exposure.below_count ?? null, exposure.below_count == null ? exposureReason : null,
     (v) => `${v.toLocaleString()} of ${(exposure.comparable_count ?? 0).toLocaleString()}`,
-    'Measurable Category A SKUs below their safety stock'
+    ['Measurable Category A SKUs below their safety stock', abcCoverage].filter(Boolean).join(' · ')
   );
 
   // Pending action count — the "what to do" figure in the hero strip. Now
@@ -541,10 +555,32 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* The LP freshness notice ("Reorder quantities are from an older
-              LP run") was taken off the page 2026-09-24 at Audrey's request.
-              GET /dashboard still reports lp.is_stale and lp.reason, so it
-              can return without backend work. */}
+          {/* The LP's own freshness. q_i and rop_i are solved against the
+              forecasts of the day the LP ran; when the forecasts are later
+              rewritten (they were, on 2026-09-21, while the LP last ran
+              2026-08-24) those two are built on numbers the table no longer
+              holds, and ss_i reflects the demand history as of that run.
+              Taken off the page 2026-09-24, restored 2026-09-29 at Audrey's
+              request until the LP is rerun. It renders only while
+              lp.is_stale, so a fresh run hides it without a code change. */}
+          {lp.is_stale && (
+            <div className="dash-stale-note" role="status">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>
+                <strong>
+                  {lp.stale_row_count < lp.row_count ? 'Some reorder quantities' : 'Reorder quantities'}
+                  {' '}are from an older LP run.
+                </strong>{' '}
+                {lp.reason}{' '}
+                {lp.superseded_pending_count > 0 && (
+                  <>
+                    {lp.superseded_pending_count.toLocaleString()} undecided rows from earlier cycles
+                    are not counted here.
+                  </>
+                )}
+              </span>
+            </div>
+          )}
 
           {/* Hero strip — the four figures that answer "what is happening
               right now": money in, money parked, service risk, and work
@@ -592,10 +628,22 @@ const Dashboard = () => {
 
           <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
             <Slot kind="Descriptive">
-              <ABCDonutWidget data={abcMix} revenue={data.abc_revenue} rules={data.abc_rules} note={placeholderNote(data.abc_revenue?.period)} />
+              <ABCDonutWidget
+                data={abcMix}
+                revenue={data.abc_revenue}
+                rules={data.abc_rules}
+                note={placeholderNote(data.abc_revenue?.period)}
+                coverage={abcCoverage}
+                units={abcUnits}
+              />
             </Slot>
             <Slot kind="Descriptive">
-              <CategoryStockBarWidget data={tierStock} note={placeholderNote(data.abc_revenue?.period)} period={data.tier_stock_period} />
+              <CategoryStockBarWidget
+                data={tierStock}
+                note={placeholderNote(data.abc_revenue?.period)}
+                period={data.tier_stock_period}
+                coverage={abcCoverage}
+              />
             </Slot>
           </div>
 

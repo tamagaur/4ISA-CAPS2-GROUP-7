@@ -122,11 +122,13 @@ def unilever_demand(mode: str) -> str:
 
 def placeholder_window(db: Session) -> dict | None:
     """The placeholder months preview adds: {start, end, rows,
-    first_real_month}, or None when there are none (real history already
-    reaches back past them)."""
+    quantity_total, first_real_month}, or None when there are none (real
+    history already reaches back past them). rows + quantity_total are the
+    fingerprint scripts/build_preview_outputs.py records, so a rebuilt
+    placeholder shows up as outdated what-if files (preview_block)."""
     row = db.execute(text(f"""
         SELECT MIN(calendar_month) AS start, MAX(calendar_month) AS last, COUNT(*) AS n,
-               {_FIRST_REAL_MONTH} AS first_real_month
+               SUM(quantity_sold) AS qty, {_FIRST_REAL_MONTH} AS first_real_month
         FROM Unilever_SKU_Demand_Fact
         WHERE is_demo = true AND calendar_month < {_FIRST_REAL_MONTH}
     """)).mappings().first()
@@ -137,8 +139,23 @@ def placeholder_window(db: Session) -> dict | None:
         "start": row["start"],
         "end": row["last"],
         "rows": int(row["n"]),
+        "quantity_total": float(row.get("qty") or 0),
         "first_real_month": row["first_real_month"],
     }
+
+
+def _outputs_stale(outputs: dict | None, placeholder: dict | None) -> bool | None:
+    """Whether the what-if files were built on different placeholder data
+    than the database holds now. Measured 2026-09-29: the files were built
+    2026-09-23 on the v1 placeholder, the 2026-09-28 synthetic v2 cutover
+    replaced it, and nothing said so. None when it cannot be told: no files,
+    or files built before the build recorded this fingerprint."""
+    built = (outputs or {}).get("meta", {}).get("placeholder_window")
+    if not built:
+        return None
+    live_rows = placeholder["rows"] if placeholder else 0
+    live_qty = placeholder["quantity_total"] if placeholder else 0.0
+    return int(built["rows"]) != live_rows or abs(float(built["quantity_total"]) - live_qty) > 0.5
 
 
 def is_placeholder_period(period: str | None, window: dict | None) -> bool:
@@ -162,8 +179,10 @@ def preview_block(db: Session, *, real_only: list[str] | None = None) -> dict:
     data, so nobody has to infer it. `outputs` describes the file-backed
     forecasts and LP (None when they have not been built)."""
     outputs = preview_outputs()
-    block = {"mode": PREVIEW, "placeholder": placeholder_window(db),
-             "outputs": outputs["meta"] if outputs else None}
+    placeholder = placeholder_window(db)
+    block = {"mode": PREVIEW, "placeholder": placeholder,
+             "outputs": outputs["meta"] if outputs else None,
+             "outputs_stale": _outputs_stale(outputs, placeholder)}
     if real_only:
         block["real_only"] = real_only
     return block

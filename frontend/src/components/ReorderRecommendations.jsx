@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown, ChevronRight, CheckCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import OverrideReasonModal from './OverrideReasonModal';
@@ -17,6 +18,9 @@ import { useBrandLookup } from '../utils/useBrandLookup';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 // The cycle selector reuses DateFilter's control styles without the component.
 import './DateFilter.css';
+// .dash-stale-note — the LP freshness notice, defined once with the
+// Dashboard's styles and reused here so both pages warn identically.
+import './Dashboard.css';
 import './ReorderRecommendations.css';
 
 // Helper to format SKU to 5 digits (SKU-#####)
@@ -111,6 +115,10 @@ const ReorderRecommendations = () => {
         setMeta({
           cycleDate: res.planning_cycle_date || null,
           supersededCount: res.superseded_count || 0,
+          freshness: res.freshness || null,
+          // The solver's own weights and service level (backend/lp_cycle.py),
+          // for the detail modal to state instead of repeating constants.
+          lpModel: res.lp_model || null,
           // Preview with the what-if LP (backend/data_mode.py): these rows
           // were never saved, so there is nothing to accept or dismiss.
           whatIf: Boolean(res.data_mode?.outputs),
@@ -150,6 +158,7 @@ const ReorderRecommendations = () => {
         urgency: item.urgency,
         planningCycleDate: item.planning_cycle_date,
         revenueShare: item.revenue_share,
+        tier: item.tier, // latest ABC run's tier; null = not ranked in that run
         priorityScore: item.priority_score,
         stockoutGap: item.stockout_gap,
         daysOfCover: item.days_of_cover,
@@ -230,7 +239,13 @@ const ReorderRecommendations = () => {
   }, [localData, searchParams, setSearchParams]);
 
   const actNowPending = actNowRows.filter((r) => !r.actionStatus).length;
+  // Rows the backend could not rank (no stock record or no revenue share)
+  // have an UNKNOWN risk, not a lower one, so the card counts them apart.
+  const reviewLaterUnranked = reviewLaterRows.filter((r) => r.priorityScore == null).length;
   const noStockRecordCount = cycleRows.filter((r) => r.stock == null).length;
+  // The LP plans Category A, but a cycle outlives the ABC run it was solved
+  // against; GET /recommendations sends each row's tier in the latest run.
+  const notCategoryACount = cycleRows.filter((r) => r.tier !== 'A').length;
   // Summed in whole units, so the card equals the sum of the table's rows.
   const totalOrderQty = cycleRows.reduce((sum, item) => sum + (wholeUnits(item.orderQty) || 0), 0);
 
@@ -546,7 +561,10 @@ const ReorderRecommendations = () => {
           <div className="card-content">
             <span className="reorder-card-label">REVIEW LATER</span>
             <span className="reorder-card-value">{reviewLaterRows.length}</span>
-            <span className="reorder-card-desc">lower revenue at risk</span>
+            <span className="reorder-card-desc">
+              {reviewLaterRows.length - reviewLaterUnranked} lower revenue at risk
+              {reviewLaterUnranked > 0 && <> · {reviewLaterUnranked} not ranked (no stock record or revenue share)</>}
+            </span>
           </div>
         </div>
         <div className="reorder-summary-card card-nodata">
@@ -644,7 +662,13 @@ const ReorderRecommendations = () => {
             {showReviewLater && reviewLaterRows.map(renderRow)}
             {cycleRows.length === 0 && (
               <tr className="table-empty-row">
-                <td colSpan={COLUMN_COUNT}>No pending recommendations for this planning cycle.</td>
+                <td colSpan={COLUMN_COUNT}>
+                  {principal === 'delmonte'
+                    ? 'The LP does not plan Del Monte: it has no SKU-level sales to forecast, so there are no reorder recommendations for it.'
+                    : meta?.cycleDate
+                      ? 'No pending recommendations for this planning cycle.'
+                      : 'No LP run has produced pending recommendations for this scope yet.'}
+                </td>
               </tr>
             )}
           </tbody>
@@ -730,7 +754,13 @@ const ReorderRecommendations = () => {
             )}
           </div>
           <p className="reorder-page-subtitle">
-            LP-optimized purchase quantities for Category A SKUs. Minimizes total inventory cost while preventing stockouts.
+            LP-optimized purchase quantities for the SKUs the LP planned as Category A. Minimizes total inventory cost while preventing stockouts.
+            {notCategoryACount > 0 && (
+              <>
+                {' '}{notCategoryACount.toLocaleString()} of this cycle&apos;s {cycleRows.length.toLocaleString()} rows
+                {' '}are no longer Category A in the latest ABC run.
+              </>
+            )}
             {' '}Each planning cycle is one optimization run, for the month after the latest sales data.
             {meta?.supersededCount > 0 && (
               <>
@@ -739,8 +769,20 @@ const ReorderRecommendations = () => {
               </>
             )}
           </p>
-          {/* LP freshness notice removed 2026-09-24 with the Dashboard's
-              (see Dashboard.jsx); GET /recommendations still returns it. */}
+          {/* Same freshness notice as the Dashboard's, for the page where
+              the affected numbers (q_i, rop_i) are actually acted on.
+              Restored 2026-09-29 with the Dashboard's (see Dashboard.jsx). */}
+          {meta?.freshness?.is_stale && (
+            <div className="dash-stale-note" role="status">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>
+                <strong>
+                  {meta.freshness.stale_row_count < meta.freshness.row_count ? 'Some of these quantities are' : 'These quantities are'}
+                  {' '}from an older LP run.
+                </strong> {meta.freshness.reason}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Tab Navigation */}
@@ -795,6 +837,7 @@ const ReorderRecommendations = () => {
         onClose={() => setIsModalOpen(false)}
         data={selectedItem ? (rankedRows.find((r) => r.id === selectedItem.id) || selectedItem) : null}
         principal={principal}
+        lpModel={meta?.lpModel}
       />
 
       <OverrideReasonModal

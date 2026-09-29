@@ -73,15 +73,22 @@ def abc_rules() -> dict:
     }
 
 
-def pareto_check(revenue_shares) -> dict | None:
+def pareto_check(revenue_shares, cumulative_shares=None) -> dict | None:
     """The manuscript's 80/20 validation over ONE run's revenue shares: the
     revenue earned by the top PARETO_TOP_FRACTION of ranked items, and whether
-    it falls inside PARETO_VALID_BAND. None when nothing was ranked."""
+    it falls inside PARETO_VALID_BAND. None when nothing was ranked.
+
+    Pass the run's cumulative shares too when they come from storage.
+    ABC_Classification keeps both as NUMERIC(7,4), and summing ~140
+    separately rounded shares drifts by up to a few hundredths of a point:
+    Unilever's 2025-12 run summed to 0.8501, "fails", where its true share is
+    0.8498. The stored running total at the cut is rounded only once."""
     shares = sorted((float(s) for s in revenue_shares if s is not None), reverse=True)
     if not shares:
         return None
     top = math.ceil(PARETO_TOP_FRACTION * len(shares))
-    share = sum(shares[:top])
+    cumulative = sorted(float(c) for c in (cumulative_shares or []) if c is not None)
+    share = cumulative[top - 1] if len(cumulative) == len(shares) else sum(shares[:top])
     low, high = PARETO_VALID_BAND
     return {
         "top_fraction": PARETO_TOP_FRACTION,

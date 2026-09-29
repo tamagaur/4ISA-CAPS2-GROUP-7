@@ -41,6 +41,12 @@ from backend.deps import TokenPayload, get_current_user, get_db
 from backend.principals import PrincipalQuery, principal_clause
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
 
+# The band the forecast runner stores: forecast +/- CONFIDENCE_Z x the served
+# model's holdout RMSE (scripts/run_baseline_forecast.py, which pulls in the
+# model libraries, so the constant is mirrored here and pinned to the script
+# by tests/backend/test_forecast.py). 1.645 is a two-sided ~90% normal band.
+FORECAST_INTERVAL = {"z": 1.645, "level_pct": 90, "basis": "the served model's holdout RMSE"}
+
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 
 
@@ -131,6 +137,7 @@ def get_forecast(
         principal=product_row["principal"],
         actuals=actuals,
         forecast=forecast,
+        interval=dict(FORECAST_INTERVAL),
     )
     if mode != PREVIEW:
         return response

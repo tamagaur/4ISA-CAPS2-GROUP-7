@@ -134,7 +134,7 @@ def test_delmonte_brand_pareto_is_a_reason_not_rows():
 
 
 def test_decomposition_zero_fills_and_runs_stl():
-    periods = [f"{2023 + i // 12}-{i % 12 + 1:02d}" for i in range(30)]
+    periods = [f"{2023 + i // 12}-{i % 12 + 1:02d}" for i in range(40)]
     rows = [{"period": p, "qty": 100 + 40 * math.cos(2 * math.pi * i / 12)} for i, p in enumerate(periods) if i != 5]
     session = FakeSession([
         ("FROM Product_Dimension WHERE sku_code", [{"product_key": 7, "principal": "unilever"}]),
@@ -143,7 +143,7 @@ def test_decomposition_zero_fills_and_runs_stl():
     ])
     body = get(session, "/decomposition?sku=X").json()
     assert body["available"] is True
-    assert body["months"] == 30  # the missing month was zero-filled, not dropped
+    assert body["months"] == 40  # the missing month was zero-filled, not dropped
     assert body["observed"][5] == 0.0
     assert body["method"]["name"] == "STL"
 

@@ -226,7 +226,12 @@ const FSN_META = {
   N: { label: 'Non-moving', title: 'Non-moving' },
 };
 
-export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded }) => {
+// `rows` are the items ranked in the page's run only. Carried-forward tiers
+// (no sales since their last run) used to be counted too, so every
+// non-moving Class A item in the matrix was one that had simply stopped
+// selling (16 of 16, 2026-09-29) — the note below then pointed at stale
+// tiers. `carriedCount` says how many were left out.
+export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded, carriedCount = 0 }) => {
   const matrix = useMemo(() => {
     const m = { A: { F: 0, S: 0, N: 0 }, B: { F: 0, S: 0, N: 0 }, C: { F: 0, S: 0, N: 0 } };
     if (!loaded) return m;
@@ -254,6 +259,8 @@ export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded }) => {
           <h3 className="abcb-card-title">Movement × value (ABC × FSN)</h3>
           <p className="abcb-card-subtitle">
             How often each class actually sells, over the last {rules?.window_months ?? 12} months with data.
+            {' '}Items ranked in this run
+            {carriedCount > 0 && <> — {carriedCount.toLocaleString()} carried-forward items (no sales since) are left out</>}.
           </p>
         </div>
       </div>

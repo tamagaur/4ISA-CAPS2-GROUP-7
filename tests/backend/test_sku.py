@@ -5,12 +5,16 @@ New 2026-09-20 alongside the principal-scoping fix: sku.py had no tests at
 all, and the anchor bug it carried was structurally invisible to the older
 fakes, which matched SQL substrings and threw `params` away.
 
-The decisive pattern here is `inventory_period_by_scope`: the fake answers
-the anchor query FROM THE :principal BIND, and the fixture is built so the
-two principals disagree about their max period (Unilever 2026-03, Del Monte
-2025-12 — the real shape, measured 2026-09-20). An unscoped anchor therefore
-resolves to the wrong period and returns NULL stock, which no assertion
-below can pass. A missing-assertion test would not have caught this.
+The decisive pattern here is `inventory_period_by_scope`: the fixture is
+built so the two principals disagree about their max period (Unilever
+2026-03, Del Monte 2025-12 — the real shape, measured 2026-09-20). Since
+2026-09-29 stock resolves per principal INSIDE the row query
+(backend/stock_units.STOCK_AT_LATEST_SQL); the fake honours that only when
+the query really groups the latest snapshot by principal, and otherwise
+falls back to one global :inv_period — the old shape, which loses Del
+Monte's stock under 'all'. Likewise reorder_point comes from the LP's
+current cycle only when the query filters on :current_cycle; otherwise the
+fake answers with the newest pending row of ANY cycle, the old behaviour.
 """
 from __future__ import annotations
 
@@ -47,14 +51,18 @@ class FakeSession:
     """Matches only the query shapes backend/routers/sku.py issues.
 
     Stock rows are keyed by (product_key, period), so a row is only found
-    when the anchor resolved to that principal's OWN max period.
+    when the query resolved that principal's OWN max period. Reorder points
+    are keyed by (product_key, planning cycle).
     """
 
-    def __init__(self, rows, stock_by_period, inventory_period_by_scope, abc_period_by_scope):
+    def __init__(self, rows, stock_by_period, inventory_period_by_scope, abc_period_by_scope,
+                 rop_by_cycle=None, current_cycle=None):
         self.rows = rows
         self.stock_by_period = stock_by_period
         self.inventory_period_by_scope = inventory_period_by_scope
         self.abc_period_by_scope = abc_period_by_scope
+        self.rop_by_cycle = rop_by_cycle or {}
+        self.current_cycle = current_cycle
         self.calls: list[tuple[str, dict]] = []
 
     def execute(self, stmt, params=None):
@@ -67,16 +75,30 @@ class FakeSession:
             return FakeResult([{"p": self.inventory_period_by_scope.get(scope)}])
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql:
             return FakeResult([{"p": self.abc_period_by_scope.get(scope)}])
+        if "MAX(lr.planning_cycle_date) AS d" in sql:
+            return FakeResult([{"d": self.current_cycle}])
         if "FROM product_dimension pd" in sql:
             matched = [
                 r for r in self.rows
                 if scope is None or r["principal"] == scope
             ]
+            per_principal = "MAX(_period) AS latest_period" in sql and "GROUP BY principal" in sql
+            current_only = "planning_cycle_date = :current_cycle" in sql
             out = []
             for r in matched:
-                stock = self.stock_by_period.get((r["product_key"], params.get("inv_period")))
+                key = r["product_key"]
+                period = (self.inventory_period_by_scope.get(r["principal"]) if per_principal
+                          else params.get("inv_period"))
+                stock = self.stock_by_period.get((key, period))
+                if current_only:
+                    rop = self.rop_by_cycle.get((key, params.get("current_cycle")))
+                else:
+                    cycles = sorted(c for k, c in self.rop_by_cycle if k == key)
+                    rop = self.rop_by_cycle[(key, cycles[-1])] if cycles else None
                 tier = r["tier"] if r["_abc_period"] == params.get("abc_period") else None
-                out.append({**r, "current_stock": stock, "reorder_point": None, "tier": tier})
+                out.append({**r, "current_stock": stock,
+                            "current_stock_cases": None if stock is None else stock / 288,
+                            "reorder_point": rop, "tier": tier})
             return FakeResult(out)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -93,6 +115,9 @@ def sample_rows():
         {"product_key": 2, "sku_id": "D-1", "product_name": "DM One", "principal": "delmonte",
          "pack_size": None, "brand": None, "unit_price": None, "lead_time_days": None,
          "status": "ACTIVE", "notes": None, "tier": None, "_abc_period": None},
+        {"product_key": 3, "sku_id": "U-2", "product_name": "Uni Two", "principal": "unilever",
+         "pack_size": None, "brand": None, "unit_price": None, "lead_time_days": None,
+         "status": "ACTIVE", "notes": None, "tier": "B", "_abc_period": "2026-02"},
     ]
 
 
@@ -104,6 +129,9 @@ def make_session(rows):
         inventory_period_by_scope={None: "2026-03", "unilever": "2026-03", "delmonte": "2025-12"},
         # Del Monte has zero abc_classification rows live — None is correct.
         abc_period_by_scope={None: "2026-02", "unilever": "2026-02", "delmonte": None},
+        # Product 1 is in the current cycle; product 3 only in a superseded one.
+        rop_by_cycle={(1, "2026-03-01"): 9818340.0, (3, "2023-05-01"): 1783.0},
+        current_cycle="2026-03-01",
     )
 
 
@@ -175,3 +203,46 @@ def test_method_single_still_pinned(client, session):
     client.get("/sku?principal=unilever")
     row_query = next(s for s, _ in session.calls if "FROM product_dimension pd" in s)
     assert "method = 'single'" in row_query
+
+
+def test_all_scope_keeps_each_principals_own_stock(client):
+    """Under 'all' one global snapshot month (Unilever's 2026-03) left every
+    Del Monte product without stock (260 products -> 0, measured 2026-09-29)."""
+    items = {i["sku_id"]: i for i in client.get("/sku").json()["items"]}
+    assert items["D-1"]["current_stock"] == 260.0
+    assert items["U-1"]["current_stock"] == 120.0
+
+
+def test_stock_is_pieces_with_cases_alongside(client):
+    item = client.get("/sku?principal=unilever").json()["items"][0]
+    assert item["current_stock"] == 120.0
+    assert item["current_stock_cases"] == pytest.approx(120.0 / 288)
+
+
+def test_reorder_point_comes_from_the_current_cycle_only(client):
+    """A superseded cycle's pending row must not supply a reorder point —
+    179 did before 2026-09-29, from runs as old as 2023-05."""
+    items = {i["sku_id"]: i for i in client.get("/sku?principal=unilever").json()["items"]}
+    assert items["U-1"]["reorder_point"] == 9818340.0
+    assert items["U-2"]["reorder_point"] is None
+
+
+@pytest.fixture
+def admin_client(session):
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(
+        auth_utils.create_access_token(user_id=2, email="admin@ssmcapstone.com", role="admin", full_name="Admin")
+    )
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("code", ["1234567", "123456789", "1234567A", "", " 12345678"])
+def test_create_rejects_a_code_that_is_not_8_digits(admin_client, session, code):
+    """Migration 0030's CHECK allows exactly 8 digits for a Unilever code; the
+    route says so with a 400 instead of letting the constraint raise a 500."""
+    resp = admin_client.post("/sku", json={"sku_code": code, "principal": "unilever", "product_name": "X"})
+    assert resp.status_code == 400
+    assert "8 digits" in resp.json()["detail"]
+    assert not any("INSERT" in s for s, _ in session.calls)

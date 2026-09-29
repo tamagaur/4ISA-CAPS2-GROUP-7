@@ -55,6 +55,13 @@ def _pct_change(latest: float, prev: float) -> float | None:
     return round((latest - prev) / abs(prev) * 100, 1)
 
 
+def _months_between(earlier: str, later: str) -> int:
+    """Whole months from one 'YYYY-MM' period to a later one."""
+    ey, em = (int(x) for x in str(earlier)[:7].split("-"))
+    ly, lm = (int(x) for x in str(later)[:7].split("-"))
+    return (ly - ey) * 12 + (lm - em)
+
+
 def kpi_trend(by_period: dict[str, float | None], latest_period: str | None) -> dict | None:
     """Sparkline points + month-over-month delta for one KPI card.
 
@@ -62,7 +69,10 @@ def kpi_trend(by_period: dict[str, float | None], latest_period: str | None) -> 
     dropped, never zero-filled (a missing month is not zero demand).
     delta_pct compares latest_period's value with the nearest EARLIER
     period that has one (the same walk-back the sales card itself uses),
-    so the delta always describes two real months. None when there is
+    so the delta always describes two real months. months_apart says how
+    far back that is, so a card can say so when it is not the month before
+    (Del Monte's sell-out skips Oct–Nov 2025; the stock card's latest
+    snapshot can sit well past the picked range). None when there is
     nothing real to plot."""
     points = [
         {"period": p, "value": round(float(v), 2)}
@@ -81,6 +91,7 @@ def kpi_trend(by_period: dict[str, float | None], latest_period: str | None) -> 
         "prev_period": prev["period"] if prev else None,
         "prev_value": prev["value"] if prev else None,
         "delta_pct": _pct_change(latest["value"], prev["value"]) if prev else None,
+        "months_apart": _months_between(prev["period"], latest["period"]) if prev else None,
     }
 
 
@@ -136,14 +147,19 @@ def sales_vs_stock_insight(series: list[dict]) -> dict | None:
 
 def portfolio_forecast_insight(series: list[dict]) -> dict | None:
     """One sentence for the portfolio forecast card: the forecast bucket's
-    total against the last actual month. None without a forecast bucket."""
+    total against the last actual month — only when that month is the one
+    right before the forecast's. With a picked range ending earlier the
+    sentence used to compare Mar 2026's forecast with Jun 2024's sales
+    ("247.4% above"), which says nothing about demand now; the forecast is
+    then stated on its own. None without a forecast bucket."""
     forecast_pts = [r for r in series if r.get("forecast") is not None and r.get("actual") is None]
     actual_pts = [r for r in series if r.get("actual") is not None]
     if not forecast_pts:
         return None
     target = forecast_pts[0]
     qty = f"{round(float(target['forecast'])):,d}"
-    if actual_pts and float(actual_pts[-1]["actual"]) > 0:
+    adjacent = bool(actual_pts) and _months_between(actual_pts[-1]["period"], target["period"]) == 1
+    if adjacent and float(actual_pts[-1]["actual"]) > 0:
         last = actual_pts[-1]
         pct = _pct_change(float(target["forecast"]), float(last["actual"]))
         if pct is not None and pct != 0:

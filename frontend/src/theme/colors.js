@@ -54,6 +54,10 @@ export const SEMANTIC = {
   watch: COLORS.warning,
   act: COLORS.critical,
   noData: '#64748B',
+  // Nothing to judge against (e.g. a SKU the LP does not plan, so no
+  // reorder point) — lighter than noData so "not applicable" never reads as
+  // a missing record.
+  notPlanned: '#CBD5E1',
   recommendation: COLORS.salesTrend,
 };
 

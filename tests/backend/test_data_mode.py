@@ -264,3 +264,17 @@ def test_preview_files_become_typed_relations_with_every_column(tmp_path, monkey
     lp, lp_params = dm.lp_source(dm.PREVIEW)
     assert "-u.product_key AS recommendation_key" in lp and "'pending'::text AS status" in lp
     assert lp_params["pv_lp_ss"] == [1.5] and lp_params["pv_generated_at"] == "2026-09-24T00:00:00+00:00"
+
+
+def test_outputs_stale_compares_the_build_fingerprint_with_the_live_placeholder():
+    """The what-if files were built 2026-09-23 on the v1 placeholder; the
+    2026-09-28 cutover replaced it and nothing said so."""
+    from backend.data_mode import _outputs_stale
+
+    built = {"meta": {"placeholder_window": {"rows": 1954, "quantity_total": 1000.0}}}
+    assert _outputs_stale(built, {"rows": 8444, "quantity_total": 5000.0}) is True
+    assert _outputs_stale(built, {"rows": 1954, "quantity_total": 1000.0}) is False
+    assert _outputs_stale(built, {"rows": 1954, "quantity_total": 1234.0}) is True
+    # Files built before the fingerprint existed, or no files at all: unknown.
+    assert _outputs_stale({"meta": {}}, {"rows": 8444, "quantity_total": 1.0}) is None
+    assert _outputs_stale(None, {"rows": 8444, "quantity_total": 1.0}) is None

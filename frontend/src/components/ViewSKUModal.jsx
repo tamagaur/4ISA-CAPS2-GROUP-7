@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import Modal from './Modal';
+import { formatUnits } from '../utils/formatNumber';
 import './ViewSKUModal.css';
 
 // Helper to format SKU Code (e.g. SKU-10234)
@@ -102,11 +103,21 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
               </div>
             )}
 
-            {/* Current Stock */}
-            {sku.currentStock !== undefined && sku.currentStock !== null && (
+            {/* Current Stock — pieces, the unit the reorder point below is in
+                (GET /sku), with the warehouse's own case count beside it. It
+                read "423 units" for 121,964 pieces until 2026-09-29. A product
+                with no usable pack size has the case count only. */}
+            {(sku.currentStock != null || sku.currentStockCases != null) && (
               <div className="view-sku-field">
                 <span className="view-sku-label">CURRENT STOCK</span>
-                <span className="view-sku-value mono-val">{sku.currentStock.toLocaleString()} units</span>
+                <span className="view-sku-value mono-val">
+                  {sku.currentStock != null
+                    ? <>
+                        {sku.currentStock.toLocaleString()} pieces
+                        {sku.currentStockCases != null && <> ({sku.currentStockCases.toLocaleString()} cases)</>}
+                      </>
+                    : <>{sku.currentStockCases.toLocaleString()} cases</>}
+                </span>
               </div>
             )}
 
@@ -130,7 +141,8 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
             {sku.reorderPt !== undefined && sku.reorderPt !== null && (
               <div className="view-sku-field">
                 <span className="view-sku-label">REORDER POINT</span>
-                <span className="view-sku-value mono-val">{sku.reorderPt.toLocaleString()} units</span>
+                {/* Whole pieces rounded up, as the SKU table shows it. */}
+                <span className="view-sku-value mono-val">{formatUnits(sku.reorderPt)} pieces</span>
               </div>
             )}
 
