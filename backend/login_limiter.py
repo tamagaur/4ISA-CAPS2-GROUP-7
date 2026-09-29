@@ -22,8 +22,9 @@ Kept in memory, not the database: the API runs as a single uvicorn process
 (`uvicorn backend.main:app`), and a restart clearing the counts is an
 acceptable cost. If the API is ever run with several worker processes, each
 would keep its own counts, and this must move to shared storage (a table or
-Redis). Behind a reverse proxy, request.client.host is the proxy's address,
-so the per-IP rule would need the forwarded client address instead.
+Redis). On Render, request.client.host is the visitor's real address, taken
+from Cloudflare's CF-Connecting-IP by backend/client_ip.py; X-Forwarded-For
+can't be used there, because the visitor can set it.
 """
 from __future__ import annotations
 
