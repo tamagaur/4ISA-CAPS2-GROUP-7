@@ -30,13 +30,14 @@ function kpiDisplay(value, blockedReason, formatter, normalContext) {
   return { value: formatter(value), contextLine: normalContext };
 }
 
-// GET /dashboard's sales/stock window ends at a single 'YYYY-MM' `period`
-// anchor (a fixed trailing 12 months, same "picker's end maps onto the
-// anchor" convention ABCClassification.jsx's toClassificationPeriod uses
-// for GET /abc) UNLESS `startPeriod` is also sent, in which case it covers
-// the exact start-through-end range the picker applied — otherwise a
-// range wider than 12 months (e.g. Apr 2023 - Mar 2026) silently clipped
-// to just its last 12 months, which read as "the start date does nothing."
+// GET /dashboard's sales/stock window covers the exact start-through-end
+// range the picker applied — this page always sends both `period` and
+// `startPeriod` (the picker opens on 12 months, DashboardLayout.jsx). The
+// backend's own fallback, a fixed trailing 12 months ending at `period`,
+// only applies to callers that omit the start; before startPeriod was
+// sent, a range wider than 12 months (e.g. Apr 2023 - Mar 2026) silently
+// clipped to its last 12, which read as "the start date does nothing."
+// Weeks of cover is the exception: it never follows the picker.
 const MONTH_TO_NUM = {
   Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
   Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
@@ -430,11 +431,28 @@ const Dashboard = () => {
   );
   // The stock card also answers SSM's own rule (client meeting, Sep 2026:
   // keep three weeks of sales in stock) with the backend's weeks_of_cover,
-  // so the target and the actual sit on one line.
+  // so the target and the actual sit on one line. The figure deliberately
+  // ignores the date picker (always the 12 months of sales up to the stock
+  // count), and the card's tooltip names that year so nobody expects it to
+  // move with the range.
   const cover = kpis.weeks_of_cover || {};
+  const policyWeeks = data.inventory?.policy_weeks ?? 3;
   const coverLine = cover.value != null
-    ? `≈ ${Number(cover.value).toFixed(1)} weeks of sales in stock · SSM policy: keep ${data.inventory?.policy_weeks ?? 3} weeks`
+    ? `≈ ${Number(cover.value).toFixed(1)} weeks of sales in stock · SSM policy: keep ${policyWeeks} weeks`
     : null;
+  const coverWindow = cover.sales_window
+    ? `${periodLabel(cover.sales_window.start)} – ${periodLabel(cover.sales_window.end)}`
+    : null;
+  // Del Monte's year has sales in only some months (6 of 12 in 2025); the
+  // average is over those, and the tooltip says so rather than imply a year.
+  const coverMonthsNote = cover.months_used != null && cover.months_used < 12
+    ? ` Only ${cover.months_used} of those months have sales on record; the average is over those.`
+    : '';
+  const coverTooltip = cover.value != null && coverWindow
+    ? `Weeks of cover = this stock ÷ average weekly sales over ${coverWindow}, the 12 months up to `
+      + `the stock count — it does not change with the date range.${coverMonthsNote} SSM's policy is `
+      + `to keep ${policyWeeks} weeks of sales in stock.`
+    : undefined;
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
     [sohMonth ? `Stock-on-hand valuation · ${sohMonth}` : 'Stock-on-hand valuation', sohCoverage, coverLine]
@@ -614,6 +632,7 @@ const Dashboard = () => {
               title="Stock on hand value"
               value={sohValue.value}
               contextLine={sohValue.contextLine}
+              tooltip={coverTooltip}
               icon={<Package size={20} />}
               {...(sohValue.value !== '—' ? trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries) : {})}
             />

@@ -479,6 +479,41 @@ def test_kpis_weeks_of_cover_null_when_no_inventory_data_at_all():
     assert wc["blocked_reason"] == "Inventory_Fact_Real has no rows for unilever at all."
 
 
+def test_weeks_of_cover_does_not_follow_the_date_range():
+    """SSM's 3-week policy is judged by this figure, so it is always the
+    latest stock over the 12 months of sales up to it, whatever range the
+    picker shows. It used to average the picker's months, so the same
+    stock read 3.0-3.5 weeks live (2026-09-29)."""
+    periods = _periods()  # 2023-03 .. 2024-02
+    sales = {p: 100.0 for p in periods}
+    sales[periods[-1]] = 400.0  # one unusual month
+    expected = round(1000.0 / ((sum(sales.values()) / 12) / AVG_WEEKS_PER_MONTH), 2)
+    for query in ("", "&start_period=2024-01&period=2024-02", "&start_period=2023-01&period=2023-07"):
+        session = FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0}, sales=dict(sales))
+        with make_client(session) as c:
+            wc = c.get(
+                f"/dashboard?principal=unilever{query}", headers={"Authorization": f"Bearer {user_token()}"}
+            ).json()["kpis"]["weeks_of_cover"]
+        assert wc["value"] == pytest.approx(expected), query
+        assert wc["sales_window"] == {"start": periods[0], "end": periods[-1]}, query
+        assert wc["months_used"] == 12, query
+
+
+def test_weeks_of_cover_sales_year_ends_at_the_stock_count():
+    """Stock and sales must describe the same moment: a snapshot older than
+    the latest sales month is measured against the 12 months up to itself."""
+    session = FakeSession(
+        latest_inventory_period="2023-12", soh={"2023-12": 1000.0}, sales={p: 100.0 for p in _periods()}
+    )
+    with make_client(session) as c:
+        wc = c.get(
+            "/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}
+        ).json()["kpis"]["weeks_of_cover"]
+    assert wc["sales_window"] == {"start": "2023-01", "end": "2023-12"}
+    assert wc["months_used"] == 10  # 2023-01 and 2023-02 have no rows: gaps, never zeros
+    assert wc["value"] == pytest.approx(round(1000.0 / (100.0 / AVG_WEEKS_PER_MONTH), 2))
+
+
 # ---- sales_vs_stock ------------------------------------------------------
 
 def test_sales_vs_stock_has_12_points_with_nulls_for_missing_periods():

@@ -149,19 +149,23 @@ zero):
     "LP_Recommendation is empty" degrades to in practice, since an empty
     LP_Recommendation makes ss_i unavailable for every product.
   kpis.weeks_of_cover
-    — {value, blocked_reason}. Formula: current stock on hand / average
-    weekly demand.
-      Stock on hand reuses kpis.soh_value's own figure verbatim
-        (soh_by_period, the same _soh_value_by_period() call —
-        UNILEVER_SOH_UNIT_CONFIRMED is inherited automatically, not
-        re-checked here).
-      Average weekly demand reuses kpis.sales' own figures
-        (sales_by_period): the mean of whatever non-null months exist in
-        the trailing 12-month window (a real gap stays excluded, never
-        averaged in as 0 demand), converted from a monthly to a weekly
-        rate via AVG_WEEKS_PER_MONTH (average days/month / 7 — a
-        documented convention, not a fabricated number, same spirit as
-        analytics/etl/granularity.py's business_days_in_month()).
+    — {value, blocked_reason, coverage, months_used, stock_period,
+    sales_window}. Formula: current stock on hand / average weekly demand.
+    The figure SSM's 3-week stock policy is judged by (client meeting,
+    Sep 2026), so it does NOT follow the date picker (since 2026-09-29).
+      Stock on hand reuses kpis.soh_value's own figure verbatim — the
+        latest snapshot, never the picker's (UNILEVER_SOH_UNIT_CONFIRMED is
+        inherited automatically, not re-checked here).
+      Average weekly demand is the mean of whatever non-null months exist
+        in the 12 months of sales ending at the stock count's month (or
+        at the last month with sales before it) — sales_window names them
+        (a real gap stays excluded, never averaged in as 0 demand) —
+        converted from a monthly to a weekly rate via AVG_WEEKS_PER_MONTH
+        (average days/month / 7 — a documented convention, not a
+        fabricated number, same spirit as analytics/etl/granularity.py's
+        business_days_in_month()). It used to average the picker's months,
+        so one stock count read 3.0–3.5 weeks depending on the range on
+        screen.
     Null (with blocked_reason) whenever either stock or average weekly
     demand is unavailable, or weekly demand is exactly 0 (division by
     zero, not "0 weeks").
@@ -479,9 +483,9 @@ def _last_12_periods(db: Session, anchor_override: str | None = None, principal:
     *end* month/year — same "picker's end maps onto the anchor" convention
     backend/routers/abc.py's classification_period already uses), is used
     as the window's end instead of _latest_sales_period. This makes
-    kpis.sales / sales_vs_stock / kpis.weeks_of_cover respond to the
-    shared date filter instead of always showing the latest-data window
-    regardless of what the user picked.
+    kpis.sales / sales_vs_stock respond to the shared date filter instead
+    of always showing the latest-data window regardless of what the user
+    picked. (kpis.weeks_of_cover deliberately does not — see its section.)
 
     Only ever called for the picker's END when no START was also applied
     (see get_dashboard: an applied start uses _month_range instead, the
@@ -731,11 +735,12 @@ def _nearest_abc_period_at_or_before(
 ) -> str | None:
     """Latest UNILEVER classification_period <= `period`, or None if the
     ETL hasn't produced any ABC run that old yet. The classification batch
-    runs roughly monthly and lags the sales data it's derived from, so the
-    date-range picker's applied end month (DashboardLayout's "today", one
-    month ahead of the latest loaded sales/ABC data by construction — see
-    DashboardLayout.jsx's getCurrentRealWorldPeriod comment) routinely has
-    no exact ABC_Classification row of its own. Falling back to the
+    runs roughly monthly and lags the sales data it's derived from, and
+    each principal's data ends in a different month, so the date-range
+    picker's applied end month (DashboardLayout's "today", the latest month
+    with ANY principal's sales — see dataCoverage.js) routinely has no
+    exact ABC_Classification row of its own for a given principal (Del
+    Monte's latest run is 2025-12 against today's 2026-02). Falling back to the
     nearest earlier real run (instead of the exact-match dead end this
     replaced) keeps kpis.safety_stock_rate/abc_mix/tier_stock populated
     for that common case, while still going genuinely blocked if `period`
@@ -783,10 +788,10 @@ def get_dashboard(
         pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
         description=(
             "'YYYY-MM'. The shared date-range picker's applied end month/year. "
-            "Anchors the sales/stock trend window kpis.sales / sales_vs_stock / "
-            "kpis.weeks_of_cover are computed over (a fixed trailing 12 months "
-            "when start_period is omitted, or the end of the exact range when "
-            "it's given), AND is used as an exact "
+            "Anchors the sales/stock trend window kpis.sales / sales_vs_stock "
+            "are computed over (a fixed trailing 12 months when start_period "
+            "is omitted, or the end of the exact range when it's given; "
+            "kpis.weeks_of_cover never follows it), AND is used as an exact "
             "ABC_Classification.classification_period match for "
             "kpis.safety_stock_rate / abc_mix / tier_stock. Omit to anchor "
             "sales at the latest real sales period and ABC at the latest "
@@ -798,8 +803,8 @@ def get_dashboard(
         pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
         description=(
             "'YYYY-MM'. The shared date-range picker's applied START month/"
-            "year. When given, kpis.sales / sales_vs_stock / "
-            "kpis.weeks_of_cover cover every month from here through `period` "
+            "year. When given, kpis.sales / sales_vs_stock "
+            "cover every month from here through `period` "
             "(or through the latest real sales period if `period` is also "
             "omitted) inclusive, instead of a fixed trailing 12 months — the "
             "exact width the user picked, not clipped to 12. Ignored (falls "
@@ -890,11 +895,11 @@ def get_dashboard(
     # Walk backward from the picker's applied end month to the nearest
     # period WITHIN the selected range that actually has a real sales row,
     # rather than requiring an exact match on the range's literal end —
-    # the end month is routinely one the sales ETL hasn't loaded yet (see
-    # _nearest_abc_period_at_or_before's docstring for why: the app's
-    # pinned "today" runs a month ahead of the latest loaded data by
-    # construction), which was blanking this card even when the rest of
-    # the selected range had plenty of real data to show.
+    # the end month is routinely one a principal has no sales row for
+    # (the pinned "today" is the latest month with ANY principal's sales,
+    # 2026-02, while Del Monte's end in 2025-12 — see
+    # _nearest_abc_period_at_or_before's docstring), which was blanking this
+    # card even when the rest of the selected range had plenty of real data.
     current_period = next(
         (p for p in reversed(periods) if sales_by_period.get(p) is not None),
         periods[-1],
@@ -1158,17 +1163,47 @@ def get_dashboard(
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring
-    # section above for the full reasoning. Reuses the stock card's figure
-    # (already carrying UNILEVER_SOH_UNIT_CONFIRMED) and sales_by_period.
+    # section above for the full reasoning. It is the figure SSM's 3-week
+    # stock policy is judged by, so it does NOT follow the date picker: the
+    # stock side is the stock card's own latest snapshot (already carrying
+    # UNILEVER_SOH_UNIT_CONFIRMED), and the sales side is always the 12
+    # months of sales ending at that snapshot's month, or at the last month
+    # with sales before it. Until 2026-09-29 it averaged the picker's months,
+    # so the same stock read 3.0-3.5 weeks depending on the range on screen,
+    # and moving the end month back divided March 2026's stock by months-old
+    # sales (2.9 weeks for Apr-Oct 2025). A year, not the latest month: Sir
+    # Abe's rule is "a month's sales x 3/4", and the latest single month
+    # (Feb 2026, a seasonal trough) or a 3-month window (holding December
+    # 2025's 0.59x dip) both overstate cover at ~3.5 weeks; twelve months
+    # average to one typical month with every season in it.
     # Numerator and denominator must describe the SAME principals. Under
     # 'all' the latest stock snapshot is Unilever's alone (Del Monte's latest
-    # is 2025-12), so the demand side is re-read for exactly the principals
-    # the stock figure covers instead of both — see
-    # _stock_valuation_coverage. `cover_scope` (resolved with the stock card
-    # above) is what the answer is about, and is returned so the card can say
-    # so rather than implying 'all'.
+    # is 2025-12), so the demand side is read for exactly the principals the
+    # stock figure covers instead of both — see _stock_valuation_coverage.
+    # `cover_scope` (resolved with the stock card above) is what the answer
+    # is about, and is returned so the card can say so rather than implying
+    # 'all'.
     stock = soh_value
-    cover_demand = sales_by_period if cover_scope == scope else _sales_by_period(db, periods, cover_scope, mode)
+    cover_latest_sales = (
+        max(filter(None, latest_by_principal.values()), default=None)
+        if cover_scope == "all" else latest_by_principal.get(cover_scope)
+    )
+    cover_end = (
+        min(cover_latest_sales, inventory_period)
+        if cover_latest_sales is not None and inventory_period is not None
+        else cover_latest_sales
+    )
+    cover_periods: list[str] = []
+    if cover_end is not None:
+        end_index = int(cover_end[:4]) * 12 + int(cover_end[5:7]) - 1
+        start_index = end_index - 11
+        cover_periods = _month_range(f"{start_index // 12:04d}-{start_index % 12 + 1:02d}", cover_end)
+    # The page's own sums are reused where they are the same scope's; only
+    # the months they lack are fetched, in one call.
+    cover_known = sales_by_period if cover_scope == scope else {}
+    cover_missing = [p for p in cover_periods if p not in cover_known]
+    cover_fetched = _sales_by_period(db, cover_missing, cover_scope, mode) if cover_missing else {}
+    cover_demand = {p: cover_known[p] if p in cover_known else cover_fetched.get(p) for p in cover_periods}
     stock_reason = (
         f"Inventory_Fact_Real has no rows for {_scope_label(scope)} at all." if inventory_period is None
         else _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON if not UNILEVER_SOH_UNIT_CONFIRMED
@@ -1626,6 +1661,12 @@ def get_dashboard(
                 "coverage": stock_coverage,
                 "months_used": cover_months_used,
                 "stock_period": inventory_period,
+                # The 12 months the average weekly sales came from — fixed to
+                # the stock count, never the picker's range — so the card can
+                # say which year the "3 weeks" is measured against.
+                "sales_window": (
+                    {"start": cover_periods[0], "end": cover_periods[-1]} if cover_periods else None
+                ),
             },
         },
         # Non-null only under 'all': the combined pesos mix Unilever's
