@@ -76,6 +76,17 @@ def lp_model_info() -> dict:
     }
 
 
+def _principal_key(principal: str | None) -> str | None:
+    """The principal the way backend.principals.normalize_principal reads it
+    for the rows: case-insensitive ('Unilever' and 'unilever' are one
+    scope), and 'all' or blank meaning no filter. Every anchor here resolves
+    through this, so an LP cycle is always found under the SAME scope as the
+    rows it anchors (the rule of commit fd4dded); a raw 'Unilever' used to
+    match no product_dimension row and leave the cycle None."""
+    value = (principal or "").strip().lower()
+    return None if value in ("", "all") else value
+
+
 def current_cycle(db: Session, principal: str | None = None, mode: str = REAL) -> datetime.date | None:
     """The planning cycle the LP is currently proposing: the most recent
     planning_cycle_date that still has undecided (pending) rows, within the
@@ -92,9 +103,9 @@ def current_cycle(db: Session, principal: str | None = None, mode: str = REAL) -
         WHERE lr.status = 'pending'
     """
     params = dict(params)
-    if principal and principal != "all":
+    if _principal_key(principal):
         sql += " AND pd.principal = :principal"
-        params["principal"] = principal
+        params["principal"] = _principal_key(principal)
     row = db.execute(text(sql), params).mappings().first()
     return row["d"] if row else None
 
@@ -114,9 +125,9 @@ def superseded_count(
         WHERE lr.status = 'pending' AND lr.planning_cycle_date < :cycle
     """
     params: dict = {"cycle": cycle, **lp_params}
-    if principal and principal != "all":
+    if _principal_key(principal):
         sql += " AND pd.principal = :principal"
-        params["principal"] = principal
+        params["principal"] = _principal_key(principal)
     return int(db.execute(text(sql), params).scalar() or 0)
 
 
@@ -153,9 +164,9 @@ def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> di
           AND (:cycle IS NULL OR lr.planning_cycle_date = :cycle)
     """
     params: dict = {"cycle": cycle, "fc_at": fc_at, **lp_params}
-    if principal and principal != "all":
+    if _principal_key(principal):
         sql += " AND pd.principal = :principal"
-        params["principal"] = principal
+        params["principal"] = _principal_key(principal)
     lp = db.execute(text(sql), params).mappings().first() or {}
     lp_at = lp.get("t")
     row_count = int(lp.get("row_count") or 0)

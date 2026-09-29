@@ -300,8 +300,9 @@ zero):
     POLICY_WEEKS x (that product's own Forecast_Result.forecast_value for
     the same month / AVG_WEEKS_PER_MONTH). Both sides are on the demand
     series' unit (pieces), so they are directly comparable; deliberately
-    NOT converted to pesos — no per-piece cost exists (unit_cost_per_case
-    is per case and pack_size is unreliable, see recommendations.py).
+    NOT converted to pesos — no agreed cost per piece exists
+    (Product_Dimension.unit_price is empty; the stock file's
+    unit_cost_per_case / pack_size is only the LP plan's placeholder).
     Products with no forecast for the cycle month are excluded from BOTH
     sums, never from one. Null with blocked_reason when no cycle or no
     comparable product exists.
@@ -910,13 +911,33 @@ def get_dashboard(
     # The two principals' pesos are on different tax bases: Unilever's
     # net_amount is "Total Sales Amt Inc. Tax" (config/column_maps/
     # unilever_sku.yaml, migration 0010) while Del Monte's sell-out
-    # net_amount is "Total Without Tax". A combined 'all' figure therefore
-    # mixes VAT-inclusive and VAT-exclusive pesos — true of kpis.sales, the
+    # net_amount is "Total Without Tax" — EXCEPT where a sheet had only a
+    # tax-inclusive total: Kelvin's X2 rule (commit 7cd47a5, migration 0027)
+    # loads that one and flags the row net_amount_tax_inclusive (live: the
+    # 122 rows of 2023-08). A combined 'all' figure therefore mixes
+    # VAT-inclusive and VAT-exclusive pesos — true of kpis.sales, the
     # sales_vs_stock sales line, and weeks_of_cover's demand denominator
     # whenever its cover_scope stays 'all'. Said here once so every card
-    # drawn from these sums can label it instead of implying one basis.
+    # drawn from these sums can label it instead of implying one basis, and
+    # the exception is named whenever the months in question include it.
+    dm_tax_inclusive = {
+        r["p"] for r in db.execute(text(
+            "SELECT DISTINCT _period AS p FROM SellOut_Fact_Real WHERE net_amount_tax_inclusive"
+        )).mappings().all()
+    }
+
+    def _dm_tax_exception(months: list[str]) -> str:
+        hit = sorted(p for p in months if p in dm_tax_inclusive)
+        if not hit:
+            return ""
+        labels = ", ".join(
+            datetime.date(int(p[:4]), int(p[5:7]), 1).strftime("%b %Y") for p in hit
+        )
+        return f" (except {labels}, recorded with tax)"
+
     vat_note = (
-        "Unilever pesos include VAT; Del Monte pesos exclude it — combined totals mix the two tax bases."
+        f"Unilever pesos include VAT; Del Monte pesos exclude it{_dm_tax_exception(periods)} — "
+        "combined totals mix the two tax bases."
         if scope == "all" else None
     )
 
@@ -985,8 +1006,12 @@ def get_dashboard(
                     }
                     for pct in ALLOCATION_LEVELS
                 ],
-                # The tax basis the pesos above are on (see vat_note's sources).
-                "vat_basis": "incl. VAT" if scope == "unilever" else "ex-VAT",
+                # The tax basis the pesos above are on (see vat_note's sources),
+                # naming any Del Monte month in the basis or YTD recorded with tax.
+                "vat_basis": (
+                    "incl. VAT" if scope == "unilever"
+                    else "ex-VAT" + _dm_tax_exception(basis_periods + ytd_periods)
+                ),
             })
 
     # ---- kpis.soh_value / sales_vs_stock.stock_on_hand ----------------

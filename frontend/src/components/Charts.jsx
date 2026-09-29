@@ -1780,7 +1780,7 @@ export const AllocationWidget = ({ allocation }) => {
   const mid = hasData ? a.levels.find((l) => l.pct === 105) || a.levels[0] : null;
   // The headline ratio only stands on a FULL prior year: annual x pct ÷ 12
   // over a partial basis understates the allocation and the percentage
-  // explodes (Del Monte's 6-month 2024 basis read "578%"). The bars and the
+  // explodes (Del Monte's 2-month 2024 basis read "578%"). The bars and the
   // footnote's "partial basis" wording still show what data exists.
   const usedPct = mid && mid.monthly > 0 && avgMonthlySales != null && a.basis_months === 12
     ? (avgMonthlySales / mid.monthly) * 100

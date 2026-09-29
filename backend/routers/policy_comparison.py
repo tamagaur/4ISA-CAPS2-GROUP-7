@@ -13,9 +13,10 @@ month. Keep the two queries in step.
   lp_safety_stock_units   = LP_Recommendation.ss_i
 
 Units (pieces), never pesos. reports/IMPLEMENTATION_PLAN_2026-09.md Phase 1
-rules peso conversion out until a real cost per piece exists
+rules peso conversion out until an agreed cost per piece exists
 (Product_Dimension.unit_price is 0/17,536 populated; Inventory_Fact's
-unit_cost_per_case is per CASE and pack_size is unreliable). So
+unit_cost_per_case is per CASE, and dividing by pack_size — trusted since
+backend/stock_units.py — is only the LP plan's placeholder so far). So
 working_capital / capital_freed stay null with the reason. est_stockout_rate
 is null too: it depends on how many days of demand variability ss_i covers
 (scripts/run_lp.py --protection-days, default 1 business day), which is an
@@ -37,9 +38,9 @@ from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, POLICY_WEEKS
 router = APIRouter(prefix="/policy-comparison", tags=["policy-comparison"])
 
 VALUATION_BLOCKED_REASON = (
-    "Units only. No cost per piece is recorded (Product_Dimension.unit_price is empty; "
-    "unit_cost_per_case is per case and pack_size is unreliable), so working capital can't "
-    "be valued in pesos. Stockout exposure is left out until the safety stock's protection "
+    "Units only. No agreed cost per piece exists (Product_Dimension.unit_price is empty; "
+    "the stock file's unit cost per case ÷ pack size is only a planning placeholder), so "
+    "working capital isn't valued in pesos. Stockout exposure is left out until the safety stock's protection "
     "period (review period + lead time) is decided — see scripts/run_lp.py --protection-days."
 )
 
