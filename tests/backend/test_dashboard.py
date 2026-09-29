@@ -285,7 +285,8 @@ class FakeSession:
         if sql.strip() == "SELECT MAX(forecast_date) AS d FROM Forecast_Result":
             return FakeResult([{"d": self.latest_forecast_date}])
 
-        if "fr.mape < :mape_gate" in sql:
+        if "fr.mase < :mase_gate" in sql:
+            assert params.get("mase_gate") == 1.0, "the portfolio gate must be the LP's own MASE < 1"
             return FakeResult(self.gated_forecast_rows)
 
         if "SELECT COUNT(*) FROM Forecast_Result fr" in sql:
@@ -692,9 +693,9 @@ def test_portfolio_forecast_scope_label_and_series():
     latest_date = datetime.date(2024, 3, 1)
     gated_rows = [
         {"product_key": 1, "forecast_date": latest_date, "forecast_value": 100.0,
-         "confidence_lower": 80.0, "confidence_upper": 120.0, "mape": 10.0},
+         "confidence_lower": 80.0, "confidence_upper": 120.0, "mase": 0.5},
         {"product_key": 2, "forecast_date": latest_date, "forecast_value": 50.0,
-         "confidence_lower": 40.0, "confidence_upper": 60.0, "mape": 15.0},
+         "confidence_lower": 40.0, "confidence_upper": 60.0, "mase": 0.75},
     ]
     session = FakeSession(
         latest_forecast_date=latest_date,
@@ -705,8 +706,9 @@ def test_portfolio_forecast_scope_label_and_series():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     pf = resp.json()["portfolio_forecast"]
     assert pf["gated_sku_count"] == 2
-    assert pf["avg_mape"] == pytest.approx(12.5)
-    assert pf["scope_label"] == "Unilever (SKU-level forecasts meeting the MAPE gate)."
+    assert pf["scope_label"] == (
+        "Unilever (SKU-level forecasts that beat a naive baseline — MASE < 1, the LP's own gate)."
+    )
     by_period = {pt["period"]: pt for pt in pf["series"]}
     assert by_period["2024-01"]["actual"] == pytest.approx(90.0)
     assert by_period["2024-02"]["actual"] == pytest.approx(95.0)
@@ -722,15 +724,15 @@ def test_portfolio_forecast_all_scope_says_which_principal_it_covers():
     latest_date = datetime.date(2024, 3, 1)
     gated_rows = [
         {"product_key": 1, "forecast_date": latest_date, "forecast_value": 100.0,
-         "confidence_lower": 80.0, "confidence_upper": 120.0, "mape": 10.0, "principal": "unilever"},
+         "confidence_lower": 80.0, "confidence_upper": 120.0, "mase": 0.5, "principal": "unilever"},
     ]
     session = FakeSession(latest_forecast_date=latest_date, gated_forecast_rows=gated_rows,
                           portfolio_actual={"2024-02": 95.0})
     with make_client(session) as c:
         resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
     assert resp.json()["portfolio_forecast"]["scope_label"] == (
-        "All principals — only Unilever has SKU-level forecasts meeting the MAPE gate, "
-        "so this matches the Unilever view."
+        "All principals — only Unilever has SKU-level forecasts that beat a naive "
+        "baseline (MASE < 1, the LP's own gate), so this matches the Unilever view."
     )
 
 
@@ -742,9 +744,8 @@ def test_portfolio_forecast_empty_when_nothing_passes_the_gate():
     assert pf == {
         "series": [],
         "gated_sku_count": 0,
-        "avg_mape": None,
-        "scope_label": "No products currently meet the MAPE < 20% gate.",
-        "mape_gate": 20.0,
+        "scope_label": "No forecasts for this scope currently beat the naive baseline (MASE < 1).",
+        "mase_gate": 1.0,
         "insight": None,
     }
 
@@ -769,7 +770,8 @@ def test_portfolio_forecast_empty_when_forecast_result_has_no_rows_at_all():
     pf = resp.json()["portfolio_forecast"]
     assert pf["series"] == []
     assert pf["gated_sku_count"] == 0
-    assert pf["avg_mape"] is None
+    # No rows at all is "no forecasts exist", never "none pass the gate".
+    assert pf["scope_label"] == "No SKU-level forecasts exist for unilever."
 
 
 # ---- reorder_preview -----------------------------------------------------
@@ -1149,9 +1151,9 @@ def test_portfolio_forecast_insight_compares_forecast_with_last_actual():
     latest_date = datetime.date(2024, 3, 1)
     gated_rows = [
         {"product_key": 1, "forecast_date": latest_date, "forecast_value": 100.0,
-         "confidence_lower": 80.0, "confidence_upper": 120.0, "mape": 10.0},
+         "confidence_lower": 80.0, "confidence_upper": 120.0, "mase": 0.5},
         {"product_key": 2, "forecast_date": latest_date, "forecast_value": 50.0,
-         "confidence_lower": 40.0, "confidence_upper": 60.0, "mape": 15.0},
+         "confidence_lower": 40.0, "confidence_upper": 60.0, "mase": 0.75},
     ]
     session = FakeSession(
         latest_forecast_date=latest_date,
@@ -1160,7 +1162,7 @@ def test_portfolio_forecast_insight_compares_forecast_with_last_actual():
     )
     with make_client(session) as c:
         pf = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["portfolio_forecast"]
-    assert pf["mape_gate"] == 20.0
+    assert pf["mase_gate"] == 1.0
     # 150 forecast vs 120 actual = +25%
     assert pf["insight"]["text"] == "The Mar 2024 forecast is 150 pieces — 25.0% above the 120 sold in Feb 2024."
     assert pf["insight"]["forecast_period"] == "2024-03"
@@ -1257,3 +1259,73 @@ def test_portfolio_insight_compares_only_with_the_month_before_the_forecast():
     assert portfolio_forecast_insight(series)["text"] == "The Mar 2026 forecast is 90,240 pieces."
     series[0]["period"] = "2026-02"
     assert "sold in Feb 2026" in portfolio_forecast_insight(series)["text"]
+
+
+# ---- allocation (SSM's rule: prior-year sales x 103/105/108%) ------------
+
+
+def test_allocation_applies_ssm_rule_to_prior_year_sales():
+    sales = {f"2025-{m:02d}": 100.0 for m in range(1, 13)}
+    sales.update({"2026-01": 110.0, "2026-02": 120.0})
+    session = FakeSession(latest_sales_period="2026-02", sales=sales)
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    a = body["allocation"]
+    assert a["basis_year"] == 2025
+    assert a["basis_sales"] == pytest.approx(1200.0)
+    assert a["basis_months"] == 12
+    assert a["latest_month"] == "2026-02"
+    assert a["ytd_sales"] == pytest.approx(230.0)
+    assert a["ytd_months"] == 2
+    assert [(level["pct"], level["annual"], level["monthly"]) for level in a["levels"]] == [
+        (103, pytest.approx(1236.0), pytest.approx(103.0)),
+        (105, pytest.approx(1260.0), pytest.approx(105.0)),
+        (108, pytest.approx(1296.0), pytest.approx(108.0)),
+    ]
+    assert a["vat_basis"] == "incl. VAT"
+    assert a["blocked_reason"] is None
+    # Single-principal pesos sit on one tax basis, so there is nothing to flag.
+    assert body["vat_note"] is None
+
+
+def test_allocation_says_when_the_basis_year_is_partial():
+    sales = {f"2025-{m:02d}": 100.0 for m in (7, 8, 9, 10, 11, 12)}
+    sales["2026-01"] = 90.0
+    session = FakeSession(latest_sales_period="2026-01", sales=sales)
+    with make_client(session) as c:
+        a = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["allocation"]
+    # 6 of 12 months on record: the card must call the basis partial, never
+    # present half a year as a full prior-year basis.
+    assert a["basis_months"] == 6
+    assert a["basis_sales"] == pytest.approx(600.0)
+
+
+def test_allocation_and_combined_pesos_are_withheld_under_all_principals():
+    """Allocations are per principal, and the two principals' pesos are on
+    different tax bases — under 'all' the rule is not applied and the mixed
+    total carries the VAT note."""
+    session = FakeSession()
+    with make_client(session) as c:
+        body = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert "pick one principal" in body["allocation"]["blocked_reason"]
+    # One shape whatever the state: withheld keys are present and null.
+    assert set(body["allocation"]) == {
+        "basis_year", "basis_sales", "basis_months", "latest_month", "ytd_sales",
+        "ytd_months", "levels", "vat_basis", "blocked_reason",
+    }
+    assert body["allocation"]["levels"] == [] and body["allocation"]["basis_sales"] is None
+    assert body["vat_note"] == (
+        "Unilever pesos include VAT; Del Monte pesos exclude it — combined totals mix the two tax bases."
+    )
+
+
+def test_allocation_is_withheld_when_the_prior_year_nets_to_zero():
+    """Returns and credits can net a year to ₱0 or less; scaling that by
+    103-108% would draw a meaningless allocation (and divide by zero)."""
+    sales = {f"2025-{m:02d}": 0.0 for m in range(1, 13)}
+    sales["2026-01"] = 50.0
+    session = FakeSession(latest_sales_period="2026-01", sales=sales)
+    with make_client(session) as c:
+        a = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["allocation"]
+    assert a["levels"] == []
+    assert "₱0 or less" in a["blocked_reason"]

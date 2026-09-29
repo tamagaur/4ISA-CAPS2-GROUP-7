@@ -2,7 +2,9 @@
 backend.routers.policy_comparison — GET /policy-comparison
 
 API_CONTRACTS.md PR4, in units: per SKU, the LP's safety stock against SSM's
-blanket 3-week rule, plus a portfolio roll-up. The rows are the same ones
+own stock policy — keep three weeks of sales in stock (client meeting,
+Sep 2026), applied here as 3 weeks of each SKU's forecast — plus a
+portfolio roll-up. The rows are the same ones
 GET /dashboard's policy_comparison sums (dashboard.py) — every product in the
 latest pending LP planning cycle that also has a Forecast_Result for that
 month. Keep the two queries in step.

@@ -345,7 +345,7 @@ const RECEIVED_LABEL = 'Purchases received';
 // `insight` is GET /dashboard's sales_vs_stock_insight: the one-sentence
 // takeaway under the title and the peak/low sales months this chart
 // labels — computed by the backend from the same rows, never typed here.
-export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null, insight = null }) => {
+export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null, insight = null, note = null }) => {
   const hasData = data.length > 0;
   // Windows over whatever range the page's date filter fetched. At a wide
   // range that is 38 months, far more than the XAxis can label without
@@ -433,6 +433,10 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
             {hasReceived
               ? ' The purchases-received line stands in for the supplier allocation schedule, which SSM has not yet provided — it is what was bought, not an allocation.'
               : ' No purchases line: Unilever has no purchase records, so the line appears only in the Del Monte view.'}
+            {/* GET /dashboard's vat_note — only under All principals, where the
+                combined pesos mix Unilever's VAT-inclusive amounts with Del
+                Monte's VAT-exclusive ones. */}
+            {note ? ` ${note}` : ''}
           </p>
           {/* The backend's takeaway sentence, from the same rows this
               chart plots (sales_vs_stock_insight). */}
@@ -1156,7 +1160,7 @@ const formatCompactQty = (value) => {
 };
 
 // Portfolio-level aggregate forecast — sums forecast_value across every
-// gated (MAPE < 20%) Category A SKU per period and plots it as one line
+// gated (MASE < 1, the LP's own gate) Category A SKU per period and plots it as one line
 // with a confidence band (sum of confidence_lower/confidence_upper)
 // against actual aggregate demand. Deliberately a directional visual, not
 // a statistically rigorous aggregate interval — summing independent
@@ -1179,8 +1183,9 @@ export const PortfolioForecastWidget = ({
   // How many SKUs the series sums (GET /dashboard's gated_sku_count) out of
   // the scope's Category A forecasts (forecast.total_count). The tiles that
   // showed the gate's figures are hidden; this line still says the card is
-  // a subset — 19 of 132 on 2026-09-29, when "1.6% below" read as the whole
-  // portfolio while all 132 together were +16.4%.
+  // a subset — 19 of 132 on 2026-09-29 under the old MAPE gate, when "1.6%
+  // below" read as the whole portfolio while all 132 together were +16.4%.
+  // Since 2026-09-29 the gate is MASE < 1 (the LP's own), which passes 73.
   gatedSkuCount = null,
   reliability = null,
 }) => {
@@ -1264,7 +1269,8 @@ export const PortfolioForecastWidget = ({
           <p>
             {gatedSkuCount != null && tierACount
               ? `Summed demand across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} `
-                + 'Category A SKUs (those whose forecasts pass the accuracy gate) vs. forecast'
+                + 'Category A SKUs (those whose forecasts beat a naive baseline — MASE < 1, '
+                + 'the same gate the reorder plan uses) vs. forecast'
               : 'Summed demand across gated Category A SKUs vs. forecast'}
           </p>
           {/* The card's takeaway, composed by the backend from this same
@@ -1656,20 +1662,23 @@ export const ReorderRecommendationWidget = ({
   );
 };
 
-// LP safety stock vs SSM's blanket 3-week rule — GET /dashboard's
+// LP safety stock vs SSM's own 3-week stock policy — GET /dashboard's
 // policy_comparison. Two bars on one scale, in the demand series' unit
 // (pieces): what the LP's per-SKU safety stock (SS_i) sums to across the
 // latest planning cycle, and what holding three weeks of each SKU's own
-// forecast would sum to. Units, not pesos — no per-piece cost exists to
+// forecast would sum to. The 3 weeks is SSM's stated policy (client
+// meeting, Sep 2026: keep three weeks of sales in the warehouse), applied
+// here per SKU to the same forecasts the LP used, so the two sides are
+// like for like. Units, not pesos — no per-piece cost exists to
 // value the difference honestly (backend/routers/dashboard.py's
-// policy_comparison docstring). The rule bar is slate (a baseline, no
+// policy_comparison docstring). The policy bar is slate (a baseline, no
 // verdict) and the LP bar indigo (a model output), per the SEMANTIC rule.
 export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
   const c = comparison || {};
   const hasData = c.lp_safety_stock_units != null && c.rule_safety_stock_units != null;
   const max = hasData ? Math.max(c.lp_safety_stock_units, c.rule_safety_stock_units, 1) : 1;
   const rows = [
-    { key: 'rule', label: `Blanket ${c.rule_weeks ?? 3}-week rule`, value: c.rule_safety_stock_units, color: SEMANTIC.noData },
+    { key: 'rule', label: `SSM ${c.rule_weeks ?? 3}-week policy`, value: c.rule_safety_stock_units, color: SEMANTIC.noData },
     { key: 'lp', label: 'LP safety stock (SS\u1d62)', value: c.lp_safety_stock_units, color: SEMANTIC.recommendation },
   ];
 
@@ -1677,10 +1686,11 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Safety stock: LP policy vs the blanket 3-week rule</h4>
+          <h4>Safety stock: LP vs SSM&apos;s 3-week policy</h4>
           <p>
             Total buffer stock each policy would hold across the latest planning cycle, in demand units.
-            Rule = 3 weeks of each SKU&apos;s own forecast; LP = the per-SKU safety stock the optimizer solved for.
+            SSM&apos;s policy (client meeting, Sep 2026) keeps three weeks of sales in stock — applied here as
+            3 weeks of each SKU&apos;s own forecast; LP = the per-SKU safety stock the optimizer solved for.
           </p>
         </div>
       </div>
@@ -1696,8 +1706,8 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
             <p className="policy-headline">
               <span className="policy-headline-number">{Math.abs(c.lp_vs_rule_pct).toFixed(1)}%</span>
               <span className="policy-headline-text">
-                {c.lp_vs_rule_pct >= 0 ? 'less' : 'more'} safety stock under the LP policy than the blanket{' '}
-                {c.rule_weeks ?? 3}-week rule, across {c.sku_count} SKUs
+                {c.lp_vs_rule_pct >= 0 ? 'less' : 'more'} safety stock under the LP policy than SSM&apos;s{' '}
+                {c.rule_weeks ?? 3}-week policy, across {c.sku_count} SKUs
               </span>
             </p>
           )}
@@ -1733,6 +1743,97 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
             period it was run with (scripts/run_lp.py --protection-days; the default is 1 business day, with no
             review period or lead time). The comparison is sensitive to that setting, which is still an open
             planning decision.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Sales vs SSM's supplier allocation — GET /dashboard's `allocation`.
+// SSM's rule (client meeting, Sep 2026): the principal sets the year's
+// allocation from the PREVIOUS year's total sales — minimum x103%, mid
+// x105%, maximum x108%, revised in Q4 on how the market went. The three
+// allocation bars are slate (a policy baseline, no verdict) and the sales
+// bar the sales-series colour, all as average pesos per month so a partial
+// year compares honestly with a full-year allocation. Withheld under All
+// principals (allocations are per principal, and the two principals'
+// pesos sit on different tax bases — the backend's blocked_reason says so).
+export const AllocationWidget = ({ allocation }) => {
+  const a = allocation || {};
+  const hasData = a.basis_sales != null && (a.levels || []).length > 0;
+  const avgMonthlySales = hasData && a.ytd_sales != null && a.ytd_months > 0
+    ? a.ytd_sales / a.ytd_months
+    : null;
+  const latestYear = a.latest_month ? a.latest_month.slice(0, 4) : null;
+  const rows = hasData
+    ? [
+        ...(avgMonthlySales != null
+          ? [{ key: 'sales', label: `${latestYear} sales (avg/month)`, value: avgMonthlySales, color: CHART_COLORS.salesSeries }]
+          : []),
+        ...a.levels.map((l) => ({
+          key: `alloc-${l.pct}`, label: `Allocation ${l.pct}% (/month)`, value: l.monthly, color: SEMANTIC.noData,
+        })),
+      ]
+    : [];
+  const max = rows.length ? Math.max(...rows.map((r) => r.value), 1) : 1;
+  const mid = hasData ? a.levels.find((l) => l.pct === 105) || a.levels[0] : null;
+  // The headline ratio only stands on a FULL prior year: annual x pct ÷ 12
+  // over a partial basis understates the allocation and the percentage
+  // explodes (Del Monte's 6-month 2024 basis read "578%"). The bars and the
+  // footnote's "partial basis" wording still show what data exists.
+  const usedPct = mid && mid.monthly > 0 && avgMonthlySales != null && a.basis_months === 12
+    ? (avgMonthlySales / mid.monthly) * 100
+    : null;
+
+  return (
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="chart-header">
+        <div className="chart-title-area">
+          <h4>Sales vs supplier allocation <span className="chart-unit">₱</span></h4>
+          <p>
+            SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total
+            sales ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4. Shown as average pesos
+            per month beside this year&apos;s actual monthly sales.
+          </p>
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{a.blocked_reason || 'Allocation not available'}</p>
+      ) : (
+        <div className="chart-widget-body">
+          {usedPct != null && (
+            <p className="policy-headline">
+              <span className="policy-headline-number">{usedPct.toFixed(0)}%</span>
+              <span className="policy-headline-text">
+                of the mid (105%) allocation pace — {latestYear} sales average {formatCompactPesos(avgMonthlySales)}/month
+                over {a.ytd_months} month{a.ytd_months === 1 ? '' : 's'}, vs {formatCompactPesos(mid.monthly)}/month allocated
+              </span>
+            </p>
+          )}
+          <div className="policy-bars">
+            {rows.map((r) => (
+              <div className="policy-bar-row" key={r.key}>
+                <span className="policy-bar-label">{r.label}</span>
+                <div
+                  className="policy-bar-track"
+                  role="img"
+                  aria-label={`${r.label}: ${formatCompactPesos(r.value)} per month`}
+                  style={{ background: `color-mix(in srgb, ${r.color} 12%, var(--color-surface))` }}
+                >
+                  {/* A month's sales can net negative (returns); no negative bar width. */}
+                  <span style={{ width: `${(Math.max(0, r.value) / max) * 100}%`, backgroundColor: r.color }} />
+                </div>
+                <span className="policy-bar-value">{formatCompactPesos(r.value)}</span>
+              </div>
+            ))}
+          </div>
+          <p className="dashboard-chart-footnote">
+            Basis: {a.basis_year} sales of {formatCompactPesos(a.basis_sales)} ({a.vat_basis}
+            {a.basis_months < 12 ? `, ${a.basis_months} of 12 months on record — a partial basis` : ''}).
+            SSM has not shared the real allocation figures, so these are the rule applied to the sales data;
+            which percentage applies in {latestYear} is a question for SSM.
           </p>
         </div>
       )}

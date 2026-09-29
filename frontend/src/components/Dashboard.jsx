@@ -5,7 +5,7 @@ import DateFilter from './DateFilter';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
-  formatCompactPesos,
+  AllocationWidget, formatCompactPesos,
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
@@ -142,12 +142,13 @@ const Slot = ({ kind, realOnly = false, children }) => (
 // in a .dash-slot like the real ones (that is where their 360px minimum
 // height comes from) and takes its widget's shape, in page order: sales
 // trend; ABC ring and tier bars; portfolio forecast and reorder list; policy
-// bars.
+// bars beside the allocation bars. Row classes repeat (two dash-row-even),
+// so keys come from the index, not the class.
 const DASHBOARD_SKELETON_ROWS = [
   ['dash-row-trend', [{ variant: 'line' }]],
   ['dash-row-abc', [{ variant: 'donut' }, { variant: 'hbars', rows: 3 }]],
   ['dash-row-even', [{ variant: 'line' }, { variant: 'list', rows: 3 }]],
-  ['dash-row-single', [{ variant: 'hbars', rows: 2, height: 120 }]],
+  ['dash-row-even', [{ variant: 'hbars', rows: 2, height: 120 }, { variant: 'hbars', rows: 4, height: 160 }]],
 ];
 
 const DashboardSkeleton = () => (
@@ -155,8 +156,8 @@ const DashboardSkeleton = () => (
     <div className="kpi-strip kpi-strip-hero">
       <SkeletonStatCards count={4} cardClassName="kpi-card" />
     </div>
-    {DASHBOARD_SKELETON_ROWS.map(([rowClass, cards]) => (
-      <div className={`dash-row ${rowClass}`} key={rowClass}>
+    {DASHBOARD_SKELETON_ROWS.map(([rowClass, cards], i) => (
+      <div className={`dash-row ${rowClass}`} key={i}>
         {cards.map((card, k) => (
           <div className="dash-slot" key={k}>
             <span className="dash-kind-row"><SkeletonLine width="5.5rem" height="1.1rem" /></span>
@@ -177,7 +178,7 @@ const DASH_SECTIONS = [
   { id: 'dash-sales', label: 'Sales & stock', hint: 'What happened: monthly sales against stock on hand' },
   { id: 'dash-abc', label: 'ABC tiers', hint: 'What happened: which products earn the most, and their stock status' },
   { id: 'dash-forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast and the reorder list" },
-  { id: 'dash-policy', label: 'Safety stock', hint: 'What to do: the LP safety stock against the blanket 3-week rule' },
+  { id: 'dash-policy', label: 'Client policy', hint: "What to do: the LP safety stock against SSM's 3-week policy, and sales against the supplier allocation" },
 ];
 const DASH_SECTION_IDS = DASH_SECTIONS.map((s) => s.id);
 
@@ -418,13 +419,25 @@ const Dashboard = () => {
   const sohMonth = periodLabel(kpis.soh_period);
   const sohCoverage = coverageNote(kpis.soh_coverage, pagePrincipal);
   const salesIsPlaceholder = isPlaceholderPeriod(kpis.sales_period, placeholder);
+  // Only under All principals (GET /dashboard's vat_note): the combined
+  // pesos mix Unilever's VAT-inclusive amounts with Del Monte's
+  // VAT-exclusive ones, and the card must say so rather than imply one basis.
+  const vatNote = data.vat_note || null;
   const sales = kpiDisplay(
     kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
-    salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales',
+    [salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales', vatNote]
+      .filter(Boolean).join(' · '),
   );
+  // The stock card also answers SSM's own rule (client meeting, Sep 2026:
+  // keep three weeks of sales in stock) with the backend's weeks_of_cover,
+  // so the target and the actual sit on one line.
+  const cover = kpis.weeks_of_cover || {};
+  const coverLine = cover.value != null
+    ? `≈ ${Number(cover.value).toFixed(1)} weeks of sales in stock · SSM policy: keep ${data.inventory?.policy_weeks ?? 3} weeks`
+    : null;
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
-    [sohMonth ? `Stock-on-hand valuation · ${sohMonth}` : 'Stock-on-hand valuation', sohCoverage]
+    [sohMonth ? `Stock-on-hand valuation · ${sohMonth}` : 'Stock-on-hand valuation', sohCoverage, coverLine]
       .filter(Boolean).join(' · '),
   );
 
@@ -623,7 +636,7 @@ const Dashboard = () => {
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
           <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} /></Slot>
+            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} /></Slot>
           </div>
 
           <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
@@ -653,7 +666,6 @@ const Dashboard = () => {
               <PortfolioForecastWidget
                 series={portfolioSeries}
                 gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
-                avgMape={portfolioForecast.avg_mape}
                 scopeLabel={portfolioForecast.scope_label}
                 // The backend's scope_label already says it plainly for Del
                 // Monte ("No SKU-level forecasts exist for Del Monte — …").
@@ -672,7 +684,6 @@ const Dashboard = () => {
                 isUpdating={forecastUpdating}
                 reliability={forecastReliability}
                 insight={portfolioForecast.insight}
-                mapeGate={portfolioForecast.mape_gate}
               />
             </Slot>
             <Slot kind="Prescriptive" realOnly={preview && realOnly.has('reorder_preview')}>
@@ -686,10 +697,14 @@ const Dashboard = () => {
             </Slot>
           </div>
 
-          {/* PRESCRIPTIVE — the policy question this project exists to answer */}
-          <div className="dash-row dash-row-single dash-section-anchor" id="dash-policy">
+          {/* PRESCRIPTIVE — the policy question this project exists to answer,
+              beside SSM's own allocation rule applied to the sales data */}
+          <div className="dash-row dash-row-even dash-section-anchor" id="dash-policy">
             <Slot kind="Prescriptive" realOnly={preview && realOnly.has('policy_comparison')}>
               <PolicyComparisonWidget comparison={data.policy_comparison} />
+            </Slot>
+            <Slot kind="Descriptive">
+              <AllocationWidget allocation={data.allocation} />
             </Slot>
           </div>
 

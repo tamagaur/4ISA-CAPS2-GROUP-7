@@ -230,21 +230,26 @@ zero):
     horizon anywhere in Forecast_Result to report (neither SARIMA's
     retirement nor the per-bin routing changed that one-step-per-product
     shape, so no aggregation logic below needed to change, only this
-    wording). The portfolio gate stays `mape < 20` (MAPE_PORTFOLIO_GATE),
-    each SKU's MAPE now from its served model's rolling one-step holdout.
+    wording). The portfolio gate is MASE < 1 (MASE_UNRELIABLE_GATE) since
+    2026-09-29 — the same gate forecast.unreliable_count and the LP's
+    candidate pool apply (scripts/run_lp.py MASE_GATE), so every screen
+    calls the same SKUs reliable. It was `mape < 20` before, which passed
+    19 of 132 Tier A SKUs against the LP's 73 and made the card describe
+    a different population than the reorder plan (the MODEL_BAKEOFF
+    report's own conclusion was to move off the mape gate).
     series covers the SAME `period`/
     `start_period`-derived window as kpis.sales / sales_vs_stock above
     (summed quantity_sold across the gated product set, i.e. products with
-    a forecast_date row where status='ok' AND mape < 20 at the most recent
+    a forecast_date row where status='ok' AND mase < 1 at the most recent
     forecast_date in the table) — the date-range picker's applied range,
     not a hardcoded trailing window — followed by however many distinct
     real forecast_date buckets exist among those gated rows (usually one,
     sometimes a few if products' own latest periods differ), which land
     past the picker's range whenever its end predates the forecast month.
     Never fabricated into a clean synchronized run.
-    gated_sku_count / avg_mape are computed from the same gated-row set.
-    Null/empty across the board (gated_sku_count=0, avg_mape=None,
-    series=[]) when nothing passes the gate.
+    gated_sku_count is computed from the same gated-row set. Null/empty
+    across the board (gated_sku_count=0, series=[]) when nothing passes
+    the gate.
 
   reorder_preview
     — real: top 5 pending LP_Recommendation rows by urgency, reusing
@@ -290,7 +295,8 @@ zero):
     less buffer the LP holds, as a percent of the rule (negative = more).
     The per-SKU rows behind these sums are GET /policy-comparison
     (policy_comparison.py) — keep the two queries in step. Sums, over the latest pending planning
-    cycle, the LP's ss_i against what SSM's blanket rule would hold:
+    cycle, the LP's ss_i against what SSM's own stock policy would hold
+    (keep three weeks of sales in stock — client meeting, Sep 2026):
     POLICY_WEEKS x (that product's own Forecast_Result.forecast_value for
     the same month / AVG_WEEKS_PER_MONTH). Both sides are on the demand
     series' unit (pieces), so they are directly comparable; deliberately
@@ -336,12 +342,19 @@ from backend.stock_units import STOCK_AT_PERIOD_SQL
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 POLICY_WEEKS = 3
-# Portfolio forecast gate (portfolio_forecast, and "Gated SKUs (MAPE < 20%)"
-# on the dashboard card): percent — see schema.sql's Forecast_Result.mape comment.
-MAPE_PORTFOLIO_GATE = 20.0
-# forecast.unreliable_count's pass gate: MASE < 1 passes, so >= 1 is
-# unreliable. Same gate as the LP (scripts/run_lp.py MASE_GATE).
+# The ONE forecast-reliability gate this page applies: MASE < 1 passes
+# (the served model beat a naive last-value forecast on its holdout), so
+# >= 1 is unreliable. Shared by forecast.unreliable_count AND
+# portfolio_forecast's gated SKU set, and it is the LP's own candidate
+# gate too (scripts/run_lp.py MASE_GATE) — since 2026-09-29 every screen
+# calls the same SKUs reliable. portfolio_forecast gated on mape < 20
+# before, a stale gate the MODEL_BAKEOFF report concluded against.
 MASE_UNRELIABLE_GATE = 1.0
+
+# Sir Abe's allocation rule (client meeting, Sep 2026): the principal sets
+# the year's allocation from the previous year's total sales — minimum
+# x103%, mid x105%, maximum x108%, revised in Q4 on how the market went.
+ALLOCATION_LEVELS = (103, 105, 108)
 
 # Step 19's LP objective weights (analytics/optimization/lp.py's W1/W2/W3:
 # 0.45/0.35/0.20) — hardcoded module constants there, not stored per-
@@ -894,6 +907,87 @@ def get_dashboard(
             f"anywhere from {periods[0]} through {periods[-1]} yet."
         )
     )
+    # The two principals' pesos are on different tax bases: Unilever's
+    # net_amount is "Total Sales Amt Inc. Tax" (config/column_maps/
+    # unilever_sku.yaml, migration 0010) while Del Monte's sell-out
+    # net_amount is "Total Without Tax". A combined 'all' figure therefore
+    # mixes VAT-inclusive and VAT-exclusive pesos — true of kpis.sales, the
+    # sales_vs_stock sales line, and weeks_of_cover's demand denominator
+    # whenever its cover_scope stays 'all'. Said here once so every card
+    # drawn from these sums can label it instead of implying one basis.
+    vat_note = (
+        "Unilever pesos include VAT; Del Monte pesos exclude it — combined totals mix the two tax bases."
+        if scope == "all" else None
+    )
+
+    # ---- allocation (SSM's rule: prior-year sales x 103/105/108%) -------
+    # Client meeting, Sep 2026 (Sir Abe): the principal sets the year's
+    # allocation from the PREVIOUS year's total sales — minimum x103%, mid
+    # x105%, maximum x108% — revised in Q4 on how the market went. Computed
+    # per principal (each principal sets its own allocation), from the same
+    # _sales_by_period sums every other peso figure on this page reads, on
+    # that principal's own tax basis. Under 'all' it is withheld: the two
+    # principals' pesos are on different tax bases (vat_note above) and a
+    # combined allocation would be against SSM's own per-principal rule.
+    # One shape whatever the state: every key present, null when withheld,
+    # and only blocked_reason saying why.
+    allocation: dict = {
+        "basis_year": None, "basis_sales": None, "basis_months": 0,
+        "latest_month": None, "ytd_sales": None, "ytd_months": 0,
+        "levels": [], "vat_basis": None, "blocked_reason": None,
+    }
+    if scope == "all":
+        allocation["blocked_reason"] = (
+            "Allocations are set per principal, so they are not combined — "
+            "pick one principal to compare its sales with its allocation."
+        )
+    elif latest_by_principal.get(scope) is None:
+        allocation["blocked_reason"] = f"No sales rows for {_scope_label(scope)} at all."
+    else:
+        latest_month = latest_by_principal[scope]
+        latest_year = int(latest_month[:4])
+        basis_year = latest_year - 1
+        basis_periods = [f"{basis_year:04d}-{m:02d}" for m in range(1, 13)]
+        ytd_periods = [f"{latest_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
+        # Reuse the months the page already summed (same scope, same mode),
+        # and fetch only the rest in ONE call — basis and YTD are disjoint.
+        missing = [p for p in basis_periods + ytd_periods if p not in sales_by_period]
+        by_period = {**sales_by_period, **(_sales_by_period(db, missing, scope, mode) if missing else {})}
+        basis_values = [by_period[p] for p in basis_periods if by_period.get(p) is not None]
+        ytd_values = [by_period[p] for p in ytd_periods if by_period.get(p) is not None]
+        basis_sales = sum(basis_values) if basis_values else None
+        allocation["basis_year"] = basis_year
+        allocation["latest_month"] = latest_month
+        if not basis_values:
+            allocation["blocked_reason"] = (
+                f"No {basis_year} sales rows for {_scope_label(scope)}, so the prior-year "
+                f"basis SSM's allocation rule needs doesn't exist yet."
+            )
+        elif basis_sales <= 0:
+            allocation["blocked_reason"] = (
+                f"{_scope_label(scope).capitalize()}'s {basis_year} sales net to ₱0 or less "
+                f"(returns and credits), so the allocation rule has nothing to scale."
+            )
+        else:
+            ytd_sales = sum(ytd_values) if ytd_values else None
+            allocation.update({
+                "basis_sales": round(basis_sales, 2),
+                # 12 real months make a true calendar-year basis; fewer and
+                # the card must say the basis is partial, not imply a year.
+                "basis_months": len(basis_values),
+                "ytd_sales": round(ytd_sales, 2) if ytd_sales is not None else None,
+                "ytd_months": len(ytd_values),
+                "levels": [
+                    {
+                        "pct": pct,
+                        "annual": round(basis_sales * pct / 100.0, 2),
+                        "monthly": round(basis_sales * pct / 100.0 / 12.0, 2),
+                    }
+                    for pct in ALLOCATION_LEVELS
+                ],
+                # The tax basis the pesos above are on (see vat_note's sources).
+                "vat_basis": "incl. VAT" if scope == "unilever" else "ex-VAT",
+            })
 
     # ---- kpis.soh_value / sales_vs_stock.stock_on_hand ----------------
 
@@ -1234,28 +1328,24 @@ def get_dashboard(
         gated_rows = db.execute(
             text(f"""
                 SELECT fr.product_key, fr.forecast_date, fr.forecast_value,
-                       fr.confidence_lower, fr.confidence_upper, fr.mape, pd.principal
+                       fr.confidence_lower, fr.confidence_upper, pd.principal
                 FROM {fc_src} fr
                 JOIN Product_Dimension pd ON pd.product_key = fr.product_key
                 WHERE fr.forecast_date = :forecast_date
                   AND fr.status = 'ok'
-                  AND fr.mape < :mape_gate
+                  AND fr.mase < :mase_gate
                   {principal_filter}
             """),
-            {"forecast_date": latest_forecast_date, "mape_gate": MAPE_PORTFOLIO_GATE, **fc_params},
+            {"forecast_date": latest_forecast_date, "mase_gate": MASE_UNRELIABLE_GATE, **fc_params},
         ).mappings().all()
 
     gated_sku_count = len({r["product_key"] for r in gated_rows})
-    avg_mape = (
-        round(sum(float(r["mape"]) for r in gated_rows) / len(gated_rows), 2)
-        if gated_rows else None
-    )
     # "No forecasts exist for this scope" and "forecasts exist but none pass
     # the gate" are different facts. Del Monte is the live case of the
     # first: Forecast_Result has no Del Monte rows at all (its Sales
     # Register is invoice-grain with no SKU column, so no SKU-level
-    # forecast is run), and reporting that as a failed MAPE gate would
-    # imply forecasts were made and judged unreliable.
+    # forecast is run), and reporting that as a failed reliability gate
+    # would imply forecasts were made and judged unreliable.
     scoped_forecast_count = 0
     if latest_forecast_date is not None and not gated_rows:
         scoped_forecast_count = db.execute(
@@ -1277,12 +1367,12 @@ def get_dashboard(
         if scope == "all" and len(covered) == 1:
             only = names.get(covered[0], covered[0])
             scope_label = (
-                f"All principals — only {only} has SKU-level forecasts meeting the MAPE gate, "
-                f"so this matches the {only} view."
+                f"All principals — only {only} has SKU-level forecasts that beat a naive "
+                f"baseline (MASE < 1, the LP's own gate), so this matches the {only} view."
             )
         else:
             who = "All principals" if scope == "all" else names.get(scope, scope)
-            scope_label = f"{who} (SKU-level forecasts meeting the MAPE gate)."
+            scope_label = f"{who} (SKU-level forecasts that beat a naive baseline — MASE < 1, the LP's own gate)."
     elif scoped_forecast_count == 0:
         scope_label = (
             "No SKU-level forecasts exist for Del Monte — its sales data is invoice-grain "
@@ -1291,7 +1381,10 @@ def get_dashboard(
             else f"No SKU-level forecasts exist for {_scope_label(scope)}."
         )
     else:
-        scope_label = f"No products currently meet the MAPE < {MAPE_PORTFOLIO_GATE:.0f}% gate."
+        scope_label = (
+            f"No forecasts for this scope currently beat the naive baseline "
+            f"(MASE < {MASE_UNRELIABLE_GATE:.0f})."
+        )
 
     series_by_period: dict[str, dict] = {}
     if gated_rows:
@@ -1351,12 +1444,10 @@ def get_dashboard(
     portfolio_forecast = {
         "series": portfolio_series,
         "gated_sku_count": gated_sku_count,
-        "avg_mape": avg_mape,
         "scope_label": scope_label,
-        # The gate the count above was filtered by, so the card's label
-        # ("Gated SKUs (MAPE < N%)") states the constant from here rather
-        # than hardcoding 20 in the JSX.
-        "mape_gate": MAPE_PORTFOLIO_GATE,
+        # The gate the count above was filtered by — the same value as
+        # forecast.mase_gate, stated here too so the card never hardcodes it.
+        "mase_gate": MASE_UNRELIABLE_GATE,
         # One sentence comparing the forecast bucket with the last actual
         # month — the card renders it verbatim (backend/chart_insights.py).
         "insight": portfolio_forecast_insight(portfolio_series),
@@ -1410,7 +1501,7 @@ def get_dashboard(
         },
     }
 
-    # ---- policy_comparison (band 4: LP safety stock vs the 3-week rule) --
+    # ---- policy_comparison (band 4: LP safety stock vs SSM's 3-week policy) --
     # One row per product in the latest pending cycle that ALSO has a
     # Forecast_Result for that same month (fr.forecast_date =
     # lr.planning_cycle_date); products missing the forecast drop out of
@@ -1512,6 +1603,13 @@ def get_dashboard(
                 "stock_period": inventory_period,
             },
         },
+        # Non-null only under 'all': the combined pesos mix Unilever's
+        # VAT-inclusive amounts with Del Monte's VAT-exclusive ones, and
+        # the sales card and hero chart say so from this one field.
+        "vat_note": vat_note,
+        # Sales against SSM's allocation rule (prior-year sales x 103/105/
+        # 108% — client meeting, Sep 2026), per principal.
+        "allocation": allocation,
         # Which LP run the page is showing, and whether it can still be
         # trusted (backend/lp_cycle.py). Every LP-derived figure above is
         # pinned to this cycle; superseded_pending_count says how many
