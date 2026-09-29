@@ -113,9 +113,15 @@ app.include_router(data_mode.router)
 
 
 @app.get("/health", tags=["health"])
+@app.get("/status", tags=["health"])
 def health() -> dict[str, str]:
     """Unauthenticated liveness check — deliberately outside every
     router's get_current_user dependency so uptime monitoring doesn't
     need an API key. Only confirms the process is up, not that Supabase
-    is reachable (see the `lifespan` startup check above for that)."""
+    is reachable (see the `lifespan` startup check above for that).
+
+    Two paths, same check: Render's health check uses /health; the
+    sidebar's status light uses /status, because EasyPrivacy (Brave
+    Shields, uBlock Origin, AdBlock) blocks ||onrender.com/health, which
+    showed SYS OFFLINE in those browsers while the app itself worked."""
     return {"status": "ok"}

@@ -57,12 +57,14 @@ const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SYS ONLINE', offlin
 
 const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
 
-  // Real backend reachability, re-checked every minute.
+  // Real backend reachability, re-checked every minute. Pings /status, not
+  // /health (same check): ad blockers' EasyPrivacy list blocks
+  // ||onrender.com/health, which showed SYS OFFLINE while the app worked.
   const [apiStatus, setApiStatus] = useState('checking');
   useEffect(() => {
     let cancelled = false;
     const check = () => {
-      fetch(`${API_URL}/health`)
+      fetch(`${API_URL}/status`)
         .then((res) => { if (!cancelled) setApiStatus(res.ok ? 'online' : 'offline'); })
         .catch(() => { if (!cancelled) setApiStatus('offline'); });
     };
@@ -164,7 +166,7 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
           
           {/* Was a hardcoded green "SYS ONLINE" (shown even with the backend
               down) next to the computer's real date, which disagreed with the
-              app's own "today" (Feb 2026). Now reflects GET /health. */}
+              app's own "today" (Feb 2026). Now reflects GET /status. */}
           <div className="sidebar-status">
             <div className={`status-indicator status-${apiStatus}`} role="status">
               <span className="status-dot"></span>
