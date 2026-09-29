@@ -327,6 +327,24 @@ def test_forgot_password_takes_a_fixed_minimum_time(client, monkeypatch):
     assert time.monotonic() - started >= 0.3
 
 
+def test_forgot_password_offers_the_email_when_it_is_set_up(client):
+    assert client.get("/auth/forgot-password").json() == {"email_enabled": True, "detail": None}
+
+
+def test_without_email_forgot_password_says_to_ask_an_admin(client, db, outbox, monkeypatch):
+    """The live API has no email set up: the page says so up front, and a
+    request makes no link, since no one could receive it."""
+    monkeypatch.setattr(mailer, "is_configured", lambda: False)
+    assert client.get("/auth/forgot-password").json() == {
+        "email_enabled": False, "detail": auth_router.FORGOT_PASSWORD_NO_EMAIL_MESSAGE,
+    }
+    for email in ("staff@ssmcapstone.com", "nobody@ssmcapstone.com"):
+        resp = client.post("/auth/forgot-password", json={"email": email})
+        assert resp.status_code == 202
+        assert resp.json() == {"detail": auth_router.FORGOT_PASSWORD_NO_EMAIL_MESSAGE}
+    assert outbox == [] and db.tokens == [] and db.audit == []
+
+
 # --- backend.mailer ----------------------------------------------------------
 
 

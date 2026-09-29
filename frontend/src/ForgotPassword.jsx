@@ -1,17 +1,27 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { requestPasswordReset } from './auth';
+import { getPasswordResetInfo, requestPasswordReset } from './auth';
 import './Login.css';
 
 // Self-service "Forgot password?": asks the server to email a one-time link
 // for choosing a new password. The server answers the same way whether or
 // not the email has an account, and this page only ever repeats that
-// answer — it must never hint at which it was.
+// answer — it must never hint at which it was. A server with no email set up
+// (the live one) says so first, and the page shows that instead of the form.
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [sentMessage, setSentMessage] = useState('');
+  const [noEmailMessage, setNoEmailMessage] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    getPasswordResetInfo()
+      .then((info) => { if (!cancelled && info?.email_enabled === false) setNoEmailMessage(info.detail); })
+      .catch(() => {}); // Unknown: keep the form; the server's answer to it still says what happened.
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,8 +54,8 @@ const ForgotPassword = () => {
         <div className="login-card">
           <h2>Reset your <span className="page-title-accent">password</span></h2>
 
-          {sentMessage ? (
-            <div className="auth-info-message auth-card-message" role="status">{sentMessage}</div>
+          {noEmailMessage || sentMessage ? (
+            <div className="auth-info-message auth-card-message" role="status">{noEmailMessage || sentMessage}</div>
           ) : (
             <>
               <p className="subtitle">Enter your email and we&apos;ll send you a link to choose a new password.</p>

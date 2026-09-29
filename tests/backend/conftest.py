@@ -10,6 +10,8 @@ were written against. Tests of the check itself opt back in with
 
 No test may send a real email: backend.mailer.send is replaced for every test
 by the `outbox` list, which a test can ask for to see what would have gone out.
+Email also counts as set up (mailer.is_configured), whatever this machine's
+.env holds; tests of the no-email case switch it off themselves.
 """
 from __future__ import annotations
 
@@ -37,6 +39,7 @@ def outbox(monkeypatch):
     monkeypatch.setattr(
         mailer, "send", lambda to, subject, body: sent.append({"to": to, "subject": subject, "body": body})
     )
+    monkeypatch.setattr(mailer, "is_configured", lambda: True)
     return sent
 
 

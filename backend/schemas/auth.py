@@ -86,5 +86,12 @@ class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
+class ForgotPasswordInfo(BaseModel):
+    """GET /auth/forgot-password: false when the server has no email set up,
+    and then `detail` says to ask an administrator instead."""
+    email_enabled: bool
+    detail: str | None = None
+
+
 class MessageResponse(BaseModel):
     detail: str

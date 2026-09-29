@@ -5,6 +5,7 @@ backend.routers.auth — sign-in, sessions, invites and password links.
   POST /auth/heartbeat        user    keeps the session alive
   POST /auth/logout           user    ends the session
   POST /auth/register         admin   creates an account and its invite link
+  GET  /auth/forgot-password  public  whether a reset link can be emailed at all
   POST /auth/forgot-password  public  emails a reset link if the account exists
   POST /auth/link-info        public  who a set-password link is for
   POST /auth/set-password     public  sets the password through a link
@@ -43,7 +44,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend import account_links, audit
+from backend import account_links, audit, mailer
 from backend.auth_utils import (
     create_access_token,
     hash_password,
@@ -53,6 +54,7 @@ from backend.auth_utils import (
 from backend.deps import TokenPayload, get_current_user, get_db, require_admin
 from backend.login_limiter import login_limiter, reset_limiter
 from backend.schemas.auth import (
+    ForgotPasswordInfo,
     ForgotPasswordRequest,
     InviteResponse,
     LinkInfo,
@@ -91,6 +93,12 @@ FORGOT_PASSWORD_MESSAGE = (
 # forgot-password answers no sooner than this, so the database work done only
 # for real accounts can't be timed to tell which emails exist.
 FORGOT_PASSWORD_MIN_SECONDS = 1.0
+# Said instead when the server has no email set up, as on the live API: no
+# link could reach anyone, so none is made, and every email gets this answer.
+FORGOT_PASSWORD_NO_EMAIL_MESSAGE = (
+    "Email isn't set up on this server, so we can't send you a reset link. "
+    "Ask an administrator to send you one from User Management."
+)
 
 
 def _start_session(db: Session, *, user_id: int, email: str, full_name: str, role: str) -> str | None:
@@ -270,6 +278,15 @@ def register(
     )
 
 
+@router.get("/forgot-password", response_model=ForgotPasswordInfo)
+def forgot_password_info() -> ForgotPasswordInfo:
+    """Whether "Forgot password?" can email a link, so the page can say to ask
+    an administrator up front instead of promising an email that can't come."""
+    if mailer.is_configured():
+        return ForgotPasswordInfo(email_enabled=True)
+    return ForgotPasswordInfo(email_enabled=False, detail=FORGOT_PASSWORD_NO_EMAIL_MESSAGE)
+
+
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED, response_model=MessageResponse)
 def forgot_password(
     body: ForgotPasswordRequest,
@@ -277,6 +294,9 @@ def forgot_password(
     background: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> MessageResponse:
+    if not mailer.is_configured():
+        # The same answer for every email, with no database work to time.
+        return MessageResponse(detail=FORGOT_PASSWORD_NO_EMAIL_MESSAGE)
     started = time.monotonic()
     client_ip = request.client.host if request.client else "unknown"
     if reset_limiter.retry_after(body.email, client_ip) is None:

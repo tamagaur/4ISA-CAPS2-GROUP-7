@@ -164,6 +164,14 @@ export async function requestPasswordReset(email) {
   return body?.detail || 'If that email has an account, a link to reset its password is on its way.';
 }
 
+// { email_enabled, detail }: whether "Forgot password?" can email a link at
+// all. The live server has no email set up; then `detail` says to ask an admin.
+export async function getPasswordResetInfo() {
+  const res = await fetch(`${API_URL}/auth/forgot-password`);
+  if (!res.ok) throw new Error('Could not check how to reset a password.');
+  return res.json();
+}
+
 // { purpose: 'invite' | 'reset', email, full_name, expires_at }
 export async function getLinkInfo(token) {
   const res = await postPublic(
