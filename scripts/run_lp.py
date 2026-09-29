@@ -22,15 +22,13 @@ every historical period that product was ever tier A in (confirmed
 empirically while building this script: an unfiltered join produced 80+
 duplicate rows for a single product_key).
 
-Gate is mase < MASE_GATE (1.0), not mape < 20 — deliberately different
-from backend/routers/dashboard.py's portfolio_forecast gate, which still
-uses mape < 20. reports/MODEL_BAKEOFF_UNILEVER.md's real-data run found
-only ~15% of Tier A SKUs ever clear mape < 20% under any method tested,
-MA3 included, while ~50-56% clear mase < 1.0 — the same report's own
-conclusion is to move off the mape gate. The LP's candidate pool follows
-that evidence directly since it's read here, not copied from dashboard.py's
-now-stale threshold; dashboard.py's gate is a separate, not-yet-updated
-concern.
+Gate is mase < MASE_GATE (1.0). reports/MODEL_BAKEOFF_UNILEVER.md's
+real-data run found only ~15% of Tier A SKUs ever clear mape < 20% under
+any method tested, MA3 included, while ~50-56% clear mase < 1.0 — the
+report's own conclusion was to move off the mape gate. Since 2026-09-29
+backend/routers/dashboard.py's portfolio_forecast applies this same gate
+(MASE_UNRELIABLE_GATE), so the dashboard card and this candidate pool
+describe the same SKUs.
 
 Forecast_Result.forecast_date is confirmed (scripts/run_baseline_forecast.py's
 _write_forecast_result) to be IDENTICAL across every row in one write —
@@ -82,7 +80,9 @@ two ways this particular LP shape can be infeasible, since Q_i's only
 lower bound is ROP_i itself, which is always individually satisfiable) and
 writes nothing for that cycle.
 
-Added 2026-09-21: --dry-run runs everything on a read-only session and
+Added 2026-09-21: --dry-run runs everything inside one READ ONLY
+transaction (transaction-scoped, never set_session — that leaks through
+the :6543 pooler; see the connect() comment in main()) and
 reports what a real run would write, including the rows it would leave
 alone; --protection-days sets how many business days of demand variability
 SS_i covers (default 1, which reproduces every earlier run). A rerun keeps
@@ -312,7 +312,7 @@ def main():
                    f"{' (default: no review period or lead time)' if args.protection_days == 1.0 else ''}")
     logger.warning(LOUD_RULE)
     if args.dry_run:
-        logger.warning("DRY RUN — read-only session; nothing will be written to LP_Recommendation.")
+        logger.warning("DRY RUN — one READ ONLY transaction; nothing will be written to LP_Recommendation.")
 
     load_dotenv(override=False)
     db_url = os.environ.get("SUPABASE_DB_URL")
@@ -321,10 +321,20 @@ def main():
         return
 
     conn = psycopg2.connect(db_url)
-    # Each cycle's upserts commit immediately. A dry run's session is
-    # read-only at the database, so a write would fail rather than land.
-    conn.set_session(readonly=args.dry_run, autocommit=True)
+    # Each cycle's upserts commit immediately (autocommit). A dry run instead
+    # runs as ONE psycopg2-managed transaction made READ ONLY by its first
+    # statement, so a write would fail rather than land; nothing ever commits
+    # it, and conn.close() (or the process exiting on an error) discards it —
+    # no rollback to remember on any exit path. Transaction-scoped on
+    # purpose: set_session(readonly=True) is session-scoped, and through the
+    # :6543 transaction pooler it stays on the shared server connection after
+    # this script disconnects, so the next client handed that connection
+    # can't write — it broke the app's sign-ins on 2026-09-28 (see
+    # backend/deps.py's engine comment).
+    conn.set_session(autocommit=not args.dry_run)
     cur = conn.cursor()
+    if args.dry_run:
+        cur.execute("SET TRANSACTION READ ONLY")
 
     def save_result(product_key, planning_cycle_date, q_i, rop_i, ss_i) -> bool:
         """Upsert one row. False when it hit a decided row and changed nothing."""
