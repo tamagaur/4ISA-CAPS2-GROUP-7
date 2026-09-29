@@ -9,7 +9,7 @@ person sets their own through a link — emailed from the group Gmail
 (backend/mailer.py), or copied by the admin when email isn't available.
 
 A link is 32 random bytes. Only its sha256 is stored (auth_token, migration
-0029), so reading the table doesn't give anyone a usable link. A link works
+0031), so reading the table doesn't give anyone a usable link. A link works
 once: using it, or issuing a newer one for the same account, retires it. It
 travels in the URL fragment (/set-password#token=...), which browsers never
 send to a server, so it can't land in an access log.

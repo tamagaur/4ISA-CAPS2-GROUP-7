@@ -21,7 +21,7 @@ checks that row (backend/deps.py), so a sign-in whose session can't be
 recorded is refused (503) instead of let through unmeasured: a token without
 a session could never be signed out.
 
-INVITES AND RESETS (2026-09-28, migration 0029): an admin no longer types a
+INVITES AND RESETS (2026-09-28, migration 0031): an admin no longer types a
 password for a new account. The account starts without one and its owner
 sets it through a one-time link (backend/account_links.py), so no admin knows
 anyone's password.
