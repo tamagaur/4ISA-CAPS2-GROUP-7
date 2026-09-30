@@ -41,7 +41,7 @@ minimize   Z = w1·TC  −  w2·SL  +  w3·SC
 
 | Term | Implemented formula (lp.py) | Line |
 |---|---|---|
-| `w1, w2, w3` | `0.45, 0.35, 0.20` (module constants; also `config/analytics_params.yaml`) | 66 |
+| `w1, w2, w3` | `0.45, 0.35, 0.20` (module constants; since 2026-09-30 `analytics/params.py` `LP_WEIGHTS` — `config/analytics_params.yaml` was never read by any code and is deleted) | 66 |
 | `TC` (total cost) | `Σ_i  procurement_cost_per_unit_i · Q_i` | 154 |
 | `SL` (service level) | `(Σ_i Q_i)  /  (Σ_i ROP_i)` — pooled ratio, **constant denominator** | 155 |
 | `SC` (storage cost) | `Σ_i  storage_cost_per_unit_i · Q_i` — flat per-unit, same rate every SKU | 156 |
@@ -75,7 +75,7 @@ only two infeasibility routes are `ΣROP > warehouse_capacity` and
 ## 1.4 ROP / safety-stock inputs
 
 `ROP_i = forecast_i + SS_i` (`compute_rop`, lp.py:94-98)
-`SS_i  = 1.28 · σ_d`         (`compute_safety_stock`, lp.py:81-91; `Z=1.28` from `config/analytics_params.yaml`)
+`SS_i  = 1.28 · σ_d`         (`compute_safety_stock`, lp.py:81-91; `Z=1.28` from `lp.py`'s own constant — never from `config/analytics_params.yaml`, which no code read; since 2026-09-30 `analytics/params.py` `SERVICE_Z`)
 
 - `forecast_i` = `Forecast_Result.forecast_value` — the **MA3 one-step-ahead
   monthly forecast** written by `scripts/run_baseline_forecast.py`
@@ -92,8 +92,8 @@ only two infeasibility routes are `ΣROP > warehouse_capacity` and
 
 | Parameter | Symbol | Units | Current source | Current value | Status |
 |---|---|---|---|---|---|
-| LP weights | `w1,w2,w3` | – | `config/analytics_params.yaml` + `lp.py` const | 0.45 / 0.35 / 0.20 | **REAL (asserted)** — "stakeholder consultation" per manuscript; not in any scribe note (same evidentiary gap as DEC-08) |
-| Service-level Z | `Z` | – | `config/analytics_params.yaml` | 1.28 (90% SL) | **REAL** — manuscript: confirmed by SSM procurement mgmt |
+| LP weights | `w1,w2,w3` | – | `lp.py` const (`analytics/params.py` `LP_WEIGHTS` since 2026-09-30) | 0.45 / 0.35 / 0.20 | **REAL (asserted)** — "stakeholder consultation" per manuscript; not in any scribe note (same evidentiary gap as DEC-08) |
+| Service-level Z | `Z` | – | `lp.py` const (`analytics/params.py` `SERVICE_Z` since 2026-09-30) | 1.28 (90% SL) | **REAL** — manuscript: confirmed by SSM procurement mgmt |
 | Next-month demand forecast | `Ŷ_i` | pieces / month | `Forecast_Result.forecast_value` (MA3) | 19 SKUs clear the gate | **REAL** (method), **partial coverage** |
 | Demand std for safety stock | `σ_d` | pieces/day (Unilever, post-conversion) | `run_lp.py` from `*_Real` views | computed | **REAL data, DISPUTED method** + unit-mismatch bug (Task 3) |
 | Procurement / unit cost | `c_i` / `procurement_cost_per_unit` | ₱ / unit | `Product_Dimension.unit_price`, else `--default-procurement-cost-per-unit` | `unit_price` **0 / 17,536** populated → 100 % fallback | **MISSING** (unused real proxy: `Inventory_Fact.unit_cost_per_case`, 27,282 Unilever rows, per case) |

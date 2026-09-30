@@ -26,7 +26,7 @@ from analytics.optimization.lp import (
     target_stock,
     weekly_demand,
 )
-from analytics.optimization.lp_inputs import WEEKS_PER_MONTH
+from analytics.params import WEEKS_PER_MONTH
 
 ROOMY = 1e12  # a warehouse or allocation that never binds
 

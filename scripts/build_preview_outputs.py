@@ -23,7 +23,7 @@ stops the build.
 Pool and inputs mirror the live scripts: Unilever Tier A at the latest 'single'
 ABC run, target month = latest real month + 1, LP pool = status ok and holdout
 MASE < MASE_GATE. The LP is run_lp.py's own plan_cycle with run_lp.py's default
-inputs (the placeholders in analytics/optimization/lp_inputs.py). Only the
+inputs (the placeholders in analytics/params.py). Only the
 forecasts and sigma_d come from the preview history; stock on hand, cost per
 piece and last year's sales (allocation, priority) are the real ones, as in a
 live run.
@@ -48,7 +48,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
 from analytics.forecasting.baseline import MIN_MONTHS_WITH_SALES  # noqa: E402
-from analytics.optimization.lp_inputs import PLACEHOLDERS  # noqa: E402
+from analytics.params import PLACEHOLDERS  # noqa: E402
 from backend.data_mode import PREVIEW_UNILEVER_DEMAND  # noqa: E402
 from scripts.preview_router_synth import load_series, preview  # noqa: E402
 from scripts.run_baseline_forecast import _clean_metric, _confidence_band  # noqa: E402

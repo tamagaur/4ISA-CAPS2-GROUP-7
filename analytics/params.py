@@ -1,0 +1,182 @@
+"""
+analytics.params — every analytic parameter the pipeline, the LP and the API
+use, kept in ONE place, each with where its value comes from.
+
+Source tags (the comment after each value):
+  LIT          literature, cited
+  SSM          said by SSM (client meeting / manuscript's confirmation)
+  DEC-nn       a decision on record in ARCHITECTURE.md
+  TEAM         a team decision on record elsewhere (the report is named)
+  MEASURED     measured from our data (the file is named)
+  CONVENTION   a convention with no citation on record yet
+  PLACEHOLDER  a stand-in until SSM confirms it; never cite as SSM's figure
+
+Standard library only: the always-on API imports this module, and pulp /
+xgboost are batch-job dependencies it must not pull in (backend/lp_cycle.py).
+tests/test_params.py pins every value here, and fails if another module
+assigns one of these names itself.
+"""
+from __future__ import annotations
+
+# --------------------------------------------------------------------------- #
+# Forecast evaluation
+# --------------------------------------------------------------------------- #
+# LIT: Hyndman & Koehler (2006), "Another look at measures of forecast
+# accuracy", IJF 22(4). MASE < 1 means the forecast beat the in-sample
+# one-step naive forecast on average. A definition, not a tuned cut. This is
+# THE reliability gate: the LP's candidate pool (scripts/run_lp.py), the
+# dashboard's forecast card and the runner's pass rates all use it.
+MASE_GATE = 1.0
+
+# TEAM: the 2026-09-23 fit review's severity bands, fixed before computing
+# (reports/diagnostics/README.md "Verdict thresholds"). They grade a SKU on
+# the review's COMMON window, a different scoring from the pipeline's 20%
+# holdout, and they are review flags, never a gate on what gets planned.
+FIT_REVIEW_NOT_FIT_MASE = 1.1       # not fit: MASE >= 1.1
+FIT_REVIEW_BORDERLINE_MASE = 0.9    # borderline: 0.9 <= MASE < 1.1
+
+# TEAM: the fit review's "high volatility" cause flag, CV(last 12) > this.
+# Team-set, source script lost: reports/diagnostics/README.md calls it the
+# measured p75 over 119 scored SKUs, but only 92 rows of
+# fit_review_common_2026-09-23.csv carry a CV, and their p75 is 0.434-0.446
+# under numpy's eight percentile methods (0.437 linear), never 0.4365. The
+# flag count is 23 of 92 at either 0.4365 or 0.437. A cohort-relative
+# descriptor for that review only; not a volatility threshold elsewhere.
+FIT_REVIEW_HIGH_VOL_CV = 0.4365
+
+# TEAM: the temporal 80/20 split (reports/BAKEOFF_8020_PROTOCOL.md).
+HOLDOUT_FRACTION = 0.20
+
+# CONVENTION: the stored forecast band is forecast ± z × the served model's
+# holdout RMSE (DEC-25). 1.645 is a two-sided ~90% normal band; DEC-25 itself
+# states no coverage level.
+FORECAST_INTERVAL_Z = 1.645
+FORECAST_INTERVAL_LEVEL_PCT = 90
+
+# --------------------------------------------------------------------------- #
+# Eligibility and demand classification
+# --------------------------------------------------------------------------- #
+# TEAM: a SKU needs 3 real months with sales to be forecast or binned (the
+# runner's gate, analytics/forecasting/baseline.py; the router bins on the
+# same floor via analytics/segmentation/bins.py).
+MIN_MONTHS_WITH_SALES = 3
+
+# TEAM: no sale in the last 6 months = dead SKU (the runner's
+# Forecast_Result.status 'dead_sku') = FSN non-moving.
+DEAD_SKU_MONTHS = 6
+
+# LIT: Syntetos, Boylan & Croston (2005), "On the categorization of demand
+# patterns", JORS 56(5). ADI (average inter-demand interval) >= 1.32 is
+# intermittent, CV² of the non-zero demand sizes >= 0.49 is erratic/lumpy.
+SBC_ADI_CUT = 1.32
+SBC_CV2_CUT = 0.49
+
+# CONVENTION: XYZ volatility cut-offs on sku_traits.cv (monthly units from
+# the first sale on). Fixed on purpose, not cohort quartiles: a quartile
+# moves with the cohort, so a SKU could change bin without its sales
+# changing (analytics/segmentation/bins.py). No citation on record yet.
+XYZ_CV_LOW = 0.5
+XYZ_CV_HIGH = 1.0
+
+# TEAM: FSN (analytics/classification/fsn.py). A product is fast only with
+# at least this many months with sales in the window — a different floor
+# from MIN_MONTHS_WITH_SALES that happens to share its value.
+FSN_WINDOW_MONTHS = 12
+FSN_MIN_FAST_SALES_MONTHS = 3
+
+# --------------------------------------------------------------------------- #
+# Global model (analytics/forecasting/global_model.py)
+# --------------------------------------------------------------------------- #
+# TEAM: the served XGBoost trains single-threaded so a rerun is
+# bit-identical. The stored bake-off artifacts were NOT all fitted this way:
+# reports/experiment_artifacts/scripts/final_models.py:81,
+# candidate_followup_2026-09-22/arms_local.py:121 and synth_check.py:38 used
+# nthread=8; final_eval.py:60 and scripts/xgboost_bakeoff.py:41 used 4. A
+# served-vs-artifact comparison can differ in the last digits for that
+# reason alone.
+XGB_NTHREAD = 1
+
+# --------------------------------------------------------------------------- #
+# LP (analytics/optimization/lp.py, scripts/run_lp.py)
+# --------------------------------------------------------------------------- #
+# TEAM (asserted): "stakeholder consultation" per the manuscript; in no
+# scribe note (reports/LP_READINESS.md §1.5). Must sum to 1.
+LP_WEIGHTS = {"cost": 0.45, "service_level": 0.35, "storage": 0.20}
+
+# SSM: 90% cycle service level, confirmed by SSM procurement management per
+# the manuscript (reports/LP_READINESS.md §1.5). Z = 1.28 is its normal quantile.
+SERVICE_Z = 1.28
+SERVICE_LEVEL_PCT = 90
+
+# CONVENTION: calendar arithmetic shared by every screen and the LP, so
+# "3 weeks of sales" is the same figure everywhere.
+DAYS_PER_MONTH = 365.25 / 12
+WEEKS_PER_MONTH = DAYS_PER_MONTH / 7
+BUSINESS_DAYS_PER_WEEK = 5
+
+# SSM: keep 3 weeks of sales in stock (Sir Abe, 2026-09-29). The dashboard's
+# policy card and the LP's --target-weeks default.
+POLICY_COVER_WEEKS = 3
+
+# Cover measured from sales HISTORY, two windows on purpose, both ending at
+# the principal's stock snapshot month:
+#   TEAM: the dashboard's weeks-of-cover KPI, a portfolio figure, over 12
+#   months so the range picker doesn't move it (commit c63b1d9,
+#   reports/LP_CLIENT_ALIGNMENT_PLAN_2026-09-29.md "Done since").
+#   CONVENTION: the Reorder page's per-SKU days of cover, over 3 months, the
+#   same window as the MA3 forecast. No DEC.
+COVER_KPI_HISTORY_MONTHS = 12
+SKU_COVER_HISTORY_MONTHS = 3
+
+# SSM: the principal sets the year's allocation from the previous year's
+# sales — x103% minimum, x105% mid, x108% maximum (Sir Abe, client meeting
+# Sep 2026). analytics/allocation.py applies it.
+ALLOCATION_LEVELS_PCT = (103, 105, 108)
+# What the sales basis is counted in; the caller says which. The LP needs
+# pieces; the dashboard card uses pesos (Del Monte's sell-out has no pieces).
+ALLOCATION_UNITS = ("pieces", "pesos")
+
+# How SSM's "keep N weeks of sales in stock" applies (--cover-rule):
+#   aggregate  the planned SKUs' month-end stock, valued at cost, covers N
+#              weeks of their sales at cost. A soft constraint; each SKU's
+#              own target stays statistical. Yuan's reading, 2026-09-29: Sir
+#              Abe's example was a peso total (₱48M × 3 ÷ 4 = ₱36M).
+#   per-sku    every SKU's target is at least N weeks of its own sales.
+# Sir Abe hasn't said which he means yet.
+COVER_RULES = ("aggregate", "per-sku")
+
+# PLACEHOLDER: THESE ARE NOT SSM'S FIGURES. Each is a realistic value picked
+# from our own data or from what Sir Abe said in the 2026-09-29 meeting,
+# agreed as a placeholder with Yuan the same day. Keys are scripts/run_lp.py's
+# argparse dests, so each is one flag's default, and backend/lp_cycle serves
+# the same dict. Step F of reports/LP_CLIENT_ALIGNMENT_PLAN_2026-09-29.md
+# edits them once SSM confirms.
+PLACEHOLDERS = {
+    # Sir Abe: the yearly allocation is last year's sales × 103% (minimum),
+    # 105% (mid) or 108% (maximum). Mid, until SSM says which applies.
+    "allocation_pct": 105.0,
+    # Business days. Weekly purchase orders, delivered 2-3 days later (Sir Abe).
+    "review_days": 5.0,
+    "lead_days": 3.0,
+    "target_weeks": float(POLICY_COVER_WEEKS),
+    "cover_rule": "aggregate",
+    # Pieces: the most stock Unilever's warehouse has held, 3,816,842 in Jan 2025.
+    "warehouse_capacity": 3_800_000.0,
+    # ₱ per piece, only where the stock file gives a SKU no cost: the median
+    # cost per piece (unit cost per case ÷ pack size) of the 73 planned SKUs
+    # in the Mar 2026 stock file (₱24.55).
+    "default_procurement_cost_per_unit": 25.0,
+    # ₱ per piece per month: 2% of ₱25 (about 24% a year).
+    "storage_cost_per_unit": 0.50,
+}
+
+# Stated with every plan (lp_model_info) until the adviser rules on it.
+SAFETY_STOCK_ASSUMPTION = (
+    f"Safety stock = {SERVICE_Z:g} × σ_monthly ÷ √(business days in a month) × √(review + lead days). "
+    "Scaling a monthly σ down to days assumes demand is independent from one day to the next. "
+    "Monthly data can't test that (reports/LP_READINESS.md §3.5: the demand is intermittent, "
+    "66% of months are zero), and for a window shorter than a month it offers no clean "
+    "alternative. An assumption, pending the adviser's safety-stock ruling."
+)
+
+assert abs(sum(LP_WEIGHTS.values()) - 1.0) < 1e-9, "LP_WEIGHTS must sum to 1"

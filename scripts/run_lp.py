@@ -68,7 +68,7 @@ INPUTS, per product:
 PLACEHOLDERS (agreed with Yuan, 2026-09-29): the allocation %, review and
 lead days, target weeks, cover rule, warehouse capacity and the two costs
 have no source in SSM's data yet. Their defaults are
-analytics/optimization/lp_inputs.PLACEHOLDERS, the same dict
+analytics/params.PLACEHOLDERS, the same dict
 backend/lp_cycle.lp_model_info() serves to the app, and they are printed
 loudly at startup. They are realistic values, not SSM's figures. Step F of
 the plan swaps in Sir Abe's answers.
@@ -104,7 +104,7 @@ from analytics.etl.granularity import business_days_in_month, resolve_delmonte_c
 from analytics.optimization.lp import (
     SKUInput, build_lp_model, compute_safety_stock, solve_lp, target_stock, weekly_demand,
 )
-from analytics.optimization.lp_inputs import COVER_RULES, PLACEHOLDERS
+from analytics.params import COVER_RULES, PLACEHOLDERS
 from backend.stock_units import PACK_SIZE_NUMERIC, STOCK_AT_LATEST_SQL
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -270,7 +270,7 @@ def safety_stock_for(sigma_d: float, protection_days: float) -> float:
 
     sigma_d is a per-business-day figure (see _sigma_d_for_product), so the
     buffer covers `protection_days` business days of demand variability,
-    assuming days are independent (lp_inputs.SAFETY_STOCK_ASSUMPTION).
+    assuming days are independent (analytics.params.SAFETY_STOCK_ASSUMPTION).
     plan_cycle() passes the review period + lead time, the window a weekly
     order-up-to policy is exposed for."""
     return compute_safety_stock(sigma_d * math.sqrt(protection_days))
@@ -530,7 +530,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _log_inputs(args: argparse.Namespace) -> None:
     logger.warning(LOUD_RULE)
     logger.warning("PLACEHOLDER INPUTS: realistic values the team chose until SSM (Sir Abe) confirms them.")
-    logger.warning("They are NOT SSM's figures. Defaults: analytics/optimization/lp_inputs.PLACEHOLDERS.")
+    logger.warning("They are NOT SSM's figures. Defaults: analytics/params.PLACEHOLDERS.")
     for key, default in PLACEHOLDERS.items():
         value = getattr(args, key)
         changed = "" if value == default else f"   <- flag; the default is {default}"
@@ -539,7 +539,7 @@ def _log_inputs(args: argparse.Namespace) -> None:
     logger.warning(LOUD_RULE)
     if not args.dry_run and any(getattr(args, k) != v for k, v in PLACEHOLDERS.items()):
         logger.warning("A real run with non-default inputs: the app's model description (lp_model_info) "
-                       "states the defaults, not these. Change lp_inputs.PLACEHOLDERS instead if these are meant.")
+                       "states the defaults, not these. Change analytics/params.PLACEHOLDERS instead if these are meant.")
     if args.dry_run:
         logger.warning("DRY RUN — one READ ONLY transaction; nothing will be written to LP_Recommendation.")
 

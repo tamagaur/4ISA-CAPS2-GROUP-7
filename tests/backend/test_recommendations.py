@@ -294,10 +294,10 @@ def test_lp_settings_the_api_states_are_the_solvers():
 
 
 def test_lp_inputs_the_api_states_are_the_ones_run_lp_uses():
-    """lp_model_info serves analytics/optimization/lp_inputs.PLACEHOLDERS, the
+    """lp_model_info serves analytics/params.PLACEHOLDERS, the
     dict scripts/run_lp.py takes its defaults from, flagged as placeholders.
     The LP's weeks convention and 3-week rule are the dashboard's own."""
-    from analytics.optimization.lp_inputs import PLACEHOLDERS, WEEKS_PER_MONTH
+    from analytics.params import PLACEHOLDERS, WEEKS_PER_MONTH
     from backend.lp_cycle import lp_model_info
     from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, POLICY_WEEKS
 

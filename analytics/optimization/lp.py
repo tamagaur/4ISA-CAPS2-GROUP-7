@@ -13,7 +13,7 @@ Per SKU i, for one monthly planning cycle (quantities in pieces):
 
   SS_i    = Z x sigma_i, Z = 1.28 (90% service level). sigma_i is the demand
             variability over the review period + lead time (scripts/run_lp.py's
-            safety_stock_for; lp_inputs.SAFETY_STOCK_ASSUMPTION states what
+            safety_stock_for; analytics.params.SAFETY_STOCK_ASSUMPTION states what
             that scaling assumes).
   w_i     = F_i / WEEKS_PER_MONTH, the weekly rate of the month's forecast F_i.
   T_i     = w_i x (R + L) / 5 + SS_i, the target stock: demand over the review
@@ -81,7 +81,7 @@ from dataclasses import dataclass
 
 import pulp
 
-from analytics.optimization.lp_inputs import BUSINESS_DAYS_PER_WEEK, WEEKS_PER_MONTH
+from analytics.params import BUSINESS_DAYS_PER_WEEK, WEEKS_PER_MONTH
 
 Z_SCORE = 1.28
 W1, W2, W3 = 0.45, 0.35, 0.20

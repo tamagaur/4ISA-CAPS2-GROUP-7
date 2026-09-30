@@ -19,7 +19,7 @@ import pandas as pd
 import pytest
 
 from analytics.optimization.lp import Z_SCORE, weekly_demand
-from analytics.optimization.lp_inputs import PLACEHOLDERS
+from analytics.params import PLACEHOLDERS
 from scripts.run_lp import (
     UPSERT_QUERY,
     ProductInput,
@@ -62,7 +62,7 @@ def test_the_order_moves_with_allocation_pct():
 
 
 def test_flags_default_to_the_placeholders():
-    """One place (analytics/optimization/lp_inputs.PLACEHOLDERS) feeds both
+    """One place (analytics/params.PLACEHOLDERS) feeds both
     the CLI defaults and backend/lp_cycle.lp_model_info()."""
     args = _args()
     for key, value in PLACEHOLDERS.items():
