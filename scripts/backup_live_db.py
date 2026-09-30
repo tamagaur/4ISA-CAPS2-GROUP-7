@@ -11,8 +11,10 @@ the actual live table is the honest source of truth for a backup).
 
 Writes:
   backups/live_backup_<timestamp>/
-    manifest.json          - per-table row count + a numeric checksum
-    <table>.parquet         - one per base table, full data
+    manifest.json          - per-table row count + a numeric checksum, and
+                             what was left out ("excluded": credentials, see
+                             EXCLUDED_TABLES / EXCLUDED_COLUMNS)
+    <table>.parquet         - one per base table, full data except credentials
     ddl_snapshot.json       - reflected column/type/constraint info per table
 
 Other schemas: create_backup(engine, schema="ssm_synth_v2") dumps any schema
@@ -44,6 +46,21 @@ from analytics.config import get_settings
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKUP_ROOT = REPO_ROOT / "backups"
 
+# Credentials never go into a backup (security audit 2026-09-30, finding 5): a
+# backup is an unencrypted copy on a laptop. users keeps every column except
+# password_hash, so a restored account comes back "invite pending" (NULL
+# password_hash, allowed since migration 0031) and its owner sets a new
+# password through a reset link. auth_token (sha256 of one-time invite/reset
+# links, dead within 48 hours) is left out whole. manifest.json lists both
+# under "excluded", so a check that compares the backup with the live tables
+# can tell a deliberate gap from a missing file.
+EXCLUDED_TABLES = {
+    "auth_token": "one-time invite/reset link hashes; expire within 48 hours, nothing to restore",
+}
+EXCLUDED_COLUMNS = {
+    "users": {"password_hash": "credential; a restored account sets a new password through a reset link"},
+}
+
 
 def _p(msg: str) -> None:
     print(msg, flush=True)
@@ -62,6 +79,29 @@ def _qcol(name: str) -> str:
     return '"' + name.replace('"', '""').replace(":", "\\:") + '"'
 
 
+def _tables_to_dump(tables: list[str]) -> tuple[list[str], dict[str, str]]:
+    """(tables to dump, {table left out: why})."""
+    return (
+        [t for t in tables if t not in EXCLUDED_TABLES],
+        {t: EXCLUDED_TABLES[t] for t in tables if t in EXCLUDED_TABLES},
+    )
+
+
+def _select_list(table: str, columns: list[dict], json_as_text: bool) -> tuple[str, dict[str, str]]:
+    """The SELECT list for one table, and {column left out: why}. '*' when no
+    column is left out or recast."""
+    drop = EXCLUDED_COLUMNS.get(table, {})
+    left_out = {c["name"]: drop[c["name"]] for c in columns if c["name"] in drop}
+    if not left_out and not json_as_text:
+        return "*", {}
+    return ", ".join(
+        f"{_qcol(c['name'])}::text AS {_qcol(c['name'])}"
+        if json_as_text and str(c["type"]).upper() in ("JSON", "JSONB") else _qcol(c["name"])
+        for c in columns
+        if c["name"] not in drop
+    ), left_out
+
+
 def create_backup(
     engine, out_dir: Path | None = None, schema: str = "public", json_as_text: bool = False
 ) -> Path:
@@ -70,13 +110,15 @@ def create_backup(
         out_dir = BACKUP_ROOT / f"live_backup_{ts}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    manifest: dict = {"created_utc": ts, "schema": schema, "tables": {}}
+    manifest: dict = {"created_utc": ts, "schema": schema, "tables": {}, "excluded": {"tables": {}, "columns": {}}}
 
     insp = inspect(engine)
 
     with engine.connect() as conn:
-        tables = _list_base_tables(conn, schema)
+        tables, manifest["excluded"]["tables"] = _tables_to_dump(_list_base_tables(conn, schema))
         _p(f"Dumping {len(tables)} base tables from {schema} -> {out_dir}")
+        if manifest["excluded"]["tables"]:
+            _p(f"  left out (credentials): {', '.join(manifest['excluded']['tables'])}")
 
         for t in tables:
             pk_cols = set(insp.get_pk_constraint(t, schema=schema).get("constrained_columns", []))
@@ -94,20 +136,18 @@ def create_backup(
             # psycopg2 returned (Decimal('NaN') stays a Decimal, None stays
             # None) in an object-dtype column, so the Decimal-detection
             # string-cast below can actually see and preserve it.
-            select = "*"
-            if json_as_text:
-                # JSON/JSONB columns as the database's own text of each value.
-                # Without this, psycopg2 parses them into dicts (numbers become
-                # floats and can lose digits), pyarrow's struct inference adds
-                # keys a row never had back as nulls, and the string-cast
-                # fallback below writes Python reprs ({'a': None}) that are not
-                # valid JSON - found 2026-09-28 in etl_quarantine.raw_values and
-                # etl_cutover_ledger.change_log.
-                select = ", ".join(
-                    f"{_qcol(c['name'])}::text AS {_qcol(c['name'])}"
-                    if str(c["type"]).upper() in ("JSON", "JSONB") else _qcol(c["name"])
-                    for c in insp.get_columns(t, schema=schema)
-                )
+            #
+            # json_as_text: JSON/JSONB columns as the database's own text of
+            # each value. Without this, psycopg2 parses them into dicts
+            # (numbers become floats and can lose digits), pyarrow's struct
+            # inference adds keys a row never had back as nulls, and the
+            # string-cast fallback below writes Python reprs ({'a': None})
+            # that are not valid JSON - found 2026-09-28 in
+            # etl_quarantine.raw_values and etl_cutover_ledger.change_log.
+            select, left_out = _select_list(t, insp.get_columns(t, schema=schema), json_as_text)
+            if left_out:
+                manifest["excluded"]["columns"][t] = left_out
+                _p(f"  {t}: left out column(s) {', '.join(left_out)} (credentials)")
             rows = conn.execute(text(f'SELECT {select} FROM "{schema}"."{t}"')).mappings().all()
             df = pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
 
