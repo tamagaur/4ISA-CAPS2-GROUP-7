@@ -1,0 +1,11 @@
+check,pass,value
+read-only transaction,True,on
+no is_demo row in _Real view,True,0
+Tier A 2026-02 single = 132 SKUs,True,132
+preds_plus SKUs within that cohort,True,119/119
+stored sales months == recomputed,True,2711/2711
+stored actual == _Real value,True,2711/2711
+TSB recompute == stored (all rows),True,"2711/2711, bit-identical 2306, max|d| 8.73e-11"
+"medium rows (length rule) = 1,002",True,1002
+medium rows lacking stored challenger (refits needed),True,0
+medium rows lacking stored TSB,True,0
