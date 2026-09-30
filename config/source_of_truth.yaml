@@ -119,6 +119,18 @@ sales_return:
     # deduping it. If a future reconciliation wants to compare the RMR
     # Oct/Nov-2025 figures against sales_return for the same months, that
     # is a cross-check report, not a second load path.
+    #
+    # EXCEPTION, fix 4 (Yuan 2026-09-28, migration 0028; a loader rule since
+    # 2026-09-30): no monthly sales-return file exists for these months, so
+    # the RMR export's GS and BO sheets ARE loaded for them (source = 'rmr',
+    # never the ONE PAGER). Only the periods listed here - scripts/load_slices.py
+    # reads this list and refuses an RMR slice for any other month. When a
+    # real sales-return file for one of these months arrives, 0028's dedupe
+    # rule runs in that slice's transaction (see load_slices.rmr_dedupe).
+    rmr_fallback:
+      doc_type: rmr_gs_bo
+      system_of_record_role: [gs, bo]
+      allowed_periods: ["2025-10", "2025-11"]
     natural_key: [return_slip_num, principal, region, invoice_num]
     # WIDENED 2026-09-11 (Phase 1 step 2b, Yuan approved): added invoice_num.
     # Confirmed against all 20 real transform-stage conflicts (see

@@ -1,111 +1,104 @@
 """
-scripts/run_canonical_load.py — the canonical Extract-output -> Load
-orchestrator (Phase 1d, ARCHITECTURE.md / reports/PHASE1_EXECUTION_PLAN_2026-09.md).
+scripts/run_canonical_load.py - raw files -> fact tables, one slice at a time,
+plus the ledgered migration runner.
 
-WHY THIS EXISTS: analytics/etl/load.py (load_to_supabase, resolve_dimension_fk)
-is a LIBRARY — before this file, nothing in the repo called it except tests.
-transform_driver.py classifies staged sheets but discards the transformed
-frames. There was no code path from raw files to DB rows. This script is
-that path.
+WHAT A RUN DOES (2026-09-30 rewrite; the earlier whole-staging/ rebuild with
+frozen expected-row constants is gone - see "WHY" below):
 
-TARGET IS ALWAYS A SCRATCH SCHEMA, NEVER `public`. --schema defaults to
-ssm_canonical and the script hard-refuses `public` (see _require_scratch_schema).
-Confirmed 2026-09-11 (Phase 1 step 2a): no other code in this repo qualifies a
-schema or sets search_path, so nothing else can read or write this scratch
-schema by accident — but this script itself must stay disciplined about it:
-every DDL/DML statement runs inside `SET LOCAL search_path TO <schema>`,
-scoped to one transaction, NEVER `ALTER ROLE`/`ALTER DATABASE` (which would
-leak the setting to every other connection).
+  --schema-only          apply pending migrations (ledger: schema_migrations)
+                         and exit. On a brand-new schema, schema.sql runs
+                         first; on a ledgered schema it never re-runs.
+  --slice SPEC ...       incremental load of one or more slices (the loop in
+                         scripts/load_slices.py). SPEC is
+                         principal:table:YYYY-MM[:branch[:source]], e.g.
+                           delmonte:sales_fact:2025-12
+                           delmonte:sales_fact:2025-11:pangasinan
+                           delmonte:salesreturn_fact:2025-10:*:rmr
+                           unilever:unilever_sku_demand_fact:2026-02
+  --all-slices           full rebuild from data/raw: every family is
+                         transformed as a whole (so cross-file dedup and
+                         conflicts decide exactly as one big load would), then
+                         written one transaction per slice.
+  --refresh-coverage     recompute etl_coverage for every principal x table x
+                         month (the seed step after migration 0033).
 
-ORDER (dimension-dependency order, not alphabetical — see _run_facts):
-  1. Gate check (reject-rate, sign-off) — nothing else has run yet, so a gate
-     failure has nothing to roll back.
-  2. Ensure the scratch schema (schema.sql + every migrations/000*.sql file).
-  3. sales_unilever_sku_demand/unilever — creates the 1,807 Product_Dimension
-     SKU rows the category/brand backfill (step 6) needs to exist first.
-  4. sales/delmonte, purchase/delmonte (no real Unilever purchase_order
-     data exists in staging — confirmed 2026-09-11, 2,703/2,703 staged rows
-     are delmonte; FACT_PLAN omits purchase/unilever rather than run it on
-     nothing), sales_return/delmonte.
-  5. sell_out/delmonte — creates the 99 Product_Dimension category rows.
-  6. inventory/delmonte (the inventory_sign_off doc_type — also delmonte-only
-     in staging, confirmed 2026-09-11: 23,350/23,350 rows; Unilever's
-     inventory is a wholly separate doc_type, ssis_soh, step 7 below).
-  7. ssis_soh — Unilever SOH Inventory_Fact rows + its own non-joining
-     Product_Dimension candidates (transform_ssis_soh.py).
-  8. Category/brand backfill — runs LAST, after steps 3 and 7 have both run,
-     since it needs the demand SKUs (3) and the SOH category source (7).
-  9. Summary print + exit.
+A SLICE is principal x table x workbook month x branch x source. Its rows are
+found by LINEAGE (the extract's own infer_sheet_period/infer_sheet_region
+applied to each row's _src_file/_src_sheet for sales_fact, whose region
+column is the customer's town and whose _period is the invoice month; the
+stored _period/region for every other table, where they are the workbook
+month and the branch). One transaction per slice:
+  delete the slice's real rows -> (if any real rows arrive) delete that
+  table-month's synthetic rows (DEC-29) -> delete the slice's etl_quarantine
+  rows -> plain INSERT of the file's real rows (a key that still collides
+  belongs to another slice: the slice is refused, never overwritten) ->
+  insert its quarantine rows -> dimension rules -> ledger check (the table
+  must hold exactly what the event says) -> etl_coverage -> etl_load_event ->
+  audit_log.
+A refused slice (shrink guard, unsigned fingerprint, key owned by another
+slice, missing file, changed layout) changes nothing; its event is written in
+a separate transaction after the rollback.
 
-TRANSACTIONALITY / WHAT ROLLS BACK ON FAILURE: this is NOT one single Postgres
-transaction spanning every table (load_to_supabase/resolve_dimension_fk each
-manage their own transaction internally, per table — changing that is a
-larger refactor than this script, not made here). Instead: "no partial load
-left behind" is enforced at the SCHEMA level, explicitly, not implicitly —
-  - A gate failure (step 1) happens before schema creation even runs. Nothing
-    to roll back — the script prints which gate and why, then exits nonzero.
-    This is the trivial case.
-  - Any exception from step 2 onward is caught by one top-level try/except.
-    On catch (and NOT in --dry-run, which never writes anything): the script
-    prints exactly what it is about to do, then issues
-    `DROP SCHEMA <schema> CASCADE` against the scratch schema and re-raises
-    the original exception. The scratch schema ends the run either fully
-    loaded or fully absent — never half-loaded. This is a real DROP, only
-    ever against the scratch schema (never `public`, same guard as
-    _require_scratch_schema), and only ever triggered by a genuine failure.
+Synthetic rows are never loaded from files. staging/'s SYNTH__ copies are the
+stale pre-clean-pool pools, and data/raw/Synthetic Data is v1. Synthetic data
+lives only in the database (scripts/build_synthetic_v2_clean_pool.py +
+apply_synth_v2_cutover.py); the loader only ever removes it, per DEC-29.
 
-EXPECTED VS ACTUAL: every fact's target row/conflict/quarantine count below
-was measured against real staged data 2026-09-11 (Phase 1 steps 2b/2c/2d/2e —
-see reports/PHASE1_EXECUTION_PLAN_2026-09.md for the full evidence per number).
-These are frozen constants, not recomputed live — if a future run's actual
-count differs, that is real information (data/raw/ changed, a fix regressed,
-a config drifted) and must be visible, not silently accepted. A mismatch
-prints a loud, unmissable banner and the run's final exit code is nonzero,
-but does NOT itself trigger the schema-drop cleanup above (a real, expected
-data update looks the same as a regression from here — a human decides which
-this is, the script's job is to make sure that decision is never made blind).
+The Del Monte fixes of 2026-09-28 (scripts/apply_dm_fixes_to_public.py,
+batches 3-7) are rules here, applied to every slice they touch:
+  fix 3  valuation = cost where the sign-off sheet has no valuation
+         (analytics.etl.transform.derive_valuation_from_cost)
+  fix 4  RMR GS & BO lines -> salesreturn_fact, source = 'rmr', only for the
+         periods in config/source_of_truth.yaml sales_return.rmr_fallback,
+         plus migration 0028's dedupe rule when a sales-return file arrives
+  fix 5  Del Monte pack_size from the price list CASE PACK, fill-if-NULL
+  fix 6  Del Monte brand from the product name's first token
+         (config/alias_tables/delmonte_brand.csv), fill-if-NULL
+  fix 7  the hidden "PANGASINAN SALES REGISTER (2)" sheet is quarantined at
+         transform (hold_pending_ssm), never reaches sales_fact
 
-STILL REQUIRES migration 0011 to be applied before a real (non---dry-run) run
-of the sales_return step can succeed — see that file's header and
-config/source_of_truth.yaml's sales_return.both comment: the transform-side
-natural_key already has 5 columns (invoice_num added), but schema.sql's
-SalesReturn_Fact UNIQUE constraint is still 4 until migration 0011 lands, and
-Postgres will reject the ON CONFLICT clause outright (a hard failure, not a
-silent misload) until it does.
+THE ONE HUMAN STEP - re-signing the Transform fingerprint. A slice run stages
+its files under staging_slices/<run key>/ (never staging/), writes a manifest
+of every sheet it read (row count + content hash) to
+transform/slices/<run key>/_manifest.json, and refuses every slice
+(status refused, reason fingerprint_unsigned) until a person has approved
+that exact manifest:
+    python -m scripts.run_canonical_load --schema <s> --slice ... --dry-run
+    python -m analytics.etl.transform_signoff --transform-dir transform/slices/<run key> \
+        --decision approved --by "<name>"
+    python -m scripts.run_canonical_load --schema <s> --slice ...
+The dry run prints the run key and fingerprint. A changed file changes the
+content hash, so an old approval never carries over to new data.
 
-The scratch-vs-live diff is scripts/diff_scratch_vs_live.py (separate,
-read-only). The cutover itself (--target-public, added 2026-09-15) is a
-separate, explicit, human-approved action from a normal scratch run — see
-that flag's own help text and reports/PROJECT_STATE_2026-09.md §10.
+WHY THE REWRITE: the 2026-09-30 rehearsal (reports/diagnostics/
+load_readiness_2026-09-30.md) found the old whole-staging/ upsert could only
+load into an empty schema (the NULL-region SOH conflict crash), never removed
+a month's placeholders, re-added synthetic v1 rows and duplicate quarantine
+rows, reverted fixes 3 and 7, and always exited 1 on stale frozen counts.
+A row count is now checked against the database inside each slice's
+transaction (the ledger check) instead of against a constant.
 
-SCHEMA SCOPING — two mechanisms, used for two different kinds of SQL, on
-purpose (a real bug in an earlier draft of this file mixed them up and would
-have silently hit `public` for the category/brand backfill's raw SQL — caught
-2026-09-11 before this shipped, see _scratch_engine()'s docstring):
-  - schema.sql / migrations (raw multi-statement text SQL): `SET LOCAL
-    search_path TO <schema>, public`, issued fresh inside every transaction
-    that runs one of these files — SET LOCAL is transaction-scoped, never
-    leaks to another transaction or connection.
-  - Everything that goes through analytics.etl.load (load_to_supabase,
-    resolve_dimension_fk — SQLAlchemy Core Table/insert/select against
-    autoload_with=engine) AND this script's own raw product_dimension
-    SELECT/UPDATE in the backfill step: a single ENGINE created once via
-    `_scratch_engine()`, using SQLAlchemy's `execution_options(
-    schema_translate_map={None: schema})`. This is the right mechanism for
-    Core-construct SQL (it rewrites the schema at compile time, correctly,
-    for every call made through that engine) — `SET LOCAL` would NOT work
-    here because load_to_supabase opens its own fresh transactions
-    internally with no way for this script to inject a SET LOCAL into them.
-    Raw `text()` SQL, however, is NOT schema_translate_map-aware (Postgres
-    resolves unqualified names in literal SQL via the CONNECTION's
-    search_path, not SQLAlchemy's compile-time rewrite) — which is why the
-    backfill step's raw SELECT/UPDATE also needs its own SET LOCAL, even
-    though it runs against the same _scratch_engine().
+SCHEMA SCOPING: every load transaction sets `SET LOCAL search_path TO
+<schema>` - the target schema only, so a table missing from a scratch schema
+fails instead of resolving to the live table (migrations keep `<schema>,
+public`). Transaction-scoped, never a session-level SET, which leaks through
+the :6543 pooler. `public` is refused unless --target-public is passed with
+--schema public (both explicit). A load against public refuses to run while a
+migration is pending; migrations reach public only through --schema-only.
+
+MIGRATION LEDGER CHECKSUMS: a stored checksum is accepted if it equals the
+sha256 of the file's LF form OR its CRLF form. Migration 0019 seeded six rows
+(0001, both 0002 files, 0003, 0012, 0013) from a CRLF (core.autocrlf)
+checkout, so those six rows hold CRLF hashes; the other 25 hold LF hashes,
+and .gitattributes now forces *.sql to LF. Accepting either form keeps every
+stored row valid without rewriting it; new rows are written in LF form.
 
 Usage:
-    python -m scripts.run_canonical_load --schema-only     # apply schema.sql + migrations, exit
-    python -m scripts.run_canonical_load --dry-run          # compute + print, write nothing
-    python -m scripts.run_canonical_load --schema ssm_canonical   # the real load
+    python -m scripts.run_canonical_load --schema ssm_x --schema-only
+    python -m scripts.run_canonical_load --schema public --target-public --schema-only
+    python -m scripts.run_canonical_load --schema ssm_x --slice delmonte:sales_fact:2025-12 [--dry-run]
+    python -m scripts.run_canonical_load --schema ssm_rebuild --all-slices
+    python -m scripts.run_canonical_load --schema ssm_x --refresh-coverage
 """
 from __future__ import annotations
 
@@ -116,33 +109,29 @@ import json
 import logging
 import re
 import sys
-import uuid
 from collections import Counter
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import Engine, MetaData, Table, create_engine, text
+from sqlalchemy import Connection, Engine, MetaData, Table, create_engine, text
 
 from analytics.config import get_settings
 from analytics.etl.load import (
     DimensionFKSpec,
-    check_reject_rate_gate,
-    check_signoff_gate,
-    load_to_supabase,
 )
 from analytics.etl.transform import (
     DEFAULT_CONFIG_DIR,
     _SELLOUT_SOURCE_DEFECT_CATEGORY_RE,
     QUARANTINE_REASON_COLUMN,
+    QUARANTINE_RULE_COLUMN,
     apply_column_map,
     coerce_is_demo_column,
-    dedup_facts,
     load_source_of_truth,
     natural_key_series,
     transform_fact,
 )
-from analytics.etl.transform_ssis_soh import transform_ssis_soh
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STAGING_DIR = REPO_ROOT / "staging"
@@ -300,176 +289,36 @@ class FactPlanItem:
     table_name: str
     amount_col: str
     dimension_fks: list[DimensionFKSpec] = field(default_factory=list)
-    # Frozen targets, measured 2026-09-11 against real staged data (see this
-    # file's own header + reports/PHASE1_EXECUTION_PLAN_2026-09.md). None
-    # where not yet measured for that specific (fact, principal).
-    expected_rows: int | None = None
-    expected_conflicts: int | None = None
-    expected_quarantined: int | None = None
 
 
+# Dimension-dependency order. The frozen expected_rows / expected_conflicts /
+# expected_quarantined constants measured 2026-09-11..17 were retired
+# 2026-09-30: they could only ever describe one snapshot of data/raw, so every
+# real change printed MISMATCH and exited 1 (load_readiness_2026-09-30.md,
+# check 4e). Each slice now checks its own counts against the database inside
+# its transaction (scripts/load_slices.py, the ledger check), and the numbers
+# travel in etl_load_event. The history of those counts is in git.
 FACT_PLAN: list[FactPlanItem] = [
-    # expected_rows is the REAL+DEMO COMBINED total (what the loader
-    # actually inserts — demo rows load into the base tables by design,
-    # filtered downstream by the _Real views, CLAUDE.md rule 1). Re-measured
-    # 2026-09-14 directly from this script's own --dry-run output, after
-    # two real bugs were found and fixed the same day (see this file's
-    # module docstring / reports/PHASE1_EXECUTION_PLAN_2026-09.md step 5c):
-    # a fresh Extract re-run staged `data/raw/Synthetic Data/*` files that
-    # a stale staging/ snapshot never had, and half of purchase_order's and
-    # inventory_sign_off's synthetic is_demo values were the literal string
-    # "True" (not boolean), silently misclassified as real by every
-    # `is_demo != True` filter until analytics.etl.transform.coerce_is_demo_column()
-    # was added. expected_conflicts/expected_quarantined stay REAL-ONLY —
-    # the meaningful data-quality signal; demo-data noise is real but not
-    # held to this rigor (same standing position as everywhere else in this
-    # codebase) and is reported separately by _run_one_fact, not blended
-    # into these targets.
-    #
-    # expected_rows EXCLUDES quarantined rows that a NOT NULL schema
-    # constraint makes impossible to insert (sales_fact.invoice_num,
-    # purchase_fact.invoice_num, inventory_fact.sku_code — found 2026-09-14,
-    # the first real load: fabricating a key to satisfy the constraint is
-    # exactly what anti-fabrication forbids, so those combined real+demo
-    # rows are excluded from the INSERT by _drop_uninsertable_quarantined_rows(),
-    # never from the quarantine COUNT reported above, which stays the
-    # real-only diagnostic number regardless of what the schema can hold).
     FactPlanItem(
         "sales_unilever_sku_demand", "unilever", "unilever_sku_demand_fact", "quantity_sold",
         dimension_fks=[_product_fk_spec("sku")],
-        expected_rows=44575, expected_conflicts=0, expected_quarantined=0,
     ),
     FactPlanItem(
         "sales", "delmonte", "sales_fact", "net_amount",
-        # No product_key (invoice-grain, DEC-02) - but customer_key/
-        # salesman_key ARE real FKs this table carries (schema.sql) that
-        # the loader never resolved until now (problem 2, 2026-09-14,
-        # Yuan's ruling - see _customer_fk_spec()/_salesman_fk_spec()
-        # docstrings for the full reasoning).
+        # No product_key (invoice-grain, DEC-02); customer_key / salesman_key are
+        # real FKs (problem 2, 2026-09-14) - see _customer_fk_spec()/_salesman_fk_spec().
         dimension_fks=[_customer_fk_spec(), _salesman_fk_spec()],
-        # rows: 53742 combined - 432 combined-quarantined (invoice_num NOT
-        # NULL, cannot insert) = 53310.
-        # rows re-measured 2026-09-14 (was 53310): the first real
-        # (non-dry-run) load surfaced two more insert-time-only exclusion
-        # classes beyond the NOT-NULL-key-column one above -
-        # (1) _drop_rows_violating_other_not_null(): 197 is_demo=true rows
-        # with a null net_amount (NOT NULL, non-key), traced to
-        # scripts/generate_synthetic_backfill.py resampling straight from
-        # staging/'s raw 2025 pool, which still had the signature-block
-        # junk rows Transform now excludes for real data - a bug in that
-        # generator, out of scope to fix here (see that function's
-        # docstring); (2) _drop_conflicting_group_rows(): 4 rows whose
-        # dedup_facts()-flagged conflicting group can't be represented in
-        # one ON CONFLICT DO UPDATE statement. 53310 - 197 - 4 = 53109.
-        expected_rows=53109, expected_conflicts=1, expected_quarantined=432,
     ),
-    FactPlanItem(
-        "purchase", "delmonte", "purchase_fact", "net_amount",
-        dimension_fks=[],  # Purchase_Fact carries no product_key either
-        # rows re-measured 2026-09-14 twice this same phase:
-        # (a) was 4567, then 13 other-NOT-NULL rows (net_amount, same
-        # synthetic-generator root cause) + 1887 conflicting-group rows
-        # excluded uniformly (real+demo alike) -> 2667.
-        # (b) item 36 fix, same day: _drop_conflicting_group_rows() no
-        # longer drops a REAL row just because it shares a key with a
-        # colliding DEMO row (data/raw/Synthetic Data/PURCHASE_ORDER_*.xlsx
-        # reuses the real BILL/YYYY/NNNN scheme with low sequential
-        # numbers) - within a mixed group, only the demo side is dropped
-        # now. 95 real rows that were being wrongly excluded are kept:
-        # 2667 + 95 = 2762. Verified via direct execution, not computed:
-        # the fix's own log line reported "kept the 95 real row(s)" and
-        # the loaded total moved 2667 -> 2762 exactly.
-        expected_rows=2762, expected_conflicts=0, expected_quarantined=27,
-    ),
-    FactPlanItem(
-        "sales_return", "delmonte", "salesreturn_fact", "net_amount",
-        dimension_fks=[],
-        # expected_quarantined=8 (was 773): source_of_truth.yaml's
-        # sales_return.both.natural_key WIDENED-BUT-MISMATCHED state (5
-        # columns incl. return_type, vs migration 0011's actual 4-column DB
-        # constraint) was a tracked-but-unresolved blocker; the first real
-        # load surfaced it as a hard Postgres error ("no unique or
-        # exclusion constraint matching the ON CONFLICT specification"),
-        # forcing the resolution already anticipated in that migration's
-        # own comment - return_type dropped from the YAML key 2026-09-14 to
-        # match the DB constraint exactly. Re-verified: real quarantined
-        # drops from 773 to 8 (only rows genuinely missing return_slip_num
-        # or invoice_num) - matches the number informationally measured
-        # 2026-09-11, before this was load-bearing.
-        # rows re-measured 2026-09-14 (was 1901): with return_type out of
-        # the key, more rows become resolvable/comparable, surfacing 270
-        # conflicting-group rows (135 combined conflict groups, demo-heavy)
-        # that _drop_conflicting_group_rows() excludes from the INSERT -
-        # same "flagged, not silently resolved" posture as sales/purchase
-        # above. 1901 (recomputed against the new key) - 270 = 1630.
-        # NOT reduced by _drop_uninsertable_quarantined_rows() - both key
-        # halves (return_slip_num, invoice_num) are nullable on
-        # SalesReturn_Fact, so all 8 quarantined rows insert fine as-is
-        # (verified via schema reflection, not assumed).
-        expected_rows=1630, expected_conflicts=0, expected_quarantined=8,
-    ),
+    FactPlanItem("purchase", "delmonte", "purchase_fact", "net_amount"),
+    FactPlanItem("sales_return", "delmonte", "salesreturn_fact", "net_amount"),
     FactPlanItem(
         "sell_out", "delmonte", "sellout_fact", "net_amount",
         dimension_fks=[_product_fk_spec("category")],
-        # rows re-measured 2026-09-14 TWICE this same phase:
-        # (a) was 8584, then 39 rows across unresolved conflicting groups
-        # (16 combined groups) excluded uniformly -> 8545.
-        # (b) item 40a fix, same day: relabel_sellout_source_defect_categories()
-        # (transform.py) relabels 1,023 rows with an unrecoverable
-        # 'False'/'False (N)' category_path - a confirmed SSM source-file
-        # defect, see that function's docstring - to 'UNCLASSIFIED' and
-        # SUMS them (revenue preserved) into 124 merged rows per
-        # (region, _period, is_demo), 22 of them real. Combined total:
-        # 8584 - 1023 + 124 = 7686 (verified via direct execution, not
-        # computed). Of the resulting 10 combined conflicting groups (all
-        # pre-existing demo-vs-demo collisions, unrelated to this merge -
-        # 0 real rows involved, confirmed), 26 rows excluded by
-        # _drop_conflicting_group_rows() -> 7686 - 26 = 7660. Real rows
-        # unaffected by either exclusion step: 1539 - 194 + 22 = 1367,
-        # unchanged before/after _drop_conflicting_group_rows.
-        expected_rows=7660, expected_conflicts=0, expected_quarantined=0,
     ),
-    FactPlanItem(
-        "inventory", "delmonte", "inventory_fact", "quantity_on_hand",
-        dimension_fks=[],  # DM sku-grain product_key is resolved post-load by
-        # resolve_delmonte_inventory_product_key() (added 2026-09-17), not this FK path
-        # rows re-measured 2026-09-14 (was 21159): 254 rows across
-        # unresolved conflicting groups (114 combined conflict groups)
-        # excluded by _drop_conflicting_group_rows(). 21159 - 254 = 20905.
-        # (Separately, this same run found and fixed a real, is_demo=false
-        # data-quality defect: 9 real MARCH-2023 Pangasinan rows carried
-        # the literal Excel boolean FALSE in Valuation/Valuation with VAT -
-        # confirmed present in the raw source file itself via openpyxl, not
-        # a pipeline artifact. inventory_sign_off's numeric columns were
-        # never run through coerce_numeric_columns() before now - fixed in
-        # analytics/etl/transform.py (DELMONTE_INVENTORY_NUMERIC_COLUMNS),
-        # which nulls the unparseable cells rather than fabricating a
-        # value. This did not change the row COUNT here - quantity_on_hand/
-        # sku_code (the natural key) were unaffected - only the two
-        # valuation columns' values for those 9 rows.)
-        # Re-measured again 2026-09-17 (column-gap audit item 3): 20905 -> 20898
-        # (-7). INVENTORY_SIGN_OFF_FOOTER_CHECKS (analytics/etl/transform.py) gained
-        # a new check excluding 7 section-header artifact rows (sku_description_raw
-        # a bare category label like "KIKKOMAN"/"QUICK N EASY", no real SKU, no
-        # quantity data) that previously loaded as fake inventory rows - all 7 from
-        # one file/sheet (AUGUST 2023, "ACTUAL 090423"). Confirmed via direct
-        # re-run: exactly 7 fewer rows, nothing else changed.
-        expected_rows=20898, expected_conflicts=0, expected_quarantined=188,
-    ),
+    # DM sku-grain product_key is resolved post-load by
+    # resolve_delmonte_inventory_product_key(), not this FK path.
+    FactPlanItem("inventory", "delmonte", "inventory_fact", "quantity_on_hand"),
 ]
-
-
-@dataclass
-class TableRunResult:
-    label: str
-    expected_rows: int | None
-    actual_rows: int
-    expected_conflicts: int | None
-    actual_conflicts: int
-    expected_quarantined: int | None
-    actual_quarantined: int
-    rows_upserted: int
-    mismatch: bool
 
 
 # Canonical column -> the fact table's own column, applied before
@@ -731,11 +580,15 @@ def _json_safe_row(row: pd.Series) -> str:
 
 
 def _quarantine_records(rows: pd.DataFrame, table_name: str, rule: str, reason) -> list[dict]:
-    """`reason` is a string, or a callable(row) -> string for a per-row reason."""
+    """`reason` is a string, or a callable(row) -> string for a per-row reason.
+    slice_period / slice_region are the row's Extract provenance (_period /
+    _region), carried so a slice load can tell which slice a record belongs to;
+    they are not etl_quarantine columns (write_quarantine drops them)."""
     records = []
     for _, row in rows.iterrows():
         ordinal = row.get("_row_ordinal")
         src_file, src_sheet = row.get("_src_file"), row.get("_src_sheet")
+        period, region = row.get("_period"), row.get("_region")
         records.append({
             "table_name": table_name,
             "rule": rule,
@@ -745,6 +598,8 @@ def _quarantine_records(rows: pd.DataFrame, table_name: str, rule: str, reason) 
             "_row_ordinal": int(ordinal) if ordinal is not None and pd.notna(ordinal) else None,
             "is_demo": bool(row.get("is_demo") == True),  # noqa: E712
             "raw_values": _json_safe_row(row),
+            "slice_period": period if isinstance(period, str) else None,
+            "slice_region": region if isinstance(region, str) else None,
         })
     return records
 
@@ -828,167 +683,127 @@ def known_duplicate_file_records() -> list[dict]:
     return records
 
 
-def write_quarantine(engine: Engine, run_id: str, records: list[dict], dry_run: bool, batch_size: int = 1000) -> int:
-    """`engine` is the schema-translating scratch engine. Returns rows written."""
+QUARANTINE_DB_COLUMNS = ("table_name", "rule", "reason", "_src_file", "_src_sheet", "_row_ordinal", "is_demo", "raw_values")
+
+
+def write_quarantine(engine: Engine | Connection, run_id: str, records: list[dict], dry_run: bool,
+                     batch_size: int = 1000) -> int:
+    """`engine` is the schema-scoped Engine or the slice's own Connection.
+    Returns rows written."""
     if dry_run or not records:
         return 0
     table = Table(QUARANTINE_TABLE, MetaData(), autoload_with=engine)
-    with engine.begin() as conn:
-        for start in range(0, len(records), batch_size):
-            batch = [{**r, "run_id": run_id, "raw_values": json.loads(r["raw_values"])} for r in records[start:start + batch_size]]
-            conn.execute(table.insert(), batch)
+    rows = [{**{k: r[k] for k in QUARANTINE_DB_COLUMNS}, "run_id": run_id, "raw_values": json.loads(r["raw_values"])}
+            for r in records]
+    with (nullcontext(engine) if isinstance(engine, Connection) else engine.begin()) as conn:
+        for start in range(0, len(rows), batch_size):
+            conn.execute(table.insert(), rows[start:start + batch_size])
     return len(records)
 
 
-def _run_one_fact(
-    item: FactPlanItem, engine: Engine, dry_run: bool, limit_rows: int | None = None, run_id: str | None = None,
-) -> TableRunResult:
+@dataclass
+class PreparedFact:
+    """A fact's rows after Transform and the loader's exclusions - nothing
+    written yet. load_input is what a slice INSERTs; quarantine is every
+    source row that will not be inserted, with its rule; transformed is the
+    post-transform real frame before projection (dimension rules read
+    columns the fact table does not keep, e.g. product_name)."""
+    item: FactPlanItem
+    natural_key: list[str]
+    load_input: pd.DataFrame
+    quarantine: list[dict]
+    transformed: pd.DataFrame
+
+
+def prepare_fact(
+    item: FactPlanItem, staged: pd.DataFrame, engine: Engine | Connection,
+    reference_pairs: frozenset = frozenset(), extra_known_keys: set[tuple] | None = None,
+) -> PreparedFact:
+    """Transform + the loader's exclusions for one fact, writing nothing
+    (`engine` is used for table reflection only). `staged` is the family's
+    staged rows. reference_pairs: (_src_file, _src_sheet) of sheets read only
+    so that dedup decides as a whole-corpus load would (the April-2025 copy of
+    the "(2)" sheet); their rows are neither loaded nor quarantined here.
+    extra_known_keys: see analytics.etl.transform.rescue_cross_check_orphans."""
     rule = load_source_of_truth(item.fact, item.principal, DEFAULT_CONFIG_DIR)
-    doc_dir = STAGING_DIR / rule.doc_type
-    raw = pd.concat(
-        [pd.read_parquet(f) for f in sorted(doc_dir.glob("*.parquet"))], ignore_index=True,
-    )
-    principal_df = raw[raw["_principal"] == item.principal] if "_principal" in raw.columns else raw
+    principal_df = staged[staged["_principal"] == item.principal] if "_principal" in staged.columns else staged
     principal_df = principal_df.copy()
+    if "is_demo" not in principal_df.columns:
+        # Real files carry no is_demo cell ("absent = real", coerce_is_demo_column).
+        # Stated explicitly so a real-only slice records the same raw_values as a
+        # load that also read synthetic files, where the column existed.
+        principal_df["is_demo"] = False
     principal_df[QID] = range(len(principal_df))
     deduped_df, report = transform_fact(
         principal_df, item.fact, item.principal, DEFAULT_CONFIG_DIR, amount_col=item.amount_col,
+        extra_known_keys=extra_known_keys,
     )
-    if limit_rows is not None:
-        # Smoke-test convenience (2026-09-15, post-incident verification
-        # step 2) - a plain head(N), not a representative sample. Exercises
-        # the SAME code path (dimension resolution, exclusions, load) at
-        # low volume before committing to a full-volume run. Expected/
-        # actual row targets will show MISMATCH under a limit - that's
-        # correct and expected, not a regression; --limit-rows is for
-        # verifying BEHAVIOR (does dimension resolution duplicate rows?),
-        # never for trusting the row counts it produces.
-        original_n = len(deduped_df)
-        deduped_df = deduped_df.head(limit_rows).copy()
-        print(f"  [{item.table_name}] --limit-rows {limit_rows}: truncated from {original_n} to "
-              f"{len(deduped_df)} rows (smoke test only, expected/actual counts below are not meaningful)")
-    dedup = report["dedup"]  # REAL+DEMO combined — this is what actually gets loaded
-
-    # Separate, real-only dedup pass — diagnostic only, nothing loaded from
-    # it — so conflicts/quarantined can be compared against a meaningful
-    # target instead of a number dominated by demo-data noise. Confirmed
-    # 2026-09-14: demo data conflicts heavily (e.g. purchase_order: 438
-    # demo-only conflict groups vs 0 real) — blending that into a pass/fail
-    # target would make every run "mismatch" on noise that was already
-    # known and accepted, defeating the point of having a target at all.
-    if "is_demo" in deduped_df.columns:
-        real_only = deduped_df[deduped_df["is_demo"] != True]  # noqa: E712
-        _, real_report = dedup_facts(real_only, rule.natural_key, amount_col=item.amount_col)
-        real_conflicts, real_quarantined = len(real_report.conflicting_groups), len(real_report.quarantined)
-    else:
-        real_conflicts, real_quarantined = len(dedup.conflicting_groups), len(dedup.quarantined)
 
     quarantine = _transform_stage_exclusions(item, rule, principal_df, report["mapped_df"], deduped_df)
-    # H1 / D12 (2026-09-22): rows Transform marked with a ruled reason
-    # (analytics.etl.transform.flag_source_quarantine) never load; they go to
-    # etl_quarantine with their raw values. After dedup, so a marked row that
-    # collapsed into a kept copy is recorded once, as the dedup collapse.
+    # H1 / D12 (2026-09-22) and fix 7 (2026-09-30): rows Transform marked with a
+    # ruled reason never load; they go to etl_quarantine under their own rule
+    # (QUARANTINE_RULE_COLUMN, default flag_source_quarantine). After dedup, so
+    # a marked row that collapsed into a kept copy is recorded once, as the
+    # dedup collapse.
     if QUARANTINE_REASON_COLUMN in deduped_df.columns:
         marked = deduped_df[QUARANTINE_REASON_COLUMN].notna()
         if marked.any():
-            quarantine += _quarantine_records(
-                deduped_df[marked], item.table_name, "flag_source_quarantine",
-                lambda r: r[QUARANTINE_REASON_COLUMN],
-            )
+            rules = (deduped_df[QUARANTINE_RULE_COLUMN] if QUARANTINE_RULE_COLUMN in deduped_df.columns
+                     else pd.Series(None, index=deduped_df.index, dtype=object))
+            rules = rules.where(rules.notna(), "flag_source_quarantine")
+            for rule_name, grp in deduped_df[marked].groupby(rules[marked], sort=True):
+                quarantine += _quarantine_records(grp, item.table_name, rule_name, lambda r: r[QUARANTINE_REASON_COLUMN])
             print(f"  [{item.table_name}] {int(marked.sum())} row(s) quarantined by ruling: "
-                  f"{dict(Counter(deduped_df.loc[marked, QUARANTINE_REASON_COLUMN]))}")
+                  f"{dict(Counter(rules[marked]))}")
         deduped_df = deduped_df[~marked]
+
+    # Real rows only (2026-09-30): synthetic rows live in the database, never in
+    # a load - staging/'s SYNTH__ copies are stale pre-clean-pool pools.
+    if "is_demo" in deduped_df.columns:
+        demo = (deduped_df["is_demo"] == True).fillna(False).astype(bool)  # noqa: E712
+        if demo.any():
+            print(f"  [{item.table_name}] {int(demo.sum())} is_demo row(s) in the input - not loaded "
+                  f"(synthetic rows are never loaded from files)")
+        deduped_df = deduped_df[~demo]
+    transformed = deduped_df
 
     load_input = _rename_to_table_columns(deduped_df, item.table_name)
     load_input = _project_to_table_columns(load_input, item.table_name, engine, item.dimension_fks)
     stage_in = load_input
-    load_input, excluded_uninsertable = _drop_uninsertable_quarantined_rows(
-        load_input, item.table_name, engine, rule.natural_key,
-    )
+    load_input, _ = _drop_uninsertable_quarantined_rows(load_input, item.table_name, engine, rule.natural_key)
     quarantine += _loader_stage_exclusions(
         stage_in, load_input, item.table_name, "_drop_uninsertable_quarantined_rows",
         lambda r: (f"natural-key column(s) {[k for k in rule.natural_key if k in r.index and pd.isna(r[k])]} are null "
                    f"and NOT NULL on {item.table_name}; no key is fabricated"),
     )
     stage_in = load_input
-    load_input, excluded_other_not_null = _drop_rows_violating_other_not_null(
-        load_input, item.table_name, engine, rule.natural_key,
-    )
+    load_input, _ = _drop_rows_violating_other_not_null(load_input, item.table_name, engine, rule.natural_key)
     quarantine += _loader_stage_exclusions(
         stage_in, load_input, item.table_name, "_drop_rows_violating_other_not_null",
         f"a NOT NULL non-key column of {item.table_name} is null on this row; no value is fabricated",
     )
-    excluded_uninsertable += excluded_other_not_null
     stage_in = load_input
-    load_input, excluded_conflicting = _drop_conflicting_group_rows(
-        load_input, item.table_name, rule.natural_key,
-    )
+    load_input, _ = _drop_conflicting_group_rows(load_input, item.table_name, rule.natural_key)
     quarantine += _loader_stage_exclusions(
         stage_in, load_input, item.table_name, "_drop_conflicting_group_rows",
         lambda r: ("shares its natural key " + str({k: r.get(k) for k in rule.natural_key})
                    + " with a row that differs on a business column (or is a demo row colliding with a real one); "
                      "needs a human decision, never resolved by insert order"),
     )
-    excluded_uninsertable += excluded_conflicting
 
-    load_result = load_to_supabase(
-        load_input, item.table_name, engine, rule.natural_key,
-        dimension_fks=item.dimension_fks, dry_run=dry_run,
-    )
+    if reference_pairs:
+        def _is_ref(frame: pd.DataFrame) -> pd.Series:
+            if frame.empty or "_src_file" not in frame.columns:
+                return pd.Series(False, index=frame.index)
+            return pd.Series([(f, s) in reference_pairs for f, s in zip(frame["_src_file"], frame["_src_sheet"])],
+                             index=frame.index)
+        load_input = load_input[~_is_ref(load_input)]
+        transformed = transformed[~_is_ref(transformed)]
+        quarantine = [r for r in quarantine if (r["_src_file"], r["_src_sheet"]) not in reference_pairs]
 
-    n_quarantined = write_quarantine(engine, run_id or "no-run-id", quarantine, dry_run)
-    print(f"  [{item.table_name}] {len(quarantine)} excluded source rows "
-          f"({'not written - dry run' if dry_run else f'{n_quarantined} written to {QUARANTINE_TABLE}'}): "
+    print(f"  [{item.table_name}] prepared {len(load_input)} row(s) to load, {len(quarantine)} excluded source row(s): "
           f"{dict(Counter(r['rule'] for r in quarantine))}")
-
-    actual_rows = load_result.rows_attempted
-    actual_conflicts = real_conflicts
-    actual_quarantined = real_quarantined
-    if len(dedup.conflicting_groups) > real_conflicts or len(dedup.quarantined) > real_quarantined:
-        print(f"  [{item.table_name}] combined (real+demo) has "
-              f"{len(dedup.conflicting_groups)} conflicts / {len(dedup.quarantined)} quarantined — "
-              f"demo-data noise, not compared against a target, loaded as-is")
-    mismatch = (
-        (item.expected_rows is not None and actual_rows != item.expected_rows)
-        or (item.expected_conflicts is not None and actual_conflicts != item.expected_conflicts)
-        or (item.expected_quarantined is not None and actual_quarantined != item.expected_quarantined)
-    )
-
-    result = TableRunResult(
-        label=f"{item.table_name} ({item.fact}/{item.principal})",
-        expected_rows=item.expected_rows, actual_rows=actual_rows,
-        expected_conflicts=item.expected_conflicts, actual_conflicts=actual_conflicts,
-        expected_quarantined=item.expected_quarantined, actual_quarantined=actual_quarantined,
-        rows_upserted=load_result.rows_upserted, mismatch=mismatch,
-    )
-    _print_table_result(result, dry_run)
-    for dim_report in load_result.dimension_resolutions:
-        verb = "would insert" if dim_report.dry_run else "inserted"
-        log.info(
-            "  dimension %s: %d distinct keys seen, %d %s, %d rows unresolved (null key part)",
-            dim_report.dimension_table, dim_report.distinct_keys_seen, dim_report.rows_inserted,
-            verb, dim_report.rows_unresolved,
-        )
-    return result
-
-
-def _print_table_result(r: TableRunResult, dry_run: bool) -> None:
-    def fmt(expected, actual):
-        if expected is None:
-            return f"{actual} (no target measured)"
-        flag = "" if expected == actual else "  <<< MISMATCH"
-        return f"expected {expected} / actual {actual}{flag}"
-
-    verb = "would upsert" if dry_run else "upserted"
-    print(f"\n[{r.label}]")
-    print(f"  rows:        {fmt(r.expected_rows, r.actual_rows)}")
-    print(f"  conflicts:   {fmt(r.expected_conflicts, r.actual_conflicts)}")
-    print(f"  quarantined: {fmt(r.expected_quarantined, r.actual_quarantined)}")
-    print(f"  {verb}: {r.rows_upserted}")
-    if r.mismatch:
-        print(f"  !!! {r.label}: ACTUAL DIFFERS FROM THE FROZEN 2026-09-11 TARGET !!!")
-        print("      This is not necessarily wrong — data/raw/ may have genuinely changed.")
-        print("      It must not be accepted silently. Investigate before trusting this load.")
+    return PreparedFact(item, list(rule.natural_key), load_input, quarantine, transformed)
 
 
 # ---------------------------------------------------------------------------
@@ -1052,14 +867,18 @@ BRAND_ALIAS_TABLE = REPO_ROOT / "config" / "alias_tables" / "unilever_brand.csv"
 _APOSTROPHE_VARIANTS = "[�’‘]"
 
 
-def _load_soh_snapshot() -> pd.DataFrame:
+def _load_soh_snapshot(staging_dir: Path = STAGING_DIR) -> pd.DataFrame:
     """Most-recent SOH snapshot per sku_code — sku_code, article_description,
     category_desc. Same DEC-21 rule transform_ssis_soh.py already uses
     (_most_recent_by_sku), reproduced here independently because that
     module only exposes category info for NON-joining SKUs
     (product_dimension_candidates) — this backfill needs it for every
-    Unilever SKU, joining or not."""
-    fs = sorted((STAGING_DIR / "ssis_soh").glob("*.parquet"))
+    Unilever SKU, joining or not. Empty when `staging_dir` has no ssis_soh
+    sheets (a slice run that did not stage SOH): the category/brand rule then
+    only classifies SKUs that have no category yet."""
+    fs = sorted((staging_dir / "ssis_soh").glob("*.parquet"))
+    if not fs:
+        return pd.DataFrame(columns=["sku_code", "article_description", "category_desc", "snapshot_date"])
     soh = pd.concat(
         [pd.read_parquet(f, columns=["sku_code", "article_description", "category_desc", "snapshot_date"]) for f in fs],
         ignore_index=True,
@@ -1069,21 +888,14 @@ def _load_soh_snapshot() -> pd.DataFrame:
     # "None", not a null value - grouping on that afterward would silently
     # coalesce every genuinely-missing-sku_code row (~39 known in this
     # corpus, one per snapshot - a blank/totals-adjacent source row) into
-    # one fake "nan"-named SKU, the same "null keys get grouped instead of
-    # quarantined" shape as the dedup_facts() bug fixed earlier this phase.
-    # Confirmed harmless in practice today (a real product_dimension.
-    # sku_code never equals the literal string "nan", so the fake row was
-    # never actually joined against) - fixed anyway rather than leaving a
-    # second instance of an already-known bug shape in the codebase.
+    # one fake "nan"-named SKU.
     soh = soh.dropna(subset=["sku_code"])
     soh["sku_code"] = soh["sku_code"].astype(str).str.strip()
     soh["category_desc"] = soh["category_desc"].astype(str).str.strip().replace({"": None, "nan": None})
     soh = soh.dropna(subset=["category_desc"])
     # Normalize mojibake/smart-quote apostrophes (U+FFFD, U+2019, U+2018) to
     # ASCII "'" before anything tokenizes article_description — found
-    # 2026-09-18: 'LADY�S CHOICE...' (product_keys 120, 121) was
-    # producing a byte-distinct brand token the alias table couldn't
-    # reliably match. Source-level fix instead of another alias entry.
+    # 2026-09-18: 'LADY�S CHOICE...' (product_keys 120, 121).
     soh["article_description"] = soh["article_description"].astype(str).str.replace(
         _APOSTROPHE_VARIANTS, "'", regex=True
     )
@@ -1123,28 +935,54 @@ def _pack_size_text(value) -> str | None:
     return str(int(number)) if number == int(number) else str(value).strip()
 
 
-def resolve_unilever_demand_product_metadata(engine: Engine, schema: str, dry_run: bool) -> dict[str, int]:
+@contextmanager
+def _in_schema(engine: Engine | Connection, schema: str):
+    """A connection whose unqualified names resolve to `schema`. Handed a
+    Connection (a slice's own transaction, scripts/load_slices.py), the work
+    joins that transaction; handed an Engine, it runs in one of its own.
+    SET LOCAL either way - never a session-level setting - and the target
+    schema only: no `public` fallback for a table a scratch schema lacks."""
+    if isinstance(engine, Connection):
+        engine.execute(text("SET LOCAL search_path TO :schema").bindparams(schema=schema))
+        yield engine
+        return
+    with engine.begin() as conn:
+        conn.execute(text("SET LOCAL search_path TO :schema").bindparams(schema=schema))
+        yield conn
+
+
+def _nn(value):
+    """None for None/NaN, else the value - pandas turns a NULL into NaN in some columns."""
+    return None if value is None or (isinstance(value, float) and pd.isna(value)) else value
+
+
+def resolve_unilever_demand_product_metadata(
+    engine: Engine | Connection, schema: str, dry_run: bool, staging_dir: Path = STAGING_DIR,
+) -> dict[str, int]:
     """Writes product_name and pack_size from the Unilever demand file onto
     Product_Dimension (2026-09-21). transform_fact() maps both columns
     (config/column_maps/unilever_sku.yaml) and _project_to_table_columns()
-    correctly keeps them off the fact table - but nothing ever carried them to
-    the dimension, where they belong. A canonical rebuild came out with
-    product_name on 291 of 2,098 Unilever SKU rows (the SOH-only ones) and
-    pack_size on none; public holds 2,098 and 1,807.
+    correctly keeps them off the fact table - this carries them to the
+    dimension, where they belong.
 
     Real rows only - a synthetic file never names a real product. Most recent
-    calendar_month wins when a SKU's description changes, the same rule
-    resolve_delmonte_sku_dimension() uses. Runs after the demand fact load
-    (the rows must exist) and before run_category_brand_backfill(), which
-    falls back to this product_name for SKUs with no SOH row."""
-    doc_dir = STAGING_DIR / "unilever_sku"
-    raw = pd.concat([pd.read_parquet(f) for f in sorted(doc_dir.glob("*.parquet"))], ignore_index=True)
+    calendar_month wins when a SKU's description changes (the latest non-null
+    value). The demand file is one workbook covering every month, so a slice
+    run stages the whole file and this reads all of it: the result is the same
+    whichever month was loaded. Set-based (2026-09-30); rows_updated counts
+    rows whose value actually changed."""
+    doc_dir = staging_dir / "unilever_sku"
+    files = sorted(doc_dir.glob("*.parquet"))
+    result = {"skus_in_demand_file": 0, "product_name_written": 0, "pack_size_written": 0, "rows_updated": 0}
+    if not files:
+        print("\n[Product_Dimension unilever demand metadata] no unilever_sku sheets staged - nothing written.")
+        return result
+    raw = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
     mapped, _ = apply_column_map(raw, "unilever_sku", DEFAULT_CONFIG_DIR)
     mapped = coerce_is_demo_column(mapped)
     if "is_demo" in mapped.columns:
         mapped = mapped[mapped["is_demo"] != True]  # noqa: E712
     have = [c for c in ("product_name", "pack_size") if c in mapped.columns]
-    result = {"skus_in_demand_file": 0, "product_name_written": 0, "pack_size_written": 0, "rows_updated": 0}
     if not have or "sku_code" not in mapped.columns:
         print("\n[Product_Dimension unilever demand metadata] no product_name/pack_size column staged - nothing written.")
         return result
@@ -1162,283 +1000,225 @@ def resolve_unilever_demand_product_metadata(engine: Engine, schema: str, dry_ru
     result["product_name_written"] = sum(1 for r in rows if r["product_name"])
     result["pack_size_written"] = sum(1 for r in rows if r["pack_size"])
 
-    if not dry_run:
-        with engine.begin() as conn:
-            conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-            for r in rows:
-                updated = conn.execute(text(
-                    "UPDATE product_dimension SET product_name = COALESCE(:product_name, product_name), "
-                    "pack_size = COALESCE(:pack_size, pack_size) "
-                    "WHERE principal = 'unilever' AND grain = 'sku' AND sku_code = :sku_code"
-                ), r)
-                result["rows_updated"] += updated.rowcount or 0
+    if not dry_run and rows:
+        with _in_schema(engine, schema) as conn:
+            updated = conn.execute(text("""
+                UPDATE product_dimension p
+                SET product_name = COALESCE(v.product_name, p.product_name),
+                    pack_size = COALESCE(v.pack_size, p.pack_size)
+                FROM unnest(CAST(:skus AS text[]), CAST(:names AS text[]), CAST(:packs AS text[]))
+                     AS v(sku_code, product_name, pack_size)
+                WHERE p.principal = 'unilever' AND p.grain = 'sku' AND p.sku_code = v.sku_code
+                  AND (p.product_name IS DISTINCT FROM COALESCE(v.product_name, p.product_name)
+                       OR p.pack_size IS DISTINCT FROM COALESCE(v.pack_size, p.pack_size))
+            """), {"skus": [r["sku_code"] for r in rows], "names": [r["product_name"] for r in rows],
+                   "packs": [r["pack_size"] for r in rows]})
+            result["rows_updated"] = updated.rowcount or 0
     print(f"\n[Product_Dimension unilever demand metadata] {result}")
     return result
 
 
-def run_category_brand_backfill(engine: Engine, schema: str, dry_run: bool) -> dict[str, int]:
-    """Runs LAST (see module docstring's step 8). For every Unilever demand
-    SKU already in Product_Dimension (loaded by step 3): direct SOH match,
-    else UNCLASSIFIED. Logs which method resolved each SKU AS IT RUNS (per
-    Yuan's instruction, 2026-09-11) via log.info at INFO level — pass
-    --quiet to suppress per-SKU lines and keep only the final tally.
+def run_category_brand_backfill(
+    engine: Engine | Connection, schema: str, dry_run: bool, staging_dir: Path = STAGING_DIR,
+) -> dict[str, int]:
+    """Unilever SKU category and brand. For every Unilever SKU in
+    Product_Dimension: a direct SOH match (most recent snapshot, DEC-21) sets
+    category_path from the SOH CATEGORY DESC and the brand from the SOH
+    description's first token; a SKU with no SOH row is UNCLASSIFIED with the
+    brand from the demand file's product_name (brand_source
+    'demand_first_token_rule'). The validated keyword CATEGORY rule
+    (_fit_keyword_rule/_predict_category) is still not switched on - that is
+    a modelling decision, not a loader fix (reports/PROJECT_STATE_2026-09.md §8).
 
-    IMPORTANT GAP, found while writing this (2026-09-11, not previously
-    surfaced this precisely): the validated description-keyword fallback
-    (_fit_keyword_rule/_predict_category above, 94.6% accuracy / 97.4% at
-    confidence >= 0.6 out-of-sample — reports/PROJECT_STATE_2026-09.md §8)
-    has NO Unilever demand SKUs to actually apply to in production. It was
-    validated on the 1,427 SKUs that DO have an SOH row (train/test split of
-    the SAME labelled population) — but the 380 SKUs that need a fallback
-    have NO SOH row at all, and Unilever's demand data
-    (unilever_sku.yaml's "Product" column is a bare SKU code, not a name)
-    carries no description anywhere else in this pipeline. There is
-    currently no text to run the keyword rule against for the population it
-    was meant to help. So this function only ever produces two outcomes in
-    practice: direct_soh_match (~1,427) or unclassified (~380) — not the
-    three-way split originally envisioned. _fit_keyword_rule/_predict_category
-    are kept, unused, for if a second Unilever description source is ever
-    found — not deleted, but not pretending to run either.
-
-    CORRECTED 2026-09-21: "carries no description anywhere else" was wrong.
-    The demand file's second column is the product description
-    (unilever_sku.yaml maps it to product_name) — it was being projected out
-    before load. It now reaches Product_Dimension, and the brand first-token
-    rule below reads it for the ~380 SKUs with no SOH row
-    (brand_source='demand_first_token_rule'). The keyword CATEGORY rule is
-    still not applied to them: switching it on is a modelling decision, not a
-    loader fix."""
+    ORDER-INDEPENDENT since 2026-09-30, because slices arrive one at a time
+    and a demand slice may land before the SOH snapshot that classifies its
+    SKU (a slice run that staged no SOH passes an empty snapshot):
+      - an SOH match overrides only a category this rule set itself
+        (source NULL / 'unclassified' / 'direct_soh_match');
+      - with no SOH row, only a SKU with no category at all is marked
+        UNCLASSIFIED;
+      - brand keeps COALESCE semantics (an existing brand stays), except that
+        a brand this rule took from the demand file is replaced by the SOH
+        description's once an SOH row exists - the same brand a load that saw
+        both at once would give.
+    Set-based UPDATE of the rows that change only."""
     if dry_run:
-        print("\n[Product_Dimension category/brand backfill] DRY RUN LIMITATION: "
-              "this step queries product_dimension for existing Unilever demand SKU "
-              "rows, but --dry-run never actually inserts them (resolve_dimension_fk's "
-              "dry-run reports 'would insert' without writing) — so on an empty/partial "
-              "scratch schema this correctly finds 0 and the tally below is not "
-              "meaningful. Real signal only on a non-dry-run run, where step 3's fact "
-              "load has already populated Product_Dimension for real by the time this "
-              "step (step 8) runs.")
-    soh = _load_soh_snapshot()
+        print("\n[Product_Dimension category/brand backfill] DRY RUN: skipped (dimension rows are not "
+              "written on a dry run, so there is nothing meaningful to classify).")
+        return {"direct_soh_match": 0, "keyword_rule": 0, "unclassified": 0, "rows_updated": 0}
+    soh = _load_soh_snapshot(staging_dir)
     alias = _load_brand_alias_table()
     soh_by_sku = soh.set_index("sku_code")
 
-    with engine.connect() as conn:
-        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-        demand_skus = pd.DataFrame(
-            conn.execute(text(
-                "SELECT product_key, sku_code, product_name FROM product_dimension "
-                "WHERE principal = 'unilever' AND grain = 'sku'"
-            )).fetchall(),
-            columns=["product_key", "sku_code", "product_name"],
-        )
+    with _in_schema(engine, schema) as conn:
+        dim = conn.execute(text(
+            "SELECT product_key, sku_code, product_name, category_path, category_path_source, brand, brand_source "
+            "FROM product_dimension WHERE principal = 'unilever' AND grain = 'sku'"
+        )).fetchall()
 
-    # keyword_rule is seeded as a real counter, not printed as a literal. No
-    # branch below increments it today (see this function's docstring), so it
-    # reports 0 because it genuinely counted zero — and if the fallback is ever
-    # wired up, the printed figure becomes correct on its own rather than
-    # staying a hardcoded 0 that quietly starts lying.
-    tally: dict[str, int] = {"direct_soh_match": 0, "keyword_rule": 0, "unclassified": 0}
-    updates: list[dict] = []
-    for _, row in demand_skus.iterrows():
-        sku = row["sku_code"]
-        if sku in soh_by_sku.index:
-            soh_row = soh_by_sku.loc[sku]
-            category_path, category_source = soh_row["category_desc"], "direct_soh_match"
-            desc, desc_origin = soh_row["article_description"], "soh_first_token_rule"
-        else:
-            # No SOH row at all -> no category signal. CORRECTED 2026-09-21: the
-            # demand file DOES carry a description (unilever_sku.yaml product_name,
-            # now on Product_Dimension via resolve_unilever_demand_product_metadata()),
-            # so the brand is still readable. Category stays UNCLASSIFIED - the
-            # keyword rule is not switched on by this.
-            category_path, category_source = None, "unclassified"
-            desc, desc_origin = row["product_name"], "demand_first_token_rule"
+        # keyword_rule is seeded as a real counter, not printed as a literal: no
+        # branch below increments it today (see this docstring).
+        tally: dict[str, int] = {"direct_soh_match": 0, "keyword_rule": 0, "unclassified": 0}
+        updates: list[dict] = []
+        for product_key, sku, product_name, cat_path, cat_src, brand, brand_src in dim:
+            if sku in soh_by_sku.index and cat_src in (None, "unclassified", "direct_soh_match"):
+                soh_row = soh_by_sku.loc[sku]
+                new_cat, new_src = soh_row["category_desc"], "direct_soh_match"
+                desc, origin = soh_row["article_description"], "soh_first_token_rule"
+            elif cat_path is None:
+                new_cat, new_src = "UNCLASSIFIED", "unclassified"
+                desc, origin = product_name, "demand_first_token_rule"
+            else:
+                tally[cat_src or "unclassified"] = tally.get(cat_src or "unclassified", 0) + 1
+                continue
 
-        brand_raw = str(desc).split()[0].upper() if desc and pd.notna(desc) else None
-        brand = alias.get(brand_raw, brand_raw) if brand_raw else None
-        brand_source = desc_origin if brand else None
+            desc = _nn(desc)
+            brand_raw = str(desc).split()[0].upper() if desc and str(desc).split() else None
+            token = alias.get(brand_raw, brand_raw) if brand_raw else None
+            if origin == "soh_first_token_rule" and brand_src == "demand_first_token_rule" and token:
+                new_brand, new_brand_src = token, origin
+            else:
+                new_brand = brand if brand is not None else token
+                new_brand_src = brand_src if brand_src is not None else (origin if token else None)
 
-        tally[category_source] = tally.get(category_source, 0) + 1
-        log.info(
-            "  %s -> category_path=%r (%s), brand=%r",
-            sku, category_path or "UNCLASSIFIED", category_source, brand,
-        )
-        updates.append({
-            "product_key": int(row["product_key"]),
-            "category_path": category_path or "UNCLASSIFIED",
-            "category_path_source": category_source,
-            "brand": brand,
-            "brand_source": brand_source,
-        })
+            tally[new_src] = tally.get(new_src, 0) + 1
+            log.info("  %s -> category_path=%r (%s), brand=%r", sku, new_cat, new_src, new_brand)
+            if (new_cat, new_src, new_brand, new_brand_src) != (cat_path, cat_src, brand, brand_src):
+                updates.append({"product_key": int(product_key), "category_path": new_cat, "category_path_source": new_src,
+                                "brand": new_brand, "brand_source": new_brand_src})
 
-    print(f"\n[Product_Dimension category/brand backfill]")
-    print(f"  direct_soh_match: {tally.get('direct_soh_match', 0)}")
-    print(f"  keyword_rule:     {tally.get('keyword_rule', 0)}  (never applied — the SKUs "
-          f"it would cover have no SOH row and therefore no description text to "
-          f"tokenize; see run_category_brand_backfill's docstring. A real, "
-          f"currently-unclosed gap, not a bug in this script)")
-    print(f"  unclassified:     {tally.get('unclassified', 0)}")
+        if updates:
+            conn.execute(text("""
+                UPDATE product_dimension p
+                SET category_path = v.category_path, category_path_source = v.category_path_source,
+                    brand = v.brand, brand_source = v.brand_source
+                FROM unnest(CAST(:keys AS bigint[]), CAST(:cats AS text[]), CAST(:srcs AS text[]),
+                            CAST(:brands AS text[]), CAST(:bsrcs AS text[]))
+                     AS v(product_key, category_path, category_path_source, brand, brand_source)
+                WHERE p.product_key = v.product_key
+            """), {"keys": [u["product_key"] for u in updates], "cats": [u["category_path"] for u in updates],
+                   "srcs": [u["category_path_source"] for u in updates], "brands": [u["brand"] for u in updates],
+                   "bsrcs": [u["brand_source"] for u in updates]})
 
-    if not dry_run and updates:
-        with engine.begin() as conn:
-            conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-            for u in updates:
-                conn.execute(text(
-                    "UPDATE product_dimension SET category_path = :category_path, "
-                    "category_path_source = :category_path_source, brand = COALESCE(brand, :brand), "
-                    "brand_source = COALESCE(brand_source, :brand_source) WHERE product_key = :product_key"
-                ), u)
-
-    # Del Monte grain='category' side (item 40a, 2026-09-14): SellOut_Fact's
-    # own transform step (relabel_sellout_source_defect_categories(),
-    # transform.py) already relabels the source-file-defect rows'
-    # category_path to the literal 'UNCLASSIFIED' string before load, so
-    # resolve_dimension_fk() creates/matches that Product_Dimension row
-    # correctly on its own - nothing to fix there. What resolve_dimension_fk
-    # does NOT populate is category_path_source (it only knows the FK's
-    # natural-key columns, not this backfill's provenance concept). Safe to
-    # target narrowly: no other mechanism in this codebase produces
-    # category_path='UNCLASSIFIED' for a Del Monte grain='category' row, so
-    # every match here is confirmed to be this exact defect, not a guess.
-    n_source_defect = 0
-    if not dry_run:
-        with engine.begin() as conn:
-            conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-            result = conn.execute(text(
-                "UPDATE product_dimension SET category_path_source = 'source_file_defect' "
-                "WHERE principal = 'delmonte' AND grain = 'category' "
-                "AND category_path = 'UNCLASSIFIED' AND category_path_source IS NULL"
-            ))
-            n_source_defect = result.rowcount or 0
-    print(f"  delmonte source_file_defect (category, item 40a): {n_source_defect}")
-    tally["source_file_defect"] = n_source_defect
+    tally["rows_updated"] = len(updates)
+    print(f"\n[Product_Dimension category/brand backfill] {tally}  (keyword_rule is never applied: "
+          f"see this function's docstring)")
     return tally
 
 
-def resolve_delmonte_sku_dimension(engine: Engine, schema: str, dry_run: bool) -> dict[str, int]:
-    """Runs after run_category_brand_backfill, before
-    resolve_delmonte_inventory_product_key (step 8a.5 — new canonical step,
-    2026-09-17 column-gap audit item 3 precursor).
+def tag_sellout_source_defect_categories(engine: Engine | Connection, schema: str, dry_run: bool) -> int:
+    """Del Monte grain='category' side (item 40a, 2026-09-14): SellOut_Fact's
+    transform step (relabel_sellout_source_defect_categories()) relabels the
+    source-file-defect rows' category_path to 'UNCLASSIFIED' before load, so
+    resolve_dimension_fk() creates/matches that Product_Dimension row on its
+    own. It does not know category_path_source; this sets it. No other
+    mechanism produces category_path='UNCLASSIFIED' for a Del Monte category
+    row, so every match is this exact defect."""
+    if dry_run:
+        return 0
+    with _in_schema(engine, schema) as conn:
+        n = conn.execute(text(
+            "UPDATE product_dimension SET category_path_source = 'source_file_defect' "
+            "WHERE principal = 'delmonte' AND grain = 'category' "
+            "AND category_path = 'UNCLASSIFIED' AND category_path_source IS NULL"
+        )).rowcount or 0
+    print(f"  delmonte source_file_defect (category, item 40a): {n}")
+    return n
 
-    Builds/refreshes delmonte sku-grain Product_Dimension rows from the ONE
+
+def resolve_delmonte_sku_dimension(
+    engine: Engine | Connection, schema: str, dry_run: bool, staging_dir: Path = STAGING_DIR,
+    transformed: pd.DataFrame | None = None,
+) -> dict[str, int]:
+    """Builds/refreshes delmonte sku-grain Product_Dimension rows from the ONE
     real Del Monte source that carries sku_code + description:
     inventory_sign_off's sku_description_raw, split by
-    analytics.etl.transform.split_sku_description() — confirmed via recon
-    to be the only DM doc_type with this data (sell_out has no sku_code
-    column at all — column_maps/sell_out.yaml:15; sales_register/
-    sales_return are invoice-grain only, no SKU column). That split already
-    runs inside the "inventory"/delmonte FactPlanItem's own transform_fact()
-    call (_run_one_fact) but its product_name output is discarded there —
-    Inventory_Fact has no product_name column. Recomputed here directly
-    (same transform_fact() call, same staged parquet) rather than threading
-    it through _run_one_fact's return value, keeping this self-contained
-    like run_category_brand_backfill.
+    analytics.etl.transform.split_sku_description() (sell_out has no
+    sku_code column - column_maps/sell_out.yaml:15; sales_register/
+    sales_return are invoice-grain only). `transformed` is the inventory
+    frame a slice already transformed; without it, staging_dir is read.
 
     category_path = NULL, no heuristic — migration 0016 corrected the prior
-    generate_synthetic_dm.py-era rows, which used a self-admitted "fake
-    category" keyword guess; no real DM source ties an individual SKU to a
-    category at all (confirmed: category only exists at SellOut_Fact's
-    region x period x category grain).
+    generate_synthetic_dm.py-era rows ("fake category"); no real DM source
+    ties an individual SKU to a category.
 
-    Upsert key: (principal, sku_code) — migration 0016's new partial unique
-    index. product_key is preserved across re-runs (ON CONFLICT DO UPDATE,
-    not DO NOTHING) so downstream FKs (inventory backfill, any future
-    fact) never see a product_key change. Conflicting product_name text for
-    the same sku_code across snapshot months (rare — 1 case found in real
-    data, a punctuation-only difference) resolves by most-recent `_period`
-    wins, logged per occurrence.
+    New sku_codes are inserted (key: migration 0016's partial unique index on
+    (principal, sku_code)); product_key is never renumbered. A sku_code whose
+    product_name differs across snapshot months resolves by most-recent
+    `_period` wins - ORDER-INDEPENDENT since 2026-09-30: a slice only renames
+    a SKU when no later real inventory month for it exists in the table, so
+    reloading an old month never overwrites a newer name.
 
-    The 7 section-header artifact rows (sku_description_raw = a bare
-    category label like "KIKKOMAN", "QUICK N EASY" — no real SKU) never
-    reach here: excluded upstream by INVENTORY_SIGN_OFF_FOOTER_CHECKS'
-    all_null=[quantity_on_hand, cases, product_name] check
-    (analytics/etl/transform.py)."""
-    raw = pd.concat(
-        [pd.read_parquet(f) for f in sorted((STAGING_DIR / "inventory_sign_off").glob("*.parquet"))],
-        ignore_index=True,
-    )
-    principal_df = raw[raw["_principal"] == "delmonte"] if "_principal" in raw.columns else raw
-    deduped_df, _ = transform_fact(principal_df, "inventory", "delmonte", DEFAULT_CONFIG_DIR, amount_col="quantity_on_hand")
-    real = deduped_df[deduped_df["is_demo"] != True]  # noqa: E712
+    The 7 section-header artifact rows (a bare category label like
+    "KIKKOMAN", no real SKU) never reach here: excluded upstream by
+    INVENTORY_SIGN_OFF_FOOTER_CHECKS (analytics/etl/transform.py)."""
+    if transformed is None:
+        raw = pd.concat(
+            [pd.read_parquet(f) for f in sorted((staging_dir / "inventory_sign_off").glob("*.parquet"))],
+            ignore_index=True,
+        )
+        principal_df = raw[raw["_principal"] == "delmonte"] if "_principal" in raw.columns else raw
+        transformed, _ = transform_fact(principal_df, "inventory", "delmonte", DEFAULT_CONFIG_DIR, amount_col="quantity_on_hand")
+    real = transformed[transformed["is_demo"] != True] if "is_demo" in transformed.columns else transformed  # noqa: E712
     named = real.dropna(subset=["sku_code", "product_name"]).copy()
 
     if dry_run:
         print(f"\n[Product_Dimension delmonte sku-grain build] DRY RUN: "
-              f"{named['sku_code'].nunique()} distinct real sku_codes with a real "
-              f"product_name found in staged inventory_sign_off data — nothing written.")
-        return {"upserted": 0, "conflicts_logged": 0}
+              f"{named['sku_code'].nunique()} distinct real sku_codes with a product_name - nothing written.")
+        return {"inserted": 0, "renamed": 0, "conflicts_logged": 0}
 
-    # Most-recent-_period wins for a sku_code with 2+ distinct product_name
-    # values across months — sort ascending so groupby.last() picks the
-    # latest period's text.
-    named = named.sort_values("_period")
+    named = named.sort_values("_period", kind="stable")
     conflicts_logged = 0
     for sku, grp in named.groupby("sku_code"):
         names = grp["product_name"].unique()
         if len(names) > 1:
             conflicts_logged += 1
-            log.info(
-                "  %s: %d distinct product_name values across periods %s — "
-                "using most recent (%r)", sku, len(names), list(grp["_period"].unique()), names[-1],
-            )
-    resolved = named.groupby("sku_code", as_index=False).last()[["sku_code", "product_name"]]
+            log.info("  %s: %d distinct product_name values across periods %s — using most recent (%r)",
+                     sku, len(names), list(grp["_period"].unique()), names[-1])
+    resolved = named.groupby("sku_code", as_index=False).last()[["sku_code", "product_name", "_period"]]
+    params = {"skus": [str(s) for s in resolved["sku_code"]], "names": [str(n) for n in resolved["product_name"]],
+              "periods": [str(p) for p in resolved["_period"]]}
 
-    with engine.begin() as conn:
-        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-        for row in resolved.itertuples(index=False):
-            conn.execute(text("""
-                INSERT INTO product_dimension (principal, grain, sku_code, category_path, product_name, status)
-                VALUES ('delmonte', 'sku', :sku_code, NULL, :product_name, 'ACTIVE')
-                ON CONFLICT (principal, sku_code) WHERE sku_code IS NOT NULL
-                DO UPDATE SET product_name = EXCLUDED.product_name
-            """), {"sku_code": row.sku_code, "product_name": row.product_name})
+    with _in_schema(engine, schema) as conn:
+        inserted = conn.execute(text("""
+            INSERT INTO product_dimension (principal, grain, sku_code, category_path, product_name, status)
+            SELECT 'delmonte', 'sku', v.sku_code, NULL, v.product_name, 'ACTIVE'
+            FROM unnest(CAST(:skus AS text[]), CAST(:names AS text[])) AS v(sku_code, product_name)
+            ON CONFLICT (principal, sku_code) WHERE sku_code IS NOT NULL DO NOTHING
+        """), params).rowcount or 0
+        renamed = conn.execute(text("""
+            UPDATE product_dimension p SET product_name = v.product_name
+            FROM unnest(CAST(:skus AS text[]), CAST(:names AS text[]), CAST(:periods AS text[]))
+                 AS v(sku_code, product_name, period)
+            WHERE p.principal = 'delmonte' AND p.grain = 'sku' AND p.sku_code = v.sku_code
+              AND p.product_name IS DISTINCT FROM v.product_name
+              AND NOT EXISTS (SELECT 1 FROM inventory_fact f
+                              WHERE f.principal = 'delmonte' AND NOT f.is_demo
+                                AND f.sku_code = v.sku_code AND f._period > v.period)
+        """), params).rowcount or 0
 
-    print(f"\n[Product_Dimension delmonte sku-grain build]")
-    print(f"  upserted:        {len(resolved)}  (expected 597, matching 5,164/5,171 real "
-          f"inventory rows getting a real sku_code+product_name)")
-    print(f"  conflicts logged: {conflicts_logged}  (expected 1 — punctuation-only, not a real "
-          f"data disagreement)")
-    return {"upserted": len(resolved), "conflicts_logged": conflicts_logged}
+    result = {"skus_seen": len(resolved), "inserted": inserted, "renamed": renamed, "conflicts_logged": conflicts_logged}
+    print(f"\n[Product_Dimension delmonte sku-grain build] {result}")
+    return result
 
 
-def resolve_delmonte_inventory_product_key(engine: Engine, schema: str, dry_run: bool) -> dict[str, int]:
-    """Runs after run_category_brand_backfill (step 8b). Fixes the 100%-null
-    Inventory_Fact.product_key for principal='delmonte' found by the 2026-09
-    column-gap audit (reports/COLUMN_GAP_AUDIT_2026-09.md) —
-    scripts/run_canonical_load.py:413-414's FactPlanItem for delmonte
-    inventory sets dimension_fks=[] with a comment promising a "downstream
-    sku_code text match" that was never actually implemented anywhere in
-    this repo (confirmed by grep — the comment was the only hit).
-
-    A plain post-load UPDATE, not _product_fk_spec("sku")/dimension_fks,
-    on purpose: Del Monte's product_dimension rows aren't governed by that
-    generic FK-resolution natural key at all here (they're loaded outside
-    this codepath, pre-canonical-load era — see _product_fk_spec's own
-    comment), and inventory_fact rows carry no category_path to match
-    against even if they were. A plain equality join on sku_code alone is
-    what's needed, and migration 0016 (dedup + the new partial unique index
-    on (principal, sku_code) WHERE sku_code IS NOT NULL) is what makes that
-    join safe — before that migration, a sku_code could match 2-3 rows.
-
-    Idempotent: re-running only touches rows still NULL. Unilever is never
-    touched (WHERE f.principal = 'delmonte' scopes every row this UPDATE can
-    see) — asserted explicitly below, not just relied on via the WHERE
+def resolve_delmonte_inventory_product_key(engine: Engine | Connection, schema: str, dry_run: bool) -> dict[str, int]:
+    """Fixes the null Inventory_Fact.product_key for principal='delmonte'
+    (2026-09 column-gap audit, reports/COLUMN_GAP_AUDIT_2026-09.md). A plain
+    equality join on sku_code against Del Monte sku-grain Product_Dimension
+    rows - migration 0016's partial unique index on (principal, sku_code)
+    makes that join safe. Idempotent: only rows still NULL are touched.
+    Unilever is never touched - asserted, not just relied on via the WHERE
     clause, per Yuan's instruction."""
     if dry_run:
-        print("\n[Inventory_Fact.product_key delmonte backfill] DRY RUN: "
-              "skipped (see run_category_brand_backfill's dry-run note above — "
-              "same reasoning: product_dimension/inventory_fact aren't populated "
-              "for real on a dry run, so there's nothing meaningful to resolve).")
+        print("\n[Inventory_Fact.product_key delmonte backfill] DRY RUN: skipped.")
         return {"resolved": 0, "still_null": 0, "unilever_touched": 0}
 
-    with engine.connect() as conn:
-        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+    with _in_schema(engine, schema) as conn:
         before_unilever_null = conn.execute(text(
             "SELECT count(*) FROM inventory_fact WHERE principal = 'unilever' AND product_key IS NULL"
         )).scalar()
-
-    with engine.begin() as conn:
-        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-        result = conn.execute(text("""
+        resolved = conn.execute(text("""
             UPDATE inventory_fact f
             SET product_key = pd.product_key
             FROM product_dimension pd
@@ -1447,11 +1227,7 @@ def resolve_delmonte_inventory_product_key(engine: Engine, schema: str, dry_run:
               AND pd.principal = 'delmonte'
               AND pd.grain = 'sku'
               AND pd.sku_code = f.sku_code
-        """))
-        resolved = result.rowcount or 0
-
-    with engine.connect() as conn:
-        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        """)).rowcount or 0
         still_null = conn.execute(text(
             "SELECT count(*) FROM inventory_fact WHERE principal = 'delmonte' AND product_key IS NULL"
         )).scalar()
@@ -1460,12 +1236,8 @@ def resolve_delmonte_inventory_product_key(engine: Engine, schema: str, dry_run:
         )).scalar()
 
     unilever_touched = after_unilever_null - before_unilever_null
-    print(f"\n[Inventory_Fact.product_key delmonte backfill]")
-    print(f"  resolved:   {resolved}  (expected 3,792 against the frozen full-volume load)")
-    print(f"  still null: {still_null}  (expected 1,379 — genuinely unmatched sku_codes, "
-          f"flagged for the client, not fabricated)")
-    print(f"  unilever rows changed: {unilever_touched}"
-          + ("  <<< MISMATCH — expected 0" if unilever_touched != 0 else "  (expected 0, OK)"))
+    print(f"\n[Inventory_Fact.product_key delmonte backfill] resolved {resolved}, still null {still_null} "
+          f"(unmatched sku_codes, flagged not fabricated), unilever rows changed {unilever_touched}")
     if unilever_touched != 0:
         raise RuntimeError(
             f"resolve_delmonte_inventory_product_key touched {unilever_touched} Unilever "
@@ -1474,113 +1246,61 @@ def resolve_delmonte_inventory_product_key(engine: Engine, schema: str, dry_run:
     return {"resolved": resolved, "still_null": still_null, "unilever_touched": unilever_touched}
 
 
-def resolve_unilever_inventory_product_key(engine: Engine, schema: str, dry_run: bool) -> dict[str, int]:
-    """Runs after the ssis_soh/unilever inventory load (step 7). Fixes the
-    100%-null Inventory_Fact.product_key for principal='unilever' on a
-    fresh canonical rebuild — found by the 2026-09-17 column-gap audit
-    Part B: transform_ssis_soh()'s output dataframe has no product_key
-    column at all (confirmed: 13 columns, none named product_key), so
-    every canonical rebuild leaves this column entirely unresolved for
-    Unilever, same shape of gap as the Del Monte one fixed earlier this
-    session, just never noticed because `public` was populated by a
-    separate, non-canonical one-time script.
+def resolve_unilever_inventory_product_key(
+    engine: Engine | Connection, schema: str, dry_run: bool, staging_dir: Path = STAGING_DIR,
+) -> dict[str, int]:
+    """Runs after the ssis_soh/unilever inventory load. transform_ssis_soh()'s
+    output has no product_key column, so every load leaves it unresolved for
+    Unilever until this join runs (2026-09-17 column-gap audit Part B).
 
-    Provenance of `public`'s already-resolved values (recon, not fixed
-    here): `scratch/run_ssis_soh_load.py:46-59` does the join this
-    function reproduces, but as a raw one-time INSERT directly into
-    `inventory_fact`, bypassing `run_canonical_load.py`/FACT_PLAN
-    entirely — never run through this canonical pipeline. `public`'s
-    Unilever `product_dimension` rows come in two distinct, disjoint
-    product_key ranges: 1-1808 (1,807 demand SKUs, from
-    `sales_unilever_sku_demand`'s `_product_fk_spec("sku")` — the only
-    canonical creator of Unilever product_dimension rows) and 50723-51013
-    (291 SOH-only "Article Nos" with no demand history — DEC-22,
-    ARCHITECTURE.md:92). The 291-row batch's actual INSERT script is not
-    in this repo (`analytics/etl/transform_ssis_soh.py:250-292`'s R8 step
-    only ever wrote `product_dimension_candidates_r8.csv`, "PREPARED
-    ONLY — not inserted" per its own script's print statement,
-    `scratch/run_ssis_soh_transform.py:70`; grepped `scratch/append_sql.py`
-    and `scratch/execute_sql.py` plus their git history for the actual
-    INSERT — no hits). The high key range (starting at 50723) tells us
-    roughly when it ran relative to other inserts: after ~50,722 other
-    product_key values had already been consumed elsewhere (the bulk of
-    that churn being Del Monte's now-deduped generate_synthetic_dm.py-era
-    rows) — not from a fresh table.
-
-    CORRECTED 2026-09-18: an earlier version of this function was a plain
-    join only, and left the 291 SOH-only rows permanently unresolved on a
-    fresh rebuild (24,528/27,282) — treating "don't invent product_key
-    values" as "don't create the dimension rows at all", which was the
-    wrong conclusion. `product_key` is a GENERATED ALWAYS AS IDENTITY
-    column; nothing requires a fresh build's identity sequence to produce
-    `public`'s exact historical values (1-1808, 50723-51013) — only the
-    *sku_code* has to match, which is what every downstream join actually
-    keys on. Fix: this function now UPSERTS the 291 SOH-only products
-    first, from the real SOH source itself (Article No -> sku_code,
-    already renamed at Extract; Article Description -> product_name;
-    CATEGORY DESC -> category_path if present, else NULL) — the exact
-    (sku_code, product_name, category) triples DEC-22's R8 step already
-    computed and would have inserted, had its INSERT ever been committed
-    (see `product_dimension_candidates_r8.csv`,
-    `analytics/etl/transform_ssis_soh.py:250-292`). ON CONFLICT (principal,
-    grain, sku_code) — migration 0014's Unilever-only partial index —
-    DO NOTHING: on `public`, all 291 already exist, so this upsert is a
-    true no-op (their historical product_key values are untouched); on a
-    fresh scratch schema, it creates exactly 291 new rows with whatever
-    keys the sequence assigns, which is fine because everything downstream
-    (inventory_fact backfill, category/brand backfill) joins on sku_code,
-    never on the numeric key value."""
-    with engine.connect() as conn:
-        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+    First UPSERTS the SOH-only products (Article Nos with no demand history,
+    DEC-22) from the real SOH source itself (Article No -> sku_code, Article
+    Description -> product_name, CATEGORY DESC -> category_path, PACK SIZE ->
+    pack_size), most recent snapshot per SKU. ON CONFLICT (principal, grain,
+    sku_code) - migration 0014's Unilever-only partial index - DO NOTHING:
+    an existing row (every demand SKU, and all 291 SOH-only rows on public)
+    is never overwritten, its product_key never renumbered; on a fresh schema
+    the SOH-only rows are created with whatever keys the sequence assigns,
+    which is fine because everything downstream joins on sku_code. X1
+    (2026-09-22): SOH "PACK SIZE" on new rows only. `staging_dir` must hold
+    every SOH snapshot (a slice run stages them all under _soh_all), not just
+    the slice's month, so "most recent" means the same thing on every run."""
+    with _in_schema(engine, schema) as conn:
         before_delmonte_null = conn.execute(text(
             "SELECT count(*) FROM inventory_fact WHERE principal = 'delmonte' AND product_key IS NULL"
         )).scalar()
         before_dim_count = conn.execute(text(
             "SELECT count(*) FROM product_dimension WHERE principal = 'unilever' AND grain = 'sku'"
         )).scalar()
+        if dry_run:
+            print("\n[Inventory_Fact.product_key unilever backfill] DRY RUN: skipped.")
+            return {"resolved": 0, "still_null": 0, "new_dimension_rows": 0, "delmonte_touched": 0}
 
-    if dry_run:
-        print("\n[Inventory_Fact.product_key unilever backfill] DRY RUN: skipped "
-              "(product_dimension/inventory_fact aren't populated for real on a dry run).")
-        return {"resolved": 0, "still_null": 0, "new_dimension_rows": 0, "delmonte_touched": 0}
-
-    # No is_demo column at this raw staging stage — transform_ssis_soh.py
-    # sets it as a constant False for every row later (its own line 243);
-    # there is no synthetic ssis_soh variant, so every raw row here is real.
-    raw = pd.concat(
-        [pd.read_parquet(f) for f in sorted((STAGING_DIR / "ssis_soh").glob("*.parquet"))],
-        ignore_index=True,
-    )
-    named = raw.dropna(subset=["sku_code"]).sort_values("_period") if "_period" in raw.columns else raw.dropna(subset=["sku_code"])
-    latest = named.groupby("sku_code", as_index=False).last()
-    soh_products = latest[["sku_code", "article_description", "category_desc", "pack_size"]].rename(
-        columns={"article_description": "product_name", "category_desc": "category_path"}
-    )
-
-    with engine.begin() as conn:
-        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-        for row in soh_products.itertuples(index=False):
+        # No is_demo column at this raw staging stage — transform_ssis_soh.py
+        # sets it as a constant False for every row later; there is no
+        # synthetic ssis_soh variant, so every raw row here is real.
+        files = sorted((staging_dir / "ssis_soh").glob("*.parquet"))
+        if files:
+            raw = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+            named = raw.dropna(subset=["sku_code"]).sort_values("_period", kind="stable") if "_period" in raw.columns else raw.dropna(subset=["sku_code"])
+            latest = named.groupby("sku_code", as_index=False).last()
             conn.execute(text("""
                 INSERT INTO product_dimension (principal, grain, sku_code, category_path, product_name, pack_size, status)
-                VALUES ('unilever', 'sku', :sku_code, :category_path, :product_name, :pack_size, 'ACTIVE')
+                SELECT 'unilever', 'sku', v.sku_code, v.category_path, v.product_name, v.pack_size, 'ACTIVE'
+                FROM unnest(CAST(:sku_code AS text[]), CAST(:category_path AS text[]), CAST(:product_name AS text[]),
+                            CAST(:pack_size AS text[])) AS v(sku_code, category_path, product_name, pack_size)
                 ON CONFLICT (principal, grain, sku_code) WHERE principal = 'unilever' AND grain = 'sku'
                 DO NOTHING
             """), {
-                "sku_code": row.sku_code,
-                "product_name": row.product_name if pd.notna(row.product_name) else None,
-                "category_path": row.category_path if pd.notna(row.category_path) else None,
-                # X1 (2026-09-22): SOH "PACK SIZE", new rows only - DO NOTHING
-                # never overwrites a pack_size already on the dimension.
-                "pack_size": _pack_size_text(row.pack_size),
+                "sku_code": [str(s).strip() for s in latest["sku_code"]],
+                "category_path": [_nn(v) for v in latest["category_desc"]],
+                "product_name": [_nn(v) for v in latest["article_description"]],
+                "pack_size": [_pack_size_text(v) for v in latest["pack_size"]],
             })
         after_dim_count = conn.execute(text(
             "SELECT count(*) FROM product_dimension WHERE principal = 'unilever' AND grain = 'sku'"
         )).scalar()
-    new_dimension_rows = after_dim_count - before_dim_count
-
-    with engine.begin() as conn:
-        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-        result = conn.execute(text("""
+        resolved = conn.execute(text("""
             UPDATE inventory_fact f
             SET product_key = pd.product_key
             FROM product_dimension pd
@@ -1589,11 +1309,7 @@ def resolve_unilever_inventory_product_key(engine: Engine, schema: str, dry_run:
               AND pd.principal = 'unilever'
               AND pd.grain = 'sku'
               AND pd.sku_code = f.sku_code
-        """))
-        resolved = result.rowcount or 0
-
-    with engine.connect() as conn:
-        conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+        """)).rowcount or 0
         still_null = conn.execute(text(
             "SELECT count(*) FROM inventory_fact WHERE principal = 'unilever' AND product_key IS NULL"
         )).scalar()
@@ -1601,22 +1317,95 @@ def resolve_unilever_inventory_product_key(engine: Engine, schema: str, dry_run:
             "SELECT count(*) FROM inventory_fact WHERE principal = 'delmonte' AND product_key IS NULL"
         )).scalar()
 
+    new_dimension_rows = after_dim_count - before_dim_count
     delmonte_touched = after_delmonte_null - before_delmonte_null
-    print(f"\n[Inventory_Fact.product_key unilever backfill]")
-    print(f"  new dimension rows: {new_dimension_rows}  (expect 291 on a fresh build, 0 on public)")
-    print(f"  resolved:   {resolved}  (expected 27,282)"
-          + ("" if resolved == 27282 else "  <<< check"))
-    print(f"  still null: {still_null}  (expected 0)"
-          + ("" if still_null == 0 else "  <<< MISMATCH"))
-    print(f"  delmonte rows changed: {delmonte_touched}"
-          + ("  <<< MISMATCH — expected 0" if delmonte_touched != 0 else "  (expected 0, OK)"))
+    print(f"\n[Inventory_Fact.product_key unilever backfill] new dimension rows {new_dimension_rows}, "
+          f"resolved {resolved}, still null {still_null}, delmonte rows changed {delmonte_touched}")
     if delmonte_touched != 0:
         raise RuntimeError(
             f"resolve_unilever_inventory_product_key touched {delmonte_touched} Del Monte "
             f"inventory_fact rows — expected 0. Aborting before this reaches public."
         )
-    return {"resolved": resolved, "still_null": still_null, "new_dimension_rows": new_dimension_rows, "delmonte_touched": delmonte_touched}
-    return {"resolved": resolved, "still_null": still_null, "delmonte_touched": delmonte_touched}
+    return {"resolved": resolved, "still_null": still_null, "new_dimension_rows": new_dimension_rows,
+            "delmonte_touched": delmonte_touched}
+
+
+# --- Fixes 5 and 6 (dm_fixes batches 5-6, 2026-09-28; loader rules since 2026-09-30) ---------------------------
+
+DM_BRAND_ALIAS = REPO_ROOT / "config" / "alias_tables" / "delmonte_brand.csv"
+_DM_BRAND_SKIP = re.compile(r"^(?:[0-9A-Z]{3,4}\d{5}|\d+|-)$")
+DM_PRICE_LIST_SHEET = "Sheet1"
+
+
+def dm_brand(name: str | None, alias: dict[str, str]) -> str | None:
+    """First word of the product name, uppercased; an embedded SKU code, bare
+    number or '-' ahead of the name is skipped. Through
+    config/alias_tables/delmonte_brand.csv: a blank canonical is a
+    descriptive word (brand NULL). Same rule as dm_fixes batch 6."""
+    for word in (name or "").upper().split():
+        if not _DM_BRAND_SKIP.match(word):
+            return alias.get(word, word) or None
+    return None
+
+
+def load_dm_price_list(staging_dir: Path) -> dict[str, str | None]:
+    """sku_code -> pack size text from the price list: the 'Sheet1' of the
+    2025 Del Monte inventory workbooks (PRODUCT/ SKU CODE -> CASE PACK; no
+    separate price-list file exists in data/raw). Every copy must agree on
+    every code, as batch 5 checked - a copy that differs stops the load."""
+    copies = [pd.read_parquet(f) for f in sorted((staging_dir / "inventory_sign_off").glob(f"2025_*__{DM_PRICE_LIST_SHEET}.parquet"))]
+    if not copies:
+        raise RuntimeError(f"no 2025 inventory '{DM_PRICE_LIST_SHEET}' price-list sheet staged under {staging_dir.name}")
+    lists = [dict(zip(c["PRODUCT/ SKU CODE"].astype(str).str.strip(), c["CASE PACK"])) for c in copies]
+    if any(x != lists[0] for x in lists):
+        raise RuntimeError(f"the {len(copies)} staged price-list copies disagree on code -> CASE PACK")
+    return {k: _pack_size_text(v) for k, v in lists[0].items()}
+
+
+def apply_dm_pack_size_rule(engine: Engine | Connection, schema: str, dry_run: bool, price: dict[str, str | None]) -> int:
+    """Fix 5: Del Monte pack_size from the price list CASE PACK, on EXACT
+    sku_code = PRODUCT/ SKU CODE matches only (no 5-digit-core matching).
+    Fill-if-NULL: a pack_size already set (by a person, or by an earlier
+    run) is never overwritten."""
+    pairs = [(k, v) for k, v in price.items() if v is not None]
+    if dry_run or not pairs:
+        return 0
+    with _in_schema(engine, schema) as conn:
+        n = conn.execute(text("""
+            UPDATE product_dimension p SET pack_size = v.pack_size
+            FROM unnest(CAST(:codes AS text[]), CAST(:packs AS text[])) AS v(sku_code, pack_size)
+            WHERE p.principal = 'delmonte' AND p.grain = 'sku' AND p.sku_code = v.sku_code AND p.pack_size IS NULL
+        """), {"codes": [k for k, _ in pairs], "packs": [v for _, v in pairs]}).rowcount or 0
+    print(f"  delmonte pack_size from the price list (fix 5, fill-if-NULL): {n}")
+    return n
+
+
+def apply_dm_brand_rule(engine: Engine | Connection, schema: str, dry_run: bool) -> int:
+    """Fix 6: Del Monte brand by the product name's first-token rule, for SKUs
+    with real inventory whose brand AND brand_source are both unset
+    (fill-if-NULL). A descriptive first word maps to NULL and stays NULL."""
+    if dry_run:
+        return 0
+    import csv as _csv
+    with open(DM_BRAND_ALIAS, encoding="utf-8", newline="") as fh:
+        alias = {r["raw"]: r["canonical"] for r in _csv.DictReader(fh)}
+    with _in_schema(engine, schema) as conn:
+        rows = conn.execute(text("""
+            SELECT p.product_key, p.product_name FROM product_dimension p
+            WHERE p.principal = 'delmonte' AND p.grain = 'sku' AND p.brand IS NULL AND p.brand_source IS NULL
+              AND EXISTS (SELECT 1 FROM inventory_fact f WHERE f.product_key = p.product_key AND NOT f.is_demo)
+        """)).fetchall()
+        target = [(int(k), dm_brand(name, alias)) for k, name in rows]
+        target = [(k, b) for k, b in target if b]
+        n = 0
+        if target:
+            n = conn.execute(text("""
+                UPDATE product_dimension p SET brand = v.brand, brand_source = 'dm_name_first_token_rule'
+                FROM unnest(CAST(:keys AS bigint[]), CAST(:brands AS text[])) AS v(product_key, brand)
+                WHERE p.product_key = v.product_key
+            """), {"keys": [k for k, _ in target], "brands": [b for _, b in target]}).rowcount or 0
+    print(f"  delmonte brand by first-token rule (fix 6, fill-if-NULL): {n} of {len(rows)} unbranded")
+    return n
 
 
 # ---------------------------------------------------------------------------
@@ -1704,34 +1493,71 @@ def _read_ledger(engine: Engine, schema: str) -> dict[str, str | None] | None:
     return {r[0]: r[1] for r in rows}
 
 
+def migration_checksums(path: Path) -> tuple[str, str]:
+    """(LF form, CRLF form) sha256 of a migration file's bytes. The ledger
+    accepts either: migration 0019 seeded six rows (0001, both 0002 files,
+    0003, 0012, 0013) from a CRLF (core.autocrlf=true) checkout, so those six
+    hold CRLF hashes while the other 25 hold LF hashes (verified against
+    public.schema_migrations 2026-09-30). .gitattributes now pins *.sql to LF,
+    so the working copy is LF everywhere; accepting both forms keeps all 31
+    stored rows valid without rewriting a single one. An edit that changes
+    anything besides line endings still fails both comparisons."""
+    lf = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(lf).hexdigest(), hashlib.sha256(lf.replace(b"\n", b"\r\n")).hexdigest()
+
+
+def pending_migrations(engine: Engine, schema: str) -> list[str]:
+    """Migration files the schema's ledger has not recorded (every file when
+    there is no ledger yet). Raises on a checksum that matches neither form."""
+    migrations = sorted(MIGRATIONS_DIR.glob("0*.sql"))
+    _assert_no_new_number_collision(migrations)
+    applied = _read_ledger(engine, schema)
+    pending = []
+    for f in migrations:
+        if applied is None or f.name not in applied:
+            pending.append(f.name)
+            continue
+        recorded = applied[f.name]
+        if recorded is not None and recorded not in migration_checksums(f):
+            raise RuntimeError(
+                f"{f.name} was applied with checksum {recorded} but the file on disk "
+                f"now hashes to {migration_checksums(f)[0]} (LF form). A migration was edited after it was "
+                f"applied. Write a new migration instead of editing an applied one."
+            )
+    return pending
+
+
 def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_public: bool = False) -> None:
+    """Brings `schema` up to date through the ledger. A brand-new schema (no
+    ledger) runs schema.sql and then every migration; a ledgered schema never
+    re-runs schema.sql (its CREATE OR REPLACE VIEW statements are not a
+    no-op on a live schema) and applies only the migrations its ledger lacks.
+    Each migration and its ledger row commit in one transaction."""
     _require_scratch_schema(schema, allow_public=allow_public)
-    print(f"\n[schema] ensuring '{schema}' exists" + (" (dry-run: SELECT-only check)" if dry_run else ""))
+    print(f"\n[schema] ensuring '{schema}' is migrated" + (" (dry-run: SELECT-only check)" if dry_run else ""))
     if dry_run:
-        with engine.connect() as conn:
-            conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-            # dry-run: don't create anything, just confirm the connection works
-            conn.execute(text("SELECT 1"))
+        print(f"  pending: {pending_migrations(engine, schema) or 'none'}")
         return
 
     migrations = sorted(MIGRATIONS_DIR.glob("0*.sql"))
     _assert_no_new_number_collision(migrations)
-    files = [SCHEMA_SQL] + migrations
     with engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
     # Read ONCE, before the loop. On a fresh schema this is None (0019 has not
     # run yet) so every file applies and 0019's backfill seeds the other 19.
-    # On every later run it is populated, and nothing re-applies.
     applied = _read_ledger(engine, schema)
+    files = ([SCHEMA_SQL] if applied is None else []) + migrations
+    if applied is not None:
+        print(f"  skipped {SCHEMA_SQL.relative_to(REPO_ROOT)} — '{schema}' already has a {LEDGER_TABLE} ledger")
     for f in files:
         is_migration = f != SCHEMA_SQL
-        checksum = hashlib.sha256(f.read_bytes()).hexdigest() if is_migration else None
+        checksum = migration_checksums(f)[0] if is_migration else None
         if is_migration and applied is not None and f.name in applied:
             recorded = applied[f.name]
-            if recorded is not None and recorded != checksum:
+            if recorded is not None and recorded not in migration_checksums(f):
                 raise RuntimeError(
                     f"{f.name} was applied with checksum {recorded} but the file on disk "
-                    f"now hashes to {checksum}. A migration was edited after it was applied. "
+                    f"now hashes to {checksum} (LF form). A migration was edited after it was applied. "
                     f"Write a new migration instead of editing an applied one."
                 )
             print(f"  skipped {f.relative_to(REPO_ROOT)} — already in {LEDGER_TABLE}")
@@ -1742,42 +1568,12 @@ def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_publ
             continue
         with engine.begin() as conn:
             # SET LOCAL is transaction-scoped only - never leaks to another
-            # session or a later transaction on this same connection. This
-            # is the ONE place a schema is ever set for this whole script.
-            # Uses text()+bindparams here (not exec_driver_sql) because this
-            # one statement genuinely needs a real bind parameter, and it
-            # has no literal `%` in it.
+            # session or a later transaction on this same connection.
             conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
-            # exec_driver_sql bypasses SQLAlchemy's text()/bind-parameter
-            # layer entirely (passes the SQL straight to psycopg2), which
-            # matters because these files' comments contain literal `%`
-            # characters (e.g. "~79% of Unilever demand SKUs" in migration
-            # 0011) that text() misreads as psycopg2 paramstyle
-            # placeholders and silently corrupts execution — caught
-            # 2026-09-14: an earlier version using text() per-statement let
-            # migration 0011's ADD COLUMN succeed but then raised
-            # UndefinedColumn on the very next COMMENT ON COLUMN statement
-            # (the schema-drop rollback fired correctly and cleanly either
-            # way, confirming that part of the design). exec_driver_sql
-            # also natively runs a full `;`-separated multi-statement
-            # script in one call (Postgres' simple query protocol).
-            #
-            # STILL not enough on its own: exec_driver_sql passes an empty
-            # parameters object to psycopg2's cursor.execute(), and
-            # psycopg2 tries to interpret ANY literal `%` in the query as a
-            # paramstyle placeholder whenever a parameters argument is
-            # present at all (even empty) - raising
-            # "immutabledict is not a sequence". schema.sql itself has a
-            # trailing INLINE comment with a literal `%` on one line
-            # (`discount_rate_label TEXT, -- ... 'LESS 2%' ...`) that
-            # _strip_sql_file() does not remove (it only strips whole
-            # comment LINES, not trailing inline comments after real code -
-            # a second gap in the same category, caught immediately after
-            # the first by actually running this against a live schema
-            # rather than trusting a static check). Doubling every literal
-            # `%` to `%%` is psycopg2's own documented escape for this -
-            # safe unconditionally here, real DDL/COMMENT text in this
-            # codebase never needs an un-doubled `%s`/`%()s` sequence.
+            # exec_driver_sql passes the whole multi-statement file straight to
+            # psycopg2 (simple query protocol). Every literal `%` is doubled -
+            # psycopg2 reads `%` as a placeholder whenever a parameters object
+            # is present at all (caught 2026-09-14, migration 0011's comments).
             conn.exec_driver_sql(cleaned_sql.replace("%", "%%"))
             # Recorded in the SAME transaction as the apply, so a failed
             # migration can never leave a row claiming it succeeded. Silently
@@ -1814,7 +1610,7 @@ def _drop_scratch_schema(engine: Engine, schema: str) -> None:
 # The 6 tables the canonical loader actually populates - see FACT_PLAN plus
 # the separate ssis_soh path. Everything else in public (product_dimension,
 # customer_dimension, salesman_dimension, supplier_dimension, date_dimension,
-# abc_classification, forecast_result, lp_recommendation, users, audit_log)
+# the ABC/forecast/LP output tables, users, audit_log)
 # is either updated in place (product_dimension, date_dimension) or never
 # touched at all by --target-public - see main()'s cutover block.
 CANONICAL_FACT_TABLES = [
@@ -1915,247 +1711,64 @@ def _preflight_dimension_identity_check(engine: Engine) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--schema", default="ssm_canonical", help="Target scratch schema (never 'public').")
-    parser.add_argument("--dry-run", action="store_true", help="Compute everything, write nothing.")
-    parser.add_argument("--quiet", action="store_true", help="Suppress per-SKU backfill log lines (tally still prints).")
-    parser.add_argument(
-        "--schema-only", action="store_true",
-        help="Apply schema.sql + all migrations (including 0011) to the scratch schema, "
-             "then exit — no fact loads, no backfill. A real DB write (DDL only, no data), "
-             "scoped to the scratch schema. Use to apply migration 0011 as its own reviewable "
-             "step before a real (non-dry-run) fact load.",
-    )
+    parser.add_argument("--schema", default="ssm_canonical", help="Target schema: a scratch schema, or 'public' with --target-public.")
     parser.add_argument(
         "--target-public", action="store_true",
-        help="DANGEROUS, explicit-only: target the live 'public' schema (Phase 1 cutover, "
-             "2026-09-15, Yuan approved) instead of a scratch schema. Requires --schema public "
-             "as well (both must be explicit — no default path leads here). Deletes ONLY the "
-             "6 canonical fact tables' existing rows first (never product_dimension or any "
-             "other table), then loads fresh, resolving dimension FKs against public's "
-             "EXISTING rows (preserves every product_key/customer_key/salesman_key value — "
-             "does not renumber anything abc_classification/forecast_result/lp_recommendation "
-             "already reference). Requires a proven-restorable backup to already exist "
-             "(scripts/backup_live_db.py) — this flag does not create one. On any failure "
-             "AFTER the delete step, this does NOT auto-rollback (there is no scratch schema "
-             "to drop) — it stops and tells you to restore from the backup.",
+        help="Explicit-only: allow --schema public. Required together with --schema public for any run "
+             "against the live schema. Loads refuse while a migration is pending; migrations reach public "
+             "only through --schema-only.",
     )
-    parser.add_argument(
-        "--limit-rows", type=int, default=None, metavar="N",
-        help="Smoke-test convenience (2026-09-15 incident verification): truncate each fact's "
-             "deduped rows to the first N (a plain head(N), not a sample) before load. Exercises "
-             "the real code path (dimension resolution, exclusions, load) at low volume. "
-             "Expected/actual row-count targets will show MISMATCH under a limit — that's "
-             "correct, not a regression; this flag verifies BEHAVIOR, never trust the resulting "
-             "counts. Combine with --target-public for a safe first real-write test after a fix.",
-    )
+    parser.add_argument("--schema-only", action="store_true",
+                        help="Apply pending migrations through the ledger, then exit. No loads, no data gates.")
+    parser.add_argument("--slice", action="append", default=[], metavar="SPEC",
+                        help="principal:table:YYYY-MM[:branch[:source]] - repeatable. See the module docstring.")
+    parser.add_argument("--all-slices", action="store_true",
+                        help="Full rebuild: every slice under data/raw, family-wide transform, one transaction per slice.")
+    parser.add_argument("--file", action="append", default=[], metavar="PATH",
+                        help="Use this raw file (under the repo) instead of discovery for the slice(s) of its family. Repeatable.")
+    parser.add_argument("--allow-shrink", action="store_true",
+                        help="Load a slice even if its real rows drop more than 5%% (event status warning, audit_log row).")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Stage, transform and plan every slice; write only its etl_load_event row (dry_run = true).")
+    parser.add_argument("--refresh-coverage", action="store_true",
+                        help="Recompute etl_coverage for every principal x table x month (2021-01 .. this month).")
+    parser.add_argument("--quiet", action="store_true", help="Suppress per-SKU backfill log lines.")
     args = parser.parse_args()
+
+    modes = [bool(args.schema_only), bool(args.slice), bool(args.all_slices), bool(args.refresh_coverage)]
+    if sum(modes) != 1:
+        parser.error("pick exactly one of --schema-only, --slice ..., --all-slices, --refresh-coverage")
     if args.schema_only and args.dry_run:
         parser.error("--schema-only and --dry-run are mutually exclusive (schema-only always writes DDL for real).")
-    if args.target_public:
-        if args.schema != "public":
-            parser.error("--target-public requires --schema public (both must be explicit, no default path leads here).")
-        if args.dry_run or args.schema_only:
-            parser.error("--target-public cannot be combined with --dry-run or --schema-only.")
-    else:
-        _require_scratch_schema(args.schema)
+    if args.file and not (args.slice or args.all_slices):
+        parser.error("--file only applies to --slice / --all-slices")
+    if args.target_public != (args.schema == "public"):
+        parser.error("--target-public and --schema public go together (both explicit, no default path leads to public).")
+    _require_scratch_schema(args.schema, allow_public=args.target_public)
 
     logging.basicConfig(level=logging.WARNING if args.quiet else logging.INFO, format="%(message)s")
-
-    print(f"=== run_canonical_load: schema='{args.schema}'  dry_run={args.dry_run}  "
-          f"schema_only={args.schema_only}  target_public={args.target_public} ===")
-    if args.target_public:
-        print("!!! TARGETING LIVE 'public' SCHEMA — Phase 1 cutover, explicit go required and given !!!")
+    print(f"=== run_canonical_load: schema='{args.schema}'  dry_run={args.dry_run}  target_public={args.target_public} ===")
 
     cfg = get_settings()
     engine = create_engine(cfg.supabase_db_url)
 
-    manifest_path = STAGING_DIR / "_manifest.json"
-    print("\n[gates]")
-    reject_result = check_reject_rate_gate(manifest_path)
-    print(f"  reject-rate gate: {reject_result.rejected}/{reject_result.staged + reject_result.rejected} "
-          f"({reject_result.reject_rate:.1%}) <= {reject_result.threshold:.0%} — PASSED")
-    signoff_result = check_signoff_gate(TRANSFORM_DIR)
-    print(f"  sign-off gate: '{signoff_result.decision}' by {signoff_result.decided_by} "
-          f"at {signoff_result.decided_at} — PASSED")
-    # Both raise on failure (uncaught, on purpose — see module docstring).
-    # Nothing below this line has touched the schema yet.
+    if args.schema_only:
+        ensure_scratch_schema(engine, args.schema, dry_run=False, allow_public=args.target_public)
+        print(f"\n--schema-only: '{args.schema}' is migrated. No loads. Exiting.")
+        return 0
 
-    results: list[TableRunResult] = []
-    try:
-        ensure_scratch_schema(engine, args.schema, args.dry_run, allow_public=args.target_public)
-        if args.schema_only:
-            print(f"\n--schema-only: schema.sql + migrations (incl. 0011) applied to "
-                  f"'{args.schema}'. No fact loads, no backfill. Exiting.")
-            return 0
-
-        if args.target_public:
-            _preflight_dimension_identity_check(engine)
-
-            # Explicit, visible, its own step - not folded into the loader's
-            # per-table upsert logic. load_to_supabase() upserts (ON
-            # CONFLICT DO UPDATE); without this, a row already in public
-            # whose natural key no longer appears in the fresh Transform
-            # output would be left behind as stale leftover data, not
-            # replaced. Scoped to exactly the 6 canonical fact tables -
-            # product_dimension and every non-canonical table (users,
-            # audit_log, abc_classification, forecast_result,
-            # lp_recommendation, customer_dimension, salesman_dimension,
-            # supplier_dimension) are never touched by this statement.
-            print(f"\n[cutover] deleting existing rows from {len(CANONICAL_FACT_TABLES)} "
-                  f"canonical fact tables in 'public' (not product_dimension, not any "
-                  f"other table) ...")
-            with engine.begin() as conn:
-                for t in CANONICAL_FACT_TABLES:
-                    before = conn.execute(text(f'SELECT count(*) FROM public."{t}"')).scalar()
-                    conn.execute(text(f'DELETE FROM public."{t}"'))
-                    print(f"  {t}: deleted {before} existing rows")
-
-        scratch_engine = _scratch_engine(engine, args.schema, allow_public=args.target_public)
-
-        # Date_Dimension must exist before any fact with a date FK loads
-        # (sales_fact.invoice_date, salesreturn_fact.return_date,
-        # inventory_fact.snapshot_date all reference it). Found missing
-        # 2026-09-14, the first real load attempt: schema.sql/migrations
-        # create the TABLE but nothing seeds its rows - that has always
-        # been analytics/db/seed_date_dim.py's own separate job, reused
-        # here rather than duplicated. Skipped entirely in --dry-run (no
-        # writes) - a dry run's column/target checks don't need real date
-        # rows, only a fact table with the right shape, which
-        # ensure_scratch_schema's DDL already provides.
-        if not args.dry_run:
-            from analytics.db.seed_date_dim import upsert_date_dimension
-            date_result, date_validation = upsert_date_dimension(scratch_engine)
-            print(f"\n[date_dimension] seeded {date_validation.row_count} calendar days "
-                  f"({date_result.rows_upserted} upserted)")
-
-        run_id = f"{pd.Timestamp.now(tz='UTC').strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
-        print(f"\n[run] run_id={run_id} (etl_quarantine.run_id)")
-        for item in FACT_PLAN:
-            results.append(_run_one_fact(item, scratch_engine, args.dry_run, limit_rows=args.limit_rows, run_id=run_id))
-        dup_records = known_duplicate_file_records()
-        n_dup = write_quarantine(scratch_engine, run_id, dup_records, args.dry_run)
-        print(f"  [salesreturn_fact] {len(dup_records)} rows of Extract's known duplicate files, {n_dup} written to {QUARANTINE_TABLE}")
-        # ssis_soh — separate path, not source_of_truth.yaml-driven
-        soh_result = transform_ssis_soh(staging_dir=STAGING_DIR, real_sku_codes=None)
-        soh_df = soh_result.inventory_fact_df
-        if args.limit_rows is not None:
-            soh_df = soh_df.head(args.limit_rows).copy()
-            print(f"  [inventory_fact/ssis_soh] --limit-rows {args.limit_rows}: truncated to {len(soh_df)} rows")
-        soh_load_input = _project_to_table_columns(
-            soh_df, "inventory_fact", scratch_engine, [],
-        )
-        # Found 2026-09-14 (Phase 1d, real load, flaky ~1-in-3 failure):
-        # transform_ssis_soh.NATURAL_KEY is ["sku_code", "snapshot_date"]
-        # (region is always None for every Unilever SOH row - see that
-        # module's own code) - its dedup_facts() call flags but KEEPS every
-        # row of a conflicting group under that 2-column key, same
-        # "flagged, not resolved" posture as every other fact. The
-        # ON CONFLICT target below is ["sku_code", "snapshot_date",
-        # "region"], which matches Inventory_Fact's PLAIN UNIQUE(sku_code,
-        # snapshot_date, region) constraint (schema.sql) - but region is
-        # always NULL here, and NULL <> NULL under plain UNIQUE semantics,
-        # so that constraint never actually fires for this data: every
-        # insert here is a bare INSERT in practice, not a real upsert. What
-        # DOES fire is the OTHER real constraint, migration 0010's partial
-        # expression index uq_inventory_unilever_soh (sku_code,
-        # snapshot_date, COALESCE(region,''), is_demo) WHERE
-        # principal='unilever' - COALESCE strips the NULL-distinctness, so
-        # a leftover conflicting-group row pair hits a real
-        # UniqueViolation, non-deterministically (depends on which two
-        # conflicting rows land in the same INSERT batch) - explaining the
-        # flakiness. Same root cause and same fix as
-        # _drop_conflicting_group_rows() applied to every FACT_PLAN table
-        # above; natural_key here matches transform_ssis_soh's own key
-        # (region excluded - it carries no discriminating power).
-        soh_before_conflicts = soh_load_input
-        soh_load_input, soh_excluded_conflicting = _drop_conflicting_group_rows(
-            soh_load_input, "inventory_fact", ["sku_code", "snapshot_date"],
-        )
-        soh_quarantine = _quarantine_records(
-            soh_result.rejected_rows, "inventory_fact", "transform_ssis_soh",
-            "null sku_code: the per-snapshot totals row in the sheet body, not a SKU",
-        ) + _quarantine_records(
-            soh_before_conflicts.loc[soh_before_conflicts.index.difference(soh_load_input.index)],
-            "inventory_fact", "_drop_conflicting_group_rows",
-            "shares (sku_code, snapshot_date) with a row that differs on a business column",
-        )
-        n_soh_quarantined = write_quarantine(scratch_engine, run_id, soh_quarantine, args.dry_run)
-        print(f"  [inventory_fact/ssis_soh] {len(soh_quarantine)} excluded source rows, "
-              f"{n_soh_quarantined} written to {QUARANTINE_TABLE}")
-        soh_load = load_to_supabase(
-            soh_load_input, "inventory_fact", scratch_engine,
-            ["sku_code", "snapshot_date", "region"], dry_run=args.dry_run,
-        )
-        print(f"\n[inventory_fact (ssis_soh/unilever)]")
-        print(f"  rows: expected 27282 / actual {soh_load.rows_attempted}"
-              + ("" if soh_load.rows_attempted == 27282 else "  <<< MISMATCH"))
-        # 2026-09-17 column-gap audit Part B: transform_ssis_soh()'s output
-        # has no product_key column at all, so this join-based backfill runs
-        # right after the SOH load, same shape as the delmonte backfill
-        # below. Must run before category/brand backfill only in the sense
-        # that ordering doesn't matter here (unlike delmonte's dependency on
-        # the new sku-dimension-build step) — placed here to stay next to
-        # the fact load it fixes.
-        uni_fk_result = resolve_unilever_inventory_product_key(engine, args.schema, args.dry_run)
-        # backfill's raw SQL needs the RAW engine + its own SET LOCAL (see
-        # module docstring's SCHEMA SCOPING note) — schema_translate_map
-        # does not apply to text() SQL.
-        uni_meta_result = resolve_unilever_demand_product_metadata(engine, args.schema, args.dry_run)
-        tally = run_category_brand_backfill(engine, args.schema, args.dry_run)
-        # Step 8a.5 (2026-09-17, column-gap audit item 3 precursor): must run
-        # AFTER migration 0016 has landed (dedup + the new (principal,
-        # sku_code) partial unique index — ensure_scratch_schema() already
-        # applies every migrations/*.sql file before any FACT_PLAN fact
-        # loads run) and BEFORE the product_key backfill below, which reads
-        # the rows this step creates/refreshes.
-        dm_dim_result = resolve_delmonte_sku_dimension(engine, args.schema, args.dry_run)
-        # Step 8b: must run AFTER the category/brand backfill and the new
-        # dimension-build step above.
-        inv_fk_result = resolve_delmonte_inventory_product_key(engine, args.schema, args.dry_run)
-    except Exception:
-        if args.target_public:
-            # No scratch schema to drop - and _drop_scratch_schema() must
-            # never be handed 'public' even if some future edit here
-            # forgot this check (it has its own _require_scratch_schema
-            # call that would refuse it anyway - this is belt-and-suspenders,
-            # not the only guard). public is left in whatever state the
-            # DELETE + partial reload reached; the backup taken before this
-            # run is the real rollback path, restored manually, not
-            # automatically - an automatic partial-cutover "fix" here would
-            # be guessing at intent on a live database, which this whole
-            # session's anti-fabrication stance rules out.
-            print("\n!!! FAILURE during --target-public run. NOT auto-rolling-back "
-                  "(there is no scratch schema to drop, and this script will never "
-                  "touch 'public' with a DROP). 'public' may be left with some or all "
-                  "of the 6 canonical fact tables deleted/partially reloaded. "
-                  "Restore from the pre-cutover backup (scripts/backup_live_db.py "
-                  "--verify <backup dir>) before doing anything else.")
-        elif not args.dry_run:
-            # KEPT, not dropped (2026-09-22): the 2026-09-21 rebuild failed at its
-            # last step and this path dropped 18 minutes of loaded scratch data,
-            # the only evidence of what had loaded. A scratch schema is never read
-            # by the app; drop it by hand once the failure is understood.
-            print(f"\n!!! FAILURE: scratch schema '{args.schema}' KEPT as the failed run left it "
-                  f"(partial load). Inspect it, then DROP SCHEMA \"{args.schema}\" CASCADE by hand.")
-        raise
-
-    mismatches = [r for r in results if r.mismatch]
-    print("\n=== summary ===")
-    for r in results:
-        print(f"  {r.label}: {r.actual_rows} rows" + ("  MISMATCH" if r.mismatch else ""))
-    print(f"  unilever demand product metadata: {uni_meta_result}")
-    print(f"  category_path_source split: {tally}")
-    print(f"  delmonte sku-grain product_dimension build: {dm_dim_result}")
-    print(f"  delmonte inventory_fact.product_key backfill: {inv_fk_result}")
-    print(f"  unilever inventory_fact.product_key backfill: {uni_fk_result}")
-    print(f"\n{'DRY RUN — nothing written.' if args.dry_run else 'Load complete.'}")
+    # A load never applies a migration to public behind the operator's back;
+    # a scratch schema is brought up to date (or created) first.
     if args.target_public:
-        print("Cutover load into 'public' complete. Next: step 3 verification "
-              "(row counts vs frozen targets, non-loaded tables intact, backend connects).")
-    else:
-        print("Next: run scripts/diff_scratch_vs_live.py, then the cutover decision is yours.")
+        pending = pending_migrations(engine, args.schema)
+        if pending:
+            print(f"\nrefusing: migrations pending on public: {pending}. Apply them first with --schema-only.")
+            return 1
+    elif not args.dry_run:
+        ensure_scratch_schema(engine, args.schema, dry_run=False)
 
-    return 1 if mismatches else 0
+    from scripts import load_slices
+    return load_slices.run(engine, args)
 
 
 if __name__ == "__main__":

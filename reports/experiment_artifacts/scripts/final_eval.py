@@ -28,8 +28,8 @@ def global_model():
     import psycopg2, xgboost as xgb
     from dotenv import load_dotenv
     load_dotenv(os.path.join(REPO, ".env"))
-    conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"]); conn.set_session(readonly=True)
-    cur = conn.cursor()
+    conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"])
+    cur = conn.cursor(); cur.execute("SET TRANSACTION READ ONLY")  # transaction-scoped READ ONLY, never session-level (pooler leak)
     cur.execute("""SELECT product_key, calendar_month, quantity_sold FROM unilever_sku_demand_fact_real
                    WHERE product_key = ANY(%s) AND calendar_month BETWEEN '2023-01' AND %s""", (sorted(P.pk.unique().tolist()), END))
     d = pd.DataFrame(cur.fetchall(), columns=["pk", "month", "q"]); conn.close()

@@ -45,7 +45,11 @@ def test_fake_booking_is_marked_only_on_the_hidden_sheet_and_only_for_real_rows(
                        "is_demo": [False, False, False, True]})
     out, report = flag_source_quarantine(df, "sales_register")
     assert out[QUARANTINE_REASON_COLUMN].tolist()[0] == "source remark: FAKE BOOKING"
-    assert out[QUARANTINE_REASON_COLUMN].iloc[1:].isna().all() and report["marked"] == 1
+    # Fix 7 (2026-09-30): the sheet's other REAL rows are held pending SSM, not loaded; the demo
+    # row and the ordinary sheet stay unmarked.
+    assert out[QUARANTINE_REASON_COLUMN].iloc[2].startswith("sheet 'PANGASINAN SALES REGISTER (2)'")
+    assert out[QUARANTINE_REASON_COLUMN].iloc[[1, 3]].isna().all()
+    assert report == {"marked": 2, "held": 1}
 
 
 def test_stale_purchase_cells_are_marked_in_2025_09_only():

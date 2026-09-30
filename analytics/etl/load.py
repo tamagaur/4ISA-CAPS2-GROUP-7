@@ -23,12 +23,24 @@ from __future__ import annotations
 
 import json
 import random
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import Engine, MetaData, Table, select, text
+from sqlalchemy import Connection, Engine, MetaData, Table, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+
+def _begin(bind: Engine | Connection):
+    """A transaction on an Engine, or the caller's own open transaction when
+    handed a Connection (2026-09-30, slice loads: one transaction per slice,
+    so dimension inserts and fact inserts commit or roll back together)."""
+    return nullcontext(bind) if isinstance(bind, Connection) else bind.begin()
+
+
+def _connect(bind: Engine | Connection):
+    return nullcontext(bind) if isinstance(bind, Connection) else bind.connect()
 
 
 @dataclass
@@ -117,7 +129,7 @@ def build_dimension_key_frame(df: pd.DataFrame, spec: DimensionFKSpec) -> tuple[
 
 
 def resolve_dimension_fk(
-    df: pd.DataFrame, engine: Engine, spec: DimensionFKSpec, dry_run: bool = False,
+    df: pd.DataFrame, engine: Engine | Connection, spec: DimensionFKSpec, dry_run: bool = False,
 ) -> tuple[pd.DataFrame, DimensionResolutionReport]:
     """Look up (or insert, if genuinely new) the dimension row matching
     each df row's natural key, and attach its surrogate key as
@@ -155,7 +167,7 @@ def resolve_dimension_fk(
     if not distinct_keys.empty:
         if not dry_run:
             records = distinct_keys.to_dict(orient="records")
-            with engine.begin() as conn:
+            with _begin(engine) as conn:
                 stmt = pg_insert(dim_table).values(records)
                 stmt = stmt.on_conflict_do_nothing(
                     index_elements=spec.dimension_natural_key,
@@ -170,7 +182,7 @@ def resolve_dimension_fk(
         # Also how dry_run resolves fk values for already-existing rows
         # without ever inserting - this SELECT is read-only either way.
         select_cols = [dim_table.c[spec.dimension_pk]] + [dim_table.c[c] for c in spec.dimension_natural_key]
-        with engine.connect() as conn:
+        with _connect(engine) as conn:
             existing = pd.DataFrame(
                 conn.execute(select(*select_cols)).fetchall(),
                 columns=[spec.dimension_pk] + spec.dimension_natural_key,
@@ -329,13 +341,14 @@ def check_signoff_gate(transform_dir: Path) -> SignoffGateResult:
 def load_to_supabase(
     df: pd.DataFrame,
     table_name: str,
-    engine: Engine,
+    engine: Engine | Connection,
     natural_key: list[str],
     batch_size: int = 500,
     dimension_fks: list[DimensionFKSpec] | None = None,
     manifest_path: Path | None = None,
     transform_dir: Path | None = None,
     dry_run: bool = False,
+    on_conflict_update: bool = True,
 ) -> LoadResult:
     """Upsert df into table_name on natural_key using
     INSERT ... ON CONFLICT (natural_key) DO UPDATE. Raises if the
@@ -381,6 +394,12 @@ def load_to_supabase(
     an actual write can still fail for reasons a dry run can't see (a
     constraint only enforced at INSERT time, a concurrent write from
     elsewhere).
+
+    `engine` may be a Connection (2026-09-30): the writes then run inside the
+    caller's open transaction instead of their own. on_conflict_update=False
+    issues a plain INSERT - a slice load deletes the rows it owns first, so a
+    key that still collides belongs to another slice and must raise, never be
+    overwritten by ON CONFLICT DO UPDATE.
     """
     if manifest_path is not None:
         check_reject_rate_gate(manifest_path)
@@ -459,12 +478,13 @@ def load_to_supabase(
         )
 
     total_upserted = 0
-    with engine.begin() as conn:
+    with _begin(engine) as conn:
         for start in range(0, len(records), batch_size):
             batch = records[start:start + batch_size]
             stmt = pg_insert(table).values(batch)
-            update_cols = {c: stmt.excluded[c] for c in df_columns if c not in natural_key}
-            stmt = stmt.on_conflict_do_update(index_elements=natural_key, set_=update_cols)
+            if on_conflict_update:
+                update_cols = {c: stmt.excluded[c] for c in df_columns if c not in natural_key}
+                stmt = stmt.on_conflict_do_update(index_elements=natural_key, set_=update_cols)
             result = conn.execute(stmt)
             total_upserted += result.rowcount if result.rowcount is not None and result.rowcount >= 0 else len(batch)
 

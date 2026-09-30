@@ -1,4 +1,4 @@
-"""Run scripts/run_baseline_forecast.py main() down its --write path on a READ-ONLY session, capturing every
+"""Run scripts/run_baseline_forecast.py main() down its --write path in a READ-ONLY transaction, capturing every
 Forecast_Result upsert instead of executing it. Report CSV/MD writers are stubbed (no repo files touched).
 Usage: python capture_router.py <out.json>"""
 import json, os, sys
@@ -31,7 +31,9 @@ class Conn:
 
 def connect():
     rbf.load_dotenv(r"C:\Users\kyuan\Capstone-Project\.env", override=False)
-    c = psycopg2.connect(os.environ["SUPABASE_DB_URL"]); c.set_session(readonly=True, autocommit=True)
+    # transaction-scoped READ ONLY, never session-level (pooler leak). Autocommit stays off and Conn.commit/rollback
+    # are no-ops, so the whole run is this one read-only transaction; close() discards it.
+    c = psycopg2.connect(os.environ["SUPABASE_DB_URL"]); c.cursor().execute("SET TRANSACTION READ ONLY")
     return Conn(c)
 
 

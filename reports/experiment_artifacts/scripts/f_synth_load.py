@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 REPO = r"C:\Users\kyuan\Capstone-Project"; OUT = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(REPO, ".env"))
 d = pickle.load(open(os.path.join(OUT, "a.pkl"), "rb")); cohort = d["cohort"]
-conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"]); conn.set_session(readonly=True)
-cur = conn.cursor()
+conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"])
+cur = conn.cursor(); cur.execute("SET TRANSACTION READ ONLY")  # transaction-scoped READ ONLY, never session-level (pooler leak)
 cur.execute("""SELECT is_demo, COUNT(*), COUNT(quantity_sold), COUNT(*) FILTER (WHERE quantity_sold='NaN'),
                       COUNT(*) FILTER (WHERE quantity_sold<0), COUNT(*) FILTER (WHERE quantity_sold=0),
                       MIN(calendar_month), MAX(calendar_month), COUNT(DISTINCT product_key)

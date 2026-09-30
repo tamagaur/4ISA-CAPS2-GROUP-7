@@ -442,8 +442,8 @@ def load_real_evidence_skus() -> set:
     load_dotenv(REPO_ROOT / ".env")
     conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"])
     try:
-        conn.set_session(readonly=True)
         with conn.cursor() as cur:
+            cur.execute("SET TRANSACTION READ ONLY")  # transaction-scoped, never session-level (pooler leak)
             cur.execute("""SELECT DISTINCT pd.sku_code FROM product_dimension pd
                            JOIN inventory_fact_real i ON i.product_key = pd.product_key
                            WHERE pd.principal = 'delmonte' AND pd.grain = 'sku' AND pd.sku_code IS NOT NULL""")

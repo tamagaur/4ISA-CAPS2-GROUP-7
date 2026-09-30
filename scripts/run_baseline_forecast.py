@@ -57,7 +57,7 @@ from analytics.forecasting.baseline import (
     sba_forecast,
 )
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rmse, wape
-from analytics.forecasting.global_model import GlobalForecaster
+from analytics.forecasting.global_model import GlobalForecaster, with_placeholder
 from analytics.forecasting.router import LIVE_MODEL, assert_real_rows, ma3_value, rolling_one_step, route
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -172,15 +172,18 @@ def fetch_tier_a(cur, abc_period: str) -> pd.DataFrame:
 
 
 def fetch_demand(cur) -> pd.DataFrame:
+    """is_demo is carried through (DEC-27) so assert_real_rows / build_series can
+    see a placeholder row if one ever reaches here; the _Real view excludes them."""
     cur.execute(
         """
-        SELECT product_key, sku_code, calendar_month, SUM(quantity_sold) AS quantity
+        SELECT product_key, sku_code, calendar_month, SUM(quantity_sold) AS quantity,
+               bool_or(is_demo) AS is_demo
         FROM Unilever_SKU_Demand_Fact_Real
         GROUP BY product_key, sku_code, calendar_month
         ORDER BY product_key, calendar_month
         """
     )
-    df = pd.DataFrame(cur.fetchall(), columns=["product_key", "sku_code", "calendar_month", "quantity"])
+    df = pd.DataFrame(cur.fetchall(), columns=["product_key", "sku_code", "calendar_month", "quantity", "is_demo"])
     df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0.0)
     return df
 
@@ -191,10 +194,14 @@ def fetch_demand(cur) -> pd.DataFrame:
 def build_series(sku_df: pd.DataFrame) -> pd.Series:
     """Zero-filled monthly series. Zeros are real demand and SBA's gap
     structure depends on them - the zero-fill stays in the modeling series;
-    only the eligibility gate looks at real observations instead (fix #1)."""
+    only the eligibility gate looks at real observations instead (fix #1).
+    Months whose rows are is_demo=true are marked on the series (DEC-27), so
+    the router / global model's assert_real_history refuses it."""
     idx = pd.to_datetime(sku_df["calendar_month"] + "-01")
     s = pd.Series(sku_df["quantity"].to_numpy(dtype=float), index=idx).sort_index()
-    return s.resample("MS").asfreq().fillna(0.0)
+    s = s.resample("MS").asfreq().fillna(0.0)
+    demo = sku_df["is_demo"].eq(True) if "is_demo" in sku_df.columns else None
+    return with_placeholder(s, idx[demo]) if demo is not None and demo.any() else s
 
 
 def one_step(method: str, series: pd.Series) -> float:
@@ -286,6 +293,7 @@ def main():
 
     tier_a = fetch_tier_a(cur, abc_period)
     demand = fetch_demand(cur)
+    assert_real_rows(demand)  # report-only runs refuse placeholder rows too, not only --write
 
     # ---- ETL-gap check (fresh, every run) -------------------------------- #
     months_present = set(demand["calendar_month"].unique())

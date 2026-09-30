@@ -11,8 +11,8 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(REPO, ".env"))
 dsn = os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"]
 conn = psycopg2.connect(dsn, options="-c statement_timeout=0")
-conn.set_session(readonly=True)
 cur = conn.cursor()
+cur.execute("SET TRANSACTION READ ONLY")  # transaction-scoped READ ONLY, never session-level (pooler leak)
 
 cur.execute("""SELECT product_key FROM abc_classification
                WHERE principal='unilever' AND classification_period='2026-02'

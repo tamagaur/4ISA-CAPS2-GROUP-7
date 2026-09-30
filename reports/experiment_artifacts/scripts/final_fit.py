@@ -57,8 +57,8 @@ if __name__ == "__main__":
     import psycopg2
     from dotenv import load_dotenv
     load_dotenv(os.path.join(REPO, ".env"))
-    conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"]); conn.set_session(readonly=True)
-    cur = conn.cursor()
+    conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"])
+    cur = conn.cursor(); cur.execute("SET TRANSACTION READ ONLY")  # transaction-scoped READ ONLY, never session-level (pooler leak)
     cur.execute("""SELECT d.product_key, a.tier, d.calendar_month, d.quantity_sold
                    FROM unilever_sku_demand_fact_real d
                    JOIN abc_classification a ON a.product_key = d.product_key AND a.principal='unilever'

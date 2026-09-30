@@ -49,7 +49,7 @@ def _connect():
             continue
         try:
             c = psycopg2.connect(dsn, connect_timeout=15)
-            c.set_session(readonly=True)
+            c.cursor().execute("SET TRANSACTION READ ONLY")  # transaction-scoped, never session-level (pooler leak)
             return c
         except Exception as e:  # noqa: BLE001
             last = e
