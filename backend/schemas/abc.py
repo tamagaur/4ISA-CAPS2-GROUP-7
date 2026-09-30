@@ -41,7 +41,7 @@ class ABCItem(BaseModel):
     # more coverage expected), so "no record" and "confirmed zero stock"
     # are different facts and must not be coalesced into the same 0.
     current_stock: float | None = None  # pieces (backend/stock_units.py)
-    # 'IN STOCK' | 'LOW' | 'CRITICAL' | 'NO DATA' | 'NO ROP' — cover against
+    # 'CRITICAL' | 'LOW' | 'OK' | 'NOT PLANNED' | 'NO DATA' — cover against
     # the LP's current-cycle ss_i and target stock rop_i; backend/stock_status.py.
     stock_status: str
 

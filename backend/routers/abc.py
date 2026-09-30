@@ -156,14 +156,16 @@ def _summarize(items: list[ABCItem], period: str | None) -> tuple[list[TierSumma
     return sorted(summary.values(), key=lambda t: t.tier), (ParetoCheck(**check) if check else None)
 
 
-def _stock_status(stock_pieces: float | None, safety_stock: float | None, target_stock: float | None) -> str:
+def _stock_status(
+    stock_pieces: float | None, safety_stock: float | None, target_stock: float | None, has_stock_row: bool,
+) -> str:
     """backend/stock_status.py's one rule, in PIECES (backend/stock_units.py),
     against the LP's current-cycle ss_i and target stock rop_i. The LP plans
-    Category A only, so most B and C products read NO TARGET rather than
-    being compared with an invented threshold. Until 2026-09-30 this route
-    had its own rule (CRITICAL at <= 0, IN STOCK above rop_i, else LOW; NO
-    ROP without one)."""
-    return stock_status(stock_pieces, safety_stock, target_stock)
+    Category A only, so most B and C products (and every Del Monte one) read
+    NOT PLANNED when they have a stock row, NO DATA only when they have
+    none. Until 2026-09-30 this route had its own rule (CRITICAL at <= 0,
+    IN STOCK above rop_i, else LOW; NO ROP without one)."""
+    return stock_status(stock_pieces, safety_stock, target_stock, has_stock_row)
 
 
 @router.get("", response_model=ABCResponse)
@@ -248,6 +250,7 @@ def _get_abc_period(
             ac.cumulative_share,
             ac.boundary_flag,
             inv.stock_pieces AS current_stock,
+            inv.product_key IS NOT NULL AS has_stock_row,
             rop.rop_i AS reorder_point,
             rop.ss_i AS safety_stock
         FROM {abc_source} ac
@@ -291,6 +294,7 @@ def _get_abc_period(
                 float(r["current_stock"]) if r["current_stock"] is not None else None,
                 float(r["safety_stock"]) if r["safety_stock"] is not None else None,
                 float(r["reorder_point"]) if r["reorder_point"] is not None else None,
+                bool(r["has_stock_row"]),
             ),
         )
         for r in rows
@@ -379,6 +383,7 @@ def _get_abc_last_known(
             ac.cumulative_share,
             ac.boundary_flag,
             inv.stock_pieces AS current_stock,
+            inv.product_key IS NOT NULL AS has_stock_row,
             rop.rop_i AS reorder_point,
             rop.ss_i AS safety_stock
         FROM latest ac
@@ -419,6 +424,7 @@ def _get_abc_last_known(
                 float(r["current_stock"]) if r["current_stock"] is not None else None,
                 float(r["safety_stock"]) if r["safety_stock"] is not None else None,
                 float(r["reorder_point"]) if r["reorder_point"] is not None else None,
+                bool(r["has_stock_row"]),
             ),
         )
         for r in rows

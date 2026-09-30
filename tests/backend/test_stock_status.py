@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from backend import auth_utils
 from backend.deps import get_current_user, get_db
 from backend.main import app
-from backend.stock_status import CRITICAL, LOW, NO_DATA, NO_TARGET, OK, stock_status
+from backend.stock_status import CRITICAL, LOW, NO_DATA, NOT_PLANNED, OK, stock_status
 
 
 @pytest.mark.parametrize("stock, expected", [
@@ -22,9 +22,20 @@ def test_the_boundaries_are_ss_and_the_target(stock, expected):
     assert stock_status(stock, 50.0, 100.0) == expected
 
 
-def test_no_stock_figure_or_no_lp_row_is_said_not_guessed():
-    assert stock_status(None, 50.0, 100.0) == NO_DATA
-    assert stock_status(10.0, None, None) == NO_TARGET
+def test_no_stock_row_is_no_data_whatever_the_plan():
+    assert stock_status(None, 50.0, 100.0, has_stock_row=False) == NO_DATA
+    assert stock_status(None, None, None, has_stock_row=False) == NO_DATA
+    assert stock_status(None, 50.0, 100.0) == NO_DATA  # no row inferred from no pieces
+
+
+def test_a_stock_row_without_a_plan_is_not_planned():
+    assert stock_status(10.0, None, None) == NOT_PLANNED
+    # Del Monte: stock on file in cases (no pack size, so no pieces) and no LP row.
+    assert stock_status(None, None, None, has_stock_row=True) == NOT_PLANNED
+
+
+def test_a_planned_row_without_pieces_is_no_data():
+    assert stock_status(None, 50.0, 100.0, has_stock_row=True) == NO_DATA
 
 
 @pytest.fixture(autouse=True)
@@ -69,17 +80,21 @@ class _InventorySession:
 
 def test_inventory_current_is_the_latest_snapshot_in_pieces_on_the_shared_rule():
     session = _InventorySession([
-        {"sku_code": "A", "principal": "unilever", "product_name": "a", "current_stock": 10.0, "ss_i": 50.0, "rop_i": 100.0},
-        {"sku_code": "B", "principal": "unilever", "product_name": "b", "current_stock": 150.0, "ss_i": 50.0, "rop_i": 100.0},
-        {"sku_code": "C", "principal": "unilever", "product_name": "c", "current_stock": 150.0, "ss_i": None, "rop_i": None},
-        {"sku_code": "D", "principal": "unilever", "product_name": "d", "current_stock": None, "ss_i": 50.0, "rop_i": 100.0},
+        {"sku_code": "A", "principal": "unilever", "product_name": "a", "current_stock": 10.0, "current_stock_cases": 1.0, "ss_i": 50.0, "rop_i": 100.0},
+        {"sku_code": "B", "principal": "unilever", "product_name": "b", "current_stock": 150.0, "current_stock_cases": 6.0, "ss_i": 50.0, "rop_i": 100.0},
+        {"sku_code": "C", "principal": "unilever", "product_name": "c", "current_stock": 150.0, "current_stock_cases": 6.0, "ss_i": None, "rop_i": None},
+        {"sku_code": "D", "principal": "unilever", "product_name": "d", "current_stock": None, "current_stock_cases": 3.0, "ss_i": 50.0, "rop_i": 100.0},
+        {"sku_code": "E", "principal": "delmonte", "product_name": "e", "current_stock": None, "current_stock_cases": 12.0, "ss_i": None, "rop_i": None},
     ])
     app.dependency_overrides[get_db] = lambda: session
     app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(
         auth_utils.create_access_token(user_id=1, email="staff@ssmcapstone.com", role="staff", full_name="Staff"))
     with TestClient(app) as c:
         body = c.get("/inventory/current?principal=unilever").json()
-    assert {r["sku"]: r["status"] for r in body} == {"A": CRITICAL, "B": OK, "C": NO_TARGET, "D": NO_DATA}
-    assert all(r["unit"] == "pieces" for r in body)
+    assert {r["sku"]: r["status"] for r in body} == {"A": CRITICAL, "B": OK, "C": NOT_PLANNED, "D": NO_DATA, "E": NOT_PLANNED}
+    # Pieces where the pack size allows; Del Monte (no pieces) keeps its stock in cases.
+    assert {r["sku"]: (r["currentStock"], r["unit"]) for r in body} == {
+        "A": (10.0, "pieces"), "B": (150.0, "pieces"), "C": (150.0, "pieces"), "D": (3.0, "cases"), "E": (12.0, "cases"),
+    }
     main_sql = next(sql for sql, _ in session.calls if "inventory_fact_real" in sql)
     assert "latest_period" in main_sql and "SUM(i.quantity_on_hand)" not in main_sql

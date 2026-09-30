@@ -24,7 +24,11 @@ def get_inventory_current(
     #
     # Stock is the latest snapshot per principal, in PIECES
     # (backend/stock_units.py), and status is backend/stock_status.py's one
-    # rule against the LP's current cycle. Until 2026-09-30 this summed
+    # rule against the LP's current cycle: every row here has a stock row, so
+    # a product the LP does not plan (all of Del Monte) reads NOT PLANNED. A
+    # product whose stock can't be put in pieces (no usable pack size — all
+    # of Del Monte) is shown in CASES, with unit saying so. Until 2026-09-30
+    # this summed
     # quantity_on_hand (CASES) over every period in the from/to range and
     # called anything above a flat 100 IN STOCK; the range params are gone
     # because a status is a fact about one snapshot, not a sum of them.
@@ -38,6 +42,7 @@ def get_inventory_current(
             pd.principal,
             pd.product_name,
             inv.stock_pieces AS current_stock,
+            inv.stock_cases AS current_stock_cases,
             lp.ss_i,
             lp.rop_i
         FROM ({STOCK_AT_LATEST_SQL}) inv
@@ -60,14 +65,21 @@ def get_inventory_current(
             # can now contain Del Monte rows.
             "brand": (r["principal"] or "").title() or None,
             "product": r["product_name"] or "Unknown Product",
-            "currentStock": None if r["current_stock"] is None else float(r["current_stock"]),
-            "unit": "pieces",
+            "currentStock": (
+                float(r["current_stock"]) if r["current_stock"] is not None
+                else float(r["current_stock_cases"]) if r["current_stock_cases"] is not None else None
+            ),
+            "unit": (
+                "pieces" if r["current_stock"] is not None
+                else "cases" if r["current_stock_cases"] is not None else None
+            ),
             "receivedMts": 0,
             "dispatchedMts": 0,
             "status": stock_status(
                 None if r["current_stock"] is None else float(r["current_stock"]),
                 None if r["ss_i"] is None else float(r["ss_i"]),
                 None if r["rop_i"] is None else float(r["rop_i"]),
+                has_stock_row=True,
             ),
         })
 
