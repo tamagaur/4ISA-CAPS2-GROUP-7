@@ -1,5 +1,40 @@
 /* ================= EVIDENCE tab (tools/dsd_dev_viewer/evidence.css) ================= */
 #tab-evidence .evintro{margin-bottom:14px}
+.evintrohead{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.evintrohead h2{margin:0}
+.evpbtn{margin-left:auto;font-size:13px;padding:6px 14px;color:var(--ink);border-color:var(--accent)}
+.evq{margin:2px 0 4px;font-size:15px;color:var(--ink-2);max-width:1100px}
+.evq b{color:var(--ink)}
+.evbefore,.evafter{margin:6px 0;font-size:14px;line-height:1.5;color:var(--ink-2);max-width:1100px}
+.evafter{color:var(--ink)}
+.evmeans{margin:12px 0 4px;padding:10px 14px;border-radius:8px;background:var(--surface-2);border-left:3px solid var(--accent);
+  font-size:15px;line-height:1.5;color:var(--ink);max-width:1100px}
+.evboard{margin-bottom:14px}
+.evboardtbl{table-layout:fixed}
+.evboardtbl td{font-size:13px;line-height:1.4;white-space:normal;overflow-wrap:anywhere}
+.evboardtbl th:nth-child(1){width:27%}.evboardtbl th:nth-child(2){width:20%}.evboardtbl th:nth-child(3){width:19%}.evboardtbl th:nth-child(4){width:13%}.evboardtbl th:nth-child(5){width:21%}
+.evboardtbl .evchip{white-space:normal;line-height:1.3}
+.evboardtbl td:nth-child(5){color:var(--ink-2)}
+.evlpbox{border-left:3px solid var(--accent)}
+.evlp{margin:6px 0 8px;padding-left:22px;font-size:14px;line-height:1.55;max-width:1100px}
+.evlp li{margin:4px 0}
+.evpnav{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:12px;
+  background:#0b0d13;border:1px solid var(--line-2);border-radius:999px;padding:8px 14px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.evpnav .evbtn{font-size:13px;padding:5px 12px}
+#evPpos{font:600 13px var(--mono);color:var(--ink-2);min-width:60px;text-align:center}
+/* presentation view: one slide per screen, bigger type, no Details */
+#tab-evidence.evpresent .evintro{display:none}
+#tab-evidence.evpresent .evslide{display:none}
+#tab-evidence.evpresent .evslide.evcurrent{display:block;min-height:calc(100vh - 120px);padding:28px 36px 90px}
+#tab-evidence.evpresent .evdetails{display:none}
+#tab-evidence.evpresent .evheadline{font-size:32px}
+#tab-evidence.evpresent .evq{font-size:20px}
+#tab-evidence.evpresent .evmeans{font-size:20px}
+#tab-evidence.evpresent .evafter,#tab-evidence.evpresent .evbefore,#tab-evidence.evpresent .evlp{font-size:17px}
+#tab-evidence.evpresent .evread{font-size:15px}
+#tab-evidence.evpresent .evfig .evsvg svg{width:100%;max-width:1200px}
+#tab-evidence.evpresent .evbtns{display:none}
+#tab-evidence.evpresent .evboardtbl td{font-size:15px;padding:9px 10px}
 #tab-evidence .evintro h2{font-size:18px;margin:0 0 8px}
 #tab-evidence .evintro p{margin:4px 0;color:var(--ink-2);font-size:12px;max-width:1100px}
 #tab-evidence .evintro p.evlead{font-size:14px;line-height:1.55;color:var(--ink);max-width:1000px;margin:6px 0}

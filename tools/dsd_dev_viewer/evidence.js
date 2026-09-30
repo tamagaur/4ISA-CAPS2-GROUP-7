@@ -1,14 +1,16 @@
 // ================= EVIDENCE tab (tools/dsd_dev_viewer/evidence.js) =================
 // Every number drawn here is read from D.evidence, which evidence.py loads from
-// reports/evidence/ (written by scripts/evidence/*.py). The page computes layout only.
-// Written for a first-time reader: each card leads with a plain-English headline chosen
-// by the stored verdict, a one-line "the test", and a "how to read this" line per chart;
-// the computed caption, criterion text, checks, amendments and data notes sit in a closed
-// "Details (for the paper)" section. No number is typed here except what the result files
-// carry; headlines carry no numbers except chart 8's (Yuan, 2026-09-30), read from its data.
+// reports/evidence/ (written by scripts/evidence/*.py), plus the served model per
+// product already in the page (D.skus, read from Forecast_Result by build.py).
+// The page computes layout and simple tallies of stored values only (group averages,
+// shares, counts); no model is refitted and no verdict is recomputed.
+// Written for a board-level reader: every card reads The question -> The answer ->
+// ONE comparison chart (ours in blue, alternatives in grey) -> What this means for SSM,
+// and everything else sits in a closed "Details (for the paper)" section. Headlines and
+// plain claims are chosen by the stored verdict and checked against the stored data;
+// where a claim cannot be checked from stored results the card says so.
 // Screen charts use the viewer's dark steps; SVG/PNG exports re-render the same figure
-// with the light print steps. Both palettes were checked with the dataviz validator
-// (models aqua/violet/orange all-pairs; blue+magenta; blue+red; ordinal blue ramp).
+// with the light print steps. Palettes checked with the dataviz validator.
 // Wrapped: only drawEvidence is global, so no name here can collide with the viewer's own script.
 const drawEvidence = (() => {
 const EV = D.evidence;
@@ -17,21 +19,29 @@ const EVT = {
   dark: {surface:'#161a24', ink:'#eef0f6', ink2:'#b9bfd0', ink3:'#7d8499', grid:'rgba(255,255,255,0.08)', axis:'#3a4150',
          ma3:'#199e70', tsb:'#9085e9', xgb:'#d95926', base:'#8a8f9e', actual:'#c3c2b7',
          blue:'#3987e5', mag:'#d55181', red:'#e66767', ramp:['#86b6ef', '#3987e5', '#1c5cab'],
+         ours:'#3987e5', alt:'#6e7688', alt2:'#4a5263', need:'#8a8f9e', neutral:'#383835', pos:'#3987e5', neg:'#e66767',
          W:'#0ca30c', L:'#d03b3b', T:'#4a5263', band:0.18, shade:'#ffffff'},
   light: {surface:'#ffffff', ink:'#0b0b0b', ink2:'#52514e', ink3:'#898781', grid:'#e1e0d9', axis:'#c3c2b7',
           ma3:'#1baf7a', tsb:'#4a3aa7', xgb:'#eb6834', base:'#898781', actual:'#52514e',
           blue:'#2a78d6', mag:'#e87ba4', red:'#e34948', ramp:['#86b6ef', '#2a78d6', '#104281'],
+          ours:'#2a78d6', alt:'#8f8e88', alt2:'#c9c8c1', need:'#b8b7b0', neutral:'#f0efec', pos:'#2a78d6', neg:'#e34948',
           W:'#0ca30c', L:'#d03b3b', T:'#d9d8d1', band:0.16, shade:'#000000'},
 };
 const evRecs = t => t ? t.rows.map(r => Object.fromEntries(t.cols.map((c, i) => [c, r[i]]))) : [];
 const nf = (v, d=0) => v == null || Number.isNaN(+v) ? '—' : Number(v).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
 const pc = (v, d=1) => v == null ? '—' : (v * 100).toFixed(d) + '%';
+const rk = v => nf(Math.round(v / 1000) * 1000);           // "62,000"
+const sgn = v => { const r = Math.round(v); return (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r) + '%'; };
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const mlab = m => MON[+String(m).slice(5, 7) - 1] + ' ' + String(m).slice(2, 4);
 const blab = w => { const [a, b] = String(w).split('..'); return mlab(a) + '–' + mlab(b); };
+const plab = w => w === 'full' ? 'Both periods combined' : ({'2025-03..2025-08': 'Mar–Aug 2025', '2025-09..2026-02': 'Sep 2025–Feb 2026'}[w] || blab(w));
 const EVSTATE = {};
 const evOnce = {drawn: false};
 const hOf = fig => typeof fig.H === 'function' ? fig.H() : fig.H;
+const listWords = a => a.length <= 1 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+const PLACEHOLDER = 'uses team estimates until SSM confirms the real figures';
 
 function niceTicks(lo, hi, n=5){
   if (!(hi > lo)) hi = lo + 1;
@@ -46,15 +56,20 @@ function txt(t, x, y, s, o={}){
     + (o.anchor ? ` text-anchor="${o.anchor}"` : '') + (o.weight ? ` font-weight="${o.weight}"` : '')
     + (o.base ? ` dominant-baseline="${o.base}"` : '') + ` font-family="${EVFONT}">${esc(s)}</text>`;
 }
-// One test-period square: colour carries the result; the legend under the strip names it.
+function hexMix(a, b, f){
+  const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * f).toString(16).padStart(2, '0')).join('');
+}
 function evCell(t, x, y, w, h, v){
   const fill = v === 'W' ? t.W : v === 'L' ? t.L : v === 'NT' ? 'none' : t.T;
   return `<rect x="${x.toFixed(1)}" y="${y}" width="${Math.max(w, 2).toFixed(1)}" height="${h}" rx="2.5" fill="${fill}"`
     + (v === 'NT' ? ` stroke="${t.ink3}" stroke-dasharray="2 2"` : '') + `/>`;
 }
 const RESULT_WORDS = cmp => [['T', 'Tie (no clear difference)'], ['W', `Better than ${cmp}`], ['L', `Worse than ${cmp}`], ['NT', 'Not enough data']];
+const yTitle = (t, fr, Y0, ph, s) => `<text transform="translate(${fr.x + 11},${(Y0 + ph / 2).toFixed(1)}) rotate(-90)" text-anchor="middle" font-size="10.5" fill="${t.ink2}" font-family="${EVFONT}">${esc(s)}</text>`;
 
-// ---- one line plot inside a frame -------------------------------------------
+// ---- line plot (used in Details) ----------------------------------------------
 function evPlot(t, fr, o){
   const legW = w => 19 + w.length * 5.6 + 18;
   const legLines = o.strip ? (() => { let n = 1, x = 0; RESULT_WORDS(o.strip.cmp || 'the simple average').forEach(([, w]) => {
@@ -87,7 +102,7 @@ function evPlot(t, fr, o){
   });
   g += `<line x1="${X0}" x2="${(X0 + pw).toFixed(1)}" y1="${(Y0 + ph).toFixed(1)}" y2="${(Y0 + ph).toFixed(1)}" stroke="${t.axis}"/>`;
   if (o.xtitle) g += txt(t, X0 + pw / 2, Y0 + ph + 22 + (o.xsub ? 12 : 0) + 6, o.xtitle, {size:10.5, fill:t.ink2, anchor:'middle'});
-  if (o.y.title) g += `<text transform="translate(${fr.x + 11},${(Y0 + ph / 2).toFixed(1)}) rotate(-90)" text-anchor="middle" font-size="10.5" fill="${t.ink2}" font-family="${EVFONT}">${esc(o.y.title)}</text>`;
+  if (o.y.title) g += yTitle(t, fr, Y0, ph, o.y.title);
   if (o.title) g += txt(t, X0, fr.y + 9, o.title, {size:11, fill:t.ink, weight:600});
   (o.hrules || []).forEach(h => { g += `<line x1="${X0}" x2="${(X0 + pw).toFixed(1)}" y1="${yp(h.y).toFixed(1)}" y2="${yp(h.y).toFixed(1)}" stroke="${t.ink3}" stroke-dasharray="4 3"/>`
     + (h.label ? (h.inside ? txt(t, X0 + 4, yp(h.y) - 4, h.label, {size:9.5, fill:t.ink3})
@@ -103,7 +118,7 @@ function evPlot(t, fr, o){
       const segs = []; let cur = [];
       s.pts.forEach(p => { if (p[1] == null){ if (cur.length) segs.push(cur); cur = []; } else cur.push(p); });
       if (cur.length) segs.push(cur);
-      segs.forEach(sg => { if (sg.length > 1) g += `<polyline points="${sg.map(p => `${xp(p[0]).toFixed(1)},${yp(p[1]).toFixed(1)}`).join(' ')}" fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" stroke-linejoin="round" stroke-linecap="round"${s.dash ? ` stroke-dasharray="${s.dash}"` : ''}/>`; });
+      segs.forEach(sg => { if (sg.length > 1) g += `<polyline points="${sg.map(p => `${xp(p[0]).toFixed(1)},${yp(p[1]).toFixed(1)}`).join(' ')}" fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" stroke-linejoin="round" stroke-linecap="round"${s.dash ? ` stroke-dasharray="${s.dash}"` : ''}${s.op ? ` stroke-opacity="${s.op}"` : ''}/>`; });
     }
     if (s.markers !== false) s.pts.forEach(p => { if (p[1] == null) return;
       g += `<circle cx="${xp(p[0]).toFixed(1)}" cy="${yp(p[1]).toFixed(1)}" r="${s.r || 3.5}" fill="${s.hollow ? 'none' : s.color}" stroke="${s.hollow ? s.color : t.surface}" stroke-width="${s.hollow ? 1.8 : 1.5}"/>`; });
@@ -112,9 +127,8 @@ function evPlot(t, fr, o){
     return last ? {s, y: yp(last[1])} : null; }).filter(Boolean).sort((a, b) => a.y - b.y);
   for (let i = 1; i < labs.length; i++) if (labs[i].y - labs[i - 1].y < 13) labs[i].y = labs[i - 1].y + 13;
   labs.forEach(l => { g += `<line x1="${(X0 + pw + 4).toFixed(1)}" x2="${(X0 + pw + 14).toFixed(1)}" y1="${l.y.toFixed(1)}" y2="${l.y.toFixed(1)}" stroke="${l.s.color}" stroke-width="2"${l.s.dash ? ` stroke-dasharray="${l.s.dash}"` : ''}/>`
-    + txt(t, X0 + pw + 18, l.y, l.s.label, {size:10.5, fill:t.ink, base:'middle'}); });
+    + txt(t, X0 + pw + 18, l.y, l.s.label, {size:10.5, fill:t.ink, base:'middle', weight: l.s.bold ? 700 : null}); });
   if (o.strip){
-    // Result strip: one row per comparison; each square = one half-year test period.
     const sy0 = Y0 + ph + M.b + 14, cw = Math.min(step * 0.86, 96);
     g += txt(t, X0, sy0 - 4, o.strip.title || 'Each square = one half-year test period', {size:9.5, fill:t.ink3});
     o.strip.rows.forEach((row, i) => { const y = sy0 + i * 18 + 2;
@@ -128,42 +142,70 @@ function evPlot(t, fr, o){
       g += evCell(t, lx, ly - 6, 14, 12, v) + txt(t, lx + 19, ly, w, {size:10, fill:t.ink2, base:'middle'});
       lx += legW(w); });
   }
-  const geo = {X0, Y0, pw, ph, cat, xs: o.xs, step, xp, xdom: o.xdom, series: o.series, fmt: o.y.tfmt || o.y.fmt, xlab: o.xlab, tip: o.tip, free: o.free};
+  const geo = {X0, Y0, pw, ph, cat, xs: o.xs, step, xp, xdom: o.xdom, series: o.series, fmt: o.y.tfmt || o.y.fmt, xlab: o.xlab, tip: o.tip};
   return {g, geo};
 }
 
-// ---- bars (one series, optional interval whiskers) ------------------------------
-function evBars(t, fr, o){
-  const M = {l: o.ml ?? 70, r: o.mr ?? 120, t: o.title ? 40 : 22, b: 36};
+// ---- grouped vertical bars: groups x series; per-bar colour; optional labels ------------
+function evGBars(t, fr, o){
+  const M = {l: o.ml ?? 70, r: o.mr ?? 24, t: (o.title ? 30 : 14) + (o.legend ? 22 : 0), b: 40};
   const pw = fr.w - M.l - M.r, ph = fr.h - M.t - M.b, X0 = fr.x + M.l, Y0 = fr.y + M.t;
-  const n = o.cats.length, step = pw / n, bw = Math.min(step * 0.42, 48);
-  const hi0 = Math.max(...o.vals.map((v, i) => Math.max(v, o.hi ? o.hi[i] : v)), ...(o.hrules || []).map(h => h.y)) * 1.18;
-  const ticks = niceTicks(0, hi0, 4), stp = ticks[1] - ticks[0];
+  const G = o.groups.length, S = o.series.length, gw = pw / G, bw = Math.min(gw * 0.72 / S, 58), gap = 4;
+  const vals = o.series.flatMap(s => s.vals).filter(v => v != null);
+  const hi0 = Math.max(...vals, ...(o.whiskers || []).map(w => w.hi), ...(o.hrules || []).map(h => h.y)) * (o.top || 1.15), lo = 0;
+  const ticks = niceTicks(lo, hi0, 4), stp = ticks[1] - ticks[0];
   while (ticks[ticks.length - 1] < hi0 - 1e-9) ticks.push(+(ticks[ticks.length - 1] + stp).toFixed(12));
-  const hi = ticks[ticks.length - 1];
-  const yp = v => Y0 + ph - v / hi * ph, xc = i => X0 + (i + 0.5) * step;
-  let g = o.title ? txt(t, X0, fr.y + 9, o.title, {size:11, weight:600}) : '';
+  const hi = ticks[ticks.length - 1], yp = v => Y0 + ph - (v - lo) / (hi - lo) * ph;
+  const bx = (gi, si) => X0 + gi * gw + (gw - (S * bw + (S - 1) * gap)) / 2 + si * (bw + gap);
+  let g = o.title ? txt(t, X0, fr.y + 10, o.title, {size:11.5, weight:600}) : '';
+  if (o.legend){ let lx = X0; const ly = fr.y + (o.title ? 30 : 12);
+    o.legend.forEach(([col, lab, dashed]) => { g += `<rect x="${lx}" y="${ly - 6}" width="12" height="12" rx="2" fill="${dashed ? 'none' : col}"${dashed ? ` stroke="${col}" stroke-dasharray="3 2"` : ''}/>` + txt(t, lx + 17, ly, lab, {size:10.5, fill:t.ink2, base:'middle'}); lx += 17 + lab.length * 6 + 22; }); }
   ticks.forEach(v => { g += `<line x1="${X0}" x2="${(X0 + pw).toFixed(1)}" y1="${yp(v).toFixed(1)}" y2="${yp(v).toFixed(1)}" stroke="${t.grid}"/>`
     + txt(t, X0 - 6, yp(v), o.fmt(v), {size:10, fill:t.ink3, anchor:'end', base:'middle'}); });
-  o.vals.forEach((v, i) => {
-    const x = xc(i) - bw / 2, y = yp(v), h = Math.max(Y0 + ph - y, 0.5), col = (o.colors && o.colors[i]) || t.blue, r = Math.min(4, h / 2, bw / 2);
-    g += `<path d="M${x.toFixed(1)},${(Y0 + ph).toFixed(1)} V${(y + r).toFixed(1)} q0,-${r} ${r},-${r} H${(x + bw - r).toFixed(1)} q${r},0 ${r},${r} V${(Y0 + ph).toFixed(1)} Z" fill="${col}"/>`;
-    if (o.lo) g += `<line x1="${xc(i).toFixed(1)}" x2="${xc(i).toFixed(1)}" y1="${yp(o.lo[i]).toFixed(1)}" y2="${yp(o.hi[i]).toFixed(1)}" stroke="${t.ink}" stroke-width="1.5"/>`
-      + [o.lo[i], o.hi[i]].map(q => `<line x1="${(xc(i) - 6).toFixed(1)}" x2="${(xc(i) + 6).toFixed(1)}" y1="${yp(q).toFixed(1)}" y2="${yp(q).toFixed(1)}" stroke="${t.ink}" stroke-width="1.5"/>`).join('');
-    const top = Math.min(y, o.hi ? yp(o.hi[i]) : y);
-    if (o.labels) g += txt(t, xc(i), top - 6, o.labels[i], {size:10, fill:t.ink, anchor:'middle'});
-    g += txt(t, xc(i), Y0 + ph + 14, o.cats[i], {size:10, fill:t.ink2, anchor:'middle'});
-    if (o.sub) g += txt(t, xc(i), Y0 + ph + 27, o.sub[i], {size:9, fill:t.ink3, anchor:'middle'});
+  o.groups.forEach((gl, gi) => {
+    o.series.forEach((s, si) => { const v = s.vals[gi]; if (v == null) return;
+      const x = bx(gi, si), y = yp(v), h = Math.max(Y0 + ph - y, 0.5), col = s.colorAt ? s.colorAt(gi) : s.color, r = Math.min(4, h / 2, bw / 2);
+      g += `<path d="M${x.toFixed(1)},${(Y0 + ph).toFixed(1)} V${(y + r).toFixed(1)} q0,-${r} ${r},-${r} H${(x + bw - r).toFixed(1)} q${r},0 ${r},${r} V${(Y0 + ph).toFixed(1)} Z" fill="${col}"${s.outline ? ` fill-opacity="0.25" stroke="${col}"` : ''}/>`;
+      const lab = s.labels && s.labels[gi]; if (lab) g += txt(t, x + bw / 2, y - 6, lab, {size:10, fill:t.ink, anchor:'middle', weight: s.bold && s.bold(gi) ? 700 : null});
+      const sub = s.sub && s.sub[gi]; if (sub) g += txt(t, x + bw / 2, Y0 + ph + 13, sub, {size:9.5, fill: s.subInk ? s.subInk(gi) : t.ink3, anchor:'middle', weight: s.bold && s.bold(gi) ? 700 : null}); });
+    g += txt(t, X0 + (gi + 0.5) * gw, Y0 + ph + (o.series.some(s => s.sub) ? 28 : 15), gl, {size:10.5, fill:t.ink2, anchor:'middle', weight: o.boldGroup && o.boldGroup(gi) ? 700 : null});
+    if (o.gnote && o.gnote[gi]){ const top = Math.min(...o.series.map(s => s.vals[gi] == null ? Infinity : yp(s.vals[gi])));
+      g += txt(t, X0 + (gi + 0.5) * gw, top - 22, o.gnote[gi], {size:10.5, fill:t.ink, anchor:'middle', weight:600}); }
   });
   g += `<line x1="${X0}" x2="${(X0 + pw).toFixed(1)}" y1="${(Y0 + ph).toFixed(1)}" y2="${(Y0 + ph).toFixed(1)}" stroke="${t.axis}"/>`;
   (o.hrules || []).forEach(h => { g += `<line x1="${X0}" x2="${(X0 + pw).toFixed(1)}" y1="${yp(h.y).toFixed(1)}" y2="${yp(h.y).toFixed(1)}" stroke="${t.ink3}" stroke-dasharray="4 3"/>`
-    + txt(t, X0 + pw + 4, yp(h.y), h.label, {size:9.5, fill:t.ink2, base:'middle'}); });
-  if (o.ytitle) g += `<text transform="translate(${fr.x + 11},${(Y0 + ph / 2).toFixed(1)}) rotate(-90)" text-anchor="middle" font-size="10.5" fill="${t.ink2}" font-family="${EVFONT}">${esc(o.ytitle)}</text>`;
-  const geo = {X0, Y0, pw, ph, cat: true, xs: o.cats, step, xp: v => xc(o.cats.indexOf(v)), tip: o.tip, nocross: true};
+    + txt(t, X0 + pw - 2, yp(h.y) - 5, h.label, {size:10, fill:t.ink2, anchor:'end'}); });
+  (o.whiskers || []).forEach(w => { const xc = bx(w.gi, w.si) + bw / 2;
+    g += `<line x1="${xc.toFixed(1)}" x2="${xc.toFixed(1)}" y1="${yp(w.lo).toFixed(1)}" y2="${yp(w.hi).toFixed(1)}" stroke="${t.ink}" stroke-width="1.5"/>`
+      + [w.lo, w.hi].map(q => `<line x1="${(xc - 7).toFixed(1)}" x2="${(xc + 7).toFixed(1)}" y1="${yp(q).toFixed(1)}" y2="${yp(q).toFixed(1)}" stroke="${t.ink}" stroke-width="1.5"/>`).join(''); });
+  (o.marks || []).forEach(m => { const x = bx(m.gi, m.si), y = yp(m.y);
+    g += `<line x1="${(x - 5).toFixed(1)}" x2="${(x + bw + 5).toFixed(1)}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${t.ink}" stroke-width="2.5" stroke-dasharray="${m.dash || ''}"/>`; });
+  if (o.ytitle) g += yTitle(t, fr, Y0, ph, o.ytitle);
+  const geo = {X0, Y0, pw, ph, cat: true, xs: o.groups, step: gw, xp: v => X0 + (o.groups.indexOf(v) + 0.5) * gw, tip: o.tip, nocross: true};
   return {g, geo};
 }
 
-// ---- figure: panels -> one SVG --------------------------------------------------
+// ---- horizontal bars (one value per row; rows may be "not available") -----------------
+function evHBars(t, fr, o){
+  const M = {l: o.ml ?? 250, r: o.mr ?? 40, t: o.title ? 30 : 12, b: 30};
+  const pw = fr.w - M.l - M.r, X0 = fr.x + M.l, Y0 = fr.y + M.t, rh = o.rowH || 22, ph = o.rows.length * rh;
+  const xmax = o.xmax, xp = v => X0 + v / xmax * pw;
+  let g = o.title ? txt(t, X0, fr.y + 10, o.title, {size:11.5, weight:600}) : '';
+  niceTicks(0, xmax, 5).filter(v => v <= xmax).forEach(v => { g += `<line x1="${xp(v).toFixed(1)}" x2="${xp(v).toFixed(1)}" y1="${Y0}" y2="${Y0 + ph}" stroke="${t.grid}"/>`
+    + txt(t, xp(v), Y0 + ph + 14, o.fmt(v), {size:10, fill:t.ink3, anchor:'middle'}); });
+  o.rows.forEach((r, i) => { const y = Y0 + i * rh + 3, h = rh - 7;
+    g += txt(t, X0 - 8, y + h / 2, r.label, {size:10.5, fill: r.ours ? t.ink : t.ink2, anchor:'end', base:'middle', weight: r.ours ? 700 : null});
+    if (r.val == null){ g += txt(t, X0 + 4, y + h / 2, r.note || 'not available', {size:10, fill:t.ink3, base:'middle'}); return; }
+    const w = Math.max(xp(r.val) - X0, r.val === 0 ? 0 : 2);
+    g += `<rect x="${X0}" y="${y}" width="${w.toFixed(1)}" height="${h}" rx="3" fill="${r.color}"/>`
+      + (r.text ? txt(t, X0 + w + 6, y + h / 2, r.text, {size:10, fill:t.ink2, base:'middle', weight: r.ours ? 700 : null}) : ''); });
+  g += `<line x1="${X0}" x2="${X0}" y1="${Y0}" y2="${Y0 + ph}" stroke="${t.axis}"/>`;
+  if (o.xtitle) g += txt(t, X0 + pw / 2, Y0 + ph + 28, o.xtitle, {size:10.5, fill:t.ink2, anchor:'middle'});
+  const geo = {X0, Y0, pw, ph, pick: (mx, my) => o.rows[Math.floor((my - Y0) / rh)] || null, tip: o.tip};
+  return {g, geo};
+}
+
+// ---- figure -> one SVG; hover; export -------------------------------------------------
 function evFigure(t, fig){
   let body = ''; const geos = [], H = hOf(fig);
   fig.build(t).forEach(p => { const r = (p.draw || evPlot)(t, p.fr, p.o); body += r.g; if (r.geo) geos.push(r.geo); });
@@ -174,7 +216,7 @@ function evFigure(t, fig){
 function evTipRows(g, x){
   return g.series.filter(s => s.tip !== false).map(s => {
     let p = s.pts.find(q => q[0] === x);
-    if (!g.cat && !p){ const k = s.pts.reduce((b, q) => q[1] != null && (b == null || Math.abs(q[0] - x) < Math.abs(b[0] - x)) ? q : b, null); p = k; }
+    if (!g.cat && !p){ p = s.pts.reduce((b, q) => q[1] != null && (b == null || Math.abs(q[0] - x) < Math.abs(b[0] - x)) ? q : b, null); }
     return p && p[1] != null ? `<div class="r"><span><i style="background:${s.color}"></i>${esc(s.label)}</span><b>${g.fmt(p[1])}</b></div>` : '';
   }).join('');
 }
@@ -188,7 +230,7 @@ function evHover(host, fig, geos){
     const g = geos.find(q => mx >= q.X0 && mx <= q.X0 + q.pw && my >= q.Y0 && my <= q.Y0 + q.ph);
     if (!g) return hide();
     let x, html;
-    if (g.pick){ x = g.pick(mx, my); if (x == null) return hide(); html = g.tip(x); }
+    if (g.pick){ x = g.pick(mx, my); if (x == null) return hide(); html = g.tip ? g.tip(x) : ''; }
     else {
       x = g.cat ? g.xs[Math.max(0, Math.min(g.xs.length - 1, Math.floor((mx - g.X0) / g.step)))]
                 : g.xdom[0] + (mx - g.X0) / g.pw * (g.xdom[1] - g.xdom[0]);
@@ -216,435 +258,591 @@ function evExport(fig, kind){
     URL.revokeObjectURL(url); c.toBlob(b => evDownload(b, name + '.png'), 'image/png'); };
   img.src = url;
 }
-function evRender(host, fig){
-  const {svg, geos} = evFigure(EVT.dark, fig);
-  host.innerHTML = svg; evHover(host, fig, geos);
-}
+function evRender(host, fig){ const {svg, geos} = evFigure(EVT.dark, fig); host.innerHTML = svg; evHover(host, fig, geos); }
 
-// ---- plain words --------------------------------------------------------------------
-const NAME = {ma3: '3-month average (MA3)', tsb: 'TSB', xgb: 'XGBoost + 3-month avg', sba: 'SBA', naive: 'Naive'};
-const ERR = 'Forecast error (lower is better)';
-// Verdict chip in words; the stored verdict code stays in Details and in the chip's tooltip.
-const WORDS = {'CONFIRMS': ['Our choice holds', 'good'], 'FLAWED': ['Our choice is questioned', 'bad'],
-               'DESCRIPTIVE': ['Description only', 'neutral'], 'NOT TESTABLE': ["Can't be tested yet", 'neutral'],
-               'NOT BUILT': ['Not built yet', 'notbuilt'], 'CAVEAT NEEDED': ['Needs a caveat', 'warn'], 'no flag': ['Our choice holds', 'good']};
-function evChip(v){
-  const s = String(v);
-  const parts = s.includes(' / ') ? s.split(' / ') : [s];
+// ---- words ---------------------------------------------------------------------------
+const WORDS = {'CONFIRMS': ['Holds', 'good'], 'FLAWED': ['Questioned', 'bad'], 'DESCRIPTIVE': ['Description only', 'neutral'],
+               'NOT TESTABLE': ["Can't test yet", 'neutral'], 'NOT BUILT': ['Not built yet', 'notbuilt'], 'CAVEAT NEEDED': ['Needs a caveat', 'warn'],
+               'no flag': ['Holds', 'good']};
+const CHIP_OVERRIDE = {8: c => { const A = evRecs(c.data.totals), r = A.find(q => q.allocation_pct === 105);
+  return c.verdict === 'FLAWED' && A.every(q => q.run_lp_says_met) && r && r.cover_gap_php < 0
+    ? [`Technically questioned: ₱${(-r.cover_gap_php).toFixed(2)} rounding`, 'warn'] : null; }};
+function evChip(c){
+  const ov = CHIP_OVERRIDE[c.chart] && c.data && CHIP_OVERRIDE[c.chart](c);
+  if (ov) return `<span class="evchip ${ov[1]}" title="stored verdict: ${esc(c.verdict)}">! ${esc(ov[0])}</span>`;
+  const s = String(c.verdict), parts = s.includes(' / ') ? s.split(' / ') : [s];
   return parts.map(p => { const m = p.match(/^([^:]+): (.+)$/), who = m && !WORDS[p] ? m[1] : null, code = who ? m[2] : p;
     const [w, cls] = WORDS[code] || [code, 'neutral'];
     return `<span class="evchip ${cls}" title="stored verdict: ${esc(p)}">${{good: '✓', bad: '!', warn: '!', notbuilt: '–', neutral: 'i'}[cls]} ${who ? esc(who) + ': ' : ''}${esc(w)}</span>`; }).join(' ');
 }
-const DECISION = {1: 'Which forecasting model to use', 2: 'How much sales history each model needs', 3: 'Averaging the last 3 months (vs 2, 6 or 12)',
-  4: 'How to mix XGBoost with the 3-month average', 5: 'Whether transforming the sales data helps', 6: 'Products we cannot forecast well',
-  7: "Which products count as 'A' (top revenue)", 8: 'How much stock the supplier allocation allows', 9: 'How the order plan weighs cost, service and storage',
-  10: 'How much safety stock to hold', 11: 'Whether sales follow a yearly season', 12: 'Where real and placeholder data exist'};
-const TEST = {
-  1: 'We would question our choice if a model we use lost to the simple average in most test periods, or a basic rule beat it.',
-  2: 'We would question our cut-offs if less history clearly won, or more history clearly lost, in most test periods.',
-  3: 'We would question the 3-month window if another window won overall and in most test periods.',
-  4: 'We would question the 50/50 mix if another mix won in most test periods.',
-  5: 'We would question dropping transforms if any truly won, or if wins came clearly more often than luck.',
-  6: 'This only checks that the list and its causes rebuild exactly from the stored data.',
-  7: 'No pass/fail rule exists for this; it describes how revenue is spread across products.',
-  8: 'We would question the default 105% if month-end stock fell below 3 weeks, or if 108% fixed shortages that 105% leaves.',
-  9: 'We would question the weights if any small change (±0.10) changed which products get cut.',
-  10: 'We would question the 90% buffer if stockouts clearly happened more than 10% of the time.',
-  11: 'We would add a caveat if every pair of full years showed the same seasonal shape.',
-  12: 'Plan only; built once the data-coverage table is in the live database.',
-};
-// Headlines follow the STORED verdict: a different verdict gets a different sentence.
-const HEAD = {
-  1: c => c.verdict === 'CONFIRMS' ? 'The newer models tie with the simple 3-month average; none does worse.'
-    : 'A model we use does worse than the simple average, or a basic rule beats it.',
-  2: c => c.verdict === 'CONFIRMS' ? 'Giving the models more or less history never clearly changes the result.'
-    : 'A different amount of history works clearly better or worse; our cut-offs are questioned.',
-  3: c => c.verdict === 'CONFIRMS' ? 'Averaging 2, 6 or 12 months is no better than averaging 3.' : 'Another averaging window beats the 3-month average.',
-  4: c => c.verdict === 'CONFIRMS' ? 'No other XGBoost/average mix beats the 50/50 mix we use.' : 'A different XGBoost/average mix beats our 50/50 mix.',
-  5: c => c.verdict === 'CONFIRMS' ? 'Transforming the sales data never truly helped; its wins look like luck.'
-    : 'Transforming the sales data helps more often than luck would explain.',
-  6: () => 'Some products forecast poorly; the list is reproducible and each cause is measured.',
-  7: () => 'A small group of top products brings in most of the revenue.',
-  8: c => { const A = evRecs(c.data.totals), r = A.find(q => q.allocation_pct === 105);
-    const boundary = c.verdict === 'FLAWED' && A.every(q => q.run_lp_says_met) && r && r.cover_gap_php < 0;
-    return boundary ? `Every allocation level keeps 3 weeks of stock; the 'questioned' flag is a ₱${(-r.cover_gap_php).toFixed(2)} rounding gap.`
-      : c.verdict === 'CONFIRMS' ? 'At every allocation level, stock covers the 3-week target.' : 'At the default allocation, stock falls short of the 3-week target.'; },
-  9: c => c.verdict === 'CONFIRMS' ? "Small changes to the plan's weights don't change which products get cut."
-    : "Small changes to the plan's weights change which products get cut.",
-  10: c => c.verdict === 'CONFIRMS' ? 'Stockouts happen no more often than the promised 90% service level allows.'
-    : 'Stockouts happen more often than the promised service level allows.',
-  11: c => /CAVEAT/.test(c.verdict) ? 'Sales repeat the same yearly season overall; the paper should mention it.'
-    : /NOT TESTABLE/.test(c.verdict) ? 'Unilever shows no consistent yearly season; Del Monte lacks a full year to test.'
-    : 'Neither principal shows a consistent yearly season.',
-  12: () => 'Not built yet: it waits for the data-coverage table to reach the live database.',
-};
 const GLOSSARY = [
-  ['Forecast', 'Our estimate of next month’s sales for one product.'],
-  ['Forecast error (WAPE)', 'How far forecasts were from actual sales, as a share of sales. Lower is better.'],
-  ['MASE', 'Forecast error divided by the error of a naive “same as last month” guess. Below 1 = better than that guess.'],
-  ['MA3 (simple 3-month average)', 'Next month = the average of the last 3 months. Our benchmark and fallback.'],
-  ['MA2 / MA6 / MA12', 'The same idea over 2, 6 or 12 months.'],
-  ['TSB', 'A smoothing method built for products that do not sell every month (Teunter–Syntetos–Babai).'],
-  ['XGBoost', 'A machine-learning model trained on all top products at once. We average it 50/50 with MA3.'],
-  ['SBA / Naive', 'Two basic benchmarks: SBA is an older method for patchy sales; naive repeats last month.'],
+  ['Forecast error', 'How far forecasts were from actual sales, as a share of sales (WAPE, weighted absolute percentage error). Lower is better.'],
+  ['Quality check (MASE)', 'MASE = mean absolute scaled error: a product’s forecast error divided by the error of a naive “same as last month” guess. A product passes when it is below 1.'],
+  ['MA3', 'Simple 3-month average: next month = the average of the last 3 months. Our benchmark and fallback. MA2 / MA6 / MA12 = the same over 2, 6 or 12 months.'],
+  ['TSB', 'Teunter–Syntetos–Babai: a smoothing method built for products that do not sell every month.'],
+  ['XGBoost', 'A machine-learning model trained on all top products at once. We blend it 50/50 with MA3.'],
+  ['SBA / Naive', 'Two basic benchmarks: SBA (Syntetos–Boylan approximation) is an older method for patchy sales; naive repeats last month.'],
+  ['ARIMA / SARIMA / ETS', 'Classic statistical forecasting models (autoregressive, seasonal autoregressive, exponential smoothing).'],
   ['Test period', 'One half-year (e.g. Oct 2023–Feb 2024) in which every model forecast each month one step ahead.'],
-  ['Tie / Better / Worse', 'Better or worse only when the 95% margin of error excludes “no difference” AND more products improve than worsen; otherwise a tie.'],
-  ['Tier A (ABC)', 'The products that together bring in the top 80% of revenue. t3m = the same ranking on a 3-month window.'],
-  ['LP (order plan)', 'The optimisation that decides each month’s order within the supplier allocation.'],
+  ['Tie / better / worse', 'Better or worse only when the 95% margin of error excludes “no difference” AND more products improve than worsen; otherwise a tie.'],
+  ['Tier A (ABC)', 'The products that together bring in the top 80% of revenue (Tier B: the next 15%, Tier C: the last 5%).'],
+  ['LP (order plan)', 'Linear programme: the optimisation that decides each month’s order within the supplier allocation.'],
   ['Allocation', 'What the supplier lets us buy: last year’s sales × 103%, 105% or 108%, split by month.'],
   ['Weeks of cover', 'How many weeks of sales the stock left at month end would last. SSM’s rule is 3 weeks.'],
-  ['Safety stock / service level', 'Extra stock held against surprises; a 90% service level means running out in about 1 month in 10.'],
+  ['Safety stock / service level', 'Extra stock held against surprises; a 90% service level means running out in at most about 1 month in 10.'],
   ['Pre-registered', 'The pass/fail rule was written and committed before any result was computed.'],
-  ['Amendment', 'A later change to a check’s data source or column, approved and listed on the card; never a change to the pass/fail rule.'],
+  ['Team estimates', 'Some order-plan inputs (allocation %, lead time, costs, warehouse size) use team estimates until SSM confirms the real figures.'],
 ];
 
-// ---- the charts -------------------------------------------------------------------
-const EVMODELS = [['ma3', NAME.ma3, 'ma3', null, 2.6, true], ['tsb', NAME.tsb, 'tsb', null, 2, true], ['ens_xgb_ma3@A', NAME.xgb, 'xgb', null, 2, true],
-                  ['sba', NAME.sba, 'base', '6 4', 1.6, false], ['naive', NAME.naive, 'base', '2 3', 1.6, false]];
-const SERVED = {ma3:'ma3', tsb:'tsb', xgb_ma3_avg:'xgb'};
-const EVFIGS = {};
+// ---- cards -------------------------------------------------------------------------------
+const CARDS = {};
+const BOARD = {};   // decision -> [what we chose, compared against, what it means for SSM]
+const oursAlt = (t, isOurs) => isOurs ? t.ours : t.alt;
 
-EVFIGS[1] = c => {
+CARDS[1] = c => {
   const L = evRecs(c.data.lines), V = evRecs(c.data.verdicts), S = evRecs(c.data.sku_series);
+  const full = k => L.find(r => r.window === 'full' && r.model === k) || {};
+  const M = [['ma3', '3-month average', true], ['tsb', 'TSB', true], ['ens_xgb_ma3@A', 'XGBoost + average', true], ['sba', 'SBA', false], ['naive', 'Naive', false]];
+  const used = M.filter(m => m[2]).map(m => full(m[0]).mase_pass_pct), newer = [full('tsb').mase_pass_pct, full('ens_xgb_ma3@A').mase_pass_pct];
+  const lo = Math.round(Math.min(...newer)), hi = Math.round(Math.max(...newer)), ma = Math.round(full('ma3').mase_pass_pct);
   const blocks = [...new Set(L.filter(r => r.window !== 'full').map(r => r.window))];
-  const nBy = Object.fromEntries(blocks.map(b => [b, (L.find(r => r.window === b) || {}).n]));
-  const more = () => !!EVSTATE.t1;
-  const rowsAll = [['medium (served: TSB)', 'tsb', 'TSB, where we use it', true], ['long (served: XGBoost+MA3 avg)', 'ens_xgb_ma3@A', 'XGBoost + avg, where we use it', true],
-                   ['ALL', 'tsb', 'TSB, all products', false], ['ALL', 'ens_xgb_ma3@A', 'XGBoost + avg, all products', false],
-                   ['ALL', 'sba', 'SBA, all products', false], ['ALL', 'naive', 'Naive, all products', false]];
-  const rows = () => rowsAll.filter(r => r[3] || more());
-  const strip = () => ({cmp: 'the simple average', rows: rows().map(([co, m, lab]) => ({label: lab, cells: Object.fromEntries(blocks.map(b => {
-    const r = V.find(v => v.cohort === co && v.model === m && v.window === b); return [b, r ? r.verdict : 'NT']; }))}))});
-  const vtip = b => `<div class="h">${esc(blab(b))} · ${nBy[b]} products</div>` + EVMODELS.filter(m => m[5] || more()).map(([k, lab, col]) => {
-    const r = L.find(q => q.window === b && q.model === k); return r ? `<div class="r"><span><i style="background:${EVT.dark[col]}"></i>${esc(lab)}</span><b>${r.median_wape.toFixed(3)}</b></div>` : ''; }).join('');
+  // served model per product, from the live Forecast_Result already in this page
+  const served = Object.fromEntries((D.skus || []).map(s => [s.pk, s.method]));
+  const SERVE = {ma3: ['short history', '3-month average', 'ma3'], tsb: ['medium history', 'TSB', 'tsb'], xgb_ma3_avg: ['long history', 'XGBoost + average', 'ens_xgb_ma3@A'],
+                 provisional: ['too little history', 'provisional average', null]};
   const skus = [...new Map(S.map(r => [r.pk, r])).values()].sort((a, b) => String(a.sku_code).localeCompare(String(b.sku_code)));
   if (EVSTATE[1] == null) EVSTATE[1] = skus[0].pk;
-  const toggle = {label: 'Also show the two basic benchmarks (SBA, naive) and all-product results', key: 't1'};
-  return [
-    {file: 'ch01_model_comparison', title: 'Forecast error in each half-year test period',
-     read: 'Each dot = one half-year test period (Oct 2023 – Feb 2026). Up = more forecast error, so lower is better. '
-       + 'The squares underneath say whether each model did better or worse than the simple 3-month average in that period. '
-       + 'MA3 = simple 3-month average; TSB = a method for products that don’t sell every month; XGBoost = a machine-learning model, averaged 50/50 with MA3. '
-       + 'Gaps between lines smaller than the margin of error count as ties; the squares show which differences are real.',
-     toggle, W: 900, H: () => 330 + rows().length * 18 + 38,
-     build: t => [{fr: {x: 0, y: 0, w: 900, h: 330 + rows().length * 18 + 38}, o: {ml: 210, xs: blocks, xlab: blab, xsub: b => `${nBy[b]} products`, strip: strip(), tip: vtip,
-       y: {fmt: v => v.toFixed(2), title: ERR},
-       series: EVMODELS.filter(m => m[5] || more()).map(([k, lab, col, dash, w]) => ({key: k, label: lab, color: t[col], dash, width: w,
-         pts: blocks.map(b => [b, (L.find(r => r.window === b && r.model === k) || {}).median_wape ?? null])}))}}]},
-    {file: () => `ch01_sku_${(S.find(r => r.pk === EVSTATE[1]) || {}).sku_code}`, title: 'One product: what sold vs what each model forecast',
-     read: 'Pick a product. Grey = what actually sold each month; coloured lines = what each model forecast one month ahead. Closer to grey is better.',
-     toggle, W: 900, H: 330,
-     control: {options: skus.map(s => [s.pk, `${s.sku_code} · ${s.product_name}`]), get: () => EVSTATE[1], set: v => { EVSTATE[1] = +v; }},
-     build: t => { const R = S.filter(r => r.pk === EVSTATE[1]), ms = R.map(r => r.month);
-       return [{fr: {x: 0, y: 0, w: 900, h: 330}, o: {xs: ms, xticks: ms.filter((m, i) => i % 3 === 0), xlab: mlab, y: {fmt: v => nf(v), title: 'Units sold', zero: true},
-         title: `${R[0].sku_code} · ${R[0].product_name}`,
-         series: [{key: 'actual', label: 'Actual sales', color: t.actual, width: 2.4, pts: R.map(r => [r.month, r.actual])}]
-           .concat(EVMODELS.filter(m => m[5] || more()).map(([k, lab, col, dash]) => ({key: k, label: lab, color: t[col], dash, width: 1.6, markers: false, pts: R.map(r => [r.month, r[k]])}))),
-         tip: m => { const r = R.find(q => q.month === m); return `<div class="h">${mlab(m)}</div><div class="r"><span>Actual sales</span><b>${nf(r.actual)}</b></div>`
-           + EVMODELS.filter(q => q[5] || more()).map(([k, lab, col]) => `<div class="r"><span><i style="background:${EVT.dark[col]}"></i>${esc(lab)}</span><b>${nf(r[k])}</b></div>`).join(''); }}}]; }},
-  ];
+  const sv = pk => SERVE[served[pk]] || ['history not on record', 'served model not on record', null];
+  const rowsAll = [['medium (served: TSB)', 'tsb', 'TSB, where we use it'], ['long (served: XGBoost+MA3 avg)', 'ens_xgb_ma3@A', 'XGBoost + avg, where we use it'],
+                   ['ALL', 'sba', 'SBA, all products'], ['ALL', 'naive', 'Naive, all products']];
+  BOARD[1] = ['3-month average; TSB and XGBoost for longer histories', 'SBA, naive (and each other)', 'The simple method is as accurate as the complex ones, so forecasts stay easy to explain.'];
+  return {
+    question: 'Is any complex model clearly better than a simple 3-month average?',
+    headline: c.verdict === 'CONFIRMS' ? 'No. The newer models tie with the simple 3-month average; the two basic benchmarks do worse.'
+      : 'A model we use does worse than the simple average, or a basic rule beats it.',
+    main: {file: 'ch01_models', title: 'Forecast error of each model, all test periods together (lower is better)', W: 900, H: 340,
+      read: 'Blue = models we use (each for a different history length); grey = benchmarks we tested and rejected. Bars of about equal height = a tie.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evGBars, o: {groups: M.map(m => m[1]), ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(0) + '%',
+        series: [{vals: M.map(m => full(m[0]).median_wape), colorAt: gi => oursAlt(t, M[gi][2]), sub: M.map(m => m[2] ? 'Ours (used)' : 'not used'),
+                  subInk: gi => M[gi][2] ? t.ink : t.ink3, bold: gi => M[gi][2]}],
+        gnote: [null, 'tie', null, null, null],
+        tip: k => { const m = M.find(q => q[1] === k); const r = full(m[0]); return `<div class="h">${esc(k)}${m[2] ? ' (ours)' : ''}</div><div class="r"><span>forecast error</span><b>${pc(r.median_wape)}</b></div><div class="r"><span>pass the quality check</span><b>${nf(r.mase_pass_pct)}% of products</b></div>`; }}}]},
+    after: [`We still use TSB and XGBoost for longer histories because they tie on error but pass the quality check for more products (${lo === hi ? lo : lo + '–' + hi}% vs ${ma}%), so more products get a reorder plan.`],
+    means: 'The simple method is as accurate as the complex ones, so forecasts stay easy to explain; the newer models let more products into the order plan.',
+    details: [
+      {file: () => `ch01_sku_${(S.find(r => r.pk === EVSTATE[1]) || {}).sku_code}`, title: 'One product: what sold vs each model (the model that serves it is highlighted)', W: 900, H: 330,
+       control: {options: skus.map(s => [s.pk, `${s.sku_code} · ${s.product_name} · ${sv(s.pk)[0]} → ${sv(s.pk)[1]}`]), get: () => EVSTATE[1], set: v => { EVSTATE[1] = +v; }},
+       read: 'Grey = actual sales; the thick line is the model that serves this product today (from the stored forecast); thin lines = the other models.',
+       build: t => { const R = S.filter(r => r.pk === EVSTATE[1]), ms = R.map(r => r.month), [hist, name, key] = sv(EVSTATE[1]);
+         return [{fr: {x: 0, y: 0, w: 900, h: 330}, o: {xs: ms, xticks: ms.filter((m, i) => i % 3 === 0), xlab: mlab, y: {fmt: v => nf(v), title: 'Units sold', zero: true},
+           title: `${R[0].sku_code} · ${R[0].product_name} · ${hist} → served by ${name}`,
+           series: [{key: 'actual', label: 'Actual sales', color: t.actual, width: 2.4, pts: R.map(r => [r.month, r.actual])}]
+             .concat([['ma3', '3-month average', 'ma3'], ['tsb', 'TSB', 'tsb'], ['ens_xgb_ma3@A', 'XGBoost + avg', 'xgb']].map(([k, lab, col]) => ({key: k,
+               label: lab + (k === key ? ' (serves it)' : ''), bold: k === key, color: t[col], width: k === key ? 3.2 : 1.2, op: k === key ? null : 0.55, markers: false,
+               pts: R.map(r => [r.month, r[k]])})))}}]; }},
+      {file: 'ch01_periods', title: 'Forecast error in each half-year test period, with the test result per period', W: 900, H: 330 + rowsAll.length * 18 + 38,
+       read: 'Each dot = one half-year test period. The squares say whether a model did better or worse than the simple average in that period.',
+       build: t => [{fr: {x: 0, y: 0, w: 900, h: 330 + rowsAll.length * 18 + 38}, o: {ml: 210, xs: blocks, xlab: blab, y: {fmt: v => v.toFixed(2), title: 'Forecast error (lower is better)'},
+         strip: {cmp: 'the simple average', rows: rowsAll.map(([co, m, lab]) => ({label: lab, cells: Object.fromEntries(blocks.map(b => {
+           const r = V.find(v => v.cohort === co && v.model === m && v.window === b); return [b, r ? r.verdict : 'NT']; }))}))},
+         series: M.map(([k, lab, u]) => ({key: k, label: lab, color: u ? t[{ma3: 'ma3', tsb: 'tsb', 'ens_xgb_ma3@A': 'xgb'}[k]] : t.base, dash: u ? null : '5 3', width: u ? 2.2 : 1.6,
+           pts: blocks.map(b => [b, (L.find(r => r.window === b && r.model === k) || {}).median_wape ?? null])}))}}]},
+    ],
+  };
 };
 
-EVFIGS[2] = c => {
+CARDS[2] = c => {
   const L = evRecs(c.data.lines);
+  const row = (f, k) => L.find(r => r.family === f && String(r.k) === String(k)) || {};
+  const GR = [['3–6 months', [3, 4, 5, 6]], ['7–11 months', [7, 8, 9, 10, 11]], ['12–23 months', [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]], ['24+ months', [24, 'all']]];
+  const gmean = (f, ks, col='median_wape') => { const v = ks.map(k => row(f, k)[col]).filter(x => x != null); return v.reduce((a, b) => a + b, 0) / v.length; };
+  const F = [['ma3', '3-month average'], ['tsb', 'TSB'], ['xgb_ma3', 'XGBoost + average']];
+  const ourRule = gi => gi <= 1 ? 'ma3' : gi === 2 ? 'tsb' : 'xgb_ma3';
+  const vals = F.map(([f]) => GR.map(([, ks]) => gmean(f, ks)));
+  const best = f => { const v = GR.map(([, ks]) => gmean(f, ks)); return v.indexOf(Math.min(...v)); };
+  const lowOf = gi => ({0: 3, 1: 7, 2: 12, 3: 24})[gi];
+  const tsbB = best('tsb'), xgbB = best('xgb_ma3');
   const xs = [...new Set(L.map(r => String(r.k)))].filter(k => k !== 'all').sort((a, b) => a - b).concat(['', 'all']);
-  const row = (f, k) => L.find(r => r.family === f && String(r.k) === k) || {};
-  const F = [['ma3', '3-month average (unaffected)', 'ma3'], ['tsb', NAME.tsb, 'tsb'], ['xgb_ma3', NAME.xgb, 'xgb']];
-  const xl = k => k === 'all' ? 'all' : k;   // '' is the visual gap before the full-history point
-  const periods = b => String(b || '').replace(/-/g, '').split('');
-  const strip = {cmp: 'the simple average', title: 'Each square = one half-year test period (2 per setting)',
-    rows: [['tsb', 'TSB vs simple average'], ['xgb_ma3', 'XGBoost + avg vs simple average']].map(([f, lab]) => ({label: lab,
-      cells: Object.fromEntries(xs.filter(k => k !== '').map(k => { const p = periods(row(f, k).blocks); return [k, p.length ? p : ['NT']]; }))}))};
-  const vr = [{x: '3', label: 'MA3 needs 3', dy: 10}, {x: '12', label: 'TSB from 12', dy: 10}, {x: '24', label: 'XGBoost from 24', dy: 22}];
-  const tip = k => k === '' ? '' : `<div class="h">${k === 'all' ? 'all available history' : k + ' months of history'}</div>` + F.map(([f, lab, col]) => { const r = row(f, k);
-    return `<div class="r"><span><i style="background:${EVT.dark[col]}"></i>${esc(lab)}</span><b>${(+r.median_wape).toFixed(3)} · ${(+r.mase_pass_pct).toFixed(0)}% beat naive</b></div>`; }).join('');
-  const mk = (t, col, title, yfmt, strip_, h) => ({fr: {x: 0, y: 0, w: 900, h}, o: {ml: 190, xs, xlab: xl, strip: strip_, vrules: vr, tip,
-    xtitle: 'Months of sales history the models were given (then all of it)', y: {fmt: yfmt, title},
-    series: F.map(([f, lab, cc]) => ({key: f, label: lab, color: t[cc], width: f === 'ma3' ? 2.6 : 2, pts: xs.map(k => [k, k === '' ? null : row(f, k)[col] ?? null])}))}});
-  return [
-    {file: 'ch02_truncation_wape', title: 'Forecast error when the models see only the last few months',
-     read: 'Left to right = more months of sales history given to the models; dashed lines = the cut-offs we use. Up = more error, so lower is better. '
-       + 'Only products with at least 30 months of sales are used, so every setting is tested on the same months. MA3 always uses just 3 months, so its line is flat. '
-       + 'Gaps between lines smaller than the margin of error count as ties; the squares show which differences are real.',
-     W: 900, H: 450, build: t => [mk(t, 'median_wape', ERR, v => v.toFixed(3), strip, 450)]},
-    {file: 'ch02_truncation_mase', title: 'Share of products forecast better than a naive guess',
-     read: 'Up = more products whose forecast beats a naive “same as last month” guess (MASE below 1). Higher is better.',
-     W: 900, H: 300, build: t => [mk(t, 'mase_pass_pct', 'Products beating a naive guess (higher is better)', v => v.toFixed(0) + '%', null, 300)]},
-  ];
+  BOARD[2] = ['3-month average from 3 months, TSB from 12, XGBoost from 24', 'Every cut-off from 3 to 24 months', 'Our history rules are safe; XGBoost might start earlier, but that is not proven.'];
+  return {
+    question: 'How many months of past sales does each model need before it works well?',
+    headline: c.verdict === 'CONFIRMS' ? `More history doesn't clearly help: TSB levels off by about ${lowOf(tsbB)} months, XGBoost by about ${lowOf(xgbB)}.`
+      : 'A different amount of history works clearly better or worse; our cut-offs are questioned.',
+    main: {file: 'ch02_history', title: 'Forecast error by how many months of history the models were given (lower is better)', W: 900, H: 360,
+      read: 'Each group = a range of history lengths (averaged over the settings in it). Blue = the model our rule uses at that length; grey = the others.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 360}, draw: evGBars, o: {groups: GR.map(g => g[0]), ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(1) + '%',
+        legend: [[t.ours, 'Ours: the model our rule uses'], [t.alt, 'Other models']],
+        series: F.map(([f, lab], si) => ({vals: vals[si], colorAt: gi => oursAlt(t, ourRule(gi) === f), sub: GR.map(() => lab.replace(' + average', '+avg').replace('3-month average', '3-mo avg')),
+          subInk: gi => ourRule(gi) === f ? t.ink : t.ink3, bold: gi => ourRule(gi) === f})),
+        tip: k => { const gi = GR.findIndex(g => g[0] === k); return `<div class="h">${esc(k)} of history</div>` + F.map(([f, lab], si) => `<div class="r"><span>${esc(lab)}${ourRule(gi) === f ? ' (ours)' : ''}</span><b>${pc(vals[si][gi], 1)}</b></div>`).join(''); }}}]},
+    after: [c.verdict === 'CONFIRMS' ? 'No setting was clearly better or worse than the simple average.' : ''].filter(Boolean),
+    means: `Our history rules are safe. XGBoost looks best from about ${lowOf(xgbB)} months although our rule starts it at 24 — not proven, only 2 test periods.`,
+    details: [
+      {file: 'ch02_truncation_wape', title: 'All 22 settings: forecast error, with the test result per setting', W: 900, H: 450,
+       read: 'Left to right = more months of history. The squares: each is one half-year test period (2 per setting).',
+       build: t => [{fr: {x: 0, y: 0, w: 900, h: 450}, o: {ml: 190, xs, xlab: k => k === 'all' ? 'all' : k, y: {fmt: v => v.toFixed(3), title: 'Forecast error (lower is better)'},
+         vrules: [{x: '3', label: 'MA3 needs 3', dy: 10}, {x: '12', label: 'TSB from 12', dy: 10}, {x: '24', label: 'XGBoost from 24', dy: 22}],
+         xtitle: 'Months of sales history the models were given (then all of it)',
+         strip: {cmp: 'the simple average', title: 'Each square = one half-year test period (2 per setting)',
+           rows: [['tsb', 'TSB vs simple average'], ['xgb_ma3', 'XGBoost + avg vs simple average']].map(([f, lab]) => ({label: lab,
+             cells: Object.fromEntries(xs.filter(k => k !== '').map(k => { const p = String(row(f, k).blocks || '').replace(/-/g, '').split('').filter(Boolean); return [k, p.length ? p : ['NT']]; }))}))},
+         series: F.map(([f, lab]) => ({key: f, label: lab, color: t[{ma3: 'ma3', tsb: 'tsb', xgb_ma3: 'xgb'}[f]], width: 2, pts: xs.map(k => [k, k === '' ? null : row(f, k).median_wape ?? null])}))}}]},
+      {file: 'ch02_truncation_mase', title: 'Share of products that pass the quality check (MASE below 1), by history length', W: 900, H: 300,
+       read: 'Up = more products forecast better than a naive “same as last month” guess. Higher is better.',
+       build: t => [{fr: {x: 0, y: 0, w: 900, h: 300}, o: {ml: 190, xs, xlab: k => k === 'all' ? 'all' : k, y: {fmt: v => v.toFixed(0) + '%', title: 'Products passing (higher is better)'},
+         series: F.map(([f, lab]) => ({key: f, label: lab, color: t[{ma3: 'ma3', tsb: 'tsb', xgb_ma3: 'xgb'}[f]], width: 2, pts: xs.map(k => [k, k === '' ? null : row(f, k).mase_pass_pct ?? null])}))}}]},
+    ],
+  };
 };
 
-EVFIGS[3] = c => {
+CARDS[3] = c => {
   const L = evRecs(c.data.lines), V = evRecs(c.data.verdicts);
+  const W_ = [['ma2', '2 months', false], ['ma3', '3 months', true], ['ma6', '6 months', false], ['ma12', '12 months', false]];
+  const full = m => (L.find(r => r.window === 'full' && r.model === m) || {}).median_wape;
   const blocks = [...new Set(L.filter(r => r.window !== 'full').map(r => r.window))];
-  const W_ = [['ma2', '2-month average (MA2)', 0, null], ['ma3', '3-month average (MA3, ours)', null, null], ['ma6', '6-month average (MA6)', 1, '6 3'], ['ma12', '12-month average (MA12)', 2, '2 3']];
-  const strip = {cmp: 'the 3-month average', rows: W_.filter(w => w[0] !== 'ma3').map(([m, lab]) => ({label: lab.replace(/ \(.*/, '') + ' vs 3-month',
-    cells: Object.fromEntries(blocks.map(b => { const r = V.find(v => v.model === m && v.window === b); return [b, r ? r.verdict : 'NT']; }))}))};
-  return [{file: 'ch03_ma_window', title: 'Forecast error of moving averages over different windows',
-    read: 'Each dot = one half-year test period. Up = more forecast error, so lower is better. The squares say whether each window did better or worse than the 3-month average in that period. '
-      + 'Gaps between lines smaller than the margin of error count as ties; the squares show which differences are real.',
-    W: 900, H: 420,
-    build: t => [{fr: {x: 0, y: 0, w: 900, h: 420}, o: {ml: 190, mr: 190, xs: blocks, xlab: blab, strip, y: {fmt: v => v.toFixed(2), title: ERR},
-      series: W_.map(([m, lab, ri, dash]) => ({key: m, label: lab, color: ri == null ? t.ma3 : t.ramp[ri], dash, width: ri == null ? 2.6 : 1.8,
-        pts: blocks.map(b => [b, (L.find(r => r.window === b && r.model === m) || {}).median_wape ?? null])}))}}]}];
+  BOARD[3] = ['Average of the last 3 months', '2, 6 and 12 months', 'Keep the 3-month average; the other windows are no more accurate.'];
+  return {
+    question: 'How many recent months should the simple average use: 2, 3, 6 or 12?',
+    before: ['Short windows react fast to change but jump around; long windows are smooth but slow to notice change. (Not the same as decision 2: that asks how much history a model needs; this asks how many recent months the simple average uses.)'],
+    headline: c.verdict === 'CONFIRMS' ? 'Three months is as good as any other window: no window is clearly better.' : 'Another averaging window beats the 3-month average.',
+    main: {file: 'ch03_window', title: 'Forecast error of the simple average by window, all test periods together (lower is better)', W: 900, H: 320,
+      read: 'Blue = ours (3 months); grey = the alternatives. Bars of about equal height = a tie.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 320}, draw: evGBars, o: {groups: W_.map(w => w[1]), ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(0) + '%',
+        series: [{vals: W_.map(w => full(w[0])), colorAt: gi => oursAlt(t, W_[gi][2]), sub: W_.map(w => w[2] ? 'Ours' : ''), subInk: () => t.ink, bold: gi => W_[gi][2]}],
+        tip: k => { const w = W_.find(q => q[1] === k); return `<div class="h">average of the last ${esc(k)}</div><div class="r"><span>forecast error</span><b>${pc(full(w[0]))}</b></div>`; }}}]},
+    means: 'Keep the 3-month average; the other windows are no more accurate.',
+    details: [{file: 'ch03_periods', title: 'Per half-year test period, with the test result per period', W: 900, H: 420,
+      read: 'Each dot = one half-year test period. The squares say whether each window did better or worse than 3 months in that period.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 420}, o: {ml: 190, mr: 150, xs: blocks, xlab: blab, y: {fmt: v => v.toFixed(2), title: 'Forecast error (lower is better)'},
+        strip: {cmp: 'the 3-month average', rows: W_.filter(w => !w[2]).map(([m, lab]) => ({label: `${lab} vs 3 months`,
+          cells: Object.fromEntries(blocks.map(b => { const r = V.find(v => v.model === m && v.window === b); return [b, r ? r.verdict : 'NT']; }))}))},
+        series: W_.map(([m, lab, ours], i) => ({key: m, label: lab + (ours ? ' (ours)' : ''), color: ours ? t.ma3 : t.ramp[[0, 0, 1, 2][i]], dash: [null, null, '6 3', '2 3'][i], width: ours ? 2.6 : 1.8,
+          pts: blocks.map(b => [b, (L.find(r => r.window === b && r.model === m) || {}).median_wape ?? null])}))}}]}],
+  };
 };
 
-EVFIGS[4] = c => {
+CARDS[4] = c => {
   const L = evRecs(c.data.lines), V = evRecs(c.data.verdicts);
-  const ws = [...new Set(L.map(r => r.weight))].sort((a, b) => a - b);
   const wins = [...new Set(L.filter(r => r.n > 0).map(r => r.window))];
-  const lab = w => w === 'full' ? 'All test months' : blab(w);
+  const at = (w, x) => (L.find(r => r.window === w && r.weight === x) || {}).median_wape;
+  const OPT = [[0, 'Only the average', false], [0.5, '50/50 (ours)', true], [1, 'Only XGBoost', false]];
+  const blocks = wins.filter(w => w !== 'full');
+  const helps = blocks.some(w => at(w, 1) < at(w, 0)), hurts = blocks.some(w => at(w, 1) > at(w, 0));
+  const ws = [...new Set(L.map(r => r.weight))].sort((a, b) => a - b);
   const cells = ag => Object.fromEntries(ws.map(w => { const vv = V.filter(v => v.weight === w && v.against === ag && v.window !== 'full' && v.verdict !== 'NT').map(v => v.verdict);
     return [String(w), (ag === 'w=0.5' && w === 0.5) || (ag === 'MA3' && w === 0) ? null : (vv.length ? vv : ['NT'])]; }));
-  const fullPts = L.filter(r => r.window === 'full' && r.median_wape != null);
-  const best = fullPts.length ? fullPts.reduce((b, r) => r.median_wape < b.median_wape ? r : b) : null;
-  const dip = c.verdict === 'CONFIRMS' && best && best.weight !== 0.5
-    ? ` The ‘All test months’ line is lowest at ${best.weight.toFixed(1)}, but no mix beats 50/50 in the test periods (see the squares), so that dip is within the margin of error.` : '';
-  const strip = {cmp: 'the comparison in the row', title: 'Each square = one half-year test period (2 per weight)',
-    rows: [{label: 'vs our 50/50 mix', cells: cells('w=0.5')}, {label: 'vs 3-month average alone', cells: cells('MA3')}]};
-  return [{file: 'ch04_blend_weight', title: 'Forecast error for each XGBoost / 3-month-average mix (products with 24+ months of history)',
-    read: 'Left = only the 3-month average; right = only XGBoost; 0.5 = the 50/50 mix we use. Up = more error, so lower is better. '
-      + 'Only two half-year periods can be tested, because products reach 24 months of history only from Jan 2025.' + dip,
-    W: 900, H: 430,
-    build: t => [{fr: {x: 0, y: 0, w: 900, h: 430}, o: {ml: 170, xs: ws, xlab: w => w.toFixed(1), strip, xtitle: 'Weight on XGBoost (0 = only the 3-month average, 1 = only XGBoost)',
-      vrules: [{x: 0.5, label: 'our mix (0.5)'}], y: {fmt: v => v.toFixed(3), title: ERR},
-      series: wins.map((w, i) => ({key: w, label: lab(w), color: w === 'full' ? t.ramp[2] : t.ramp[i === 1 ? 1 : 0],
-        dash: w === 'full' ? null : (i === 1 ? '6 3' : '2 3'), width: w === 'full' ? 2.6 : 1.8,
-        pts: ws.map(x => [x, (L.find(r => r.window === w && r.weight === x) || {}).median_wape ?? null])}))}}]}];
+  BOARD[4] = ['50/50 blend of XGBoost and the 3-month average', 'Every mix from 0% to 100% XGBoost', 'Keep the 50/50 blend; leaning on XGBoost helps in some half-years and hurts in others.'];
+  return {
+    question: 'When we blend XGBoost with the simple average, how much weight should XGBoost get?',
+    headline: c.verdict === 'CONFIRMS' && helps && hurts ? 'XGBoost helps in some periods and hurts in others; 50/50 is the safe middle.'
+      : c.verdict === 'CONFIRMS' ? 'No other mix beats the 50/50 blend we use.' : 'A different XGBoost/average mix beats our 50/50 blend.',
+    main: {file: 'ch04_blend', title: 'Forecast error for three blends, by test period (products with 24+ months of history; lower is better)', W: 900, H: 340,
+      read: 'Each group = a test period. Blue = ours (50/50); grey = all average or all XGBoost. Where the right-hand grey bar is shorter, XGBoost helped that period; taller, it hurt.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evGBars, o: {groups: wins.map(plab), ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(0) + '%',
+        legend: [[t.alt, 'Only the average'], [t.ours, '50/50 (ours)'], [t.alt2, 'Only XGBoost']],
+        series: OPT.map(([x, lab, ours]) => ({vals: wins.map(w => at(w, x)), color: ours ? t.ours : x === 0 ? t.alt : t.alt2})),
+        tip: k => { const w = wins[wins.map(plab).indexOf(k)]; return `<div class="h">${esc(k)}</div>` + OPT.map(([x, lab]) => `<div class="r"><span>${esc(lab)}</span><b>${pc(at(w, x))}</b></div>`).join(''); }}}]},
+    means: 'Keep the 50/50 blend: leaning more on XGBoost would help in some half-years and hurt in others.',
+    details: [{file: 'ch04_blend_weight', title: 'All 11 blends (0 = only the average, 1 = only XGBoost), with the test result per period', W: 900, H: 430,
+      read: 'Each line = one time period. The squares: each is one half-year test period (2 per blend).',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 430}, o: {ml: 170, xs: ws, xlab: w => w.toFixed(1), xtitle: 'Weight on XGBoost', vrules: [{x: 0.5, label: 'ours (0.5)'}],
+        y: {fmt: v => v.toFixed(3), title: 'Forecast error (lower is better)'},
+        strip: {cmp: 'the comparison in the row', title: 'Each square = one half-year test period (2 per blend)', rows: [{label: 'vs our 50/50 blend', cells: cells('w=0.5')}, {label: 'vs 3-month average alone', cells: cells('MA3')}]},
+        series: wins.map((w, i) => ({key: w, label: plab(w), color: w === 'full' ? t.ramp[2] : t.ramp[i === 1 ? 1 : 0], dash: w === 'full' ? null : (i === 1 ? '6 3' : '2 3'), width: w === 'full' ? 2.6 : 1.8,
+          pts: ws.map(x => [x, at(w, x) ?? null])}))}}]}],
+  };
 };
 
-EVFIGS[5] = c => {
-  const R = evRecs(c.data.rates);
-  const plain = {'original 50': 'Earlier 50 methods', 'phase 1 (35)': '35 transforms', 'phase 2 (77)': '77 more transforms', 'all 162': 'All 162 together'};
-  return [{file: 'ch05_transforms', title: 'How often a method won a test period, compared with pure luck',
-    read: 'Each bar = how often methods in that group beat the method we use in a half-year test period; the black whisker is the margin of error. '
-      + 'Dashed line = how often they would win by luck alone. Bars below the line = no real gain.',
-    W: 900, H: 340,
-    build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evBars, o: {cats: R.map(r => plain[r.candidate_set] || r.candidate_set), vals: R.map(r => r.block_win_rate),
-      lo: R.map(r => r.cp_lo), hi: R.map(r => r.cp_hi), colors: R.map(r => r.candidate_set === 'all 162' ? t.ramp[2] : t.blue),
-      labels: R.map(r => `${r.block_wins} wins in ${nf(r.testable_blocks)}`), sub: R.map(r => `${r.real} real wins`),
-      fmt: v => (v * 100).toFixed(1) + '%', ytitle: 'Share of test periods won (lower = less gain)',
-      hrules: [{y: R[0].chance_per_block, label: `luck alone (${(R[0].chance_per_block * 100).toFixed(1)}%)`}],
-      tip: k => { const r = R.find(q => (plain[q.candidate_set] || q.candidate_set) === k); return `<div class="h">${esc(k)} · ${r.candidates} methods</div>`
-        + `<div class="r"><span>test periods won</span><b>${r.block_wins} / ${nf(r.testable_blocks)} = ${pc(r.block_win_rate, 2)}</b></div>`
-        + `<div class="r"><span>margin of error (95%)</span><b>${pc(r.cp_lo, 2)} – ${pc(r.cp_hi, 2)}</b></div>`
-        + `<div class="r"><span>real wins</span><b>${r.real}</b></div>`; }}}]}];
+CARDS[5] = c => {
+  const R = evRecs(c.data.rates), all = R.find(r => r.candidate_set === 'all 162') || {};
+  const plain = {'original 50': 'First 50 methods tried', 'phase 1 (35)': 'Round 2: 35 tricks', 'phase 2 (77)': 'Round 3: 77 tricks', 'all 162': 'All 162 together'};
+  BOARD[5] = ['No transform (forecast the sales as they are)', `${all.candidates || 162} alternatives, incl. log / square-root transforms`, 'No need to add data transforms: more complexity, no real accuracy gain.'];
+  return {
+    question: 'Does reshaping the sales numbers before forecasting help?',
+    before: ['A transform = for example using the log or square root of sales, forecasting that, then converting back.'],
+    headline: c.verdict === 'CONFIRMS' ? `No. None of the ${all.candidates} alternatives truly beat our method; their few wins look like luck.`
+      : 'Transforming the sales data helps more often than luck would explain.',
+    main: {file: 'ch05_transforms', title: 'How often the alternatives beat ours (no transform) in a half-year test period', W: 900, H: 330,
+      read: 'Grey bars = alternatives. The black whisker = the range the true rate likely falls in. Dashed line = how often they would win by pure luck. Bars below the line = no real gain.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 330}, draw: evGBars, o: {groups: R.map(r => plain[r.candidate_set] || r.candidate_set), ytitle: 'Test periods won', fmt: v => (v * 100).toFixed(1) + '%',
+        series: [{vals: R.map(r => r.block_win_rate), colorAt: () => t.alt}],
+        hrules: [{y: R[0].chance_per_block, label: 'pure luck'}],
+        whiskers: R.map((r, gi) => ({gi, si: 0, lo: r.cp_lo, hi: r.cp_hi})),
+        tip: k => { const r = R.find(q => (plain[q.candidate_set] || q.candidate_set) === k); return `<div class="h">${esc(k)}</div>`
+          + `<div class="r"><span>test periods won</span><b>${r.block_wins} of ${nf(r.testable_blocks)} (${pc(r.block_win_rate, 1)})</b></div>`
+          + `<div class="r"><span>likely range of the true rate</span><b>${pc(r.cp_lo, 1)}–${pc(r.cp_hi, 1)}</b></div><div class="r"><span>real wins</span><b>${r.real}</b></div>`; }}}]},
+    after: [`A “real win” = better overall AND in most test periods — none of the ${all.candidates} managed it.`],
+    means: 'No need to add data transforms: they add complexity without a real accuracy gain.',
+    details: [],
+  };
 };
 
-EVFIGS[6] = c => {
-  const S = evRecs(c.data.skus), M = evRecs(c.data.months);
+CARDS[6] = c => {
+  const S = evRecs(c.data.skus), M = evRecs(c.data.months), R = evRecs(c.data.rescue);
+  const n = S.length, nScored = R.length ? R[0].products : null;
+  const stored = R.filter(r => r.status === 'stored'), notStored = R.filter(r => r.status !== 'stored');
+  const maxBest = stored.length ? Math.max(...stored.filter(r => !/^Ours/.test(r.approach)).map(r => +r.best_single_method)) : null;
+  const promo = S.filter(s => /\(\d+\+\d+\)/.test(s.product_name)).length;
   if (EVSTATE[6] == null) EVSTATE[6] = S[0].pk;
-  const causes = [...new Set(S.map(s => s.cause_group))], cnt = causes.map(k => S.filter(s => s.cause_group === k).length);
-  const plainCause = {'level shift': 'Sales level jumped', 'spiky': 'Sudden spikes', 'high volatility': 'Very up-and-down',
-                      'tiny scale': 'Very small volumes', 'none of the above': 'No clear cause', 'intermittent': 'Months with no sales', 'trend reversal': 'Trend reversed'};
+  const plainCause = {'level shift': 'Sales level jumped', 'spiky': 'Sudden spikes', 'high volatility': 'Very up-and-down', 'tiny scale': 'Very small volumes',
+                      'none of the above': 'No clear cause', 'intermittent': 'Months with no sales', 'trend reversal': 'Trend reversed'};
   const pcause = k => plainCause[k] || k;
-  return [
-    {file: () => `ch06_unfit_${(S.find(s => s.pk === EVSTATE[6]) || {}).sku_code}`, title: 'One poorly-forecast product: sales, our forecast and its likely range',
-     read: 'Pick a product. Grey = actual monthly sales. Coloured line = our forecast for the recent test months, with its likely range shaded. '
-       + 'Circle = an unusual spike. Shaded columns = the two periods compared when checking for a jump in the sales level.',
-     W: 900, H: 340,
-     control: {options: S.map(s => [s.pk, `${s.sku_code} · ${s.product_name} · ${pcause(s.cause_group)}`]), get: () => EVSTATE[6], set: v => { EVSTATE[6] = +v; }},
-     build: t => {
-       const s = S.find(q => q.pk === EVSTATE[6]), R = M.filter(r => r.pk === s.pk), ms = R.map(r => r.month), col = t[SERVED[s.served_model]] || t.blue;
-       const rects = []; const firstLast = f => { const k = R.filter(f); return k.length ? [k[0].month, k[k.length - 1].month] : null; };
-       const pr = firstLast(r => r.level_prior), rc = firstLast(r => r.level_recent);
-       if (pr) rects.push({x0: pr[0], x1: pr[1], op: 0.05, label: 'earlier 12 months'}); if (rc) rects.push({x0: rc[0], x1: rc[1], op: 0.11, label: 'last 6'});
-       return [{fr: {x: 0, y: 0, w: 900, h: 340}, o: {xs: ms, xticks: ms.filter((m, i) => i % 3 === 0), xlab: mlab, rects,
-         title: `${s.sku_code} · ${s.product_name} · main cause: ${pcause(s.cause_group)}`,
-         y: {fmt: v => nf(v), title: 'Units sold', zero: true},
-         series: [{key: 'actual', label: 'Actual sales', color: t.actual, width: 2.2, r: 2.5, pts: R.map(r => [r.month, r.actual])},
-                  {key: 'fc', label: 'Our forecast + range', color: col, width: 2, band: R.map(r => [r.month, r.band_lo, r.band_hi]),
-                   pts: R.map(r => [r.month, r.holdout ? r.forecast : null])},
-                  {key: 'spike', label: 'Unusual spike', color: t.ink, line: false, hollow: true, r: 6, pts: R.map(r => [r.month, r.spike ? r.actual : null])}],
-         tip: m => { const r = R.find(q => q.month === m); return `<div class="h">${mlab(m)}${r.spike ? ' · unusual spike' : ''}</div>`
-           + `<div class="r"><span>Actual sales</span><b>${nf(r.actual)}</b></div>` + (r.holdout ? `<div class="r"><span>Our forecast</span><b>${nf(r.forecast)}</b></div>`
-           + `<div class="r"><span>Likely range</span><b>${nf(r.band_lo)} – ${nf(r.band_hi)}</b></div><div class="r"><span>Outside the range</span><b>${r.outside_band ? 'yes' : 'no'}</b></div>` : ''); }}}]; }},
-    {file: 'ch06_unfit_causes', title: 'Poorly-forecast products by main cause',
-     read: 'Each bar = how many poorly-forecast products share that main cause. Hover a bar to list them.',
-     W: 900, H: 290,
-     build: t => [{fr: {x: 0, y: 0, w: 900, h: 290}, draw: evBars, o: {cats: causes.map(pcause), vals: cnt, labels: cnt.map(String), fmt: v => v.toFixed(0), ytitle: 'Number of products',
-       tip: k => { const orig = causes.find(q => pcause(q) === k); return `<div class="h">${esc(k)}</div>` + S.filter(s => s.cause_group === orig).map(s => `<div class="r"><span>${esc(s.sku_code)}</span><b>${esc(s.product_name)}</b></div>`).join(''); }}}]},
-  ];
+  const SERVED = {ma3: 'ma3', tsb: 'tsb', xgb_ma3_avg: 'xgb'};
+  BOARD[6] = ['Flag them for manual review (buyer decides)', 'Other models, spike capping, differencing, transforms', 'These products need the buyer’s judgement each month.'];
+  return {
+    question: 'Which products can’t be forecast well, and can any method fix them?',
+    headline: R.length ? `${n} products forecast poorly; no method we tried rescues more than ${maxBest} of them.`
+      : `${n} products forecast poorly; per-product results of other methods are not available from stored results.`,
+    main: R.length ? {file: 'ch06_rescue', title: `How many of the ${nScored} poorly-forecast products each approach rescued (brought below the fit line)`, W: 900, H: 30 + R.length * 22 + 50,
+      read: `Blue = ours (the model that serves them today); grey = alternatives we tried. Bar = the best single method in that group. The other ${n - nScored} products were scored on a different test window and are not comparable here.`,
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 30 + R.length * 22 + 50}, draw: evHBars, o: {xmax: nScored, fmt: v => nf(v), xtitle: `Products rescued (out of ${nScored})`,
+        rows: R.map(r => ({label: r.approach, ours: /^Ours/.test(r.approach), val: r.status === 'stored' ? +r.best_single_method : null,
+          color: /^Ours/.test(r.approach) ? t.ours : t.alt, note: 'not available from stored results (tested only as a group: none passed)',
+          text: r.status === 'stored' && /^Ours/.test(r.approach) ? `${r.best_single_method} — that is why they are flagged` : '', raw: r})),
+        tip: row => row.raw.status !== 'stored' ? `<div class="h">${esc(row.label)}</div>${esc(row.raw.status)}`
+          : `<div class="h">${esc(row.label)}</div><div class="r"><span>methods tried</span><b>${row.raw.methods}</b></div>`
+            + `<div class="r"><span>best single method rescued</span><b>${row.raw.best_single_method}</b></div><div class="r"><span>rescued by any method</span><b>${row.raw.any_method}</b></div>`
+            + `<div class="r"><span>rescue held on earlier periods</span><b>${esc(String(row.raw.held_earlier || '—'))}</b></div>`}}]} : null,
+    after: [`<b>What the system does instead:</b> flags these products “needs manual review”. They are left out of the automatic order plan, which only plans products that pass the quality check, so the buyer decides — for example with a larger buffer. (An automatic larger buffer is not built.)`,
+            `Observation, not a cause: ${promo} of the ${n} have a promo-pack marker like “(11+1)” in their name.`],
+    afterHTML: true,
+    means: 'These products need the buyer’s judgement each month; no forecasting method we tried fixes them.',
+    details: [
+      {file: () => `ch06_unfit_${(S.find(s => s.pk === EVSTATE[6]) || {}).sku_code}`, title: 'A concrete example: one poorly-forecast product', W: 900, H: 340,
+       control: {options: S.map(s => [s.pk, `${s.sku_code} · ${s.product_name} · ${pcause(s.cause_group)}`]), get: () => EVSTATE[6], set: v => { EVSTATE[6] = +v; }},
+       read: 'Grey = actual monthly sales. Coloured line = our forecast for the recent test months, with its likely range shaded. Circle = an unusual spike.',
+       build: t => {
+         const s = S.find(q => q.pk === EVSTATE[6]), RR = M.filter(r => r.pk === s.pk), ms = RR.map(r => r.month), col = t[SERVED[s.served_model]] || t.blue;
+         const rects = []; const fl = f => { const k = RR.filter(f); return k.length ? [k[0].month, k[k.length - 1].month] : null; };
+         const pr = fl(r => r.level_prior), rc = fl(r => r.level_recent);
+         if (pr) rects.push({x0: pr[0], x1: pr[1], op: 0.05, label: 'earlier 12 months'}); if (rc) rects.push({x0: rc[0], x1: rc[1], op: 0.11, label: 'last 6'});
+         return [{fr: {x: 0, y: 0, w: 900, h: 340}, o: {xs: ms, xticks: ms.filter((m, i) => i % 3 === 0), xlab: mlab, rects,
+           title: `${s.sku_code} · ${s.product_name} · main cause: ${pcause(s.cause_group)}`, y: {fmt: v => nf(v), title: 'Units sold', zero: true},
+           series: [{key: 'actual', label: 'Actual sales', color: t.actual, width: 2.2, r: 2.5, pts: RR.map(r => [r.month, r.actual])},
+                    {key: 'fc', label: 'Our forecast + range', color: col, width: 2, band: RR.map(r => [r.month, r.band_lo, r.band_hi]), pts: RR.map(r => [r.month, r.holdout ? r.forecast : null])},
+                    {key: 'spike', label: 'Unusual spike', color: t.ink, line: false, hollow: true, r: 6, pts: RR.map(r => [r.month, r.spike ? r.actual : null])}]}}]; }},
+      {file: 'ch06_unfit_causes', title: 'Poorly-forecast products by main cause', W: 900, H: 280,
+       read: 'Each bar = how many of these products share that main cause.',
+       build: t => { const causes = [...new Set(S.map(s => s.cause_group))];
+         return [{fr: {x: 0, y: 0, w: 900, h: 280}, draw: evGBars, o: {groups: causes.map(pcause), fmt: v => v.toFixed(0), ytitle: 'Products',
+           series: [{vals: causes.map(k => S.filter(s => s.cause_group === k).length), color: t.alt, labels: causes.map(k => String(S.filter(s => s.cause_group === k).length))}]}}]; }},
+    ],
+    detailsHTML: R.length ? `<p class="evcap">Rescue tally: <code>reports/evidence/ch06_rescue.csv</code> (script <code>scripts/evidence/ch06_rescue.py</code>), from stored per-product results of the transforms experiment (fce007e, common test window). “Rescued” = the product’s MASE falls below the fit line (1.1) on that window. Phase-2 methods were also checked on earlier periods; phase-1 methods were not.</p>` : '',
+  };
 };
 
-EVFIGS[7] = c => {
-  const C7 = evRecs(c.data.curve);
-  const S = [['unilever', 'single', 'Unilever', 'blue', null], ['unilever', 't3m', 'Unilever, 3-month view', 'blue', '6 4'], ['delmonte', 'single', 'Del Monte (categories)', 'mag', null]]
-    .map(([p, m, lab, col, dash]) => ({p, m, lab, col, dash, R: C7.filter(r => r.principal === p && r.method === m)})).filter(s => s.R.length);
-  return [{file: 'ch07_pareto', title: 'How revenue builds up across products, highest earners first',
-    read: 'Left to right = products ranked from highest to lowest revenue (as a share of all products). Up = share of total revenue so far. '
-      + 'A steep early rise means a few products carry most of the revenue. Products left of where a line crosses 80% are Tier A.'
-      + (S.find(s => s.p === 'delmonte') ? ` Del Monte is ranked by product category, and it has only ${S.find(s => s.p === 'delmonte').R.length} categories, so its line has that many points.` : ''),
-    W: 900, H: 390,
-    build: t => [{fr: {x: 0, y: 0, w: 900, h: 390}, o: {xnum: true, xdom: [0, 1], xs: [0, 0.2, 0.4, 0.6, 0.8, 1], xlab: v => (v * 100).toFixed(0) + '%', mr: 190,
-      xtitle: 'Products, from highest to lowest revenue (share of all products)', y: {dom: [0, 1.02], fmt: v => (v * 100).toFixed(0) + '%', title: 'Share of total revenue'},
-      hrules: [{y: 0.8, label: '80% of revenue: Tier A ends', inside: true}, {y: 0.95, label: '95%: Tier B ends', inside: true}],
-      series: S.map(s => ({key: s.p + s.m, label: s.lab, color: t[s.col], dash: s.dash, width: 2,
-        markers: s.R.length < 20, r: 4.5, pts: s.R.map(r => [r.rank_share, r.cumulative_share]), R: s.R})),
-      tip: x => `<div class="h">top ${(x * 100).toFixed(0)}% of products</div>` + S.map(s => { const r = s.R.reduce((b, q) => Math.abs(q.rank_share - x) < Math.abs(b.rank_share - x) ? q : b);
-        return `<div class="r"><span><i style="background:${EVT.dark[s.col]}"></i>${esc(s.lab)}</span><b>#${r.rank} ${esc(r.label)} · Tier ${r.tier} · ${(r.cumulative_share * 100).toFixed(2)}%</b></div>`; }).join('')}}]}];
-};
-
-EVFIGS[8] = c => {
-  const A = evRecs(c.data.totals), cats = A.map(r => r.allocation_pct + '%');
-  const tip = k => { const r = A.find(q => q.allocation_pct + '%' === k); return `<div class="h">allocation ${esc(k)} of last year's sales</div>`
-    + `<div class="r"><span>ordered / needed</span><b>${nf(r.ordered)} / ${nf(r.need)} units</b></div><div class="r"><span>could not order</span><b>${nf(r.shortfall)} units, ${r.n_short} products</b></div>`
-    + `<div class="r"><span>stock at month end</span><b>${(+r.month_end_cover_weeks).toFixed(6)} weeks</b></div><div class="r"><span>vs the 3-week target</span><b>₱${(+r.cover_gap_php).toFixed(2)}</b></div>`; };
-  return [{file: 'ch08_allocation', title: 'What each allocation level leaves: shortages and weeks of stock (planning inputs are placeholders)',
-    read: 'Each bar = one allocation level (103%, 105%, 108% of last year’s sales; 105% is the default). '
-      + 'Left: units we could not order (lower is better). Right: weeks of sales the month-end stock would cover (dashed = 3-week target).',
-    W: 900, H: 330,
-    build: t => [
-      {fr: {x: 0, y: 0, w: 450, h: 330}, draw: evBars, o: {title: 'Units we could not order (lower is better)', cats, vals: A.map(r => r.shortfall),
-        labels: A.map(r => `${nf(r.shortfall)} (${r.n_short} products)`), sub: A.map(r => r.allocation_pct === 105 ? 'default' : ''), fmt: v => nf(v), mr: 30, tip}},
-      {fr: {x: 450, y: 0, w: 450, h: 330}, draw: evBars, o: {title: 'Weeks of stock at month end', cats, vals: A.map(r => r.month_end_cover_weeks),
-        labels: A.map(r => `${(+r.month_end_cover_weeks).toFixed(2)} weeks`),
-        sub: A.map(r => r.cover_gap_php < 0 ? `₱${(-r.cover_gap_php).toFixed(2)} short of 3 weeks` : 'above 3 weeks'),
-        fmt: v => v.toFixed(1), hrules: [{y: 3, label: '3-week target'}], mr: 90, tip}}]}];
-};
-
-EVFIGS[9] = c => {
-  const G = evRecs(c.data.grid), d0 = G.find(g => g.is_default);
+CARDS[7] = c => {
+  const C7 = evRecs(c.data.curve), T7 = evRecs(c.data.tiers), MV = evRecs(c.data.unilever_moves);
+  const U = C7.filter(r => r.principal === 'unilever' && r.method === 'single'), DM = C7.filter(r => r.principal === 'delmonte');
+  const nU = U.length, tierN = k => U.filter(r => r.tier === k).length, share = k => U.filter(r => r.tier === k).reduce((a, r) => a + r.revenue_share, 0);
+  const t3 = T7.find(r => r.principal === 'unilever' && r.method === 't3m') || {};
+  const changed = MV.filter(r => r.single !== r.t3m).reduce((a, r) => a + r.n, 0), aMoves = MV.filter(r => (r.single === 'A') !== (r.t3m === 'A')).reduce((a, r) => a + r.n, 0);
+  const nA = tierN('A'), pctA = Math.round(nA / nU * 100);
+  BOARD[7] = ['Rank by the latest month’s revenue', 'Rank by a 3-month average', 'SSM can focus forecasting and ordering effort on about 1 product in 5.'];
   const draw = (t, fr) => {
-    const M = {l: 64, r: 280, t: 16, b: 40}, side = Math.min(fr.w - M.l - M.r, fr.h - M.t - M.b), X0 = fr.x + M.l, Y0 = fr.y + M.t, n = 21, cs = side / n;
+    // left: Unilever cumulative curve (ours); right: A/B/C bars, ours vs the 3-month view
+    const L = {x: fr.x, y: fr.y, w: 560, h: fr.h}, Rt = {x: fr.x + 580, y: fr.y, w: fr.w - 580, h: fr.h};
+    const X0 = L.x + 64, Y0 = L.y + 30, pw = L.w - 90, ph = L.h - 80, xp = v => X0 + v * pw, yp = v => Y0 + ph - v / 1.02 * ph;
+    let g = txt(t, X0, fr.y + 12, 'Unilever: share of revenue as products are added, top earner first (ours)', {size:11.5, weight:600});
+    [0, 0.2, 0.4, 0.6, 0.8, 1].forEach(v => { g += `<line x1="${X0}" x2="${X0 + pw}" y1="${yp(v).toFixed(1)}" y2="${yp(v).toFixed(1)}" stroke="${t.grid}"/>` + txt(t, X0 - 6, yp(v), (v * 100) + '%', {size:10, fill:t.ink3, anchor:'end', base:'middle'})
+      + txt(t, xp(v), Y0 + ph + 14, (v * 100) + '%', {size:10, fill:t.ink3, anchor:'middle'}); });
+    g += `<polyline points="${U.map(r => `${xp(r.rank_share).toFixed(1)},${yp(r.cumulative_share).toFixed(1)}`).join(' ')}" fill="none" stroke="${t.ours}" stroke-width="2.4"/>`;
+    const a = U.filter(r => r.tier === 'A'), last = a[a.length - 1];
+    g += `<line x1="${X0}" x2="${xp(last.rank_share).toFixed(1)}" y1="${yp(0.8).toFixed(1)}" y2="${yp(0.8).toFixed(1)}" stroke="${t.ink3}" stroke-dasharray="4 3"/>`
+      + `<line x1="${xp(last.rank_share).toFixed(1)}" x2="${xp(last.rank_share).toFixed(1)}" y1="${yp(0.8).toFixed(1)}" y2="${(Y0 + ph).toFixed(1)}" stroke="${t.ink3}" stroke-dasharray="4 3"/>`
+      + `<circle cx="${xp(last.rank_share).toFixed(1)}" cy="${yp(last.cumulative_share).toFixed(1)}" r="5" fill="${t.ours}" stroke="${t.surface}" stroke-width="2"/>`
+      + txt(t, xp(last.rank_share) + 8, yp(0.8) + 22, `↑ ${nA} products = Tier A (80% of revenue)`, {size:11, weight:700});
+    g += txt(t, X0 + pw / 2, Y0 + ph + 30, 'Products, from highest to lowest revenue (share of all products)', {size:10.5, fill:t.ink2, anchor:'middle'});
+    g += yTitle(t, L, Y0, ph, 'Share of total revenue');
+    // right: stacked bars of product counts per tier
+    const bx = Rt.x + 20, bw = Rt.w - 40, rows = [['Ours: latest month', [tierN('A'), tierN('B'), tierN('C')], true], ['3-month view', [t3.A, t3.B, t3.C], false]];
+    g += txt(t, bx, fr.y + 12, 'Products in each tier', {size:11.5, weight:600});
+    const tot = Math.max(...rows.map(r => r[1].reduce((x, y) => x + y, 0)));
+    rows.forEach(([lab, v, ours], i) => { const y = Y0 + 20 + i * 90; let x = bx;
+      g += txt(t, bx, y - 8, lab, {size:11, weight: ours ? 700 : null, fill: ours ? t.ink : t.ink2});
+      ['A', 'B', 'C'].forEach((tier, j) => { const w = v[j] / tot * bw, col = ours ? [t.ours, hexMix(t.ours, t.surface, 0.45), hexMix(t.ours, t.surface, 0.7)][j] : [t.alt, hexMix(t.alt, t.surface, 0.4), hexMix(t.alt, t.surface, 0.65)][j];
+        g += `<rect x="${x.toFixed(1)}" y="${y}" width="${Math.max(w - 2, 1).toFixed(1)}" height="30" rx="3" fill="${col}"/>` + (w > 22 ? txt(t, x + w / 2, y + 16, tier, {size:11, weight:700, anchor:'middle', base:'middle', fill: j === 0 ? '#ffffff' : t.ink}) : '');
+        x += w; }); });
+    g += txt(t, bx, Y0 + 210, `A = top 80% of revenue · B = next 15% · C = last 5%`, {size:10, fill:t.ink3});
+    return {g, geo: null};
+  };
+  return {
+    question: 'Which products bring in most of the revenue?',
+    headline: `Just ${nA} of Unilever’s ${nU} products (${pctA}%) bring in 80% of revenue.`,
+    main: {file: 'ch07_abc', title: 'Revenue concentration and the resulting tiers (ours vs a 3-month view)', W: 900, H: 330,
+      read: 'Left: the steep early rise means a few products carry most of the revenue. Right: how many products land in each tier with our ranking (blue) and with a 3-month view (grey).',
+      build: () => [{fr: {x: 0, y: 0, w: 900, h: 330}, draw}]},
+    after: [`Using a 3-month average instead of the latest month would change the tier of about ${Math.round(changed / 10) * 10} products.`],
+    means: 'SSM can focus forecasting and ordering effort on about 1 product in 5.',
+    details: [{file: 'ch07_delmonte', title: 'Del Monte, ranked by category (4 categories in its latest month)', W: 900, H: 260,
+      read: 'Share of Del Monte revenue by category, latest classified month.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 260}, draw: evGBars, o: {groups: DM.map(r => r.label), fmt: v => (v * 100).toFixed(0) + '%', ytitle: 'Share of revenue',
+        series: [{vals: DM.map(r => r.revenue_share), color: t.mag, labels: DM.map(r => pc(r.revenue_share, 1)), sub: DM.map(r => 'Tier ' + r.tier)}]}}]}],
+    detailsHTML: `<p class="evcap">Unilever, latest month (ours): A ${tierN('A')} products → ${pc(share('A'), 1)} of revenue; B ${tierN('B')} → ${pc(share('B'), 1)}; C ${tierN('C')} → ${pc(share('C'), 1)}. `
+      + `3-month view: A ${t3.A}, B ${t3.B}, C ${t3.C}. Between the two, ${changed} products change tier (${aMoves} move into or out of Tier A).</p>`,
+  };
+};
+
+CARDS[8] = c => {
+  const A = evRecs(c.data.totals), r103 = A.find(q => q.allocation_pct === 103) || {};
+  const levels = A.map(r => r.allocation_pct + '%'), ours = gi => A[gi].allocation_pct === 105;
+  BOARD[8] = ['105% of last year’s sales (team estimate)', '103% and 108%', 'More allocation = fewer shortages; the 3-week stock rule holds at every level.'];
+  return {
+    question: 'How much does the supplier allocation limit what we can order?',
+    headline: 'More supplier allocation means fewer products run short; the 3-week stock rule is always kept.',
+    main: {file: 'ch08_allocation', title: 'Units needed vs units we could order, at each allocation level', W: 900, H: 340,
+      read: `Each group = an allocation level. Light bar = what the products need; solid bar = what the allocation lets us order; the gap = shortage. Blue = ours (105%). The order plan ${PLACEHOLDER}.`,
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evGBars, o: {groups: levels.map((l, gi) => l + (ours(gi) ? ' (ours)' : '')), ytitle: 'Units', fmt: v => nf(v / 1e6, 1) + 'M',
+        boldGroup: ours, legend: [[t.need, 'Needed', true], [t.ours, 'Could order']],
+        series: [{vals: A.map(r => r.need), colorAt: () => t.need, outline: true}, {vals: A.map(r => r.ordered), colorAt: gi => oursAlt(t, ours(gi))}],
+        gnote: A.map(r => `short: ${rk(r.shortfall)} units`),
+        tip: k => { const r = A[levels.findIndex((l, gi) => k.startsWith(l))]; return `<div class="h">allocation ${r.allocation_pct}% of last year’s sales</div>`
+          + `<div class="r"><span>needed</span><b>${nf(r.need)}</b></div><div class="r"><span>could order</span><b>${nf(r.ordered)}</b></div>`
+          + `<div class="r"><span>short</span><b>${nf(r.shortfall)} units, ${r.n_short} products</b></div>`; }}}]},
+    after: ['The 3-week stock rule is kept at every level. (The stored test flags 105% because it falls ₱0.02 short of 3 weeks — a rounding gap within the order plan’s own ₱1 tolerance.)'],
+    means: `At the minimum allocation, ${r103.n_short} products run short but the 3-week stock rule still holds.`,
+    details: [],
+    detailsHTML: `<p class="evcap"><b>Products short at 103% (${r103.n_short}):</b> ${esc(String(r103.short_skus || '').split(';').join(', '))}.</p>`,
+  };
+};
+
+CARDS[9] = c => {
+  const G = evRecs(c.data.grid), d0 = G.find(g => g.is_default) || {};
+  const diff = G.filter(g => g.cut_set_differs), onlyExtremes = diff.every(g => g.w1 <= 0.1 + 1e-9 || g.w2 < 1e-9);
+  const sameShort = new Set(G.map(g => Math.round(g.shortfall))).size === 1;
+  BOARD[9] = ['Cost 0.45, service 0.35, storage 0.20', `${G.length - 1} other mixes of the three weights`, 'SSM can set these priorities roughly; the same products get cut unless one priority is switched off.'];
+  const draw = (t, fr) => {
+    const M = {l: 70, r: 300, t: 20, b: 44}, side = Math.min(fr.w - M.l - M.r, fr.h - M.t - M.b), X0 = fr.x + M.l, Y0 = fr.y + M.t, n = 21, cs = side / n;
     const cx = w1 => X0 + Math.round(w1 / 0.05) * cs, cy = w2 => Y0 + side - (Math.round(w2 / 0.05) + 1) * cs;
     let g = '';
     G.forEach(r => { const x = cx(r.w1), y = cy(r.w2);
-      g += `<rect x="${(x + 1).toFixed(1)}" y="${(y + 1).toFixed(1)}" width="${(cs - 2).toFixed(1)}" height="${(cs - 2).toFixed(1)}" rx="2" fill="${r.cut_set_differs ? t.red : t.blue}"`
-        + (r.neighbour ? ` stroke="${t.ink}" stroke-width="1.4"` : '') + `/>`; });
-    g += `<circle cx="${(cx(d0.w1) + cs / 2).toFixed(1)}" cy="${(cy(d0.w2) + cs / 2).toFixed(1)}" r="${(cs * 0.62).toFixed(1)}" fill="none" stroke="${t.ink}" stroke-width="2"/>`;
-    [0, 0.2, 0.4, 0.6, 0.8, 1].forEach(v => { g += txt(t, cx(v) + cs / 2, Y0 + side + 14, v.toFixed(1), {size:10, fill:t.ink3, anchor:'middle'})
-      + txt(t, X0 - 6, cy(v) + cs / 2, v.toFixed(1), {size:10, fill:t.ink3, anchor:'end', base:'middle'}); });
-    g += txt(t, X0 + side / 2, Y0 + side + 30, 'Weight on cost → (weight on storage = what is left)', {size:10.5, fill:t.ink2, anchor:'middle'});
-    g += `<text transform="translate(${fr.x + 14},${(Y0 + side / 2).toFixed(1)}) rotate(-90)" text-anchor="middle" font-size="10.5" fill="${t.ink2}" font-family="${EVFONT}">Weight on service →</text>`;
-    const lx = X0 + side + 24; let ly = Y0 + 10;
-    [[t.blue, 'Same products cut as today'], [t.red, 'Different products cut']].forEach(([cl, s]) => { g += `<rect x="${lx}" y="${ly - 6}" width="12" height="12" rx="2" fill="${cl}"/>` + txt(t, lx + 18, ly, s, {size:10.5, base:'middle'}); ly += 20; });
-    g += `<rect x="${lx}" y="${ly - 6}" width="12" height="12" rx="2" fill="none" stroke="${t.ink}" stroke-width="1.4"/>` + txt(t, lx + 18, ly, 'Small change from today (±0.10)', {size:10.5, base:'middle'}); ly += 20;
-    g += `<circle cx="${lx + 6}" cy="${ly}" r="7" fill="none" stroke="${t.ink}" stroke-width="2"/>` + txt(t, lx + 18, ly, `Today: cost ${d0.w1}, service ${d0.w2}, storage ${d0.w3}`, {size:10.5, base:'middle'});
+      g += `<rect x="${(x + 1).toFixed(1)}" y="${(y + 1).toFixed(1)}" width="${(cs - 2).toFixed(1)}" height="${(cs - 2).toFixed(1)}" rx="2" fill="${r.cut_set_differs ? t.red : t.alt}"`
+        + (r.neighbour ? ` stroke="${t.ink}" stroke-width="1.2"` : '') + `/>`; });
+    g += `<rect x="${(cx(d0.w1) + 1).toFixed(1)}" y="${(cy(d0.w2) + 1).toFixed(1)}" width="${(cs - 2).toFixed(1)}" height="${(cs - 2).toFixed(1)}" rx="2" fill="${t.ours}"/>`
+      + `<circle cx="${(cx(d0.w1) + cs / 2).toFixed(1)}" cy="${(cy(d0.w2) + cs / 2).toFixed(1)}" r="${(cs * 0.75).toFixed(1)}" fill="none" stroke="${t.ours}" stroke-width="2.5"/>`
+      + `<rect x="${(cx(d0.w1) + cs * 1.45).toFixed(1)}" y="${(cy(d0.w2) - 2).toFixed(1)}" width="40" height="${(cs + 4).toFixed(1)}" rx="4" fill="${t.surface}" stroke="${t.ours}"/>`
+      + txt(t, cx(d0.w1) + cs * 1.45 + 20, cy(d0.w2) + cs / 2, 'Ours', {size:12, weight:700, base:'middle', anchor:'middle'});
+    g += txt(t, X0 + side / 2, Y0 + side + 16, '← service ignored (bottom row)', {size:10.5, fill:t.red, anchor:'middle'});
+    g += `<text transform="translate(${(X0 - 22).toFixed(1)},${(Y0 + side / 2).toFixed(1)}) rotate(-90)" text-anchor="middle" font-size="10.5" fill="${t.red}" font-family="${EVFONT}">cost nearly ignored (left columns)</text>`;
+    g += txt(t, X0 + side / 2, Y0 + side + 34, 'Weight on cost →', {size:10.5, fill:t.ink2, anchor:'middle'});
+    g += `<text transform="translate(${fr.x + 12},${(Y0 + side / 2).toFixed(1)}) rotate(-90)" text-anchor="middle" font-size="10.5" fill="${t.ink2}" font-family="${EVFONT}">Weight on service →</text>`;
+    const lx = X0 + side + 28; let ly = Y0 + 10;
+    [[t.ours, 'Ours'], [t.alt, 'Other mix: same products cut as ours'], [t.red, 'Other mix: different products cut']].forEach(([cl, s]) => { g += `<rect x="${lx}" y="${ly - 6}" width="12" height="12" rx="2" fill="${cl}"/>` + txt(t, lx + 18, ly, s, {size:10.5, base:'middle'}); ly += 20; });
+    g += `<rect x="${lx}" y="${ly - 6}" width="12" height="12" rx="2" fill="none" stroke="${t.ink}" stroke-width="1.2"/>` + txt(t, lx + 18, ly, 'Small change from ours (±0.10)', {size:10.5, base:'middle'}); ly += 30;
+    g += txt(t, lx, ly, 'Storage gets whatever is left,', {size:10.5, fill:t.ink2}) + txt(t, lx, ly + 15, 'so only half the square is possible.', {size:10.5, fill:t.ink2});
     const geo = {X0, Y0, pw: side, ph: side, pick: (mx, my) => { const i = Math.floor((mx - X0) / cs), j = n - 1 - Math.floor((my - Y0) / cs);
         return G.find(r => Math.round(r.w1 / 0.05) === i && Math.round(r.w2 / 0.05) === j) || null; },
-      tip: r => `<div class="h">cost ${r.w1} · service ${r.w2} · storage ${r.w3}${r.is_default ? ' (today)' : ''}</div>`
-        + `<div class="r"><span>products cut short</span><b>${r.n_short}</b></div><div class="r"><span>units short</span><b>${nf(r.shortfall)}</b></div>`
-        + `<div class="r"><span>order cost</span><b>₱${nf(r.order_cost)}</b></div><div class="r"><span>same products cut as today?</span><b>${r.cut_set_differs ? 'no' : 'yes'}</b></div>`};
+      tip: r => `<div class="h">cost ${r.w1} · service ${r.w2} · storage ${r.w3}${r.is_default ? ' (ours)' : ''}</div>`
+        + `<div class="r"><span>products cut short</span><b>${r.n_short}</b></div><div class="r"><span>same products as ours?</span><b>${r.cut_set_differs ? 'no' : 'yes'}</b></div>`};
     return {g, geo};
   };
-  return [{file: 'ch09_lp_weights', title: 'Does changing the order plan’s priorities change which products get cut?',
-    read: 'Each square = one way of weighting cost, service and storage in the order plan (LP), in steps of 0.05. Across = weight on cost; up = weight on service. '
-      + 'Blue = the same products get cut short as today; red = different ones. The outlined squares are small changes from today’s weights.',
-    W: 900, H: 470, build: () => [{fr: {x: 0, y: 0, w: 900, h: 470}, draw}]}];
+  return {
+    question: 'Does it matter exactly how we weigh cost, service and storage?',
+    before: ['Cost = cut expensive items first; service = protect the items that bring in the most revenue; storage = the cost of holding stock (one team estimate for every product for now, so it changes little).'],
+    headline: c.verdict === 'CONFIRMS' && onlyExtremes ? `Weights barely matter: the same ${d0.n_short} products are cut unless cost or service is nearly ignored.`
+      : c.verdict === 'CONFIRMS' ? "Small changes to the weights don't change which products get cut." : "Small changes to the weights change which products get cut.",
+    main: {file: 'ch09_weights', title: 'Every mix of the three weights (steps of 0.05): are the same products cut as with ours?', W: 900, H: 480,
+      read: 'Each square = one mix. Across = weight on cost; up = weight on service. Grey = same products cut as ours; red = different ones.',
+      build: () => [{fr: {x: 0, y: 0, w: 900, h: 480}, draw}]},
+    after: [sameShort ? `Total shortfall is ${rk(G[0].shortfall)} units everywhere; only which products are short changes.` : ''].filter(Boolean),
+    means: 'SSM can set these priorities roughly; the same products get cut unless one priority is switched off.',
+    details: [],
+  };
 };
 
-EVFIGS[10] = c => {
+CARDS[10] = c => {
   const T = evRecs(c.data.curve), xs = T.map(r => Math.round(r.service_level * 100)), at = x => T[xs.indexOf(x)];
-  const cur = [{x: 90, label: 'ours (90%)'}];
-  const p = (t, x, title, key, fmt, extra) => ({fr: {x, y: 0, w: 300, h: 300}, o: {ml: 58, mr: 16, mt: 24, xs, xticks: [85, 90, 95, 99], xlab: v => v + '%', title,
-    vrules: cur, y: {fmt, zero: true}, ...extra, series: extra && extra.series ? extra.series : [{key, label: title, color: t.blue, labelEnd: false, r: 2.5, pts: xs.map(v => [v, at(v)[key]])}],
-    tip: v => { const r = at(v); return `<div class="h">promised service level ${v}%</div>`
-      + `<div class="r"><span>safety stock held</span><b>${nf(r.total_safety_stock_pieces)} units</b></div>`
-      + `<div class="r"><span>months with a stockout / year (estimate)</span><b>${nf(r.model_stockout_sku_months_per_year, 1)}</b></div>`
-      + `<div class="r"><span>demand beat forecast + buffer (measured)</span><b>${pc(r.measured_exceedance)}</b></div>`
-      + `<div class="r"><span>allowed by the promise</span><b>${pc(r.nominal_exceedance)}</b></div>`; }}});
-  return [{file: 'ch10_service_level', title: 'Holding more safety stock vs running out',
-    read: 'Left to right = a higher promised service level (90% = our setting). Left: extra stock held (up = more stock). '
-      + 'Middle: estimated product-months with a stockout per year (lower is better). Right: how often real demand beat forecast plus buffer, measured (blue) vs what the promise allows (dashed); below the dashed line = the buffer does its job.',
-    W: 900, H: 300,
-    build: t => [
-      p(t, 0, 'Safety stock held (units)', 'total_safety_stock_pieces', v => nf(v / 1000) + 'k'),
-      p(t, 300, 'Stockout months / year (estimate)', 'model_stockout_sku_months_per_year', v => nf(v)),
-      p(t, 600, 'Demand beat forecast + buffer', null, v => (v * 100).toFixed(0) + '%', {mr: 74, series: [
-        {key: 'meas', label: 'measured', color: t.blue, r: 2.5, band: xs.map(v => [v, at(v).measured_ci_lo, at(v).measured_ci_hi]), pts: xs.map(v => [v, at(v).measured_exceedance])},
-        {key: 'nom', label: 'promised', color: t.base, dash: '4 3', markers: false, pts: xs.map(v => [v, at(v).nominal_exceedance])}]})]}];
+  const show = [85, 90, 95, 99].filter(x => xs.includes(x)), meas = c.measured_rate;
+  BOARD[10] = ['90% service level', '85% to 99%', 'The 90% buffer does its job; going higher ties up much more stock.'];
+  return {
+    question: 'How much extra stock should we keep for surprises?',
+    headline: c.verdict === 'CONFIRMS' ? `Our 90% buffer works: stockouts happened in ${Math.round(meas * 100)}% of months, within the promised 10%.`
+      : 'Stockouts happen more often than the promised service level allows.',
+    main: {file: 'ch10_service', title: 'How often demand ran past forecast + buffer, at each service level (lower is better)', W: 900, H: 340,
+      read: 'Bar = measured on past months; thick dashed mark = what the service level promises. Blue = ours (90%). Bars below their mark = the buffer does its job.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evGBars, o: {groups: show.map(x => x + '% service' + (x === 90 ? ' (ours)' : '')), ytitle: 'Months out of stock', fmt: v => (v * 100).toFixed(0) + '%',
+        boldGroup: gi => show[gi] === 90, top: 1.3, legend: [[t.ours, 'Measured (ours)'], [t.alt, 'Measured (other levels)'], [t.ink, 'Promised maximum (dashed mark)', true]],
+        series: [{vals: show.map(x => at(x).measured_exceedance), colorAt: gi => oursAlt(t, show[gi] === 90)}],
+        marks: show.map((x, gi) => ({gi, si: 0, y: at(x).nominal_exceedance, dash: '6 3'})),
+        tip: k => { const x = show[show.findIndex(q => k.startsWith(q + '%'))], r = at(x); return `<div class="h">${x}% service level</div>`
+          + `<div class="r"><span>measured stockout rate</span><b>${pc(r.measured_exceedance)}</b></div><div class="r"><span>promised at most</span><b>${pc(r.nominal_exceedance)}</b></div>`
+          + `<div class="r"><span>safety stock held</span><b>${nf(r.total_safety_stock_pieces)} units</b></div>`; }}}]},
+    after: [`Promised: out of stock at most 1 month in 10. Actual: ${pc(meas)} of months. Higher levels cut stockouts further but need much more stock (table in Details). The order plan ${PLACEHOLDER}.`],
+    means: 'The 90% buffer does its job; going higher would tie up much more stock for fewer stockouts.',
+    details: [{file: 'ch10_estimate', title: 'Formula estimate (not a measurement): product-months with a stockout per year', W: 900, H: 280,
+      read: 'From the normal-demand formula the order plan assumes; an estimate, not measured.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 280}, o: {xs, xticks: [85, 90, 95, 99], xlab: v => v + '%', vrules: [{x: 90, label: 'ours (90%)'}], y: {fmt: v => nf(v), zero: true, title: 'Stockout months / year'},
+        series: [{key: 'e', label: 'estimate', color: t.alt, pts: xs.map(v => [v, at(v).model_stockout_sku_months_per_year])}]}}]}],
+    detailsHTML: `<table class="evtable"><thead><tr><th>Service level</th><th>Safety stock held (units)</th><th>Measured stockout rate</th><th>Promised at most</th></tr></thead><tbody>`
+      + show.map(x => { const r = at(x); return `<tr><td>${x}%${x === 90 ? ' (ours)' : ''}</td><td>${nf(r.total_safety_stock_pieces)}</td><td>${pc(r.measured_exceedance)}</td><td>${pc(r.nominal_exceedance)}</td></tr>`; }).join('') + `</tbody></table>`,
+  };
 };
 
-EVFIGS[11] = c => {
-  const I = evRecs(c.data.index), moys = [...Array(12).keys()].map(i => i + 1);
-  const panel = (t, x, w, p, ser, title, years) => ({fr: {x, y: 0, w, h: 320}, o: {ml: 48, mr: 100, mt: 24, xs: moys, xlab: m => MON[m - 1].slice(0, 1), title,
-    hrules: [{y: 1, label: ''}], y: {fmt: v => v.toFixed(1)},
-    series: years.map((yy, i) => { const R = I.filter(r => r.principal === p && r.series === ser && r.year === yy); if (!R.length) return null;
-      const part = R[0].months_in_year < 12 ? ` (${R[0].months_in_year} of 12 mo)` : '';
-      return {key: String(yy), label: `${yy}${part}`, color: t.ramp[i], dash: part ? '4 3' : null, width: 2, r: 3,
-        pts: moys.map(m => [m, (R.find(r => r.moy === m) || {}).index ?? null])}; }).filter(Boolean),
-    tip: m => `<div class="h">${MON[m - 1]} · ${esc(title)}</div>` + years.map((yy, i) => { const r = I.find(q => q.principal === p && q.series === ser && q.year === yy && q.moy === m);
-      return r ? `<div class="r"><span><i style="background:${EVT.dark.ramp[i]}"></i>${yy}</span><b>${(+r.index).toFixed(2)} × average · ₱${nf(r.net_amount / 1e6, 2)}M</b></div>` : ''; }).join('')}});
-  const br = (t) => ({fr: {x: 600, y: 0, w: 300, h: 320}, o: {ml: 48, mr: 100, mt: 24, xs: moys, xlab: m => MON[m - 1].slice(0, 1), title: 'Del Monte by branch, 2023',
-    hrules: [{y: 1, label: ''}], y: {fmt: v => v.toFixed(1)},
-    series: [['branch pangasinan (2023 only)', 'Pangasinan', 'blue'], ['branch ilocos (2023 only)', 'Ilocos', 'mag']].map(([s, lab, col]) => {
-      const R = I.filter(r => r.series === s); return {key: s, label: lab, color: t[col], width: 2, r: 3, pts: moys.map(m => [m, (R.find(r => r.moy === m) || {}).index ?? null])}; })}});
-  return [{file: 'ch11_month_of_year', title: 'Each month’s sales compared with that year’s average month',
-    read: 'Each line = one year; left to right = January to December. Above 1 = a stronger-than-average month. '
-      + 'Lines that rise and fall together would mean a repeating yearly season. Dashed lines = incomplete years.',
-    W: 900, H: 320,
-    build: t => [panel(t, 0, 300, 'delmonte', 'total', 'Del Monte, all branches', [2023, 2024, 2025]),
-                 panel(t, 300, 300, 'unilever', 'total', 'Unilever', [2023, 2024, 2025]), br(t)]}];
+CARDS[11] = c => {
+  const I = evRecs(c.data.index), P = evRecs(c.data.pairs);
+  const tot = p => I.filter(r => r.principal === p && r.series === 'total');
+  const years = p => [...new Set(tot(p).map(r => r.year))].sort();
+  const val = (p, y, m) => (tot(p).find(r => r.year === y && r.moy === m) || {}).index;
+  const full = p => years(p).filter(y => tot(p).filter(r => r.year === y).length === 12);
+  const fy = full('unilever');
+  const steady = [...Array(12).keys()].map(i => i + 1).map(m => { const v = fy.map(y => Math.round(val('unilever', y, m) * 100 - 100));
+    return v.length >= 2 && v.every(x => x !== 0) && (v.every(x => x > 0) || v.every(x => x < 0)) ? [m, v[0] > 0 ? 'high' : 'low'] : null; }).filter(Boolean);
+  const dmYears = years('delmonte').filter(y => val('delmonte', y, 11) != null && val('delmonte', y, 12) != null);
+  const dmNovDecHigh = dmYears.length >= 2 && dmYears.every(y => val('delmonte', y, 11) > 1 && val('delmonte', y, 12) > 1);
+  const orderSize = (y, ms) => { const R = tot('delmonte').filter(r => r.year === y && ms.includes(r.moy)); return R.reduce((a, r) => a + r.net_amount, 0) / R.reduce((a, r) => a + r.rows, 0); };
+  const ratio = dmYears.map(y => orderSize(y, [11, 12]) / orderSize(y, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
+  const pang = (() => { const b = I.filter(r => r.series === 'branch pangasinan (2023 only)' && [11, 12].includes(r.moy)), tt = tot('delmonte').filter(r => r.year === 2023 && [11, 12].includes(r.moy));
+    return tt.length && b.length ? b.reduce((a, r) => a + r.net_amount, 0) / tt.reduce((a, r) => a + r.net_amount, 0) : null; })();
+  const highs = steady.filter(s => s[1] === 'high').map(s => MONL[s[0] - 1]), lows = steady.filter(s => s[1] === 'low').map(s => MONL[s[0] - 1]);
+  BOARD[11] = ['No seasonal adjustment in the forecasts', 'A month-by-month pattern repeating across years', 'Plan without a seasonal adjustment for now; re-check when full years of Del Monte data arrive.'];
+  const heat = (t, fr) => {
+    let g = ''; const panels = [['unilever', 'Unilever'], ['delmonte', 'Del Monte']], cw = (fr.w - 150) / 12, rh = 30;
+    let y0 = fr.y + 26;
+    g += txt(t, fr.x + 110, fr.y + 10, 'Each month vs that year’s normal month (blue = higher, red = lower; grey = no data)', {size:11, fill:t.ink2});
+    MON.forEach((m, i) => { g += txt(t, fr.x + 110 + (i + 0.5) * cw, y0 + 4, m, {size:10, fill:t.ink3, anchor:'middle'}); });
+    y0 += 12;
+    panels.forEach(([p, lab]) => {
+      g += txt(t, fr.x + 4, y0 + 12, lab, {size:12, weight:700});
+      years(p).forEach((y, ri) => { const yy = y0 + 20 + ri * rh, n = tot(p).filter(r => r.year === y).length;
+        g += txt(t, fr.x + 104, yy + rh / 2 - 2, `${y}${n < 12 ? ` (${n} of 12 mo)` : ''}`, {size:10.5, fill: n < 12 ? t.ink3 : t.ink2, anchor:'end', base:'middle'});
+        for (let m = 1; m <= 12; m++){ const v = val(p, y, m), x = fr.x + 110 + (m - 1) * cw;
+          if (v == null){ g += `<rect x="${(x + 1).toFixed(1)}" y="${yy}" width="${(cw - 2).toFixed(1)}" height="${rh - 4}" rx="3" fill="none" stroke="${t.axis}" stroke-dasharray="2 2"/>`; continue; }
+          const d = v - 1, f = Math.min(Math.abs(d) / 0.4, 1), col = hexMix(t.neutral, d >= 0 ? t.pos : t.neg, 0.25 + 0.75 * f), fade = n < 12 ? ' fill-opacity="0.55"' : '';
+          g += `<rect x="${(x + 1).toFixed(1)}" y="${yy}" width="${(cw - 2).toFixed(1)}" height="${rh - 4}" rx="3" fill="${col}"${fade}/>`
+            + txt(t, x + cw / 2, yy + (rh - 4) / 2 + 1, sgn(d * 100), {size:10, anchor:'middle', base:'middle', fill: f > 0.55 ? '#ffffff' : t.ink}); } });
+      y0 += 20 + years(p).length * rh + 18; });
+    const geo = {X0: fr.x + 110, Y0: fr.y + 38, pw: fr.w - 150, ph: y0 - fr.y - 38, pick: () => null};
+    return {g, geo};
+  };
+  const dmSent = dmNovDecHigh ? `Del Monte: November–December high in both years we have — too little data to call it seasonal.` : `Del Monte: too little data to call anything seasonal.`;
+  const ulSent = /NOT TESTABLE|no flag|CONFIRMS/.test(c.verdict) ? `Unilever: a few months lean the same way each year${lows.length ? ` (e.g. ${lows.slice(0, 2).join(' and ')} low)` : ''}, but the full pattern does not repeat reliably.` : '';
+  return {
+    question: 'Do sales go up or down in the same months every year?',
+    headline: /CAVEAT/.test(c.verdict) ? 'Sales repeat the same yearly pattern overall; the paper should mention it.'
+      : 'Unilever’s yearly pattern doesn’t repeat reliably; Del Monte has too little data to tell.',
+    main: {file: 'ch11_season', title: 'Ours: no seasonal adjustment. Does any month repeat high or low every year?', W: 900, H: 330,
+      read: 'Each row = one year; each cell = how that month compared with the year’s normal month (“+11%” = 11% above). A real season shows the same colour in the same column every year. Faded rows = incomplete years.',
+      build: () => [{fr: {x: 0, y: 0, w: 900, h: 330}, draw: heat}]},
+    after: [ulSent + ' ' + dmSent, `Our choice: no seasonal adjustment. Unilever months that lean the same way in all full years: ${highs.length ? 'higher — ' + listWords(highs) : 'none higher'}; ${lows.length ? 'lower — ' + listWords(lows) : 'none lower'}. Our test needs the whole year’s shape to match between every pair of years, and it does not.`],
+    means: 'Plan orders without a seasonal adjustment for now; re-check once full years of Del Monte data arrive.',
+    details: [{file: 'ch11_branch', title: 'Del Monte by branch, 2023 (the only year with a branch field)', W: 900, H: 280,
+      read: 'Each month vs 2023’s normal month, per branch.',
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 280}, o: {xs: [...Array(12).keys()].map(i => i + 1), xlab: m => MON[m - 1], hrules: [{y: 1, label: 'normal month'}], y: {fmt: v => sgn((v - 1) * 100), title: 'vs normal month'},
+        series: [['branch pangasinan (2023 only)', 'Pangasinan', 'blue'], ['branch ilocos (2023 only)', 'Ilocos', 'mag']].map(([s, lab, col]) => { const R = I.filter(r => r.series === s);
+          return {key: s, label: lab, color: t[col], width: 2, r: 3, pts: [...Array(12).keys()].map(i => [i + 1, (R.find(r => r.moy === i + 1) || {}).index ?? null])}; })}}]}],
+    detailsHTML: `<p class="evcap">Del Monte November–December: the average invoice was ${ratio.map((r, i) => `${r.toFixed(1)}× the rest of ${dmYears[i]}`).join(' and ')} (from stored monthly totals and invoice counts)`
+      + (pang != null ? `; in 2023 the Pangasinan branch was ${pc(pang, 0)} of Nov–Dec sales (2024–25 rows carry towns, not branches)` : '')
+      + `. Whether these were promotional orders: not available from stored results.</p>`,
+  };
 };
 
-// ---- cards ---------------------------------------------------------------------------
-function evDetails(c){
+CARDS[12] = c => {
+  BOARD[12] = ['— (not built yet)', '—', 'Will show where real, placeholder and missing data sit, once the coverage table is live.'];
+  return {question: 'Where do we have real data, placeholder data, or none?', headline: 'Not built yet: it waits for the data-coverage table to reach the live database.', main: null, means: 'Nothing to act on yet.', details: []};
+};
+
+// ---- page ----------------------------------------------------------------------------------
+function evDetailsBlock(c, spec){
   const checks = (c.checks || []).map(k => `<li><span class="${k.pass ? 'evok' : 'evno'}">${k.pass ? '✓' : '✗'} ${esc(k.id)}</span> ${esc(k.detail)}</li>`).join('');
   const amends = (c.amendments || []).map(a => `<div class="evamend"><b>Amended ${esc(a.date)} (${esc(a.item)}, ${esc(a.approved_by)}):</b> ${esc(a.amended)} <span class="muted">— ${esc(a.reason)}</span></div>`).join('');
   const files = Object.values(c.files || {}).map(f => `<code>${esc(f)}</code>`).join(' ');
   return `<details class="evdetails"><summary>Details (for the paper)</summary>`
+    + (spec.details || []).map((f, i) => evFigHTML(c, f, 'd' + i)).join('')
+    + (spec.detailsHTML || '')
     + `<div class="evcrit"><b>Pre-registered — flawed if:</b> ${esc(c.criterion)} <span class="muted">Otherwise: ${esc(c.otherwise)}. Stored verdict: <b>${esc(c.verdict)}</b>.</span></div>`
     + (c.verdict_detail ? `<div class="evdetail">${esc(c.verdict_detail)}</div>` : '')
     + (c.caption ? `<p class="evcap"><b>Caption.</b> ${esc(c.caption)} <button class="evbtn evcopy" data-c="${c.chart}">Copy caption</button></p>` : '')
-    + amends
-    + (checks ? `<ul class="evlist checks">${checks}</ul>` : '')
+    + amends + (checks ? `<ul class="evlist checks">${checks}</ul>` : '')
     + ((c.data_notes || []).length ? `<ul class="evlist">${c.data_notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '')
     + `<div class="evprov"><span>MASE gate used: <b>${esc(c.mase_gate_used)}</b></span><span>Re-run after 5f: <b>${esc(c.rerun_after_5f)}</b></span>`
     + (c.script ? `<span>Script <code>${esc(c.script)}</code> @ <code>${esc(c.code_commit)}</code>, ${esc(c.computed_at)}</span>` : '')
     + (c.caption_restamped_by ? `<span>Caption restamped by <code>${esc(c.caption_restamped_by)}</code></span>` : '')
     + (files ? `<span>Data ${files}</span>` : '') + `</div></details>`;
 }
+function evFigHTML(c, f, key){
+  return `<figure class="evfig${key === 'm' ? ' evmain' : ''}"><div class="evfhead"><span class="evftitle">${esc(f.title)}</span>`
+    + (f.control ? `<select class="evsel" data-c="${c.chart}" data-f="${key}">${f.control.options.map(([v, l]) => `<option value="${v}"${v === f.control.get() ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>` : '')
+    + `<span class="evbtns"><button class="evbtn" data-c="${c.chart}" data-f="${key}" data-k="svg">SVG</button><button class="evbtn" data-c="${c.chart}" data-f="${key}" data-k="png">PNG</button></span></div>`
+    + (f.read ? `<div class="evread"><b>How to read this:</b> ${esc(f.read)}</div>` : '')
+    + `<div class="evsvg" id="evs-${c.chart}-${key}"></div></figure>`;
+}
 function evCard(c){
-  const figs = c.verdict === 'NOT BUILT' ? [] : (EVFIGS[c.chart] ? EVFIGS[c.chart](c) : []);
-  c._figs = figs;
-  return `<article class="evcard" id="ev-${c.chart}"><div class="evhead"><span class="evnum">Decision ${c.chart}</span>`
-    + `<span class="evdec">${esc(DECISION[c.chart] || c.title)}</span>${evChip(c.verdict)}</div>`
-    + `<h3 class="evheadline">${esc(HEAD[c.chart] ? HEAD[c.chart](c) : c.title)}</h3>`
-    + `<p class="evtest"><b>The test:</b> ${esc(TEST[c.chart] || '')}</p>`
-    + `<div class="evfigs">${figs.map((f, i) => `<figure class="evfig"><div class="evfhead"><span class="evftitle">${esc(f.title)}</span>`
-      + (f.control ? `<select class="evsel" data-c="${c.chart}" data-f="${i}">${f.control.options.map(([v, l]) => `<option value="${v}"${v === f.control.get() ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>` : '')
-      + `<span class="evbtns"><button class="evbtn" data-c="${c.chart}" data-f="${i}" data-k="svg">SVG</button><button class="evbtn" data-c="${c.chart}" data-f="${i}" data-k="png">PNG</button></span></div>`
-      + `<div class="evread"><b>How to read this:</b> ${esc(f.read || '')}</div>`
-      + (f.toggle && i === figs.findIndex(q => q.toggle) ? `<label class="evtoggle"><input type="checkbox" data-c="${c.chart}" data-t="${f.toggle.key}"${EVSTATE[f.toggle.key] ? ' checked' : ''}> ${esc(f.toggle.label)}</label>` : '')
-      + `<div class="evsvg" id="evs-${c.chart}-${i}"></div></figure>`).join('')}</div>`
-    + (c.verdict === 'NOT BUILT' ? '' : evDetails(c)) + `</article>`;
+  const spec = CARDS[c.chart] ? CARDS[c.chart](c) : {question: '', headline: c.title, main: null, details: []};
+  c._spec = spec; c._figs = {m: spec.main};
+  (spec.details || []).forEach((f, i) => { c._figs['d' + i] = f; });
+  const lines = (arr, cls) => (arr || []).map(s => `<p class="${cls}">${spec.afterHTML && cls === 'evafter' ? s : esc(s)}</p>`).join('');
+  return `<article class="evcard evslide" id="ev-${c.chart}"><div class="evhead"><span class="evnum">Decision ${c.chart}</span>${evChip(c)}</div>`
+    + `<p class="evq"><b>The question:</b> ${esc(spec.question)}</p>`
+    + `<h3 class="evheadline">${esc(spec.headline)}</h3>`
+    + lines(spec.before, 'evbefore')
+    + (spec.main ? evFigHTML(c, spec.main, 'm') : '')
+    + lines(spec.after, 'evafter')
+    + `<p class="evmeans"><b>What this means for SSM:</b> ${esc(spec.means || '')}</p>`
+    + (c.verdict === 'NOT BUILT' ? '' : evDetailsBlock(c, spec)) + `</article>`;
+}
+function lpBox(){
+  const c8 = EV.charts.find(c => c.chart === 8), n = c8 ? (evRecs(c8.data.totals)[0] || {}).products : null;
+  return `<section class="card evlpbox evslide" id="ev-lp"><h3 class="evheadline">What the order plan (LP) does</h3><ol class="evlp">`
+    + `<li>For each of the ${n ?? 'planned'} products it works out the <b>need</b>: next month’s forecast + the stock it should end the month with (including a safety buffer) − stock already on hand.</li>`
+    + `<li>It respects three limits: the <b>supplier allocation</b> (last year’s sales × 103–108%), <b>warehouse space</b>, and SSM’s rule of keeping <b>3 weeks of sales</b> in stock.</li>`
+    + `<li>If the allocation is smaller than the total need, some products get less — the plan decides which, using the <b>weights</b> (decision 9).</li></ol>`
+    + `<p class="evbefore">Like a store that only lets you buy 95 kg when your family needs 100 kg: you keep 3 weeks of food in the pantry and decide which items get cut.</p>`
+    + `<p class="evbefore">The plan ${PLACEHOLDER} (allocation %, lead time, costs, warehouse size).</p></section>`;
+}
+function boardTable(C){
+  const res = c => evChip(c);
+  return `<section class="card evboard evslide" id="ev-board"><h3 class="evheadline">Board summary</h3><table class="evsum evboardtbl"><thead><tr><th>Decision</th><th>What we chose</th><th>What we compared it against</th><th>Result</th><th>What it means for SSM</th></tr></thead><tbody>`
+    + C.map(c => { const b = BOARD[c.chart] || ['', '', '']; return `<tr><td><a href="#ev-${c.chart}">${c.chart}. ${esc(c._spec.question)}</a></td><td>${esc(b[0])}</td><td>${esc(b[1])}</td><td>${res(c)}</td><td>${esc(b[2])}</td></tr>`; }).join('')
+    + `</tbody></table></section>`;
 }
 function drawEvidence(){
   if (evOnce.drawn) return;
   evOnce.drawn = true;
   const C = EV.charts;
-  const intro = `<div class="card evintro"><h2>Evidence: is each modelling decision backed by the data?</h2>`
-    + `<p class="evlead">Each card below tests one decision we made. The pass/fail rule for every test was written down and committed <b>before</b> the result was computed, `
-    + `and results are shown exactly as they came out, including the one that questions our choice. A “tie” means the data cannot tell two options apart.</p>`
-    + `<p class="evlead">Read each card from the top: the <b>headline</b> is the takeaway, the <b>coloured label</b> says whether our choice holds, and the chart shows why. `
-    + `Numbers for the paper, the exact test and the data notes are under <b>Details (for the paper)</b> on each card. Real sales only; SVG/PNG exports use a white print style.</p>`
+  const cards = C.map(c => ({c, html: evCard(c)}));      // builds specs and BOARD rows first
+  const intro = `<div class="card evintro"><div class="evintrohead"><h2>Evidence: is each decision backed by the data?</h2>`
+    + `<button class="evbtn evpbtn" id="evPresent">▶ Presentation view</button></div>`
+    + `<p class="evlead">Each card tests one decision we made. The pass/fail rule for every test was written down <b>before</b> the result was computed, and results are shown as they came out — including the one that is questioned. `
+    + `Read a card top to bottom: <b>the question</b>, <b>the answer</b>, one chart comparing our choice (blue, “Ours”) with the alternatives (grey), and <b>what it means for SSM</b>. Exact figures are under <b>Details (for the paper)</b>.</p>`
     + (EV.uncommitted.length ? `<p class="evno">Computed from uncommitted code: charts ${EV.uncommitted.join(', ')}.</p>` : '')
-    + `<div class="evsumgrid">${C.map(c => `<a class="evsumrow" href="#ev-${c.chart}"><span class="evnum">${c.chart}</span><span>${esc(DECISION[c.chart] || c.title)}</span><span>${evChip(c.verdict)}</span></a>`).join('')}</div>`
     + `<details class="evgloss"><summary>Glossary: every term on this page</summary><dl>${GLOSSARY.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></details>`
     + `<details class="evgloss"><summary>Technical summary (checks, MASE gate, re-run after session 5f)</summary><table class="evsum"><thead><tr><th>#</th><th>Chart</th><th>Stored verdict</th><th>Checks</th><th>MASE gate</th><th>Re-run after 5f</th></tr></thead><tbody>`
     + C.map(c => `<tr><td class="num">${c.chart}</td><td>${esc(c.title)}</td><td>${esc(c.verdict)}</td>`
       + `<td>${(c.checks || []).map(k => `<span class="${k.pass ? 'evok' : 'evno'}">${k.pass ? '✓' : '✗'} ${esc(k.id)}</span>`).join(' ') || '<span class="muted">—</span>'}</td>`
       + `<td>${esc(c.mase_gate_used)}</td><td>${esc(c.rerun_after_5f)}</td></tr>`).join('') + `</tbody></table></details></div>`;
-  $('#evidence').innerHTML = intro + `<div class="evgrid">${C.map(evCard).join('')}</div>`;
-  C.forEach(c => (c._figs || []).forEach((f, i) => evRender($(`#evs-${c.chart}-${i}`), f)));
-  $('#evidence').addEventListener('click', e => {
-    const b = e.target.closest('.evbtn'); if (!b) return;
+  const body = cards.map(({c, html}) => (c.chart === 8 ? lpBox() : '') + html).join('');
+  $('#evidence').innerHTML = intro + boardTable(C) + `<div class="evgrid">${body}</div>`
+    + `<div class="evpnav" id="evPnav" hidden><button class="evbtn" id="evPrev">← Previous</button><span id="evPpos"></span><button class="evbtn" id="evNext">Next →</button><button class="evbtn" id="evPexit">Exit presentation</button></div>`;
+  C.forEach(c => Object.entries(c._figs).forEach(([k, f]) => { if (f) evRender($(`#evs-${c.chart}-${k}`), f); }));
+  const root = $('#evidence');
+  root.addEventListener('click', e => {
+    const b = e.target.closest('.evbtn'); if (!b || !b.dataset.c) return;
     const c = C.find(x => x.chart === +b.dataset.c);
     if (b.classList.contains('evcopy')){ navigator.clipboard.writeText(c.caption).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy caption'; }, 1200); }); return; }
-    evExport(c._figs[+b.dataset.f], b.dataset.k);
+    evExport(c._figs[b.dataset.f], b.dataset.k);
   });
-  $('#evidence').addEventListener('change', e => {
-    const s = e.target.closest('.evsel'), tg = e.target.closest('input[data-t]');
-    const c = C.find(x => x.chart === +(s || tg || {dataset: {}}).dataset.c); if (!c) return;
-    if (s){ const f = c._figs[+s.dataset.f]; f.control.set(s.value); evRender($(`#evs-${c.chart}-${s.dataset.f}`), f); }
-    if (tg){ EVSTATE[tg.dataset.t] = tg.checked; c._figs.forEach((f, i) => { if (f.toggle) evRender($(`#evs-${c.chart}-${i}`), f); }); }
+  root.addEventListener('change', e => {
+    const s = e.target.closest('.evsel'); if (!s) return;
+    const c = C.find(x => x.chart === +s.dataset.c), f = c._figs[s.dataset.f]; f.control.set(s.value); evRender($(`#evs-${c.chart}-${s.dataset.f}`), f);
   });
+  // Presentation view: one slide per screen (board summary, then each card; the order-plan box before decision 8).
+  const slides = () => [...root.querySelectorAll('.evslide')];
+  let pos = 0;
+  const show = () => { const s = slides(); pos = Math.max(0, Math.min(s.length - 1, pos));
+    s.forEach((el, i) => el.classList.toggle('evcurrent', i === pos)); $('#evPpos').textContent = `${pos + 1} / ${s.length}`; window.scrollTo(0, 0); };
+  const setPresent = on => { $('#tab-evidence').classList.toggle('evpresent', on); $('#evPnav').hidden = !on; if (on){ pos = 0; show(); } };
+  $('#evPresent').onclick = () => setPresent(true);
+  $('#evPexit').onclick = () => setPresent(false);
+  $('#evPrev').onclick = () => { pos--; show(); };
+  $('#evNext').onclick = () => { pos++; show(); };
+  document.addEventListener('keydown', e => { if (!$('#tab-evidence').classList.contains('evpresent')) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') { pos++; show(); } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { pos--; show(); } else if (e.key === 'Escape') setPresent(false); });
+  window.evidencePresent = (on, p) => { setPresent(on); if (p != null){ pos = p; show(); } };
 }
-// Dev hook (scripted checks and batch export): the light print SVG of chart `chart`, figure `fig`.
+// Dev hooks (scripted checks and batch export).
 window.evidenceExportSVG = (chart, fig) => { drawEvidence(); const c = EV.charts.find(x => x.chart === chart);
-  return c && c._figs[fig] ? evFigure(EVT.light, c._figs[fig]).svg : null; };
-// Dev hook for the readability check: each card's headline, chip text and chart titles.
-window.evidenceCards = () => { drawEvidence(); return EV.charts.map(c => ({chart: c.chart, verdict: c.verdict, headline: HEAD[c.chart] ? HEAD[c.chart](c) : '',
-  words: (HEAD[c.chart] ? HEAD[c.chart](c) : '').split(/\s+/).length})); };
+  const f = c && c._figs[fig === 0 ? 'm' : fig]; return f ? evFigure(EVT.light, f).svg : null; };
+window.evidenceFigKeys = () => { drawEvidence(); return EV.charts.flatMap(c => Object.entries(c._figs).filter(([, f]) => f).map(([k]) => [c.chart, k])); };
+window.evidenceCards = () => { drawEvidence(); return EV.charts.map(c => ({chart: c.chart, question: c._spec.question, headline: c._spec.headline, means: c._spec.means, board: BOARD[c.chart]})); };
 return drawEvidence;
 })();

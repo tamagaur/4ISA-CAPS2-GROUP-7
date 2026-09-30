@@ -83,6 +83,11 @@ def load(repo: str) -> dict:
                 problems.append(f"chart {n}: file '{key}' ({rel}) missing")
                 continue
             data[key] = _table(os.path.join(repo, rel), cols)
+        # Chart 6's "what we tried" panel: a tally of stored per-product results (scripts/evidence/ch06_rescue.py).
+        if n == 6 and os.path.isfile(os.path.join(ev, "ch06_rescue.csv")):
+            data["rescue"] = _table(os.path.join(ev, "ch06_rescue.csv"))
+            with open(os.path.join(ev, "ch06_rescue.json"), encoding="utf-8") as fh:
+                meta["rescue_meta"] = json.load(fh)
         meta["data"] = data
         meta["amendments"] = [a for a in amend if a["chart"] == str(n)]
         charts.append(meta)
