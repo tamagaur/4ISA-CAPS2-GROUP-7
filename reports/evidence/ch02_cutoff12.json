@@ -1,0 +1,8 @@
+{
+ "source": "C:/Users/kyuan/dsd-cutoff-test (branch exp/cutoff-12) @ 8515d2b: reports/evidence/cutoff12_results.csv, RESULT_cutoff12.md",
+ "prereg_commit": "14657c2",
+ "verdict": "KEEP",
+ "status": "Exploratory: these months were also used to set the cutoffs. Under the pre-registered rule, KEEP settles the question. No production code or rule was changed.",
+ "script": "scripts/evidence/import_side_results.py",
+ "code_commit": "1735565"
+}
