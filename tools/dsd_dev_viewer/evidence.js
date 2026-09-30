@@ -294,7 +294,7 @@ const GLOSSARY = [
   ['Weeks of cover', 'How many weeks of sales the stock left at month end would last. SSM’s rule is 3 weeks.'],
   ['Safety stock / service level', 'Extra stock held against surprises; a 90% service level means running out in at most about 1 month in 10.'],
   ['Pre-registered', 'The pass/fail rule was written and committed before any result was computed.'],
-  ['Team estimates', 'Some order-plan inputs (allocation %, lead time, costs, warehouse size) use team estimates until SSM confirms the real figures.'],
+  ['Team estimates', 'Some order-plan inputs (lead time, costs, warehouse size) use team estimates until SSM confirms the real figures.'],
 ];
 
 // ---- cards -------------------------------------------------------------------------------
@@ -1046,7 +1046,8 @@ function lpBox(){
     + `<li>It respects three limits: the <b>supplier allocation</b> (last year’s sales × 103–108%), <b>warehouse space</b>, and SSM’s rule of keeping <b>3 weeks of sales</b> in stock.</li>`
     + `<li>If the allocation is smaller than the total need, some products get less — the plan decides which, using the <b>weights</b> (decision 9).</li></ol>`
     + `<p class="evbefore">Like a store that only lets you buy 95 kg when your family needs 100 kg: you keep 3 weeks of food in the pantry and decide which items get cut.</p>`
-    + `<p class="evbefore">The plan ${PLACEHOLDER} (allocation %, lead time, costs, warehouse size).</p></section>`;
+    + `<p class="evbefore"><b>Supplier allocation:</b> SSM gave the range (103% minimum, 105% middle, 108% maximum of last year’s sales, depending on the year); we plan at 103%, the guaranteed minimum. Still to confirm with SSM: whether it is counted in pesos or pieces.</p>`
+    + `<p class="evbefore">The plan ${PLACEHOLDER} (lead time, costs, warehouse size).</p></section>`;
 }
 function boardTable(C){
   const res = c => evChip(c);
