@@ -1,0 +1,35 @@
+{
+ "chart": 8,
+ "slug": "allocation",
+ "title": "Allocation 103/105/108",
+ "files": {
+  "totals": "reports/evidence/ch08_totals.csv",
+  "diff_vs_0929": "reports/evidence/ch08_diff_vs_0929.csv"
+ },
+ "caption": "Supplier allocation at Sir Abe's three levels (last year's sales x 103 / 105 / 108 % / 12), planning cycle 2026-03-01, 73 products, run_lp --dry-run with every other input at its placeholder default. 103%: order 1,193,368 of need 1,255,471 pieces, shortfall 62,103 on 45 SKUs, month-end cover 3.000000 weeks (PHP -0.02 against the 3-week requirement); 105%: order 1,216,540 of need 1,255,471 pieces, shortfall 38,931 on 40 SKUs, month-end cover 3.000000 weeks (PHP -0.02 against the 3-week requirement); 108%: order 1,251,299 of need 1,255,471 pieces, shortfall 4,173 on 18 SKUs, month-end cover 3.232118 weeks (PHP +635,314.11 against the 3-week requirement). The pre-registered test is strict (cover below 3 weeks), so 105% FAILS it by PHP 0.020492; run_lp's own log counts cover within PHP 1 as met (run_lp.py:556), so it reports 105% as met. Target cover 3 weeks (placeholder). Against the 2026-09-29 dry run: 103% 0 of 73 orders changed; 105% 0 of 73 orders changed; 108% 0 of 73 orders changed. Inputs are placeholders, not SSM's figures.",
+ "verdict": "FLAWED",
+ "verdict_detail": "105%: month-end cover 2.999999993 weeks vs target 3 (BELOW; PHP -0.020492 against the requirement; run_lp's own log rule, stock >= required - PHP 1 (run_lp.py:556), calls it met); short SKUs 40 at 105% vs 18 at 108% (not cleared by 108%)",
+ "criterion": "The default 105% leaves month-end cover below 3 weeks (lp_inputs target_weeks), or leaves a shortfall that 108% clears",
+ "otherwise": "CONFIRMS",
+ "mase_gate_used": "1.0 (LP candidate pool; scripts/run_lp.py:113)",
+ "rerun_after_5f": "y",
+ "checks": [
+  {
+   "id": "G7",
+   "pass": true,
+   "detail": "harness at weights (0.45, 0.35, 0.2) equals run_lp --dry-run order for order at 103%, 105%, 108% (73 products each)"
+  }
+ ],
+ "script": "scripts/evidence/lp_charts.py",
+ "code_commit": "d3dc662",
+ "computed_at": "2026-09-30T18:28:32",
+ "data_notes": [
+  "LP inputs are PLACEHOLDERS (analytics/optimization/lp_inputs.py), realistic values the team chose, not SSM's figures: allocation_pct 105, review_days 5, lead_days 3, target_weeks 3, cover_rule aggregate, warehouse_capacity 3.8e+06, default_procurement_cost_per_unit 25, storage_cost_per_unit 0.5.",
+  "Pool: Category A with a stored forecast of status 'ok' and MASE < 1 (pipeline gate)."
+ ],
+ "cli_csvs": [
+  "reports/evidence/ch08_cli_plan_103.csv",
+  "reports/evidence/ch08_cli_plan_105.csv",
+  "reports/evidence/ch08_cli_plan_108.csv"
+ ]
+}

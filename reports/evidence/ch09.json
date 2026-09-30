@@ -1,0 +1,35 @@
+{
+ "chart": 9,
+ "slug": "weights",
+ "title": "LP weights",
+ "files": {
+  "grid": "reports/evidence/ch09_grid.csv"
+ },
+ "caption": "LP weights (cost w1, service w2, storage w3) on a 0.05 grid summing to 1 (231 points), allocation 103 %, 73 products, placeholder inputs. At the current weights (0.45, 0.35, 0.2): 45 SKUs cut (order below need), shortfall 62,103 pieces, order cost PHP 14,007,120. Within +/-0.10 of the current weights on every weight (18 other points) the cut set changes at 0; across the whole grid at 62 of 230. Shortfall across the grid 62,103-62,103 pieces; order cost PHP 14,007,120-14,268,462.",
+ "verdict": "CONFIRMS",
+ "verdict_detail": "0 of 18 grid points within +/-0.10 of (0.45, 0.35, 0.2) change the cut-SKU set",
+ "criterion": "At any grid point within +/-0.10 of (0.45, 0.35, 0.20) on every weight, the cut-SKU set (short > 0 at 103%) differs from the default's",
+ "otherwise": "CONFIRMS",
+ "mase_gate_used": "1.0 (LP candidate pool; run_lp.py:113)",
+ "rerun_after_5f": "y",
+ "checks": [
+  {
+   "id": "G7",
+   "pass": true,
+   "detail": "harness at weights (0.45, 0.35, 0.2) equals run_lp --dry-run order for order at 103%, 105%, 108% (73 products each)"
+  }
+ ],
+ "script": "scripts/evidence/lp_charts.py",
+ "code_commit": "d3dc662",
+ "computed_at": "2026-09-30T18:28:32",
+ "data_notes": [
+  "LP inputs are PLACEHOLDERS (analytics/optimization/lp_inputs.py), realistic values the team chose, not SSM's figures: allocation_pct 105, review_days 5, lead_days 3, target_weeks 3, cover_rule aggregate, warehouse_capacity 3.8e+06, default_procurement_cost_per_unit 25, storage_cost_per_unit 0.5.",
+  "Pool: Category A with a stored forecast of status 'ok' and MASE < 1 (pipeline gate)."
+ ],
+ "default": [
+  0.45,
+  0.35,
+  0.2
+ ],
+ "step": 0.05
+}
