@@ -333,8 +333,9 @@ from backend.data_mode import (
     preview_block,
     unilever_demand,
 )
+from analytics.allocation import allocation_levels, basis_year as allocation_basis_year, planning_month_after
 from analytics.classification.abc import abc_rules
-from analytics.params import MASE_GATE
+from analytics.params import ALLOCATION_DEFAULT_PCT, MASE_GATE
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle
@@ -360,7 +361,7 @@ POLICY_WEEKS = 3
 # Sir Abe's allocation rule (client meeting, Sep 2026): the principal sets
 # the year's allocation from the previous year's total sales — minimum
 # x103%, mid x105%, maximum x108%, revised in Q4 on how the market went.
-ALLOCATION_LEVELS = (103, 105, 108)
+# One definition with the LP's ceiling: analytics/allocation.py.
 
 # Step 19's LP objective weights (analytics/optimization/lp.py's W1/W2/W3:
 # 0.45/0.35/0.20) — hardcoded module constants there, not stored per-
@@ -962,6 +963,11 @@ def get_dashboard(
         "basis_year": None, "basis_sales": None, "basis_months": 0,
         "latest_month": None, "ytd_sales": None, "ytd_months": 0,
         "levels": [], "vat_basis": None, "blocked_reason": None,
+        # analytics/allocation.py: the basis is the calendar year before the
+        # planning month (the month after the latest sales month), in pesos
+        # here (Del Monte has no pieces); default_pct is the placeholder level.
+        "planning_month": None, "allocation_year": None,
+        "unit": "pesos", "default_pct": ALLOCATION_DEFAULT_PCT,
     }
     if scope == "all":
         allocation["blocked_reason"] = (
@@ -972,10 +978,16 @@ def get_dashboard(
         allocation["blocked_reason"] = f"No sales rows for {_scope_label(scope)} at all."
     else:
         latest_month = latest_by_principal[scope]
-        latest_year = int(latest_month[:4])
-        basis_year = latest_year - 1
+        planning_month = planning_month_after(latest_month)
+        allocation_year = int(planning_month[:4])
+        basis_year = allocation_basis_year(planning_month)
         basis_periods = [f"{basis_year:04d}-{m:02d}" for m in range(1, 13)]
-        ytd_periods = [f"{latest_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
+        # Sales so far in the allocation year. A January plan (latest data
+        # in December) has none yet: the card shows the allocation alone.
+        ytd_periods = (
+            [f"{allocation_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
+            if int(latest_month[:4]) == allocation_year else []
+        )
         # Reuse the months the page already summed (same scope, same mode),
         # and fetch only the rest in ONE call — basis and YTD are disjoint.
         missing = [p for p in basis_periods + ytd_periods if p not in sales_by_period]
@@ -985,6 +997,8 @@ def get_dashboard(
         basis_sales = sum(basis_values) if basis_values else None
         allocation["basis_year"] = basis_year
         allocation["latest_month"] = latest_month
+        allocation["planning_month"] = planning_month
+        allocation["allocation_year"] = allocation_year
         if not basis_values:
             allocation["blocked_reason"] = (
                 f"No {basis_year} sales rows for {_scope_label(scope)}, so the prior-year "
@@ -1004,14 +1018,7 @@ def get_dashboard(
                 "basis_months": len(basis_values),
                 "ytd_sales": round(ytd_sales, 2) if ytd_sales is not None else None,
                 "ytd_months": len(ytd_values),
-                "levels": [
-                    {
-                        "pct": pct,
-                        "annual": round(basis_sales * pct / 100.0, 2),
-                        "monthly": round(basis_sales * pct / 100.0 / 12.0, 2),
-                    }
-                    for pct in ALLOCATION_LEVELS
-                ],
+                "levels": allocation_levels(basis_sales, unit="pesos"),
                 # The tax basis the pesos above are on (see vat_note's sources),
                 # naming any Del Monte month in the basis or YTD recorded with tax.
                 "vat_basis": (

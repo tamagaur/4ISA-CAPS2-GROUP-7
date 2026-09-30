@@ -132,6 +132,10 @@ SKU_COVER_HISTORY_MONTHS = 3
 # sales — x103% minimum, x105% mid, x108% maximum (Sir Abe, client meeting
 # Sep 2026). analytics/allocation.py applies it.
 ALLOCATION_LEVELS_PCT = (103, 105, 108)
+# PLACEHOLDER: which level applies is SSM's to say. Until then the
+# guaranteed minimum (Yuan, 2026-09-30): the LP's --allocation-pct default
+# and the level the dashboard card reports as the default.
+ALLOCATION_DEFAULT_PCT = 103
 # What the sales basis is counted in; the caller says which. The LP needs
 # pieces; the dashboard card uses pesos (Del Monte's sell-out has no pieces).
 ALLOCATION_UNITS = ("pieces", "pesos")
@@ -153,8 +157,9 @@ COVER_RULES = ("aggregate", "per-sku")
 # edits them once SSM confirms.
 PLACEHOLDERS = {
     # Sir Abe: the yearly allocation is last year's sales × 103% (minimum),
-    # 105% (mid) or 108% (maximum). Mid, until SSM says which applies.
-    "allocation_pct": 105.0,
+    # 105% (mid) or 108% (maximum). ALLOCATION_DEFAULT_PCT until SSM says
+    # which applies.
+    "allocation_pct": float(ALLOCATION_DEFAULT_PCT),
     # Business days. Weekly purchase orders, delivered 2-3 days later (Sir Abe).
     "review_days": 5.0,
     "lead_days": 3.0,

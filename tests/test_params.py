@@ -45,10 +45,11 @@ PINNED = {
     "COVER_KPI_HISTORY_MONTHS": 12,
     "SKU_COVER_HISTORY_MONTHS": 3,
     "ALLOCATION_LEVELS_PCT": (103, 105, 108),
+    "ALLOCATION_DEFAULT_PCT": 103,
     "ALLOCATION_UNITS": ("pieces", "pesos"),
     "COVER_RULES": ("aggregate", "per-sku"),
     "PLACEHOLDERS": {
-        "allocation_pct": 105.0,
+        "allocation_pct": 103.0,
         "review_days": 5.0,
         "lead_days": 3.0,
         "target_weeks": 3.0,

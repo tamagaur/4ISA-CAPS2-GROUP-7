@@ -101,6 +101,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from analytics.etl.granularity import business_days_in_month, resolve_delmonte_category_grain, resolve_unilever_sku_grain
+from analytics.allocation import basis_year, monthly_allocation
 from analytics.optimization.lp import (
     SKUInput, build_lp_model, compute_safety_stock, solve_lp, target_stock, weekly_demand,
 )
@@ -386,12 +387,13 @@ def product_input(
 
 
 def allocation_ceilings(products: list[ProductInput], allocation_pct: float) -> dict[str, float]:
-    """Sir Abe's rule, pro rata to the planned products: last year's sales in
-    pieces × allocation % ÷ 12, per principal. Pieces a month."""
+    """Sir Abe's rule (analytics/allocation.py, the dashboard card's own), pro
+    rata to the planned products: the basis year's sales in pieces ×
+    allocation % ÷ 12, per principal. Pieces a month."""
     totals: dict[str, float] = {}
     for p in products:
         totals[p.principal] = totals.get(p.principal, 0.0) + max(p.prior_year_pieces, 0.0)
-    return {principal: total * allocation_pct / 100.0 / 12.0 for principal, total in totals.items()}
+    return {principal: monthly_allocation(total, allocation_pct, unit="pieces") for principal, total in totals.items()}
 
 
 def _diagnose_infeasibility(skus: list[SKUInput], warehouse_capacity: float) -> list[str]:
@@ -641,7 +643,7 @@ def main():
             continue
         product, reason = product_input(
             row.product_key, row.sku_id, row.principal, float(row.forecast_value), sigma_d,
-            stock_and_cost, demand_df, prior_year=row.forecast_date.year - 1,
+            stock_and_cost, demand_df, prior_year=basis_year(row.forecast_date),
         )
         if product is None:
             gate_out(row.sku_id, row.principal, reason)
@@ -670,7 +672,7 @@ def main():
             infeasible_cycles.append((planning_cycle_date, plan.infeasible_reasons))
             logger.error(f"  Writing NOTHING for cycle {planning_cycle_date} — no constraint was relaxed to force a solution.")
             continue
-        _log_cycle(plan, args.allocation_pct, planning_cycle_date.year - 1)
+        _log_cycle(plan, args.allocation_pct, basis_year(planning_cycle_date))
 
         # What is already stored for this cycle decides what a write would
         # do: decided rows are kept as they are (UPSERT_QUERY), and pending

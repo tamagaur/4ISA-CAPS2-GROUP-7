@@ -1354,11 +1354,31 @@ def test_allocation_and_combined_pesos_are_withheld_under_all_principals():
     assert set(body["allocation"]) == {
         "basis_year", "basis_sales", "basis_months", "latest_month", "ytd_sales",
         "ytd_months", "levels", "vat_basis", "blocked_reason",
+        "planning_month", "allocation_year", "unit", "default_pct",
     }
     assert body["allocation"]["levels"] == [] and body["allocation"]["basis_sales"] is None
     assert body["vat_note"] == (
         "Unilever pesos include VAT; Del Monte pesos exclude it — combined totals mix the two tax bases."
     )
+
+
+def test_allocation_basis_is_the_year_before_the_planning_month():
+    """Item 7: one rule with the LP (analytics/allocation.py). Data through
+    December plans January, so the basis is that December's own year and the
+    allocation year has no sales yet; the Del Monte card still renders (pesos,
+    since Del Monte has no pieces)."""
+    session = FakeSession(latest_sales_period=None)
+    session.delmonte_sales = {f"2025-{m:02d}": 1_000.0 for m in range(1, 13)}
+    session.delmonte_latest_sales_period = "2025-12"
+    with make_client(session) as c:
+        a = c.get("/dashboard?principal=delmonte", headers={"Authorization": f"Bearer {user_token()}"}).json()["allocation"]
+    assert a["blocked_reason"] is None
+    assert (a["planning_month"], a["allocation_year"], a["basis_year"]) == ("2026-01", 2026, 2025)
+    assert a["basis_sales"] == pytest.approx(12_000.0) and a["basis_months"] == 12
+    assert a["ytd_months"] == 0 and a["ytd_sales"] is None
+    assert a["unit"] == "pesos" and a["default_pct"] == 103
+    assert [level["pct"] for level in a["levels"]] == [103, 105, 108]
+    assert a["levels"][0]["monthly"] == pytest.approx(12_000.0 * 1.03 / 12)
 
 
 def test_allocation_is_withheld_when_the_prior_year_nets_to_zero():

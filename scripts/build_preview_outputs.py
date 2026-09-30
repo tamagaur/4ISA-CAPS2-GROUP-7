@@ -48,6 +48,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
 from analytics.forecasting.baseline import MIN_MONTHS_WITH_SALES  # noqa: E402
+from analytics.allocation import basis_year  # noqa: E402
 from analytics.params import MASE_GATE, PLACEHOLDERS  # noqa: E402
 from backend.data_mode import PREVIEW_UNILEVER_DEMAND  # noqa: E402
 from scripts.preview_router_synth import load_series, preview  # noqa: E402
@@ -176,7 +177,7 @@ def lp_rows(conn, forecasts: pd.DataFrame, abc_period: str) -> tuple[pd.DataFram
             logging.warning("LP: %s gated out — %s", r.sku_id, reason)
             continue
         product, reason = product_input(r.product_key, r.sku_id, r.principal, float(r.forecast_value), sigma_d,
-                                        stock_and_cost, history, prior_year=int(str(r.forecast_date)[:4]) - 1)
+                                        stock_and_cost, history, prior_year=basis_year(r.forecast_date))
         if product is None:
             logging.warning("LP: %s gated out — %s", r.sku_id, reason)
             continue
