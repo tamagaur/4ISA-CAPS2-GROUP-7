@@ -40,7 +40,8 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from analytics.forecasting.split import train_holdout_split
-from analytics.params import FORECAST_INTERVAL_Z, HOLDOUT_FRACTION
+from analytics.classification.fsn import no_sale_in_last_months
+from analytics.params import DEAD_SKU_MONTHS, FORECAST_INTERVAL_Z, HOLDOUT_FRACTION
 from analytics.forecasting.baseline import (
     MIN_MONTHS_WITH_SALES,
     MASE_GATE,
@@ -351,7 +352,13 @@ def main():
                                                    months_with_sales, full_class, "insufficient_data")))
             continue
 
-        if months_span >= 6 and series.tail(6).sum() <= 0:
+        # Dead: no sale in the last DEAD_SKU_MONTHS CALENDAR months up to the
+        # latest demand month (fsn.no_sale_in_last_months, FSN's own rule).
+        # Anchored on latest_demand_month, not on the series' own end:
+        # build_series stops at the SKU's last row (session 6's fix), and a
+        # series that stops early must not have its old tail read as recent.
+        if months_span >= DEAD_SKU_MONTHS and no_sale_in_last_months(
+                series.index.strftime("%Y-%m"), series.to_numpy(), latest_demand_month):
             records.append(_with_window(_row_shell(p_key, sku_code, abc_period, months_span,
                                                    months_with_sales, full_class, "dead_sku")))
             continue
@@ -1071,7 +1078,7 @@ def _write_forecast_result(cur, df):
                     "provisional": False,
                     "lp_input_method": "zero_no_order",
                     "mase_gate_passed": None,
-                    "note": "no sale in the last 6 months — LP orders nothing.",
+                    "note": f"no sale in the last {DEAD_SKU_MONTHS} months — LP orders nothing.",
                 }
                 cur.execute(upsert, (
                     p_key, planning_date, 0.0, None, None, None, None, "dead_sku", json.dumps(mp),

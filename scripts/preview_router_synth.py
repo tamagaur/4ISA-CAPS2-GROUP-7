@@ -37,7 +37,8 @@ from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rm
 from analytics.forecasting.global_model import GlobalForecaster, with_placeholder
 from analytics.forecasting.router import rolling_one_step, route
 from analytics.forecasting.split import train_holdout_split
-from analytics.params import HOLDOUT_FRACTION
+from analytics.classification.fsn import no_sale_in_last_months
+from analytics.params import DEAD_SKU_MONTHS, HOLDOUT_FRACTION
 
 FIRST_REAL_ATTR = "first_real_month"   # series.attrs key: the SKU's first non-placeholder row
 
@@ -85,7 +86,10 @@ def preview(series_by_key: dict, target: pd.Timestamp) -> pd.DataFrame:
             rows.append({**base, "status": "insufficient_data", "bin": "insufficient", "served_model": "trailing_average",
                          "forecast": max(0.0, float(observed.mean()) if len(observed) else 0.0)})
             continue
-        if len(series) >= 6 and series.tail(6).sum() <= 0:
+        # The live runner's dead rule: calendar months up to the month before target.
+        if len(series) >= DEAD_SKU_MONTHS and no_sale_in_last_months(
+                series.index.strftime("%Y-%m"), series.to_numpy(),
+                (target - pd.offsets.MonthBegin(1)).strftime("%Y-%m")):
             rows.append({**base, "status": "dead_sku", "served_model": "zero_no_order", "forecast": 0.0})
             continue
         r = route(series, target, forecaster, allow_placeholder=True)

@@ -87,7 +87,9 @@ def classify_principal(
     for product_key, entry in series.items():
         if not (entry["qty"] > 0).any():
             continue
-        result = classify_fsn(entry["qty"])
+        # The window's own month labels: non-moving is judged on calendar months
+        # ending at the window's last month, so a gap month counts as no sale.
+        result = classify_fsn(entry["qty"], months)
         last_sale = max(i for i, q in enumerate(entry["qty"]) if q > 0)
         items.append({
             "product_key": product_key,
