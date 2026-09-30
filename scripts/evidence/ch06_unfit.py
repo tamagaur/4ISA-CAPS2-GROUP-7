@@ -41,6 +41,11 @@ def main():
     skus = payload["skus"]
     periods = payload["periods"]
 
+    # ma3_also_fails_common is stored as "1.0" / "0.0" / blank; the viewer's own field compares it with "1"
+    # (build.py load_fit_review) and so reads False for every SKU. Read the column here as a number.
+    fr = pd.read_csv(os.path.join(C.REPO, fit["file"]), dtype={"ma3_also_fails_common": float})
+    ma3_fails = dict(zip(fr.product_key.astype(int), fr.ma3_also_fails_common))
+
     unfit = [s for s in skus if s.get("verdict") == "not fit"]
     common = [s for s in unfit if s.get("verdict_source") == "common"]
     fallback = [s for s in unfit if s.get("verdict_source") == FALLBACK]
@@ -63,7 +68,8 @@ def main():
         lvl = s.get("lvl") or {}
         rows.append(dict(pk=s["pk"], sku_code=s["code"], product_name=s["name"], router_bin=s["router_bin"], served_model=s["method"],
                          verdict_source=s["verdict_source"], mase_used=used, mase_gate=GATE, ma3_mase_common=s.get("ma3_mase_common"),
-                         ma3_also_fails=s.get("ma3_fails"), cause_group=s.get("cause"), causes_all="; ".join(s.get("causes_all") or []),
+                         ma3_also_fails=None if pd.isna(ma3_fails.get(s["pk"])) else ma3_fails[s["pk"]] == 1.0,
+                         cause_group=s.get("cause"), causes_all="; ".join(s.get("causes_all") or []),
                          n_spikes=len(s["spike_months"]) if s.get("spike_months") is not None else None,
                          spike_months="; ".join(s.get("spike_months") or []),
                          level_ratio=lvl.get("r"), level_prior=" .. ".join(lvl.get("prior") or []),
@@ -86,7 +92,8 @@ def main():
     by_cause = S.cause_group.value_counts()
     by_bin = S.router_bin.value_counts()
     outside = M[M.holdout & M.outside_band.notna()]
-    ma3_fail = int(S.ma3_also_fails.fillna(False).astype(bool).sum())
+    ma3_scored = S[S.ma3_also_fails.notna()]
+    ma3_fail = int(ma3_scored.ma3_also_fails.astype(bool).sum())
     band_agree = payload["band"]["agree"]
     caption = (
         f"Unfit SKUs, Tier A as of 2026-02 (single): {len(S)} of {len(skus)} carry the fit review's 'not fit' verdict "
@@ -95,7 +102,8 @@ def main():
         + ", ".join(f"{b} {n}" for b, n in by_bin.items())
         + ". Measured cause (the fit review's first matching rule): "
         + ", ".join(f"{c} {n}" for c, n in by_cause.items())
-        + f". MA3 also fails on the common holdout for {ma3_fail} of them. Each panel shows the real monthly series, the served "
+        + f". MA3 also fails on the common holdout for {ma3_fail} of the {len(ma3_scored)} with a common-window MA3 score "
+          f"({len(S) - len(ma3_scored)} have none). Each panel shows the real monthly series, the served "
           f"model's rolling one-step holdout with its band (forecast +/- {V.CONFIDENCE_Z} x holdout RMSE), and the measured cause "
           f"months: spikes (more than 3 x MAD from the SKU's median; {int(S.n_spikes.fillna(0).sum())} months across the "
           f"{len(S)} SKUs) and, where the level-shift rule applies, the prior-12 and last-6 windows its ratio is measured on. "
