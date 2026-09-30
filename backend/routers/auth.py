@@ -31,10 +31,14 @@ FAILED SIGN-INS (2026-09-21): repeated wrong passwords lock the email (5 in
 15 min) or the IP address (20 in 15 min) for 15 minutes — see
 backend/login_limiter.py for the rules and why they are shaped that way.
 Each lock is also written to the audit log, naming the limit that tripped
-(per-email or per-IP, 2026-09-30).
+(per-email or per-IP, 2026-09-30). So is every failed sign-in (2026-09-30):
+"Sign-in Failed" with the IP and the sha256 of the lower-cased email, never
+the email as typed and never the password, at most
+MAX_LOGGED_FAILURES_PER_WINDOW per 15 minutes so a flood can't fill the table.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import time
@@ -58,6 +62,7 @@ from backend.login_limiter import (
     MAX_FAILURES_PER_IP,
     WINDOW_SECONDS,
     Lock,
+    failure_log_budget,
     login_limiter,
     reset_limiter,
 )
@@ -182,6 +187,38 @@ def _record_lockout(db: Session, email: str, client_ip: str, lock: Lock) -> None
         logger.warning("Could not write the sign-in lock to audit_log.", exc_info=True)
 
 
+def _email_digest(email: str) -> str:
+    """How a failed sign-in names its email: sha256 of the address trimmed
+    and lower-cased, the same normalisation as the limiter's key. Repeated
+    tries on one account group together, without the log keeping every
+    address someone typed."""
+    return "sha256:" + hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()
+
+
+def _record_failed_sign_in(db: Session, email: str, client_ip: str) -> None:
+    """One audit entry per wrong email or password, within failure_log_budget
+    (see backend/login_limiter.py). Never the password. A failure to write it
+    must not turn the 401 into a 500."""
+    decision = failure_log_budget.take()
+    if decision == "skip":
+        return
+    if decision == "log":
+        action, who, details = "Sign-in Failed", _email_digest(email), f"Wrong email or password from {client_ip}"
+    else:
+        action, who = "Sign-in Failure Logging Paused", "system"
+        details = (
+            f"{failure_log_budget.limit} failed sign-ins logged in this "
+            f"{WINDOW_SECONDS // 60}-minute window; later ones still count toward "
+            f"locks but are not logged until it ends"
+        )
+    try:
+        audit.record(db, action, details, email=who)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        logger.warning("Could not write a failed sign-in to audit_log.", exc_info=True)
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -> LoginResponse:
     client_ip = request.client.host if request.client else "unknown"
@@ -214,6 +251,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
         # Counted the same whether or not the email exists, so the lock
         # can't reveal which emails have accounts either.
         lock = login_limiter.record_failure(body.email, client_ip)
+        _record_failed_sign_in(db, body.email, client_ip)
         if lock is not None:
             logger.warning(
                 "Sign-in locked (%s limit) for %r from %s after repeated failures.",

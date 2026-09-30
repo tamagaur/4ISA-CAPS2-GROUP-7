@@ -20,6 +20,7 @@ and emails captured by tests/backend/conftest.py.
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -30,7 +31,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from backend import auth_utils, mailer
 from backend.deps import get_db, get_token_payload
-from backend.login_limiter import MAX_FAILURES_PER_EMAIL, MAX_FAILURES_PER_IP
+from backend.login_limiter import MAX_FAILURES_PER_EMAIL, MAX_FAILURES_PER_IP, FailureLogBudget
 from backend.main import app
 from backend.routers import auth as auth_router
 
@@ -504,10 +505,62 @@ def test_fifth_wrong_password_locks_the_email(client, fake_session):
     assert locked.status_code == 429
     assert locked.json()["detail"] == "Too many failed sign-in attempts. Try again in 15 minutes."
     assert locked.headers["Retry-After"] == "900"
-    # The lock is on the record for admins, under the email that was tried.
+    # Each failure is on the record under the email's digest, then the lock
+    # under the email that was tried.
+    digest = "sha256:" + hashlib.sha256(b"admin@ssmcapstone.com").hexdigest()
     assert [(a["action"], a["user_email"]) for a in fake_session.audit] == [
-        ("Sign-in Locked", "admin@ssmcapstone.com")
+        ("Sign-in Failed", digest)
+    ] * MAX_FAILURES_PER_EMAIL + [("Sign-in Locked", "admin@ssmcapstone.com")]
+
+
+# --- failed sign-ins in the audit log (2026-09-30) ---------------------------
+
+def test_failed_sign_in_is_logged_as_an_email_digest_and_ip(client, fake_session):
+    assert client.post("/auth/login", json={"email": "Admin@SSMcapstone.com", "password": "wrong-password"}).status_code == 401
+    assert client.post("/auth/login", json=BAD).status_code == 401
+    rows = [a for a in fake_session.audit if a["action"] == "Sign-in Failed"]
+    assert len(rows) == 2
+    digest = "sha256:" + hashlib.sha256(b"admin@ssmcapstone.com").hexdigest()
+    assert {r["user_email"] for r in rows} == {digest}  # case and spaces don't split the count
+    assert rows[-1]["details"] == "Wrong email or password from testclient"
+    assert (rows[-1]["user_name"], rows[-1]["role"]) == (None, None)
+    for row in rows:
+        values = " ".join(str(v) for v in row.values())
+        assert "wrong-password" not in values
+        assert "admin@ssmcapstone.com" not in values.lower()
+
+
+def test_unknown_email_is_logged_the_same_way(client, fake_session):
+    """Same entry whether or not the account exists, so the log can't be used
+    to tell them apart either."""
+    client.post("/auth/login", json={"email": "nobody@ssmcapstone.com", "password": "whatever123"})
+    [row] = fake_session.audit
+    assert row["action"] == "Sign-in Failed"
+    assert row["user_email"] == "sha256:" + hashlib.sha256(b"nobody@ssmcapstone.com").hexdigest()
+    assert row["details"] == "Wrong email or password from testclient"
+
+
+def test_successful_sign_in_logs_no_failure(client, fake_session):
+    assert client.post("/auth/login", json=GOOD).status_code == 200
+    assert [a for a in fake_session.audit if a["action"].startswith("Sign-in")] == []
+
+
+def test_failed_sign_in_logging_is_capped(client, fake_session, monkeypatch):
+    """A flood from many addresses must not fill the table: past the cap one
+    'paused' entry is written, then nothing until the window ends. The
+    limiter still counts every failure."""
+    monkeypatch.setattr(auth_router, "failure_log_budget", FailureLogBudget(limit=2))
+    for n in range(4):
+        assert client.post("/auth/login", json={"email": f"g{n}@ssmcapstone.com", "password": "x" * 8}).status_code == 401
+    assert [a["action"] for a in fake_session.audit] == [
+        "Sign-in Failed", "Sign-in Failed", "Sign-in Failure Logging Paused",
     ]
+    paused = fake_session.audit[-1]
+    assert paused["user_email"] == "system"
+    assert paused["details"] == (
+        "2 failed sign-ins logged in this 15-minute window; "
+        "later ones still count toward locks but are not logged until it ends"
+    )
 
 
 def test_correct_password_is_refused_while_locked(client, fake_session):

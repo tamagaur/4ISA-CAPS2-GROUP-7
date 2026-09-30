@@ -124,8 +124,52 @@ def _ip_key(ip: str) -> str:
     return "ip:" + ip
 
 
+# Failed sign-ins are written to the audit log (backend/routers/auth.py,
+# 2026-09-30). The limits above already cap that per email (5) and per IP
+# (20) in any 15 minutes: while locked, a request is refused before its
+# password is checked and nothing is logged for it. They don't cap many
+# addresses together, so at most MAX_LOGGED_FAILURES_PER_WINDOW failures are
+# written in any one 15-minute window. Past that, one row says logging paused;
+# the rest of the window still counts toward locks but is not written.
+# 100 is a chosen bound, not a measured one: five addresses' worth of the
+# per-IP limit, and under 9,700 rows a day even in a flood that never stops.
+MAX_LOGGED_FAILURES_PER_WINDOW = 5 * MAX_FAILURES_PER_IP
+
+
+class FailureLogBudget:
+    """Decides, per failed sign-in, whether it goes into the audit log:
+    'log' while this fixed 15-minute window has room, 'pause' once when it
+    runs out (the caller writes one row saying so), then 'skip' until the
+    next window. In memory, like LoginLimiter, and for the same reason."""
+
+    def __init__(self, limit: int = MAX_LOGGED_FAILURES_PER_WINDOW, clock=time.monotonic) -> None:
+        self.limit = limit
+        self._clock = clock
+        self._mutex = threading.Lock()
+        self._window: int | None = None
+        self._used = 0
+
+    def take(self) -> str:
+        window = int(self._clock() // WINDOW_SECONDS)
+        with self._mutex:
+            if window != self._window:
+                self._window, self._used = window, 0
+            self._used += 1
+            if self._used <= self.limit:
+                return "log"
+            return "pause" if self._used == self.limit + 1 else "skip"
+
+    def reset(self) -> None:
+        """Starts a fresh window (tests)."""
+        with self._mutex:
+            self._window, self._used = None, 0
+
+
 # The one limiter POST /auth/login uses.
 login_limiter = LoginLimiter()
+
+# How many of its failures reach the audit log.
+failure_log_budget = FailureLogBudget()
 
 # POST /auth/forgot-password counts every request here (not just failures):
 # at most 5 reset emails per address, and 20 per IP, every 15 minutes, so the

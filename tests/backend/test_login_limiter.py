@@ -10,7 +10,9 @@ from backend.login_limiter import (
     LOCKOUT_SECONDS,
     MAX_FAILURES_PER_EMAIL,
     MAX_FAILURES_PER_IP,
+    MAX_LOGGED_FAILURES_PER_WINDOW,
     WINDOW_SECONDS,
+    FailureLogBudget,
     Lock,
     LoginLimiter,
 )
@@ -111,3 +113,22 @@ def test_stale_entries_are_pruned(monkeypatch):
     clock.advance(WINDOW_SECONDS + 1)
     limiter.record_failure("late@x.com", "10.0.1.1")
     assert len(limiter._records) == 2  # only the two fresh keys survive
+
+
+# --- how many failures reach the audit log ---------------------------------
+
+def test_failure_log_budget_logs_then_pauses_once_then_skips():
+    budget = FailureLogBudget(limit=3, clock=FakeClock())
+    assert [budget.take() for _ in range(6)] == ["log", "log", "log", "pause", "skip", "skip"]
+
+
+def test_failure_log_budget_starts_over_each_window():
+    clock = FakeClock()
+    budget = FailureLogBudget(limit=1, clock=clock)
+    assert [budget.take() for _ in range(3)] == ["log", "pause", "skip"]
+    clock.advance(WINDOW_SECONDS)
+    assert [budget.take() for _ in range(2)] == ["log", "pause"]
+
+
+def test_failure_log_cap_is_tied_to_the_per_ip_limit():
+    assert MAX_LOGGED_FAILURES_PER_WINDOW == 5 * MAX_FAILURES_PER_IP == 100
