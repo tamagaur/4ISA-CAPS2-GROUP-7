@@ -226,7 +226,8 @@ def main():
     caption = (
         f"History truncation: {T.pk.nunique()} Unilever Tier A SKUs (ABC 2026-02, single) with >= {MIN_SALES_MONTHS} real sales "
         f"months, {len(T)} forecast months that have >= {MIN_HISTORY} months of history ({T.month.min()}..{T.month.max()}, "
-        f"{testable} testable half-year blocks). Each is re-forecast with its history cut to the last k months; the global "
+        f"{testable} testable half-year blocks). Every verdict in this chart rests on {testable} testable half-year blocks per k "
+        f"(of {len(C.BLOCKS)}); a majority needs {int(testable) // 2 + 1} of them. Each is re-forecast with its history cut to the last k months; the global "
         f"XGBoost model (nthread=1) is refitted for every k and month on equally truncated training rows, and the same harness's "
         f"full-history run is the reference. MA3 is unchanged for every k >= 3 "
         f"({'verified: identical forecasts' if ma3_flat else 'NOT identical - see CSV'}), median WAPE "
