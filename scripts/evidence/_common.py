@@ -81,6 +81,15 @@ KNOWN_NULL_NOTE = ("Data note: product_key 150 / SKU 64861486, 2025-12 has a NUL
                    "the same treatment as the bake-off.")
 
 
+# For session 5f (logged, not acted on here): the served global model fits with
+# nthread=1 (analytics/forecasting/global_model.py:38); the stored bake-off
+# forecasts (xgb_abs@A, ens_xgb_ma3@A) were fitted with nthread=8
+# (reports/experiment_artifacts/scripts/final_models.py:81).
+THREAD_NOTE = ("Note for session 5f: the served XGBoost model fits with nthread=1 (analytics/forecasting/global_model.py:38); "
+               "the stored bake-off XGBoost forecasts shown here were fitted with nthread=8 "
+               "(reports/experiment_artifacts/scripts/final_models.py:81).")
+
+
 def null_notes(pks_used) -> list:
     """The data note, if this chart used SKU 150's series."""
     return [KNOWN_NULL_NOTE] if any(pk in {k for k, _ in KNOWN_NULLS} for pk in set(int(p) for p in pks_used)) else []
@@ -159,9 +168,13 @@ def read_only():
 
 
 # ---- outputs ----------------------------------------------------------------
-def git_sha():
+def git_sha(paths=()):
+    """HEAD, plus ' +uncommitted' if any of `paths` differs from HEAD (so the record
+    never claims code that was not in that commit)."""
     try:
-        return subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+        sha = subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+        dirty = subprocess.run(["git", "-C", REPO, "status", "--porcelain", "--", *paths], capture_output=True, text=True).stdout.strip()
+        return sha + (" +uncommitted" if dirty else "")
     except Exception:
         return "unknown"
 
@@ -184,7 +197,8 @@ def write_result(chart: int, slug: str, title: str, frames: dict, caption: str, 
     meta = dict(chart=chart, slug=slug, title=title, files=files, caption=caption, verdict=verdict,
                 verdict_detail=verdict_detail, criterion=pr["flawed_if"], otherwise=pr["otherwise"],
                 mase_gate_used=pr["mase_gate_used"], rerun_after_5f=pr["rerun_after_5f"], checks=checks,
-                script=f"scripts/evidence/{script}", code_commit=git_sha(),
+                script=f"scripts/evidence/{script}",
+                code_commit=git_sha([f"scripts/evidence/{script}", "scripts/evidence/_common.py"]),
                 computed_at=datetime.datetime.now().isoformat(timespec="seconds"), **(extra or {}))
     with open(os.path.join(EVID, f"ch{chart:02d}.json"), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=1, allow_nan=False, default=_json_default)

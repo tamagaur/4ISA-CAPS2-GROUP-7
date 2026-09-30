@@ -11,7 +11,7 @@ counted as 0 like the bake-off (_common.KNOWN_NULLS; corrected 2026-09-30 - the
 first run expected 0, a figure taken from the transforms experiment's printout,
 not from final_fit.py, which prints the count with no expectation). Any other
 NULL stops the run. No expected figure is on record for the ABC latest-period
-rows or the Del Monte branch x month grid: reported as found.
+rows or the Del Monte region x month grid: reported as found.
 """
 import _common as C  # noqa: F401  (thread pins first)
 import os
@@ -27,11 +27,9 @@ Q = {
                  FROM unilever_sku_demand_fact_real d
                  WHERE d.product_key = ANY(%(pks)s) AND d.calendar_month BETWEEN '2023-01' AND '2026-02'
                  ORDER BY 1, 2""",
-    "abc_latest": """WITH per AS (
-                        SELECT principal, MAX(classification_period) AS period
-                        FROM (SELECT principal, method, MAX(classification_period) AS classification_period
-                              FROM abc_classification GROUP BY 1, 2) m
-                        GROUP BY 1 HAVING COUNT(*) = 2)            -- latest period only if both methods reach it
+    "abc_latest": """WITH per AS (                                   -- latest period of the 'single' method, per principal;
+                        SELECT principal, MAX(classification_period) AS period  -- every method present at that period
+                        FROM abc_classification WHERE method = 'single' GROUP BY 1)
                      SELECT a.principal, a.method, a.classification_period, a.product_key, a.tier,
                             a.revenue_share, a.cumulative_share, a.boundary_flag,
                             p.grain, p.sku_code, p.category_path, p.product_name
@@ -41,7 +39,11 @@ Q = {
                      ORDER BY 1, 2, a.cumulative_share""",
     "abc_periods": """SELECT principal, method, MAX(classification_period), COUNT(DISTINCT classification_period)
                       FROM abc_classification GROUP BY 1, 2 ORDER BY 1, 2""",
-    "dm_branch_month": """SELECT branch_code, to_char(invoice_date, 'YYYY-MM') AS month,
+    # Del Monte has no branch field: branch_code is outlet-level ("Branch Code"/"Outlet",
+    # config/column_maps/sales_register.yaml:89-91). region holds the branch
+    # (pangasinan / ilocos) in 2023 rows and a town name from 2024 (three header
+    # vocabularies, sales_register.yaml:30-33). Both are kept as found.
+    "dm_region_month": """SELECT region, to_char(invoice_date, 'YYYY-MM') AS month,
                                  SUM(net_amount) AS net_amount, COUNT(*) AS invoices
                           FROM sales_fact_real WHERE principal = 'delmonte'
                           GROUP BY 1, 2 ORDER BY 1, 2""",
@@ -59,7 +61,7 @@ def main():
         cur.execute(Q["tierA"]); out["tierA"] = cur.fetchall()
         pks = [int(r[0]) for r in out["tierA"]]
         cur.execute(Q["series"], {"pks": pks}); out["series"] = cur.fetchall()
-        for k in ("abc_latest", "abc_periods", "dm_branch_month", "dm_null_dates", "ul_month"):
+        for k in ("abc_latest", "abc_periods", "dm_region_month", "dm_null_dates", "ul_month"):
             cur.execute(Q[k]); out[k] = cur.fetchall()
     print(f"read via {via} (one READ ONLY transaction, rolled back)")
 
@@ -84,11 +86,11 @@ def main():
     print("abc periods (principal, method, latest, n periods):", out["abc_periods"])
     print("abc latest rows:", a.groupby(["principal", "method", "period"]).size().to_dict())
 
-    dm = pd.DataFrame(out["dm_branch_month"], columns=["branch_code", "month", "net_amount", "invoices"])
+    dm = pd.DataFrame(out["dm_region_month"], columns=["region", "month", "net_amount", "invoices"])
     dm["net_amount"] = pd.to_numeric(dm.net_amount).astype(float)
     ul = pd.DataFrame(out["ul_month"], columns=["month", "net_amount", "rows", "rows_with_amount"])
     ul["net_amount"] = pd.to_numeric(ul.net_amount).astype(float)
-    print(f"delmonte branch x month cells={len(dm)} branches={dm.branch_code.nunique()} "
+    print(f"delmonte region x month cells={len(dm)} regions={dm.region.nunique()} "
           f"span={dm.month.min()}..{dm.month.max()} null invoice_date rows={out['dm_null_dates'][0][0]}")
     print(f"unilever months={len(ul)} span={ul.month.min()}..{ul.month.max()} "
           f"rows without net_amount={int((ul.rows - ul.rows_with_amount).sum())}")
@@ -96,7 +98,7 @@ def main():
     t.to_csv(os.path.join(C.INPUTS, "unilever_tierA_2026-02.csv"), index=False, lineterminator="\n")
     s.to_csv(os.path.join(C.INPUTS, "unilever_tierA_2026-02_series.csv"), index=False, lineterminator="\n")
     a.to_csv(os.path.join(C.INPUTS, "abc_latest.csv"), index=False, lineterminator="\n")
-    dm.to_csv(os.path.join(C.INPUTS, "delmonte_sales_branch_month.csv"), index=False, lineterminator="\n")
+    dm.to_csv(os.path.join(C.INPUTS, "delmonte_sales_region_month.csv"), index=False, lineterminator="\n")
     ul.to_csv(os.path.join(C.INPUTS, "unilever_sales_month.csv"), index=False, lineterminator="\n")
 
 
