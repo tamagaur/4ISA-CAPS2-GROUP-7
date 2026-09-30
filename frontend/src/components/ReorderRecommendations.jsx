@@ -11,6 +11,8 @@ import SaveResult from './SaveResult';
 import { useToast } from './ToastProvider';
 import { useSaveResult } from '../utils/useSaveResult';
 import { getCurrentUser } from '../auth';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
 import { getRecommendations, decideRecommendation } from '../api/recommendations';
 import { formatDateTime, formatMonth } from '../utils/formatDate';
 import { formatUnits, exactUnits, wholeUnits } from '../utils/formatNumber';
@@ -99,9 +101,11 @@ const ReorderRecommendations = () => {
   const acceptSave = useSaveResult();
   const bulkSave = useSaveResult();
   const [acceptError, setAcceptError] = useState('');
-  // Accept/Dismiss is admin-only (backend: require_admin on PATCH
-  // /recommendations); staff can review every recommendation but not act.
-  const isAdmin = getCurrentUser()?.role === 'admin';
+  // Accept/Dismiss need lp.decide (Kelvin's permissions proposal; the
+  // backend checks it on PATCH /recommendations). Without it the page is
+  // view only: every recommendation can be reviewed, none acted on.
+  const { hasPermission } = usePermissions();
+  const canDecide = hasPermission(P.LP_DECIDE);
   const [decisionLog, setDecisionLog] = useState([]);
 
   useEffect(() => {
@@ -438,12 +442,12 @@ const ReorderRecommendations = () => {
       );
     }
 
-    // Staff: the row's state instead of buttons — the one-line note above
-    // the table says why there's nothing to click.
-    if (!isAdmin) {
+    // Without lp.decide: the row's state instead of buttons — the one-line
+    // note above the table says why there's nothing to click.
+    if (!canDecide) {
       return (
         <div className="action-status-container">
-          <span className="reorder-pending-label" title="Waiting for an admin to accept or dismiss">
+          <span className="reorder-pending-label" title="Waiting for someone who can accept or dismiss">
             Pending
           </span>
         </div>
@@ -594,12 +598,12 @@ const ReorderRecommendations = () => {
             months included. They are never saved, so they can&apos;t be accepted or dismissed.
           </p>
         )}
-        {!isAdmin && !meta?.whatIf && (
+        {!canDecide && !meta?.whatIf && (
           <p className="reorder-view-only-note">
-            View only — accepting or dismissing reorders is limited to admin accounts.
+            View only — your account can&apos;t accept or dismiss reorders. Ask an admin if you need to.
           </p>
         )}
-        {isAdmin && !meta?.whatIf && (
+        {canDecide && !meta?.whatIf && (
           <button
             className="reorder-bulk-btn"
             onClick={() => {
