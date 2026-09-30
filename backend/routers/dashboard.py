@@ -259,7 +259,8 @@ zero):
     — real: top 5 pending LP_Recommendation rows by urgency, reusing
     backend.routers.recommendations._to_item / _SELECT_ONE verbatim
     (imported, not reimplemented) for the exact same urgency derivation
-    GET /recommendations uses. critical_count / urgent_count /
+    GET /recommendations uses (backend/stock_status.py). critical_count /
+    low_count (urgent_count: the same number under its old name) /
     total_order_qty are computed over the FULL pending set (not just the
     5 previewed rows) — a portfolio-wide summary next to a 5-row preview,
     same relationship ABC's tier_summary has to its own items list.
@@ -344,6 +345,7 @@ from backend.principals import PrincipalQuery, latest_abc_period, normalize_prin
 from backend.routers.recommendations import select_one as _recommendation_select_one
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 from backend.routers.recommendations import whole_units
+from backend.stock_status import CRITICAL, LOW, NO_DATA, URGENCY_RANK
 from backend.stock_units import STOCK_AT_PERIOD_SQL
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -393,7 +395,7 @@ _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON = (
     "cases — see UNILEVER_SOH_UNIT_CONFIRMED in backend/routers/dashboard.py."
 )
 
-_URGENCY_RANK = {"CRITICAL": 0, "URGENT": 1, "PLANNED": 2}
+_URGENCY_RANK = URGENCY_RANK  # backend/stock_status.py: CRITICAL, LOW, OK
 
 
 def _scope_label(principal: str) -> str:
@@ -1555,11 +1557,14 @@ def get_dashboard(
 
     reorder_preview = {
         "rows": [item.model_dump() for item in rp_items_sorted[:5]],
-        "critical_count": sum(1 for it in rp_items if it.urgency == "CRITICAL"),
-        "urgent_count": sum(1 for it in rp_items if it.urgency == "URGENT"),
+        "critical_count": sum(1 for it in rp_items if it.urgency == CRITICAL),
+        "low_count": sum(1 for it in rp_items if it.urgency == LOW),
+        # The old name for low_count, the same number, until the frontend
+        # reads low_count (URGENT became LOW, 2026-09-30).
+        "urgent_count": sum(1 for it in rp_items if it.urgency == LOW),
         # Products with no Inventory_Fact_Real row at the latest snapshot —
         # reported as their own count, never folded into critical.
-        "no_data_count": sum(1 for it in rp_items if it.urgency == "NO DATA"),
+        "no_data_count": sum(1 for it in rp_items if it.urgency == NO_DATA),
         # Whole units per row, summed — the Reorder page's own total, so the
         # two screens agree (they differed by 123.6 units, 2026-09-29).
         "total_order_qty": sum(whole_units(it.q_i) for it in rp_items) if rp_items else 0,

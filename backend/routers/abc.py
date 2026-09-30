@@ -120,6 +120,7 @@ from backend.principals import (
     normalize_principal,
     principal_clause,
 )
+from backend.stock_status import stock_status
 from backend.stock_units import STOCK_AT_LATEST_SQL
 from analytics.classification.abc import abc_rules, pareto_check
 from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
@@ -155,26 +156,14 @@ def _summarize(items: list[ABCItem], period: str | None) -> tuple[list[TierSumma
     return sorted(summary.values(), key=lambda t: t.tier), (ParetoCheck(**check) if check else None)
 
 
-def _stock_status(stock_pieces: float | None, reorder_point: float | None) -> str:
-    """Cover against the SKU's own reorder point, both in PIECES
-    (backend/stock_units.py). Until 2026-09-29 this compared stock in CASES
-    with rop_i in pieces, called a SKU with loose pieces but no full case
-    out of stock, and judged every SKU without a reorder point against a
-    flat 100 — so no Class A SKU could ever read as above its reorder point.
-
-    NO DATA: no stock record at the latest snapshot (or no usable pack size
-    to express it in pieces). CRITICAL: no stock at all. NO ROP: stock on
-    hand but no reorder point to judge it by — the LP's current cycle plans
-    Category A only, so most B and C products land here rather than in a
-    comparison against an invented threshold.
-    """
-    if stock_pieces is None:
-        return "NO DATA"
-    if stock_pieces <= 0:
-        return "CRITICAL"
-    if reorder_point is None:
-        return "NO ROP"
-    return "IN STOCK" if stock_pieces > reorder_point else "LOW"
+def _stock_status(stock_pieces: float | None, safety_stock: float | None, target_stock: float | None) -> str:
+    """backend/stock_status.py's one rule, in PIECES (backend/stock_units.py),
+    against the LP's current-cycle ss_i and target stock rop_i. The LP plans
+    Category A only, so most B and C products read NO TARGET rather than
+    being compared with an invented threshold. Until 2026-09-30 this route
+    had its own rule (CRITICAL at <= 0, IN STOCK above rop_i, else LOW; NO
+    ROP without one)."""
+    return stock_status(stock_pieces, safety_stock, target_stock)
 
 
 @router.get("", response_model=ABCResponse)
@@ -259,12 +248,13 @@ def _get_abc_period(
             ac.cumulative_share,
             ac.boundary_flag,
             inv.stock_pieces AS current_stock,
-            rop.rop_i AS reorder_point
+            rop.rop_i AS reorder_point,
+            rop.ss_i AS safety_stock
         FROM {abc_source} ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
         LEFT JOIN (
-            SELECT product_key, rop_i
+            SELECT product_key, rop_i, ss_i
             FROM {lp_src}
             WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
@@ -299,6 +289,7 @@ def _get_abc_period(
             current_stock=float(r["current_stock"]) if r["current_stock"] is not None else None,
             stock_status=_stock_status(
                 float(r["current_stock"]) if r["current_stock"] is not None else None,
+                float(r["safety_stock"]) if r["safety_stock"] is not None else None,
                 float(r["reorder_point"]) if r["reorder_point"] is not None else None,
             ),
         )
@@ -388,12 +379,13 @@ def _get_abc_last_known(
             ac.cumulative_share,
             ac.boundary_flag,
             inv.stock_pieces AS current_stock,
-            rop.rop_i AS reorder_point
+            rop.rop_i AS reorder_point,
+            rop.ss_i AS safety_stock
         FROM latest ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
         LEFT JOIN (
-            SELECT product_key, rop_i
+            SELECT product_key, rop_i, ss_i
             FROM {lp_src}
             WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
@@ -425,6 +417,7 @@ def _get_abc_last_known(
             current_stock=float(r["current_stock"]) if r["current_stock"] is not None else None,
             stock_status=_stock_status(
                 float(r["current_stock"]) if r["current_stock"] is not None else None,
+                float(r["safety_stock"]) if r["safety_stock"] is not None else None,
                 float(r["reorder_point"]) if r["reorder_point"] is not None else None,
             ),
         )

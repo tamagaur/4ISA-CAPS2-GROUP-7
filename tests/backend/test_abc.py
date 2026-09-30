@@ -83,11 +83,11 @@ class FakeSession:
 def sample_rows():
     return [
         {"product_key": 1, "sku_id": "SKU-A", "product_name": "Product A", "principal": "unilever", "tier": "A", "revenue_share": 0.60,
-         "cumulative_share": 0.60, "boundary_flag": False, "current_stock": 120, "reorder_point": None, "_period": "2024-02"},
+         "cumulative_share": 0.60, "boundary_flag": False, "current_stock": 120, "reorder_point": None, "safety_stock": None, "_period": "2024-02"},
         {"product_key": 2, "sku_id": "SKU-B", "product_name": "Product B", "principal": "unilever", "tier": "B", "revenue_share": 0.20,
-         "cumulative_share": 0.80, "boundary_flag": True, "current_stock": 40, "reorder_point": None, "_period": "2024-02"},
+         "cumulative_share": 0.80, "boundary_flag": True, "current_stock": 40, "reorder_point": None, "safety_stock": None, "_period": "2024-02"},
         {"product_key": 3, "sku_id": "SKU-C", "product_name": "Product C", "principal": "unilever", "tier": "C", "revenue_share": 0.05,
-         "cumulative_share": 0.99, "boundary_flag": False, "current_stock": 0, "reorder_point": None, "_period": "2024-02"},
+         "cumulative_share": 0.99, "boundary_flag": False, "current_stock": 0, "reorder_point": None, "safety_stock": None, "_period": "2024-02"},
     ]
 
 
@@ -231,7 +231,7 @@ class LastKnownFakeSession:
                     "principal": r["principal"], "tier": r["tier"],
                     "tier_period": r["classification_period"],
                     "revenue_share": r["revenue_share"], "cumulative_share": r["cumulative_share"],
-                    "boundary_flag": r["boundary_flag"], "current_stock": None, "reorder_point": None,
+                    "boundary_flag": r["boundary_flag"], "current_stock": None, "reorder_point": None, "safety_stock": None,
                 }
                 for k, r in latest.items()
             ]
@@ -357,7 +357,7 @@ def test_period_view_resolves_requested_month_to_latest_classified_period_per_pr
     def row(pk, principal, period, tier="A"):
         return {"product_key": pk, "sku_id": f"/CAT/{pk}", "product_name": f"Category {pk}", "principal": principal, "tier": tier,
                 "revenue_share": 0.5, "cumulative_share": 0.5, "boundary_flag": False, "current_stock": None,
-                "reorder_point": None, "_period": period}
+                "reorder_point": None, "safety_stock": None, "_period": period}
     rows = [row(1, "unilever", "2026-02"), row(10, "delmonte", "2025-12"), row(11, "delmonte", "2025-12", "B"), row(12, "delmonte", "2025-11")]
     session = PeriodResolvingFakeSession(rows, latest_period=None)
 
@@ -397,16 +397,17 @@ def test_last_known_shares_count_only_this_run(last_known_session):
 
 # ---- stock status and the Pareto check (2026-09-29) -------------------------
 
-def test_stock_status_compares_pieces_and_never_invents_a_reorder_point():
-    """Stock and rop_i are both pieces now. Loose pieces are stock, and a SKU
-    the LP does not plan has no reorder point instead of a flat 100."""
+def test_stock_status_is_the_shared_rule_in_pieces():
+    """Item 9: backend/stock_status.py, stock vs ss_i and the target stock
+    rop_i, all pieces. A SKU the LP does not plan has no target instead of
+    a flat 100."""
     from backend.routers.abc import _stock_status
 
-    assert _stock_status(None, 100.0) == "NO DATA"
-    assert _stock_status(0.0, 100.0) == "CRITICAL"
-    assert _stock_status(22.0, None) == "NO ROP"
-    assert _stock_status(121964.0, 9818340.0) == "LOW"
-    assert _stock_status(121964.0, 36193.0) == "IN STOCK"
+    assert _stock_status(None, 50.0, 100.0) == "NO DATA"
+    assert _stock_status(0.0, 50.0, 100.0) == "CRITICAL"
+    assert _stock_status(22.0, None, None) == "NO TARGET"
+    assert _stock_status(121964.0, 36193.0, 9818340.0) == "LOW"
+    assert _stock_status(121964.0, 1000.0, 36193.0) == "OK"
 
 
 def test_pareto_check_reads_the_running_total_not_a_sum_of_rounded_shares():

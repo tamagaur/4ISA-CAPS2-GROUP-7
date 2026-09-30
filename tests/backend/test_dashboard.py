@@ -825,9 +825,10 @@ def test_portfolio_forecast_empty_when_forecast_result_has_no_rows_at_all():
 
 # ---- reorder_preview -----------------------------------------------------
 
-def _reco_row(key, urgency_stock, rop_i):
-    """urgency_stock chosen relative to rop_i to land in a specific urgency
-    bucket, matching backend.routers.recommendations._to_item's own rule."""
+def _reco_row(key, urgency_stock, rop_i, ss_i=50.0):
+    """urgency_stock chosen relative to ss_i and rop_i to land in a specific
+    urgency bucket (backend/stock_status.py): CRITICAL below ss_i, LOW below
+    rop_i, OK at or above it."""
     return {
         "recommendation_key": key,
         "sku_id": f"SKU-{key}",
@@ -836,7 +837,7 @@ def _reco_row(key, urgency_stock, rop_i):
         "planning_cycle_date": "2024-02-01",
         "q_i": 10.0,
         "rop_i": rop_i,
-        "ss_i": 5.0,
+        "ss_i": ss_i,
         "status": "pending",
         "current_stock": urgency_stock,
     }
@@ -844,13 +845,13 @@ def _reco_row(key, urgency_stock, rop_i):
 
 def test_reorder_preview_top5_sorted_by_urgency_full_set_counts():
     rows = [
-        _reco_row(1, urgency_stock=0, rop_i=100),    # CRITICAL (0 < 50)
-        _reco_row(2, urgency_stock=90, rop_i=100),   # URGENT (50 <= 90 < 100)
-        _reco_row(3, urgency_stock=150, rop_i=100),  # PLANNED (150 >= 100)
+        _reco_row(1, urgency_stock=0, rop_i=100),    # CRITICAL (0 < ss 50)
+        _reco_row(2, urgency_stock=90, rop_i=100),   # LOW (50 <= 90 < 100)
+        _reco_row(3, urgency_stock=150, rop_i=100),  # OK (150 >= 100)
         _reco_row(4, urgency_stock=10, rop_i=100),   # CRITICAL
         _reco_row(5, urgency_stock=20, rop_i=100),   # CRITICAL
         _reco_row(6, urgency_stock=30, rop_i=100),   # CRITICAL
-        _reco_row(7, urgency_stock=95, rop_i=100),   # URGENT
+        _reco_row(7, urgency_stock=95, rop_i=100),   # LOW
         _reco_row(8, urgency_stock=40, rop_i=100),   # CRITICAL
     ]
     session = FakeSession(reco_preview_rows=rows)
@@ -860,8 +861,22 @@ def test_reorder_preview_top5_sorted_by_urgency_full_set_counts():
     assert len(preview["rows"]) == 5
     assert all(r["urgency"] == "CRITICAL" for r in preview["rows"])
     assert preview["critical_count"] == 5
-    assert preview["urgent_count"] == 2
+    assert preview["low_count"] == preview["urgent_count"] == 2
     assert preview["total_order_qty"] == pytest.approx(80.0)  # 8 rows x q_i=10, full set not just top 5
+
+
+def test_reorder_preview_critical_means_below_safety_stock_not_half_the_target():
+    """Item 9: CRITICAL is stock below ss_i. The old rule said below
+    0.5 x rop_i, a threshold with no source."""
+    rows = [
+        _reco_row(1, urgency_stock=30, rop_i=100, ss_i=20.0),  # was CRITICAL (30 < 50): now LOW
+        _reco_row(2, urgency_stock=70, rop_i=100, ss_i=80.0),  # was URGENT: now CRITICAL (70 < 80)
+    ]
+    session = FakeSession(reco_preview_rows=rows)
+    with make_client(session) as c:
+        preview = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["reorder_preview"]
+    assert {r["sku_id"]: r["urgency"] for r in preview["rows"]} == {"SKU-1": "LOW", "SKU-2": "CRITICAL"}
+    assert (preview["critical_count"], preview["low_count"]) == (1, 1)
 
 
 def test_reorder_preview_empty_when_no_pending_recommendations():
@@ -870,7 +885,7 @@ def test_reorder_preview_empty_when_no_pending_recommendations():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     preview = resp.json()["reorder_preview"]
     assert preview == {
-        "rows": [], "critical_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
+        "rows": [], "critical_count": 0, "low_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
         "lp_weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
         "lp_weights_source": "defaults",
     }

@@ -393,8 +393,9 @@ class ForecastResult(Base):
 
 
 class LPRecommendation(Base):
-    """SS_i = Z x sigma_di (Z=1.28, 90% service level);
-    ROP_i = Y_hat_(t+1,i) + SS_i; Q_i from LP (w1=.45, w2=.35, w3=.20).
+    """SS_i = Z x sigma (Z=1.28, 90% service level); rop_i holds the
+    order-up-to TARGET stock T_i (scripts/run_lp.py), not a reorder point;
+    Q_i from the LP (weights analytics.params.LP_WEIGHTS).
     status supports the dashboard's Accept/Dismiss write-back (Phase 7)."""
     __tablename__ = "lp_recommendation"
     __table_args__ = (

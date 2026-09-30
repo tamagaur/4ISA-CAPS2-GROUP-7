@@ -3,9 +3,10 @@ backend.routers.recommendations — GET /recommendations, PATCH /recommendations
 
 Returns LP-derived replenishment quantities Q_i per SKU, joined to
 Product_Dimension for identity and to the latest Inventory_Fact_Real period
-for current_stock. urgency is derived from current_stock vs rop_i (same
-CRITICAL/URGENT/PLANNED thresholds a reviewer would apply reading the ROP
-column), not stored anywhere.
+for current_stock. urgency is backend/stock_status.py's one rule (CRITICAL /
+LOW / OK / NO DATA: current_stock against ss_i and the target stock rop_i),
+not stored anywhere. Until 2026-09-30 it was CRITICAL below 0.5 x rop_i,
+URGENT below rop_i and PLANNED otherwise — the 0.5 had no source.
 
 ?from=/?to= (shared date-range picker, 2026-09) — OPTIONAL, both must be
 given together or neither is used (matching backend/routers/dashboard.py's
@@ -96,6 +97,7 @@ from backend.schemas.recommendations import RecommendationItem, RecommendationDe
 from backend.data_mode import PREVIEW, REAL, get_data_mode, lp_source, predictive_preview, preview_block
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info, stored_run
 from backend.lp_cycle import freshness as lp_freshness
+from backend.stock_status import NO_DATA, stock_status
 from backend.stock_units import NO_PACK_SIZE_REASON, STOCK_AT_PERIOD_SQL
 
 # Order quantities are counted in whole units rounded UP, the rule the Reorder
@@ -206,13 +208,13 @@ def _to_item(r) -> RecommendationItem:
     rop = float(r["rop_i"])
     stock_blocked_reason = None
     if stock is None:
-        urgency = "NO DATA"
+        urgency = NO_DATA
         stock_blocked_reason = (
             NO_PACK_SIZE_REASON if stock_cases is not None
             else "no Inventory_Fact_Real row for this product at the latest snapshot"
         )
     else:
-        urgency = "CRITICAL" if stock < rop * 0.5 else ("URGENT" if stock < rop else "PLANNED")
+        urgency = stock_status(stock, float(r["ss_i"]), rop)
 
     revenue_share = _opt_float(r, "revenue_share")
     stockout_gap = None if stock is None else max(0.0, rop - stock)

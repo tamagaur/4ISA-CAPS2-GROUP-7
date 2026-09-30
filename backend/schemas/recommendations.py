@@ -54,7 +54,7 @@ class RecommendationItem(BaseModel):
     # there is no snapshot row, or no usable pack size to convert with.
     current_stock: float | None = None
     current_stock_cases: float | None = None  # the raw snapshot figure, for display
-    urgency: str  # 'CRITICAL' | 'URGENT' | 'PLANNED' | 'NO DATA' — derived from current_stock vs rop_i
+    urgency: str  # 'CRITICAL' | 'LOW' | 'OK' | 'NO DATA' — backend/stock_status.py (stock vs ss_i, rop_i)
     # Why urgency is 'NO DATA': no snapshot row, or no usable pack size.
     stock_blocked_reason: str | None = None
     revenue_share: float | None = None
