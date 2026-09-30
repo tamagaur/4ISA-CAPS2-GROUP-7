@@ -1392,3 +1392,51 @@ def test_vat_note_names_del_montes_tax_inclusive_month_when_the_range_holds_it()
     with make_client(session) as c:
         note = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"}).json()["vat_note"]
     assert "except" not in note
+
+
+# ---- LP figures follow lp.view (Yuan's permissions proposal, 2026-09-30) ----
+
+def _lp_rich_session():
+    return FakeSession(
+        recommendation_count=5,
+        reco_preview_rows=[_reco_row(1, urgency_stock=0, rop_i=100)],
+        policy_rows=[{"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "forecast_value": 100.0}],
+        latest_abc_period="2024-02",
+        abc_rows=[_abc_row(1, "A", "2024-02", 0.30, current_stock=10, ss_i=50)],
+        tier_stock_rows=[
+            {"product_key": 1, "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": False},
+        ],
+        tier_pending_reorder_rows=[{"product_key": 1, "tier": "A", "period": "2024-02"}],
+    )
+
+
+def test_lp_figures_are_there_for_a_user_with_lp_view():
+    with make_client(_lp_rich_session()) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["lp_hidden"] is False
+    assert body["reorder_preview"]["critical_count"] == 1
+    assert body["policy_comparison"]["sku_count"] == 1
+    assert body["safety_stock_exposure"]["below_count"] == 1
+    assert body["recommendations"]["product_count"] == 5
+    assert body["tier_stock"][0]["pending_reorder_count"] == 1
+
+
+def test_lp_figures_are_left_out_for_a_user_without_lp_view(monkeypatch):
+    """Server-side, not just a hidden tab: the numbers never reach the
+    browser. Everything not derived from LP_Recommendation stays."""
+    from backend import permissions
+    from backend.routers.dashboard import LP_HIDDEN_REASON
+
+    monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {"lp.view": False})
+    with make_client(_lp_rich_session()) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["lp_hidden"] is True
+    for key in ("reorder_preview", "policy_comparison", "lp", "safety_stock_exposure"):
+        assert body[key] is None, key
+    assert body["recommendations"] == {"order_value": None, "product_count": None}
+    assert body["kpis"]["safety_stock_rate"] is None
+    assert body["kpis"]["safety_stock_rate_blocked_reason"] == LP_HIDDEN_REASON
+    assert body["tier_stock"] == [
+        {"tier": "A", "in_stock": 1, "dead_stock": 0, "no_data": 0, "pending_reorder_count": None}
+    ]
+    assert body["abc_mix"] and body["forecast"]["total_count"] == 0

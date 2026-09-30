@@ -425,3 +425,48 @@ def test_pareto_check_reads_the_running_total_not_a_sum_of_rounded_shares():
     assert check["top_count"] == 120
     assert check["revenue_share"] == pytest.approx(0.8484)
     assert check["passes"] is True
+
+
+# ---- stock status follows lp.view (Yuan's permissions proposal, 2026-09-30) ----
+
+def _rows_with_reorder_points():
+    base = {"principal": "unilever", "revenue_share": 0.25, "cumulative_share": 0.5,
+            "boundary_flag": False, "_period": "2024-02"}
+    return [
+        {**base, "product_key": 1, "sku_id": "ABOVE", "product_name": "P1", "tier": "A", "current_stock": 120, "reorder_point": 100},
+        {**base, "product_key": 2, "sku_id": "BELOW", "product_name": "P2", "tier": "A", "current_stock": 40, "reorder_point": 100},
+        {**base, "product_key": 3, "sku_id": "NOROP", "product_name": "P3", "tier": "B", "current_stock": 40, "reorder_point": None},
+        {**base, "product_key": 4, "sku_id": "EMPTY", "product_name": "P4", "tier": "C", "current_stock": 0, "reorder_point": 100},
+    ]
+
+
+def _statuses():
+    session = FakeSession(_rows_with_reorder_points(), latest_period="2024-02")
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
+    with TestClient(app) as c:
+        body = c.get("/abc").json()
+    app.dependency_overrides.clear()
+    return {i["sku_id"]: i["stock_status"] for i in body["items"]}
+
+
+def test_stock_status_is_judged_against_the_reorder_point_with_lp_view():
+    assert _statuses() == {"ABOVE": "IN STOCK", "BELOW": "LOW", "NOROP": "NO ROP", "EMPTY": "CRITICAL"}
+
+
+def test_without_lp_view_stock_on_hand_reads_on_hand(monkeypatch):
+    """Above/below the reorder point would reveal the LP's figure; being out
+    of stock doesn't, so CRITICAL (and NO DATA) stay."""
+    from backend import permissions
+
+    monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {"lp.view": False})
+    assert _statuses() == {"ABOVE": "ON HAND", "BELOW": "ON HAND", "NOROP": "ON HAND", "EMPTY": "CRITICAL"}
+
+
+def test_status_for_keeps_no_data_and_critical():
+    from backend.routers.abc import _status_for
+
+    assert _status_for(None, 100.0, lp_visible=False) == "NO DATA"
+    assert _status_for(0.0, 100.0, lp_visible=False) == "CRITICAL"
+    assert _status_for(500.0, 100.0, lp_visible=False) == "ON HAND"
+    assert _status_for(500.0, 100.0, lp_visible=True) == "IN STOCK"

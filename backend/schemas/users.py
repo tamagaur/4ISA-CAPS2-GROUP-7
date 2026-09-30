@@ -30,4 +30,4 @@ class UserUpdate(BaseModel):
 
     email: EmailStr | None = None
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
-    role: Literal["admin", "staff"] | None = None
+    role: Literal["admin", "manager", "staff"] | None = None

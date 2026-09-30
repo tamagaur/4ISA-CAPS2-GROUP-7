@@ -246,3 +246,14 @@ def test_create_rejects_a_code_that_is_not_8_digits(admin_client, session, code)
     assert resp.status_code == 400
     assert "8 digits" in resp.json()["detail"]
     assert not any("INSERT" in s for s, _ in session.calls)
+
+
+def test_reorder_point_is_left_out_without_lp_view(client, monkeypatch):
+    """The product list is sign-in only (shared by several pages), but the
+    LP's reorder point on it follows lp.view (Yuan's permissions proposal)."""
+    from backend import permissions
+
+    monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {"lp.view": False})
+    items = {i["sku_id"]: i for i in client.get("/sku?principal=unilever").json()["items"]}
+    assert items["U-1"]["reorder_point"] is None
+    assert items["U-1"]["current_stock"] == 120.0  # stock is not an LP figure

@@ -85,7 +85,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend import audit
-from backend.deps import TokenPayload, get_current_user, get_db, require_admin
+from backend.deps import TokenPayload, get_db
+from backend.permissions import require_permission
 from backend.principals import (
     PrincipalQuery,
     latest_abc_period,
@@ -264,7 +265,7 @@ def get_recommendations(
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("lp.view")),
 ) -> RecommendationsResponse:
     # Both principals again (2026-09-17) — see backend/principals.py.
     # lp_recommendation currently holds 430 Unilever rows and ZERO Del
@@ -343,7 +344,7 @@ def update_recommendation(
     recommendation_key: int,
     decision: RecommendationDecision,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_admin),
+    current_user: TokenPayload = Depends(require_permission("lp.decide")),
 ) -> RecommendationItem:
     if decision.status not in ("accepted", "dismissed"):
         raise HTTPException(status_code=400, detail="status must be 'accepted' or 'dismissed'")

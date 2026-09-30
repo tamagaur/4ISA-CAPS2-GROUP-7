@@ -29,7 +29,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_db
+from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 from backend.data_mode import PREVIEW, get_data_mode, forecast_source, lp_source, predictive_preview, preview_block
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle
@@ -50,7 +51,7 @@ def get_policy_comparison(
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("lp.view")),
 ) -> dict:
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     # The LP's current cycle, resolved under the SAME scope as the rows

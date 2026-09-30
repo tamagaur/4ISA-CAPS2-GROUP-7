@@ -34,7 +34,8 @@ from analytics.classification.fsn import (
     FAST_ADI_MAX, FSN_LABELS, FSN_WINDOW_MONTHS, MIN_FAST_SALES_MONTHS, NON_MOVING_MONTHS, classify_fsn,
 )
 from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_db
+from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
 
 router = APIRouter(prefix="/fsn", tags=["fsn"])
@@ -105,7 +106,7 @@ def get_fsn(
     period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$", description="Window end 'YYYY-MM'; default the latest data month."),
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("abc.view")),
 ) -> dict:
     scope = normalize_principal(principal)
     windows, items = {}, []

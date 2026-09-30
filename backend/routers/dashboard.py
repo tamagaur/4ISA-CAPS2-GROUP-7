@@ -335,7 +335,8 @@ from backend.data_mode import (
 )
 from analytics.classification.abc import abc_rules
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_db
+from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle
 from backend.lp_cycle import freshness as lp_freshness
 from backend.principals import PrincipalQuery, latest_abc_period, normalize_principal
@@ -814,7 +815,7 @@ def get_dashboard(
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
 ):
     # Both principals again (2026-09-17) — see backend/principals.py.
     # normalize_principal() maps None/'all' -> None and validates the rest;
@@ -1710,4 +1711,30 @@ def get_dashboard(
             real_only += ["kpis.safety_stock_rate", "safety_stock_exposure", "recommendations", "forecast",
                           "portfolio_forecast", "reorder_preview", "policy_comparison", "lp"]
         payload["data_mode"] = preview_block(db, real_only=real_only)
+    # LP figures follow lp.view everywhere (Yuan's permissions proposal):
+    # without it they are left out here, not only hidden behind the Reorder
+    # tab.
+    payload["lp_hidden"] = False
+    if not can_see_lp(db, current_user):
+        _strip_lp_fields(payload)
     return payload
+
+
+LP_HIDDEN_REASON = "Needs the reorder-recommendation permission (lp.view)."
+
+
+def _strip_lp_fields(payload: dict) -> None:
+    """Blanks every figure GET /dashboard derives from LP_Recommendation
+    (the sections the module docstring sources to it) and says so with
+    `lp_hidden`, so the page shows a dash, not a zero."""
+    payload["lp_hidden"] = True
+    payload["reorder_preview"] = None
+    payload["policy_comparison"] = None
+    payload["lp"] = None
+    payload["safety_stock_exposure"] = None
+    payload["recommendations"] = {"order_value": None, "product_count": None}
+    kpis = payload.get("kpis") or {}
+    kpis["safety_stock_rate"] = None
+    kpis["safety_stock_rate_blocked_reason"] = LP_HIDDEN_REASON
+    for tier in payload.get("tier_stock") or []:
+        tier["pending_reorder_count"] = None

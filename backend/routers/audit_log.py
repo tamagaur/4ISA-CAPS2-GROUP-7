@@ -22,7 +22,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend.deps import TokenPayload, get_db, require_admin
+from backend.deps import TokenPayload, get_db
+from backend.permissions import require_permission
 from backend.schemas.audit_log import (
     AuditLogEntry,
     AuditLogListResponse,
@@ -69,7 +70,7 @@ USER_SUMMARY_SQL = """
 @router.get("/users", response_model=AuditUserSummaryResponse)
 def get_audit_user_summary(
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_admin),
+    current_user: TokenPayload = Depends(require_permission("audit_log.view")),
 ) -> AuditUserSummaryResponse:
     try:
         rows = db.execute(text(USER_SUMMARY_SQL)).mappings().all()
@@ -94,7 +95,7 @@ def get_audit_log(
     user_email: str | None = Query(None, description="Filter to an exact user email. Omit for all."),
     limit: int = Query(200, le=1000),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_admin),
+    current_user: TokenPayload = Depends(require_permission("audit_log.view")),
 ) -> AuditLogListResponse:
     query = "SELECT * FROM audit_log WHERE 1=1"
     params: dict = {}

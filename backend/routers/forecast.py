@@ -37,7 +37,8 @@ from backend.data_mode import (
     preview_block,
     unilever_demand,
 )
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_db
+from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
 
@@ -56,7 +57,7 @@ def get_forecast(
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("forecast.view")),
 ) -> ForecastResponse:
     # Both principals again (2026-09-17) — see backend/principals.py.
     # Scoping the sku_code lookup matters because sku_code is NOT unique

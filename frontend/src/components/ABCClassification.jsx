@@ -26,6 +26,8 @@ import Pagination from './Pagination';
 import RefreshingNote from './RefreshingNote';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
@@ -114,6 +116,10 @@ const STATUS_LABELS = {
   CRITICAL: 'Out of stock',
   'NO ROP': 'No reorder point',
   'NO DATA': 'No stock record',
+  // For an account without lp.view the backend sends ON HAND instead of the
+  // three statuses that compare stock with the LP's reorder point (Yuan's
+  // permissions proposal: LP figures follow lp.view everywhere).
+  'ON HAND': 'Stock on hand',
 };
 const statusLabel = (status) => STATUS_LABELS[status] || status;
 
@@ -128,9 +134,15 @@ const STOCK_STATUS_COLORS = {
   CRITICAL: SEMANTIC.act,
   'NO ROP': SEMANTIC.notPlanned,
   'NO DATA': SEMANTIC.noData,
+  'ON HAND': SEMANTIC.notPlanned,
 };
 
-const ClassAggregateTooltip = ({ active, payload }) => {
+// The statuses GET /abc can send, in drill-down order: with the LP's reorder
+// point, or without it (no lp.view).
+const STATUSES_WITH_ROP = ['CRITICAL', 'LOW', 'IN STOCK', 'NO ROP', 'NO DATA'];
+const STATUSES_WITHOUT_ROP = ['CRITICAL', 'ON HAND', 'NO DATA'];
+
+const ClassAggregateTooltip = ({ active, payload, lpHidden }) => {
   if (active && payload && payload.length) {
     const point = payload[0].payload;
     // Swatch + ink rows: the coloured square carries identity, the words
@@ -147,10 +159,19 @@ const ClassAggregateTooltip = ({ active, payload }) => {
         <p className="abc-pareto-tooltip-title">{point.label}</p>
         {point.revenueTotal != null
           && row(COLORS[`abc${point.cat}`], 'Revenue share', `${point.revenueTotal.toFixed(1)}%`)}
-        {row(STOCK_STATUS_COLORS['IN STOCK'], statusLabel('IN STOCK'), `${point.inStockPct.toFixed(0)}%`)}
-        {row(STOCK_STATUS_COLORS.LOW, statusLabel('LOW'), `${point.lowPct.toFixed(0)}%`)}
-        {row(STOCK_STATUS_COLORS.CRITICAL, statusLabel('CRITICAL'), `${point.criticalPct.toFixed(0)}%`)}
-        {row(STOCK_STATUS_COLORS['NO ROP'], statusLabel('NO ROP'), `${point.noRopPct.toFixed(0)}%`)}
+        {lpHidden ? (
+          <>
+            {row(STOCK_STATUS_COLORS['ON HAND'], statusLabel('ON HAND'), `${point.onHandPct.toFixed(0)}%`)}
+            {row(STOCK_STATUS_COLORS.CRITICAL, statusLabel('CRITICAL'), `${point.criticalPct.toFixed(0)}%`)}
+          </>
+        ) : (
+          <>
+            {row(STOCK_STATUS_COLORS['IN STOCK'], statusLabel('IN STOCK'), `${point.inStockPct.toFixed(0)}%`)}
+            {row(STOCK_STATUS_COLORS.LOW, statusLabel('LOW'), `${point.lowPct.toFixed(0)}%`)}
+            {row(STOCK_STATUS_COLORS.CRITICAL, statusLabel('CRITICAL'), `${point.criticalPct.toFixed(0)}%`)}
+            {row(STOCK_STATUS_COLORS['NO ROP'], statusLabel('NO ROP'), `${point.noRopPct.toFixed(0)}%`)}
+          </>
+        )}
         {row(STOCK_STATUS_COLORS['NO DATA'], statusLabel('NO DATA'), `${point.noDataPct.toFixed(0)}%`)}
         <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.axisLabel }}>
           {point.skuCount} {point.skuCount === 1 ? 'item' : 'items'} ({point.skuSharePct.toFixed(0)}% of total)
@@ -200,6 +221,10 @@ const ABCClassification = () => {
   // and never writes back to the shared range (same local-state pattern
   // as SKUForecast.jsx's own picker).
   const dashboardRange = useOutletContext() || {};
+  // Without lp.view the stock statuses carry no reorder-point comparison
+  // (ON HAND instead), so the chart, legend and drill-down show those.
+  const { hasPermission } = usePermissions();
+  const lpHidden = !hasPermission(P.LP_VIEW);
   // Shared principal scope (Topbar's segmented control). Refetches on
   // change via this page's load effect deps.
   const { principal } = dashboardRange;
@@ -486,6 +511,7 @@ const ABCClassification = () => {
         lowPct: (countOf('LOW') / n) * 100,
         criticalPct: (countOf('CRITICAL') / n) * 100,
         noRopPct: (countOf('NO ROP') / n) * 100,
+        onHandPct: (countOf('ON HAND') / n) * 100,
         // Inventory_Fact_Real is a partial load (backend/routers/abc.py) —
         // most products currently have no stock record at all yet. Kept
         // as its own bucket rather than folded into CRITICAL, so the
@@ -495,9 +521,9 @@ const ABCClassification = () => {
     });
   };
 
-  const buildStockBreakdown = (items) => {
+  const buildStockBreakdown = (items, withoutRop) => {
     const total = items.length || 1;
-    return ['CRITICAL', 'LOW', 'IN STOCK', 'NO ROP', 'NO DATA'].map((status) => {
+    return (withoutRop ? STATUSES_WITHOUT_ROP : STATUSES_WITH_ROP).map((status) => {
       const count = items.filter((d) => d.status === status).length;
       return { status, count, pct: (count / total) * 100 };
     });
@@ -510,8 +536,8 @@ const ABCClassification = () => {
   // Drill-down now follows whichever class is selected (click a bar, or
   // a tab) instead of always being Class C.
   const selectedClassStockBreakdown = useMemo(
-    () => buildStockBreakdown(dataWithCumulative.filter((d) => d.cat === selectedClass)),
-    [dataWithCumulative, selectedClass]
+    () => buildStockBreakdown(dataWithCumulative.filter((d) => d.cat === selectedClass), lpHidden),
+    [dataWithCumulative, selectedClass, lpHidden]
   );
 
   const filteredData = useMemo(() => {
@@ -612,6 +638,7 @@ const ABCClassification = () => {
       case 'CRITICAL': return 'pill pill-critical';
       case 'NO ROP': return 'pill pill-neutral';
       case 'NO DATA': return 'pill pill-neutral';
+      case 'ON HAND': return 'pill pill-neutral';
       default: return 'pill pill-neutral';
     }
   };
@@ -848,13 +875,18 @@ const ABCClassification = () => {
                 <div className="abc-pareto-header">
                   <div className="abc-pareto-title-group">
                     <h3 className="abc-pareto-title">
-                      {panel.label ? `${panel.label} — Cover vs reorder point, by class` : 'Cover vs reorder point, by class'}
+                      {`${panel.label ? `${panel.label} — ` : ''}${lpHidden ? 'Stock status' : 'Cover vs reorder point'}, by class`}
                     </h3>
                     <p className="abc-pareto-subtitle">
                       {isDelMonte ? (
                         <>
                           Del Monte has no stock record or reorder point at category grain, so every Del Monte row
                           shows No data here.
+                        </>
+                      ) : lpHidden ? (
+                        <>
+                          Whether each SKU has stock. The comparison with its reorder point needs the
+                          reorder-recommendation permission, which this account doesn&apos;t have.
                         </>
                       ) : (
                         <>
@@ -867,22 +899,33 @@ const ABCClassification = () => {
                     </p>
                   </div>
                   <div className="abc-pareto-legend">
-                    <div className="abc-pareto-legend-item">
-                      <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['IN STOCK'] }} />
-                      <span>{statusLabel('IN STOCK')}</span>
-                    </div>
-                    <div className="abc-pareto-legend-item">
-                      <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.LOW }} />
-                      <span>{statusLabel('LOW')}</span>
-                    </div>
+                    {lpHidden ? (
+                      <div className="abc-pareto-legend-item">
+                        <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['ON HAND'] }} />
+                        <span>{statusLabel('ON HAND')}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="abc-pareto-legend-item">
+                          <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['IN STOCK'] }} />
+                          <span>{statusLabel('IN STOCK')}</span>
+                        </div>
+                        <div className="abc-pareto-legend-item">
+                          <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS.LOW }} />
+                          <span>{statusLabel('LOW')}</span>
+                        </div>
+                      </>
+                    )}
                     <div className="abc-pareto-legend-item">
                       <span className="abc-pareto-legend-swatch abc-pareto-legend-swatch--critical" />
                       <span>{statusLabel('CRITICAL')}</span>
                     </div>
-                    <div className="abc-pareto-legend-item">
-                      <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['NO ROP'] }} />
-                      <span>{statusLabel('NO ROP')}</span>
-                    </div>
+                    {!lpHidden && (
+                      <div className="abc-pareto-legend-item">
+                        <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['NO ROP'] }} />
+                        <span>{statusLabel('NO ROP')}</span>
+                      </div>
+                    )}
                     <div className="abc-pareto-legend-item">
                       <span className="abc-pareto-legend-swatch" style={{ backgroundColor: STOCK_STATUS_COLORS['NO DATA'] }} />
                       <span>{statusLabel('NO DATA')}</span>
@@ -920,7 +963,7 @@ const ABCClassification = () => {
                         tickLine={{ stroke: CHART_COLORS.gridline }}
                         tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                       />
-                      <Tooltip content={<ClassAggregateTooltip />} cursor={{ fill: '#f7fafc' }} />
+                      <Tooltip content={<ClassAggregateTooltip lpHidden={lpHidden} />} cursor={{ fill: '#f7fafc' }} />
                       {/* Was a two-bar-per-class combo: this stock-status stack
                           next to a separate solid "revenue share" bar on the
                           SAME 0-100% axis. Dropped the revenue-share bar
@@ -962,10 +1005,16 @@ const ABCClassification = () => {
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
+                      {/* Zero, so invisible, unless the account lacks lp.view. */}
+                      <Bar dataKey="onHandPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['ON HAND']} radius={[4, 4, 0, 0]} barSize={28} {...chartAnim(5)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                        {panel.classAggregates.map((entry) => (
+                          <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="abc-drilldown-hint">Click a class's bar above to drill into its cover vs reorder point.</p>
+                <p className="abc-drilldown-hint">Click a class's bar above to drill into its {lpHidden ? 'stock status' : 'cover vs reorder point'}.</p>
                 <div className="abc-class-summary-row">
                   {panel.classAggregates.map((entry) => (
                     <div key={entry.cat} className="abc-class-summary-item">
@@ -986,7 +1035,7 @@ const ABCClassification = () => {
               <div className="abc-pareto-container abc-analysis-drilldown">
                 <div className="abc-pareto-header">
                   <h3 className="abc-pareto-title">
-                    {panel.label ? `${panel.label} — Drill-down · Class ${selectedClass} cover vs reorder point` : `Drill-down · Class ${selectedClass} cover vs reorder point`}
+                    {`${panel.label ? `${panel.label} — ` : ''}Drill-down · Class ${selectedClass} ${lpHidden ? 'stock status' : 'cover vs reorder point'}`}
                   </h3>
                 </div>
                 {/* Tab buttons — same class-switching as clicking the chart,

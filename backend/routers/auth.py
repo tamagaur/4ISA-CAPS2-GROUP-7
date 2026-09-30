@@ -41,17 +41,21 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend import account_links, audit, mailer
+from backend.api_errors import ApiError
 from backend.auth_utils import (
     create_access_token,
     hash_password,
     spend_password_check_time,
     verify_password,
 )
-from backend.deps import TokenPayload, get_current_user, get_db, require_admin
+from backend.deps import TokenPayload, get_current_user, get_db
+from backend.permissions import (
+    NOT_READY, permissions_for, permissions_ready, require_permission, require_role_available,
+)
 from backend.login_limiter import login_limiter, reset_limiter
 from backend.schemas.auth import (
     ForgotPasswordInfo,
@@ -65,6 +69,7 @@ from backend.schemas.auth import (
     SetPasswordRequest,
     TokenRequest,
 )
+from backend.schemas.permissions import MeResponse
 from backend.schemas.users import UserOut
 from backend.sessions import CLOSE_IF_IDLE_SQL, SESSION_IDLE_MINUTES, revoke_user_sessions
 
@@ -232,30 +237,61 @@ def logout(
     _touch_session(db, current_user.session_id, LOGOUT_SQL)
 
 
+@router.get("/me", response_model=MeResponse)
+def me(
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+) -> MeResponse:
+    """Who is signed in, and what they may open and do (Yuan's permissions
+    proposal). Read fresh on every call; the frontend loads it at sign-in
+    and again after any 403 missing_permission.
+
+    Until migration 0034 is applied this answers 404 permissions_not_ready,
+    which the frontend treats as "keep today's behaviour" (backend/
+    permissions.py, BEFORE MIGRATION 0034 IS APPLIED)."""
+    if not permissions_ready(db):
+        raise ApiError(404, NOT_READY, code="permissions_not_ready")
+    return MeResponse(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        role=current_user.role,
+        permissions=sorted(permissions_for(db, current_user)),
+    )
+
+
+EMAIL_TAKEN = "A user with this email already exists."
+
+
 @router.post("/register", response_model=InviteResponse, status_code=status.HTTP_201_CREATED)
 def register(
     body: RegisterRequest,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_admin),
+    current_user: TokenPayload = Depends(require_permission("users.manage")),
 ) -> InviteResponse:
+    require_role_available(db, body.role)
+    # Any capitalisation counts as the same email: Ana@x.com and ana@x.com
+    # are one person (migration 0034 adds the matching unique index).
     existing = db.execute(
-        text("SELECT 1 FROM users WHERE email = :email"), {"email": body.email}
+        text("SELECT 1 FROM users WHERE lower(email) = lower(:email)"), {"email": body.email}
     ).first()
     if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A user with this email already exists.",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=EMAIL_TAKEN)
 
     # No password: the account stays "invite pending" until its owner sets one.
-    row = db.execute(
-        text(
-            "INSERT INTO users (email, password_hash, full_name, role) "
-            "VALUES (:email, NULL, :full_name, :role) "
-            "RETURNING user_id, email, full_name, role, created_at"
-        ),
-        {"email": body.email, "full_name": body.full_name, "role": body.role},
-    ).mappings().first()
+    try:
+        row = db.execute(
+            text(
+                "INSERT INTO users (email, password_hash, full_name, role) "
+                "VALUES (:email, NULL, :full_name, :role) "
+                "RETURNING user_id, email, full_name, role, created_at"
+            ),
+            {"email": body.email, "full_name": body.full_name, "role": body.role},
+        ).mappings().first()
+    except IntegrityError:
+        # Two invites for the same address at once: the unique index wins.
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=EMAIL_TAKEN) from None
     token, expires_at = account_links.issue(
         db, user_id=row["user_id"], purpose="invite", minutes=account_links.INVITE_MINUTES,
         created_by=current_user.user_id,

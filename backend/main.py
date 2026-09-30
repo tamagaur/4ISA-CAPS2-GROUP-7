@@ -29,11 +29,12 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api_errors import ApiError, api_error_handler
 from backend.client_ip import RealClientIPMiddleware
 from backend.deps import check_db_connection, get_db
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, data_mode, decomposition, forecast, fsn,
-    inventory, pareto, policy_comparison, recommendations, segment, sku, users,
+    inventory, pareto, permissions, policy_comparison, recommendations, segment, sku, users,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,8 +99,13 @@ app.add_middleware(
 # per-IP sign-in limits depend on it. See backend/client_ip.py.
 app.add_middleware(RealClientIPMiddleware)
 
+# The permissions contract's error body: {"detail": <sentence>, "code": ...}
+# (backend/api_errors.py).
+app.add_exception_handler(ApiError, api_error_handler)
+
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(permissions.router)
 app.include_router(inventory.router)
 app.include_router(forecast.router)
 app.include_router(recommendations.router)

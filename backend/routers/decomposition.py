@@ -22,7 +22,8 @@ from sqlalchemy.orm import Session
 
 from analytics.forecasting.decomposition import MIN_MONTHS, PERIOD, stl_summary
 from backend.data_mode import PREVIEW, get_data_mode, preview_block, unilever_demand
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_db
+from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 
 router = APIRouter(prefix="/decomposition", tags=["decomposition"])
@@ -39,7 +40,7 @@ def get_decomposition(
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("forecast.view", "lp.view")),
 ) -> dict:
     scope_sql, scope_params = principal_clause(principal, "principal")
     demand = unilever_demand(mode)

@@ -1040,7 +1040,8 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
             {data.map((row, index) => {
               const inStock = row.inStock || 0;
               const deadStock = row.deadStock || 0;
-              const pendingReorderCount = row.pendingReorderCount || 0;
+              // null when the account can't see LP figures (no lp.view).
+              const pendingReorderCount = row.pendingReorderCount ?? null;
               const noData = row.noData || 0;
               const total = inStock + deadStock + noData;
               // Floor at a visible width for any segment that's genuinely
@@ -1057,7 +1058,8 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
               };
               const title =
                 `Tier ${row.tier} — active: ${inStock.toLocaleString()}, ` +
-                `dead stock (Inactive): ${deadStock.toLocaleString()}, pending reorder: ${pendingReorderCount.toLocaleString()}` +
+                `dead stock (Inactive): ${deadStock.toLocaleString()}` +
+                (pendingReorderCount != null ? `, pending reorder: ${pendingReorderCount.toLocaleString()}` : '') +
                 (noData ? `, no inventory record: ${noData.toLocaleString()}` : '');
               // Each row's bar sweeps in staggered by tier — same duration/
               // easing/stagger constants the Recharts widgets on this page

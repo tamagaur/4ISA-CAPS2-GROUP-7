@@ -112,7 +112,8 @@ from backend.data_mode import (
     placeholder_window,
     preview_block,
 )
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_db
+from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import current_cycle
 from backend.principals import (
     PrincipalQuery,
@@ -177,6 +178,17 @@ def _stock_status(stock_pieces: float | None, reorder_point: float | None) -> st
     return "IN STOCK" if stock_pieces > reorder_point else "LOW"
 
 
+def _status_for(stock_pieces: float | None, reorder_point: float | None, lp_visible: bool) -> str:
+    """_stock_status, except for a user without lp.view: "Above / below
+    the reorder point" would reveal the LP's figure, so a product with stock
+    on hand reads ON HAND instead (Yuan's permissions proposal: LP figures
+    follow lp.view everywhere)."""
+    status = _stock_status(stock_pieces, reorder_point)
+    if not lp_visible and status in ("IN STOCK", "LOW", "NO ROP"):
+        return "ON HAND"
+    return status
+
+
 @router.get("", response_model=ABCResponse)
 def get_abc(
     classification_period: str | None = Query(
@@ -192,7 +204,7 @@ def get_abc(
     ),
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("abc.view", "forecast.view")),
 ) -> ABCResponse:
     # The placeholder is Unilever's, so a Del Monte-only request has nothing
     # to add and reads exactly as in real mode.
@@ -201,9 +213,16 @@ def get_abc(
         if mode == PREVIEW and normalize_principal(principal) in (None, "unilever")
         else None
     )
+    # Without lp.view the stock status can't be judged against the LP's
+    # reorder point in the user's sight (see _status_for).
+    lp_visible = can_see_lp(db, current_user)
     if view == "last_known":
-        return _with_data_mode(_get_abc_last_known(db, classification_period, principal, window, mode), db, mode)
-    return _with_data_mode(_get_abc_period(db, classification_period, principal, window, mode), db, mode)
+        return _with_data_mode(
+            _get_abc_last_known(db, classification_period, principal, window, mode, lp_visible=lp_visible), db, mode,
+        )
+    return _with_data_mode(
+        _get_abc_period(db, classification_period, principal, window, mode, lp_visible=lp_visible), db, mode,
+    )
 
 
 def _with_data_mode(response: ABCResponse, db: Session, mode: str):
@@ -217,7 +236,7 @@ def _with_data_mode(response: ABCResponse, db: Session, mode: str):
 
 def _get_abc_period(
     db: Session, classification_period: str | None, principal: str | None, window: dict | None = None,
-    mode: str = REAL,
+    mode: str = REAL, *, lp_visible: bool = True,
 ) -> ABCResponse:
     """view=period — the SKUs ranked in one run."""
     # The row query reads under the same principal scope the period is
@@ -297,9 +316,10 @@ def _get_abc_period(
             cumulative_share=r["cumulative_share"],
             boundary_flag=bool(r["boundary_flag"]),
             current_stock=float(r["current_stock"]) if r["current_stock"] is not None else None,
-            stock_status=_stock_status(
+            stock_status=_status_for(
                 float(r["current_stock"]) if r["current_stock"] is not None else None,
                 float(r["reorder_point"]) if r["reorder_point"] is not None else None,
+                lp_visible,
             ),
         )
         for r in rows
@@ -318,7 +338,7 @@ def _get_abc_period(
 
 def _get_abc_last_known(
     db: Session, classification_period: str | None, principal: str | None, window: dict | None = None,
-    mode: str = REAL,
+    mode: str = REAL, *, lp_visible: bool = True,
 ) -> ABCResponse:
     """view=last_known — every product's most recent 'single' tier at or
     before the anchor period, the same rule GET /sku uses.
@@ -423,9 +443,10 @@ def _get_abc_last_known(
             cumulative_share=r["cumulative_share"],
             boundary_flag=bool(r["boundary_flag"]),
             current_stock=float(r["current_stock"]) if r["current_stock"] is not None else None,
-            stock_status=_stock_status(
+            stock_status=_status_for(
                 float(r["current_stock"]) if r["current_stock"] is not None else None,
                 float(r["reorder_point"]) if r["reorder_point"] is not None else None,
+                lp_visible,
             ),
         )
         for r in rows

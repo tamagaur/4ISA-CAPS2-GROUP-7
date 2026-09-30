@@ -8,6 +8,11 @@ check is replaced with "trust the signed token", which is what those tests
 were written against. Tests of the check itself opt back in with
 @pytest.mark.real_session_check (tests/backend/test_accounts.py).
 
+Permissions (backend/permissions.py) default to the role presets with no
+per-user overrides, as if migration 0034's table were there but empty, so no
+module has to fake the override lookup. Tests of the lookup itself opt back in
+with @pytest.mark.real_permission_store (tests/backend/test_permissions.py).
+
 No test may send a real email: backend.mailer.send is replaced for every test
 by the `outbox` list, which a test can ask for to see what would have gone out.
 Email also counts as set up (mailer.is_configured), whatever this machine's
@@ -17,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend import deps, mailer
+from backend import deps, mailer, permissions
 from backend.login_limiter import login_limiter, reset_limiter
 
 
@@ -25,12 +30,26 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "real_session_check: run get_current_user's database check instead of skipping it"
     )
+    config.addinivalue_line(
+        "markers", "real_permission_store: look permissions up in the database instead of presets only"
+    )
 
 
 @pytest.fixture(autouse=True)
 def _trust_signed_tokens(request, monkeypatch):
     if request.node.get_closest_marker("real_session_check") is None:
         monkeypatch.setattr(deps, "_load_active_principal", lambda db, payload: payload)
+
+
+@pytest.fixture(autouse=True)
+def _presets_only(request, monkeypatch):
+    if request.node.get_closest_marker("real_permission_store") is None:
+        monkeypatch.setitem(permissions._ready_cache, "value", True)
+        monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {})
+    else:
+        # Every such test starts as a fresh server would: nothing cached.
+        monkeypatch.setitem(permissions._ready_cache, "value", False)
+        monkeypatch.setitem(permissions._ready_cache, "checked_at", 0.0)
 
 
 @pytest.fixture(autouse=True)

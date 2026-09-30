@@ -183,6 +183,10 @@ const DASH_SECTIONS = [
 ];
 const DASH_SECTION_IDS = DASH_SECTIONS.map((s) => s.id);
 
+// The reason on the LP cards for an account without lp.view (GET
+// /dashboard's lp_hidden).
+const LP_HIDDEN_NOTE = 'Needs the reorder-recommendation permission';
+
 // Which section is being read, and whether the toolbar has stuck under the
 // top bar. Both are read off `.dashboard` — the element that scrolls on this
 // page; the top bar sits outside it — once per frame while it scrolls.
@@ -528,8 +532,15 @@ const Dashboard = () => {
   // below it is drawn from, so a card and its chart can never disagree; a
   // missing field renders "—" with the reason, never 0.
 
+  // An account without lp.view gets GET /dashboard with every LP-derived
+  // figure left out and lp_hidden set (Yuan's permissions proposal): those
+  // cards say why they're empty, and the reorder and policy widgets are
+  // not drawn at all rather than drawn with zeros.
+  const lpHidden = data.lp_hidden === true;
   const exposure = data.safety_stock_exposure || {};
-  const exposureReason = exposure.blocked_reason || 'Safety-stock exposure cannot be measured yet';
+  const exposureReason = lpHidden
+    ? LP_HIDDEN_NOTE
+    : exposure.blocked_reason || 'Safety-stock exposure cannot be measured yet';
   // Health tier for the safety-stock card, from the same rate the
   // exposure figures are derived from.
   const ssTier = safetyStockMetricType(kpis.safety_stock_rate ?? null);
@@ -645,9 +656,9 @@ const Dashboard = () => {
             />
             <KPICard
               title="Pending reorder actions"
-              value={pendingCount.toLocaleString()}
-              metricType="recommendation"
-              contextLine={pendingContext}
+              value={lpHidden ? '—' : pendingCount.toLocaleString()}
+              metricType={lpHidden ? undefined : 'recommendation'}
+              contextLine={lpHidden ? LP_HIDDEN_NOTE : pendingContext}
               icon={<ClipboardList size={20} />}
             />
           </div>
@@ -680,7 +691,7 @@ const Dashboard = () => {
           </div>
 
           {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
-          <div className="dash-row dash-row-even dash-section-anchor" id="dash-forecast">
+          <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-forecast">
             <Slot kind="Predictive" realOnly={portfolioRealOnly}>
               <PortfolioForecastWidget
                 series={portfolioSeries}
@@ -705,33 +716,39 @@ const Dashboard = () => {
                 insight={portfolioForecast.insight}
               />
             </Slot>
-            <Slot kind="Prescriptive" realOnly={preview && realOnly.has('reorder_preview')}>
-              <ReorderRecommendationWidget
-                rows={reorderRows}
-                criticalCount={reorderPreview.critical_count ?? 0}
-                urgentCount={reorderPreview.urgent_count ?? 0}
-                totalOrderQty={reorderPreview.total_order_qty ?? 0}
-                weights={reorderPreview.lp_weights}
-              />
-            </Slot>
+            {!lpHidden && (
+              <Slot kind="Prescriptive" realOnly={preview && realOnly.has('reorder_preview')}>
+                <ReorderRecommendationWidget
+                  rows={reorderRows}
+                  criticalCount={reorderPreview.critical_count ?? 0}
+                  urgentCount={reorderPreview.urgent_count ?? 0}
+                  totalOrderQty={reorderPreview.total_order_qty ?? 0}
+                  weights={reorderPreview.lp_weights}
+                />
+              </Slot>
+            )}
           </div>
 
           {/* PRESCRIPTIVE — the policy question this project exists to answer,
               beside SSM's own allocation rule applied to the sales data */}
-          <div className="dash-row dash-row-even dash-section-anchor" id="dash-policy">
-            <Slot kind="Prescriptive" realOnly={preview && realOnly.has('policy_comparison')}>
-              <PolicyComparisonWidget comparison={data.policy_comparison} />
-            </Slot>
+          <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-policy">
+            {!lpHidden && (
+              <Slot kind="Prescriptive" realOnly={preview && realOnly.has('policy_comparison')}>
+                <PolicyComparisonWidget comparison={data.policy_comparison} />
+              </Slot>
+            )}
             <Slot kind="Descriptive">
               <AllocationWidget allocation={data.allocation} />
             </Slot>
           </div>
 
-          <p className="dash-footnote">
-            Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as
-            &ldquo;Act now&rdquo;.{' '}
-            <Link to="/reorder" className="band-link">Open Reorder Recs <ArrowRight size={12} /></Link>
-          </p>
+          {!lpHidden && (
+            <p className="dash-footnote">
+              Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as
+              &ldquo;Act now&rdquo;.{' '}
+              <Link to="/reorder" className="band-link">Open Reorder Recs <ArrowRight size={12} /></Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

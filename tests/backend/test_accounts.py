@@ -78,8 +78,9 @@ class FakeDB:
         now = datetime.now(timezone.utc)
         if "FROM users u LEFT JOIN user_session s" in sql:
             return FakeResult(self.principal_row)
-        if sql.startswith("SELECT 1 FROM users WHERE email = :email"):
-            return FakeResult(True if self.user(email=p["email"]) else None)
+        if sql.startswith("SELECT 1 FROM users WHERE lower(email) = lower(:email)"):
+            taken = any(u["email"].lower() == p["email"].lower() for u in self.users)
+            return FakeResult(True if taken else None)
         if sql.startswith("SELECT user_id, password_hash, role, full_name FROM users"):
             return FakeResult(self.user(email=p["email"]))
         if sql.startswith("SELECT user_id, email, full_name, role FROM users WHERE email"):
