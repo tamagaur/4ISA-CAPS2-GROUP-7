@@ -425,10 +425,22 @@ def demand_matrix(
     return matrices, periods
 
 
-def series_traits(qty: np.ndarray, periods: list[str]) -> dict:
+def observed_periods(db: Session, start: str, end: str, mode: str) -> set[str]:
+    """orchestrate_segment._fetch_observed_periods, from `mode`'s demand
+    source: the months in [start, end] with any demand row at all."""
+    rows = db.execute(
+        text(f"SELECT DISTINCT calendar_month FROM {unilever_demand(mode)} "
+             "WHERE calendar_month >= :start AND calendar_month <= :end"),
+        {"start": start, "end": end},
+    ).all()
+    return {r[0] for r in rows}
+
+
+def series_traits(qty: np.ndarray, periods: list[str], observed: set[str] | None = None) -> dict:
     """The demand-series columns of orchestrate_segment.build_traits for one
     SKU. stability_group and revenue_share_2026_02 are not here: they come
-    from ABC runs, not the demand series, and stay the stored values."""
+    from ABC runs, not the demand series, and stay the stored values.
+    `observed` is observed_periods(); None = every period observed."""
     fs = first_sale_index(qty)
     trend, trend_pvalue, trend_slope = trend_stats(qty)
     return {
@@ -439,6 +451,7 @@ def series_traits(qty: np.ndarray, periods: list[str]) -> dict:
         "trend_pvalue": trend_pvalue,
         "trend_slope": trend_slope,
         "cv": coefficient_of_variation(qty),
-        "adi": average_demand_interval(qty),
+        "adi": average_demand_interval(
+            qty, None if observed is None else np.array([p in observed for p in periods], dtype=bool)),
         "restart_flag": has_restart(qty),
     }

@@ -166,12 +166,28 @@ def _fetch_sku_codes(engine: Engine, principal: str, product_keys: list[int]) ->
     return {pk: code for pk, code in rows}
 
 
+def _fetch_observed_periods(engine: Engine, principal: str, start: str, end: str) -> set[str]:
+    """Months in [start, end] the principal has ANY demand row for. A month
+    outside this set is a data gap, not a zero-sale month, and ADI drops it
+    (traits.average_demand_interval)."""
+    metadata = MetaData()
+    demand = Table(DEMAND_SOURCE_BY_PRINCIPAL[principal], metadata, autoload_with=engine)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(demand.c.calendar_month).distinct()
+            .where(and_(demand.c.calendar_month >= start, demand.c.calendar_month <= end))
+        ).fetchall()
+    return {r[0] for r in rows}
+
+
 def build_traits(
     engine: Engine, principal: str, cohort_period: str, abc_method: str,
     demand_start: str, demand_end: str, run_id: str,
 ) -> tuple[pd.DataFrame, SegmentRunReport]:
     product_keys = _fetch_cohort(engine, principal, cohort_period, abc_method)
     matrices, periods = _fetch_demand_matrix(engine, principal, product_keys, demand_start, demand_end)
+    observed_periods = _fetch_observed_periods(engine, principal, demand_start, demand_end)
+    observed = np.array([p in observed_periods for p in periods], dtype=bool)
     a_periods, revenue = _fetch_stability_and_revenue(engine, principal, product_keys, cohort_period, abc_method)
 
     records = []
@@ -192,7 +208,7 @@ def build_traits(
             trend_pvalue=trend_pvalue,
             trend_slope=trend_slope,
             cv=coefficient_of_variation(qty),
-            adi=average_demand_interval(qty),
+            adi=average_demand_interval(qty, observed),
             tier_a_periods=a_periods.get(pk, 0),
             restart_flag=has_restart(qty),
             stability_group=stability_group(a_periods.get(pk, 0), TOTAL_PERIODS),

@@ -50,7 +50,8 @@ import pandas as pd
 # validation live in sarima.py and are shared verbatim.
 from analytics.forecasting.sarima import train_holdout_split, HOLDOUT_FRACTION  # noqa: F401
 from analytics.classification.abc import TIER_A_CUTOFF as ABC_TIER_A_CUTOFF  # noqa: F401
-from analytics.params import MASE_GATE, SBC_ADI_CUT, SBC_CV2_CUT
+from analytics.params import MASE_GATE, SBC_CV2_CUT
+from analytics.segmentation.traits import average_demand_interval, is_intermittent_adi
 
 MIN_MONTHS_WITH_SALES = 3
 MA_WINDOW = 3
@@ -72,7 +73,6 @@ TSB_ALPHA_PROB = 0.1
 # from analytics.params. CV² here is of the NON-ZERO demand sizes only —
 # not sku_traits.cv (every month from the first sale), not the fit
 # review's CV(last 12).
-_ADI_CUT = SBC_ADI_CUT
 _CV2_CUT = SBC_CV2_CUT
 
 # ---------------------------------------------------------------------------
@@ -188,15 +188,18 @@ def tsb_forecast(train: pd.Series, horizon: int, alpha_demand: float = TSB_ALPHA
     return np.full(horizon, float(demand * prob), dtype=float)
 
 
-def demand_class(series: pd.Series) -> str:
+def demand_class(series: pd.Series, gap_months=None) -> str:
     """smooth / erratic / intermittent / lumpy / unclassifiable, via ADI
     (average inter-demand interval) and CV^2 of the nonzero demand sizes.
 
     Callable on a training-only slice (for rule_method) or on the full series
     (for reporting) - it just measures whatever `series` it is given.
 
-    ADI = len(series) / (# months with demand); CV^2 = (std/mean)^2 of the
-    nonzero values (sample std, ddof=1). Cut points: ADI 1.32, CV^2 0.49.
+    ADI is traits.average_demand_interval: from the first sale, with the
+    principal-wide gap months in `gap_months` (month-start timestamps)
+    dropped, never counted as zero-sale months. CV^2 = (std/mean)^2 of the
+    nonzero values (sample std, ddof=1). Cut points: SBC 2005, ADI 1.32 and
+    CV^2 0.49, the tie going to intermittent / erratic.
     Fewer than 2 nonzero months -> variance is not estimable -> unclassifiable.
     """
     values = series.to_numpy(dtype=float)
@@ -205,18 +208,16 @@ def demand_class(series: pd.Series) -> str:
     if n_demand < 2 or nonzero.mean() <= 0:
         return "unclassifiable"
 
-    adi = len(values) / n_demand
+    observed = None if not gap_months else ~series.index.isin(pd.DatetimeIndex(list(gap_months)))
+    adi = average_demand_interval(values, observed)
     cv2 = (nonzero.std(ddof=1) / nonzero.mean()) ** 2
     if np.isnan(cv2):
         return "unclassifiable"
 
-    if adi < _ADI_CUT and cv2 < _CV2_CUT:
-        return "smooth"
-    if adi < _ADI_CUT and cv2 >= _CV2_CUT:
-        return "erratic"
-    if adi >= _ADI_CUT and cv2 < _CV2_CUT:
-        return "intermittent"
-    return "lumpy"
+    intermittent, erratic = is_intermittent_adi(adi), cv2 >= _CV2_CUT
+    if not intermittent:
+        return "erratic" if erratic else "smooth"
+    return "lumpy" if erratic else "intermittent"
 
 
 def evaluate_baseline(forecast, holdout: pd.Series, train: pd.Series) -> dict:

@@ -63,6 +63,7 @@ from backend.data_mode import (
     get_data_mode,
     placeholder_window,
     preview_block,
+    observed_periods,
     series_traits,
 )
 from backend.deps import TokenPayload, get_current_user, get_db
@@ -164,7 +165,8 @@ def get_segment(
     if window:
         cohort_period = traits_row["cohort_period"]
         matrices, periods = demand_matrix(db, [product_key], window["start"], cohort_period, PREVIEW)
-        traits_row = {**traits_row, **series_traits(matrices[product_key], periods)}
+        observed = observed_periods(db, window["start"], cohort_period, PREVIEW)
+        traits_row = {**traits_row, **series_traits(matrices[product_key], periods, observed)}
         recomputed = SimpleNamespace(stability_group=traits_row["stability_group"], tier_a_periods=None, **{
             k: traits_row[k] for k in ("history_months", "trend", "trend_pvalue", "trend_slope", "cv")
         })

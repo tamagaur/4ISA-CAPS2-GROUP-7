@@ -14,6 +14,8 @@ from __future__ import annotations
 import numpy as np
 from scipy import stats
 
+from analytics.params import SBC_ADI_CUT
+
 MANN_KENDALL_ALPHA = 0.05
 RESTART_GAP_MONTHS = 3
 
@@ -59,11 +61,29 @@ def active_months(qty: np.ndarray) -> int:
     return len(from_first_sale(qty))
 
 
-def average_demand_interval(qty: np.ndarray) -> float | None:
-    """ADI = months since first sale / months with a sale (1.0 = sold
-    every month). None if the SKU never sold."""
+def average_demand_interval(qty: np.ndarray, observed: np.ndarray | None = None) -> float | None:
+    """ADI = months from the first sale to the end of the window / months
+    with a sale (1.0 = sold every month). None if the SKU never sold.
+
+    `observed` (bool, same length as qty) marks the months the PRINCIPAL
+    has any demand rows for. A month no product has a row for is a data
+    gap, not a zero-sale month (Yuan, 2026-09-30), so it is dropped before
+    counting; otherwise one missing file makes every SKU look
+    intermittent. None = every month observed.
+
+    The one ADI definition: baseline.demand_class and classification.fsn
+    call this, and is_intermittent_adi is the one comparison."""
+    qty = np.asarray(qty, dtype=float)
+    if observed is not None:
+        qty = qty[np.asarray(observed, dtype=bool)]
     n_pos = history_months(qty)
     return active_months(qty) / n_pos if n_pos else None
+
+
+def is_intermittent_adi(adi: float) -> bool:
+    """Syntetos, Boylan & Croston (2005): ADI >= 1.32 is intermittent. The
+    tie goes to intermittent, the same side everywhere in this codebase."""
+    return adi >= SBC_ADI_CUT
 
 
 def trend_stats(qty: np.ndarray, alpha: float = MANN_KENDALL_ALPHA) -> tuple[str, float | None, float | None]:

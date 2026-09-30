@@ -9,12 +9,13 @@ reference month:
   N  non-moving  no sale in the last NON_MOVING_MONTHS observed months — the
                  same six-month rule the forecast runner uses for a dead SKU
                  (Forecast_Result.status = 'dead_sku').
-  F  fast        sells regularly: ADI <= FAST_ADI_MAX, with at least
+  F  fast        sells regularly: ADI < 1.32 (not intermittent), with at least
                  MIN_FAST_SALES_MONTHS months of sales. ADI (average demand
                  interval) = observed months since the first sale in the
-                 window / months with a sale — sku_traits.adi's definition,
-                 restricted to the window. 1.32 is the Syntetos–Boylan
-                 cut-off between regular and intermittent demand.
+                 window / months with a sale — traits.average_demand_
+                 interval, the one ADI definition, restricted to the
+                 window. ADI >= 1.32 is intermittent (Syntetos, Boylan &
+                 Croston 2005; traits.is_intermittent_adi), so a tie is slow.
   S  slow        everything else that sold in the window: intermittent, or
                  too few sales months to call regular.
 
@@ -30,9 +31,12 @@ from __future__ import annotations
 
 import numpy as np
 
+from analytics.params import SBC_ADI_CUT
+from analytics.segmentation.traits import average_demand_interval, is_intermittent_adi
+
 FSN_WINDOW_MONTHS = 12
 NON_MOVING_MONTHS = 6
-FAST_ADI_MAX = 1.32
+FAST_ADI_BELOW = SBC_ADI_CUT  # fast needs ADI < this (a tie is intermittent)
 MIN_FAST_SALES_MONTHS = 3
 
 FSN_LABELS = {"F": "Fast-moving", "S": "Slow-moving", "N": "Non-moving"}
@@ -51,8 +55,8 @@ def classify_fsn(qty) -> dict:
     if months_observed == 0 or not sold[-NON_MOVING_MONTHS:].any():
         return {"fsn": "N", "adi": None, "months_with_sales": months_with_sales, "months_observed": months_observed}
     active = months_observed - int(np.argmax(sold))
-    adi = active / months_with_sales
-    fast = adi <= FAST_ADI_MAX and months_with_sales >= MIN_FAST_SALES_MONTHS
+    adi = average_demand_interval(q)
+    fast = not is_intermittent_adi(adi) and months_with_sales >= MIN_FAST_SALES_MONTHS
     return {
         "fsn": "F" if fast else "S",
         "adi": round(adi, 3),

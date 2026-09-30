@@ -31,7 +31,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from analytics.classification.fsn import (
-    FAST_ADI_MAX, FSN_LABELS, FSN_WINDOW_MONTHS, MIN_FAST_SALES_MONTHS, NON_MOVING_MONTHS, classify_fsn,
+    FAST_ADI_BELOW, FSN_LABELS, FSN_WINDOW_MONTHS, MIN_FAST_SALES_MONTHS, NON_MOVING_MONTHS, classify_fsn,
 )
 from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
 from backend.deps import TokenPayload, get_current_user, get_db
@@ -121,7 +121,11 @@ def get_fsn(
         "rules": {
             "window_months": FSN_WINDOW_MONTHS,
             "non_moving_months": NON_MOVING_MONTHS,
-            "fast_adi_max": FAST_ADI_MAX,
+            # Fast needs ADI < fast_adi_below (a tie is intermittent). fast_adi_max
+            # is the old key, the same number, kept until the frontend reads
+            # fast_adi_below; it no longer means "<=".
+            "fast_adi_below": FAST_ADI_BELOW,
+            "fast_adi_max": FAST_ADI_BELOW,
             "min_fast_sales_months": MIN_FAST_SALES_MONTHS,
             "labels": FSN_LABELS,
         },

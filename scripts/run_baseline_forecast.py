@@ -229,7 +229,7 @@ def pick_oracle(per_method: dict) -> str:
     return sorted(tied)[0]
 
 
-def evaluate_sku(series: pd.Series) -> dict:
+def evaluate_sku(series: pd.Series, gap_months=None) -> dict:
     """Run all 3 methods + both selection methods for one status='ok' SKU."""
     train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
     horizon = len(holdout)
@@ -246,7 +246,7 @@ def evaluate_sku(series: pd.Series) -> dict:
             metrics["window"] = MA_WINDOW
         per_method[m] = metrics
 
-    train_class = demand_class(train)
+    train_class = demand_class(train, gap_months)
     oracle_method = pick_oracle(per_method)
     rule_method = RULE_METHOD_MAP.get(train_class, "naive")
 
@@ -308,6 +308,10 @@ def main():
         print("\n  All 38 expected months have demand rows - a per-SKU missing month")
         print("  reads as 'this SKU had zero sales that month'.")
 
+    # A principal-wide missing month is a file gap, not a zero-sale month: ADI
+    # (demand_class) drops these instead of counting them as zeros.
+    gap_months = [pd.Timestamp(f"{m}-01") for m in etl_gaps]
+
     # ---- per-SKU loop --------------------------------------------------- #
     demand_by_key = {k: g for k, g in demand.groupby("product_key")}
     sku_code_by_key = demand.groupby("product_key")["sku_code"].first().to_dict()
@@ -327,7 +331,7 @@ def main():
         series = build_series(sku_df)
         months_span = int(len(series))
         months_with_sales = int((series > 0).sum())
-        full_class = demand_class(series)
+        full_class = demand_class(series, gap_months)
 
         # first/last month with a real positive sale, from the UNtrimmed rows
         sold_months = sorted(
@@ -351,7 +355,7 @@ def main():
                                                    months_with_sales, full_class, "dead_sku")))
             continue
 
-        ev = evaluate_sku(series)
+        ev = evaluate_sku(series, gap_months)
         rec = _with_window(_row_shell(p_key, sku_code, abc_period, months_span, months_with_sales,
                                       full_class, "ok"))
         rec["train_months"] = ev["train_len"]
