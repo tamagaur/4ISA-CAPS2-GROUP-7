@@ -22,10 +22,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from jose import jwt
 from sqlalchemy.exc import ProgrammingError
 
 from backend import auth_utils, mailer
@@ -192,13 +192,43 @@ def test_decode_expired_token_raises(monkeypatch):
         auth_utils.decode_access_token(token)
 
 
+def _unverified_claims(token):
+    return jwt.decode(token, options={"verify_signature": False})
+
+
+# Minted 2026-09-30 by python-jose 3.3.0 (the library before PyJWT) with this
+# module's test secret: sub "7", exp 2099-01-01, sid "jose-fixture-session".
+JOSE_MINTED_TOKEN = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+    "eyJzdWIiOiI3IiwiZW1haWwiOiJ4QHNzbWNhcHN0b25lLmNvbSIsInJvbGUiOiJzdGFmZiIsImZ1bGxfbmFtZSI6IlggVXNlciIs"
+    "ImV4cCI6NDA3MDkwODgwMCwic2lkIjoiam9zZS1maXh0dXJlLXNlc3Npb24ifQ."
+    "LrMHU21DOdkUljGZPKIloixhCqpv-n3TrMrkhT6z-2o"
+)
+
+
+def test_tokens_issued_before_pyjwt_still_decode():
+    """Tokens already in browsers when the backend switched libraries must
+    keep working, so the switch signs nobody out."""
+    payload = auth_utils.decode_access_token(JOSE_MINTED_TOKEN)
+    assert (payload.user_id, payload.email, payload.role, payload.full_name, payload.session_id) == (
+        7, "x@ssmcapstone.com", "staff", "X User", "jose-fixture-session"
+    )
+
+
+def test_unsigned_token_is_rejected():
+    """alg=none must never pass, whatever the library."""
+    unsigned = jwt.encode({"sub": "1", "email": "x@ssmcapstone.com", "role": "admin", "full_name": "X"}, None, algorithm="none")
+    with pytest.raises(auth_utils.JWTError):
+        auth_utils.decode_access_token(unsigned)
+
+
 def test_token_exp_defaults_to_eight_hours(monkeypatch):
     monkeypatch.delenv("JWT_EXPIRY_HOURS", raising=False)
     before = datetime.now(timezone.utc)
     token = auth_utils.create_access_token(
         user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
     )
-    exp = datetime.fromtimestamp(jwt.get_unverified_claims(token)["exp"], tz=timezone.utc)
+    exp = datetime.fromtimestamp(_unverified_claims(token)["exp"], tz=timezone.utc)
     assert timedelta(hours=7, minutes=59) < (exp - before) < timedelta(hours=8, minutes=1)
 
 
@@ -208,7 +238,7 @@ def test_token_exp_honors_custom_hours(monkeypatch):
     token = auth_utils.create_access_token(
         user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
     )
-    exp = datetime.fromtimestamp(jwt.get_unverified_claims(token)["exp"], tz=timezone.utc)
+    exp = datetime.fromtimestamp(_unverified_claims(token)["exp"], tz=timezone.utc)
     assert timedelta(hours=1, minutes=59) < (exp - before) < timedelta(hours=2, minutes=1)
 
 
@@ -216,7 +246,7 @@ def test_decode_tampered_signature_raises(monkeypatch):
     token = auth_utils.create_access_token(
         user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
     )
-    monkeypatch.setenv("JWT_SECRET_KEY", "a-different-secret")
+    monkeypatch.setenv("JWT_SECRET_KEY", "a-different-secret-at-least-32-bytes-long")
     with pytest.raises(auth_utils.JWTError):
         auth_utils.decode_access_token(token)
 

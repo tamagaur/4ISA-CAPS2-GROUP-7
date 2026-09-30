@@ -17,8 +17,13 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
+import jwt
 from dotenv import load_dotenv
-from jose import JWTError, jwt
+# PyJWT since 2026-09-30, replacing python-jose 3.3.0 (CVE-2024-33663,
+# CVE-2024-29370; jose's ecdsa dependency has an advisory with no fix).
+# InvalidTokenError is PyJWT's base for a bad signature, a malformed token and
+# an expired one, as jose's JWTError was, so the name callers catch is kept.
+from jwt import InvalidTokenError as JWTError
 from passlib.context import CryptContext
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

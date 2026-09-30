@@ -47,7 +47,10 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1  # pinned <4.1: passlib 1.7.4's bcrypt backend probes
                # bcrypt.__about__.__version__, removed in bcrypt 4.1+,
                # which breaks hashing at import time otherwise.
-python-jose[cryptography]==3.3.0
+PyJWT==2.14.0  # 2026-09-30: replaces python-jose[cryptography]==3.3.0, which had
+               # CVE-2024-33663 (CRITICAL) and CVE-2024-29370 and pulled in ecdsa
+               # (CVE-2024-23342, no fix released). HS256 only (backend/auth_utils.py).
+               # Release 2026-09-11, >7 days old.
 
 # --- Testing ---
 pytest==8.3.3
