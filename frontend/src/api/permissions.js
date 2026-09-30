@@ -9,8 +9,9 @@ import {
 
 const MOCK = import.meta.env.DEV && MOCK_PERMISSIONS;
 
-// A refused call, keeping the proposal's error code (missing_permission,
-// last_admin, self_lockout, unknown_permission) so a screen can word it.
+// A refused call: `message` is the backend's sentence (`detail`), and
+// `code` the proposal's machine code (missing_permission, last_admin,
+// self_lockout, unknown_permission), which screens branch on.
 export class PermissionApiError extends Error {
   constructor(message, { status, code = null, permission = null } = {}) {
     super(message);
@@ -24,11 +25,10 @@ export class PermissionApiError extends Error {
 async function readJson(res, fallback) {
   const body = await res.json().catch(() => null);
   if (res.ok) return body;
-  // apiFetch rewrites a 403's detail into a sentence and keeps the code apart.
   const detail = body?.detail;
   throw new PermissionApiError(typeof detail === 'string' ? detail : fallback, {
     status: res.status,
-    code: body?.code || (typeof detail === 'string' ? detail : null),
+    code: body?.code ?? null,
     permission: body?.permission ?? null,
   });
 }

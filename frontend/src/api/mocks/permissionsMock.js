@@ -11,6 +11,7 @@
 // in localStorage so a reload keeps it:
 //   dsd_mock_me     { role, overrides }: who the signed-in person acts as
 //   dsd_mock_users  { [user_id]: { role, overrides } }: saved on the admin screen
+import { LEGACY_CATALOG } from '../../permissions/keys';
 import { effectiveKeys, normalizeOverrides } from '../../permissions/rules';
 
 export const MOCK_PERMISSIONS = import.meta.env.DEV && import.meta.env.VITE_MOCK_PERMISSIONS === 'true';
@@ -18,26 +19,14 @@ export const MOCK_PERMISSIONS = import.meta.env.DEV && import.meta.env.VITE_MOCK
 const ME_KEY = 'dsd_mock_me';
 const USERS_KEY = 'dsd_mock_users';
 
-// The proposal's draft catalog and presets, plus the provisional keys in
-// permissions/keys.js, whose presets keep today's access for those pages.
+// The catalog and presets in Yuan's revised proposal (its Design table),
+// grouped by page as the permissions screen shows them.
 export const MOCK_CATALOG = {
-  permissions: [
-    { key: 'dashboard.view', label: 'Dashboard', group: 'Analytics', description: 'Open the dashboard.' },
-    { key: 'forecast.view', label: 'SKU Forecast', group: 'Analytics', description: 'Open the forecasts page.' },
-    { key: 'trends.view', label: 'Category Trends', group: 'Analytics', description: 'Open category trends. Provisional key.' },
-    { key: 'abc.view', label: 'ABC Classification', group: 'Management', description: 'Open the ABC classification page.' },
-    { key: 'sku.view', label: 'SKU Management', group: 'Management', description: 'See the product list. Provisional key.' },
-    { key: 'sku.edit', label: 'Add or edit SKUs', group: 'Management', description: 'Changes the product master. Provisional key.' },
-    { key: 'lp.view', label: 'Reorder recommendations', group: 'LP / Reorder', description: 'See the recommended orders.' },
-    { key: 'lp.decide', label: 'Accept or dismiss recommendations', group: 'LP / Reorder', description: 'Changes what SSM orders.' },
-    { key: 'audit.view', label: 'Audit Log', group: 'Admin', description: 'See who changed what, and when. Provisional key.' },
-    { key: 'upload.run', label: 'Data Management (upload)', group: 'Admin', description: 'Reserved for Module 07.' },
-    { key: 'users.manage', label: 'Manage users', group: 'Admin', description: 'Invite users, set roles and permissions.' },
-  ],
+  permissions: LEGACY_CATALOG.permissions,
   roles: {
     admin: 'all',
-    manager: ['dashboard.view', 'forecast.view', 'trends.view', 'abc.view', 'sku.view', 'lp.view', 'lp.decide'],
-    staff: ['dashboard.view', 'forecast.view', 'trends.view', 'abc.view', 'sku.view'],
+    manager: ['dashboard.view', 'abc.view', 'forecast.view', 'category_trends.view', 'sku.view', 'sku.edit', 'lp.view', 'lp.decide'],
+    staff: ['dashboard.view', 'abc.view', 'forecast.view', 'category_trends.view', 'sku.view', 'lp.view'],
   },
 };
 
@@ -113,18 +102,24 @@ export function mockUserPermissions(user) {
 export function mockSaveUserPermissions(user, { role, overrides = {} }, { isSelf, users }) {
   const known = new Set(MOCK_CATALOG.permissions.map((permission) => permission.key));
   const unknown = Object.keys(overrides).find((key) => !known.has(key));
-  if (unknown) return respond(422, { detail: 'unknown_permission', permission: unknown });
+  if (unknown) return respond(422, { detail: 'Unknown permission.', code: 'unknown_permission', permission: unknown });
 
   const before = savedAccess(user);
   const next = { role, overrides: normalizeOverrides(MOCK_CATALOG, role, overrides) };
   const couldManage = effective(before.role, before.overrides).includes('users.manage');
   const canManage = effective(next.role, next.overrides).includes('users.manage');
   if (isSelf && ((before.role === 'admin' && role !== 'admin') || (couldManage && !canManage))) {
-    return respond(409, { detail: 'self_lockout' });
+    return respond(409, { detail: "You can't remove your own admin access.", code: 'self_lockout' });
+  }
+  // Same as the backend: nobody changes their own access in any other way.
+  const changed = next.role !== before.role
+    || JSON.stringify(Object.entries(next.overrides).sort()) !== JSON.stringify(Object.entries(before.overrides).sort());
+  if (isSelf && changed) {
+    return respond(409, { detail: "You can't change your own access. Ask another admin.", code: 'self_promotion' });
   }
   const admins = users.filter((row) => row.role === 'admin').length;
   if (before.role === 'admin' && role !== 'admin' && admins <= 1) {
-    return respond(409, { detail: 'last_admin' });
+    return respond(409, { detail: 'There must be at least one admin.', code: 'last_admin' });
   }
 
   write(USERS_KEY, { ...read(USERS_KEY, {}), [user.user_id]: next });
@@ -145,7 +140,7 @@ const MOCK_RULES = [
   { methods: ['GET'], pattern: /^\/recommendations(\?|$)/, permission: 'lp.view' },
   { methods: ['POST'], pattern: /^\/sku(\?|$)/, permission: 'sku.edit' },
   { methods: ['PATCH'], pattern: /^\/sku\/[^/?]+/, permission: 'sku.edit' },
-  { methods: ['GET'], pattern: /^\/audit-log/, permission: 'audit.view' },
+  { methods: ['GET'], pattern: /^\/audit-log/, permission: 'audit_log.view' },
   { methods: ['GET', 'POST', 'PATCH', 'DELETE'], pattern: /^\/users(\/|\?|$)/, permission: 'users.manage' },
   { methods: ['POST'], pattern: /^\/auth\/register$/, permission: 'users.manage' },
 ];

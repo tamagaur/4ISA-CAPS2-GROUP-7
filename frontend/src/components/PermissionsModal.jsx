@@ -7,14 +7,22 @@
 // change. Save sends only what differs from the role's preset; the backend
 // enforces what's saved and refuses a change that would leave no admin or
 // lock the saver out (409), which this screen puts in plain words.
+//
+// It is also step 2 of Add User: given `newUser` ({ fullName, email } from
+// the Add User form's Next) instead of `user`, it starts from the Staff
+// defaults, adds a Back button, and its Save calls onCreate to make the
+// account with this access. While the backend can't store single
+// permissions yet (PermissionsProvider's `legacy`), it offers Admin and
+// Staff and shows, read-only, the pages that role opens.
 import React, { useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
 import Modal from './Modal';
 import SaveResult from './SaveResult';
 import { useSaveResult } from '../utils/useSaveResult';
 import { getPermissionCatalog, getUserPermissions, saveUserPermissions } from '../api/permissions';
+import { usePermissions } from '../permissions/context';
 import { effectiveKeys, normalizeOverrides, presetKeys } from '../permissions/rules';
-import { ROLES } from '../permissions/keys';
+import { LEGACY_CATALOG, ROLES, roleLabel } from '../permissions/keys';
 import './UserFormModal.css';
 import './PermissionsModal.css';
 
@@ -22,10 +30,10 @@ import './PermissionsModal.css';
 const SAVE_ERRORS = {
   last_admin: () => 'This is the only admin. Make someone else an admin first.',
   self_lockout: () => "You can't take away your own admin access. Ask another admin to do it.",
+  self_promotion: () => "You can't change your own access. Ask another admin to do it.",
   unknown_permission: (key) => `"${key}" isn't a known permission any more. Close this and open it again.`,
+  user_not_found: () => 'This account no longer exists. Close this and refresh the list.',
 };
-
-const roleLabel = (role) => ROLES.find((r) => r.value === role)?.label || role;
 
 // Catalog order, grouped by page ("group"), keeping each group's first place.
 function groupPermissions(permissions) {
@@ -43,7 +51,12 @@ const sameOverrides = (a, b) => {
   return [...keys].every((key) => a[key] === b[key]);
 };
 
-const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
+const PermissionsModal = ({ isOpen, user, newUser = null, isSelf = false, onClose, onSaved, onBack, onCreate }) => {
+  const creating = Boolean(newUser);
+  const { legacy } = usePermissions();
+  // Nothing to tick until the backend can store it: show the role's access.
+  const readOnly = creating && legacy;
+  const roles = readOnly ? ROLES.filter((r) => r.value !== 'manager') : ROLES;
   const [catalog, setCatalog] = useState(null);
   const [initial, setInitial] = useState({ role: null, overrides: {} });
   const [role, setRole] = useState(null);
@@ -53,11 +66,31 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
   const { saving, result, run, reset } = useSaveResult();
 
   useEffect(() => {
-    if (!isOpen || !user) return undefined;
+    if (!isOpen || (!user && !newUser)) return undefined;
     let cancelled = false;
     setLoad({ status: 'loading', error: '' });
     setApiError('');
     reset();
+    if (newUser) {
+      // A new person starts on Staff, or on what was chosen before Back.
+      const start = newUser.access || { role: 'staff', overrides: {} };
+      const ready = (loadedCatalog) => {
+        if (cancelled) return;
+        setCatalog(loadedCatalog);
+        setInitial(start);
+        setRole(start.role);
+        setOverrides(normalizeOverrides(loadedCatalog, start.role, start.overrides));
+        setLoad({ status: 'ready', error: '' });
+      };
+      if (legacy) {
+        ready(LEGACY_CATALOG);
+      } else {
+        getPermissionCatalog()
+          .then(ready)
+          .catch((err) => { if (!cancelled) setLoad({ status: 'error', error: err.message }); });
+      }
+      return () => { cancelled = true; };
+    }
     Promise.all([getPermissionCatalog(), getUserPermissions(user)])
       .then(([loadedCatalog, current]) => {
         if (cancelled) return;
@@ -75,14 +108,15 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
         if (!cancelled) setLoad({ status: 'error', error: err.message });
       });
     return () => { cancelled = true; };
-  }, [isOpen, user, reset]);
+  }, [isOpen, user, newUser, legacy, reset]);
 
   const preset = useMemo(() => presetKeys(catalog, role), [catalog, role]);
   const granted = useMemo(() => effectiveKeys(catalog, role, overrides), [catalog, role, overrides]);
   const groups = useMemo(() => groupPermissions(catalog?.permissions || []), [catalog]);
 
-  if (!isOpen || !user) return null;
+  if (!isOpen || (!user && !newUser)) return null;
 
+  const person = creating ? { full_name: newUser.fullName, email: newUser.email } : user;
   const isAdminRole = role === 'admin';
   const changed = role !== initial.role || !sameOverrides(overrides, initial.overrides);
   const added = Object.values(overrides).filter(Boolean).length;
@@ -102,6 +136,20 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
   const handleSave = async (e) => {
     e.preventDefault();
     setApiError('');
+    if (creating) {
+      // Add User: create the account with this access. onCreate resolves
+      // with { message } for the check mark, or throws for the red X.
+      await run(() => onCreate({
+        fullName: newUser.fullName,
+        email: newUser.email,
+        role,
+        overrides: readOnly ? {} : normalizeOverrides(catalog, role, overrides),
+      }), {
+        onSaved: (outcome) => onSaved?.(outcome),
+        onFailed: setApiError,
+      });
+      return;
+    }
     await run(async () => {
       try {
         const saved = await saveUserPermissions(user, { role, overrides: normalizeOverrides(catalog, role, overrides) });
@@ -117,15 +165,17 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
     });
   };
 
-  const summary = isAdminRole
+  let summary = isAdminRole
     ? 'Admin: every permission, always.'
     : [`${roleLabel(role)} defaults`, added && `${added} added`, removed && `${removed} removed`].filter(Boolean).join(', ');
+  if (readOnly && !isAdminRole) summary = `${roleLabel(role)}: ${granted.size} of ${catalog?.permissions.length || 0} permissions.`;
+  const boxesLocked = isSelf || saving || isAdminRole || readOnly;
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      label={`Permissions for ${user.full_name}`}
+      label={`Permissions for ${person.full_name}`}
       overlayClassName="modal-overlay"
       containerClassName="modal-card permissions-modal-card"
       closeOnOverlayClick={!saving}
@@ -134,7 +184,7 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
       {result ? (
         <SaveResult
           ok={result.ok}
-          title={result.ok ? 'Permissions saved' : "Couldn't save"}
+          title={result.ok ? (creating ? 'User added' : 'Permissions saved') : "Couldn't save"}
           message={result.ok ? result.value?.message : result.message}
         />
       ) : (
@@ -142,7 +192,9 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
           <div className="modal-header">
             <div>
               <h3 className="modal-title">Permissions</h3>
-              <p className="modal-subtitle">{user.full_name} · {user.email}</p>
+              <p className="modal-subtitle">
+                {creating && 'Step 2 of 2 · '}{person.full_name} · {person.email}
+              </p>
             </div>
             <button className="modal-close-btn" onClick={onClose} disabled={saving} aria-label="Close">
               <X size={20} />
@@ -157,6 +209,12 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
               {isSelf && (
                 <p className="perm-note">You can&apos;t change your own access. Ask another admin to do it.</p>
               )}
+              {readOnly && (
+                <p className="perm-note">
+                  For now the role decides what they can open and do (ticked below). Ticking boxes person by
+                  person turns on once the server supports it.
+                </p>
+              )}
 
               <div className="form-group">
                 <label className="form-label" htmlFor="perm-role">ROLE</label>
@@ -167,17 +225,18 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
                   onChange={handleRole}
                   disabled={isSelf || saving}
                 >
-                  {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  {roles.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
                 <span className="form-hint">
-                  {isAdminRole
-                    ? 'Admins can use everything, so there is nothing to tick.'
-                    : `The boxes start from the ${roleLabel(role)} defaults; tick or untick only the exceptions.`}
+                  {isAdminRole && 'Admins can use everything, so there is nothing to tick.'}
+                  {!isAdminRole && readOnly && `What a ${roleLabel(role)} can open and do.`}
+                  {!isAdminRole && !readOnly
+                    && `The boxes start from the ${roleLabel(role)} defaults; tick or untick only the exceptions.`}
                 </span>
               </div>
 
               {groups.map(([group, permissions]) => (
-                <fieldset className="perm-group" key={group} disabled={isSelf || saving || isAdminRole}>
+                <fieldset className="perm-group" key={group} disabled={boxesLocked}>
                   <legend className="perm-group-title">{group}</legend>
                   {permissions.map((permission) => {
                     const change = overrides[permission.key];
@@ -201,10 +260,13 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
                               </span>
                             )}
                           </span>
-                          <span className="perm-desc" id={`perm-desc-${permission.key}`}>
-                            {permission.description}
-                            {!isAdminRole && change === undefined && preset.has(permission.key) && ' Part of this role.'}
-                          </span>
+                          {(permission.description || !readOnly) && (
+                            <span className="perm-desc" id={`perm-desc-${permission.key}`}>
+                              {permission.description}
+                              {!isAdminRole && !readOnly && change === undefined && preset.has(permission.key)
+                                && ' Part of this role.'}
+                            </span>
+                          )}
                         </span>
                       </label>
                     );
@@ -216,7 +278,18 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
               {apiError && <div className="form-api-error">{apiError}</div>}
 
               <div className="modal-actions">
-                {!isSelf && !isAdminRole && (
+                {creating && (
+                  <button
+                    type="button"
+                    className="btn-cancel perm-back"
+                    onClick={() => onBack?.({ role, overrides })}
+                    disabled={saving}
+                  >
+                    <ArrowLeft size={16} aria-hidden="true" />
+                    Back
+                  </button>
+                )}
+                {!isSelf && !isAdminRole && !readOnly && (
                   <button
                     type="button"
                     className="btn-cancel perm-reset"
@@ -230,7 +303,7 @@ const PermissionsModal = ({ isOpen, user, isSelf, onClose, onSaved }) => {
                   {isSelf ? 'Close' : 'Cancel'}
                 </button>
                 {!isSelf && (
-                  <button type="submit" className="btn-submit" disabled={saving || !changed}>
+                  <button type="submit" className="btn-submit" disabled={saving || (!creating && !changed)}>
                     {saving ? 'Saving...' : 'Save'}
                   </button>
                 )}

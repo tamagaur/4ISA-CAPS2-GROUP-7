@@ -89,8 +89,8 @@ function App() {
           <Route path="abc" element={guard(P.ABC_VIEW, <ABCClassification />)} />
           <Route path="forecast" element={guard(P.FORECAST_VIEW, <SKUForecast />)} />
           <Route path="reorder" element={guard(P.LP_VIEW, <ReorderRecommendations />)} />
-          <Route path="category-trends" element={guard(P.TRENDS_VIEW, <CategoryTrends />)} />
-          <Route path="audit-log" element={guard(P.AUDIT_VIEW, <AuditLog />)} />
+          <Route path="category-trends" element={guard(P.CATEGORY_TRENDS_VIEW, <CategoryTrends />)} />
+          <Route path="audit-log" element={guard(P.AUDIT_LOG_VIEW, <AuditLog />)} />
           <Route path="upload" element={guard(P.UPLOAD_RUN, <DataUpload />)} />
           <Route path="users" element={guard(P.USERS_MANAGE, <UserManagement />)} />
         </Route>

@@ -11,7 +11,6 @@
 import { invalidateCache } from './api/cache';
 import { MOCK_PERMISSIONS, mockDeniedPermission } from './api/mocks/permissionsMock';
 import { dataModeHeaders } from './dataMode';
-import { deniedMessage } from './permissions/keys';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'dsd_access_token';
@@ -231,19 +230,15 @@ export function authHeaders(extraHeaders = {}) {
 
 // Fired when the backend refuses a request for a missing permission, so
 // PermissionsProvider reloads /auth/me: an admin may just have changed this
-// person's access (Kelvin's permissions proposal).
+// person's access (Yuan's permissions proposal).
 export const PERMISSION_DENIED_EVENT = 'dsd:permission-denied';
 
-// The proposal's 403 body is {"detail": "missing_permission", "permission":
-// key}. Every api/*.js wrapper shows `detail` as its error text, so the code
-// is swapped for a sentence here, once, rather than in each wrapper; the
-// code itself stays in `code`.
-function permissionDenied(permission) {
+// The proposal's 403 body is {"detail": "<a sentence>", "code":
+// "missing_permission", "permission": key}. Every api/*.js wrapper already
+// shows `detail` as its error text, so the response passes through as it is;
+// this only tells PermissionsProvider, going by `code` (never by detail).
+function notifyPermissionDenied(permission) {
   window.dispatchEvent(new CustomEvent(PERMISSION_DENIED_EVENT, { detail: { permission } }));
-  return new Response(
-    JSON.stringify({ detail: deniedMessage(permission), code: 'missing_permission', permission }),
-    { status: 403, headers: { 'Content-Type': 'application/json' } },
-  );
 }
 
 // Thin fetch wrapper so future API calls don't each have to remember
@@ -263,7 +258,13 @@ export async function apiFetch(path, options = {}) {
   // will refuse, so the 403 path can be tried before the backend has it.
   if (import.meta.env.DEV && MOCK_PERMISSIONS) {
     const missing = mockDeniedPermission(options.method, path, getCurrentUser()?.role);
-    if (missing) return permissionDenied(missing);
+    if (missing) {
+      notifyPermissionDenied(missing);
+      return new Response(
+        JSON.stringify({ detail: "You don't have access to this. Ask an admin.", code: 'missing_permission', permission: missing }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
   }
 
   // Preview mode rides on every read as X-Data-Mode (src/dataMode.js), so
@@ -282,7 +283,7 @@ export async function apiFetch(path, options = {}) {
   }
   if (res.status === 403) {
     const body = await res.clone().json().catch(() => null);
-    if (body?.detail === 'missing_permission') return permissionDenied(body.permission);
+    if (body?.code === 'missing_permission') notifyPermissionDenied(body.permission);
   }
   return res;
 }

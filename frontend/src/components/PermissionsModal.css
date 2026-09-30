@@ -109,3 +109,13 @@
 .perm-reset {
   margin-right: auto;
 }
+
+/* Add User, step 2: Back is leftmost. When "Reset to role defaults" is
+   shown too, it sits next to Back and takes the push to the right. */
+.perm-back {
+  margin-right: auto;
+}
+
+.perm-back:has(+ .perm-reset) {
+  margin-right: 0;
+}
