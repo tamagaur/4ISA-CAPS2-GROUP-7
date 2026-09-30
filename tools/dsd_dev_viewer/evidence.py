@@ -88,6 +88,13 @@ def load(repo: str) -> dict:
             data["rescue"] = _table(os.path.join(ev, "ch06_rescue.csv"))
             with open(os.path.join(ev, "ch06_rescue.json"), encoding="utf-8") as fh:
                 meta["rescue_meta"] = json.load(fh)
+        # Decision 2: the direct cut-off test; decision 5: the stored candidate names (scripts/evidence/import_side_results.py).
+        if n == 2 and os.path.isfile(os.path.join(ev, "ch02_cutoff12_results.csv")):
+            data["cutoff12"] = _table(os.path.join(ev, "ch02_cutoff12_results.csv"))
+            with open(os.path.join(ev, "ch02_cutoff12.json"), encoding="utf-8") as fh:
+                meta["cutoff12_meta"] = json.load(fh)
+        if n == 5 and os.path.isfile(os.path.join(ev, "ch05_candidate_names.csv")):
+            data["names"] = _table(os.path.join(ev, "ch05_candidate_names.csv"))
         meta["data"] = data
         meta["amendments"] = [a for a in amend if a["chart"] == str(n)]
         charts.append(meta)

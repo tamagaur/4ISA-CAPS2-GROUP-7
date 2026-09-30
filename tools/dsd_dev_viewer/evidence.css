@@ -99,6 +99,8 @@
 .evbtn{background:var(--surface-2);border:1px solid var(--line-2);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;
   color:var(--ink-2);cursor:pointer}
 .evbtn:hover{background:var(--surface-3);color:var(--ink)}
+.evtog{display:inline-flex;gap:4px}
+.evtogb.on{background:var(--accent);border-color:var(--accent);color:#0d1420}
 .evsel{background:var(--surface-2);border:1px solid var(--line-2);border-radius:6px;padding:3px 6px;font-size:12px;max-width:520px}
 .evcap{font-size:12.5px;line-height:1.55;color:var(--ink);margin:10px 0 6px;max-width:1200px}
 .evlist{margin:6px 0;padding-left:18px;font-size:12px;color:var(--ink-2)}

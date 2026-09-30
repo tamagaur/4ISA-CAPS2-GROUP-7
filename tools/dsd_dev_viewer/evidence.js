@@ -169,7 +169,7 @@ function evGBars(t, fr, o){
       const lab = s.labels && s.labels[gi]; if (lab) g += txt(t, x + bw / 2, y - 6, lab, {size:10, fill:t.ink, anchor:'middle', weight: s.bold && s.bold(gi) ? 700 : null});
       const sub = s.sub && s.sub[gi]; if (sub) g += txt(t, x + bw / 2, Y0 + ph + 13, sub, {size:9.5, fill: s.subInk ? s.subInk(gi) : t.ink3, anchor:'middle', weight: s.bold && s.bold(gi) ? 700 : null}); });
     g += txt(t, X0 + (gi + 0.5) * gw, Y0 + ph + (o.series.some(s => s.sub) ? 28 : 15), gl, {size:10.5, fill:t.ink2, anchor:'middle', weight: o.boldGroup && o.boldGroup(gi) ? 700 : null});
-    if (o.gsub && o.gsub[gi]) g += txt(t, X0 + (gi + 0.5) * gw, Y0 + ph + (o.series.some(s => s.sub) ? 43 : 30), o.gsub[gi], {size:10.5, fill:t.ours, anchor:'middle', weight:700});
+    if (o.gsub && o.gsub[gi]) g += txt(t, X0 + (gi + 0.5) * gw, Y0 + ph + (o.series.some(s => s.sub) ? 43 : 30), o.gsub[gi], {size:10.5, fill: o.gsubInk || t.ours, anchor:'middle', weight: o.gsubInk ? null : 700});
     if (o.gnote && o.gnote[gi]){ const top = Math.min(...o.series.map(s => s.vals[gi] == null ? Infinity : yp(s.vals[gi])));
       g += txt(t, X0 + (gi + 0.5) * gw, top - 22, o.gnote[gi], {size:10.5, fill:t.ink, anchor:'middle', weight:600}); }
   });
@@ -198,8 +198,9 @@ function evHBars(t, fr, o){
     g += txt(t, X0 - 8, y + h / 2, r.label, {size:10.5, fill: r.ours ? t.ink : t.ink2, anchor:'end', base:'middle', weight: r.ours ? 700 : null});
     if (r.val == null){ g += txt(t, X0 + 4, y + h / 2, r.note || 'not available', {size:10, fill:t.ink3, base:'middle'}); return; }
     const w = Math.max(xp(r.val) - X0, r.val === 0 ? 0 : 2);
-    g += `<rect x="${X0}" y="${y}" width="${w.toFixed(1)}" height="${h}" rx="3" fill="${r.color}"/>`
-      + (r.text ? txt(t, X0 + w + 6, y + h / 2, r.text, {size:10, fill:t.ink2, base:'middle', weight: r.ours ? 700 : null}) : ''); });
+    g += r.val === 0 ? `<circle cx="${X0 + 5}" cy="${(y + h / 2).toFixed(1)}" r="4.5" fill="${r.color}" stroke="${t.surface}" stroke-width="1.5"/>`
+                     : `<rect x="${X0}" y="${y}" width="${w.toFixed(1)}" height="${h}" rx="3" fill="${r.color}"/>`;
+    g += r.text ? txt(t, X0 + Math.max(w, r.val === 0 ? 10 : 0) + 6, y + h / 2, r.text, {size:10, fill: r.ours ? t.ink : t.ink2, base:'middle', weight: r.ours ? 700 : null}) : ''; });
   g += `<line x1="${X0}" x2="${X0}" y1="${Y0}" y2="${Y0 + ph}" stroke="${t.axis}"/>`;
   if (o.xtitle) g += txt(t, X0 + pw / 2, Y0 + ph + 28, o.xtitle, {size:10.5, fill:t.ink2, anchor:'middle'});
   const geo = {X0, Y0, pw, ph, pick: (mx, my) => o.rows[Math.floor((my - Y0) / rh)] || null, tip: o.tip};
@@ -312,6 +313,7 @@ CARDS[1] = c => {
   const lowerIn = k => blocks.filter(b => pw(b, k) < pw(b, 'ma3')).length;
   const used = ['ma3', 'tsb', 'ens_xgb_ma3@A'].map(k => full(k).median_wape);
   const spread = (Math.max(...used) - Math.min(...used)) * 100, bench = (Math.min(full('sba').median_wape, full('naive').median_wape) - Math.max(...used)) * 100;
+  const naiveGap = Math.round((full('naive').median_wape - full('ma3').median_wape) * 100);
   const p1 = x => (x * 100).toFixed(1) + '%', tv = vFull('tsb'), xv = vFull('ens_xgb_ma3@A');
   const tie = tv.verdict === 'T' && xv.verdict === 'T';
   const better = Math.round(-Math.min(tv.ci_lo, xv.ci_lo) * 100), worse = Math.round(Math.max(tv.ci_hi, xv.ci_hi) * 100);
@@ -328,10 +330,14 @@ CARDS[1] = c => {
   const shown = pk => S.filter(r => r.pk === pk).length;
   const scored = skus.map(s => skd.get(s.pk)).filter(s => s && s.wape != null);
   const sorted = scored.map(s => s.wape).sort((a, b) => a - b), medW = sorted.length ? (sorted[(sorted.length - 1) >> 1] + sorted[sorted.length >> 1]) / 2 : null;
-  // Representative example: passes the quality check (stored MASE < 1), 2+ years of sales shown, stored error closest to the typical product's.
-  const ex = scored.filter(s => s.mase != null && s.mase < 1 && shown(s.pk) >= 24).sort((a, b) => Math.abs(a.wape - medW) - Math.abs(b.wape - medW))[0];
-  if (EVSTATE[1] == null) EVSTATE[1] = ex ? ex.pk : skus[0].pk;
-  const exRow = ex ? (S.find(r => r.pk === ex.pk) || {}) : {};
+  // Examples come from the products that pass the quality check (stored MASE < 1) with 2+ years of sales shown.
+  // Well-forecast: the middle of the lowest-error quarter. Typical: stored error closest to the typical product's.
+  const elig = scored.filter(s => s.mase != null && s.mase < 1 && shown(s.pk) >= 24).sort((a, b) => a.wape - b.wape);
+  const q4 = Math.ceil(elig.length / 4), well = elig.length ? elig[(q4 - 1) >> 1] : null;
+  const typ = elig.slice().sort((a, b) => Math.abs(a.wape - medW) - Math.abs(b.wape - medW))[0];
+  if (EVSTATE[1] == null) EVSTATE[1] = well ? well.pk : skus[0].pk;
+  const rowOf = pk => S.find(r => r.pk === pk) || {};
+  const kind = pk => well && pk === well.pk ? 'A well-forecast product' : typ && pk === typ.pk ? 'Typical product' : 'Your pick';
   const e0 = Math.round(full('ma3').median_wape * 100);
   BOARD[1] = ['3-month average; TSB and XGBoost for longer histories', 'SBA, naive (and each other)', 'The simple method is as accurate as the complex ones, so forecasts stay easy to explain.'];
   return {
@@ -350,15 +356,17 @@ CARDS[1] = c => {
         gnote: [null, 'tie', null, null, null],
         tip: k => { const m = M.find(q => q[1] === k); const r = full(m[0]); return `<div class="h">${esc(k)}${m[2] ? ' (ours)' : ''}</div><div class="r"><span>forecast error</span><b>${pc(r.median_wape)}</b></div><div class="r"><span>pass the quality check</span><b>${nf(r.mase_pass_pct)}% of products</b></div>`; }}}]},
     after: [`We still use TSB and XGBoost for longer histories because they tie on error but pass the quality check for more products (${lo === hi ? lo : lo + '–' + hi}% vs ${ma}%), so more products get a reorder plan.`],
-    example: {file: () => `ch01_example_${(S.find(r => r.pk === EVSTATE[1]) || {}).sku_code}`, title: 'Example: one product, what sold vs what the models forecast', W: 900, H: 330,
+    example: {file: () => `ch01_example_${rowOf(EVSTATE[1]).sku_code}`, title: 'Example: one product, what sold vs what the models forecast', W: 900, H: 330,
+      toggle: [well, typ].every(Boolean) ? {options: [[well.pk, 'A well-forecast product'], [typ.pk, 'Typical product']], get: () => EVSTATE[1], set: v => { EVSTATE[1] = +v; }} : null,
       control: {options: skus.map(s => [s.pk, `${s.sku_code} · ${s.product_name} · ${sv(s.pk)[0]} → ${sv(s.pk)[1]}`]), get: () => EVSTATE[1], set: v => { EVSTATE[1] = +v; }},
-      shows: ['Light line with dots = what actually sold each month. Blue = the model that serves this product today, forecasting one month ahead.',
-              'Grey = the other two models we use, for comparison. Pick any product from the list to see its own chart.',
-              ex ? `Shown first: ${exRow.sku_code} · ${exRow.product_name}. Chosen because, among products that pass the quality check and have 2+ years of sales, its forecast error (${Math.round(ex.wape * 100)}%) is the closest to the typical product’s (${Math.round(medW * 100)}%).`
-                 : 'No product with a stored forecast error was available to pick a typical example.'],
-      build: t => { const R = S.filter(r => r.pk === EVSTATE[1]), ms = R.map(r => r.month), [hist, name, key] = sv(EVSTATE[1]);
+      shows: ['Light line with dots = what actually sold each month. Blue = the model that serves this product today, forecasting one month ahead; grey = the other two models we use.',
+              `Monthly sales jump up and down largely at random; forecasts aim at the general level — chasing every zigzag would be less accurate. (Naive, which just repeats last month, is about ${naiveGap} points worse than the 3-month average — first chart.)`,
+              well ? `Shown first — a well-forecast product: ${rowOf(well.pk).sku_code} · ${rowOf(well.pk).product_name}. Rule: of the ${elig.length} products that pass the quality check and have 2+ years of sales, the middle of the best-forecast quarter (its error: ${Math.round(well.wape * 100)}%).`
+                   : 'No product with a stored forecast error was available to pick a well-forecast example.',
+              typ ? `“Typical product”: ${rowOf(typ.pk).sku_code} · ${rowOf(typ.pk).product_name}, whose error (${Math.round(typ.wape * 100)}%) is the closest to the typical product’s (${Math.round(medW * 100)}%). Or pick any product from the list.` : ''].filter(Boolean),
+      build: t => { const R = S.filter(r => r.pk === EVSTATE[1]), ms = R.map(r => r.month), [hist, name, key] = sv(EVSTATE[1]), st = skd.get(EVSTATE[1]);
         return [{fr: {x: 0, y: 0, w: 900, h: 330}, o: {xs: ms, xticks: ms.filter((m, i) => i % 3 === 0), xlab: mlab, y: {fmt: v => nf(v), title: 'Units sold', zero: true},
-          title: `${R[0].sku_code} · ${R[0].product_name} · ${hist} → served by ${name}`,
+          title: `${kind(EVSTATE[1])}${st && st.wape != null ? ` (error ${Math.round(st.wape * 100)}%)` : ''}: ${R[0].sku_code} · ${R[0].product_name} · ${hist} → served by ${name}`,
           series: [{key: 'actual', label: 'Actual sales', color: t.actual, width: 2.6, r: 2.5, pts: R.map(r => [r.month, r.actual])}]
             .concat([['ma3', '3-month average'], ['tsb', 'TSB'], ['ens_xgb_ma3@A', 'XGBoost + avg']].map(([k, lab]) => ({key: k,
               label: lab + (k === key ? ' (serves it)' : ''), bold: k === key, color: k === key ? t.ours : t.alt, width: k === key ? 3 : 1.3, markers: false,
@@ -370,7 +378,6 @@ CARDS[1] = c => {
       ['Which model is used for which product?', 'It depends on how many months of sales the product has: 3–11 months → 3-month average; 12–23 → TSB; 24 or more → XGBoost + average. Decision 2 tests these cut-offs.'],
       ['What is the “quality check”?', 'A product passes when its forecast beats a naive “same as last month” guess (MASE below 1). Only products that pass get an automatic reorder plan (decision 8).'],
       [`Is ${e0}% good?`, `Our data has no industry benchmark to compare with, so we can’t say. What we can say: it is about ${Math.round(bench)} points better than the two basic benchmarks.`],
-      [`Why doesn't the forecast follow every up and down?`, `Monthly sales jump around; the models forecast the general level, not each zigzag. That is why even the typical example above is off by about ${ex ? Math.round(ex.wape * 100) : e0}% of its sales.`],
     ],
     means: 'The simple method is as accurate as the complex ones, so forecasts stay easy to explain; the newer models let more products into the order plan.',
     details: [
@@ -393,7 +400,8 @@ CARDS[2] = c => {
   const gmean = (f, ks, col='median_wape') => { const v = ks.map(k => row(f, k)[col]).filter(x => x != null); return v.reduce((a, b) => a + b, 0) / v.length; };
   const F = [['ma3', '3-month average'], ['tsb', 'TSB'], ['xgb_ma3', 'XGBoost + average']];
   const ourRule = gi => gi <= 1 ? 'ma3' : gi === 2 ? 'tsb' : 'xgb_ma3';
-  const ruleName = gi => F.find(f => f[0] === ourRule(gi))[1];
+  const binOf = gi => gi <= 1 ? 'short' : gi === 2 ? 'medium' : 'long';
+  const shortName = {ma3: '3-mo avg', tsb: 'TSB', xgb_ma3: 'XGBoost+avg'};
   const vals = F.map(([f]) => GR.map(([, ks]) => gmean(f, ks)));
   const vOf = (f, gi) => vals[F.findIndex(x => x[0] === f)][gi];
   const best = f => { const v = GR.map(([, ks]) => gmean(f, ks)); return v.indexOf(Math.min(...v)); };
@@ -409,35 +417,49 @@ CARDS[2] = c => {
   const w1 = k => (l1.find(r => r.model === k) || {}).median_wape;
   const gap1 = w1('ma3') != null && w1('ens_xgb_ma3@A') != null ? (w1('ma3') - w1('ens_xgb_ma3@A')) * 100 : null;
   const xs = [...new Set(L.map(r => String(r.k)))].filter(k => k !== 'all').sort((a, b) => a - b).concat(['', 'all']);
-  BOARD[2] = ['3-month average from 3 months, TSB from 12, XGBoost from 24', 'Every cut-off from 3 to 24 months', 'Our history rules are safe; XGBoost might start earlier, but that is not proven.'];
+  // The direct cut-off test (stored; scripts/evidence/import_side_results.py): medium bin = the verdict, short bin = a side result.
+  const CT = evRecs(c.data.cutoff12), cm = c.cutoff12_meta || {};
+  const ct = (bin, w) => CT.find(r => r.bin === bin && r.window === w);
+  const med = ct('medium', 'full'), sho = ct('short', 'full');
+  const medWins = CT.filter(r => r.bin === 'medium' && r.window !== 'full' && r.v === 'W').length;
+  const direct = !!(med && sho && cm.verdict === 'KEEP' && med.v !== 'W' && sho.v !== 'W');
+  const p0 = x => Math.round(x * 100) + '%';
+  BOARD[2] = ['3-month average from 3 months, TSB from 12, XGBoost from 24', 'Every cut-off from 3 to 24 months, then a direct test at 12',
+              direct ? 'Our history rules hold; a direct test on newer products kept them.' : 'Our history rules are safe; XGBoost might start earlier, but that is not proven.'];
   return {
     question: 'How many months of past sales does each model need before it works well?',
     headline: c.verdict === 'CONFIRMS' ? `More history doesn't clearly help: TSB levels off by about ${lowOf(tsbB)} months, XGBoost by about ${lowOf(xgbB)}.`
       : 'A different amount of history works clearly better or worse; our cut-offs are questioned.',
+    before: direct ? ['Tested directly: the current cut-offs hold.'] : [],
     main: {file: 'ch02_history', title: 'Forecast error by how many months of history the models were given (lower is better)', W: 900, H: 380,
-      read: 'Each group = a range of history lengths. Blue = the model our rule uses at that length (named under the group); grey = the other models.',
+      read: 'Each group = a range of history lengths; under it, the history group it falls in and the model our rule uses there. Blue = that model; grey = the other models.',
       shows: ['Each group = the same products, forecast as if only that many months of sales history existed. Bars = forecast error, averaged over the settings in the group.',
-              'Blue = the model our rule uses at that length: 3–11 months → 3-month average; 12–23 → TSB; 24+ → XGBoost + average.',
+              'Blue = the model our rule uses: short history (3–11 months) → 3-month average; medium (12–23 months) → TSB; long (24+ months) → XGBoost + average.',
               'The 3-month average’s bar hardly moves: it only ever uses the last 3 months, so extra history can’t change it.',
               `Within each model the bars differ by less than ${Math.ceil(Math.max(spreadOf('tsb'), spreadOf('xgb_ma3')))} point between groups. TSB is lowest at ${GR[tsbB][0]}, XGBoost + average at ${GR[xgbB][0]}: "levels off" means more history stops helping, not that it hurts.`],
-      build: t => [{fr: {x: 0, y: 0, w: 900, h: 380}, draw: evGBars, o: {groups: GR.map(g => g[0]), gsub: GR.map((g, gi) => `we use: ${ruleName(gi)}`),
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 380}, draw: evGBars, o: {groups: GR.map(g => g[0]), gsub: GR.map((g, gi) => `${binOf(gi)} → we use ${shortName[ourRule(gi)]}`),
         ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(0) + '%',
         legend: [[t.ours, 'Ours: the model our rule uses'], [t.alt, 'Other models']],
         series: F.map(([f, lab], si) => ({vals: vals[si], colorAt: gi => oursAlt(t, ourRule(gi) === f), sub: GR.map(() => lab.replace(' + average', '+avg').replace('3-month average', '3-mo avg')),
           subInk: gi => ourRule(gi) === f ? t.ink : t.ink3, bold: gi => ourRule(gi) === f})),
-        tip: k => { const gi = GR.findIndex(g => g[0] === k); return `<div class="h">${esc(k)} of history</div>` + F.map(([f, lab], si) => `<div class="r"><span>${esc(lab)}${ourRule(gi) === f ? ' (ours)' : ''}</span><b>${pc(vals[si][gi], 1)}</b></div>`).join(''); }}}]},
+        tip: k => { const gi = GR.findIndex(g => g[0] === k); return `<div class="h">${esc(k)} of history (${binOf(gi)})</div>` + F.map(([f, lab], si) => `<div class="r"><span>${esc(lab)}${ourRule(gi) === f ? ' (ours)' : ''}</span><b>${pc(vals[si][gi], 1)}</b></div>`).join(''); }}}]},
     after: [c.verdict === 'CONFIRMS' ? 'No setting was clearly better or worse than the simple average.' : '',
             xgbLowestAll ? `XGBoost + average is slightly lowest in every group, even where we use other models. The gaps (about ${gapTxt} point${pl}) aren’t proven — only ${periods} test periods. `
-              + 'It can work with shorter histories because it learns from all products together. A possible improvement, not proven — changing the rule is a separate decision.' : ''].filter(Boolean),
+              + (direct ? 'This chart cuts down long-established products, though; tested directly on products that really have 12–23 months, TSB did better (see the first question below).'
+                        : 'It can work with shorter histories because it learns from all products together. A possible improvement, not proven — changing the rule is a separate decision.') : ''].filter(Boolean),
     faq: [
+      med ? ['Why not use XGBoost + average from 12 months?',
+             `We tested it directly on the ${med.n} products that really have 12–23 months of history, with the pass/fail rule written down first. `
+             + `TSB did slightly better (${p0(med.inc)} vs ${p0(med.ch)} error), XGBoost + average was worse on more products than better (${med.nw} vs ${med.nb}) and won ${medWins ? medWins + ' test period' + (medWins === 1 ? '' : 's') : 'no test period'}. `
+             + `Verdict: ${cm.verdict === 'KEEP' ? 'keep TSB' : String(cm.verdict || 'not stored')}. The pattern in this chart came from cutting down long-established products; the direct test on genuinely newer products is the fairer one.`
+             + (sho ? ` Same for 3–11 months (a side result, not part of the verdict): ${sho.v === 'W' ? 'XGBoost + average did better than' : 'the simple 3-month average holds —'} ${sho.v === 'W' ? 'the simple 3-month average' : `XGBoost + average ${p0(sho.ch)} vs ${p0(sho.inc)} error, worse on ${sho.nw} of ${sho.n} products`}.` : '')] : null,
       ['How was this tested?', 'We took the products with at least 30 months of sales, pretended we only had their last few months (from 3 up to 24), and forecast the months that followed — the same months for every setting.'],
       [`Why only ${periods} test periods?`, `To compare every setting on the same months, each product first needed 24 months of history. That is only true from January 2025, which leaves ${periods} half-year periods.`],
-      ['Does this mean our cut-offs (12 and 24 months) are wrong?', 'No: no setting was clearly better or worse than the simple average, so the cut-offs pass the test. The XGBoost pattern is a lead to re-check as more months of data arrive.'],
       ['If XGBoost + average is lowest here, why is decision 1 a tie?', gap1 != null ? `Both cards say the same thing. Decision 1 compares all products: XGBoost + average is ${gap1.toFixed(1)} points below the 3-month average. This card uses only products with 30+ months of sales, where its lead is about ${gapTxt} point${pl}. Neither gap is large enough to be proven.` : 'Decision 1 compares all products; this card only products with 30+ months of sales. Neither gap is proven.'],
       ['What happens to products with fewer than 3 months of sales?', 'No model can forecast them yet. A provisional average is stored and clearly flagged "insufficient data".'],
-      ['What is TSB?', 'A smoothing method built for products that don’t sell every month (Teunter–Syntetos–Babai).'],
-    ],
-    means: `Our history rules are safe. XGBoost looks best from about ${lowOf(xgbB)} months although our rule starts it at 24 — not proven, only ${periods} test periods.`,
+    ].filter(Boolean),
+    means: direct ? 'Our history rules hold: a direct test on genuinely newer products kept TSB for 12–23 months and the simple average for 3–11 months.'
+      : `Our history rules are safe. XGBoost looks best from about ${lowOf(xgbB)} months although our rule starts it at 24 — not proven, only ${periods} test periods.`,
     details: [
       {file: 'ch02_truncation_wape', title: 'All 22 settings: forecast error, with the test result per setting', W: 900, H: 450,
        read: 'Left to right = more months of history. The squares: each is one half-year test period (2 per setting).',
@@ -453,14 +475,28 @@ CARDS[2] = c => {
        build: t => [{fr: {x: 0, y: 0, w: 900, h: 300}, o: {ml: 190, xs, xlab: k => k === 'all' ? 'all' : k, y: {fmt: v => v.toFixed(0) + '%', title: 'Products passing (higher is better)'},
          series: F.map(([f, lab]) => ({key: f, label: lab, color: t[{ma3: 'ma3', tsb: 'tsb', xgb_ma3: 'xgb'}[f]], width: 2, pts: xs.map(k => [k, k === '' ? null : row(f, k).mase_pass_pct ?? null])}))}}]},
     ],
+    detailsHTML: med ? `<p class="evcap"><b>Direct cut-off test</b> (verdict <b>${esc(String(cm.verdict))}</b>; pre-registered at <code>${esc(String(cm.prereg_commit))}</code>; source ${esc(String(cm.source))}). ${esc(String(cm.status || ''))}</p>`
+      + `<table class="evtable"><thead><tr><th>History group</th><th>Our model</th><th>Products</th><th>XGBoost + avg error</th><th>Our model’s error</th><th>Better / worse (products)</th><th>Full-window result</th></tr></thead><tbody>`
+      + [[med, 'medium (12–23) — the verdict', 'TSB'], [sho, 'short (3–11) — side result', '3-month average']].filter(r => r[0]).map(([r, lab, inc]) =>
+          `<tr><td>${esc(lab)}</td><td>${esc(inc)}</td><td>${r.n}</td><td>${pc(r.ch)}</td><td>${pc(r.inc)}</td><td>${r.nb} / ${r.nw}</td><td>${esc(r.v)}</td></tr>`).join('')
+      + `</tbody></table>` : '',
   };
 };
 
 CARDS[3] = c => {
   const L = evRecs(c.data.lines), V = evRecs(c.data.verdicts);
   const W_ = [['ma2', '2 months', false], ['ma3', '3 months', true], ['ma6', '6 months', false], ['ma12', '12 months', false]];
+  const lab = m => (W_.find(w => w[0] === m) || [m, m])[1], lab2 = m => ({ma2: '2-month', ma3: '3-month', ma6: '6-month', ma12: '12-month'})[m] || m;
   const full = m => (L.find(r => r.window === 'full' && r.model === m) || {}).median_wape;
   const blocks = [...new Set(L.filter(r => r.window !== 'full').map(r => r.window))];
+  const bw = (b, m) => (L.find(r => r.window === b && r.model === m) || {}).median_wape;
+  const lowerIn = m => blocks.filter(b => bw(b, m) < bw(b, 'ma3')).length;
+  const flab = w => String(w).split('..').map(m => MON[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4)).join('–');
+  const alts = W_.filter(w => !w[2]).map(w => w[0]), top = alts.slice().sort((a, b) => lowerIn(b) - lowerIn(a))[0];
+  const vb = V.filter(v => v.window !== 'full'), wins = vb.filter(v => v.verdict === 'W'), losses = vb.filter(v => v.verdict === 'L');
+  const topAllTie = V.filter(v => v.model === top).every(v => v.verdict === 'T' || v.verdict === 'NT');
+  const spread = Math.max(...alts.map(m => Math.abs(full(m) - full('ma3')))) * 100;
+  const n = (L.find(r => r.window === 'full' && r.model === 'ma3') || {}).n;
   BOARD[3] = ['Average of the last 3 months', '2, 6 and 12 months', 'Keep the 3-month average; the other windows are no more accurate.'];
   return {
     question: 'How many recent months should the simple average use: 2, 3, 6 or 12?',
@@ -468,17 +504,31 @@ CARDS[3] = c => {
     headline: c.verdict === 'CONFIRMS' ? 'Three months is as good as any other window: no window is clearly better.' : 'Another averaging window beats the 3-month average.',
     main: {file: 'ch03_window', title: 'Forecast error of the simple average by window, all test periods together (lower is better)', W: 900, H: 320,
       read: 'Blue = ours (3 months); grey = the alternatives. Bars of about equal height = a tie.',
+      shows: [`Each bar = the simple average’s forecast error when it averages the last 2, 3, 6 or 12 months (${n} products, Oct 2023 – Feb 2026). Shorter is better.`,
+              `Blue = ours, 3 months (${pc(full('ma3'))}). The others: ${alts.map(m => `${lab(m)} ${pc(full(m))}`).join(', ')} — all within ${Math.ceil(spread)} points: a tie.`,
+              topAllTie ? `The ${lab2(top)} average was slightly lower than ours in ${lowerIn(top)} of ${blocks.length} test periods, but never by enough to count as better (its margin of error always included “no difference”).`
+                        : `The ${lab2(top)} average was lower than ours in ${lowerIn(top)} of ${blocks.length} test periods.`,
+              (losses.length ? `In single test periods, ${listWords(losses.map(v => `the ${lab2(v.model)} average was clearly worse once (${flab(v.window)})`))}` : 'No window was clearly worse in any single test period')
+                + (wins.length ? `; ${listWords(wins.map(v => `the ${lab2(v.model)} average was clearly better once (${flab(v.window)})`))}.` : '; no window was ever clearly better.')],
       build: t => [{fr: {x: 0, y: 0, w: 900, h: 320}, draw: evGBars, o: {groups: W_.map(w => w[1]), ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(0) + '%',
         series: [{vals: W_.map(w => full(w[0])), colorAt: gi => oursAlt(t, W_[gi][2]), sub: W_.map(w => w[2] ? 'Ours' : ''), subInk: () => t.ink, bold: gi => W_[gi][2]}],
         tip: k => { const w = W_.find(q => q[1] === k); return `<div class="h">average of the last ${esc(k)}</div><div class="r"><span>forecast error</span><b>${pc(full(w[0]))}</b></div>`; }}}]},
+    faq: [
+      ['Why test 6 and 12 months?', `A longer average is smoother (12 months covers a whole year); a shorter one reacts faster. We checked whether smoother is more accurate — it isn’t: 12 months is ${pc(full('ma12'))} overall vs ${pc(full('ma3'))} for 3 months, a tie.`],
+      ['What about sudden jumps in sales?', 'Detecting sudden jumps in sales is a different question — see decision 6.'],
+      [`The ${lab2(top)} average was lower in ${lowerIn(top)} of ${blocks.length} periods — why not switch?`,
+       topAllTie ? 'In every period its margin of error included “no difference”, so by the rule written down beforehand it is a tie, and a tie keeps the current choice.'
+                 : 'See the per-period results under Details.'],
+      ['How was this tested?', 'The same way as decision 1: each month from October 2023 to February 2026, each window forecast the next month from the months before it, and the forecasts were compared with what sold.'],
+    ],
     means: 'Keep the 3-month average; the other windows are no more accurate.',
     details: [{file: 'ch03_periods', title: 'Per half-year test period, with the test result per period', W: 900, H: 420,
       read: 'Each dot = one half-year test period. The squares say whether each window did better or worse than 3 months in that period.',
       build: t => [{fr: {x: 0, y: 0, w: 900, h: 420}, o: {ml: 190, mr: 150, xs: blocks, xlab: blab, y: {fmt: v => v.toFixed(2), title: 'Forecast error (lower is better)'},
-        strip: {cmp: 'the 3-month average', rows: W_.filter(w => !w[2]).map(([m, lab]) => ({label: `${lab} vs 3 months`,
+        strip: {cmp: 'the 3-month average', rows: W_.filter(w => !w[2]).map(([m, lb]) => ({label: `${lb} vs 3 months`,
           cells: Object.fromEntries(blocks.map(b => { const r = V.find(v => v.model === m && v.window === b); return [b, r ? r.verdict : 'NT']; }))}))},
-        series: W_.map(([m, lab, ours], i) => ({key: m, label: lab + (ours ? ' (ours)' : ''), color: ours ? t.ma3 : t.ramp[[0, 0, 1, 2][i]], dash: [null, null, '6 3', '2 3'][i], width: ours ? 2.6 : 1.8,
-          pts: blocks.map(b => [b, (L.find(r => r.window === b && r.model === m) || {}).median_wape ?? null])}))}}]}],
+        series: W_.map(([m, lb, ours], i) => ({key: m, label: lb + (ours ? ' (ours)' : ''), color: ours ? t.ma3 : t.ramp[[0, 0, 1, 2][i]], dash: [null, null, '6 3', '2 3'][i], width: ours ? 2.6 : 1.8,
+          pts: blocks.map(b => [b, bw(b, m) ?? null])}))}}]}],
   };
 };
 
@@ -492,6 +542,13 @@ CARDS[4] = c => {
   const ws = [...new Set(L.map(r => r.weight))].sort((a, b) => a - b);
   const cells = ag => Object.fromEntries(ws.map(w => { const vv = V.filter(v => v.weight === w && v.against === ag && v.window !== 'full' && v.verdict !== 'NT').map(v => v.verdict);
     return [String(w), (ag === 'w=0.5' && w === 0.5) || (ag === 'MA3' && w === 0) ? null : (vv.length ? vv : ['NT'])]; }));
+  const vv = (w, ag, win) => V.find(v => v.weight === w && v.against === ag && v.window === win) || {};
+  const WORD = {T: 'a tie', W: 'clearly better', L: 'clearly worse', NT: 'not testable'};
+  const fullN = (L.find(r => r.window === 'full' && r.weight === 0.5) || {}).n;
+  const fw = ws.map(x => [x, at('full', x)]).filter(p => p[1] != null), minW = fw.reduce((a, b) => b[1] < a[1] ? b : a);
+  const lostVs50 = w => blocks.filter(b => vv(w, 'w=0.5', b).verdict === 'L');
+  const between = (at('full', 0.5) - at('full', 0)) * (at('full', 0.5) - at('full', 1)) < 0;
+  const spread = (Math.max(...OPT.map(o => at('full', o[0]))) - Math.min(...OPT.map(o => at('full', o[0])))) * 100;
   BOARD[4] = ['50/50 blend of XGBoost and the 3-month average', 'Every mix from 0% to 100% XGBoost', 'Keep the 50/50 blend; leaning on XGBoost helps in some half-years and hurts in others.'];
   return {
     question: 'When we blend XGBoost with the simple average, how much weight should XGBoost get?',
@@ -499,10 +556,22 @@ CARDS[4] = c => {
       : c.verdict === 'CONFIRMS' ? 'No other mix beats the 50/50 blend we use.' : 'A different XGBoost/average mix beats our 50/50 blend.',
     main: {file: 'ch04_blend', title: 'Forecast error for three blends, by test period (products with 24+ months of history; lower is better)', W: 900, H: 340,
       read: 'Each group = a test period. Blue = ours (50/50); grey = all average or all XGBoost. Where the right-hand grey bar is shorter, XGBoost helped that period; taller, it hurt.',
+      shows: [`Each group = a half-year test period, and the first = both combined. Only ${blocks.length} periods could be tested: the blend is for products with 24+ months of sales (${fullN} here), and the first reached that in January 2025.`,
+              'Blue = ours (50/50). Grey: left = only the 3-month average, right = only XGBoost.',
+              blocks.map(b => { const r = vv(1, 'w=0.5', b); return `${plab(b)}: only XGBoost was ${at(b, 1) > at(b, 0.5) ? 'higher' : 'lower'} than ours (${pc(at(b, 1))} vs ${pc(at(b, 0.5))}) — ${WORD[r.verdict] || 'not stored'}`; }).join('; ') + '.',
+              `Combined, the three are within ${spread.toFixed(1)} points of each other${between ? '; 50/50 sits between the two extremes' : ''}.`],
       build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evGBars, o: {groups: wins.map(plab), ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(0) + '%',
         legend: [[t.alt, 'Only the average'], [t.ours, '50/50 (ours)'], [t.alt2, 'Only XGBoost']],
         series: OPT.map(([x, lab, ours]) => ({vals: wins.map(w => at(w, x)), color: ours ? t.ours : x === 0 ? t.alt : t.alt2})),
         tip: k => { const w = wins[wins.map(plab).indexOf(k)]; return `<div class="h">${esc(k)}</div>` + OPT.map(([x, lab]) => `<div class="r"><span>${esc(lab)}</span><b>${pc(at(w, x))}</b></div>`).join(''); }}}]},
+    faq: [
+      ['Why not XGBoost alone?', `Against our 50/50 blend it was ${blocks.map(b => { const r = vv(1, 'w=0.5', b); return `${WORD[r.verdict] || 'not stored'} in ${plab(b)}${r.verdict === 'L' ? ` (worse on ${r.n_worse} of ${r.n} products)` : ''}`; }).join(' and ')}. `
+        + `Against the 3-month average alone it was ${blocks.map(b => `${WORD[vv(1, 'MA3', b).verdict] || 'not stored'} in ${plab(b)}`).join(' and ')}. `
+        + 'So it is worse in some periods, and the blend is easier to explain: half of it is the simple 3-month average.'],
+      [`The lowest combined error is at ${minW[0].toFixed(1)} XGBoost — why not use that?`, minW[0] === 0.5 ? 'It is our blend.'
+        : `Its lead over 50/50 (${pc(minW[1])} vs ${pc(at('full', 0.5))}) is ${WORD[vv(minW[0], 'w=0.5', 'full').verdict] || 'not stored'}` + (lostVs50(minW[0]).length ? `, and it was clearly worse than 50/50 in ${listWords(lostVs50(minW[0]).map(plab))}.` : '.')],
+      [`Why only ${blocks.length} test periods?`, 'The blend is only used for products with 24 or more months of sales; the first products reached that in January 2025, so the earlier half-years have none.'],
+    ],
     means: 'Keep the 50/50 blend: leaning more on XGBoost would help in some half-years and hurt in others.',
     details: [{file: 'ch04_blend_weight', title: 'All 11 blends (0 = only the average, 1 = only XGBoost), with the test result per period', W: 900, H: 430,
       read: 'Each line = one time period. The squares: each is one half-year test period (2 per blend).',
@@ -515,24 +584,45 @@ CARDS[4] = c => {
 };
 
 CARDS[5] = c => {
-  const R = evRecs(c.data.rates), all = R.find(r => r.candidate_set === 'all 162') || {};
-  const plain = {'original 50': 'First 50 methods tried', 'phase 1 (35)': 'Round 2: 35 tricks', 'phase 2 (77)': 'Round 3: 77 tricks', 'all 162': 'All 162 together'};
+  const R = evRecs(c.data.rates), all = R.find(r => r.candidate_set === 'all 162') || {}, N = evRecs(c.data.names);
+  const plain = {'original 50': 'First 50 methods tried', 'phase 1 (35)': 'Round 2: 35 reshapings', 'phase 2 (77)': 'Round 3: 77 more', 'all 162': 'All 162 together'};
+  // Examples per bar, named only when the stored candidate list contains them.
+  const has = (set, f) => N.some(r => r.set === set && f(r));
+  const EX0 = [['naive', 'naive'], ['snaive12', 'seasonal naive'], ['holt', 'Holt'], ['theta', 'Theta'], ['ets_auto', 'ETS'], ['croston', 'Croston'], ['rf@A', 'random forest'],
+               ['ridge@A', 'ridge regression'], ['mlp@A', 'neural net'], ['lgbm@A', 'LightGBM'], ['xgb_raw@A', 'XGBoost alone']].filter(([k]) => has('original 50', r => r.candidate === k)).map(e => e[1]);
+  const EX1 = [['log1p', 'log'], ['sqrt', 'square root'], ['boxcox', 'Box-Cox'], ['cbrt', 'cube root'], ['winsor', 'spike capping (winsorize)'], ['yeojohnson', 'Yeo-Johnson'],
+               ['asinh', 'inverse hyperbolic sine'], ['anscombe', 'Anscombe'], ['diff1', 'differencing once'], ['stl12', 'seasonal adjustment (STL)']].filter(([k]) => has('phase 1 (35)', r => r.part === k)).map(e => e[1]);
+  const EX2 = [['A:', 'differencing twice, three times or seasonally (D2, D3, S12)'], ['B:', 'a transform + differencing'], ['C:', 'repeated transforms (e.g. square root twice)'],
+               ['D:', 'automatic differencing'], ['E:', 'auto-ARIMA / fixed SARIMA']].filter(([p]) => has('phase 2 (77)', r => String(r.part || '').startsWith(p))).map(e => e[1]);
+  const EXS = {'original 50': 'naive, Holt, ETS, XGBoost…', 'phase 1 (35)': 'log, square root, Box-Cox…', 'phase 2 (77)': 'differencing, ARIMA…', 'all 162': ''};
+  const chance = R[0].chance_per_block, allBelow = R.every(r => r.cp_hi < chance);
   BOARD[5] = ['No transform (forecast the sales as they are)', `${all.candidates || 162} alternatives, incl. log / square-root transforms`, 'No need to add data transforms: more complexity, no real accuracy gain.'];
   return {
     question: 'Does reshaping the sales numbers before forecasting help?',
     before: ['A transform = for example using the log or square root of sales, forecasting that, then converting back.'],
     headline: c.verdict === 'CONFIRMS' ? `No. None of the ${all.candidates} alternatives truly beat our method; their few wins look like luck.`
       : 'Transforming the sales data helps more often than luck would explain.',
-    main: {file: 'ch05_transforms', title: 'How often the alternatives beat ours (no transform) in a half-year test period', W: 900, H: 330,
-      read: 'Grey bars = alternatives. The black whisker = the range the true rate likely falls in. Dashed line = how often they would win by pure luck. Bars below the line = no real gain.',
-      build: t => [{fr: {x: 0, y: 0, w: 900, h: 330}, draw: evGBars, o: {groups: R.map(r => plain[r.candidate_set] || r.candidate_set), ytitle: 'Test periods won', fmt: v => (v * 100).toFixed(1) + '%',
+    main: {file: 'ch05_transforms', title: 'How often the alternatives beat ours (no transform) in a half-year test period', W: 900, H: 345,
+      read: 'Ours = no transform: every bar is measured against it. Grey bars = alternatives. The black whisker = the range the true rate likely falls in. Dashed line = how often they would win by pure luck.',
+      shows: [EX0.length ? `First 50 methods tried = the original model comparison, e.g. ${listWords(EX0)}.` : 'First 50 methods tried = the original model comparison.',
+              EX1.length ? `Round 2 (35) = reshaping the sales before forecasting — ${listWords(EX1)} — applied to our models and to a simple combination of methods.` : 'Round 2 (35) = reshaping the sales before forecasting.',
+              EX2.length ? `Round 3 (77) = ${listWords(EX2)}.` : 'Round 3 (77) = further reshaping methods.',
+              `Each bar = the share of half-year test periods those methods won against ours. ${allBelow ? 'Even the top of every whisker is below the dashed “pure luck” line' : 'Compare each whisker with the dashed “pure luck” line'} (${pc(chance, 1)}).`],
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 345}, draw: evGBars, o: {groups: R.map(r => plain[r.candidate_set] || r.candidate_set), ytitle: 'Test periods won', fmt: v => (v * 100).toFixed(1) + '%',
+        gsub: R.map(r => EXS[r.candidate_set] ? 'e.g. ' + EXS[r.candidate_set] : ''), gsubInk: t.ink3,
+        legend: [[t.ours, 'Ours = no transform (the baseline each bar is compared with)', true], [t.alt, 'Alternatives']],
         series: [{vals: R.map(r => r.block_win_rate), colorAt: () => t.alt}],
-        hrules: [{y: R[0].chance_per_block, label: 'pure luck'}],
+        hrules: [{y: chance, label: 'pure luck'}],
         whiskers: R.map((r, gi) => ({gi, si: 0, lo: r.cp_lo, hi: r.cp_hi})),
         tip: k => { const r = R.find(q => (plain[q.candidate_set] || q.candidate_set) === k); return `<div class="h">${esc(k)}</div>`
           + `<div class="r"><span>test periods won</span><b>${r.block_wins} of ${nf(r.testable_blocks)} (${pc(r.block_win_rate, 1)})</b></div>`
           + `<div class="r"><span>likely range of the true rate</span><b>${pc(r.cp_lo, 1)}–${pc(r.cp_hi, 1)}</b></div><div class="r"><span>real wins</span><b>${r.real}</b></div>`; }}}]},
     after: [`A “real win” = better overall AND in most test periods — none of the ${all.candidates} managed it.`],
+    faq: [
+      ['What is a “real win”?', `Better overall AND in most half-year test periods, by the same tie / better / worse rule as decision 1. None of the ${all.candidates} managed it.`],
+      [`Where does the ${pc(chance, 1)} “pure luck” line come from?`, `A period counts as a win only when the 95% margin of error sits entirely on the better side. A method no better than ours still lands there by chance about 1 time in 40 (${pc(chance, 1)}).`],
+      ['So what were the few wins?', `${all.block_wins} wins in ${nf(all.testable_blocks)} period comparisons (${pc(all.block_win_rate, 1)}) — fewer than luck alone would give. That is what “look like luck” means.`],
+    ],
     means: 'No need to add data transforms: they add complexity without a real accuracy gain.',
     details: [],
   };
@@ -542,13 +632,17 @@ CARDS[6] = c => {
   const S = evRecs(c.data.skus), M = evRecs(c.data.months), R = evRecs(c.data.rescue);
   const n = S.length, nScored = R.length ? R[0].products : null;
   const stored = R.filter(r => r.status === 'stored'), notStored = R.filter(r => r.status !== 'stored');
-  const maxBest = stored.length ? Math.max(...stored.filter(r => !/^Ours/.test(r.approach)).map(r => +r.best_single_method)) : null;
+  const alts = stored.filter(r => !/^Ours/.test(r.approach)), ours = stored.find(r => /^Ours/.test(r.approach));
+  const maxBest = alts.length ? Math.max(...alts.map(r => +r.best_single_method)) : null;
+  const bestRows = alts.filter(r => +r.best_single_method === maxBest), zeroAlts = alts.filter(r => +r.best_single_method === 0).length;
+  const luck = alts.filter(r => r.held_earlier === 'not checked' && +r.best_single_method > 0);
   const promo = S.filter(s => /\(\d+\+\d+\)/.test(s.product_name)).length;
   if (EVSTATE[6] == null) EVSTATE[6] = S[0].pk;
   const plainCause = {'level shift': 'Sales level jumped', 'spiky': 'Sudden spikes', 'high volatility': 'Very up-and-down', 'tiny scale': 'Very small volumes',
                       'none of the above': 'No clear cause', 'intermittent': 'Months with no sales', 'trend reversal': 'Trend reversed'};
   const pcause = k => plainCause[k] || k;
   const SERVED = {ma3: 'ma3', tsb: 'tsb', xgb_ma3_avg: 'xgb'};
+  const NOTE = 'tested as a group — none passed; which products each one helped wasn’t saved';
   BOARD[6] = ['Flag them for manual review (buyer decides)', 'Other models, spike capping, differencing, transforms', 'These products need the buyer’s judgement each month.'];
   return {
     question: 'Which products can’t be forecast well, and can any method fix them?',
@@ -556,10 +650,15 @@ CARDS[6] = c => {
       : `${n} products forecast poorly; per-product results of other methods are not available from stored results.`,
     main: R.length ? {file: 'ch06_rescue', title: `How many of the ${nScored} poorly-forecast products each approach rescued (brought below the fit line)`, W: 900, H: 30 + R.length * 22 + 50,
       read: `Blue = ours (the model that serves them today); grey = alternatives we tried. Bar = the best single method in that group. The other ${n - nScored} products were scored on a different test window and are not comparable here.`,
+      shows: [`Each row = one approach tried on the ${nScored} poorly-forecast products; the bar = how many it brought below the fit line (MASE below 1.1, the fit-review gate) on the common test months.`,
+              ours ? `Blue = ours, the model serving them today: ${ours.best_single_method} — that’s why these products are flagged.` : 'Blue = ours (not stored).',
+              `The best alternative${bestRows.length > 1 ? 's' : ''} (${listWords(bestRows.map(r => r.approach))}) rescued ${maxBest} of ${nScored}; ${zeroAlts} of the ${alts.length} counted approaches rescued none.`
+                + (luck.length ? ` “May be luck — not re-checked” = ${listWords(luck.map(r => r.approach))}: those rescues were never re-tested on earlier periods.` : ''),
+              notStored.length ? `${notStored.length} rows have no bar: ${NOTE}.` : ''].filter(Boolean),
       build: t => [{fr: {x: 0, y: 0, w: 900, h: 30 + R.length * 22 + 50}, draw: evHBars, o: {xmax: nScored, fmt: v => nf(v), xtitle: `Products rescued (out of ${nScored})`,
-        rows: R.map(r => ({label: r.approach, ours: /^Ours/.test(r.approach), val: r.status === 'stored' ? +r.best_single_method : null,
-          color: /^Ours/.test(r.approach) ? t.ours : t.alt, note: 'not available from stored results (tested only as a group: none passed)',
-          text: r.status === 'stored' && /^Ours/.test(r.approach) ? `${r.best_single_method} — that is why they are flagged` : '', raw: r})),
+        rows: R.map(r => { const isO = /^Ours/.test(r.approach), v = r.status === 'stored' ? +r.best_single_method : null;
+          return {label: r.approach, ours: isO, val: v, color: isO ? t.ours : t.alt, note: NOTE,
+            text: v == null ? '' : isO ? `${v} — that’s why these products are flagged` : `${v}` + (r.held_earlier === 'not checked' && v > 0 ? ' · may be luck — not re-checked' : ''), raw: r}; }),
         tip: row => row.raw.status !== 'stored' ? `<div class="h">${esc(row.label)}</div>${esc(row.raw.status)}`
           : `<div class="h">${esc(row.label)}</div><div class="r"><span>methods tried</span><b>${row.raw.methods}</b></div>`
             + `<div class="r"><span>best single method rescued</span><b>${row.raw.best_single_method}</b></div><div class="r"><span>rescued by any method</span><b>${row.raw.any_method}</b></div>`
@@ -567,6 +666,13 @@ CARDS[6] = c => {
     after: [`<b>What the system does instead:</b> flags these products “needs manual review”. They are left out of the automatic order plan, which only plans products that pass the quality check, so the buyer decides — for example with a larger buffer. (An automatic larger buffer is not built.)`,
             `Observation, not a cause: ${promo} of the ${n} have a promo-pack marker like “(11+1)” in their name.`],
     afterHTML: true,
+    faq: [
+      ['What does “rescued” mean?', 'The product’s forecast got below the fit line — MASE below 1.1 (the fit-review gate), i.e. clearly better than a “same as last month” guess — on the common test months, September 2025 to February 2026.'],
+      [`Why are only ${nScored} of the ${n} counted?`, `The other ${n - nScored} were scored on a different test window, so their results can’t be put on the same chart.`],
+      bestRows.length ? [`${bestRows[0].approach} rescued ${maxBest} — why not use it?`, `${maxBest} of ${nScored} leaves ${nScored - maxBest} still flagged, so the buyer’s review is needed either way.`
+        + (bestRows[0].held_earlier === 'not checked' ? ' Its rescues were also never re-checked on earlier periods.' : ` Of the products this group rescued, ${bestRows[0].held_earlier} also held up on earlier periods.`)] : null,
+      ['Is the promo-pack marker the cause?', `Not tested. ${promo} of the ${n} have a marker like “(11+1)” in the name; that is an observation only.`],
+    ].filter(Boolean),
     means: 'These products need the buyer’s judgement each month; no forecasting method we tried fixes them.',
     details: [
       {file: () => `ch06_unfit_${(S.find(s => s.pk === EVSTATE[6]) || {}).sku_code}`, title: 'A concrete example: one poorly-forecast product', W: 900, H: 340,
@@ -596,15 +702,18 @@ CARDS[7] = c => {
   const C7 = evRecs(c.data.curve), T7 = evRecs(c.data.tiers), MV = evRecs(c.data.unilever_moves);
   const U = C7.filter(r => r.principal === 'unilever' && r.method === 'single'), DM = C7.filter(r => r.principal === 'delmonte');
   const nU = U.length, tierN = k => U.filter(r => r.tier === k).length, share = k => U.filter(r => r.tier === k).reduce((a, r) => a + r.revenue_share, 0);
-  const t3 = T7.find(r => r.principal === 'unilever' && r.method === 't3m') || {};
+  const t3 = T7.find(r => r.principal === 'unilever' && r.method === 't3m') || {}, t1 = T7.find(r => r.principal === 'unilever' && r.method === 'single') || {};
+  const tdm = T7.find(r => r.principal === 'delmonte') || {};
+  const per = p => p ? MONL[+String(p).slice(5, 7) - 1] + ' ' + String(p).slice(0, 4) : 'period not stored';
+  const perS = p => p ? MON[+String(p).slice(5, 7) - 1] + ' ' + String(p).slice(0, 4) : '';
   const changed = MV.filter(r => r.single !== r.t3m).reduce((a, r) => a + r.n, 0), aMoves = MV.filter(r => (r.single === 'A') !== (r.t3m === 'A')).reduce((a, r) => a + r.n, 0);
-  const nA = tierN('A'), pctA = Math.round(nA / nU * 100);
+  const nA = tierN('A'), pctA = Math.round(nA / nU * 100), n3 = (t3.A || 0) + (t3.B || 0) + (t3.C || 0);
   BOARD[7] = ['Rank by the latest month’s revenue', 'Rank by a 3-month average', 'SSM can focus forecasting and ordering effort on about 1 product in 5.'];
   const draw = (t, fr) => {
     // left: Unilever cumulative curve (ours); right: A/B/C bars, ours vs the 3-month view
     const L = {x: fr.x, y: fr.y, w: 560, h: fr.h}, Rt = {x: fr.x + 580, y: fr.y, w: fr.w - 580, h: fr.h};
     const X0 = L.x + 64, Y0 = L.y + 30, pw = L.w - 90, ph = L.h - 80, xp = v => X0 + v * pw, yp = v => Y0 + ph - v / 1.02 * ph;
-    let g = txt(t, X0, fr.y + 12, 'Unilever: share of revenue as products are added, top earner first (ours)', {size:11.5, weight:600});
+    let g = txt(t, X0, fr.y + 12, `Unilever, ${perS(t1.period)}: running share of revenue, top earner first (ours)`, {size:11.5, weight:600});
     [0, 0.2, 0.4, 0.6, 0.8, 1].forEach(v => { g += `<line x1="${X0}" x2="${X0 + pw}" y1="${yp(v).toFixed(1)}" y2="${yp(v).toFixed(1)}" stroke="${t.grid}"/>` + txt(t, X0 - 6, yp(v), (v * 100) + '%', {size:10, fill:t.ink3, anchor:'end', base:'middle'})
       + txt(t, xp(v), Y0 + ph + 14, (v * 100) + '%', {size:10, fill:t.ink3, anchor:'middle'}); });
     g += `<polyline points="${U.map(r => `${xp(r.rank_share).toFixed(1)},${yp(r.cumulative_share).toFixed(1)}`).join(' ')}" fill="none" stroke="${t.ours}" stroke-width="2.4"/>`;
@@ -615,44 +724,59 @@ CARDS[7] = c => {
       + txt(t, xp(last.rank_share) + 8, yp(0.8) + 22, `↑ ${nA} products = Tier A (80% of revenue)`, {size:11, weight:700});
     g += txt(t, X0 + pw / 2, Y0 + ph + 30, 'Products, from highest to lowest revenue (share of all products)', {size:10.5, fill:t.ink2, anchor:'middle'});
     g += yTitle(t, L, Y0, ph, 'Share of total revenue');
-    // right: stacked bars of product counts per tier
-    const bx = Rt.x + 20, bw = Rt.w - 40, rows = [['Ours: latest month', [tierN('A'), tierN('B'), tierN('C')], true], ['3-month view', [t3.A, t3.B, t3.C], false]];
+    // right: stacked bars of product counts per tier, with the count in each box
+    const bx = Rt.x + 20, bw = Rt.w - 40, rows = [[`Ours: latest month — ${nU} products`, [tierN('A'), tierN('B'), tierN('C')], true], [`3-month view — ${n3} products`, [t3.A, t3.B, t3.C], false]];
     g += txt(t, bx, fr.y + 12, 'Products in each tier', {size:11.5, weight:600});
     const tot = Math.max(...rows.map(r => r[1].reduce((x, y) => x + y, 0)));
     rows.forEach(([lab, v, ours], i) => { const y = Y0 + 20 + i * 90; let x = bx;
       g += txt(t, bx, y - 8, lab, {size:11, weight: ours ? 700 : null, fill: ours ? t.ink : t.ink2});
       ['A', 'B', 'C'].forEach((tier, j) => { const w = v[j] / tot * bw, col = ours ? [t.ours, hexMix(t.ours, t.surface, 0.45), hexMix(t.ours, t.surface, 0.7)][j] : [t.alt, hexMix(t.alt, t.surface, 0.4), hexMix(t.alt, t.surface, 0.65)][j];
-        g += `<rect x="${x.toFixed(1)}" y="${y}" width="${Math.max(w - 2, 1).toFixed(1)}" height="30" rx="3" fill="${col}"/>` + (w > 22 ? txt(t, x + w / 2, y + 16, tier, {size:11, weight:700, anchor:'middle', base:'middle', fill: j === 0 ? '#ffffff' : t.ink}) : '');
+        const s = w > 38 ? `${tier} ${v[j]}` : w > 14 ? tier : '';
+        g += `<rect x="${x.toFixed(1)}" y="${y}" width="${Math.max(w - 2, 1).toFixed(1)}" height="30" rx="3" fill="${col}"/>` + (s ? txt(t, x + w / 2, y + 16, s, {size:11, weight:700, anchor:'middle', base:'middle', fill: j === 0 ? '#ffffff' : t.ink}) : '');
         x += w; }); });
     g += txt(t, bx, Y0 + 210, `A = top 80% of revenue · B = next 15% · C = last 5%`, {size:10, fill:t.ink3});
     return {g, geo: null};
   };
   return {
     question: 'Which products bring in most of the revenue?',
-    headline: `Just ${nA} of Unilever’s ${nU} products (${pctA}%) bring in 80% of revenue.`,
-    main: {file: 'ch07_abc', title: 'Revenue concentration and the resulting tiers (ours vs a 3-month view)', W: 900, H: 330,
+    headline: `Just ${nA} of Unilever’s ${nU} products (${pctA}%) bring in 80% of revenue (${per(t1.period)}).`,
+    main: {file: 'ch07_abc', title: `Revenue concentration and the resulting tiers, ${per(t1.period)} (ours vs a 3-month view)`, W: 900, H: 330,
       read: 'Left: the steep early rise means a few products carry most of the revenue. Right: how many products land in each tier with our ranking (blue) and with a 3-month view (grey).',
+      shows: [`Left: Unilever’s products ranked from the top earner down; the line is the running share of revenue. It climbs steeply — the first ${nA} products (${pctA}% of all) reach 80%.`,
+              'Tier A = the products that make up the top 80% of revenue; B = the next 15%; C = the last 5%.',
+              `Right: products per tier. Ours (latest month, ${per(t1.period)}): A ${tierN('A')}, B ${tierN('B')}, C ${tierN('C')}. A 3-month view: A ${t3.A}, B ${t3.B}, C ${t3.C} (it covers ${n3} products, ours ${nU}).`,
+              `Switching to the 3-month view would change the tier of ${changed} products (${aMoves} move into or out of Tier A).`],
       build: () => [{fr: {x: 0, y: 0, w: 900, h: 330}, draw}]},
-    after: [`Using a 3-month average instead of the latest month would change the tier of about ${Math.round(changed / 10) * 10} products.`],
+    faq: [
+      ['Why rank by the latest month and not a 3-month average?', `This card describes the difference only; no accuracy test was written for it (its result is “description only”). With the 3-month view, ${changed} products would change tier.`],
+      ['Which products were the forecasts on this page tested on?', `Unilever products in Tier A as of ${per(t1.period)}.`],
+      ['What about Del Monte?', `Del Monte is ranked by product category, not by product: ${DM.length} categories in its latest classified month (${per(tdm.period)}), shown under Details.`],
+      ['Why 80%, 15% and 5%?', 'These are the usual ABC cut-offs: A = the top 80% of revenue, B = the next 15%, C = the last 5%.'],
+    ],
     means: 'SSM can focus forecasting and ordering effort on about 1 product in 5.',
-    details: [{file: 'ch07_delmonte', title: 'Del Monte, ranked by category (4 categories in its latest month)', W: 900, H: 260,
+    details: [{file: 'ch07_delmonte', title: `Del Monte, ranked by category (${DM.length} categories in its latest month, ${per(tdm.period)})`, W: 900, H: 260,
       read: 'Share of Del Monte revenue by category, latest classified month.',
       build: t => [{fr: {x: 0, y: 0, w: 900, h: 260}, draw: evGBars, o: {groups: DM.map(r => r.label), fmt: v => (v * 100).toFixed(0) + '%', ytitle: 'Share of revenue',
         series: [{vals: DM.map(r => r.revenue_share), color: t.mag, labels: DM.map(r => pc(r.revenue_share, 1)), sub: DM.map(r => 'Tier ' + r.tier)}]}}]}],
-    detailsHTML: `<p class="evcap">Unilever, latest month (ours): A ${tierN('A')} products → ${pc(share('A'), 1)} of revenue; B ${tierN('B')} → ${pc(share('B'), 1)}; C ${tierN('C')} → ${pc(share('C'), 1)}. `
+    detailsHTML: `<p class="evcap">Unilever, latest month (ours, ${per(t1.period)}): A ${tierN('A')} products → ${pc(share('A'), 1)} of revenue; B ${tierN('B')} → ${pc(share('B'), 1)}; C ${tierN('C')} → ${pc(share('C'), 1)}. `
       + `3-month view: A ${t3.A}, B ${t3.B}, C ${t3.C}. Between the two, ${changed} products change tier (${aMoves} move into or out of Tier A).</p>`,
   };
 };
 
 CARDS[8] = c => {
-  const A = evRecs(c.data.totals), r103 = A.find(q => q.allocation_pct === 103) || {};
+  const A = evRecs(c.data.totals), r103 = A.find(q => q.allocation_pct === 103) || {}, r105 = A.find(q => q.allocation_pct === 105) || {};
   const levels = A.map(r => r.allocation_pct + '%'), ours = gi => A[gi].allocation_pct === 105;
+  const gap = r105.cover_gap_php != null && r105.cover_gap_php < 0 ? (-r105.cover_gap_php).toFixed(2) : null;
   BOARD[8] = ['105% of last year’s sales (team estimate)', '103% and 108%', 'More allocation = fewer shortages; the 3-week stock rule holds at every level.'];
   return {
     question: 'How much does the supplier allocation limit what we can order?',
     headline: 'More supplier allocation means fewer products run short; the 3-week stock rule is always kept.',
     main: {file: 'ch08_allocation', title: 'Units needed vs units we could order, at each allocation level', W: 900, H: 340,
       read: `Each group = an allocation level. Light bar = what the products need; solid bar = what the allocation lets us order; the gap = shortage. Blue = ours (105%). The order plan ${PLACEHOLDER}.`,
+      shows: ['Each group = one allocation level: the most the supplier lets us buy, as a share of last year’s sales for the same months.',
+              `Light outlined bar = the units the ${A[0].products} products need; solid bar = what the allocation lets us order. The gap is the shortage.`,
+              A.map(r => `${r.allocation_pct}%${r.allocation_pct === 105 ? ' (ours)' : ''}: ${r.n_short} products short, ${rk(r.shortfall)} units`).join('; ') + '.',
+              'The 3-week stock rule is kept at every level (see the note below the chart).'],
       build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evGBars, o: {groups: levels.map((l, gi) => l + (ours(gi) ? ' (ours)' : '')), ytitle: 'Units', fmt: v => nf(v / 1e6, 1) + 'M',
         boldGroup: ours, legend: [[t.need, 'Needed', true], [t.ours, 'Could order']],
         series: [{vals: A.map(r => r.need), colorAt: () => t.need, outline: true}, {vals: A.map(r => r.ordered), colorAt: gi => oursAlt(t, ours(gi))}],
@@ -661,6 +785,12 @@ CARDS[8] = c => {
           + `<div class="r"><span>needed</span><b>${nf(r.need)}</b></div><div class="r"><span>could order</span><b>${nf(r.ordered)}</b></div>`
           + `<div class="r"><span>short</span><b>${nf(r.shortfall)} units, ${r.n_short} products</b></div>`; }}}]},
     after: ['The 3-week stock rule is kept at every level. (The stored test flags 105% because it falls ₱0.02 short of 3 weeks — a rounding gap within the order plan’s own ₱1 tolerance.)'],
+    faq: [
+      ['What is the supplier allocation?', `The most the supplier lets us buy: last year’s sales for the same months × 103%, 105% or 108%. The plan ${PLACEHOLDER}.`],
+      ['Which products get cut when there isn’t enough?', `The order plan decides, using the weights for cost, service and storage (decision 9). The ${r103.n_short} products short at 103% are listed under Details.`],
+      ['Why is this card “technically questioned”?', gap ? `The rule written down beforehand says the plan must end the month with 3 weeks of stock. At 105% it ends ₱${gap} short of that — a rounding gap, well inside the order plan’s own ₱1 tolerance. We report it exactly as the rule says.`
+        : 'See the stored verdict under Details.'],
+    ],
     means: `At the minimum allocation, ${r103.n_short} products run short but the 3-week stock rule still holds.`,
     details: [],
     detailsHTML: `<p class="evcap"><b>Products short at 103% (${r103.n_short}):</b> ${esc(String(r103.short_skus || '').split(';').join(', '))}.</p>`,
@@ -671,6 +801,10 @@ CARDS[9] = c => {
   const G = evRecs(c.data.grid), d0 = G.find(g => g.is_default) || {};
   const diff = G.filter(g => g.cut_set_differs), onlyExtremes = diff.every(g => g.w1 <= 0.1 + 1e-9 || g.w2 < 1e-9);
   const sameShort = new Set(G.map(g => Math.round(g.shortfall))).size === 1;
+  const nb = G.filter(g => g.neighbour && !g.is_default), nbDiff = nb.filter(g => g.cut_set_differs).length;
+  const costCut = diff.filter(g => g.w2 > 1e-9).length ? Math.max(...diff.filter(g => g.w2 > 1e-9).map(g => g.w1)) : null;
+  const c8 = EV.charts.find(x => x.chart === 8), a8 = c8 ? evRecs(c8.data.totals) : [], lowest = a8.length ? Math.min(...a8.map(r => r.allocation_pct)) : null;
+  const atLowest = lowest != null && (a8.find(r => r.allocation_pct === lowest) || {}).n_short === d0.n_short;
   BOARD[9] = ['Cost 0.45, service 0.35, storage 0.20', `${G.length - 1} other mixes of the three weights`, 'SSM can set these priorities roughly; the same products get cut unless one priority is switched off.'];
   const draw = (t, fr) => {
     const M = {l: 70, r: 300, t: 20, b: 44}, side = Math.min(fr.w - M.l - M.r, fr.h - M.t - M.b), X0 = fr.x + M.l, Y0 = fr.y + M.t, n = 21, cs = side / n;
@@ -702,10 +836,21 @@ CARDS[9] = c => {
     before: ['Cost = cut expensive items first; service = protect the items that bring in the most revenue; storage = the cost of holding stock (one team estimate for every product for now, so it changes little).'],
     headline: c.verdict === 'CONFIRMS' && onlyExtremes ? `Weights barely matter: the same ${d0.n_short} products are cut unless cost or service is nearly ignored.`
       : c.verdict === 'CONFIRMS' ? "Small changes to the weights don't change which products get cut." : "Small changes to the weights change which products get cut.",
-    main: {file: 'ch09_weights', title: 'Every mix of the three weights (steps of 0.05): are the same products cut as with ours?', W: 900, H: 480,
+    main: {file: 'ch09_weights', title: `Every mix of the three weights (steps of 0.05)${lowest != null && atLowest ? `, at the lowest allocation (${lowest}%)` : ''}: are the same products cut as with ours?`, W: 900, H: 480,
       read: 'Each square = one mix. Across = weight on cost; up = weight on service. Grey = same products cut as ours; red = different ones.',
+      shows: ['Each square = one way to weigh cost, service and storage',
+              `Grey = cuts the same ${d0.n_short} products as ours`,
+              onlyExtremes ? 'Red appears only when cost or service is almost ignored' : 'Red also appears away from the edges',
+              onlyExtremes ? 'So the exact weights don’t matter much' : 'So the exact weights can matter'],
       build: () => [{fr: {x: 0, y: 0, w: 900, h: 480}, draw}]},
     after: [sameShort ? `Total shortfall is ${rk(G[0].shortfall)} units everywhere; only which products are short changes.` : ''].filter(Boolean),
+    faq: [
+      ['What if SSM wants to lean more on service, or on cost?', `Every mix within 0.10 of ours on each weight cuts the same ${d0.n_short} products (${nb.length - nbDiff} of the ${nb.length} nearby mixes).`
+        + (onlyExtremes && costCut != null ? ` Different products are cut only when cost gets ${costCut.toFixed(2)} or less, or service gets 0.` : '')],
+      ['Does the total shortage change?', sameShort ? `No: ${rk(G[0].shortfall)} units short in every mix; only which products are short changes.` : 'Yes; see the tooltip on each square.'],
+      ['Why is only half the square filled?', 'The three weights add up to 1, and storage gets whatever cost and service leave, so cost + service can’t be more than 1.'],
+      lowest != null && atLowest ? [`Why test at ${lowest}%?`, `It is the lowest allocation tested, where the most products are cut (${d0.n_short} of ${d0.n_short != null && a8[0] ? a8[0].products : '—'}).`] : null,
+    ].filter(Boolean),
     means: 'SSM can set these priorities roughly; the same products get cut unless one priority is switched off.',
     details: [],
   };
@@ -714,6 +859,10 @@ CARDS[9] = c => {
 CARDS[10] = c => {
   const T = evRecs(c.data.curve), xs = T.map(r => Math.round(r.service_level * 100)), at = x => T[xs.indexOf(x)];
   const show = [85, 90, 95, 99].filter(x => xs.includes(x)), meas = c.measured_rate;
+  const over = show.filter(x => at(x).measured_exceedance > at(x).nominal_exceedance);
+  const hm = String(c.caption || '').match(/\((\d+) of the products, (\d+) SKU-months, (\d{4}-\d{2})\.\.(\d{4}-\d{2})/);
+  const ml = m => MONL[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4);
+  const s90 = at(90).total_safety_stock_pieces, s95 = at(95) ? at(95).total_safety_stock_pieces : null;
   BOARD[10] = ['90% service level', '85% to 99%', 'The 90% buffer does its job; going higher ties up much more stock.'];
   return {
     question: 'How much extra stock should we keep for surprises?',
@@ -721,6 +870,10 @@ CARDS[10] = c => {
       : 'Stockouts happen more often than the promised service level allows.',
     main: {file: 'ch10_service', title: 'How often demand ran past forecast + buffer, at each service level (lower is better)', W: 900, H: 340,
       read: 'Bar = measured on past months; thick dashed mark = what the service level promises. Blue = ours (90%). Bars below their mark = the buffer does its job.',
+      shows: ['Each group = one service level: the share of months we aim to have enough stock. 90% = run out in at most 1 month in 10.',
+              'Bar = how often demand actually ran past the forecast plus the buffer on past months; dashed mark = the promised maximum.',
+              `Ours (90%): ${pc(meas)} of months, under the promised 10%. ` + (over.length ? `At ${listWords(over.map(x => x + '%'))} the measured rate (${listWords(over.map(x => pc(at(x).measured_exceedance)))}) is slightly above its promise; the other levels shown are below theirs.` : 'Every level shown is below its promise.'),
+              `More service needs more safety stock: ${listWords(show.map((x, i) => `${rk(at(x).total_safety_stock_pieces)}${i ? '' : ' units'} at ${x}%`))}.`],
       build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evGBars, o: {groups: show.map(x => x + '% service' + (x === 90 ? ' (ours)' : '')), ytitle: 'Months out of stock', fmt: v => (v * 100).toFixed(0) + '%',
         boldGroup: gi => show[gi] === 90, top: 1.3, legend: [[t.ours, 'Measured (ours)'], [t.alt, 'Measured (other levels)'], [t.ink, 'Promised maximum (dashed mark)', true]],
         series: [{vals: show.map(x => at(x).measured_exceedance), colorAt: gi => oursAlt(t, show[gi] === 90)}],
@@ -729,6 +882,13 @@ CARDS[10] = c => {
           + `<div class="r"><span>measured stockout rate</span><b>${pc(r.measured_exceedance)}</b></div><div class="r"><span>promised at most</span><b>${pc(r.nominal_exceedance)}</b></div>`
           + `<div class="r"><span>safety stock held</span><b>${nf(r.total_safety_stock_pieces)} units</b></div>`; }}}]},
     after: [`Promised: out of stock at most 1 month in 10. Actual: ${pc(meas)} of months. Higher levels cut stockouts further but need much more stock (table in Details). The order plan ${PLACEHOLDER}.`],
+    faq: [
+      ['What does a 90% service level mean?', 'Enough extra stock that demand should run past the forecast plus the buffer in at most 1 month in 10.'],
+      s95 != null ? ['Why not 95%?', `It would hold about ${Math.round((s95 / s90 - 1) * 100)}% more safety stock (${rk(s95)} vs ${rk(s90)} units) to cut stockouts from ${pc(meas, 0)} to ${pc(at(95).measured_exceedance, 0)} of months. That trade-off is SSM’s call; this card only shows it.`] : null,
+      ['How was it measured?', hm ? `On past months (${ml(hm[3])} – ${ml(hm[4])}, ${nf(+hm[2])} product-months for ${hm[1]} products): how often actual sales went above the forecast plus the buffer.`
+        : 'On past months: how often actual sales went above the forecast plus the buffer.'],
+      ['Are these real stock numbers?', `Not fully: the buffer depends on the lead time and review days, and the order plan ${PLACEHOLDER}.`],
+    ].filter(Boolean),
     means: 'The 90% buffer does its job; going higher would tie up much more stock for fewer stockouts.',
     details: [{file: 'ch10_estimate', title: 'Formula estimate (not a measurement): product-months with a stockout per year', W: 900, H: 280,
       read: 'From the normal-demand formula the order plan assumes; an estimate, not measured.',
@@ -755,6 +915,8 @@ CARDS[11] = c => {
   const pang = (() => { const b = I.filter(r => r.series === 'branch pangasinan (2023 only)' && [11, 12].includes(r.moy)), tt = tot('delmonte').filter(r => r.year === 2023 && [11, 12].includes(r.moy));
     return tt.length && b.length ? b.reduce((a, r) => a + r.net_amount, 0) / tt.reduce((a, r) => a + r.net_amount, 0) : null; })();
   const highs = steady.filter(s => s[1] === 'high').map(s => MONL[s[0] - 1]), lows = steady.filter(s => s[1] === 'low').map(s => MONL[s[0] - 1]);
+  const UP = P.filter(p => p.principal === 'unilever'), matched = UP.filter(p => p.positive_significant === true);
+  const dmMonths = years('delmonte').map(y => `${tot('delmonte').filter(r => r.year === y).length} months of ${y}`);
   BOARD[11] = ['No seasonal adjustment in the forecasts', 'A month-by-month pattern repeating across years', 'Plan without a seasonal adjustment for now; re-check when full years of Del Monte data arrive.'];
   const heat = (t, fr) => {
     let g = ''; const panels = [['unilever', 'Unilever'], ['delmonte', 'Del Monte']], cw = (fr.w - 150) / 12, rh = 30;
@@ -783,8 +945,19 @@ CARDS[11] = c => {
       : 'Unilever’s yearly pattern doesn’t repeat reliably; Del Monte has too little data to tell.',
     main: {file: 'ch11_season', title: 'Ours: no seasonal adjustment. Does any month repeat high or low every year?', W: 900, H: 330,
       read: 'Each row = one year; each cell = how that month compared with the year’s normal month (“+11%” = 11% above). A real season shows the same colour in the same column every year. Faded rows = incomplete years.',
+      shows: ['Each row = one year; each cell = that month vs the year’s normal month (“+11%” = 11% above).',
+              'A real season would show the same colour in the same column every year.',
+              `Unilever: ${steady.length ? `${steady.length} of 12 months (${steady.map(s => MONL[s[0] - 1]).join(', ')}) lean the same way in all ${fy.length} full years` : 'no month leans the same way in every full year'}, but the whole-year shape matched in only ${matched.length} of ${UP.length} pairs of years${matched.length ? ` (${listWords(matched.map(p => p.years.replace('-', '–')))})` : ''}.`,
+              `Del Monte: ${listWords(dmMonths)} — no two full years to compare.`],
       build: () => [{fr: {x: 0, y: 0, w: 900, h: 330}, draw: heat}]},
     after: [ulSent + ' ' + dmSent, `Our choice: no seasonal adjustment. Unilever months that lean the same way in all full years: ${highs.length ? 'higher — ' + listWords(highs) : 'none higher'}; ${lows.length ? 'lower — ' + listWords(lows) : 'none lower'}. Our test needs the whole year’s shape to match between every pair of years, and it does not.`],
+    faq: [
+      ['How was it tested?', 'For every pair of full years we checked whether the 12-month shape matches (a rank correlation). A seasonal pattern needs a clear match in every pair.'],
+      matched.length ? [`${listWords(matched.map(p => p.years.replace('-', '–')))} match — isn’t that seasonal?`, `Only ${matched.length} of ${UP.length} pairs matched; ${listWords(UP.filter(p => !p.positive_significant).map(p => p.years.replace('-', '–')))} did not. A match in one pair only could be chance.`] : null,
+      ['Why can’t Del Monte be tested yet?', `Its data has ${listWords(dmMonths)}, so there are no two full years to compare.`],
+      dmNovDecHigh ? ['What about Del Monte’s high November–December?', `An observation only: the average invoice in those months was ${ratio.map((r, i) => `${r.toFixed(1)}× the rest of ${dmYears[i]}`).join(' and ')}. Whether these were promotional orders is not in the stored results.`] : null,
+      ['What would change the decision?', 'A re-check once Del Monte has at least two full years of data.'],
+    ].filter(Boolean),
     means: 'Plan orders without a seasonal adjustment for now; re-check once full years of Del Monte data arrive.',
     details: [{file: 'ch11_branch', title: 'Del Monte by branch, 2023 (the only year with a branch field)', W: 900, H: 280,
       read: 'Each month vs 2023’s normal month, per branch.',
@@ -822,12 +995,18 @@ function evDetailsBlock(c, spec){
 }
 function evFigHTML(c, f, key){
   return `<figure class="evfig${key === 'm' ? ' evmain' : ''}"><div class="evfhead"><span class="evftitle">${esc(f.title)}</span>`
+    + (f.toggle ? `<span class="evtog">${f.toggle.options.map(([v, l]) => `<button class="evbtn evtogb${String(v) === String(f.toggle.get()) ? ' on' : ''}" data-c="${c.chart}" data-f="${key}" data-v="${v}">${esc(l)}</button>`).join('')}</span>` : '')
     + (f.control ? `<select class="evsel" data-c="${c.chart}" data-f="${key}">${f.control.options.map(([v, l]) => `<option value="${v}"${v === f.control.get() ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>` : '')
     + `<span class="evbtns"><button class="evbtn" data-c="${c.chart}" data-f="${key}" data-k="svg">SVG</button><button class="evbtn" data-c="${c.chart}" data-f="${key}" data-k="png">PNG</button></span></div>`
     + (f.read ? `<div class="evread"><b>How to read this:</b> ${esc(f.read)}</div>` : '')
     + `<div class="evsvg" id="evs-${c.chart}-${key}"></div>`
     + ((f.shows || []).length ? `<div class="evshows"><b>What the chart shows</b><ul>${f.shows.map(b => `<li>${esc(b)}</li>`).join('')}</ul></div>` : '')
     + `</figure>`;
+}
+function evRefresh(c, key){
+  const f = c._figs[key]; evRender($(`#evs-${c.chart}-${key}`), f);
+  const sel = document.querySelector(`.evsel[data-c="${c.chart}"][data-f="${key}"]`); if (sel && f.control) sel.value = String(f.control.get());
+  document.querySelectorAll(`.evtogb[data-c="${c.chart}"][data-f="${key}"]`).forEach(b => b.classList.toggle('on', b.dataset.v === String(f.toggle.get())));
 }
 function evCard(c){
   const spec = CARDS[c.chart] ? CARDS[c.chart](c) : {question: '', headline: c.title, main: null, details: []};
@@ -883,12 +1062,13 @@ function drawEvidence(){
   root.addEventListener('click', e => {
     const b = e.target.closest('.evbtn'); if (!b || !b.dataset.c) return;
     const c = C.find(x => x.chart === +b.dataset.c);
+    if (b.classList.contains('evtogb')){ c._figs[b.dataset.f].toggle.set(b.dataset.v); evRefresh(c, b.dataset.f); return; }
     if (b.classList.contains('evcopy')){ navigator.clipboard.writeText(c.caption).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy caption'; }, 1200); }); return; }
     evExport(c._figs[b.dataset.f], b.dataset.k);
   });
   root.addEventListener('change', e => {
     const s = e.target.closest('.evsel'); if (!s) return;
-    const c = C.find(x => x.chart === +s.dataset.c), f = c._figs[s.dataset.f]; f.control.set(s.value); evRender($(`#evs-${c.chart}-${s.dataset.f}`), f);
+    const c = C.find(x => x.chart === +s.dataset.c); c._figs[s.dataset.f].control.set(s.value); evRefresh(c, s.dataset.f);
   });
   // Presentation view: one slide per screen (board summary, then each card; the order-plan box before decision 8).
   const slides = () => [...root.querySelectorAll('.evslide')];
