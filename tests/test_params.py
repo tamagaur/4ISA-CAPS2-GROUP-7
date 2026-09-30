@@ -96,3 +96,16 @@ def test_standard_library_only():
         for alias in node.names
     }
     assert imported <= {"__future__"} | set(sys.stdlib_module_names)
+
+
+def test_one_mase_gate_everywhere():
+    """Item 2: the LP's candidate pool, the dashboard's reliability count and
+    the runner's pass rates share analytics.params.MASE_GATE; none defines
+    its own. The fit review's 1.1 is a separate, named review flag."""
+    from analytics.forecasting import baseline
+    from backend.routers import dashboard
+    from scripts import run_lp
+
+    assert run_lp.MASE_GATE is dashboard.MASE_GATE is baseline.MASE_GATE is params.MASE_GATE
+    assert not hasattr(dashboard, "MASE_UNRELIABLE_GATE")
+    assert params.FIT_REVIEW_NOT_FIT_MASE != params.MASE_GATE

@@ -52,6 +52,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, REPO)
 
+from analytics.params import FIT_REVIEW_NOT_FIT_MASE  # noqa: E402
+
 PRINCIPAL, ABC_PERIOD, ABC_METHOD = "unilever", "2026-02", "single"
 REAL_START = "2023-01"
 COMBINED_ORDER = ["insufficient", "short", "medium", "long_down", "long_flat", "long_up"]
@@ -872,6 +874,8 @@ def load_fit_review(payload: dict) -> dict:
         # The two medians ARE computed here, over the CSV rows that carry the column,
         # and the sentence that uses one says so.
         "gate_cv": 0.4365, "gate_units": 812.5,
+        # The not-fit flag (MASE on the common window): a review flag, not the LP gate.
+        "not_fit_mase": FIT_REVIEW_NOT_FIT_MASE,
         "median_cv": _median([num(r["cause_cv_last12"]) for r in rows.values()]),
         "median_cv_n": sum(1 for r in rows.values() if num(r["cause_cv_last12"]) is not None),
         "median_units": _median([num(r["cause_median_units"]) for r in rows.values()]),
@@ -1574,7 +1578,7 @@ function honestySentences(s){
       `<b>Not fit to use on this SKU.</b> Cause group: <b>${esc(s.cause)}</b>`
       + (s.cause === 'none of the above' ? ' (no cause rule fires on this SKU)' : '')
       + (s.causes_all && s.causes_all.length > 1 ? `, first match; also fired: ${esc(s.causes_all.filter(c => c !== s.cause).join(', '))}` : '') + '.')];
-    bits.push(sent(`mase_common, flag_* columns (${CSVSRC}); the not-fit gate is MASE >= 1.1, reports/diagnostics/README.md`,
+    bits.push(sent(`mase_common, flag_* columns (${CSVSRC}); the not-fit review flag is MASE >= ${F.not_fit_mase} (analytics/params.py), reports/diagnostics/README.md`,
       `MASE is <b>${fmt(s.mase_common)}</b> on the common window`
       + (s.flags && s.flags.length ? `, flags: ${esc(s.flags.join(', '))}` : '') + '.'));
     if (s.ma3_fails) bits.push(sent(`ma3_also_fails_common, ma3_mase_common (${CSVSRC})`,
@@ -1631,13 +1635,13 @@ function verdictBlock(s){
   return `<div class="verdictline ${cls}" title="verdict, cause_group (${esc(CSVSRC)}); recent_level_ratio; spike months and level windows re-derived on this series">${txt}</div>`;
 }
 // The four that answer "what is the number and can I use it". MASE on the
-// common window is the one the verdict is made on, so it carries the 1.1 gate.
+// common window is the one the verdict is made on, so it carries the not-fit flag (F.not_fit_mase).
 function topTiles(s){
   const p = PROV(s);
   return `<div class="stats four">` + [
     [fmt(s.served), `Served forecast${s.provisional ? ' (provisional)' : ''}`, false],
     [fmt(s.ma3), 'MA3 forecast', false],
-    [p ? NT : fmt(s.mase_common), 'MASE (common window)', !p && s.mase_common != null && s.mase_common >= 1.1],
+    [p ? NT : fmt(s.mase_common), 'MASE (common window)', !p && s.mase_common != null && s.mase_common >= F.not_fit_mase],
     [fmt(s.rlr_fit != null ? s.rlr_fit : s.rlr), 'Recent level ratio (3 / 12 mo)', false],
   ].map(([v, l, f]) => `<div class="stat${f ? ' flag' : ''}" title="${esc(v)}"><div class="v">${esc(v)}</div><div class="l">${l}</div></div>`).join('') + `</div>`;
 }

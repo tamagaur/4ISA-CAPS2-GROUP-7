@@ -49,7 +49,7 @@ import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from analytics.params import PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION
+from analytics.params import MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION
 from backend.data_mode import REAL, forecast_source, lp_source
 
 # Applied to every LP read. Bound (not interpolated) so it is safe to
@@ -200,7 +200,7 @@ def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> di
             reason = (
                 f"{stale_count:,} of the {row_count:,} rows in this cycle predate the forecasts "
                 f"rewritten {fc_at:%Y-%m-%d %H:%M UTC}. The LP last ran {lp_at:%Y-%m-%d %H:%M UTC} "
-                "but refreshes only the products in that run (Tier A, forecast status ok, MASE < 1) "
+                f"but refreshes only the products in that run (Tier A, forecast status ok, MASE < {MASE_GATE:g}) "
                 "and leaves the cycle's other rows as they were, so these still carry order "
                 "quantities (q_i) and reorder points (rop_i) solved against forecasts that are no "
                 "longer the served ones. A rerun will not change them; keeping or dropping them is "

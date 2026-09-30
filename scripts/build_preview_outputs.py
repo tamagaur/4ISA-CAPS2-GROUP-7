@@ -48,12 +48,12 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
 from analytics.forecasting.baseline import MIN_MONTHS_WITH_SALES  # noqa: E402
-from analytics.params import PLACEHOLDERS  # noqa: E402
+from analytics.params import MASE_GATE, PLACEHOLDERS  # noqa: E402
 from backend.data_mode import PREVIEW_UNILEVER_DEMAND  # noqa: E402
 from scripts.preview_router_synth import load_series, preview  # noqa: E402
 from scripts.run_baseline_forecast import _clean_metric, _confidence_band  # noqa: E402
 from scripts.run_lp import (  # noqa: E402
-    MASE_GATE, _sigma_d_for_product, build_parser, fetch_demand_history, fetch_stock_and_cost, plan_cycle,
+    _sigma_d_for_product, build_parser, fetch_demand_history, fetch_stock_and_cost, plan_cycle,
     product_input,
 )
 

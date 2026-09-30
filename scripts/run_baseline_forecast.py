@@ -501,8 +501,8 @@ def _print_report(df, abc_period, latest_demand_month):
 
     line("MASE median", lambda m: fmt(mase[m].median()))
     line("MASE mean", lambda m: fmt(mase[m].mean()))
-    line("MASE<1.0 pass count", lambda m: f"{int((mase[m] < 1.0).sum())}/{len(mase[m])}")
-    line("MASE<1.0 pass %", lambda m: fmt(_pct((mase[m] < 1.0).sum(), len(mase[m]))))
+    line(f"MASE<{MASE_GATE} pass count", lambda m: f"{int((mase[m] < MASE_GATE).sum())}/{len(mase[m])}")
+    line(f"MASE<{MASE_GATE} pass %", lambda m: fmt(_pct((mase[m] < MASE_GATE).sum(), len(mase[m]))))
     line("MAPE median", lambda m: fmt(mape[m].median()))
     line("MAPE<20% pass count", lambda m: f"{int((mape[m] < 0.20).sum())}/{len(mape[m])}")
     line("MAPE<20% pass %", lambda m: fmt(_pct((mape[m] < 0.20).sum(), len(mape[m]))))
@@ -551,15 +551,15 @@ def _print_report(df, abc_period, latest_demand_month):
     print("  Numeric fallback + provisional flag = --write-path work, not done this pass.")
 
     print("\n" + "=" * 78)
-    print("5. PASS RATES - oracle vs. rule vs. plain-MA3-alone (MASE<1.0)")
+    print(f"5. PASS RATES - oracle vs. rule vs. plain-MA3-alone (MASE<{MASE_GATE})")
     print("=" * 78)
     oracle_pass, oracle_n = _selected_pass(df_ok, "oracle_method")
     rule_pass, rule_n = _selected_pass(df_ok, "rule_method")
     ma3 = mase["ma3"]
-    ma3_pass, ma3_n = int((ma3 < 1.0).sum()), len(ma3)
-    print(f"  oracle-selected  MASE<1.0 : {oracle_pass}/{oracle_n}  ({_pct(oracle_pass, oracle_n):.1f}%)   [UPPER BOUND - peeks at holdout]")
-    print(f"  rule-selected    MASE<1.0 : {rule_pass}/{rule_n}  ({_pct(rule_pass, rule_n):.1f}%)   [deployable]")
-    print(f"  plain MA3 alone  MASE<1.0 : {ma3_pass}/{ma3_n}  ({_pct(ma3_pass, ma3_n):.1f}%)")
+    ma3_pass, ma3_n = int((ma3 < MASE_GATE).sum()), len(ma3)
+    print(f"  oracle-selected  MASE<{MASE_GATE} : {oracle_pass}/{oracle_n}  ({_pct(oracle_pass, oracle_n):.1f}%)   [UPPER BOUND - peeks at holdout]")
+    print(f"  rule-selected    MASE<{MASE_GATE} : {rule_pass}/{rule_n}  ({_pct(rule_pass, rule_n):.1f}%)   [deployable]")
+    print(f"  plain MA3 alone  MASE<{MASE_GATE} : {ma3_pass}/{ma3_n}  ({_pct(ma3_pass, ma3_n):.1f}%)")
     print(f"  gap rule vs oracle : {_pct(oracle_pass, oracle_n) - _pct(rule_pass, rule_n):+.1f} pp")
     print(f"  gap rule vs MA3    : {_pct(ma3_pass, ma3_n) - _pct(rule_pass, rule_n):+.1f} pp")
     print("  (rule below MA3-alone is the EXPECTED honest result - see class evidence below.)")
@@ -575,7 +575,7 @@ def _print_report(df, abc_period, latest_demand_month):
 
 
 def _selected_pass(df_ok, col):
-    """Count ok SKUs whose `col`-selected method has MASE < 1.0 (undefined
+    """Count ok SKUs whose `col`-selected method has MASE < MASE_GATE (undefined
     MASE does not count as a pass)."""
     n = 0
     passed = 0
@@ -585,7 +585,7 @@ def _selected_pass(df_ok, col):
             continue
         n += 1
         v = r[f"{method}_mase"]
-        if v is not None and not (isinstance(v, float) and np.isnan(v)) and v < 1.0:
+        if v is not None and not (isinstance(v, float) and np.isnan(v)) and v < MASE_GATE:
             passed += 1
     return passed, n
 
@@ -745,7 +745,7 @@ def _write_md(df, abc_period, latest_demand_month):
     mape = {m: ms(m, "mape") for m in METHODS}
     lines.append(f"| MASE median | {cell(lambda m: f3(mase[m].median()))} |")
     lines.append(f"| MASE mean | {cell(lambda m: f3(mase[m].mean()))} |")
-    lines.append(f"| MASE<1.0 % | {cell(lambda m: f3(_pct((mase[m] < 1.0).sum(), len(mase[m]))))} |")
+    lines.append(f"| MASE<{MASE_GATE} % | {cell(lambda m: f3(_pct((mase[m] < MASE_GATE).sum(), len(mase[m]))))} |")
     lines.append(f"| MAPE median | {cell(lambda m: f3(mape[m].median()))} |")
     lines.append(f"| MAPE<20% % | {cell(lambda m: f3(_pct((mape[m] < 0.20).sum(), len(mape[m]))))} |")
     lines.append(f"| MAE median | {cell(lambda m: f3(ms(m, 'mae').median()))} |")
@@ -756,12 +756,12 @@ def _write_md(df, abc_period, latest_demand_month):
     oracle_pass, oracle_n = _selected_pass(df_ok, "oracle_method")
     rule_pass, rule_n = _selected_pass(df_ok, "rule_method")
     ma3v = mase["ma3"]
-    lines.append("## Pass rates (MASE<1.0)\n")
+    lines.append(f"## Pass rates (MASE<{MASE_GATE})\n")
     lines.append("| selection | pass | rate |")
     lines.append("|---|---|---|")
     lines.append(f"| oracle (upper bound) | {oracle_pass}/{oracle_n} | {_pct(oracle_pass, oracle_n):.1f}% |")
     lines.append(f"| rule (deployable) | {rule_pass}/{rule_n} | {_pct(rule_pass, rule_n):.1f}% |")
-    lines.append(f"| plain MA3 alone | {int((ma3v < 1.0).sum())}/{len(ma3v)} | {_pct((ma3v < 1.0).sum(), len(ma3v)):.1f}% |\n")
+    lines.append(f"| plain MA3 alone | {int((ma3v < MASE_GATE).sum())}/{len(ma3v)} | {_pct((ma3v < MASE_GATE).sum(), len(ma3v)):.1f}% |\n")
 
     lines.append("## rule_method mapping\n")
     lines.append("Derived from the full 1,807-SKU catalog (1,096 evaluable, all tiers), applied to Tier A only.\n")

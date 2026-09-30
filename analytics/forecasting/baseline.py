@@ -38,7 +38,7 @@ Implements:
 Constants:
   MIN_MONTHS_WITH_SALES = 3     eligibility gate (real observations, not span)
   HOLDOUT_FRACTION             reused from sarima.py (0.20)
-  MASE_GATE = 1.0              a forecast beating the naive benchmark scores < 1
+  MASE_GATE                    analytics.params (1.0): a forecast beating the naive benchmark scores < 1
   SBA_ALPHA = 0.1             UNTUNED this pass - stamped alpha_tuned:false everywhere
 """
 from __future__ import annotations
@@ -50,9 +50,9 @@ import pandas as pd
 # validation live in sarima.py and are shared verbatim.
 from analytics.forecasting.sarima import train_holdout_split, HOLDOUT_FRACTION  # noqa: F401
 from analytics.classification.abc import TIER_A_CUTOFF as ABC_TIER_A_CUTOFF  # noqa: F401
+from analytics.params import MASE_GATE
 
 MIN_MONTHS_WITH_SALES = 3
-MASE_GATE = 1.0
 MA_WINDOW = 3
 
 # SBA smoothing constant. Flagged untuned: no tuning was attempted this pass.

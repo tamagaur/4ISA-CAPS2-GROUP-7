@@ -35,7 +35,7 @@ real-data run found only ~15% of Tier A SKUs ever clear mape < 20% under
 any method tested, MA3 included, while ~50-56% clear mase < 1.0 — the
 report's own conclusion was to move off the mape gate. Since 2026-09-29
 backend/routers/dashboard.py's portfolio_forecast applies this same gate
-(MASE_UNRELIABLE_GATE), so the dashboard card and this candidate pool
+(the same analytics.params.MASE_GATE), so the dashboard card and this candidate pool
 describe the same SKUs.
 
 Forecast_Result.forecast_date is confirmed (scripts/run_baseline_forecast.py's
@@ -104,14 +104,12 @@ from analytics.etl.granularity import business_days_in_month, resolve_delmonte_c
 from analytics.optimization.lp import (
     SKUInput, build_lp_model, compute_safety_stock, solve_lp, target_stock, weekly_demand,
 )
-from analytics.params import COVER_RULES, PLACEHOLDERS
+from analytics.params import COVER_RULES, MASE_GATE, PLACEHOLDERS
 from backend.stock_units import PACK_SIZE_NUMERIC, STOCK_AT_LATEST_SQL
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-MASE_GATE = 1.0  # MASE < 1 beats the naive benchmark — see analytics/forecasting/baseline.py's
-                 # own MASE_GATE and reports/MODEL_BAKEOFF_UNILEVER.md for why mape < 20 was dropped here.
 LOUD_RULE = "=" * 78
 
 # Re-running a cycle refreshes only rows still awaiting a decision. The

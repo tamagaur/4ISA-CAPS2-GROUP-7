@@ -81,7 +81,7 @@ zero):
     total_count is every row; evaluated_count the rows with a holdout MASE
     (status 'ok' — provisional and no-order rows have none); unreliable_count
     the evaluated rows that FAIL the pass gate MASE < 1
-    (MASE_UNRELIABLE_GATE), i.e. whose served model did no better on its
+    (analytics.params.MASE_GATE), i.e. whose served model did no better on its
     rolling one-step holdout than a naive last-value forecast. The gate was
     `mape >= 20` until 2026-09-21: that flagged 100 of 132 Tier A SKUs
     whatever the model, so it told the user nothing; MASE < 1 is also the
@@ -234,9 +234,9 @@ zero):
     horizon anywhere in Forecast_Result to report (neither SARIMA's
     retirement nor the per-bin routing changed that one-step-per-product
     shape, so no aggregation logic below needed to change, only this
-    wording). The portfolio gate is MASE < 1 (MASE_UNRELIABLE_GATE) since
+    wording). The portfolio gate is MASE < 1 (analytics.params.MASE_GATE) since
     2026-09-29 — the same gate forecast.unreliable_count and the LP's
-    candidate pool apply (scripts/run_lp.py MASE_GATE), so every screen
+    candidate pool apply (the same analytics.params.MASE_GATE), so every screen
     calls the same SKUs reliable. It was `mape < 20` before, which passed
     19 of 132 Tier A SKUs against the LP's 73 and made the card describe
     a different population than the reorder plan (the MODEL_BAKEOFF
@@ -334,6 +334,7 @@ from backend.data_mode import (
     unilever_demand,
 )
 from analytics.classification.abc import abc_rules
+from analytics.params import MASE_GATE
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle
@@ -351,10 +352,10 @@ POLICY_WEEKS = 3
 # (the served model beat a naive last-value forecast on its holdout), so
 # >= 1 is unreliable. Shared by forecast.unreliable_count AND
 # portfolio_forecast's gated SKU set, and it is the LP's own candidate
-# gate too (scripts/run_lp.py MASE_GATE) — since 2026-09-29 every screen
+# gate too (scripts/run_lp.py) — since 2026-09-29 every screen
 # calls the same SKUs reliable. portfolio_forecast gated on mape < 20
 # before, a stale gate the MODEL_BAKEOFF report concluded against.
-MASE_UNRELIABLE_GATE = 1.0
+# The value is analytics.params.MASE_GATE (Hyndman & Koehler 2006's MASE < 1).
 
 # Sir Abe's allocation rule (client meeting, Sep 2026): the principal sets
 # the year's allocation from the previous year's total sales — minimum
@@ -871,7 +872,7 @@ def get_dashboard(
             JOIN latest ON fr.forecast_date = latest.forecast_date
             WHERE 1=1 {principal_filter}
         """),
-        {"mase_gate": MASE_UNRELIABLE_GATE, **fc_params},
+        {"mase_gate": MASE_GATE, **fc_params},
     ).mappings().first()
     total_count = int(forecast_row["total_count"])
     evaluated_count = int(forecast_row["evaluated_count"])
@@ -1396,7 +1397,7 @@ def get_dashboard(
                   AND fr.mase < :mase_gate
                   {principal_filter}
             """),
-            {"forecast_date": latest_forecast_date, "mase_gate": MASE_UNRELIABLE_GATE, **fc_params},
+            {"forecast_date": latest_forecast_date, "mase_gate": MASE_GATE, **fc_params},
         ).mappings().all()
 
     gated_sku_count = len({r["product_key"] for r in gated_rows})
@@ -1443,7 +1444,7 @@ def get_dashboard(
     else:
         scope_label = (
             f"No forecasts for this scope currently beat the naive baseline "
-            f"(MASE < {MASE_UNRELIABLE_GATE:.0f})."
+            f"(MASE < {MASE_GATE:g})."
         )
 
     series_by_period: dict[str, dict] = {}
@@ -1507,7 +1508,7 @@ def get_dashboard(
         "scope_label": scope_label,
         # The gate the count above was filtered by — the same value as
         # forecast.mase_gate, stated here too so the card never hardcodes it.
-        "mase_gate": MASE_UNRELIABLE_GATE,
+        "mase_gate": MASE_GATE,
         # One sentence comparing the forecast bucket with the last actual
         # month — the card renders it verbatim (backend/chart_insights.py).
         "insight": portfolio_forecast_insight(portfolio_series),
@@ -1626,7 +1627,7 @@ def get_dashboard(
             "total_count": total_count,
             # The pass gate unreliable_count was counted against, so the
             # card's "Beat naive (MASE < N)" label states it from here.
-            "mase_gate": MASE_UNRELIABLE_GATE,
+            "mase_gate": MASE_GATE,
         },
         "latest_data_period": max(filter(None, latest_by_principal.values()), default=None),
         "latest_data_period_by_principal": latest_by_principal,
