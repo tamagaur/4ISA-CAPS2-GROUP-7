@@ -806,7 +806,7 @@ def load_fit_review(payload: dict) -> dict:
             verdict_source=r["verdict_source"],
             mase_common=num(r["mase_common"]), mase_pipeline=num(r["mase_pipeline"]),
             ma3_mase_common=num(r["ma3_mase_common"]),
-            ma3_fails=r["ma3_also_fails_common"] == "1",
+            ma3_fails=num(r["ma3_also_fails_common"]) == 1,   # stored as "1.0" / "0.0" / blank - compare as a number
             rlr_fit=num(r["recent_level_ratio"]),
             bw_csv=num(r["band_width_over_forecast_stored"]),
             flags=[k[5:].replace("_", " ") for k in
