@@ -83,7 +83,9 @@ scoped, never set_session — that leaks through the :6543 pooler; see the
 connect() comment in main()) and reports what a real run would write,
 including the rows it would leave alone. A rerun keeps accepted/rejected rows
 exactly as they are (UPSERT_QUERY) and reports, but never deletes, pending
-rows for products that fell out of the pool.
+rows for products that fell out of the pool, unless --retire-stale-pending
+is given: then those rows are saved to reports/lp_runs/ and deleted in the
+same transaction as the cycle's upserts (retire_stale_pending).
 """
 from __future__ import annotations
 
@@ -92,7 +94,10 @@ import logging
 import math
 import os
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 import psycopg2
@@ -136,6 +141,24 @@ UPSERT_QUERY = """
         generated_at = now()
     WHERE LP_Recommendation.status = 'pending'
 """
+
+# --retire-stale-pending. The cycle's rows, read inside the cycle's
+# transaction; a real run adds FOR UPDATE so no planner can accept or dismiss
+# one between this read and the DELETE (a dry run can't: a READ ONLY
+# transaction refuses row locks). rows_to_retire() picks from them.
+CYCLE_ROWS_QUERY = "SELECT * FROM LP_Recommendation WHERE planning_cycle_date = %s ORDER BY product_key"
+
+# Keyed on exactly the rows just saved to the CSV, and still guarded on the
+# cycle and 'pending', so it can never remove a decided row or another
+# cycle's.
+RETIRE_QUERY = """
+    DELETE FROM LP_Recommendation
+    WHERE recommendation_key = ANY(%s)
+      AND planning_cycle_date = %s
+      AND status = 'pending'
+"""
+
+RETIRED_DIR = Path(__file__).resolve().parent.parent / "reports" / "lp_runs"
 
 # Category A (latest classification_period) with a Forecast_Result row at
 # the latest forecast_date, status='ok', mase < MASE_GATE. Both "latest"
@@ -368,6 +391,58 @@ def fetch_stock_and_cost(cur, product_keys: list[int]) -> dict[int, tuple[bool, 
     }
 
 
+def rows_to_retire(rows: list[dict], planning_cycle_date, solved_keys: set[int]) -> list[dict]:
+    """The rows --retire-stale-pending removes: this cycle's pending rows for
+    products this run did not solve. Accepted and dismissed rows, and every
+    other cycle's rows, are never among them."""
+    return [r for r in rows
+            if r["planning_cycle_date"] == planning_cycle_date
+            and r["status"] == "pending"
+            and int(r["product_key"]) not in solved_keys]
+
+
+def retire_stale_pending(
+    cur, planning_cycle_date, solved_keys: set[int], dry_run: bool, out_dir: Path = RETIRED_DIR,
+) -> tuple[list[dict], Path | None]:
+    """Delete this cycle's pending rows for products outside the run, after
+    saving them, every column, to out_dir/retired_<cycle>_<UTC time>.csv.
+    Returns (rows, csv path). A dry run only reads: it returns the rows it
+    would retire and no path. Called inside cycle_transaction(), after the
+    upserts, so the refresh and the retirement land together or not at all."""
+    cur.execute(CYCLE_ROWS_QUERY + ("" if dry_run else " FOR UPDATE"), (planning_cycle_date,))
+    columns = [d[0] for d in cur.description]
+    rows = rows_to_retire([dict(zip(columns, r)) for r in cur.fetchall()], planning_cycle_date, solved_keys)
+    if dry_run or not rows:
+        return rows, None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"retired_{planning_cycle_date}_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.csv"
+    pd.DataFrame(rows, columns=columns).to_csv(path, index=False)
+    cur.execute(RETIRE_QUERY, ([int(r["recommendation_key"]) for r in rows], planning_cycle_date))
+    if cur.rowcount != len(rows):
+        raise RuntimeError(f"retiring cycle {planning_cycle_date} deleted {cur.rowcount} row(s), expected "
+                           f"{len(rows)}; the cycle is rolled back, so {path} lists rows that were NOT retired")
+    return rows, path
+
+
+@contextmanager
+def cycle_transaction(cur, dry_run: bool):
+    """One planning cycle's writes as one transaction: its upserts and, with
+    --retire-stale-pending, its retirements commit together or not at all.
+    A real run's connection is autocommit, so this opens the transaction
+    itself. A dry run is already inside its single READ ONLY transaction
+    (see main()) and gets nothing here."""
+    if dry_run:
+        yield
+        return
+    cur.execute("BEGIN")
+    try:
+        yield
+    except BaseException:
+        cur.execute("ROLLBACK")
+        raise
+    cur.execute("COMMIT")
+
+
 def product_input(
     product_key: int, sku_id: str, principal: str, forecast: float, sigma_d: float,
     stock_and_cost: dict, history: pd.DataFrame, prior_year: int,
@@ -521,6 +596,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also write the per-product plan to this CSV (with --dry-run too).",
     )
     parser.add_argument(
+        "--retire-stale-pending", action="store_true",
+        help="Delete the cycle's pending rows for products this run did not plan (a rerun otherwise leaves "
+             "them showing orders solved against older forecasts), in the same transaction as the cycle's "
+             "upserts, after saving them to reports/lp_runs/retired_<cycle>_<time>.csv. Accepted and "
+             "dismissed rows and other cycles are never touched. With --dry-run, only reports what it would retire.",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Compute and report everything, write nothing: the database session is read-only.",
     )
@@ -656,6 +738,7 @@ def main():
     rows_written = 0
     rows_kept_decided = 0
     stale_pending_by_cycle: dict = {}
+    retired_by_cycle: dict = {}  # planning_cycle_date -> (rows retired, CSV path or None)
     total_ss_by_cycle: dict = {}
     infeasible_cycles: list[tuple] = []
     csv_rows: list[dict] = []
@@ -686,27 +769,36 @@ def main():
 
         cycle_written = cycle_kept = 0
         total_ss_by_cycle[planning_cycle_date] = sum(s.safety_stock for s in plan.skus)
-        for product, sku in zip(products, plan.skus):
-            q_i, ss_i = plan.orders[sku.sku_id], sku.safety_stock
-            decided = existing.get(product.product_key, "pending") != "pending"
-            if args.dry_run:
-                short = sku.need - q_i
-                logger.info(f"  [dry run] {sku.sku_id}: order {q_i:,.0f} of need {sku.need:,.0f}"
-                            f"{f' (short {short:,.0f})' if short > 0.5 else ''} · target {sku.target_stock:,.0f} "
-                            f"(SS {ss_i:,.0f}) · stock {sku.stock_on_hand:,.0f} · forecast {sku.demand:,.0f}"
-                            f"{'  (decided row — would be kept as is)' if decided else ''}")
-            elif not save_result(product.product_key, planning_cycle_date, q_i, sku.target_stock, ss_i):
-                decided = True
-            if decided:
-                cycle_kept += 1
-            else:
-                cycle_written += 1
+        with cycle_transaction(cur, args.dry_run):
+            for product, sku in zip(products, plan.skus):
+                q_i, ss_i = plan.orders[sku.sku_id], sku.safety_stock
+                decided = existing.get(product.product_key, "pending") != "pending"
+                if args.dry_run:
+                    short = sku.need - q_i
+                    logger.info(f"  [dry run] {sku.sku_id}: order {q_i:,.0f} of need {sku.need:,.0f}"
+                                f"{f' (short {short:,.0f})' if short > 0.5 else ''} · target {sku.target_stock:,.0f} "
+                                f"(SS {ss_i:,.0f}) · stock {sku.stock_on_hand:,.0f} · forecast {sku.demand:,.0f}"
+                                f"{'  (decided row — would be kept as is)' if decided else ''}")
+                elif not save_result(product.product_key, planning_cycle_date, q_i, sku.target_stock, ss_i):
+                    decided = True
+                if decided:
+                    cycle_kept += 1
+                else:
+                    cycle_written += 1
+            if args.retire_stale_pending:
+                retired, retired_csv = retire_stale_pending(cur, planning_cycle_date, written_keys, args.dry_run)
+                retired_by_cycle[planning_cycle_date] = (len(retired), retired_csv)
         rows_written += cycle_written
         rows_kept_decided += cycle_kept
         verb = "would be upserted" if args.dry_run else "upserted into LP_Recommendation (status='pending')"
         logger.info(f"  Cycle {planning_cycle_date}: {cycle_written} row(s) {verb}"
                     f"{f'; {cycle_kept} decided row(s) kept as they were' if cycle_kept else ''}.")
-        if stale:
+        if args.retire_stale_pending:
+            count, retired_csv = retired_by_cycle[planning_cycle_date]
+            logger.info(f"  Cycle {planning_cycle_date}: {count} pending row(s) for products outside this run's pool "
+                        f"{'would be retired' if args.dry_run else 'retired'}"
+                        f"{f', saved first to {retired_csv}' if retired_csv else ''}.")
+        elif stale:
             logger.warning(f"  Cycle {planning_cycle_date}: {len(stale)} existing pending row(s) are for products outside "
                            f"this run's pool and are left unchanged: product_key {stale[:10]}{'...' if len(stale) > 10 else ''}")
 
@@ -748,8 +840,11 @@ def main():
     for cycle_date, total_ss in total_ss_by_cycle.items():
         logger.info(f"  Total SS_i in {cycle_date}: {total_ss:,.0f} pieces "
                     f"(review + lead = {args.review_days + args.lead_days:g} business days)")
+    for cycle_date, (count, retired_csv) in retired_by_cycle.items():
+        logger.info(f"  Pending rows {'that would be ' if args.dry_run else ''}retired in {cycle_date} "
+                    f"(products outside this run's pool): {count}{f' -> {retired_csv}' if retired_csv else ''}")
     for cycle_date, stale in stale_pending_by_cycle.items():
-        if stale:
+        if stale and not args.retire_stale_pending:
             logger.info(f"  Pending rows left unchanged in {cycle_date} (products outside this run's pool): {len(stale)}")
     for cycle_date, count in older_pending:
         logger.info(f"  Older cycle still pending: {cycle_date} ({count} row(s))")
