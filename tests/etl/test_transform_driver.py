@@ -120,7 +120,7 @@ def test_zero_silent_skips_every_sheet_is_accounted_for(staging_dir):
 
 
 def test_quantity_issues_flags_zero_negative_outlier_without_dropping(staging_dir):
-    """DEC-13: zero/negative/outlier quantities are flagged, never
+    """DEC-15: zero/negative/outlier quantities are flagged, never
     dropped - the promoted sheet still carries all 4 rows even though 3
     of them get flagged."""
     manifest = build_transform_manifest(staging_dir)

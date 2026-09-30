@@ -383,7 +383,7 @@ class ForecastResult(Base):
     forecast_value: Mapped[decimal.Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     confidence_lower: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
     confidence_upper: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
-    mape: Mapped[decimal.Decimal | None] = mapped_column(Numeric(6, 3))  # percent; reported, never a gate (the LP gates on mase)
+    mape: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 3))  # schema.sql and live: NUMERIC(10,3); percent; reported, never a gate (the LP gates on mase)
     model_params: Mapped[dict | None] = mapped_column(JSONB)             # SARIMA order etc., stored as given
     generated_at: Mapped[datetime.datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
