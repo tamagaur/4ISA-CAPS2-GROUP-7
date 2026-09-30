@@ -325,3 +325,63 @@ def test_whole_units_round_up_but_ignore_float_noise():
     assert whole_units(9818339.99) == 9818340
     assert whole_units(1782.0000000002) == 1782
     assert whole_units(10.0) == 10
+
+
+def _item_row(**overrides):
+    row = {"recommendation_key": 1, "sku_id": "U-1", "product_name": "Uni One", "principal": "unilever",
+           "planning_cycle_date": "2026-03-01", "status": "pending", "tier": "A", "revenue_share": 0.03,
+           "ss_i": 10.0, "current_stock_cases": None, "stock_value_pesos": None, "avg_monthly_sales_pesos": None}
+    return {**row, **overrides}
+
+
+def test_short_units_is_the_lp_arithmetic_since_the_target_stock_run():
+    """Since the 2026-09-30 run, q_i = the month's forecast + target (rop_i)
+    - stock, less any cut to fit the allocation. The live figures for the
+    Reorder page's #1 (filled) and #11 (cut) rows, and an overstocked SKU."""
+    from backend.routers.recommendations import _to_item
+
+    filled = _to_item(_item_row(forecast_units=20970.0, rop_i=14418.0, current_stock=22.0, q_i=35366.0))
+    assert filled.forecast_units == 20970.0
+    assert filled.short_units == 0.0
+
+    cut = _to_item(_item_row(forecast_units=5800.0, rop_i=3867.0, current_stock=8.0, q_i=7524.0))
+    assert cut.short_units == pytest.approx(5800.0 + 3867.0 - 8.0 - 7524.0)
+
+    # Stock above forecast + target: the need floors at 0 and orders 0 — not short.
+    over = _to_item(_item_row(forecast_units=677.78, rop_i=504.9, current_stock=2689.0, q_i=0.0))
+    assert over.short_units == 0.0
+
+    # Float noise under a piece is rounding, not a cut.
+    assert _to_item(_item_row(forecast_units=100.0, rop_i=50.0, current_stock=0.0, q_i=149.4)).short_units == 0.0
+
+    # Nothing to work it out from: unknown, never 0.
+    assert _to_item(_item_row(forecast_units=None, rop_i=50.0, current_stock=0.0, q_i=10.0)).short_units is None
+    assert _to_item(_item_row(forecast_units=100.0, rop_i=50.0, current_stock=None, q_i=10.0)).short_units is None
+
+
+def test_forecast_is_the_cycle_months_own():
+    """The forecast the row is explained by is the one for its planning
+    month — joined on the cycle date, never the product alone (which would
+    fan a row out across every forecast month)."""
+    from backend.routers.recommendations import select_one
+
+    sql, _ = select_one()
+    assert "fr.forecast_date = lr.planning_cycle_date" in " ".join(sql.split())
+    assert "fr.forecast_value AS forecast_units" in sql
+
+
+def test_response_carries_forecast_and_short(sample_rows):
+    sample_rows[0].update(forecast_units=40.0)  # need = 40 + 30 - 120 < 0 -> 0
+    session = FakeSession(
+        sample_rows,
+        stock_by_period={(1, "2026-03"): 120.0},
+        inventory_period_by_scope={None: "2026-03", "unilever": "2026-03", "delmonte": "2025-12"},
+        abc_period_by_scope={None: "2026-02", "unilever": "2026-02", "delmonte": None},
+    )
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
+    with TestClient(app) as c:
+        item = c.get("/recommendations?principal=unilever",
+                     headers={"Authorization": f"Bearer {user_token()}"}).json()["items"][0]
+    assert item["forecast_units"] == 40.0
+    assert item["short_units"] == 0.0

@@ -94,7 +94,7 @@ from backend.principals import (
     principal_clause,
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
-from backend.data_mode import PREVIEW, REAL, get_data_mode, lp_source, predictive_preview, preview_block
+from backend.data_mode import PREVIEW, REAL, forecast_source, get_data_mode, lp_source, predictive_preview, preview_block
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info
 from backend.lp_cycle import freshness as lp_freshness
 from backend.stock_units import NO_PACK_SIZE_REASON, STOCK_AT_PERIOD_SQL
@@ -127,9 +127,12 @@ _SELECT_ONE = f"""
         inv.stock_value_pesos AS stock_value_pesos,
         abc.revenue_share AS revenue_share,
         abc.tier AS tier,
-        sales.avg_monthly_sales_pesos AS avg_monthly_sales_pesos
+        sales.avg_monthly_sales_pesos AS avg_monthly_sales_pesos,
+        fr.forecast_value AS forecast_units
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
+    LEFT JOIN Forecast_Result fr
+      ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
     LEFT JOIN (
         {STOCK_AT_PERIOD_SQL}
     ) inv ON inv.product_key = lr.product_key
@@ -162,14 +165,22 @@ _SELECT_ONE = f"""
 
 _LP_FROM = "FROM lp_recommendation lr"
 assert _SELECT_ONE.count(_LP_FROM) == 1
+_FC_JOIN = "LEFT JOIN Forecast_Result fr"
+assert _SELECT_ONE.count(_FC_JOIN) == 1
 
 
 def select_one(mode: str = REAL) -> tuple[str, dict]:
     """_SELECT_ONE and its extra params for `mode`: in preview with built
-    outputs its one LP read comes from backend/data_mode.lp_source(); every
-    other join (stock, ABC, recent sales) is the real one either way."""
+    outputs its LP read comes from backend/data_mode.lp_source() and its
+    forecast read from forecast_source(), so a what-if row is explained by
+    the what-if forecast it was solved against; every other join (stock,
+    ABC, recent sales) is the real one either way."""
     lp, params = lp_source(mode, "lp_recommendation")
-    return (_SELECT_ONE if lp == "lp_recommendation" else _SELECT_ONE.replace(_LP_FROM, f"FROM {lp} lr")), params
+    fc, fc_params = forecast_source(mode, "Forecast_Result")
+    sql = _SELECT_ONE if lp == "lp_recommendation" else _SELECT_ONE.replace(_LP_FROM, f"FROM {lp} lr")
+    if fc != "Forecast_Result":
+        sql = sql.replace(_FC_JOIN, f"LEFT JOIN {fc} fr")
+    return sql, {**params, **fc_params}
 
 
 # Average days per calendar month (365.25 / 12) — the same "documented
@@ -224,6 +235,20 @@ def _to_item(r) -> RecommendationItem:
     )
     days_of_cover, cover_reason = _cover(_opt_float(r, "stock_value_pesos"), _opt_float(r, "avg_monthly_sales_pesos"))
 
+    # The LP's own arithmetic since the 2026-09-30 run (scripts/run_lp.py):
+    # need = the cycle month's forecast + target stock (rop_i) - stock on
+    # hand, floored at 0, and q_i is that need less any cut made to fit the
+    # supplier allocation. Without the forecast on the page, q_i can't be
+    # read off the row (target 14,418 - stock 22 = 14,396 against an order
+    # of 35,365), and a row cut to fit the allocation looks identical to a
+    # filled one. short_units is that cut: the row ends the month short of
+    # its target by this much. Under 1 piece is rounding, not a cut.
+    forecast = _opt_float(r, "forecast_units")
+    short_units = None
+    if forecast is not None and stock is not None:
+        short = max(0.0, forecast + rop - stock) - float(r["q_i"])
+        short_units = round(short, 2) if short >= 1.0 else 0.0
+
     return RecommendationItem(
         recommendation_key=r["recommendation_key"],
         sku_id=r["sku_id"] or "",
@@ -243,6 +268,8 @@ def _to_item(r) -> RecommendationItem:
         stockout_gap=stockout_gap,
         priority_score=priority_score,
         days_of_cover=days_of_cover,
+        forecast_units=forecast,
+        short_units=short_units,
         cover_blocked_reason=cover_reason,
     )
 

@@ -293,8 +293,8 @@
   cursor: not-allowed;
 }
 
-/* Current stock against the reorder point: below half = critical, below
-   ROP = low. Weight carries part of the signal so it isn't color-only. */
+/* Current stock against the target stock (rop_i): below half = critical, below
+   target = low. Weight carries part of the signal so it isn't color-only. */
 .reorder-stock-cell {
   font-weight: 500;
 }
@@ -457,4 +457,16 @@
 
 .reorder-accept-confirm:hover {
   background-color: var(--color-brand-hover);
+}
+
+/* An LP qty the allocation cut short (GET /recommendations' short_units):
+   a second line under the quantity, amber like the "watch" tier — the SKU
+   is still ordered, just not up to its target. */
+.reorder-short-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-severity-urgent);
+  white-space: nowrap;
 }

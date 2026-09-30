@@ -69,9 +69,11 @@ class FakeSession:
 
 CYCLE = datetime.date(2026, 3, 1)
 ROWS = [
-    {"planning_cycle_date": CYCLE, "ss_i": 40.0, "forecast_value": 100.0, "sku_id": "A1", "product_name": "SMALL GAP", "principal": "unilever"},
-    {"planning_cycle_date": CYCLE, "ss_i": 10.0, "forecast_value": 500.0, "sku_id": "B2", "product_name": "BIG GAP", "principal": "unilever"},
-    {"planning_cycle_date": CYCLE, "ss_i": None, "forecast_value": 80.0, "sku_id": "C3", "product_name": "NO SS", "principal": "unilever"},
+    # rop_i is the LP's target stock since the 2026-09-30 run. A1's target
+    # sits ABOVE its 3 weeks (volatile SKU), B2's well below it.
+    {"planning_cycle_date": CYCLE, "ss_i": 40.0, "rop_i": 120.0, "forecast_value": 100.0, "sku_id": "A1", "product_name": "ABOVE RULE", "principal": "unilever"},
+    {"planning_cycle_date": CYCLE, "ss_i": 10.0, "rop_i": 60.0, "forecast_value": 500.0, "sku_id": "B2", "product_name": "BIG GAP", "principal": "unilever"},
+    {"planning_cycle_date": CYCLE, "ss_i": None, "rop_i": 50.0, "forecast_value": 80.0, "sku_id": "C3", "product_name": "NO SS", "principal": "unilever"},
 ]
 
 
@@ -101,15 +103,21 @@ def test_per_sku_rule_vs_lp_and_rollup():
     # The row with no ss_i is dropped from BOTH sides, never one.
     assert [i["sku_id"] for i in body["items"]] == ["B2", "A1"]  # biggest gap first
     big = body["items"][0]
-    assert big["rule_safety_stock_units"] == pytest.approx(3 * 500.0 / AVG_WEEKS_PER_MONTH, rel=1e-4)
-    assert big["difference_units"] == pytest.approx(3 * 500.0 / AVG_WEEKS_PER_MONTH - 10.0, rel=1e-4)
+    assert big["rule_stock_units"] == pytest.approx(3 * 500.0 / AVG_WEEKS_PER_MONTH, rel=1e-4)
+    assert big["rule_safety_stock_units"] == big["rule_stock_units"]  # old name kept
+    assert big["lp_target_stock_units"] == pytest.approx(60.0)
+    # The gap is target vs rule — the like-for-like pair — not ss vs rule.
+    assert big["difference_units"] == pytest.approx(3 * 500.0 / AVG_WEEKS_PER_MONTH - 60.0, rel=1e-4)
     rule_total = 3 * 600.0 / AVG_WEEKS_PER_MONTH
     pf = body["portfolio"]
     assert pf["sku_count"] == 2
+    assert pf["lp_target_stock_units"] == pytest.approx(180.0)
     assert pf["lp_safety_stock_units"] == pytest.approx(50.0)
-    assert pf["rule_safety_stock_units"] == pytest.approx(rule_total, rel=1e-4)
+    assert pf["rule_stock_units"] == pytest.approx(rule_total, rel=1e-4)
+    assert pf["target_vs_rule_pct"] == pytest.approx(round((rule_total - 180.0) / rule_total * 100, 1))
     assert pf["lp_vs_rule_pct"] == pytest.approx(round((rule_total - 50.0) / rule_total * 100, 1))
-    assert pf["skus_lp_holds_less"] == 2
+    # A1's target is above its 3 weeks, so only B2 holds less.
+    assert pf["skus_lp_holds_less"] == 1
 
 
 def test_money_and_stockout_fields_are_null_with_reason():
@@ -140,4 +148,5 @@ def test_blocked_when_nothing_compares():
         body = c.get("/policy-comparison", headers={"Authorization": f"Bearer {user_token()}"}).json()
     assert body["items"] == []
     assert body["portfolio"]["lp_vs_rule_pct"] is None
+    assert body["portfolio"]["target_vs_rule_pct"] is None
     assert body["blocked_reason"]

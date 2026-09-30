@@ -637,7 +637,7 @@ const SKUManagement = () => {
                     <th className="col-fit">Brand</th>
                     <th className="col-text col-product">Product</th>
                     <th className="table-center col-fit">Cat</th>
-                    <th className="table-num col-fit">Reorder pt</th>
+                    <th className="table-num col-fit" title="The stock level the LP orders up to: demand expected before the next delivery, plus safety stock">Target stock</th>
                     <th className="table-center col-fit"><span className="visually-hidden">Actions</span></th>
                   </tr>
                 </thead>

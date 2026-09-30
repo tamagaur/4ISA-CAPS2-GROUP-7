@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { Check, Calendar, FlaskConical } from 'lucide-react';
-import { DEFAULT_PRINCIPAL, PRINCIPALS } from '../principals';
+import { DEFAULT_PRINCIPAL, SELECTABLE_PRINCIPALS } from '../principals';
 import { DATA_MODES, isPreviewMode } from '../dataMode';
 import './Topbar.css';
 
@@ -61,7 +61,7 @@ const Topbar = ({
         {showPrincipalFilter && (
           <div className="principal-filter">
             <div className="principal-segmented" role="tablist" aria-label="Principal filter">
-              {PRINCIPALS.map((p) => (
+              {SELECTABLE_PRINCIPALS.map((p) => (
                 <button
                   key={p.key}
                   type="button"
@@ -75,7 +75,7 @@ const Topbar = ({
               ))}
             </div>
             {/* Below 640px the segmented control doesn't fit, so the same
-                three options collapse into a native select (CSS swaps
+                principal options collapse into a native select (CSS swaps
                 which one is visible — they're never both shown). */}
             <div className="principal-dropdown">
               <select
@@ -84,7 +84,7 @@ const Topbar = ({
                 value={principal}
                 onChange={(e) => setPrincipal(e.target.value)}
               >
-                {PRINCIPALS.map((p) => (
+                {SELECTABLE_PRINCIPALS.map((p) => (
                   <option key={p.key} value={p.key}>{p.label}</option>
                 ))}
               </select>

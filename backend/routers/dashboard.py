@@ -294,12 +294,19 @@ zero):
     of revenue_share over the below-SS products (a share of the WHOLE
     period's revenue, not of Tier A's).
   policy_comparison
-    — {cycle_date, sku_count, lp_safety_stock_units, rule_safety_stock_units,
-    lp_vs_rule_pct, rule_weeks, blocked_reason}. lp_vs_rule_pct is how much
-    less buffer the LP holds, as a percent of the rule (negative = more).
+    — {cycle_date, sku_count, lp_target_stock_units, lp_safety_stock_units,
+    rule_stock_units, target_vs_rule_pct, lp_target_weeks, skus_above_rule,
+    lp_vs_rule_pct, rule_weeks, window_business_days,
+    inputs_are_placeholders, blocked_reason} (rule_safety_stock_units is
+    rule_stock_units under its pre-2026-09-30 name). target_vs_rule_pct is
+    the headline: how much less stock the LP's per-SKU targets (rop_i, the
+    order-up-to level T_i since the 2026-09-30 run) hold than the rule, as a
+    percent of the rule (negative = more). lp_vs_rule_pct is safety stock
+    alone against the rule, kept as a detail — SSM's 3 weeks is a target for
+    all stock, not a buffer, so it is not the like-for-like figure.
     The per-SKU rows behind these sums are GET /policy-comparison
     (policy_comparison.py) — keep the two queries in step. Sums, over the latest pending planning
-    cycle, the LP's ss_i against what SSM's own stock policy would hold
+    cycle, the LP's rop_i and ss_i against what SSM's own stock policy would hold
     (keep three weeks of sales in stock — client meeting, Sep 2026):
     POLICY_WEEKS x (that product's own Forecast_Result.forecast_value for
     the same month / AVG_WEEKS_PER_MONTH). Both sides are on the demand
@@ -334,6 +341,7 @@ from backend.data_mode import (
     unilever_demand,
 )
 from analytics.classification.abc import abc_rules
+from analytics.optimization.lp_inputs import PLACEHOLDERS
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
@@ -1562,7 +1570,7 @@ def get_dashboard(
         },
     }
 
-    # ---- policy_comparison (band 4: LP safety stock vs SSM's 3-week policy) --
+    # ---- policy_comparison (band 4: LP target stock vs SSM's 3-week policy) --
     # One row per product in the latest pending cycle that ALSO has a
     # Forecast_Result for that same month (fr.forecast_date =
     # lr.planning_cycle_date); products missing the forecast drop out of
@@ -1570,7 +1578,7 @@ def get_dashboard(
     # docstring section above for why this stays in units, not pesos.
     policy_rows = db.execute(
         text(f"""
-            SELECT lr.planning_cycle_date, lr.ss_i, fr.forecast_value
+            SELECT lr.planning_cycle_date, lr.ss_i, lr.rop_i, fr.forecast_value
             FROM {lp_src} lr
             JOIN Product_Dimension pd ON pd.product_key = lr.product_key
             JOIN {fc_src} fr
@@ -1581,31 +1589,65 @@ def get_dashboard(
         """),
         {"current_cycle": lp_cycle, **lp_params, **fc_params},
     ).mappings().all()
-    policy_rows = [r for r in policy_rows if r["forecast_value"] is not None and r["ss_i"] is not None]
+    policy_rows = [
+        r for r in policy_rows
+        if r["forecast_value"] is not None and r["ss_i"] is not None and r["rop_i"] is not None
+    ]
     if policy_rows:
         cycle = policy_rows[0]["planning_cycle_date"]
         lp_units = sum(float(r["ss_i"]) for r in policy_rows)
-        rule_units = sum(POLICY_WEEKS * float(r["forecast_value"]) / AVG_WEEKS_PER_MONTH for r in policy_rows)
+        # rop_i holds the LP's per-SKU target stock since the 2026-09-30 run
+        # (scripts/run_lp.py: order up to T_i = demand over review + lead
+        # days + safety stock). SSM's 3 weeks is a target for ALL stock,
+        # not a buffer on top of it, so target-vs-rule is the like-for-like
+        # headline; safety stock alone against the rule's whole 3 weeks read
+        # 35.2% "less" when the targets actually hold 18.2% more.
+        target_units = sum(float(r["rop_i"]) for r in policy_rows)
+        forecast_units = sum(float(r["forecast_value"]) for r in policy_rows)
+        rule_units = POLICY_WEEKS * forecast_units / AVG_WEEKS_PER_MONTH
         policy_comparison = {
             "cycle_date": cycle.isoformat() if hasattr(cycle, "isoformat") else str(cycle),
             "sku_count": len(policy_rows),
+            "lp_target_stock_units": round(target_units, 2),
             "lp_safety_stock_units": round(lp_units, 2),
+            # What SSM's policy holds: 3 weeks of each SKU's forecast. Kept
+            # under its old name too, for any caller still reading it.
+            "rule_stock_units": round(rule_units, 2),
             "rule_safety_stock_units": round(rule_units, 2),
-            # How much less (positive) or more (negative) buffer the LP holds
-            # than the rule, as a percent of the rule — the one-number
-            # headline IMPLEMENTATION_PLAN Phase 1.1 asks for.
+            # How much less (positive) or more (negative) stock the LP's
+            # targets hold than the rule, as a percent of the rule — the
+            # one-number headline IMPLEMENTATION_PLAN Phase 1.1 asks for.
+            "target_vs_rule_pct": round((rule_units - target_units) / rule_units * 100, 1) if rule_units > 0 else None,
+            # The targets as weeks of the same forecast, beside rule_weeks.
+            "lp_target_weeks": round(target_units / (forecast_units / AVG_WEEKS_PER_MONTH), 2) if forecast_units > 0 else None,
+            "skus_above_rule": sum(
+                1 for r in policy_rows
+                if float(r["rop_i"]) > POLICY_WEEKS * float(r["forecast_value"]) / AVG_WEEKS_PER_MONTH
+            ),
+            # Safety stock alone against the rule — no longer the headline.
             "lp_vs_rule_pct": round((rule_units - lp_units) / rule_units * 100, 1) if rule_units > 0 else None,
             "rule_weeks": POLICY_WEEKS,
+            # The window the safety stock covers, from the same placeholder
+            # dict the run takes its defaults from (lp_model_info).
+            "window_business_days": PLACEHOLDERS["review_days"] + PLACEHOLDERS["lead_days"],
+            "inputs_are_placeholders": True,
             "blocked_reason": None,
         }
     else:
         policy_comparison = {
             "cycle_date": None,
             "sku_count": 0,
+            "lp_target_stock_units": None,
             "lp_safety_stock_units": None,
+            "rule_stock_units": None,
             "rule_safety_stock_units": None,
+            "target_vs_rule_pct": None,
+            "lp_target_weeks": None,
+            "skus_above_rule": None,
             "lp_vs_rule_pct": None,
             "rule_weeks": POLICY_WEEKS,
+            "window_business_days": PLACEHOLDERS["review_days"] + PLACEHOLDERS["lead_days"],
+            "inputs_are_placeholders": True,
             "blocked_reason": (
                 f"No pending LP_Recommendation for {_scope_label(scope)} has a Forecast_Result "
                 "for its own planning-cycle month, so the two policies can't be compared."

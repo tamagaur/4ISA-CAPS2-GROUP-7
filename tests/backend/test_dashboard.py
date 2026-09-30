@@ -149,7 +149,7 @@ class FakeSession:
         self.scoped_forecast_count = scoped_forecast_count
         self.portfolio_actual = portfolio_actual or {}
         self.reco_preview_rows = reco_preview_rows or []
-        # policy_comparison rows: [{planning_cycle_date, ss_i, forecast_value}]
+        # policy_comparison rows: [{planning_cycle_date, ss_i, rop_i, forecast_value}]
         self.policy_rows = policy_rows or []
         self.lp_cycle_date = lp_cycle_date
         self.lp_superseded_pending = lp_superseded_pending
@@ -940,8 +940,8 @@ def test_safety_stock_exposure_blocked_when_nothing_measurable():
 
 def test_policy_comparison_sums_lp_ss_against_three_week_rule():
     session = FakeSession(policy_rows=[
-        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "forecast_value": 100.0},
-        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 10.0, "forecast_value": 50.0},
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "rop_i": 120.0, "forecast_value": 100.0},
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 10.0, "rop_i": 30.0, "forecast_value": 50.0},
     ])
     with make_client(session) as c:
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
@@ -954,6 +954,28 @@ def test_policy_comparison_sums_lp_ss_against_three_week_rule():
     assert pc["lp_vs_rule_pct"] == pytest.approx(round((rule - 50.0) / rule * 100, 1))
     assert pc["rule_weeks"] == 3
     assert pc["blocked_reason"] is None
+
+
+def test_policy_comparison_headline_is_target_stock_vs_rule():
+    """rop_i is the LP's target stock since the 2026-09-30 run. SSM's 3 weeks
+    is a target for ALL stock, so the headline compares the targets with it:
+    comparing safety stock alone read "less" when the targets hold more."""
+    session = FakeSession(policy_rows=[
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "rop_i": 120.0, "forecast_value": 100.0},
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 10.0, "rop_i": 30.0, "forecast_value": 50.0},
+    ])
+    with make_client(session) as c:
+        pc = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["policy_comparison"]
+    rule = 3 * 150.0 / AVG_WEEKS_PER_MONTH
+    assert pc["lp_target_stock_units"] == pytest.approx(150.0)
+    assert pc["rule_stock_units"] == pytest.approx(rule, rel=1e-4)
+    # Targets above the rule read as MORE (negative), while ss alone reads less.
+    assert pc["target_vs_rule_pct"] == pytest.approx(round((rule - 150.0) / rule * 100, 1))
+    assert pc["target_vs_rule_pct"] < 0 < pc["lp_vs_rule_pct"]
+    assert pc["lp_target_weeks"] == pytest.approx(round(150.0 / (150.0 / AVG_WEEKS_PER_MONTH), 2))
+    assert pc["skus_above_rule"] == 1  # 120 > 3 weeks of 100; 30 < 3 weeks of 50
+    assert pc["window_business_days"] == 8.0
+    assert pc["inputs_are_placeholders"] is True
 
 
 def test_principal_echoes_the_requested_scope():
@@ -971,6 +993,8 @@ def test_policy_comparison_blocked_when_no_comparable_rows():
     assert pc["lp_safety_stock_units"] is None
     assert pc["rule_safety_stock_units"] is None
     assert pc["lp_vs_rule_pct"] is None
+    assert pc["target_vs_rule_pct"] is None
+    assert pc["lp_target_stock_units"] is None
     assert pc["blocked_reason"]
 
 
@@ -1076,7 +1100,9 @@ def test_lp_rerun_that_left_rows_behind_is_still_flagged():
     assert lp["is_stale"] is True
     assert (lp["row_count"], lp["stale_row_count"]) == (250, 177)
     assert "177 of the 250 rows" in lp["reason"]
-    assert "rerun will not change them" in lp["reason"].lower()
+    # A plain rerun still leaves them; only --retire-stale-pending clears them.
+    assert "plain rerun leaves them" in lp["reason"].lower()
+    assert "--retire-stale-pending" in lp["reason"]
 
     # Counted against the forecast run, within the page's own principal.
     sql, params = _sql_for(session, "MAX(lr.generated_at) AS t")
@@ -1400,7 +1426,7 @@ def _lp_rich_session():
     return FakeSession(
         recommendation_count=5,
         reco_preview_rows=[_reco_row(1, urgency_stock=0, rop_i=100)],
-        policy_rows=[{"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "forecast_value": 100.0}],
+        policy_rows=[{"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "rop_i": 120.0, "forecast_value": 100.0}],
         latest_abc_period="2024-02",
         abc_rows=[_abc_row(1, "A", "2024-02", 0.30, current_stock=10, ss_i=50)],
         tier_stock_rows=[

@@ -917,7 +917,7 @@ const SKUForecast = () => {
             <h3 className="forecast-empty-title">{DEL_MONTE_NO_FORECAST}</h3>
             <p className="forecast-empty-body">
               Del Monte is ranked by product category on the ABC Classification page. Switch the scope to
-              Unilever or All principals to forecast a SKU.
+              Unilever to forecast a SKU.
             </p>
             <button className="forecast-range-fix-btn" onClick={() => navigate('/abc')}>
               Open ABC Classification

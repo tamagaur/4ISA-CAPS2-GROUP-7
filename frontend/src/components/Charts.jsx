@@ -6,14 +6,13 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
-import { HelpCircle, ArrowRight, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { HelpCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
 import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { ChartTable, ChartViewToggle } from './ChartTable';
-import { DEFAULT_PRINCIPAL, PRINCIPALS, labelForPrincipal } from '../principals';
 import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
@@ -428,16 +427,10 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Sales vs Stock on Hand <span className="chart-unit">₱</span></h4>
-          <p>
-            Monthly revenue and stock-on-hand valuation, in pesos.
-            {hasReceived
-              ? ' The purchases-received line stands in for the supplier allocation schedule, which SSM has not yet provided — it is what was bought, not an allocation.'
-              : ' No purchases line: Unilever has no purchase records, so the line appears only in the Del Monte view.'}
-            {/* GET /dashboard's vat_note — only under All principals, where the
-                combined pesos mix Unilever's VAT-inclusive amounts with Del
-                Monte's VAT-exclusive ones. */}
-            {note ? ` ${note}` : ''}
-          </p>
+          {/* GET /dashboard's vat_note — only under All principals, where the
+              combined pesos mix Unilever's VAT-inclusive amounts with Del
+              Monte's VAT-exclusive ones. */}
+          {note && <p>{note}</p>}
           {/* The backend's takeaway sentence, from the same rows this
               chart plots (sales_vs_stock_insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
@@ -967,6 +960,17 @@ const WAREHOUSE_STATUS_COLORS = {
   noData: SEMANTIC.noData,
 };
 
+// One tier's exact counts, for the detail line under the bars. Pending
+// reorder is null when the account can't see LP figures (no lp.view).
+const tierStockDetail = (row) => {
+  const pending = row.pendingReorderCount ?? null;
+  const noData = row.noData || 0;
+  return `Tier ${row.tier} — active: ${(row.inStock || 0).toLocaleString()}, `
+    + `dead stock (Inactive): ${(row.deadStock || 0).toLocaleString()}`
+    + (pending != null ? `, pending reorder: ${pending.toLocaleString()}` : '')
+    + (noData ? `, no inventory record: ${noData.toLocaleString()}` : '');
+};
+
 // One bar per ABC tier — `data` is
 // [{ tier: 'A'|'B'|'C', inStock, deadStock, noData, pendingReorderCount }],
 // from GET /dashboard's tier_stock. Each bar splits that tier's classified
@@ -1003,16 +1007,21 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
   // CSS (no Recharts here), so it's applied by hand rather than picked up
   // for free.
   const disableAnim = prefersReducedMotion();
+  // The tier whose counts the detail line under the bars shows — set by
+  // hover, keyboard focus or a tap (2026-09-30: was a native title tooltip
+  // that floated over the bars below it).
+  const [activeTier, setActiveTier] = useState(null);
+  const activeRow = data.find((row) => row.tier === activeTier) || null;
 
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+    <div className={`chart-widget tier-stock-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Active / dead stock by ABC tier (warehouse status)</h4>
           <p>
             Counts each tier&apos;s products by the warehouse&apos;s own Active/Inactive flag on the latest
-            stock snapshot — not by whether stock covers the reorder point (that is the ABC page&apos;s
-            &ldquo;Cover vs reorder point&rdquo;).
+            stock snapshot — not by whether stock covers the LP&apos;s target stock (that is the ABC page&apos;s
+            &ldquo;Cover vs target stock&rdquo;).
           </p>
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
           {note && <p className="chart-placeholder-note">{note}</p>}
@@ -1022,7 +1031,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
       {!hasData ? (
         <p className="dashboard-empty-note">{emptyReason || 'No stock status data available'}</p>
       ) : (
-        <div className="chart-widget-body">
+        <div className="chart-widget-body tier-stock-body">
           {/* When no tier has a single Inactive product, the bars alone
               just read "everything is green" — say the finding outright.
               The month is GET /dashboard's tier_stock_period (the snapshot
@@ -1036,12 +1045,13 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
               </span>
             </p>
           )}
-          <div className="tier-stock-bars">
+          <div
+            className={`tier-stock-bars${activeRow ? ' has-active' : ''}`}
+            onMouseLeave={() => setActiveTier(null)}
+          >
             {data.map((row, index) => {
               const inStock = row.inStock || 0;
               const deadStock = row.deadStock || 0;
-              // null when the account can't see LP figures (no lp.view).
-              const pendingReorderCount = row.pendingReorderCount ?? null;
               const noData = row.noData || 0;
               const total = inStock + deadStock + noData;
               // Floor at a visible width for any segment that's genuinely
@@ -1050,17 +1060,12 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
               // indistinguishable from "actually zero." A truly-zero count
               // stays at 0% — this never invents a value, it only keeps a
               // real one from being visually erased. Exact figures are
-              // still in this row's title tooltip regardless.
+              // still in the detail line under the bars regardless.
               const MIN_VISIBLE_PCT = 1.5;
               const pct = (v) => {
                 if (total <= 0 || v <= 0) return 0;
                 return Math.max((v / total) * 100, MIN_VISIBLE_PCT);
               };
-              const title =
-                `Tier ${row.tier} — active: ${inStock.toLocaleString()}, ` +
-                `dead stock (Inactive): ${deadStock.toLocaleString()}` +
-                (pendingReorderCount != null ? `, pending reorder: ${pendingReorderCount.toLocaleString()}` : '') +
-                (noData ? `, no inventory record: ${noData.toLocaleString()}` : '');
               // Each row's bar sweeps in staggered by tier — same duration/
               // easing/stagger constants the Recharts widgets on this page
               // use (CHART_ANIM_DURATION/STAGGER), just applied as CSS
@@ -1071,8 +1076,20 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
                     '--tier-anim-duration': `${CHART_ANIM_DURATION}ms`,
                     '--tier-anim-delay': `${index * CHART_ANIM_STAGGER}ms`,
                   };
+              // Focusable so keyboard users reach the same detail line;
+              // a tap sets it too (touch has no hover), and it clears when
+              // focus or the pointer leaves the bars.
               return (
-                <div className="tier-stock-row" key={row.tier} title={title}>
+                <div
+                  className={`tier-stock-row${row.tier === activeTier ? ' is-active' : ''}`}
+                  key={row.tier}
+                  tabIndex={0}
+                  aria-label={tierStockDetail(row)}
+                  onMouseEnter={() => setActiveTier(row.tier)}
+                  onFocus={() => setActiveTier(row.tier)}
+                  onBlur={() => setActiveTier(null)}
+                  onClick={() => setActiveTier(row.tier)}
+                >
                   <span className="tier-stock-label">{row.tier}</span>
                   <div className={`tier-stock-track${disableAnim ? '' : ' is-animated'}`} style={animStyle}>
                     {total <= 0 ? (
@@ -1089,6 +1106,12 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
               );
             })}
           </div>
+          {/* The hovered / focused / tapped tier's exact counts, under the
+              bars instead of over them. The hint holds the line's height so
+              the legend doesn't jump when a tier is picked. */}
+          <p className={`tier-stock-detail${activeRow ? '' : ' is-hint'}`} aria-live="polite">
+            {activeRow ? tierStockDetail(activeRow) : 'Hover or tap a bar for its counts.'}
+          </p>
           <ul className="custom-legend">
             <li className="legend-item">
               <span className="legend-color" style={{ backgroundColor: WAREHOUSE_STATUS_COLORS.active, borderRadius: '3px' }} />
@@ -1114,7 +1137,12 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
             <p className="chart-placeholder-note">
               Pending reorder recommendations in the LP&apos;s current cycle:{' '}
               {data.map((row) => `${row.tier} ${(row.pendingReorderCount || 0).toLocaleString()}`).join(' · ')}.
-              {' '}The LP plans Category A; rows now in B or C come from a cycle solved against an earlier ABC run.
+              {' '}The LP plans Category A
+              {/* Only true while an older run's rows linger in the cycle —
+                  the 2026-09-30 run retired them, leaving B and C at 0. */}
+              {data.some((row) => row.tier !== 'A' && (row.pendingReorderCount || 0) > 0)
+                ? '; rows now in B or C come from a cycle solved against an earlier ABC run.'
+                : '.'}
             </p>
           )}
         </div>
@@ -1154,9 +1182,13 @@ const PortfolioForecastTooltip = ({ active, payload, label }) => {
 };
 
 // 236k / 1.2M / 940 — the same compaction the pieces axis uses.
-const formatCompactQty = (value) => {
+// millionDigits: the axis passes 2 so a 1,350k tick reads 1.35M, not a
+// rounded 1.4M that sits beside a gridline it doesn't match; trailing
+// zeros are dropped (1.80M -> 1.8M).
+const formatCompactQty = (value, millionDigits = 1) => {
   const n = Math.abs(value);
-  if (n >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  // 999,600 rounds to "1000k" in thousands, so it is shown as 1M instead.
+  if (Math.round(n / 1_000) >= 1_000) return `${parseFloat((value / 1_000_000).toFixed(millionDigits))}M`;
   if (n >= 1_000) return `${Math.round(value / 1_000)}k`;
   return `${Math.round(value)}`;
 };
@@ -1178,8 +1210,6 @@ export const PortfolioForecastWidget = ({
   series = [],
   scopeLabel,
   emptyReason,
-  principal,
-  onPrincipalChange,
   isUpdating = false,
   insight = null,
   // How many SKUs the series sums (GET /dashboard's gated_sku_count) out of
@@ -1262,7 +1292,7 @@ export const PortfolioForecastWidget = ({
   ];
 
   return (
-    <div className={`chart-widget${onPrincipalChange ? ' chart-widget-filterable' : ''}${hasData ? '' : ' chart-widget-empty'}`}>
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           {/* The unit is PIECES here and pesos on the chart above it; the
@@ -1279,44 +1309,10 @@ export const PortfolioForecastWidget = ({
               series (portfolio_forecast.insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
         </div>
-        {/* Card-scoped principal filter — re-scopes THIS card only, never
-            the page (the Topbar's filter does that). Rendered in the empty
-            state too, so a scope with no forecasts can be switched back
-            out of. Own class names, not the Topbar's .principal-segment:
-            CSS is global and that one carries viewport breakpoints meant
-            for the topbar, not a card. */}
-        {onPrincipalChange && (
-          <div className="card-filter-controls">
-            {hasData && <ChartViewToggle view={view} onChange={setView} label="Portfolio forecast: chart or table" />}
-            <div className="card-principal-filter" role="radiogroup" aria-label="Forecast principal">
-              {PRINCIPALS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  role="radio"
-                  aria-checked={principal === p.key}
-                  className={`card-principal-option${principal === p.key ? ' active' : ''}`}
-                  onClick={() => onPrincipalChange(p.key)}
-                >
-                  {p.key === 'all' ? 'All' : p.label}
-                </button>
-              ))}
-            </div>
-            {/* Back to the default scope (Unilever), where this card starts on every visit. */}
-            <button
-              type="button"
-              className="card-filter-reset"
-              onClick={() => onPrincipalChange(DEFAULT_PRINCIPAL)}
-              disabled={principal === DEFAULT_PRINCIPAL}
-              title={principal === DEFAULT_PRINCIPAL
-                ? `Already showing ${labelForPrincipal(DEFAULT_PRINCIPAL)}`
-                : `Reset to ${labelForPrincipal(DEFAULT_PRINCIPAL)}`}
-            >
-              <RotateCcw size={12} aria-hidden="true" />
-              Reset
-            </button>
-          </div>
-        )}
+        {/* The card follows the Topbar's principal filter like the rest of
+            the page (2026-09-30). Its own All / Del Monte / Unilever + Reset
+            filter is on branch parked/all-principals-filter. */}
+        {hasData && <ChartViewToggle view={view} onChange={setView} label="Portfolio forecast: chart or table" />}
       </div>
 
       {!hasData && isUpdating ? (
@@ -1379,7 +1375,7 @@ export const PortfolioForecastWidget = ({
                       tickLine={false}
                       domain={['auto', 'auto']}
                       tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
-                      tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                      tickFormatter={(v) => formatCompactQty(v, 2)}
                     />
                     <Tooltip content={<PortfolioForecastTooltip />} />
                     {/* The uncertainty cone is this chart's ONE fill — the
@@ -1664,35 +1660,71 @@ export const ReorderRecommendationWidget = ({
   );
 };
 
-// LP safety stock vs SSM's own 3-week stock policy — GET /dashboard's
-// policy_comparison. Two bars on one scale, in the demand series' unit
-// (pieces): what the LP's per-SKU safety stock (SS_i) sums to across the
-// latest planning cycle, and what holding three weeks of each SKU's own
-// forecast would sum to. The 3 weeks is SSM's stated policy (client
-// meeting, Sep 2026: keep three weeks of sales in the warehouse), applied
-// here per SKU to the same forecasts the LP used, so the two sides are
-// like for like. Units, not pesos — no per-piece cost exists to
-// value the difference honestly (backend/routers/dashboard.py's
-// policy_comparison docstring). The policy bar is slate (a baseline, no
-// verdict) and the LP bar indigo (a model output), per the SEMANTIC rule.
+// LP target stock vs SSM's own 3-week stock policy — GET /dashboard's
+// policy_comparison, in the demand series' unit (pieces). SSM's policy
+// (client meeting, Sep 2026: keep three weeks of sales in the warehouse)
+// is applied per SKU to the same forecasts the LP used. Since the
+// 2026-09-30 LP run each SKU has a target stock (demand over the review +
+// lead window plus safety stock), and THAT is what compares with 3 weeks:
+// both are how much stock to hold. Until then this card set the LP's
+// safety stock alone against the rule's whole 3 weeks, which read "35.2%
+// less" when the targets hold 18.2% more. The LP bar is stacked into its
+// two parts — sales until the next delivery, then safety stock — so the
+// buffer is visible inside the target. Units, not pesos — no
+// agreed per-piece cost exists (the backend's policy_comparison
+// docstring). The policy bar is slate (a baseline, no verdict), the LP
+// bars indigo (model output), per the SEMANTIC rule.
 export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
   const c = comparison || {};
-  const hasData = c.lp_safety_stock_units != null && c.rule_safety_stock_units != null;
-  const max = hasData ? Math.max(c.lp_safety_stock_units, c.rule_safety_stock_units, 1) : 1;
+  const ruleUnits = c.rule_stock_units ?? c.rule_safety_stock_units;
+  const hasData = c.lp_target_stock_units != null && ruleUnits != null;
+  const max = hasData ? Math.max(c.lp_target_stock_units, ruleUnits, 1) : 1;
+  const ruleWeeks = c.rule_weeks ?? 3;
+  // The LP target is two parts added together, so it is ONE stacked bar
+  // rather than a target bar plus a separate safety-stock bar (which read as
+  // a third policy): the sales expected until the next delivery arrives,
+  // and the safety stock on top for demand above the forecast. Both are
+  // steps of the LP's indigo, validated as a pair (dataviz
+  // validate_palette.js: CVD ΔE 19.9, normal 21.5); the lighter one is
+  // under 3:1 against the surface, so the legend below labels both parts
+  // with their figures rather than leaving them to colour.
+  const windowDays = c.window_business_days != null ? Number(c.window_business_days) : null;
+  const safetyUnits = c.lp_safety_stock_units;
+  const cycleUnits = hasData && safetyUnits != null ? Math.max(c.lp_target_stock_units - safetyUnits, 0) : null;
+  const lpParts = cycleUnits != null
+    ? [
+      {
+        key: 'cycle',
+        label: 'Sales until the next delivery',
+        note: windowDays != null ? `${windowDays.toFixed(0)} business days of forecast sales` : 'forecast sales over the review period + lead time',
+        value: cycleUnits,
+        color: SEMANTIC.recommendation,
+      },
+      {
+        key: 'safety',
+        label: 'Safety stock',
+        note: 'buffer for demand above the forecast',
+        value: safetyUnits,
+        color: '#A5A7F6',
+      },
+    ]
+    : [{ key: 'target', label: 'LP target stock', value: c.lp_target_stock_units, color: SEMANTIC.recommendation }];
   const rows = [
-    { key: 'rule', label: `SSM ${c.rule_weeks ?? 3}-week policy`, value: c.rule_safety_stock_units, color: SEMANTIC.noData },
-    { key: 'lp', label: 'LP safety stock (SS\u1d62)', value: c.lp_safety_stock_units, color: SEMANTIC.recommendation },
-  ];
+    { key: 'rule', label: `SSM ${ruleWeeks}-week policy`, value: ruleUnits, color: SEMANTIC.noData,
+      parts: [{ key: 'rule', label: `SSM ${ruleWeeks}-week policy`, value: ruleUnits, color: SEMANTIC.noData }] },
+    { key: 'target', label: 'LP target stock', value: c.lp_target_stock_units, color: SEMANTIC.recommendation, parts: lpParts },
+  ].filter((r) => r.value != null);
+  const pieces = (v) => `${Math.round(v).toLocaleString()} pieces`;
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Safety stock: LP vs SSM&apos;s 3-week policy</h4>
+          <h4>Stock target: LP vs SSM&apos;s 3-week policy</h4>
           <p>
-            Total buffer stock each policy would hold across the latest planning cycle, in demand units.
-            SSM&apos;s policy (client meeting, Sep 2026) keeps three weeks of sales in stock — applied here as
-            3 weeks of each SKU&apos;s own forecast; LP = the per-SKU safety stock the optimizer solved for.
+            How much stock each policy would hold across the latest planning cycle, in pieces.
+            SSM&apos;s policy keeps three weeks of each SKU&apos;s own forecast in stock; the LP sets a
+            per-SKU target instead — the demand expected before the next delivery plus a safety buffer.
           </p>
         </div>
       </div>
@@ -1702,15 +1734,26 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
       ) : (
         <div className="chart-widget-body">
           {/* The one-number headline (IMPLEMENTATION_PLAN Phase 1.1-1.2):
-              units and percent, never pesos. lp_vs_rule_pct is how much
-              less buffer the LP holds than the rule; negative = more. */}
-          {c.lp_vs_rule_pct != null && (
+              units and percent, never pesos. target_vs_rule_pct is how much
+              less stock the LP's targets hold than the rule; negative = more. */}
+          {c.target_vs_rule_pct != null && (
             <p className="policy-headline">
-              <span className="policy-headline-number">{Math.abs(c.lp_vs_rule_pct).toFixed(1)}%</span>
+              <span className="policy-headline-number">{Math.abs(c.target_vs_rule_pct).toFixed(1)}%</span>
               <span className="policy-headline-text">
-                {c.lp_vs_rule_pct >= 0 ? 'less' : 'more'} safety stock under the LP policy than SSM&apos;s{' '}
-                {c.rule_weeks ?? 3}-week policy, across {c.sku_count} SKUs
+                {c.target_vs_rule_pct >= 0 ? 'less' : 'more'} stock under the LP&apos;s per-SKU targets than
+                SSM&apos;s {ruleWeeks}-week policy
+                {c.lp_target_weeks != null ? ` — ${Number(c.lp_target_weeks).toFixed(2)} weeks of sales against ${ruleWeeks}` : ''},
+                across {c.sku_count} SKUs
               </span>
+            </p>
+          )}
+          {/* Where the difference comes from: the targets move stock between
+              SKUs by how volatile each one's demand is, rather than giving
+              every SKU the same 3 weeks. */}
+          {c.skus_above_rule != null && (
+            <p className="dashboard-chart-footnote">
+              {c.skus_above_rule} of {c.sku_count} SKUs get a target above {ruleWeeks} weeks (the ones with the
+              most volatile demand); the other {c.sku_count - c.skus_above_rule} get less.
             </p>
           )}
           <div className="policy-bars">
@@ -1718,33 +1761,55 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
               <div className="policy-bar-row" key={r.key}>
                 <span className="policy-bar-label">{r.label}</span>
                 {/* Meter rule: the unfilled track is a lighter step of the
-                    fill's own hue, so each bar reads as one meter. */}
+                    fill's own hue, so each bar reads as one meter. Each part
+                    of a stacked bar carries its own hover title. */}
                 <div
                   className="policy-bar-track"
                   role="img"
-                  aria-label={`${r.label}: ${Math.round(r.value).toLocaleString()} units`}
+                  aria-label={r.parts.length > 1
+                    ? `${r.label}: ${pieces(r.value)} — ${r.parts.map((part) => `${part.label.toLowerCase()} ${pieces(part.value)}`).join(' + ')}`
+                    : `${r.label}: ${pieces(r.value)}`}
                   style={{ background: `color-mix(in srgb, ${r.color} 12%, var(--color-surface))` }}
                 >
-                  <span style={{ width: `${(r.value / max) * 100}%`, backgroundColor: r.color }} />
+                  {r.parts.map((part) => (
+                    <span
+                      key={part.key}
+                      title={`${part.label}: ${pieces(part.value)}`}
+                      style={{ width: `${(part.value / max) * 100}%`, backgroundColor: part.color }}
+                    />
+                  ))}
                 </div>
-                <span className="policy-bar-value">{Math.round(r.value).toLocaleString()} units</span>
+                <span className="policy-bar-value">{pieces(r.value)}</span>
               </div>
             ))}
           </div>
+          {/* What the LP bar is made of, with each part's figure — the
+              labels the lighter segment's contrast requires. */}
+          {lpParts.length > 1 && (
+            <ul className="custom-legend policy-parts-legend">
+              {lpParts.map((part) => (
+                <li className="legend-item" key={part.key}>
+                  <span className="legend-color" style={{ backgroundColor: part.color, borderRadius: '3px' }} />
+                  <span>
+                    <strong>{part.label}</strong> {pieces(part.value)}
+                    <span className="policy-part-note"> · {part.note}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="dashboard-chart-footnote">
-            {c.sku_count} SKUs in the {formatMonth(c.cycle_date)} cycle with a forecast for that month; both sides in
-            units of the demand series (pieces), the unit the safety stock itself is solved in, so the two
-            are compared without a peso conversion.
+            {c.sku_count} SKUs in the {formatMonth(c.cycle_date)} cycle with a forecast for that month, all in
+            pieces — the unit the LP solves in — so the policies compare without a peso conversion.
           </p>
-          {/* The headline depends on how many days of demand variability the
-              LP's safety stock covers — run_lp.py's --protection-days, 1
-              business day by default. Stated beside the number, since it
-              changes the answer (reports/PROJECT_DIAGNOSIS_2026-09-21.md). */}
+          {/* The headline moves most with the safety stock's window and the
+              placeholders behind it (analytics/optimization/lp_inputs.py),
+              so they are stated beside the number. */}
           <p className="policy-assumption">
-            <strong>Assumption:</strong> the LP&apos;s safety stock covers the demand variability of the protection
-            period it was run with (scripts/run_lp.py --protection-days; the default is 1 business day, with no
-            review period or lead time). The comparison is sensitive to that setting, which is still an open
-            planning decision.
+            <strong>Assumption:</strong> the safety stock covers
+            {c.window_business_days != null ? ` ${Number(c.window_business_days).toFixed(0)} business days` : ' the review period plus lead time'}{' '}
+            (weekly orders, delivered 2–3 days later), assuming demand is independent from one day to the
+            next.{c.inputs_are_placeholders ? ' These are placeholder inputs until SSM confirms them, and the headline is sensitive to them.' : ''}
           </p>
         </div>
       )}

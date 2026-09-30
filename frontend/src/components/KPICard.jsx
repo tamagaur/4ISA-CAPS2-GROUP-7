@@ -95,9 +95,12 @@ const Sparkline = ({ points, color }) => {
 // deltaTone: 'positive' | 'negative' | 'neutral' — renders deltaLine as a
 // shaded pill coloured by the change itself, independent of the card's
 // accent tier. Without it, deltaLine keeps the tier-coloured text line.
+// unit: a short muted word after the value ("SKUs"); callers leave it off
+// when the card is blocked and the value is "—".
 const KPICard = ({
   title,
   value,
+  unit,
   icon,
   metricType,
   direction,
@@ -126,7 +129,10 @@ const KPICard = ({
         {icon && <div className="kpi-icon" style={{ color: accentColor }}>{icon}</div>}
       </div>
       <div className="kpi-value-row">
-        <div className="kpi-value">{value}</div>
+        <div className="kpi-value">
+          {value}
+          {unit && <span className="kpi-unit">{unit}</span>}
+        </div>
         {trend && <Sparkline points={trend.points} color={trend.color} />}
       </div>
       <div className="kpi-footer">

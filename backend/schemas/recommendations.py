@@ -46,7 +46,7 @@ class RecommendationItem(BaseModel):
     principal: str
     planning_cycle_date: datetime.date
     q_i: float  # recommended order quantity
-    rop_i: float  # reorder point
+    rop_i: float  # target stock T_i (order-up-to level) since the 2026-09-30 run; was the reorder point
     ss_i: float  # safety stock
     status: str  # 'pending' | 'accepted' | 'dismissed'
     # PIECES since 2026-09-23 (backend/stock_units.py), the same unit as
@@ -66,6 +66,13 @@ class RecommendationItem(BaseModel):
     priority_score: float | None = None
     days_of_cover: float | None = None
     cover_blocked_reason: str | None = None
+    # The cycle month's Forecast_Result.forecast_value, in pieces: with it,
+    # q_i = forecast + rop_i - current_stock, less short_units.
+    forecast_units: float | None = None
+    # How far the order falls short of reaching rop_i (the target) because
+    # the supplier allocation couldn't cover the whole need. 0 when filled;
+    # None without a forecast or a stock figure to work it out from.
+    short_units: float | None = None
 
 
 class RecommendationsResponse(BaseModel):

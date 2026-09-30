@@ -95,15 +95,15 @@ const CLASS_ARCHETYPE = {
 // Copy for the drill-down panel's footer note, one per class — swapped
 // in based on whichever class the user has clicked in the chart above.
 const CLASS_DRILLDOWN_NOTE = {
-  A: 'Top-value SKUs below their reorder point or out of stock are the highest-priority reorders — a stockout here has the biggest revenue impact.',
-  B: 'Mid-value SKUs below their reorder point are worth a proactive reorder check before they slip toward a stockout.',
-  C: 'Long-tail SKUs below their reorder point are the lowest-priority reorders by revenue, but still worth a periodic check so they don\u2019t go fully out of stock unnoticed.',
+  A: 'Top-value SKUs below their target stock or out of stock are the highest-priority reorders — a stockout here has the biggest revenue impact.',
+  B: 'Mid-value SKUs below their target stock are worth a proactive reorder check before they slip toward a stockout.',
+  C: 'Long-tail SKUs below their target stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don\u2019t go fully out of stock unnoticed.',
 };
 
-// GET /abc's stock_status values are a COVER-vs-REORDER-POINT test
+// GET /abc's stock_status values are a COVER-vs-TARGET-STOCK test (rop_i, the LP's target stock since the 2026-09-30 run)
 // (backend/routers/abc.py's _stock_status): current stock in pieces against
-// the SKU's own reorder point from the LP's current cycle. A SKU the LP does
-// not plan has no reorder point and reads NO ROP — until 2026-09-29 it was
+// the SKU's own target stock from the LP's current cycle. A SKU the LP does
+// not plan has no target stock and reads NO ROP — until 2026-09-29 it was
 // judged against a flat 100 cases instead. They are NOT the warehouse's
 // Active/Inactive flag — that is what the Dashboard's "Active / dead stock by
 // ABC tier (warehouse status)" widget shows. Both used to say "In stock", and
@@ -111,13 +111,13 @@ const CLASS_DRILLDOWN_NOTE = {
 // 0 SKUs" here for the same month. The backend strings are unchanged; the
 // labels below say what each one actually means.
 const STATUS_LABELS = {
-  'IN STOCK': 'Above reorder point',
-  LOW: 'Below reorder point',
+  'IN STOCK': 'Above target stock',
+  LOW: 'Below target stock',
   CRITICAL: 'Out of stock',
-  'NO ROP': 'No reorder point',
+  'NO ROP': 'No target stock',
   'NO DATA': 'No stock record',
   // For an account without lp.view the backend sends ON HAND instead of the
-  // three statuses that compare stock with the LP's reorder point (Yuan's
+  // three statuses that compare stock with the LP's target stock (Yuan's
   // permissions proposal: LP figures follow lp.view everywhere).
   'ON HAND': 'Stock on hand',
 };
@@ -875,22 +875,22 @@ const ABCClassification = () => {
                 <div className="abc-pareto-header">
                   <div className="abc-pareto-title-group">
                     <h3 className="abc-pareto-title">
-                      {`${panel.label ? `${panel.label} — ` : ''}${lpHidden ? 'Stock status' : 'Cover vs reorder point'}, by class`}
+                      {`${panel.label ? `${panel.label} — ` : ''}${lpHidden ? 'Stock status' : 'Cover vs target stock'}, by class`}
                     </h3>
                     <p className="abc-pareto-subtitle">
                       {isDelMonte ? (
                         <>
-                          Del Monte has no stock record or reorder point at category grain, so every Del Monte row
+                          Del Monte has no stock record or target stock at category grain, so every Del Monte row
                           shows No data here.
                         </>
                       ) : lpHidden ? (
                         <>
-                          Whether each SKU has stock. The comparison with its reorder point needs the
+                          Whether each SKU has stock. The comparison with its target stock needs the
                           reorder-recommendation permission, which this account doesn&apos;t have.
                         </>
                       ) : (
                         <>
-                          Compares each SKU&apos;s current stock, in pieces, with its own reorder point from the LP&apos;s
+                          Compares each SKU&apos;s current stock, in pieces, with its own target stock from the LP&apos;s
                           current planning cycle. The LP plans Category A only, so most B and C SKUs have no reorder
                           point to compare against. Not the warehouse&apos;s Active/Inactive flag, which is what the
                           Dashboard&apos;s warehouse-status chart shows.
@@ -1014,7 +1014,7 @@ const ABCClassification = () => {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="abc-drilldown-hint">Click a class's bar above to drill into its {lpHidden ? 'stock status' : 'cover vs reorder point'}.</p>
+                <p className="abc-drilldown-hint">Click a class's bar above to drill into its {lpHidden ? 'stock status' : 'cover vs target stock'}.</p>
                 <div className="abc-class-summary-row">
                   {panel.classAggregates.map((entry) => (
                     <div key={entry.cat} className="abc-class-summary-item">
@@ -1035,7 +1035,7 @@ const ABCClassification = () => {
               <div className="abc-pareto-container abc-analysis-drilldown">
                 <div className="abc-pareto-header">
                   <h3 className="abc-pareto-title">
-                    {`${panel.label ? `${panel.label} — ` : ''}Drill-down · Class ${selectedClass} ${lpHidden ? 'stock status' : 'cover vs reorder point'}`}
+                    {`${panel.label ? `${panel.label} — ` : ''}Drill-down · Class ${selectedClass} ${lpHidden ? 'stock status' : 'cover vs target stock'}`}
                   </h3>
                 </div>
                 {/* Tab buttons — same class-switching as clicking the chart,
@@ -1075,7 +1075,7 @@ const ABCClassification = () => {
                   </tbody>
                 </table>
                 {/* The class notes are SKU reorder guidance; Del Monte rows
-                    are categories with no stock or reorder point (the chart's
+                    are categories with no stock or target stock (the chart's
                     subtitle says so), so there is nothing here to act on. */}
                 {!isDelMonte && (
                   <p className="abc-page-grain-note">
@@ -1336,7 +1336,7 @@ const ABCClassification = () => {
                   <th className="table-center col-fit">Cat</th>
                   <th className="table-center col-fit" title="Fast / Slow / Non-moving over the 12 months with data up to this run">FSN</th>
                   <th className="table-num col-fit" title={`Share of revenue in the run the ${rowNoun.one} was classified in`}>Rev %</th>
-                  <th className="col-fit">Cover vs ROP</th>
+                  <th className="col-fit" title="Current stock, in pieces, against the LP's target stock for the SKU">Cover vs target</th>
                 </tr>
               </thead>
               <tbody>

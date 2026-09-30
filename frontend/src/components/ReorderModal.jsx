@@ -45,6 +45,7 @@ const COVER_BASIS_NOTE =
 const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
   if (!isOpen || !data) return null;
   const weightRows = objectiveWeights(lpModel);
+  const inputs = lpModel?.inputs || {};
 
   return (
     <Modal
@@ -105,8 +106,13 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
         {/* How the LP arrived at this quantity — Story #80 */}
         <div className="reorder-why-section">
           <h4 className="reorder-section-title">How this recommendation was made</h4>
+          {/* The 2026-09-30 model (scripts/run_lp.py): order up to a target,
+              net of stock on hand, within the allocation. The weights only
+              decide who comes up short when the allocation can't cover
+              every SKU's need — they no longer set every quantity. */}
           <p className="reorder-why-intro">
-            The LP model weighs three objectives when solving for this SKU's order quantity:
+            The LP orders each SKU up to its target stock, net of what is already on hand. When the
+            allocation can&apos;t cover every SKU, these weights decide which ones come up short:
           </p>
           {/* Single 100%-stacked bar — these three weights are shares of one
               whole (they sum to 100%), so one composite bar is the correct
@@ -133,9 +139,16 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
             </div>
           </div>
           <p className="reorder-why-note">
-            Constraints applied: each SKU is ordered at least up to its reorder point
-            {lpModel?.z_score != null && <> (forecast + safety stock at Z = {lpModel.z_score})</>}, and the
-            cycle&apos;s total must fit the warehouse capacity and each principal&apos;s supplier limit.
+            Target stock = demand expected over the review period and delivery lead time
+            {inputs.review_days != null && inputs.lead_days != null
+              && <> ({inputs.review_days} + {inputs.lead_days} business days)</>}
+            {' '}plus safety stock{lpModel?.z_score != null && <> at Z = {lpModel.z_score}</>}. The cycle&apos;s
+            total order stays within the supplier allocation
+            {inputs.allocation_pct != null && <> ({inputs.allocation_pct}% of last year&apos;s sales)</>} and the
+            warehouse capacity, and SSM&apos;s {inputs.target_weeks ?? 3}-week rule is kept
+            {inputs.cover_rule === 'per-sku' ? ' as a floor for each SKU' : ' across the whole warehouse, at cost'} where
+            the allocation allows.
+            {lpModel?.inputs_are_placeholders && ' These inputs are placeholders until SSM confirms them.'}
           </p>
         </div>
     </Modal>

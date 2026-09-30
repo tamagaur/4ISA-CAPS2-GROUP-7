@@ -9,7 +9,7 @@ import {
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
-import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
+import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL } from '../principals';
 import { staleCoverageNotice } from '../dataCoverage';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
@@ -290,34 +290,11 @@ const Dashboard = () => {
   const [error, setError] = useState(null); // { key, message }
   const loadedKey = loaded?.key;
 
-  // The portfolio forecast card has its OWN principal filter, independent
-  // of the Topbar's page-wide one — switching it re-scopes that card only.
-  // When the two match, the card reads the page's own payload; otherwise
-  // it fetches GET /dashboard for its own scope (same period range),
-  // through the same response cache, so flipping back and forth never
-  // refetches a scope already loaded this session.
-  //
-  // Deliberately not remembered (no localStorage, unlike the Topbar's
-  // filter): every visit to the dashboard starts this card on the default
-  // scope, Unilever (principals.js), and its Reset button returns it there.
+  // Every card, the portfolio forecast included, follows the Topbar's
+  // principal filter (2026-09-30). The forecast card's own filter, and the
+  // separate GET /dashboard it fetched for that scope, are on branch
+  // parked/all-principals-filter.
   const pagePrincipal = principal ?? DEFAULT_PRINCIPAL;
-  const [forecastPrincipal, setForecastPrincipal] = useState(DEFAULT_PRINCIPAL);
-  const forecastKey = `${period ?? ''}|${startPeriod ?? ''}|${forecastPrincipal}`;
-  const forecastFollowsPage = forecastPrincipal === pagePrincipal;
-  const [cardForecast, setCardForecast] = useState(null); // { key, data, reliability, error }
-  const cardForecastKey = cardForecast?.key;
-  useEffect(() => {
-    if (forecastFollowsPage || cardForecastKey === forecastKey) return undefined;
-    let cancelled = false;
-    getDashboardData({ period, startPeriod, principal: forecastPrincipal })
-      .then((res) => {
-        if (!cancelled) setCardForecast({ key: forecastKey, data: res.portfolio_forecast || {}, reliability: res.forecast || null });
-      })
-      .catch(() => {
-        if (!cancelled) setCardForecast({ key: forecastKey, data: null, error: true });
-      });
-    return () => { cancelled = true; };
-  }, [forecastFollowsPage, cardForecastKey, forecastKey, period, startPeriod, forecastPrincipal]);
 
   useEffect(() => {
     if (loadedKey === requestKey) return undefined;
@@ -494,20 +471,10 @@ const Dashboard = () => {
     pendingReorderCount: t.pending_reorder_count,
   }));
 
-  // While the card's own scope is loading, keep the last thing it showed
-  // on screen (dimmed) rather than blanking it.
-  const cardForecastReady = cardForecast?.key === forecastKey;
-  const forecastUpdating = !forecastFollowsPage && !cardForecastReady;
-  const forecastError = !forecastFollowsPage && cardForecastReady && cardForecast.error;
-  const portfolioForecast = forecastFollowsPage
-    ? data.portfolio_forecast || {}
-    : (cardForecast?.data ?? data.portfolio_forecast) || {};
-  // The card's own scope for the MASE reliability count too (GET
-  // /dashboard's forecast block), so the two never describe different
-  // principals. Null while that scope is still loading.
-  const forecastReliability = forecastFollowsPage
-    ? data.forecast || null
-    : (cardForecastReady ? cardForecast?.reliability ?? null : null);
+  // The page's own payload, so the card and the MASE reliability count
+  // (GET /dashboard's forecast block) describe the page's principal.
+  const portfolioForecast = data.portfolio_forecast || {};
+  const forecastReliability = data.forecast || null;
   // A real-only forecast card in preview has nothing in the placeholder
   // months by construction — dropped rather than drawn as a blank run.
   const portfolioSeries = (portfolioForecast.series || [])
@@ -650,6 +617,7 @@ const Dashboard = () => {
             <KPICard
               title="Below safety stock"
               value={belowSs.value}
+              unit={belowSs.value === '—' ? undefined : exposure.comparable_count === 1 ? 'SKU' : 'SKUs'}
               metricType={belowSs.value === '—' ? undefined : ssTier}
               contextLine={belowSs.contextLine}
               icon={<AlertTriangle size={20} />}
@@ -657,6 +625,7 @@ const Dashboard = () => {
             <KPICard
               title="Pending reorder actions"
               value={lpHidden ? '—' : pendingCount.toLocaleString()}
+              unit={lpHidden ? undefined : pendingCount === 1 ? 'SKU' : 'SKUs'}
               metricType={lpHidden ? undefined : 'recommendation'}
               contextLine={lpHidden ? LP_HIDDEN_NOTE : pendingContext}
               icon={<ClipboardList size={20} />}
@@ -702,16 +671,11 @@ const Dashboard = () => {
                 // The local sentence only stands in if it is ever missing,
                 // so the card can't fall back to a generic "No forecast data".
                 emptyReason={
-                  forecastError
-                    ? `Couldn't load the forecast for ${labelForPrincipal(forecastPrincipal)}.`
-                    : portfolioForecast.scope_label
-                      || (forecastPrincipal === 'delmonte'
-                        ? 'No SKU-level forecasts for Del Monte — it has no SKU-level sales data, only category sell-out.'
-                        : undefined)
+                  portfolioForecast.scope_label
+                    || (pagePrincipal === 'delmonte'
+                      ? 'No SKU-level forecasts for Del Monte — it has no SKU-level sales data, only category sell-out.'
+                      : undefined)
                 }
-                principal={forecastPrincipal}
-                onPrincipalChange={setForecastPrincipal}
-                isUpdating={forecastUpdating}
                 reliability={forecastReliability}
                 insight={portfolioForecast.insight}
               />
