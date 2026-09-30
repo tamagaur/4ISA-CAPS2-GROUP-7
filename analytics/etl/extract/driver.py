@@ -13,12 +13,26 @@ DEC-04: only raw_data sheets from ssis_summary are promoted to the
 sales_unilever_ssis_summary fact in Transform/Load; other sheet roles
 are staged here for auditability.
 
-Usage: python -m analytics.etl.extract.driver
+2026-09-30: the Unilever SOH sheets (ssis_soh) are extracted here too, after
+the 8 families - previously only by the gitignored scratch/run_ssis_soh_extract.py.
+They go through parse_ssis_soh, not the generic loop, because rule R2 dedupes
+one snapshot date across every SSIS workbook at once.
+
+Single-file mode (2026-09-30): --file PATH [--file ...] stages only those files,
+into --staging-dir (default staging_slices/_extract), never into staging/ - a
+full run is the only thing that writes staging/. The slice loader
+(scripts/load_slices.py) makes the same process_file + write_staging_table calls.
+
+Usage:
+    python -m analytics.etl.extract.driver
+    python -m analytics.etl.extract.driver --file "data/raw/Del Monte/.../2025 DECEMBER SALES REGISTER.xlsx"
 """
 from __future__ import annotations
 
+import argparse
 import sys
 import time
+from pathlib import Path
 
 from analytics.etl._review import render_review
 from analytics.etl._timeline import render_timeline
@@ -27,6 +41,7 @@ from analytics.etl.extract._qc import generate_qc_report, save_qc_report
 from analytics.etl.extract._shared import (
     REPO_ROOT,
     build_manifest,
+    process_file,
     save_manifest,
     write_reject,
     write_staging_table,
@@ -52,7 +67,52 @@ FAMILY_PARSERS = [
 ]
 
 
-def main():
+def extract_file(path: Path, staging_dir: Path) -> tuple[int, str | None]:
+    """Stage one raw file under staging_dir, doc_type from its file name
+    (profiling.profile_files.infer_doc_type, the same frozen classification
+    the family drivers select on). Returns (sheets staged, problem or None)."""
+    from profiling.profile_files import infer_doc_type
+    doc_type = infer_doc_type(path)
+    if doc_type == "unknown":
+        return 0, f"{path.name}: file name matches no doc-type pattern"
+    result = process_file(path, doc_type)
+    if result.file_reject is not None:
+        return 0, f"{path.name}: {result.file_reject.reason}"
+    for df, outcome in result.dfs:
+        write_staging_table(df, outcome.doc_type, outcome.src_file, outcome.src_sheet, staging_dir)
+    return len(result.dfs), None if result.dfs else f"{path.name}: no sheet could be staged"
+
+
+def extract_ssis_soh(staging_dir: Path) -> int:
+    """Every in-scope SOH snapshot (analytics.etl.extract.ssis_soh: R1 scope,
+    R2 cross-folder dedupe, R4 date guard) -> staging_dir/ssis_soh/."""
+    from analytics.etl.extract.ssis_soh import parse_ssis_soh
+    result = parse_ssis_soh()
+    for df, rel, sheet_name, _snapshot in result.dfs:
+        write_staging_table(df, "ssis_soh", rel, sheet_name, staging_dir)
+    return len(result.dfs)
+
+
+def main(argv: list[str] | None = None):
+    parser = argparse.ArgumentParser(description="Extract: data/raw -> staging")
+    parser.add_argument("--file", action="append", default=[], metavar="PATH",
+                        help="stage only this raw file (repeatable), into --staging-dir, never staging/")
+    parser.add_argument("--staging-dir", default=None,
+                        help="with --file: where to stage (default staging_slices/_extract)")
+    args = parser.parse_args(argv)
+    if args.file:
+        out = Path(args.staging_dir).resolve() if args.staging_dir else REPO_ROOT / "staging_slices" / "_extract"
+        if out == (REPO_ROOT / "staging").resolve():
+            parser.error("single-file mode never writes staging/ - pick another --staging-dir")
+        problems = []
+        for f in args.file:
+            n, problem = extract_file(Path(f).resolve(), out)
+            print(f"  {Path(f).name}: {n} sheet(s) staged")
+            if problem:
+                problems.append(problem)
+        print(f"Staged under {out}" + (f"; problems: {problems}" if problems else ""))
+        return 1 if problems else 0
+
     staging_dir = REPO_ROOT / "staging"
 
     # Opt-in event log (DSD_EVENTS=1) for the live/replay timeline viewer.
@@ -93,6 +153,10 @@ def main():
                 "reject_count": family_rejects,
                 "duration_ms": (time.perf_counter() - family_t0) * 1000,
             })
+
+        soh_sheets = extract_ssis_soh(staging_dir)
+        written += soh_sheets
+        print(f"ssis_soh: {soh_sheets} SOH snapshot sheet(s) staged")
 
         # staging/_rejects/ is reserved for unreadable files and sheets with no
         # detectable header/data or Magnolia content — never a checksum
@@ -139,4 +203,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

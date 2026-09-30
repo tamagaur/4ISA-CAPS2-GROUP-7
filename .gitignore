@@ -28,6 +28,9 @@ transform/
 # generator scripts themselves stay tracked in scripts/.
 staging_synthetic/
 
+# Per-run slice staging (scripts/load_slices.py) - rewritten every run, never committed.
+staging_slices/
+
 # Python
 __pycache__/
 *.py[cod]

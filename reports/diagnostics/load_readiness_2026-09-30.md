@@ -1,0 +1,31 @@
+# Load readiness rehearsal — 2026-09-30 (kelvin-etl @ c63b1d9)
+
+Scratch `ssm_load_rehearsal` is KEPT for the loader-update session. It holds 17 tables and 9 views copied from public, with counts equal at copy time. Public untouched: all 14 table counts match the start, forecast `generated_at` is still 2026-09-21, and there are no rehearsal run_ids. Gap months (in scratch): Del Monte sales 2025-12 (934 rows / ₱25,779,220.77) replaced by 686 `GEN/2025-12/*` placeholders; Unilever demand 2026-02 (779 / ₱27,914,343.91) replaced by 644 placeholders, 569 of them sharing a key with a real row. Harness scripts live in the session scratchpad, not the repo.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| 3 | Raw file = staged input | PASS | Re-extract through the family parsers: 4/4 staged parquet identical (Dec-2025 register: 3 sheets; La Union SKU file) |
+| 3 | Normal loader into scratch | **FAIL** | Stops at the runner (task 8). Via a wrapper that skips only `ensure_scratch_schema`: the 6 FACT_PLAN facts committed, then it **crashed** after 288 s at ssis_soh (`run_canonical_load.py:2085`). UniqueViolation on (sku_code, snapshot_date, COALESCE(region,''), is_demo): ON CONFLICT (…, region) never matches a NULL region (:2055-2058), so SOH loads only into an empty table. The 5 backfills never ran |
+| 4a | Real rows back, both months | PASS | 934 / ₱25,779,220.77 and 779 / ₱27,914,343.91; EXCEPT ALL vs public 0/0 both ways |
+| 4b | That month's placeholders gone | **FAIL** | DM: 686 remain (`GEN/` keys never collide). UL: 75 remain; 569 were flipped to real in place (`load.py:466-467` updates is_demo) |
+| 4c | Fix 3 derived_cost | **FAIL** | 209 rows now have valuation NULL but are still labelled `derived_cost` |
+| 4c | Fix 4 rmr | present | 224 / ₱1,439,087.79 untouched but not reproduced (the loader never deletes) |
+| 4c | Fix 5 / 6 | present, UNVERIFIED | 187 and 554+43, but the backfills that write product_dimension never ran (crash) |
+| 4c | Fix 7 "(2)" | **FAIL** | 564 / ₱4,932,185.22 back in 2025-04 (962 → 1,526 real rows); b7 quarantine still holds them too, so they now exist twice |
+| 4d | Collateral | **FAIL** | +34,310 demo sales, +305 demo purchases, +236 demo inventory (596 overwritten), 251 demo returns overwritten, +3,023 customers, +9,659 duplicate etl_quarantine rows (no natural key); 1,372 real returns changed `_row_ordinal`; +8 real returns (not investigated) |
+| 4e | File layouts | PASS | No parse or layout error. All 6 frozen `expected_rows` print MISMATCH (stale constants), which gives exit 1 on any run (:2158) |
+| 5 | Chain ABC → bins → forecast | PASS (harness) | ABC 710 / 843 / 4, traits 132, segments 660 + 132, forecasts 132 (119 ok, 13 insufficient): EXCEPT 0/0 vs public, `model_params` included |
+| 8 | Migration runner | **FAIL** | See below |
+| gate | Pooler probe | PASS | 10 pinned transactions on 10 distinct backends (= all Supavisor/postgres backends at probe time); all `default_transaction_read_only = off` |
+
+**5 — steps and order:** (1) Extract: no single-file mode, rewrites all of `staging/` (`driver.py:55-56`), plus `scratch/run_ssis_soh_extract.py` by hand for SOH → (2) a person re-signs Transform (fingerprint gate, `load.py:309-311`) → (3) loader, empty schema only → (4) re-run DM fix batches 3–7 (`apply_dm_fixes_to_public.py`) → (5) ABC ×3: UL single, UL t3m, DM single (`--period`, `--schema` required) → (6) segment, which reads the ABC cohort (`orchestrate_segment.py:69-71`) → (7) forecast `--write`, which reads ABC single Tier A (`run_baseline_forecast.py:134-171`) and never the segment tables.
+
+**What blocks a scratch rehearsal:** ABC and segment `--schema` set the write target only; reads come from public (`orchestrate_abc.py:304,465`). Segment uses `SUPABASE_DIRECT_URL` (`:292`), which does not resolve from this machine, and hardcodes 2023-01..2026-02, `TOTAL_PERIODS=38` and `revenue_share_2026_02` (`:47,51,297`), so a new month needs a code and schema change. The forecaster has no `--schema` and refuses a scratch search_path on the pooled URL (`:96-117`); its report-only mode overwrites `reports/BASELINE_FORECAST_RUN.md` and `reports/baseline_forecast_per_sku.csv` (`:74-76`).
+
+**6 — guard:** only the `_Real` view keeps synthetic rows out of forecasts. `assert_real_rows` (`run_baseline_forecast.py:926`) is still a no-op: `fetch_demand` returns no is_demo column (`:177-183`). `assert_real_history` (`global_model.py:58-70`) checks `series.attrs`, which `build_series` never sets (`:191-197`). The 75 scratch placeholders changed no forecast. Preview mode writes nothing (no DML in `backend/data_mode.py` or `backend/routers/data_mode.py`; the predictive preview reads CSVs from `build_preview_outputs.py`) and never reaches the forecast CLI. The only backend writes to a forecast input are `backend/routers/sku.py:209,277` (product_dimension), which don't depend on data mode.
+
+**7 — no loader:** price lists (regex only, no parser: `profile_files.py:70`, `driver.py:43-52`); RMR GS & BO (staged, cross-check only, `source_of_truth.yaml:106-117`; fix 4 is DB-only); SSIS non-SOH sheets (staged, no fact); SOH (the load path exists, but its extract is the manual script; the 2026-02/03/04 snapshots are staged); Unilever purchases, returns and non-SSIS inventory (no FACT_PLAN item); any filename matching none of `profile_files.py:62-81` (skipped; UNVERIFIED whether a reject is recorded). No Del Monte 2026 file exists.
+
+**8 — runner, verbatim** (`run_canonical_load.py:1732`): `RuntimeError: 0023_user_session.sql was applied with checksum 0bf2b72234b95748df5c8fd04bca3ce4079f109d9e3d33d55a3ed07543c05008 but the file on disk now hashes to ea6148ce54019509bc8fbe190d722a318dd949c3902c61fce3b1fa57a3d6aa0e. A migration was edited after it was applied. Write a new migration instead of editing an applied one.` Before it: schema.sql re-run, 22 skipped, and 0019 re-applied (it adds a ledger row; scratch now has 32). 0024–0031 were never evaluated. Offline, 0031 also mismatches. Both files hash equal to their ledger rows after CRLF→LF (`git ls-files --eol`: i/lf w/crlf).
+
+Side finding: `orchestrate_segment.py:288-291` calls the pooled URL "read-only"; that is probably the default_transaction_read_only leak, not pooler config.

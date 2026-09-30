@@ -35,8 +35,8 @@ pytestmark = pytest.mark.skipif(
 def live_columns():
     psycopg2 = pytest.importorskip("psycopg2")
     conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"])
-    conn.set_session(readonly=True)
     with conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")  # transaction-scoped, never session-level (pooler leak)
         # table_schema = 'public': the live database also holds experiment
         # copies of this table (ssm_abc_repro, ssm_synth_v2, ...), which
         # are not what the app reads.
@@ -54,8 +54,8 @@ def live_columns():
 def live_unique_keys():
     psycopg2 = pytest.importorskip("psycopg2")
     conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"])
-    conn.set_session(readonly=True)
     with conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")  # transaction-scoped, never session-level (pooler leak)
         cur.execute(
             """
             -- string_agg, not array_agg: psycopg2 hands a PG array back as a

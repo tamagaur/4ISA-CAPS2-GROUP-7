@@ -371,7 +371,10 @@ def _connect():
         except psycopg2.OperationalError as exc:
             errors.append(f"{name}: {str(exc).strip().splitlines()[0]}")
             continue
-        conn.set_session(readonly=True, autocommit=True)
+        # Read-only is transaction-scoped (fetch()'s first statement), never
+        # set_session: that sets default_transaction_read_only on the server
+        # session, which through the :6543 pooler outlives this connection and
+        # leaves the next client unable to write.
         return conn, name
     raise SystemExit("no database reachable:\n  " + "\n  ".join(errors)
                      + f"\nrebuild the page from the last snapshot with: --offline ({SNAPSHOT})")
@@ -380,14 +383,21 @@ def _connect():
 def fetch() -> tuple[dict, dict, str]:
     conn, dsn = _connect()
     cur = conn.cursor()
+    # One psycopg2-managed transaction (autocommit off: it opens with BEGIN),
+    # made READ ONLY by its first statement. Nothing commits it; rollback()
+    # ends it, and close() discards it on any error exit.
+    cur.execute("SET TRANSACTION READ ONLY")
     params = {"p": PRINCIPAL, "per": ABC_PERIOD, "m": ABC_METHOD, "start": REAL_START}
     out, timing = {}, {}
-    for name, sql in QUERIES.items():
-        t = time.perf_counter()
-        cur.execute(sql, params)
-        out[name] = cur.fetchall()
-        timing[name] = round(time.perf_counter() - t, 2)
-    conn.close()
+    try:
+        for name, sql in QUERIES.items():
+            t = time.perf_counter()
+            cur.execute(sql, params)
+            out[name] = cur.fetchall()
+            timing[name] = round(time.perf_counter() - t, 2)
+        conn.rollback()
+    finally:
+        conn.close()
     return out, timing, dsn
 
 
@@ -769,6 +779,7 @@ def load_fit_review(payload: dict) -> dict:
     cohort = {s_["pk"] for s_ in payload["skus"]}
     agree = {"n": 0, "mase": 0, "bw": 0}
     spike_check = {"n": 0, "ok": 0, "bad": []}
+    level_check = {"n": 0, "ok": 0, "bad": []}
     counts = {"verdict": {}, "cause": {}, "cause_verdict": {}, "by_bin": {}}
     for sku in payload["skus"]:
         r = rows.get(sku["pk"])
@@ -781,7 +792,7 @@ def load_fit_review(payload: dict) -> dict:
             causes_all=[label for col, label in CAUSE_FLAGS.items() if r.get(col) == "1"],
             cause_level_shift=num(r["cause_level_shift"]), cause_cv=num(r["cause_cv_last12"]),
             cause_median_units=num(r["cause_median_units"]), cause_spikes=num(r["cause_n_spikes"]),
-            cause_mad=num(r["cause_mad"]), cause_step_month=r["cause_largest_step_month"] or None,
+            cause_mad=num(r["cause_mad"]),
             cause_zero_share=num(r["cause_zero_missing_share"]), cause_zero_run=num(r["cause_longest_zero_run"]),
             cause_n_months=num(r["cause_n_months"]), cause_is_level_shift=r["cause_is_level_shift"] == "1",
             sales_months_fit=num(r["sales_months"]),
@@ -803,24 +814,48 @@ def load_fit_review(payload: dict) -> dict:
         counts["cause_verdict"][cause][r["verdict"]] = counts["cause_verdict"][cause].get(r["verdict"], 0) + 1
         counts["by_bin"].setdefault(sku["router_bin"], {})
         counts["by_bin"][sku["router_bin"]][r["verdict"]] = counts["by_bin"][sku["router_bin"]].get(r["verdict"], 0) + 1
-        # Which months are spikes is not a column, but its two parameters are:
-        # |value - cause_median_units| > 3 x cause_mad, applied to the SKU's own
-        # modelling series. Checked below - the count must equal cause_n_spikes.
+        # ONE month record per SKU, on the same modelling series the chart draws
+        # and the holdout path scores, dated by that series' own period index.
+        # The banner, the series sentences and Band detail all read it; none of
+        # them reads a month from the CSV. Each part is re-derived from the CSV's
+        # parameters and must reproduce the CSV's number, or it is withheld.
+        #   spike_months  |value - cause_median_units| > 3 x cause_mad, whole series;
+        #                 the count must equal cause_n_spikes.
+        #   lvl           README's level-shift rule, mean(last 6) / mean(prior 12),
+        #                 with the two windows it was measured on; the ratio must
+        #                 equal cause_level_shift. cause_largest_step_month is NOT
+        #                 used: its producer is not in the repo and no definition
+        #                 tried reproduces it (it dated 65004662's change to
+        #                 2023-04 while the ratio beside it is measured on
+        #                 2024-09..2026-02).
         med, mad = sku["cause_median_units"], sku["cause_mad"]
-        sku["spike_top"] = None
+        months = payload["periods"]
+        sku["spike_top"], sku["spike_months"], sku["lvl"] = None, None, None
         if med is not None and mad is not None and sku["first_i"] is not None:
-            months = payload["periods"]
             hits = [(months[i], sku["monthly"][i] or 0.0)
                     for i in range(sku["first_i"], sku["last_i"] + 1)
                     if abs((sku["monthly"][i] or 0.0) - med) > 3 * mad]
             spike_check["n"] += 1
             if len(hits) == int(sku["cause_spikes"] or 0):
                 spike_check["ok"] += 1
+                sku["spike_months"] = [m for m, _ in hits]
+                if hits:
+                    m, v = max(hits, key=lambda h: abs(h[1] - med))
+                    sku["spike_top"] = {"m": m, "v": _num(v, 1)}
             else:
                 spike_check["bad"].append(sku["code"])
-            if hits:
-                m, v = max(hits, key=lambda h: abs(h[1] - med))
-                sku["spike_top"] = {"m": m, "v": _num(v, 1)}
+        if sku["cause_level_shift"] is not None and sku["first_i"] is not None:
+            a, b = sku["first_i"], sku["last_i"]
+            series = [sku["monthly"][i] or 0.0 for i in range(a, b + 1)]
+            level_check["n"] += 1
+            prior = sum(series[-18:-6]) / 12 if len(series) >= 18 else 0.0
+            ratio = None if prior <= 0 else sum(series[-6:]) / 6 / prior
+            if ratio is not None and abs(round(ratio, 3) - sku["cause_level_shift"]) <= 0.0006:
+                level_check["ok"] += 1
+                sku["lvl"] = {"r": sku["cause_level_shift"],
+                              "prior": [months[b - 17], months[b - 6]], "recent": [months[b - 5], months[b]]}
+            else:
+                level_check["bad"].append(sku["code"])
         if scored:
             agree["n"] += 1
             if sku["mase"] is not None and sku["mase_pipeline"] is not None and abs(sku["mase"] - sku["mase_pipeline"]) <= 0.0011:
@@ -830,7 +865,7 @@ def load_fit_review(payload: dict) -> dict:
     return {
         "file": os.path.relpath(FIT_REVIEW, REPO).replace("\\", "/"),
         "rows": len(rows), "missing": sorted(cohort - set(rows)), "extra": sorted(set(rows) - cohort),
-        "agree": agree, "counts": counts, "spike_check": spike_check,
+        "agree": agree, "counts": counts, "spike_check": spike_check, "level_check": level_check,
         "verdict_order": VERDICT_ORDER, "cause_order": CAUSE_ORDER, "no_better_model": NO_BETTER_MODEL,
         "thresholds": CAUSE_THRESHOLDS,
         # The two gates are the README's measured figures, quoted, never recomputed.
@@ -1076,6 +1111,9 @@ def main():
     sc = f["spike_check"]
     print(f"  spike months re-identified from cause_median_units +/- 3 x cause_mad match cause_n_spikes: "
           f"{sc['ok']}/{sc['n']}" + (f" MISMATCH {sc['bad']}" if sc["bad"] else ""))
+    lc = f["level_check"]
+    print(f"  level shift re-derived as mean(last 6) / mean(prior 12) matches cause_level_shift: "
+          f"{lc['ok']}/{lc['n']}" + (f" MISMATCH {lc['bad']} (window withheld)" if lc["bad"] else ""))
     print(f"  verdict={f['counts']['verdict']}")
     print(f"  cause={f['counts']['cause']}")
     for cs in f["cause_order"]:
@@ -1464,6 +1502,19 @@ const retTag = v => v != null && v < 0 ? ` <span class="ret" title="${esc(RETSRC
 const said = {mad: false};
 const sent = (src, txt) => `<span title="${esc(src)}">${txt}</span>`;
 const u = (v, d=0) => fmt(v, d);
+const LVLSRC = `cause_level_shift (${CSVSRC}), re-derived on this series as mean(last 6) / mean(prior 12); the windows are the ones it was measured on`;
+const SPKSRC = `cause_n_spikes, cause_mad, cause_median_units (${CSVSRC}); the months re-identified on this series`;
+// Every month the banner, the series sentences, Band detail and the hover name
+// comes from here: spike_months and lvl (build.py load_fit_review) and the
+// recomputed holdout path, all dated on the series the chart draws. Nothing
+// reads a month from the CSV.
+function monthFacts(s){
+  const scored = s.hpath ? s.hpath.map(p => p.m) : (s.holdout ? V.periods.slice(s.holdout[0], s.holdout[1] + 1) : []);
+  const spikes = s.spike_months || null;
+  return {scored, spikes, spikesScored: spikes && spikes.filter(m => scored.includes(m)),
+          bandOut: s.hpath ? s.hpath.filter(p => p.out).map(p => p.m) : null,
+          recentScored: s.lvl ? scored.filter(m => m >= s.lvl.recent[0] && m <= s.lvl.recent[1]) : null};
+}
 function seriesSentences(s){
   const out = [];
   out.push(sent(`sales_months (${CSVSRC}) \u00b7 model_params.bin`,
@@ -1472,16 +1523,16 @@ function seriesSentences(s){
   const rlr = s.rlr_fit != null ? s.rlr_fit : s.rlr;
   let lvl = rlr == null ? sent('recent_level_ratio (' + CSVSRC + ')', 'No recent-level ratio on record: fewer than 12 months.')
     : sent(`recent_level_ratio (${CSVSRC})`, `Recent 3 months are at <b>${(rlr * 100).toFixed(1)}%</b> of the 12-month level.`);
-  if (s.cause_is_level_shift && s.cause_level_shift != null)
-    lvl += ' ' + sent(`cause_level_shift, cause_largest_step_month (${CSVSRC})`,
-      `A level change of <b>${fmt(s.cause_level_shift, 2)}\u00d7</b> sits in <b>${esc(s.cause_step_month || '\u2014')}</b>.`);
+  if (s.cause_is_level_shift && s.lvl)
+    lvl += ' ' + sent(LVLSRC,
+      `The last 6 months (<b>${esc(s.lvl.recent[0])} \u2013 ${esc(s.lvl.recent[1])}</b>) average <b>${fmt(s.lvl.r, 2)}\u00d7</b> the 12 before (${esc(s.lvl.prior[0])} \u2013 ${esc(s.lvl.prior[1])}).`);
   out.push(lvl);
 
   const madName = said.mad ? '3 MAD' : '3 MAD (median absolute deviation)';
   said.mad = true;
-  const sp = s.cause_spikes, spk = s.spike_top;
-  out.push(sent(`cause_n_spikes, cause_mad, cause_median_units (${CSVSRC}); the largest is the series month furthest from that median`,
-    sp ? `<b>${u(sp)}</b> month${sp === 1 ? ' is' : 's are'} more than ${madName} from this SKU\u2019s own median of <b>${u(s.cause_median_units)}</b> units \u2014 largest deviation: <b>${u(spk && spk.v)}</b> units in <b>${esc(spk && spk.m)}</b>.`
+  const sp = s.spike_months && s.spike_months.length, spk = s.spike_top;
+  out.push(sent(`${SPKSRC}; the largest is the series month furthest from that median`,
+    !s.spike_months ? 'Spike months could not be re-identified on this series.' : sp ? `<b>${u(sp)}</b> month${sp === 1 ? ' is' : 's are'} more than ${madName} from this SKU\u2019s own median of <b>${u(s.cause_median_units)}</b> units \u2014 largest deviation: <b>${u(spk && spk.v)}</b> units in <b>${esc(spk && spk.m)}</b>.`
        : `No month is more than ${madName} from this SKU\u2019s own median of <b>${u(s.cause_median_units)}</b> units.`));
 
   out.push(s.cause_cv == null
@@ -1503,11 +1554,11 @@ function outsideSentences(s){
   const half = s.rmse == null ? null : B.z * s.rmse;
   return s.hpath.filter(p => p.out).map(p => {
     const gap = half ? Math.abs(p.a - p.v) / half : null;
-    const spike = s.cause_mad != null && s.cause_median_units != null && Math.abs(p.a - s.cause_median_units) > 3 * s.cause_mad;
-    const clause = p.m === s.cause_step_month
-      ? sent(`cause_largest_step_month (${CSVSRC})`, 'It is the level-change month.')
-      : spike ? sent(`cause_mad, cause_median_units (${CSVSRC})`, 'It is a spike month.')
-      : sent(`cause_largest_step_month, cause_mad, cause_median_units (${CSVSRC})`, 'It is neither, the miss is ordinary error.');
+    const spike = !!(s.spike_months && s.spike_months.includes(p.m));
+    const shifted = !!(s.cause_is_level_shift && s.lvl && p.m >= s.lvl.recent[0] && p.m <= s.lvl.recent[1]);
+    const clause = spike ? sent(SPKSRC, 'It is a spike month.')
+      : shifted ? sent(LVLSRC, 'It sits in the shifted last 6 months.')
+      : sent(`${SPKSRC}; ${LVLSRC}`, 'It is neither, the miss is ordinary error.');
     return sent(`the month\u2019s actual and one-step forecast from the recomputed served holdout; the band from the stored \u03c3 (model_params.holdout_metrics_served.rmse)`,
       `<b>${esc(p.m)}</b>: actual <b>${u(p.a, 1)}</b>${retTag(p.a)} vs forecast <b>${u(p.v)}</b>; the band reaches <b>${u(p.lo)}\u2013${u(p.hi)}</b> (\u00b1${B.z} \u00d7 RMSE ${u(s.rmse)}). The gap is <b>${gap == null ? '\u2014' : fmt(gap, 2)}\u00d7</b> the band half-width.`)
       + ' <span class="cl">' + clause + '</span>';
@@ -1554,13 +1605,15 @@ function bindSecs(root){
 function verdictLine(s){
   const pctOf = v => v == null ? null : Math.round(v * 100) + '%';
   const rlr = s.rlr_fit != null ? s.rlr_fit : s.rlr;
-  const inHoldout = s.cause_step_month && s.holdout
-    && V.periods.indexOf(s.cause_step_month) >= s.holdout[0] && V.periods.indexOf(s.cause_step_month) <= s.holdout[1];
+  const mf = monthFacts(s), ns = mf.scored.length;
   const CAUSE = {
-    'level shift': rlr == null ? 'The selling level has shifted.'
-      : `Recent sales are at ${pctOf(rlr)} of the usual level; the change happened `
-        + (inHoldout ? 'during the months we score on.' : `in ${s.cause_step_month}, outside the months we score on.`),
-    'spiky': `${u(s.cause_spikes)} month(s) sit far outside this SKU\u2019s usual range, and a one-step forecast cannot follow them.`,
+    'level shift': rlr == null || !s.lvl ? 'The selling level has shifted.'
+      : `Recent sales are at ${pctOf(rlr)} of the usual level; the last 6 months (${s.lvl.recent[0]} \u2013 ${s.lvl.recent[1]}) `
+        + `average ${fmt(s.lvl.r, 2)}\u00d7 the 12 before, and ${mf.recentScored.length} of the ${ns} months we score on fall inside those 6.`,
+    'spiky': !mf.spikes ? 'Spike months could not be re-identified on this series.'
+      : `${mf.spikes.length} month(s) of the whole series sit far outside this SKU\u2019s usual range; ${mf.spikesScored.length} of them fall in the ${ns} months we score on`
+        + (mf.bandOut ? `, and ${mf.bandOut.length} of those ${ns} fell outside the band.` : '.')
+        + ' A one-step forecast cannot follow them.',
     'high volatility': 'Month-to-month swings on this SKU are wider than most of the cohort.',
     'intermittent': 'Many months have no sales at all, so there is little to follow.',
     'tiny scale': 'This SKU sells in small volumes, so ordinary swings look large against them.',
@@ -1575,7 +1628,7 @@ function verdictLine(s){
 }
 function verdictBlock(s){
   const [cls, txt] = verdictLine(s);
-  return `<div class="verdictline ${cls}" title="verdict, cause_group (${esc(CSVSRC)}); recent_level_ratio, cause_largest_step_month">${txt}</div>`;
+  return `<div class="verdictline ${cls}" title="verdict, cause_group (${esc(CSVSRC)}); recent_level_ratio; spike months and level windows re-derived on this series">${txt}</div>`;
 }
 // The four that answer "what is the number and can I use it". MASE on the
 // common window is the one the verdict is made on, so it carries the 1.1 gate.
@@ -1609,7 +1662,7 @@ function routingKv(s){
 }
 function skuSections(s, W){
   said.mad = false;                       // spell out MAD once per render
-  const outs = outsideSentences(s), hon = honestySentences(s);
+  const outs = outsideSentences(s), hon = honestySentences(s), mf = monthFacts(s);
   const why = hon.map(([cls, t]) => cls === 'unfitnote' ? `<div class="${cls}">${t}</div>` : '').join('')
     || `<div class="explain"><ul><li>${verdictLine(s)[1].replace(/<\/?b>/g, '')}</li></ul></div>`;
   const bandBody = hon.filter(([cls]) => cls === 'widenote').map(([cls, t]) => `<div class="${cls}">${t}</div>`).join('')
@@ -1623,7 +1676,7 @@ function skuSections(s, W){
           ['MA3 band (computed)', s.ma3_bw == null ? '\u2014' : `width / forecast ${fmt(s.ma3_bw)} \u00b7 coverage ${pctv(s.ma3_cov)}`]]);
   return sec('why', 'Why this verdict', why)
     + sec('series', 'Series shape', `<div class="explain"><ul>` + seriesSentences(s).map(x => `<li>${x}</li>`).join('') + `</ul></div>`)
-    + sec('band', 'Band detail', bandBody, outs.length ? `${outs.length} month(s) outside` : '')
+    + sec('band', 'Band detail', bandBody, mf.bandOut && mf.bandOut.length ? `${mf.bandOut.length} of ${mf.scored.length} scored month(s) outside the band` : '')
     + sec('all', 'All metrics', statTiles(s) + routingKv(s));
 }
 
@@ -1632,7 +1685,7 @@ function oneLine(s){
   const rlr = s.rlr_fit != null ? s.rlr_fit : s.rlr;
   return [`${u(s.sales_months_fit != null ? s.sales_months_fit : s.sales_months)} months of sales, ${s.router_bin} bin`,
     rlr == null ? 'no recent-level ratio' : `recent 3 at ${(rlr * 100).toFixed(1)}% of the 12-month level`,
-    `${u(s.cause_spikes)} spike month(s) beyond 3 MAD`,
+    `${s.spike_months ? s.spike_months.length : '\u2014'} spike month(s) beyond 3 MAD`,
     s.cause_cv == null ? 'no CV' : `CV ${fmt(s.cause_cv)} vs cohort median ${fmt(F.median_cv)}`,
     `median ${u(s.cause_median_units)} units`,
     (s.cause_zero_share ? `${Math.round(s.cause_zero_share * s.cause_n_months)} zero/missing months` : 'no zero or missing months'),

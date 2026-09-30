@@ -197,16 +197,25 @@ def main():
     parser.add_argument("--decision", choices=list(DECISIONS), default=None)
     parser.add_argument("--by", default=None, help="name of the person making the decision")
     parser.add_argument("--notes", default=None)
+    parser.add_argument(
+        "--transform-dir", default=None,
+        help="A slice run's manifest directory (transform/slices/<run key>, printed by "
+             "run_canonical_load --slice ... --dry-run). Default: the whole-staging transform/.",
+    )
     args = parser.parse_args()
 
     transform_dir = REPO_ROOT / "transform"
     staging_dir = REPO_ROOT / "staging"
+    if args.transform_dir:
+        # A slice manifest has no Extract manifest to reconcile against - it
+        # already records every staged sheet's row count and content hash.
+        transform_dir = (REPO_ROOT / args.transform_dir).resolve()
+        staging_dir = None
 
     manifest = json.loads((transform_dir / "_manifest.json").read_text(encoding="utf-8"))
     extract_manifest = None
-    extract_manifest_path = staging_dir / "_manifest.json"
-    if extract_manifest_path.exists():
-        extract_manifest = json.loads(extract_manifest_path.read_text(encoding="utf-8"))
+    if staging_dir is not None and (staging_dir / "_manifest.json").exists():
+        extract_manifest = json.loads((staging_dir / "_manifest.json").read_text(encoding="utf-8"))
 
     checklist = build_checklist(manifest, extract_manifest)
     print(format_checklist_text(checklist))

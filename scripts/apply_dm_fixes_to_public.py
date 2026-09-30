@@ -1,4 +1,9 @@
-"""scripts/apply_dm_fixes_to_public.py - the Del Monte data fixes of 2026-09-28, batch by batch. Same pattern as
+"""SUPERSEDED (2026-09-30) - batches 3-7 are now rules in the loader (scripts/run_canonical_load.py --slice: fix 3
+derived_cost in transform, fix 4 RMR loader via config/source_of_truth.yaml, fixes 5-6 product_dimension fill-if-NULL
+rules, fix 7 the "(2)" sheet quarantined at transform). Kept for --status and --rollback of the 2026-09-28 ledger run;
+do not use it for new data.
+
+scripts/apply_dm_fixes_to_public.py - the Del Monte data fixes of 2026-09-28, batch by batch. Same pattern as
 scripts/apply_real_recovery_to_public.py (whose helpers it reuses): expected counts stated in code, scratch first,
 backup + checksum, apply, verify both directions, ledger entry, rollback proven.
 
@@ -67,18 +72,41 @@ IDENT = {**{t: k for t, (k, _) in FACTS.items()}, **{d: k for d, (k, _) in DIMEN
 SKIP_COMPARE = LOAD_TIME | {"quarantined_at"}
 
 
+# Per-transaction, never session-level: a session SET can outlive this client on a pooled backend and reach whoever
+# is handed that backend next (the 2026-09-28 sign-in outage was a session-level READ ONLY doing exactly that).
+TXN_SETTINGS = "SET LOCAL statement_timeout = 0; SET LOCAL idle_in_transaction_session_timeout = 0; SET LOCAL lock_timeout = '30s'"
+
+
+class TxnSettingsCursor(psycopg2.extensions.cursor):
+    """Issues TXN_SETTINGS as the first statement of every transaction the connection opens (the first statement
+    after connect(), commit() or rollback()), so each batch runs with them and none of them outlives its transaction."""
+
+    def _begin(self):
+        conn = self.connection
+        if not conn.autocommit and conn.info.transaction_status == psycopg2.extensions.TRANSACTION_STATUS_IDLE:
+            with conn.cursor(cursor_factory=psycopg2.extensions.cursor) as c:  # plain cursor: no recursion
+                c.execute(TXN_SETTINGS)
+
+    def execute(self, query, vars=None):
+        self._begin()
+        return super().execute(query, vars)
+
+    def executemany(self, query, vars_list):
+        self._begin()
+        return super().executemany(query, vars_list)
+
+    def copy_expert(self, sql, file, size=8192):
+        self._begin()
+        return super().copy_expert(sql, file, size)
+
+
 def connect():
     env = dotenv_values(REPO / ".env")
     dsn = env["SUPABASE_DB_URL"].replace(":6543/", ":5432/")
     if ":5432/" not in dsn:
         sys.exit("refusing: could not derive the session-pooler URL (port 5432) from SUPABASE_DB_URL")
-    conn = psycopg2.connect(dsn, connect_timeout=30)
+    conn = psycopg2.connect(dsn, connect_timeout=30, cursor_factory=TxnSettingsCursor)
     conn.autocommit = False
-    cur = conn.cursor()
-    cur.execute("SET statement_timeout = 0")
-    cur.execute("SET idle_in_transaction_session_timeout = 0")
-    cur.execute("SET lock_timeout = '30s'")
-    conn.commit()
     return conn
 
 
@@ -745,7 +773,7 @@ def main() -> int:
         T, t, cols, out = args.export
         conn = connect()
         cur = conn.cursor()
-        cur.execute("SET idle_in_transaction_session_timeout = '60s'")
+        cur.execute("SET LOCAL idle_in_transaction_session_timeout = '60s'")  # this transaction only; overrides TXN_SETTINGS' 0
         Path(out).write_bytes(export_rows(cur, T, t, cols.split(",")))
         conn.close()
         return 0

@@ -83,7 +83,9 @@ def connect():
     load_dotenv()
     dsn = os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"]
     conn = psycopg2.connect(dsn, options="-c statement_timeout=0")
-    conn.set_session(readonly=True)
+    # transaction-scoped READ ONLY, never session-level (pooler leak): autocommit
+    # stays off, so every read in fetch() runs in this one transaction; close() ends it.
+    conn.cursor().execute("SET TRANSACTION READ ONLY")
     return conn
 
 

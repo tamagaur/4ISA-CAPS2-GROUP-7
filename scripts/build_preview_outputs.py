@@ -205,8 +205,11 @@ def main():
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s", force=True)
     load_dotenv(os.path.join(REPO, ".env"))
     conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"])
-    conn.set_session(readonly=True)  # files only — see the module docstring
     cur = conn.cursor()
+    # files only — see the module docstring. Transaction-scoped READ ONLY, never
+    # session-level (pooler leak): autocommit stays off and nothing here commits,
+    # so every later cursor and pd.read_sql on `conn` runs inside this transaction.
+    cur.execute("SET TRANSACTION READ ONLY")
     cur.execute("SELECT MAX(calendar_month), MIN(calendar_month) FROM Unilever_SKU_Demand_Fact_Real")
     last_real, first_real = cur.fetchone()
     # The placeholder these files are built on, measured exactly as

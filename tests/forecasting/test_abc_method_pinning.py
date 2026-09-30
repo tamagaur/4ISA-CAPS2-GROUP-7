@@ -48,8 +48,10 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def cur():
     conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"])
-    conn.set_session(readonly=True)
     with conn.cursor() as c:
+        # transaction-scoped READ ONLY, never session-level (pooler leak); nothing
+        # in this module commits, so every test's read stays inside it
+        c.execute("SET TRANSACTION READ ONLY")
         yield c
     conn.rollback()
     conn.close()

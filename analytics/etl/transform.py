@@ -803,13 +803,19 @@ def filter_source_of_truth(df: pd.DataFrame, fact: str, principal: str, config_d
 
 def rescue_cross_check_orphans(
     df: pd.DataFrame, sot_df: pd.DataFrame, rule: SourceOfTruthRule, config_dir: Path = DEFAULT_CONFIG_DIR,
+    extra_known_keys: set[tuple] | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """Adds back the rows of rule.orphan_rescue_roles sheets whose natural key
     is fully non-null and present on no system-of-record sheet. A cross-check
     view is only a duplicate for the keys it shares with the system of
     record; a key that exists nowhere else is real data with one source.
     Returns the RAW rows (sot_df + rescued), so the rescued rows go through
-    the same column map, footer checks and dedup as every other row."""
+    the same column map, footer checks and dedup as every other row.
+
+    extra_known_keys (2026-09-30, slice loads): natural keys already loaded
+    from files outside this input, as tuples of stripped strings. A slice
+    reads one month's files, so "no system-of-record sheet" must also cover
+    the rows other slices already put in the table."""
     report = {"roles": rule.orphan_rescue_roles, "candidate_rows": 0, "rescued_rows": 0}
     if not rule.orphan_rescue_roles or "_sheet_role" not in df.columns:
         return sot_df, report
@@ -832,7 +838,7 @@ def rescue_cross_check_orphans(
         return keys.astype(str).apply(lambda r: tuple(v.strip() for v in r), axis=1)
 
     sot_keys = _keys(sot_df)
-    known = set(_as_tuples(sot_keys[sot_keys.notna().all(axis=1)]))
+    known = set(_as_tuples(sot_keys[sot_keys.notna().all(axis=1)])) | set(extra_known_keys or ())
     cand_keys = _keys(candidates)
     resolvable = cand_keys.notna().all(axis=1)
     orphan_mask = resolvable & ~_as_tuples(cand_keys).isin(known)
@@ -875,6 +881,9 @@ def period_from_invoice_date(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
 
 QUARANTINE_REASON_COLUMN = "_quarantine_reason"
+# The etl_quarantine.rule a marked row is written under; None means the generic
+# "flag_source_quarantine".
+QUARANTINE_RULE_COLUMN = "_quarantine_rule"
 
 # Source rows Yuan ruled must not load. Transform only MARKS them
 # (QUARANTINE_REASON_COLUMN); scripts/run_canonical_load.py removes the marked
@@ -884,7 +893,18 @@ QUARANTINE_REASON_COLUMN = "_quarantine_reason"
 #   D12 (2026-09-22): the 18 September-2025 purchases whose Tax and Net Amount
 #       cells are August's (untaxed + tax != net). Limited to 2025-09: 14 real
 #       2024-01 rows fail the same arithmetic and are an open item, not ruled on.
+#   Fix 7 (2026-09-28, dm_fixes batch 7; a rule here since 2026-09-30): every
+#       other real row of that same hidden sheet is HELD, not loaded - its
+#       invoices are all dated 2024-09, suspected September-2024 data filed in
+#       the 2025 workbooks, pending SSM. Not re-dated. The six workbook copies are
+#       identical; dedup_facts keeps the first in file order (April) and records
+#       the other five as duplicates, so only April's copy reaches this rule.
 FAKE_BOOKING_SHEET = "PANGASINAN SALES REGISTER (2)"
+HOLD_PENDING_SSM_RULE = "hold_pending_ssm[sales_register]"
+HOLD_PENDING_SSM_REASON = (
+    f"sheet '{FAKE_BOOKING_SHEET}': every invoice dated 2024-09-03..2024-09-30 - suspected September-2024 "
+    "data filed in the 2025 workbooks, awaiting SSM; not re-dated"
+)
 
 
 def _num(df: pd.DataFrame, col: str) -> pd.Series:
@@ -896,17 +916,42 @@ def _num(df: pd.DataFrame, col: str) -> pd.Series:
 def flag_source_quarantine(df: pd.DataFrame, doc_type: str) -> tuple[pd.DataFrame, dict]:
     out = df.copy()
     reason = pd.Series(None, index=out.index, dtype=object)
+    rule = pd.Series(None, index=out.index, dtype=object)
     real = (out["is_demo"] != True) if "is_demo" in out.columns else pd.Series(True, index=out.index)  # noqa: E712
-    if doc_type == "sales_register" and "REMARKS" in out.columns and "_src_sheet" in out.columns:
-        fake = real & (out["_src_sheet"] == FAKE_BOOKING_SHEET) & (
-            out["REMARKS"].astype("string").str.strip().str.upper() == "FAKE BOOKING")
-        reason[fake.fillna(False).astype(bool)] = "source remark: FAKE BOOKING"
+    if doc_type == "sales_register" and "_src_sheet" in out.columns:
+        on_sheet = (real & (out["_src_sheet"] == FAKE_BOOKING_SHEET)).fillna(False).astype(bool)
+        remarks = (out["REMARKS"].astype("string").str.strip().str.upper() if "REMARKS" in out.columns
+                   else pd.Series(pd.NA, index=out.index, dtype="string"))
+        fake = on_sheet & (remarks == "FAKE BOOKING").fillna(False).astype(bool)
+        reason[fake] = "source remark: FAKE BOOKING"
+        held = on_sheet & ~fake
+        reason[held] = HOLD_PENDING_SSM_REASON
+        rule[held] = HOLD_PENDING_SSM_RULE
     elif doc_type == "purchase_order" and "_period" in out.columns:
         stale = real & (out["_period"] == "2025-09") & (
             (_num(out, "untaxed_amount") + _num(out, "tax_amount") - _num(out, "net_amount")).abs() > 0.01)
         reason[stale.fillna(False).astype(bool)] = "stale cells: untaxed + tax != net; Net Amount copied from August"
     out[QUARANTINE_REASON_COLUMN] = reason
-    return out, {"marked": int(reason.notna().sum())}
+    out[QUARANTINE_RULE_COLUMN] = rule
+    return out, {"marked": int(reason.notna().sum()), "held": int(rule.notna().sum())}
+
+
+def derive_valuation_from_cost(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Fix 3 (2026-09-28, dm_fixes batch 3 + migration 0028; a rule here since
+    2026-09-30). The Feb-2023 Ilocos and Mar-2023 Pangasinan sign-off sheets
+    carry Cost but no Valuation. On every real Del Monte row carrying both,
+    Valuation = Cost exactly, so Valuation is set to Cost there and marked
+    valuation_source = 'derived_cost' - never read as an SSM-reported figure.
+    NULL valuation_source = the source's own value."""
+    out = df.copy()
+    if "valuation_source" not in out.columns:
+        out["valuation_source"] = None
+    if "valuation" not in out.columns or "cost" not in out.columns:
+        return out, 0
+    derive = out["valuation"].isna() & out["cost"].notna()
+    out.loc[derive, "valuation"] = out.loc[derive, "cost"]
+    out.loc[derive, "valuation_source"] = "derived_cost"
+    return out, int(derive.sum())
 
 
 def flag_sellout_tax_inclusive(raw_df: pd.DataFrame) -> pd.Series:
@@ -1402,6 +1447,7 @@ INVENTORY_SIGN_OFF_FOOTER_CHECKS = [
 def transform_fact(
     df: pd.DataFrame, fact: str, principal: str, config_dir: Path = DEFAULT_CONFIG_DIR,
     amount_col: str | None = None, discount_alias_table: str | None = "discount_rate_labels",
+    extra_known_keys: set[tuple] | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """Convenience pipeline: source-of-truth filter -> column map ->
     alias-standardize discount labels -> dedup.
@@ -1427,7 +1473,7 @@ def transform_fact(
         )
 
     sot_df = filter_source_of_truth(df, fact, principal, config_dir)
-    sot_df, orphan_rescue_report = rescue_cross_check_orphans(df, sot_df, rule, config_dir)
+    sot_df, orphan_rescue_report = rescue_cross_check_orphans(df, sot_df, rule, config_dir, extra_known_keys)
     mapped_df, map_report = apply_column_map(sot_df, rule.doc_type, config_dir)
     mapped_df = coerce_is_demo_column(mapped_df)
     mapped_df = backfill_provenance_fields(mapped_df)
@@ -1526,7 +1572,8 @@ def transform_fact(
         numeric_coercion_report = {"unparseable_columns": unparseable_cols}
     elif rule.doc_type == "inventory_sign_off":
         mapped_df, unparseable_cols = coerce_numeric_columns(mapped_df, DELMONTE_INVENTORY_NUMERIC_COLUMNS)
-        numeric_coercion_report = {"unparseable_columns": unparseable_cols}
+        mapped_df, derived = derive_valuation_from_cost(mapped_df)
+        numeric_coercion_report = {"unparseable_columns": unparseable_cols, "valuation_derived_from_cost": derived}
     elif rule.doc_type in ("sales_register", "sales_return"):
         mapped_df, unparseable_cols = coerce_numeric_columns(mapped_df, INVOICE_QUANTITY_COLUMNS)
         numeric_coercion_report = {"unparseable_columns": unparseable_cols}

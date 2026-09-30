@@ -50,7 +50,8 @@ LABEL = {"naive": "Naive", "sba_a3": "SBA (a=0.3)", "sba": "SBA (a=0.1)", "ma3":
 last = None
 for d in (os.environ.get("SUPABASE_DB_URL"), os.environ.get("SUPABASE_DIRECT_URL")):
     try:
-        c = psycopg2.connect(d, connect_timeout=15); c.set_session(readonly=True); break
+        # transaction-scoped READ ONLY, never session-level (pooler leak)
+        c = psycopg2.connect(d, connect_timeout=15); c.cursor().execute("SET TRANSACTION READ ONLY"); break
     except Exception as e:
         last = e; c = None
 if c is None: raise last
