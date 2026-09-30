@@ -401,8 +401,8 @@ def demand_matrix(
 ) -> tuple[dict[int, np.ndarray], list[str]]:
     """orchestrate_segment._fetch_demand_matrix, from `mode`'s demand source:
     one zero-filled monthly quantity array per product over [start, end]. No
-    row is a zero-sale month, a NULL quantity is 0, a negative is clipped to
-    0 — all three exactly as the segmentation run builds it."""
+    row is a zero-sale month, a NULL quantity is 0, a negative is kept
+    (DEC-15) — all three exactly as the segmentation run builds it."""
     periods = [str(p) for p in pd.period_range(start, end, freq="M")]
     index = {p: i for i, p in enumerate(periods)}
     matrices = {int(pk): np.zeros(len(periods)) for pk in product_keys}
@@ -421,7 +421,7 @@ def demand_matrix(
         if i is None:
             continue
         qty = 0.0 if r["qty"] is None else float(r["qty"])
-        matrices[int(r["product_key"])][i] = max(qty, 0.0)
+        matrices[int(r["product_key"])][i] = qty
     return matrices, periods
 
 

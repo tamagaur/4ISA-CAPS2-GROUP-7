@@ -89,7 +89,9 @@ def _fetch_demand_matrix(
     """One zero-filled monthly quantity array per product_key, ascending,
     over [start, end] inclusive. No row this period = a genuine zero-sale
     month (same "no row = fact, not gap" precedent as
-    orchestrate_abc._fetch_unilever_sku_revenue)."""
+    orchestrate_abc._fetch_unilever_sku_revenue). A negative month (returns
+    exceeding sales) is kept as it is (DEC-15: flagged, never clamped); the
+    traits that count sales months only count qty > 0 anyway."""
     source = DEMAND_SOURCE_BY_PRINCIPAL.get(principal)
     if source is None:
         raise NotImplementedError(
@@ -119,7 +121,7 @@ def _fetch_demand_matrix(
         if idx is None:
             continue
         qty = row.qty if not pd.isna(row.qty) else 0.0
-        matrices[row.product_key][idx] = max(qty, 0.0)  # negative rows clipped to 0, noted not investigated (see report Open items)
+        matrices[row.product_key][idx] = qty  # negatives kept (DEC-15); clipped to 0 until 2026-09-30
     return matrices, periods
 
 
