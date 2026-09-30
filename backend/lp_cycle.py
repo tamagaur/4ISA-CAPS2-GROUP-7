@@ -49,6 +49,7 @@ import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from analytics.optimization.lp_inputs import PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION
 from backend.data_mode import REAL, forecast_source, lp_source
 
 # Applied to every LP read. Bound (not interpolated) so it is safe to
@@ -68,12 +69,32 @@ LP_SERVICE_LEVEL_PCT = 90  # the cycle service level Z = 1.28 stands for
 
 
 def lp_model_info() -> dict:
-    """How the LP decides, for the reorder detail view to state."""
+    """How the LP decides, for the reorder detail view to state.
+
+    `inputs` is analytics/optimization/lp_inputs.PLACEHOLDERS, the dict
+    scripts/run_lp.py takes its defaults from: the allocation %, review and
+    lead days, target weeks, cover rule, warehouse capacity and costs.
+    Placeholders until SSM confirms them, so they're flagged as such, and the
+    safety stock's daily-independence assumption is stated with them."""
     return {
         "weights": dict(LP_WEIGHTS),
         "service_level_pct": LP_SERVICE_LEVEL_PCT,
         "z_score": LP_SERVICE_Z,
+        "inputs": dict(PLACEHOLDERS),
+        "inputs_are_placeholders": True,
+        "safety_stock_assumption": SAFETY_STOCK_ASSUMPTION,
     }
+
+
+def _principal_key(principal: str | None) -> str | None:
+    """The principal the way backend.principals.normalize_principal reads it
+    for the rows: case-insensitive ('Unilever' and 'unilever' are one
+    scope), and 'all' or blank meaning no filter. Every anchor here resolves
+    through this, so an LP cycle is always found under the SAME scope as the
+    rows it anchors (the rule of commit fd4dded); a raw 'Unilever' used to
+    match no product_dimension row and leave the cycle None."""
+    value = (principal or "").strip().lower()
+    return None if value in ("", "all") else value
 
 
 def current_cycle(db: Session, principal: str | None = None, mode: str = REAL) -> datetime.date | None:
@@ -92,9 +113,9 @@ def current_cycle(db: Session, principal: str | None = None, mode: str = REAL) -
         WHERE lr.status = 'pending'
     """
     params = dict(params)
-    if principal and principal != "all":
+    if _principal_key(principal):
         sql += " AND pd.principal = :principal"
-        params["principal"] = principal
+        params["principal"] = _principal_key(principal)
     row = db.execute(text(sql), params).mappings().first()
     return row["d"] if row else None
 
@@ -114,9 +135,9 @@ def superseded_count(
         WHERE lr.status = 'pending' AND lr.planning_cycle_date < :cycle
     """
     params: dict = {"cycle": cycle, **lp_params}
-    if principal and principal != "all":
+    if _principal_key(principal):
         sql += " AND pd.principal = :principal"
-        params["principal"] = principal
+        params["principal"] = _principal_key(principal)
     return int(db.execute(text(sql), params).scalar() or 0)
 
 
@@ -153,9 +174,9 @@ def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> di
           AND (:cycle IS NULL OR lr.planning_cycle_date = :cycle)
     """
     params: dict = {"cycle": cycle, "fc_at": fc_at, **lp_params}
-    if principal and principal != "all":
+    if _principal_key(principal):
         sql += " AND pd.principal = :principal"
-        params["principal"] = principal
+        params["principal"] = _principal_key(principal)
     lp = db.execute(text(sql), params).mappings().first() or {}
     lp_at = lp.get("t")
     row_count = int(lp.get("row_count") or 0)

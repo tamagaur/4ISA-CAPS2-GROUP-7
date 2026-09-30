@@ -132,6 +132,10 @@ class FakeSession:
         # most periods. Tests that care about Del Monte set these.
         self.delmonte_latest_sales_period = None
         self.delmonte_sales = {}
+        # Del Monte months whose sell-out net_amount is tax-inclusive
+        # (Kelvin's X2 rule, SellOut_Fact.net_amount_tax_inclusive). Live:
+        # 2023-08 only. Empty = every Del Monte peso is ex-VAT.
+        self.dm_tax_inclusive_periods: list = []
         self.latest_inventory_period = latest_inventory_period
         self.soh = soh or {}
         self.latest_abc_period = latest_abc_period
@@ -213,6 +217,9 @@ class FakeSession:
 
         if "MAX(_period) AS p FROM SellOut_Fact_Real" in sql:
             return FakeResult([{"p": self.delmonte_latest_sales_period}])
+
+        if "net_amount_tax_inclusive" in sql:
+            return FakeResult([{"p": p} for p in self.dm_tax_inclusive_periods])
 
         if "FROM SellOut_Fact_Real" in sql and "SUM(net_amount)" in sql:
             periods = params["periods"]
@@ -470,6 +477,41 @@ def test_kpis_weeks_of_cover_null_when_no_inventory_data_at_all():
     wc = resp.json()["kpis"]["weeks_of_cover"]
     assert wc["value"] is None
     assert wc["blocked_reason"] == "Inventory_Fact_Real has no rows for unilever at all."
+
+
+def test_weeks_of_cover_does_not_follow_the_date_range():
+    """SSM's 3-week policy is judged by this figure, so it is always the
+    latest stock over the 12 months of sales up to it, whatever range the
+    picker shows. It used to average the picker's months, so the same
+    stock read 3.0-3.5 weeks live (2026-09-29)."""
+    periods = _periods()  # 2023-03 .. 2024-02
+    sales = {p: 100.0 for p in periods}
+    sales[periods[-1]] = 400.0  # one unusual month
+    expected = round(1000.0 / ((sum(sales.values()) / 12) / AVG_WEEKS_PER_MONTH), 2)
+    for query in ("", "&start_period=2024-01&period=2024-02", "&start_period=2023-01&period=2023-07"):
+        session = FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0}, sales=dict(sales))
+        with make_client(session) as c:
+            wc = c.get(
+                f"/dashboard?principal=unilever{query}", headers={"Authorization": f"Bearer {user_token()}"}
+            ).json()["kpis"]["weeks_of_cover"]
+        assert wc["value"] == pytest.approx(expected), query
+        assert wc["sales_window"] == {"start": periods[0], "end": periods[-1]}, query
+        assert wc["months_used"] == 12, query
+
+
+def test_weeks_of_cover_sales_year_ends_at_the_stock_count():
+    """Stock and sales must describe the same moment: a snapshot older than
+    the latest sales month is measured against the 12 months up to itself."""
+    session = FakeSession(
+        latest_inventory_period="2023-12", soh={"2023-12": 1000.0}, sales={p: 100.0 for p in _periods()}
+    )
+    with make_client(session) as c:
+        wc = c.get(
+            "/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}
+        ).json()["kpis"]["weeks_of_cover"]
+    assert wc["sales_window"] == {"start": "2023-01", "end": "2023-12"}
+    assert wc["months_used"] == 10  # 2023-01 and 2023-02 have no rows: gaps, never zeros
+    assert wc["value"] == pytest.approx(round(1000.0 / (100.0 / AVG_WEEKS_PER_MONTH), 2))
 
 
 # ---- sales_vs_stock ------------------------------------------------------
@@ -1329,3 +1371,24 @@ def test_allocation_is_withheld_when_the_prior_year_nets_to_zero():
         a = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["allocation"]
     assert a["levels"] == []
     assert "₱0 or less" in a["blocked_reason"]
+
+
+
+def test_vat_note_names_del_montes_tax_inclusive_month_when_the_range_holds_it():
+    """Kelvin's X2 rule loads a Del Monte sheet's tax-inclusive total where
+    that was its only amount and flags the rows (live: 2023-08). Inside the
+    range the note must name the exception; outside it, it stays plain."""
+    session = FakeSession()
+    session.dm_tax_inclusive_periods = ["2023-08"]  # inside the default 12 months to 2024-02
+    with make_client(session) as c:
+        note = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"}).json()["vat_note"]
+    assert note == (
+        "Unilever pesos include VAT; Del Monte pesos exclude it (except Aug 2023, recorded with tax) — "
+        "combined totals mix the two tax bases."
+    )
+
+    session = FakeSession()
+    session.dm_tax_inclusive_periods = ["2021-08"]  # outside the range
+    with make_client(session) as c:
+        note = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"}).json()["vat_note"]
+    assert "except" not in note

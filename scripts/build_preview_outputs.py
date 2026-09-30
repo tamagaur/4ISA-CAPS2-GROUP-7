@@ -7,13 +7,13 @@ written to Forecast_Result or LP_Recommendation.
 Why files: the forecast router refuses placeholder rows everywhere except
 scripts/preview_router_synth.py (DEC-27, tests/forecasting/test_router.py), and
 the API must not fit a model per request. So this script runs that sanctioned
-preview once, applies run_lp.py's own safety stock / ROP / LP steps to it, and
+preview once, applies run_lp.py's own safety stock / target stock / LP steps to it, and
 writes the result where the API reads it. Every formula is imported, not copied:
   forecasts   scripts/preview_router_synth.load_series + preview (router, holdout
               metrics, the preview's real-month MASE scale)
   band, MAPE  scripts/run_baseline_forecast._confidence_band / _clean_metric
-  LP          scripts/run_lp._sigma_d_for_product + safety_stock_for,
-              analytics/optimization/lp.compute_rop / build_lp_model / solve_lp
+  LP          scripts/run_lp._sigma_d_for_product, product_input, plan_cycle
+              (analytics/optimization/lp's model, run_lp.py's defaults)
 
 Before writing anything it reruns the same pipeline on the REAL months only and
 checks the result against the live Forecast_Result (forecast, status, MASE): the
@@ -22,11 +22,11 @@ stops the build.
 
 Pool and inputs mirror the live scripts: Unilever Tier A at the latest 'single'
 ABC run, target month = latest real month + 1, LP pool = status ok and holdout
-MASE < MASE_GATE, protection_days 1 (run_lp's default). The LP's warehouse
-capacity and supplier ceiling have no data source (run_lp.py's docstring); they
-are set far above total ROP so they never bind. With every product on the same
-fallback unit cost, lp.py's normalized objective puts each Q_i at ROP_i whatever
-those limits are, as long as they are feasible.
+MASE < MASE_GATE. The LP is run_lp.py's own plan_cycle with run_lp.py's default
+inputs (the placeholders in analytics/optimization/lp_inputs.py). Only the
+forecasts and sigma_d come from the preview history; stock on hand, cost per
+piece and last year's sales (allocation, priority) are the real ones, as in a
+live run.
 
     python scripts/build_preview_outputs.py            # writes reports/preview/app_*.{csv,json}
 """
@@ -48,11 +48,14 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
 from analytics.forecasting.baseline import MIN_MONTHS_WITH_SALES  # noqa: E402
-from analytics.optimization.lp import SKUInput, build_lp_model, compute_rop, solve_lp  # noqa: E402
+from analytics.optimization.lp_inputs import PLACEHOLDERS  # noqa: E402
 from backend.data_mode import PREVIEW_UNILEVER_DEMAND  # noqa: E402
 from scripts.preview_router_synth import load_series, preview  # noqa: E402
 from scripts.run_baseline_forecast import _clean_metric, _confidence_band  # noqa: E402
-from scripts.run_lp import MASE_GATE, _sigma_d_for_product, safety_stock_for  # noqa: E402
+from scripts.run_lp import (  # noqa: E402
+    MASE_GATE, _sigma_d_for_product, build_parser, fetch_demand_history, fetch_stock_and_cost, plan_cycle,
+    product_input,
+)
 
 OUT_DIR = os.path.join(REPO, "reports", "preview")
 FORECAST_FILE, LP_FILE, META_FILE = "app_forecast.csv", "app_lp.csv", "app_meta.json"
@@ -146,42 +149,53 @@ def forecast_rows(pv: pd.DataFrame, forecast_date: str, built_at: str) -> pd.Dat
     return pd.DataFrame(rows)
 
 
-def lp_rows(conn, forecasts: pd.DataFrame, abc_period: str) -> pd.DataFrame:
+def lp_rows(conn, forecasts: pd.DataFrame, abc_period: str) -> tuple[pd.DataFrame, dict]:
+    """The LP rows in LP_Recommendation's shape (q_i = the month's order, rop_i = the target
+    stock, ss_i = the safety stock), and the model settings for app_meta.json."""
     pool = forecasts[(forecasts["status"] == "ok") & (forecasts["mase"] < MASE_GATE)]
     dims = pd.read_sql(f"""
-        SELECT product_key, COALESCE(sku_code, category_path) AS sku_id, principal, unit_price
+        SELECT product_key, COALESCE(sku_code, category_path) AS sku_id, principal
         FROM Product_Dimension WHERE product_key IN ({TIER_A})""", conn, params={"abc": abc_period})
     cand = dims.merge(pool[["product_key", "forecast_value", "forecast_date"]], on="product_key")
+    keys = [int(k) for k in cand["product_key"]]
     demand = pd.read_sql(f"""
         SELECT pd.product_key, pd.sku_code, pd.principal, d.calendar_month AS period, SUM(d.quantity_sold) AS total_quantity
         FROM {PREVIEW_UNILEVER_DEMAND} d JOIN Product_Dimension pd ON pd.product_key = d.product_key
         WHERE pd.product_key = ANY(%(keys)s)
         GROUP BY pd.product_key, pd.sku_code, pd.principal, d.calendar_month
-        ORDER BY pd.product_key, d.calendar_month""", conn, params={"keys": [int(k) for k in cand["product_key"]]})
+        ORDER BY pd.product_key, d.calendar_month""", conn, params={"keys": keys})
     demand["total_quantity"] = pd.to_numeric(demand["total_quantity"], errors="coerce").fillna(0)
-    skus, rows = [], []
+    cur = conn.cursor()
+    stock_and_cost = fetch_stock_and_cost(cur, keys)
+    history = fetch_demand_history(cur, keys)  # real sales: last year's allocation and priority
+    args = build_parser().parse_args([])  # run_lp.py's defaults, i.e. the placeholders
+    products = []
     for r in cand.itertuples():
         sigma_d, reason = _sigma_d_for_product(demand[demand["product_key"] == r.product_key], r.principal)
         if sigma_d is None:
             logging.warning("LP: %s gated out — %s", r.sku_id, reason)
             continue
-        ss = safety_stock_for(sigma_d, 1.0)
-        rop = compute_rop(forecast=float(r.forecast_value), safety_stock=ss)
-        cost = float(r.unit_price) if r.unit_price is not None and not pd.isna(r.unit_price) else 1.0
-        skus.append(SKUInput(sku_id=str(r.sku_id), principal=r.principal, rop=rop,
-                             procurement_cost_per_unit=cost, storage_cost_per_unit=1.0))
-        rows.append({"product_key": int(r.product_key), "sku_id": str(r.sku_id), "planning_cycle_date": r.forecast_date,
-                     "rop_i": round(rop, 2), "ss_i": round(ss, 2)})
-    if not skus:
-        return pd.DataFrame(columns=["product_key", "planning_cycle_date", "q_i", "rop_i", "ss_i"])
-    total_rop = sum(s.rop for s in skus)
-    limits = {"warehouse_capacity": total_rop * 10, "supplier_ceilings": {"unilever": total_rop * 10}}
-    result = solve_lp(build_lp_model(skus, **limits))
-    if result is None:
-        raise SystemExit("LP infeasible with non-binding limits — unexpected; nothing written.")
-    df = pd.DataFrame(rows)
-    df["q_i"] = df["sku_id"].map(result).round(2)
-    return df[["product_key", "planning_cycle_date", "q_i", "rop_i", "ss_i"]]
+        product, reason = product_input(r.product_key, r.sku_id, r.principal, float(r.forecast_value), sigma_d,
+                                        stock_and_cost, history, prior_year=int(str(r.forecast_date)[:4]) - 1)
+        if product is None:
+            logging.warning("LP: %s gated out — %s", r.sku_id, reason)
+            continue
+        products.append(product)
+    model = {"cover_rule": args.cover_rule, "inputs": {k: getattr(args, k) for k in PLACEHOLDERS}}
+    if not products:
+        return pd.DataFrame(columns=["product_key", "planning_cycle_date", "q_i", "rop_i", "ss_i"]), model
+    plan = plan_cycle(products, args)
+    if plan.orders is None:
+        raise SystemExit(f"LP infeasible ({'; '.join(plan.infeasible_reasons)}); nothing written.")
+    cycle = cand["forecast_date"].iloc[0]
+    df = pd.DataFrame([{"product_key": p.product_key, "planning_cycle_date": cycle,
+                        "q_i": round(plan.orders[s.sku_id], 2), "rop_i": round(s.target_stock, 2),
+                        "ss_i": round(s.safety_stock, 2)} for p, s in zip(plan.products, plan.skus)])
+    summary = plan.summary()
+    model.update(allocation={k: round(v, 2) for k, v in plan.allocation.items()},
+                 need=round(summary["need"], 2), ordered=round(summary["ordered"], 2),
+                 short_skus=len(summary["short_skus"]))
+    return df, model
 
 
 def main():
@@ -215,7 +229,7 @@ def main():
     built_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     pv = run_preview(series_df, target, real_only=False)
     forecasts = forecast_rows(pv, f"{target}-01", built_at)
-    lp = lp_rows(conn, forecasts, abc_period)
+    lp, lp_model = lp_rows(conn, forecasts, abc_period)
     meta = {
         "built_at": built_at, "target_month": target, "abc_period": abc_period, "first_real_month": first_real,
         "last_real_month": last_real, "series_rows": int(len(series_df)),
@@ -224,9 +238,7 @@ def main():
         "placeholder_end": series_df.loc[series_df["is_placeholder"], "month"].max(),
         "placeholder_window": {"rows": int(pw_rows), "quantity_total": float(pw_qty or 0)},
         "forecast_status": forecasts["status"].value_counts().to_dict(),
-        "lp_skus": int(len(lp)), "live_reproduction_check": check,
-        "lp_limits": "non-binding (10 x total ROP); uniform unit cost 1.0 where unit_price is null",
-        "protection_days": 1.0,
+        "lp_skus": int(len(lp)), "live_reproduction_check": check, "lp_model": lp_model,
     }
     os.makedirs(args.out_dir, exist_ok=True)
     forecasts.to_csv(os.path.join(args.out_dir, FORECAST_FILE), index=False)

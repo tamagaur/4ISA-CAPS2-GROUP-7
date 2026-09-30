@@ -260,7 +260,7 @@ After these five, the rest of the file-by-file section below will make sense wit
 **What it does:** Turns a forecast into a recommended order quantity, using linear programming (LP) to balance cost, service level, and storage cost, subject to warehouse capacity and per-company supplier limits.
 **Why it exists:** This is the final "here's what to order" step (Phase 5) that feeds `LP_Recommendation`, which the dashboard shows to a human to accept or dismiss.
 **Calls / called by:** Not yet called by any orchestration script. Uses the `pulp` library with the CBC solver.
-**Key functions:** `compute_safety_stock`, `compute_rop` (reorder point), `build_lp_model`, `solve_lp` (returns `None` — never raises — if the problem is infeasible, so the caller can show a warning instead of crashing).
+**Key functions:** `compute_safety_stock`, `target_stock` and `net_need` (what to order, net of stock on hand), `build_lp_model`, `solve_lp` (returns `None` — never raises — if the problem is infeasible, so the caller can show a warning instead of crashing).
 **Gotchas:** The objective function's "storage cost" term is a plain per-unit cost, not tied to spoilage or Bad Order data specifically, even though the manuscript sometimes describes it as a "spoilage cost" — worth knowing if you're cross-referencing the manuscript.
 **Status:** Working and tested against synthetic inputs; never run against real forecast output.
 

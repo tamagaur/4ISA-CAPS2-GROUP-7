@@ -1,69 +1,87 @@
 """
-analytics.optimization.lp — Safety stock, ROP, and LP optimization (PuLP/CBC).
+analytics.optimization.lp — safety stock, target stock and the replenishment
+LP (PuLP/CBC).
 
-Phase 5 (CLAUDE.md Steps 17–21):
+Reworked 2026-09-29 to plan the way SSM orders (reports/
+LP_CLIENT_ALIGNMENT_PLAN_2026-09-29.md, Step B, agreed with Yuan): weekly
+purchase orders against a yearly supplier allocation, keeping about 3 weeks
+of sales in stock (Sir Abe, SSM). The model it replaces ordered
+Q_i >= ROP_i = forecast + SS for every SKU, ignored stock on hand, and with
+flat costs always returned Q_i = ROP_i (reports/LP_READINESS.md, B1).
 
-  Step 17 — Safety Stock:
-    SS_i = Z × σ_di   where Z = 1.28 (90% service level, hardcoded constant)
-    σ_di from reconstructed daily demand series (granularity.py output).
+Per SKU i, for one monthly planning cycle (quantities in pieces):
 
-    Step 18 — Reorder Point:
-    ROP_i = Ŷ_(t+1,i) + SS_i
-    Ŷ_(t+1,i) = one-month-ahead forecast (scripts/run_baseline_forecast.py's
-    deployed MA3 output, Forecast_Result.forecast_value — SARIMA was
-    retired; see analytics/forecasting/baseline.py's module docstring for
-    the bake-off evidence).
+  SS_i    = Z x sigma_i, Z = 1.28 (90% service level). sigma_i is the demand
+            variability over the review period + lead time (scripts/run_lp.py's
+            safety_stock_for; lp_inputs.SAFETY_STOCK_ASSUMPTION states what
+            that scaling assumes).
+  w_i     = F_i / WEEKS_PER_MONTH, the weekly rate of the month's forecast F_i.
+  T_i     = w_i x (R + L) / 5 + SS_i, the target stock: demand over the review
+            period R plus the lead time L (business days), plus safety stock.
+            Under the 'per-sku' cover rule T_i is at least N x w_i.
+  need_i  = max(0, F_i + T_i - S_i): the month's demand plus the gap to the
+            target, net of the stock on hand S_i.
 
-  Step 19 — LP Model (PuLP):
-    Decision variable: Q_i (replenishment quantity per SKU)
-    Objective: Minimize Z = w₁·TC − w₂·SL + w₃·SC
-      w₁ = 0.45, w₂ = 0.35, w₃ = 0.20
-    Constraints:
-      1. Warehouse capacity
-      2. Supplier ceiling (per-principal allocation limit)
-      3. Demand coverage (Q_i ≥ ROP_i)
+Decision variable: 0 <= Q_i <= need_i, the month's order (the app splits it
+into weekly POs). Q_i never exceeds the need, so an overstocked SKU orders 0.
 
-  Step 20 — Solver:
-    Solver: CBC (default PuLP).
-    INFEASIBLE result → surface warning to dashboard. NEVER crash silently.
-    Feasibility check BEFORE accepting Q_i values.
+Constraints:
+  1. warehouse   sum(S_i + Q_i) <= W. Counts the month's deliveries as if
+                 they all arrived at once, so it errs on the safe side.
+  2. allocation  sum(Q_i) <= A_p for each principal p.
+  3. cover rule  'aggregate' only, soft: the planned month-end stock, valued
+                 at cost c_i, covers N weeks of the planned SKUs' sales:
+                 sum(c_i (S_i + Q_i - F_i)) + short >= N x sum(c_i w_i).
 
-  Step 21 — Storage:
-    Write Q_i, ROP_i, SS_i per SKU per planning cycle to Supabase.
-    Link each record to ABC_Classification for dashboard filtering.
+Each need is filled in three layers, in this order of importance:
+  demand         max(0, F_i - S_i): this month's sales, so no SKU is planned
+                 to run out
+  safety stock   up to a month-end stock of SS_i
+  rest of target up to T_i (the demand over the review period + lead time,
+                 and the 'per-sku' 3-week floor)
+
+Objective, in stages; each holds the ones before at their optimum:
+  1. fill     maximize the pieces ordered in each layer, one layer at a time:
+              order as much of the need as the allocation and warehouse
+              allow, and when that isn't all of it, cut the rest of the
+              target first and this month's demand last.
+  2. cover    minimize `short` (skipped under 'per-sku').
+  3. weights  minimize w1 x TC - w2 x SL + w3 x SC, each term relative to its
+              value at full fill (Q = need):
+                TC = sum(c_i Q_i)                   procurement cost
+                SL = sum(r_i Q_i) / sum(r_i need_i)  the need met, each piece
+                                                    weighted by its SKU's
+                                                    revenue weight r_i
+                SC = sum(h_i Q_i)                   storage cost
+With enough allocation, stage 1 fills every need and nothing is left for the
+weights to decide. When the allocation is short, stage 1 fixes how much each
+layer gets and stage 3 decides who comes up short within the layer being cut:
+per piece, SKU i scores w2 x r_i/r - w1 x c_i/c - w3 x h_i/h (r, c and h are
+need-weighted averages), and the lowest scores give up that layer first. An
+LP picks corners, so within that layer the lowest SKUs can lose all of it
+before anyone else loses a piece; the layers keep that from reaching
+anyone's safety stock or month of demand while the allocation allows.
+(Filled as one block, the first dry run, 2026-09-29, ordered 0 for SKUs with
+less stock than a month's forecast.)
+
+Why stages and not one weighted sum: with every term at 1.0 at full fill, the
+cost weights (0.45 + 0.20) outweigh service (0.35), so a single weighted sum
+would order nothing, the mirror image of the old Q_i = ROP_i. The old model
+hid that behind its hard Q_i >= ROP_i floor. Here the floor is the target,
+kept as the first priority rather than a hard constraint, so a short
+allocation gives a plan instead of INFEASIBLE.
 
 Constants:
   Z_SCORE = 1.28
   W1, W2, W3 = 0.45, 0.35, 0.20
-
-Constants:
-  Z_SCORE = 1.28
-  W1, W2, W3 = 0.45, 0.35, 0.20
-
-Implements:
-  compute_safety_stock(sigma_d) -> float               (Step 17)
-  compute_rop(forecast, safety_stock) -> float          (Step 18)
-  build_lp_model(skus, warehouse_capacity, supplier_ceilings) -> pulp.LpProblem  (Step 19)
-  solve_lp(model) -> dict[str, float] | None            (Step 20)
-
-Objective modeling note (Step 19's Z = w1*TC - w2*SL + w3*SC, spelled out
-here since the docstring names the terms but not their formulas — flagged,
-not silently assumed, per this repo's convention):
-  TC (Total Cost)     = sum(procurement_cost_i * Q_i)   — minimize
-  SL (Service Level)  = sum(Q_i) / sum(ROP_i)           — maximize (hence
-                         the minus sign: minimizing -SL maximizes SL)
-  SC (Storage Cost)   = sum(storage_cost_i * Q_i)       — minimize
-All three are linear in Q_i, so the objective stays a valid LP. Demand
-coverage (Q_i >= ROP_i, Step 19 constraint 3) is a HARD constraint per
-the spec above, not a soft penalty — so a tight warehouse_capacity or
-supplier_ceiling relative to total ROP is exactly what produces the
-INFEASIBLE case Step 20 requires solve_lp() to handle gracefully.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 import pulp
+
+from analytics.optimization.lp_inputs import BUSINESS_DAYS_PER_WEEK, WEEKS_PER_MONTH
 
 Z_SCORE = 1.28
 W1, W2, W3 = 0.45, 0.35, 0.20
@@ -73,32 +91,76 @@ assert abs((W1 + W2 + W3) - 1.00) < 1e-9, "W1+W2+W3 must sum to 1.00 (Step 19 we
 
 @dataclass
 class SKUInput:
-    """One SKU's inputs to the LP for a single planning cycle."""
+    """One SKU's inputs to the LP for a single planning cycle, in pieces."""
     sku_id: str
     principal: str            # 'unilever' | 'delmonte' — must match a key in supplier_ceilings
-    rop: float                # ROP_i from compute_rop() — hard lower bound on Q_i
-    procurement_cost_per_unit: float
-    storage_cost_per_unit: float
+    demand: float             # F_i: this month's forecast
+    target_stock: float       # T_i: see target_stock()
+    stock_on_hand: float      # S_i: stock at the start of the month
+    safety_stock: float       # SS_i, the part of T_i filled before the rest
+    procurement_cost_per_unit: float  # c_i, ₱ per piece; also values stock for the cover rule
+    storage_cost_per_unit: float      # h_i, ₱ per piece
+    revenue_weight: float = 1.0       # r_i: priority when the allocation is short
+
+    @property
+    def need(self) -> float:
+        return net_need(self.demand, self.target_stock, self.stock_on_hand)
 
 
 def compute_safety_stock(sigma_d: float, z: float = Z_SCORE) -> float:
     """Step 17: SS_i = Z x sigma_di, Z=1.28 fixed (90% service level).
 
-    sigma_d is the standard deviation of the reconstructed DAILY demand
-    series for one SKU (granularity.py's output) — this function does not
-    reconstruct or aggregate that series itself, it only applies the
-    formula, so it stays a pure, trivially-testable unit.
+    sigma_d is the standard deviation of demand over the period the buffer
+    covers — this function does not derive or rescale it, it only applies
+    the formula, so it stays a pure, trivially-testable unit.
     """
     if sigma_d < 0:
         raise ValueError(f"sigma_d (a standard deviation) cannot be negative: {sigma_d}")
     return z * sigma_d
 
 
-def compute_rop(forecast: float, safety_stock: float) -> float:
-    """Step 18: ROP_i = Y_hat_(t+1,i) + SS_i."""
+def weekly_demand(monthly_demand: float) -> float:
+    """A month's demand as a weekly rate (the dashboard's weeks convention)."""
+    return monthly_demand / WEEKS_PER_MONTH
+
+
+def target_stock(
+    monthly_demand: float,
+    safety_stock: float,
+    review_days: float,
+    lead_days: float,
+    floor_weeks: float | None = None,
+) -> float:
+    """T_i = demand over the review period + lead time (business days) +
+    safety stock. With floor_weeks (the 'per-sku' cover rule), never less
+    than that many weeks of sales."""
     if safety_stock < 0:
         raise ValueError(f"safety_stock cannot be negative: {safety_stock}")
-    return forecast + safety_stock
+    if review_days < 0 or lead_days < 0:
+        raise ValueError(f"review_days and lead_days cannot be negative: {review_days}, {lead_days}")
+    weekly = weekly_demand(monthly_demand)
+    target = weekly * (review_days + lead_days) / BUSINESS_DAYS_PER_WEEK + safety_stock
+    if floor_weeks is not None:
+        target = max(target, floor_weeks * weekly)
+    return target
+
+
+def net_need(monthly_demand: float, target: float, stock_on_hand: float) -> float:
+    """need_i = max(0, F_i + T_i - S_i): what the month's orders must bring
+    in to cover its demand and end the month at the target."""
+    return max(0.0, monthly_demand + target - stock_on_hand)
+
+
+FILL_LAYERS = ("demand", "safety_stock", "rest_of_target")
+
+
+def fill_layers(sku: SKUInput) -> tuple[float, float, float]:
+    """need_i split into the FILL_LAYERS, filled in that order: this month's
+    demand, then safety stock, then the rest of the target. Sums to need_i."""
+    need = sku.need
+    demand = min(need, max(0.0, sku.demand - sku.stock_on_hand))
+    safety = min(need, max(0.0, sku.demand + sku.safety_stock - sku.stock_on_hand)) - demand
+    return demand, safety, need - demand - safety
 
 
 def build_lp_model(
@@ -106,28 +168,17 @@ def build_lp_model(
     warehouse_capacity: float,
     supplier_ceilings: dict[str, float],
     weights: tuple[float, float, float] = (W1, W2, W3),
+    min_cover_weeks: float | None = None,
 ) -> pulp.LpProblem:
-    """Step 19: builds (does not solve) the replenishment LP.
+    """Builds (does not solve) the LP in the module docstring.
+    min_cover_weeks turns on the aggregate cover rule (constraint 3).
 
-    Decision variables: one continuous Q_i >= 0 per SKU.
-    Objective: minimize w1*TC - w2*SL + w3*SC (see module docstring for
-    the TC/SL/SC formulas).
-    Constraints:
-      1. warehouse_capacity: sum(Q_i) <= warehouse_capacity
-      2. supplier ceiling: sum(Q_i for SKUs of principal p) <= supplier_ceilings[p],
-         for every principal present in `skus`
-      3. demand_coverage: Q_i >= rop_i, per SKU (hard)
+    Raises ValueError if `skus` is empty, the weights don't sum to 1, or a
+    principal in `skus` has no supplier ceiling (a silently-missing ceiling
+    would leave that principal's SKUs unconstrained).
 
-    Raises ValueError if `skus` is empty, or if any SKU's principal has
-    no entry in supplier_ceilings (a silently-missing ceiling would mean
-    that principal's SKUs are unconstrained, contradicting Step 19).
-
-    The returned LpProblem carries an extra `.sku_variables` attribute
-    (dict[sku_id, LpVariable]) so solve_lp() can map the solution back to
-    SKU ids without re-deriving PuLP's internal variable names — a
-    deviation from the bare `pulp.LpProblem` the original TODO signature
-    implied, flagged here rather than silently done, since a plain
-    LpProblem alone has no clean way to recover which variable is which SKU.
+    The problem carries `.sku_orders` ({sku_id: Q_i as an expression}) and
+    `.stages`, the (name, expression) pairs solve_lp() minimizes in turn.
     """
     if not skus:
         raise ValueError("build_lp_model requires at least one SKU")
@@ -145,97 +196,103 @@ def build_lp_model(
 
     problem = pulp.LpProblem("SSM_Replenishment", pulp.LpMinimize)
 
-    variables: dict[str, pulp.LpVariable] = {
-        sku.sku_id: pulp.LpVariable(f"Q_{sku.sku_id}", lowBound=0, cat="Continuous")
-        for sku in skus
-    }
+    # One variable per SKU and layer, Q_i their sum. Named by position: PuLP
+    # rewrites characters it can't use in a name, so two SKU ids could
+    # otherwise end up as one variable.
+    needs = {sku.sku_id: sku.need for sku in skus}
+    layers: dict[str, list[pulp.LpVariable]] = {name: [] for name in FILL_LAYERS}
+    variables: dict[str, pulp.LpAffineExpression] = {}
+    for n, sku in enumerate(skus):
+        parts = []
+        for name, cap in zip(FILL_LAYERS, fill_layers(sku)):
+            if cap > 0:
+                part = pulp.LpVariable(f"Q_{n}_{name}", lowBound=0, upBound=cap, cat="Continuous")
+                layers[name].append(part)
+                parts.append(part)
+        variables[sku.sku_id] = pulp.lpSum(parts)
+    order = pulp.lpSum(variables.values())
 
-    total_rop = sum(sku.rop for sku in skus)
-    if total_rop <= 0:
-        raise ValueError("sum of ROP across all SKUs must be positive to define service level")
+    # Constraint 1 — warehouse capacity, stock on hand included
+    problem += (order + sum(sku.stock_on_hand for sku in skus) <= warehouse_capacity, "warehouse_capacity")
 
-    total_cost = pulp.lpSum(sku.procurement_cost_per_unit * variables[sku.sku_id] for sku in skus)
-    service_level = pulp.lpSum(variables[sku.sku_id] for sku in skus) / total_rop
-    storage_cost = pulp.lpSum(sku.storage_cost_per_unit * variables[sku.sku_id] for sku in skus)
-
-    # ── Objective normalization (added 2026-09; see CHANGE LOG) ────────────
-    # The three terms are measured in incommensurate units: TC and SC are
-    # pesos (each Q_i carries a coefficient of ~1e1-1e2), while SL is a
-    # dimensionless ratio whose per-unit coefficient is 1/total_rop (~1e-8
-    # on real data). Weighting raw terms therefore compared a peso against
-    # a ratio: the cost coefficients outweighed the service coefficient by
-    # ~9 orders of magnitude, every objective coefficient stayed positive,
-    # and CBC drove every Q_i to its lower bound. That is exactly what the
-    # live 2026-03 cycle shows — Q_i == ROP_i on 227 of 251 rows (90%) —
-    # i.e. w1/w2/w3 had no influence on the solution at all.
-    #
-    # Each term is now divided by its own value at the reference point
-    # Q_i = ROP_i (the minimum feasible solution, given constraint 3), so
-    # all three read 1.0 there and the weights trade like-for-like: a 1%
-    # rise in normalized cost is directly comparable to a 1% rise in
-    # normalized service. This rescales the objective ONLY — the feasible
-    # region, the constraints and the reported Q_i units are unchanged,
-    # and an LP objective is invariant to positive scaling of its terms.
-    tc_ref = sum(sku.procurement_cost_per_unit * sku.rop for sku in skus)
-    sc_ref = sum(sku.storage_cost_per_unit * sku.rop for sku in skus)
-    # SL at the reference point is total_rop/total_rop = 1.0 by construction.
-
-    # A zero reference means that term is identically zero across the whole
-    # feasible region (every unit cost is 0), so it cannot be normalized and
-    # contributes nothing. Falling back to 1.0 leaves it at its raw value
-    # (still zero) rather than dividing by zero — never silently dropped.
-    tc_scale = tc_ref if tc_ref > 0 else 1.0
-    sc_scale = sc_ref if sc_ref > 0 else 1.0
-
-    problem += (
-        w1 * (total_cost / tc_scale)
-        - w2 * service_level
-        + w3 * (storage_cost / sc_scale),
-        "objective",
-    )
-
-    # Constraint 1 — warehouse capacity
-    problem += (
-        pulp.lpSum(variables.values()) <= warehouse_capacity,
-        "warehouse_capacity",
-    )
-
-    # Constraint 2 — supplier ceiling, per principal
-    principals = {sku.principal for sku in skus}
-    for principal in principals:
-        principal_qty = pulp.lpSum(
-            variables[sku.sku_id] for sku in skus if sku.principal == principal
-        )
+    # Constraint 2 — supplier allocation, per principal
+    for principal in sorted({sku.principal for sku in skus}):
         problem += (
-            principal_qty <= supplier_ceilings[principal],
+            pulp.lpSum(variables[sku.sku_id] for sku in skus if sku.principal == principal)
+            <= supplier_ceilings[principal],
             f"supplier_ceiling_{principal}",
         )
 
-    # Constraint 3 — demand coverage, per SKU (hard lower bound)
-    for sku in skus:
-        problem += (
-            variables[sku.sku_id] >= sku.rop,
-            f"demand_coverage_{sku.sku_id}",
-        )
+    stages: list[tuple[str, pulp.LpAffineExpression]] = [
+        (f"fill_{name}", -pulp.lpSum(layers[name])) for name in FILL_LAYERS
+    ]
 
-    problem.sku_variables = variables  # type: ignore[attr-defined]
+    # Constraint 3 — the aggregate cover rule, soft
+    if min_cover_weeks is not None:
+        short = pulp.LpVariable("cover_short", lowBound=0)
+        planned = pulp.lpSum(
+            sku.procurement_cost_per_unit * (sku.stock_on_hand + variables[sku.sku_id] - sku.demand)
+            for sku in skus
+        )
+        required = min_cover_weeks * sum(sku.procurement_cost_per_unit * weekly_demand(sku.demand) for sku in skus)
+        problem += (planned + short >= required, "cover_rule")
+        stages.append(("cover_short", pulp.lpSum([short])))
+
+    # Stage 3 — the weights. Each term is relative to its value at full fill
+    # (Q = need), so all three read 1.0 there and trade like for like.
+    total_need = sum(needs.values())
+    tc_ref = sum(sku.procurement_cost_per_unit * needs[sku.sku_id] for sku in skus)
+    sc_ref = sum(sku.storage_cost_per_unit * needs[sku.sku_id] for sku in skus)
+    sl_ref = sum(sku.revenue_weight * needs[sku.sku_id] for sku in skus)
+    total_cost = pulp.lpSum(sku.procurement_cost_per_unit * variables[sku.sku_id] for sku in skus)
+    storage_cost = pulp.lpSum(sku.storage_cost_per_unit * variables[sku.sku_id] for sku in skus)
+    if sl_ref > 0:
+        service_level = pulp.lpSum(sku.revenue_weight * variables[sku.sku_id] for sku in skus) / sl_ref
+    else:  # no revenue weights at all: every piece counts the same
+        service_level = order / total_need if total_need > 0 else pulp.LpAffineExpression()
+    # A zero reference means every unit cost is 0, so the term is 0 everywhere
+    # and is left at its raw value rather than divided by zero.
+    weighted = (
+        w1 * (total_cost / (tc_ref if tc_ref > 0 else 1.0))
+        - w2 * service_level
+        + w3 * (storage_cost / (sc_ref if sc_ref > 0 else 1.0))
+    )
+    # Scaled by the total need so a piece's coefficient is O(1): unscaled it
+    # sits near 1e-7, CBC's own tolerance, where two SKUs can't be told
+    # apart. A positive rescale doesn't move the optimum.
+    stages.append(("weights", weighted * (total_need if total_need > 0 else 1.0)))
+
+    problem.sku_orders = variables  # type: ignore[attr-defined]
+    problem.stages = stages  # type: ignore[attr-defined]
     return problem
 
 
 def solve_lp(model: pulp.LpProblem) -> dict[str, float] | None:
-    """Step 20: solves with CBC (PuLP's default solver).
+    """Step 20: solves the stages in order with CBC (PuLP's default
+    solver), holding each at its optimum before the next.
 
-    Returns a dict {sku_id: Q_i} on an Optimal solution. Returns None —
-    NEVER raises — for Infeasible, Unbounded, or Undefined status, so the
-    caller can surface a clear warning to the dashboard instead of the
-    pipeline crashing. Feasibility is checked BEFORE any Q_i value is
-    read off the model, per Step 20's checkpoint.
+    Returns {sku_id: Q_i} when every stage is Optimal. Returns None — NEVER
+    raises — for Infeasible, Unbounded or Undefined, so the caller can
+    surface a clear warning to the dashboard instead of the pipeline
+    crashing. No Q_i is read off the model before that check.
+
+    Sets model.stage_values ({stage name: its optimum}) for the caller's
+    report; 'cover_short' is the aggregate cover rule's shortfall in pesos.
     """
-    model.solve(pulp.PULP_CBC_CMD(msg=False))
-    status = pulp.LpStatus[model.status]
+    stages = getattr(model, "stages", None) or [("objective", model.objective)]
+    model.stage_values = {}  # type: ignore[attr-defined]
+    for n, (name, expression) in enumerate(stages):
+        model.setObjective(expression)
+        model.solve(pulp.PULP_CBC_CMD(msg=False))
+        if pulp.LpStatus[model.status] != "Optimal":
+            return None
+        value = float(pulp.value(expression) or 0.0)
+        model.stage_values[name] = value
+        if n < len(stages) - 1:
+            # Hold this stage at its optimum. The slack only absorbs float
+            # round-off: the later stages lean on it (stage 3's costs pull the
+            # order down), so a looser one shows up as orders just under need.
+            model += (expression <= value + 1e-9 * max(1.0, abs(value)) + 1e-7, f"hold_{name}")
 
-    if status != "Optimal":
-        return None
-
-    sku_variables: dict[str, pulp.LpVariable] = getattr(model, "sku_variables", {})
-    return {sku_id: float(var.value()) for sku_id, var in sku_variables.items()}
+    sku_orders: dict[str, pulp.LpAffineExpression] = getattr(model, "sku_orders", {})
+    return {sku_id: float(pulp.value(expr) or 0.0) for sku_id, expr in sku_orders.items()}

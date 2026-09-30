@@ -10,7 +10,7 @@ import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
 import { LoadingStatus, PageSkeleton } from './Skeleton';
 import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal, labelForPrincipal } from '../principals';
-import { LATEST_DATA_PERIOD } from '../dataCoverage';
+import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
 import {
   DATA_MODES, PLACEHOLDER_PRINCIPAL, PLACEHOLDER_START, getDataMode, isPreviewMode, setDataMode as storeDataMode,
 } from '../dataMode';
@@ -58,15 +58,18 @@ const subtractMonths = (month, year, count) => {
   return { month: MONTHS[monthIndex], year: String(Number(year) + yearOffset) };
 };
 
-// Default period: 6 months back from "today" (the latest month with real
-// data) through "today" — a 7-point window, up from the 3 points this
-// used to open on. Short windows make the dashboard's trend charts read
-// as a couple of disconnected dots; six months back is enough shape to
-// see direction at a glance while still comfortably inside the data
-// (real Unilever demand starts Jan 2023, so this never underflows).
-// Both the initial state below and the "Today" reset button build off
-// this same function, so they can never drift apart.
-const DEFAULT_MONTHS_BACK = 6;
+// Default period: the 12 months ending "today" (the latest month with real
+// data) — Mar 2025-Feb 2026 as of 2026-09. Twelve, not the seven this
+// opened on until 2026-09-29, because a full year is one of every season:
+// Unilever dips every July and February and peaks in June, and seven months
+// (Aug-Feb) left out the June peak and the July dip, so one dip could read
+// as a trend. It also shows Del Monte's real months properly (6 in the last
+// year against 3 in seven months, its data being patchy), and matches SSM's
+// own yearly view — its supplier allocation is last year's sales x
+// 103-108%. Still comfortably inside the data (real demand starts Jan 2023).
+// Both the initial state below and the "Today" reset button build off this
+// same function, so they can never drift apart.
+const DEFAULT_MONTHS_BACK = 11;
 
 // Minimum SELECTABLE range width (inclusive month count, not "months
 // back" — a 6-month minimum means Sep 2025-Feb 2026 is the shortest
@@ -75,12 +78,11 @@ const DEFAULT_MONTHS_BACK = 6;
 //   - analytics/forecasting/baseline.py's MIN_MONTHS_WITH_SALES = 3 is the
 //     hard floor below which no forecasting model runs for a SKU at all
 //     (it gets a provisional trailing average instead).
-//   - This app's own DEFAULT_MONTHS_BACK above already opens on 7 points,
-//     which is what "enough shape to see a trend, not just 2-3 connected
-//     dots" actually looks like in practice.
-// 6 sits between those: comfortably past the analytics floor, matching
-// what the app already defaults to, so "the minimum you can pick" and
-// "what you see with no changes" are the same order of magnitude.
+//   - Six points is what "enough shape to see a trend, not just 2-3
+//     connected dots" actually looks like in practice.
+// 6 sits between those and the 12-month default above: comfortably past
+// the analytics floor, and half a year is the shortest window that still
+// says something about direction.
 const MIN_RANGE_MONTHS = 6;
 
 // Preview (src/dataMode.js) exists to show the whole span, so its default
@@ -91,6 +93,63 @@ const getDefaultDateRange = (mode = DATA_MODES.REAL) => {
     ? PLACEHOLDER_START
     : subtractMonths(today.month, today.year, DEFAULT_MONTHS_BACK);
   return { startMonth: start.month, startYear: start.year, endMonth: today.month, endYear: today.year };
+};
+
+// The range someone last saved, kept across reloads — per data mode, since
+// preview reaches back to 2021 and real mode can't. Until 2026-09-29 the
+// range was written to four san2_start_/san2_end_ keys that nothing ever
+// read, so every reload reset it. The key is new on purpose: a range saved
+// under the old seven-month default must not mask the twelve-month one.
+// A saved range is dropped, and the default comes back, when:
+//   - "today" has moved since it was saved (new data loaded, and the
+//     default is what ends on the newest month);
+//   - it no longer fits what the picker offers (before the mode's first
+//     month, after today, backwards, or under MIN_RANGE_MONTHS).
+// Storage can be unavailable (blocked, private mode), so every access is
+// guarded and falls back to the default.
+const RANGE_STORAGE_KEY = 'san2_date_range_v2';
+const LEGACY_RANGE_KEYS = ['san2_start_month', 'san2_start_year', 'san2_end_month', 'san2_end_year'];
+const todayStamp = () => {
+  const today = getCurrentRealWorldPeriod();
+  return `${today.month} ${today.year}`;
+};
+
+const loadSavedRange = (mode) => {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(`${RANGE_STORAGE_KEY}:${mode}`) || 'null');
+  } catch {
+    return null;
+  }
+  if (!saved || typeof saved !== 'object' || saved.today !== todayStamp()) return null;
+  const { startMonth, startYear, endMonth, endYear } = saved;
+  const monthsOk = MONTHS.includes(startMonth) && MONTHS.includes(endMonth);
+  const yearsOk = [startYear, endYear].every((y) => /^\d{4}$/.test(String(y)));
+  if (!monthsOk || !yearsOk) return null;
+  const today = getCurrentRealWorldPeriod();
+  const first = isPreviewMode(mode) ? PLACEHOLDER_START : { month: 'Jan', year: String(FIRST_DATA_YEAR) };
+  const start = periodValue(startMonth, startYear);
+  const end = periodValue(endMonth, endYear);
+  const fits = start >= periodValue(first.month, first.year)
+    && end <= periodValue(today.month, today.year)
+    && end - start + 1 >= MIN_RANGE_MONTHS;
+  return fits ? { startMonth, startYear: String(startYear), endMonth, endYear: String(endYear) } : null;
+};
+
+const saveRange = (mode, range) => {
+  try {
+    localStorage.setItem(`${RANGE_STORAGE_KEY}:${mode}`, JSON.stringify({ ...range, today: todayStamp() }));
+  } catch {
+    // Not remembered this time; the range still applies.
+  }
+};
+
+const clearSavedRange = (mode) => {
+  try {
+    localStorage.removeItem(`${RANGE_STORAGE_KEY}:${mode}`);
+  } catch {
+    // Nothing stored to clear.
+  }
 };
 
 // On phone/tablet widths the sidebar becomes a slide-over overlay (see
@@ -120,7 +179,9 @@ const DashboardLayout = () => {
   // Held here as state so the Topbar, the banner and every page re-render
   // on a flip; the module copy is what apiFetch reads.
   const [dataMode, setDataModeState] = useState(getDataMode);
-  const defaultRange = getDefaultDateRange(dataMode);
+  // Where the page opens: the range last saved for this mode, if it still
+  // fits (loadSavedRange), else the default. Read once, at mount.
+  const [initialRange] = useState(() => loadSavedRange(dataMode) || getDefaultDateRange(dataMode));
 
   // What preview means right now (GET /data-mode): the placeholder window
   // and, when scripts/build_preview_outputs.py has run, `outputs` — the
@@ -128,11 +189,21 @@ const DashboardLayout = () => {
   // Null in real mode, and while the request is in flight.
   const [previewInfo, setPreviewInfo] = useState(null);
 
-  // Persistent Applied State (defaulting to the 3-month range ending "today")
-  const [startMonth, setStartMonth] = useState(defaultRange.startMonth);
-  const [startYear, setStartYear] = useState(defaultRange.startYear);
-  const [endMonth, setEndMonth] = useState(defaultRange.endMonth);
-  const [endYear, setEndYear] = useState(defaultRange.endYear);
+  // Applied range: the saved one, or the 12-month default ending "today".
+  const [startMonth, setStartMonth] = useState(initialRange.startMonth);
+  const [startYear, setStartYear] = useState(initialRange.startYear);
+  const [endMonth, setEndMonth] = useState(initialRange.endMonth);
+  const [endYear, setEndYear] = useState(initialRange.endYear);
+
+  // The four keys the range used to be written to (never read) are removed
+  // once, so they don't linger in anyone's browser.
+  useEffect(() => {
+    try {
+      LEGACY_RANGE_KEYS.forEach((key) => localStorage.removeItem(key));
+    } catch {
+      // Storage unavailable: nothing to tidy.
+    }
+  }, []);
 
   // Pending Unsaved Selection State
   const [pendingStartMonth, setPendingStartMonth] = useState(startMonth);
@@ -222,10 +293,9 @@ const DashboardLayout = () => {
     setStartYear(pendingStartYear);
     setEndMonth(pendingEndMonth);
     setEndYear(pendingEndYear);
-    localStorage.setItem('san2_start_month', pendingStartMonth);
-    localStorage.setItem('san2_start_year', pendingStartYear);
-    localStorage.setItem('san2_end_month', pendingEndMonth);
-    localStorage.setItem('san2_end_year', pendingEndYear);
+    saveRange(dataMode, {
+      startMonth: pendingStartMonth, startYear: pendingStartYear, endMonth: pendingEndMonth, endYear: pendingEndYear,
+    });
   };
 
   const handleDiscardPeriod = () => {
@@ -238,23 +308,26 @@ const DashboardLayout = () => {
   // "Today" is a one-click reset to the default range — unlike a manual
   // month/year pick, it applies immediately (via updatePeriodImmediately,
   // defined below) rather than staging a pending change that still needs
-  // a separate Save.
+  // a separate Save — and forgets the saved range, so the next visit opens
+  // on the default too.
   const handleResetToToday = () => {
     const range = getDefaultDateRange(dataMode);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
+    clearSavedRange(dataMode);
   };
 
-  // Flipping the mode resets the range to that mode's default: all of Jan
-  // 2021 – today in preview, the usual window in real mode (whose picker
-  // can't show 2021-22 at all). Turning preview on also switches to
-  // Unilever, the one principal with placeholder months — under All, the
-  // both-principals-or-nothing rule leaves those months blank. Every cached
-  // response is dropped and the page remounts, like the Refresh button.
+  // Flipping the mode switches to that mode's own range: the one saved for
+  // it, else its default — all of Jan 2021 – today in preview, the usual
+  // 12 months in real mode (whose picker can't show 2021-22 at all).
+  // Turning preview on also switches to Unilever, the one principal with
+  // placeholder months — under All, the both-principals-or-nothing rule
+  // leaves those months blank. Every cached response is dropped and the
+  // page remounts, like the Refresh button.
   const handleDataModeChange = (next) => {
     if (next === dataMode) return;
     const mode = storeDataMode(next);
     setDataModeState(mode);
-    const range = getDefaultDateRange(mode);
+    const range = loadSavedRange(mode) || getDefaultDateRange(mode);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
     if (isPreviewMode(mode)) setPrincipal(PLACEHOLDER_PRINCIPAL);
     invalidateCache();
@@ -298,10 +371,6 @@ const DashboardLayout = () => {
     setPendingStartYear(sy);
     setPendingEndMonth(em);
     setPendingEndYear(ey);
-    localStorage.setItem('san2_start_month', sm);
-    localStorage.setItem('san2_start_year', sy);
-    localStorage.setItem('san2_end_month', em);
-    localStorage.setItem('san2_end_year', ey);
   };
 
   return (

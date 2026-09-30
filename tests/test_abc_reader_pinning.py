@@ -24,8 +24,6 @@ SEARCH_ROOTS = ("analytics", "scripts", "tools")
 ALLOWLIST = {
     "analytics/classification/abc.py":
         "pure function, DB-free by design — mentions the table in its docstring only",
-    "analytics/optimization/lp.py":
-        "docstring reference only; the query lives in scripts/run_lp.py",
     "scripts/backup_live_db.py":
         "SELECT * over every reflected table — a full dump must not filter",
     "scripts/apply_product_master_cleanup.py":
