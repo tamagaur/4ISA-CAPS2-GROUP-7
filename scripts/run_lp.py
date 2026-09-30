@@ -7,10 +7,12 @@ agreed with Yuan) to order the way SSM does: net of stock on hand, up to a
 target stock, within the supplier allocation (Sir Abe's rule). lp.py's
 module docstring has the model. This script fetches its inputs, solves one LP
 per planning cycle, and writes (or, with --dry-run, reports) one row per
-product. The columns are reused, so no migration:
-  q_i    the month's order, in pieces (the app splits it into weekly POs)
-  rop_i  the target stock T_i
-  ss_i   the safety stock
+product:
+  q_i         the month's order, in pieces (the app splits it into weekly POs)
+  rop_i       the target stock T_i
+  ss_i        the safety stock
+  lp_run_key  the lp_run row (migration 0035) holding every input the run
+              used, which is what the app shows (backend/lp_cycle.stored_run)
 
 Mirrors scripts/run_baseline_forecast.py's structure (argparse ->
 load_dotenv -> psycopg2 connect -> fetch queries -> a per-item loop -> a
@@ -91,12 +93,14 @@ import argparse
 import logging
 import math
 import os
+import subprocess
 import sys
 from dataclasses import dataclass
 
 import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
+from psycopg2.extras import Json
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -105,7 +109,9 @@ from analytics.allocation import basis_year, monthly_allocation
 from analytics.optimization.lp import (
     SKUInput, build_lp_model, compute_safety_stock, solve_lp, target_stock, weekly_demand,
 )
-from analytics.params import COVER_RULES, MASE_GATE, PLACEHOLDERS
+from analytics.params import (
+    COVER_RULES, LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION, SERVICE_LEVEL_PCT, SERVICE_Z,
+)
 from backend.stock_units import PACK_SIZE_NUMERIC, STOCK_AT_LATEST_SQL
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -122,19 +128,32 @@ LOUD_RULE = "=" * 78
 # on INSERT, and backend/lp_cycle.py dates the run from it: a refreshed row
 # that kept its first-insert time made a rerun look like it never happened,
 # so the dashboard's stale-LP banner could not clear.
+#
+# lp_run_key moves with the numbers: a refreshed row points at this run, a
+# decided row keeps the run it was decided on.
 UPSERT_QUERY = """
     INSERT INTO LP_Recommendation
-    (product_key, planning_cycle_date, q_i, rop_i, ss_i, status)
-    VALUES (%s, %s, %s, %s, %s, 'pending')
+    (product_key, planning_cycle_date, q_i, rop_i, ss_i, status, lp_run_key)
+    VALUES (%s, %s, %s, %s, %s, 'pending', %s)
     ON CONFLICT (product_key, planning_cycle_date)
     DO UPDATE SET
         q_i = EXCLUDED.q_i,
         rop_i = EXCLUDED.rop_i,
         ss_i = EXCLUDED.ss_i,
+        lp_run_key = EXCLUDED.lp_run_key,
         status = 'pending',
         generated_at = now()
     WHERE LP_Recommendation.status = 'pending'
 """
+
+# What one planning cycle's run used (migration 0035). RETURNING the key the
+# cycle's rows then carry.
+LP_RUN_INSERT_QUERY = """
+    INSERT INTO lp_run (planning_cycle_date, principal_scope, inputs, model, code_version)
+    VALUES (%s, %s, %s, %s, %s)
+    RETURNING run_key
+"""
+LP_RUN_PRESENT_QUERY = "SELECT to_regclass('lp_run') IS NOT NULL"
 
 # Category A (latest classification_period) with a Forecast_Result row at
 # the latest forecast_date, status='ok', mase < MASE_GATE. Both "latest"
@@ -466,6 +485,42 @@ def plan_rows(plan: CyclePlan, planning_cycle_date) -> list[dict]:
     return rows
 
 
+def _code_version() -> str | None:
+    """The git commit this run came from, or None when it can't be read."""
+    try:
+        out = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10,
+                             cwd=os.path.dirname(os.path.abspath(__file__)))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.strip() or None
+
+
+def run_record(args: argparse.Namespace, plan: CyclePlan, planning_cycle_date) -> dict:
+    """The lp_run row for one solved cycle: every flag as run (inputs) and
+    what the code fixed (model). What the app shows about this run."""
+    return {
+        "planning_cycle_date": planning_cycle_date,
+        "principal_scope": args.principal,
+        "inputs": {key: getattr(args, key) for key in PLACEHOLDERS},
+        "model": {
+            "weights": dict(LP_WEIGHTS),
+            "z_score": SERVICE_Z,
+            "service_level_pct": SERVICE_LEVEL_PCT,
+            "mase_gate": MASE_GATE,
+            "safety_stock_window_days": args.review_days + args.lead_days,
+            "allocation": {
+                "pct": args.allocation_pct,
+                "unit": "pieces",
+                "basis_year": basis_year(planning_cycle_date),
+                "monthly_ceiling": {p: round(v, 2) for p, v in sorted(plan.allocation.items())},
+            },
+            "safety_stock_assumption": SAFETY_STOCK_ASSUMPTION,
+        },
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = PLACEHOLDERS
     parser = argparse.ArgumentParser(
@@ -538,8 +593,8 @@ def _log_inputs(args: argparse.Namespace) -> None:
     logger.warning(f"  safety stock window = review + lead = {args.review_days + args.lead_days:g} business days")
     logger.warning(LOUD_RULE)
     if not args.dry_run and any(getattr(args, k) != v for k, v in PLACEHOLDERS.items()):
-        logger.warning("A real run with non-default inputs: the app's model description (lp_model_info) "
-                       "states the defaults, not these. Change analytics/params.PLACEHOLDERS instead if these are meant.")
+        logger.warning("A real run with non-default inputs: they are recorded in lp_run, and the app "
+                       "shows them for this cycle. The defaults stay analytics/params.PLACEHOLDERS.")
     if args.dry_run:
         logger.warning("DRY RUN — one READ ONLY transaction; nothing will be written to LP_Recommendation.")
 
@@ -587,10 +642,32 @@ def main():
     if args.dry_run:
         cur.execute("SET TRANSACTION READ ONLY")
 
-    def save_result(product_key, planning_cycle_date, q_i, rop_i, ss_i) -> bool:
+    # Every real run records what it used (lp_run, migration 0035): without
+    # the table the app could only state defaults, so a real run refuses.
+    cur.execute(LP_RUN_PRESENT_QUERY)
+    if not cur.fetchone()[0]:
+        if not args.dry_run:
+            logger.error("lp_run is missing: apply analytics/db/migrations/0035_lp_run.sql before a real "
+                         "run, so the app can show what this run used. Nothing was written.")
+            conn.close()
+            return
+        logger.warning("lp_run is missing (migration 0035): a real run would refuse until it is applied.")
+
+    def save_result(product_key, planning_cycle_date, q_i, rop_i, ss_i, run_key) -> bool:
         """Upsert one row. False when it hit a decided row and changed nothing."""
-        cur.execute(UPSERT_QUERY, (int(product_key), planning_cycle_date, float(q_i), float(rop_i), float(ss_i)))
+        cur.execute(UPSERT_QUERY, (int(product_key), planning_cycle_date, float(q_i), float(rop_i), float(ss_i),
+                                   int(run_key)))
         return cur.rowcount > 0
+
+    def save_run(record: dict) -> int:
+        """Insert one lp_run row; its run_key."""
+        cur.execute(LP_RUN_INSERT_QUERY, (
+            record["planning_cycle_date"], record["principal_scope"],
+            Json(record["inputs"]), Json(record["model"]), code_version,
+        ))
+        return int(cur.fetchone()[0])
+
+    code_version = _code_version()
 
     def existing_rows(planning_cycle_date) -> dict:
         """product_key -> status of the rows already stored for this cycle."""
@@ -684,6 +761,7 @@ def main():
         stale = sorted(k for k, status in existing.items() if status == "pending" and k not in written_keys)
         stale_pending_by_cycle[planning_cycle_date] = stale
 
+        run_key = None if args.dry_run else save_run(run_record(args, plan, planning_cycle_date))
         cycle_written = cycle_kept = 0
         total_ss_by_cycle[planning_cycle_date] = sum(s.safety_stock for s in plan.skus)
         for product, sku in zip(products, plan.skus):
@@ -695,7 +773,7 @@ def main():
                             f"{f' (short {short:,.0f})' if short > 0.5 else ''} · target {sku.target_stock:,.0f} "
                             f"(SS {ss_i:,.0f}) · stock {sku.stock_on_hand:,.0f} · forecast {sku.demand:,.0f}"
                             f"{'  (decided row — would be kept as is)' if decided else ''}")
-            elif not save_result(product.product_key, planning_cycle_date, q_i, sku.target_stock, ss_i):
+            elif not save_result(product.product_key, planning_cycle_date, q_i, sku.target_stock, ss_i, run_key):
                 decided = True
             if decided:
                 cycle_kept += 1

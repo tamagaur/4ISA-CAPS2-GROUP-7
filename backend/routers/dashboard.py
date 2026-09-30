@@ -338,7 +338,7 @@ from analytics.classification.abc import abc_rules
 from analytics.params import ALLOCATION_DEFAULT_PCT, MASE_GATE
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
 from backend.deps import TokenPayload, get_current_user, get_db
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle, stored_run
 from backend.lp_cycle import freshness as lp_freshness
 from backend.principals import PrincipalQuery, latest_abc_period, normalize_principal
 from backend.routers.recommendations import select_one as _recommendation_select_one
@@ -841,6 +841,7 @@ def get_dashboard(
     # cycle the page is showing.
     lp_freshness_info = lp_freshness(db, scope, mode)
     lp_cycle = current_cycle(db, scope, mode)
+    lp_run = stored_run(db, lp_cycle, scope, mode)
     lp_cycle_filter = CURRENT_CYCLE_CLAUSE if lp_cycle is not None else " AND 1=0"
     # The LP's rows and the forecasts: the stored tables, or in preview with
     # built outputs the five-year what-if's (backend/data_mode.py). Every
@@ -1562,11 +1563,14 @@ def get_dashboard(
         # Whole units per row, summed — the Reorder page's own total, so the
         # two screens agree (they differed by 123.6 units, 2026-09-29).
         "total_order_qty": sum(whole_units(it.q_i) for it in rp_items) if rp_items else 0,
-        "lp_weights": {
+        # The weights the run behind this cycle used (lp_run), else the
+        # current constants; lp_weights_source says which.
+        "lp_weights": (lp_run["model"]["weights"] if lp_run else {
             "cost": LP_WEIGHT_COST,
             "service_level": LP_WEIGHT_SERVICE_LEVEL,
             "storage": LP_WEIGHT_STORAGE,
-        },
+        }),
+        "lp_weights_source": "run" if lp_run else "defaults",
     }
 
     # ---- policy_comparison (band 4: LP safety stock vs SSM's 3-week policy) --

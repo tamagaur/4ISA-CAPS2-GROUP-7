@@ -68,21 +68,76 @@ LP_SERVICE_Z = 1.28
 LP_SERVICE_LEVEL_PCT = 90  # the cycle service level Z = 1.28 stands for
 
 
-def lp_model_info() -> dict:
+def stored_run(db: Session, cycle: datetime.date | None, principal: str | None = None,
+               mode: str = REAL) -> dict | None:
+    """The lp_run row (migration 0035) behind `cycle`'s pending rows in the
+    selected scope: what that LP run actually used. None when there is
+    nothing to look up — preview mode, no cycle, the table not applied yet
+    (checked with to_regclass first, so a missing table never aborts the
+    request's transaction), or rows written before runs were recorded."""
+    if mode != REAL or cycle is None:
+        return None
+    present = db.execute(text("SELECT to_regclass('lp_run') IS NOT NULL AS present")).mappings().first()
+    if not present or not present["present"]:
+        return None
+    sql = """
+        SELECT r.run_key, r.planning_cycle_date, r.principal_scope, r.inputs, r.model,
+               r.code_version, r.created_at
+        FROM lp_run r
+        WHERE r.run_key = (
+            SELECT MAX(lr.lp_run_key)
+            FROM lp_recommendation lr
+            JOIN product_dimension pd ON pd.product_key = lr.product_key
+            WHERE lr.planning_cycle_date = :cycle AND lr.status = 'pending'{principal_clause}
+        )
+    """
+    params: dict = {"cycle": cycle}
+    clause = ""
+    if _principal_key(principal):
+        clause = " AND pd.principal = :principal"
+        params["principal"] = _principal_key(principal)
+    row = db.execute(text(sql.format(principal_clause=clause)), params).mappings().first()
+    return dict(row) if row else None
+
+
+def lp_model_info(run: dict | None = None) -> dict:
     """How the LP decides, for the reorder detail view to state.
 
-    `inputs` is analytics/params.PLACEHOLDERS, the dict
-    scripts/run_lp.py takes its defaults from: the allocation %, review and
-    lead days, target weeks, cover rule, warehouse capacity and costs.
-    Placeholders until SSM confirms them, so they're flagged as such, and the
+    With a stored run (stored_run), everything is what that run used:
+    inputs_source 'run'. Without one, `inputs` is analytics/params.
+    PLACEHOLDERS, the dict scripts/run_lp.py takes its defaults from, and
+    inputs_source says 'defaults' so no screen presents them as a run's.
+    Either way the inputs are placeholders until SSM confirms them, and the
     safety stock's daily-independence assumption is stated with them."""
+    if run is None:
+        return {
+            "weights": dict(LP_WEIGHTS),
+            "service_level_pct": LP_SERVICE_LEVEL_PCT,
+            "z_score": LP_SERVICE_Z,
+            "inputs": dict(PLACEHOLDERS),
+            "inputs_are_placeholders": True,
+            "inputs_source": "defaults",
+            "run": None,
+            "safety_stock_assumption": SAFETY_STOCK_ASSUMPTION,
+        }
+    model, inputs = run["model"], run["inputs"]
     return {
-        "weights": dict(LP_WEIGHTS),
-        "service_level_pct": LP_SERVICE_LEVEL_PCT,
-        "z_score": LP_SERVICE_Z,
-        "inputs": dict(PLACEHOLDERS),
+        "weights": model["weights"],
+        "service_level_pct": model["service_level_pct"],
+        "z_score": model["z_score"],
+        "inputs": inputs,
         "inputs_are_placeholders": True,
-        "safety_stock_assumption": SAFETY_STOCK_ASSUMPTION,
+        "inputs_source": "run",
+        "inputs_differing_from_defaults": sorted(k for k, v in PLACEHOLDERS.items() if inputs.get(k) != v),
+        "allocation": model.get("allocation"),
+        "run": {
+            "run_key": run["run_key"],
+            "planning_cycle_date": run["planning_cycle_date"],
+            "principal_scope": run["principal_scope"],
+            "created_at": run["created_at"],
+            "code_version": run["code_version"],
+        },
+        "safety_stock_assumption": model.get("safety_stock_assumption", SAFETY_STOCK_ASSUMPTION),
     }
 
 

@@ -94,7 +94,7 @@ from backend.principals import (
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
 from backend.data_mode import PREVIEW, REAL, get_data_mode, lp_source, predictive_preview, preview_block
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info, stored_run
 from backend.lp_cycle import freshness as lp_freshness
 from backend.stock_units import NO_PACK_SIZE_REASON, STOCK_AT_PERIOD_SQL
 
@@ -310,7 +310,7 @@ def get_recommendations(
             # promise. An empty list with the reason is the honest answer.
             return _with_data_mode(RecommendationsResponse(
                 items=[], count=0, planning_cycle_date=None,
-                superseded_count=0, freshness=freshness, lp_model=lp_model_info(),
+                superseded_count=0, freshness=freshness, lp_model=lp_model_info(),  # no cycle: defaults
             ), db, mode)
         query += CURRENT_CYCLE_CLAUSE
         params["current_cycle"] = current
@@ -324,7 +324,8 @@ def get_recommendations(
         planning_cycle_date=freshness["cycle_date"],
         superseded_count=freshness["superseded_pending_count"] if cycle == "current" else 0,
         freshness=freshness,
-        lp_model=lp_model_info(),
+        # What the run behind the current cycle used (lp_run), else the defaults, labelled.
+        lp_model=lp_model_info(stored_run(db, freshness["cycle_date"], principal, mode)),
     ), db, mode)
 
 

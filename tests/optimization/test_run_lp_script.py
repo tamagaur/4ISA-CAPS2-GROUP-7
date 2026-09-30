@@ -174,3 +174,33 @@ def test_dry_run_is_transaction_scoped_never_session_scoped():
     assert "conn.set_session(autocommit=not args.dry_run)" in source
     assert source.count('cur.execute("SET TRANSACTION READ ONLY")') == 1
     assert "conn.commit()" not in source
+
+
+# ---- item 8: every real run records what it used (lp_run, migration 0035) ----
+
+
+def test_run_record_holds_every_flag_and_the_fixed_model():
+    import datetime
+    import json
+
+    from analytics.params import LP_WEIGHTS, MASE_GATE
+    from scripts.run_lp import run_record
+
+    args = _args("--allocation-pct", "108")
+    plan = plan_cycle([_product(1)], args)
+    record = run_record(args, plan, datetime.date(2026, 3, 1))
+    assert record["inputs"] == {key: getattr(args, key) for key in PLACEHOLDERS}
+    assert record["inputs"]["allocation_pct"] == 108.0
+    assert record["principal_scope"] == "both"
+    model = record["model"]
+    assert model["weights"] == LP_WEIGHTS and model["mase_gate"] == MASE_GATE
+    assert model["allocation"]["basis_year"] == 2025 and model["allocation"]["unit"] == "pieces"
+    assert model["allocation"]["monthly_ceiling"] == {k: round(v, 2) for k, v in plan.allocation.items()}
+    json.dumps(record["inputs"])
+    json.dumps(model)  # both go to JSONB columns
+
+
+def test_each_refreshed_row_points_at_its_run():
+    normalized = " ".join(UPSERT_QUERY.split())
+    assert "(product_key, planning_cycle_date, q_i, rop_i, ss_i, status, lp_run_key)" in normalized
+    assert "lp_run_key = EXCLUDED.lp_run_key" in normalized

@@ -132,6 +132,7 @@ class FakeSession:
         # most periods. Tests that care about Del Monte set these.
         self.delmonte_latest_sales_period = None
         self.delmonte_sales = {}
+        self.lp_run = None  # the lp_run row stored_run finds; None = table not applied
         # Del Monte months whose sell-out net_amount is tax-inclusive
         # (Kelvin's X2 rule, SellOut_Fact.net_amount_tax_inclusive). Live:
         # 2023-08 only. Empty = every Del Monte peso is ex-VAT.
@@ -169,6 +170,12 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
 
+        # backend/lp_cycle.stored_run (migration 0035). Before every
+        # lp_recommendation matcher: its subquery reads that table too.
+        if "to_regclass('lp_run')" in sql:
+            return FakeResult([{"present": self.lp_run is not None}])
+        if "FROM lp_run r" in sql:
+            return FakeResult([self.lp_run] if self.lp_run else [])
         # LP cycle + freshness (backend/lp_cycle.py) — checked BEFORE the
         # _SELECT_ONE matcher below, which would otherwise claim these:
         # they read the same table with the same status predicate.
@@ -865,6 +872,7 @@ def test_reorder_preview_empty_when_no_pending_recommendations():
     assert preview == {
         "rows": [], "critical_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
         "lp_weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
+        "lp_weights_source": "defaults",
     }
 
 

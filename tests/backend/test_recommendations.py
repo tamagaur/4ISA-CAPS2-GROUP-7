@@ -76,6 +76,7 @@ class FakeSession:
         self.superseded_pending = superseded_pending
         self.lp_generated_at = lp_generated_at
         self.forecast_generated_at = forecast_generated_at
+        self.lp_run = None  # the lp_run row stored_run finds; None = table not applied
         self.calls: list[tuple[str, dict]] = []
 
     def execute(self, stmt, params=None):
@@ -83,6 +84,12 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
         scope = params.get("principal")
+        # backend/lp_cycle.stored_run (migration 0035). Before every
+        # lp_recommendation matcher: its subquery reads that table too.
+        if "to_regclass('lp_run')" in sql:
+            return FakeResult([{"present": self.lp_run is not None}])
+        if "FROM lp_run r" in sql:
+            return FakeResult([self.lp_run] if self.lp_run else [])
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult([{"p": self.inventory_period_by_scope.get(scope)}])
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql:
@@ -307,6 +314,35 @@ def test_lp_inputs_the_api_states_are_the_ones_run_lp_uses():
     assert "independent" in info["safety_stock_assumption"]
     assert WEEKS_PER_MONTH == AVG_WEEKS_PER_MONTH
     assert PLACEHOLDERS["target_weeks"] == POLICY_WEEKS
+
+
+def test_lp_model_states_defaults_when_no_run_is_recorded(client):
+    """Item 8: without lp_run (migration 0035 unapplied) the model is the
+    defaults, and says so."""
+    body = client.get("/recommendations?principal=unilever").json()
+    assert body["lp_model"]["inputs_source"] == "defaults"
+    assert body["lp_model"]["run"] is None
+
+
+def test_lp_model_serves_what_the_stored_run_used(session, client):
+    """Item 8: with an lp_run behind the current cycle, the API states that
+    run's inputs, not the defaults, and names the ones that differ."""
+    from analytics.params import PLACEHOLDERS
+
+    inputs = {**PLACEHOLDERS, "allocation_pct": 108.0}
+    session.lp_run = {
+        "run_key": 7, "planning_cycle_date": datetime.date(2026, 3, 1), "principal_scope": "both",
+        "inputs": inputs, "code_version": "abc123",
+        "created_at": datetime.datetime(2026, 3, 2, 8, 0, tzinfo=datetime.timezone.utc),
+        "model": {"weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
+                  "z_score": 1.28, "service_level_pct": 90,
+                  "allocation": {"pct": 108.0, "unit": "pieces", "basis_year": 2025}},
+    }
+    lp_model = client.get("/recommendations?principal=unilever").json()["lp_model"]
+    assert lp_model["inputs_source"] == "run"
+    assert lp_model["inputs"]["allocation_pct"] == 108.0
+    assert lp_model["inputs_differing_from_defaults"] == ["allocation_pct"]
+    assert lp_model["run"]["run_key"] == 7 and lp_model["allocation"]["basis_year"] == 2025
 
 
 def test_response_carries_the_lp_model_and_each_rows_tier(client):
