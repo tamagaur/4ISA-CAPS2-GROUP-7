@@ -49,6 +49,7 @@ import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from analytics.optimization.lp_inputs import PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION
 from backend.data_mode import REAL, forecast_source, lp_source
 
 # Applied to every LP read. Bound (not interpolated) so it is safe to
@@ -68,11 +69,20 @@ LP_SERVICE_LEVEL_PCT = 90  # the cycle service level Z = 1.28 stands for
 
 
 def lp_model_info() -> dict:
-    """How the LP decides, for the reorder detail view to state."""
+    """How the LP decides, for the reorder detail view to state.
+
+    `inputs` is analytics/optimization/lp_inputs.PLACEHOLDERS, the dict
+    scripts/run_lp.py takes its defaults from: the allocation %, review and
+    lead days, target weeks, cover rule, warehouse capacity and costs.
+    Placeholders until SSM confirms them, so they're flagged as such, and the
+    safety stock's daily-independence assumption is stated with them."""
     return {
         "weights": dict(LP_WEIGHTS),
         "service_level_pct": LP_SERVICE_LEVEL_PCT,
         "z_score": LP_SERVICE_Z,
+        "inputs": dict(PLACEHOLDERS),
+        "inputs_are_placeholders": True,
+        "safety_stock_assumption": SAFETY_STOCK_ASSUMPTION,
     }
 
 

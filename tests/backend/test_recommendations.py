@@ -293,10 +293,27 @@ def test_lp_settings_the_api_states_are_the_solvers():
     assert round(NormalDist().cdf(LP_SERVICE_Z) * 100) == LP_SERVICE_LEVEL_PCT
 
 
+def test_lp_inputs_the_api_states_are_the_ones_run_lp_uses():
+    """lp_model_info serves analytics/optimization/lp_inputs.PLACEHOLDERS, the
+    dict scripts/run_lp.py takes its defaults from, flagged as placeholders.
+    The LP's weeks convention and 3-week rule are the dashboard's own."""
+    from analytics.optimization.lp_inputs import PLACEHOLDERS, WEEKS_PER_MONTH
+    from backend.lp_cycle import lp_model_info
+    from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, POLICY_WEEKS
+
+    info = lp_model_info()
+    assert info["inputs"] == PLACEHOLDERS
+    assert info["inputs_are_placeholders"] is True
+    assert "independent" in info["safety_stock_assumption"]
+    assert WEEKS_PER_MONTH == AVG_WEEKS_PER_MONTH
+    assert PLACEHOLDERS["target_weeks"] == POLICY_WEEKS
+
+
 def test_response_carries_the_lp_model_and_each_rows_tier(client):
     body = client.get("/recommendations?principal=unilever").json()
     assert body["lp_model"]["weights"] == {"cost": 0.45, "service_level": 0.35, "storage": 0.2}
     assert body["lp_model"]["service_level_pct"] == 90
+    assert body["lp_model"]["inputs_are_placeholders"] is True
     assert body["items"] and all("tier" in item for item in body["items"])
 
 
