@@ -92,6 +92,7 @@ def solve(job):
     return dict(w1=w[0], w2=w[1], w3=w[2], pct=pct, feasible=plan.orders is not None, need=s["need"], ordered=s["ordered"],
                 shortfall=s["shortfall"], short_skus=";".join(s["short_skus"]), n_short=len(s["short_skus"]),
                 order_cost=cost, month_end_cover_weeks=s["month_end_cover_weeks"],
+                month_end_stock_value=s["month_end_stock_value"], cover_required_value=s["cover_required_value"],
                 allocation_binds=all(s["allocation_binds"].values()),
                 orders={k.sku_id: orders.get(k.sku_id) for k in plan.skus})
 
@@ -163,6 +164,8 @@ def chart8(cli, base, products, cycle, g7, notes):
         b = base[pct]
         rows.append(dict(allocation_pct=pct, products=len(products), need=b["need"], ordered=b["ordered"], shortfall=b["shortfall"],
                          n_short=b["n_short"], short_skus=b["short_skus"], month_end_cover_weeks=b["month_end_cover_weeks"],
+                         cover_gap_php=b["month_end_stock_value"] - b["cover_required_value"],
+                         run_lp_says_met=b["month_end_stock_value"] >= b["cover_required_value"] - 1.0,
                          order_cost=b["order_cost"], allocation_binds=b["allocation_binds"]))
     A = pd.DataFrame(rows)
     old = []
@@ -180,13 +183,20 @@ def chart8(cli, base, products, cycle, g7, notes):
     low_cover = r105.month_end_cover_weeks is not None and r105.month_end_cover_weeks < tw
     cleared = r105.n_short > 0 and r108.n_short == 0
     verdict = "FLAWED" if (low_cover or cleared) else "CONFIRMS"
-    detail = (f"105%: month-end cover {r105.month_end_cover_weeks:.2f} weeks vs target {tw:g} ({'BELOW' if low_cover else 'met'}); "
+    detail = (f"105%: month-end cover {r105.month_end_cover_weeks:.9f} weeks vs target {tw:g} ({'BELOW' if low_cover else 'met'}; "
+              f"PHP {r105.cover_gap_php:+,.6f} against the requirement; run_lp's own log rule, stock >= required - PHP 1 "
+              f"(run_lp.py:556), calls it {'met' if r105.run_lp_says_met else 'short'}); "
               f"short SKUs {int(r105.n_short)} at 105% vs {int(r108.n_short)} at 108% ({'108% CLEARS it' if cleared else 'not cleared by 108%'})")
     caption = (
         f"Supplier allocation at Sir Abe's three levels (last year's sales x 103 / 105 / 108 % / 12), planning cycle {cycle}, "
         f"{len(products)} products, run_lp --dry-run with every other input at its placeholder default. "
         + "; ".join(f"{r.allocation_pct:g}%: order {r.ordered:,.0f} of need {r.need:,.0f} pieces, shortfall {r.shortfall:,.0f} on "
-                    f"{r.n_short} SKUs, month-end cover {r.month_end_cover_weeks:.2f} weeks" for r in A.itertuples())
+                    f"{r.n_short} SKUs, month-end cover {r.month_end_cover_weeks:.6f} weeks (PHP {r.cover_gap_php:+,.2f} against "
+                    f"the {R().PLACEHOLDERS['target_weeks']:g}-week requirement)" for r in A.itertuples())
+        + f". The pre-registered test is strict (cover below {tw:g} weeks), so 105% "
+        + ("FAILS it" if low_cover else "passes it")
+        + (f" by PHP {-r105.cover_gap_php:,.6f}; run_lp's own log counts cover within PHP 1 as met (run_lp.py:556), so it "
+           f"reports 105% as met" if low_cover and r105.run_lp_says_met else "")
         + f". Target cover {tw:g} weeks (placeholder). Against the 2026-09-29 dry run: "
         + "; ".join(f"{r.allocation_pct:g}% {r.order_changed} of {r.skus_now} orders changed" for r in D.itertuples())
         + ". Inputs are placeholders, not SSM's figures."
