@@ -168,8 +168,8 @@ def main():
     a1 = R1[(R1.harness == "A_bakeoff") & (R1.cohort == "all") & ~R1.family.isin(["control", "sanity"])]
     a2 = R2[(R2.harness == "A_bakeoff") & (R2.cohort == "all") & ~R2.group.isin(["control", "reference"])]
     n1, n2 = a1.candidate.nunique(), a2.candidate.nunique()
-    in_csv = set(R1.candidate) | set(R2.candidate) | set(R1.model) | set(R2.model)
-    fifty_in_csv = sorted(set(C50) & in_csv)
+    fifty_as_cells = sorted(set(C50) & (set(R1.candidate) | set(R2.candidate)))
+    fifty_as_base = sorted(set(C50) & (set(R1.model) | set(R2.model)))
 
     got = {"original 50": summarise(ref, "original 50", len(C50)),
            "phase 1 (35)": summarise(a1, "phase 1 (35)", n1),
@@ -180,7 +180,8 @@ def main():
     ok = counts_ok and not diffs
     checks = [dict(id="G8", **{"pass": ok},
                    detail=f"candidates {len(C50)} + {n1} + {n2} = {len(C50) + n1 + n2} (SUMMARY: {n_total}); the original 50 are "
-                          f"not in results_by_bin.csv ({len(fifty_in_csv)} of their names appear there) and are scored from "
+                          f"not scored in results_by_bin.csv ({len(fifty_as_cells)} appear as candidates; {', '.join(fifty_as_base)} appear only "
+                          f"as base models of transformed candidates) and are scored from "
                           f"preds_plus.csv.gz with run_experiment.py's own loop; SUMMARY table counts "
                           + ("all match" if not diffs else f"DIFFER: {diffs}"))]
     if not ok:
