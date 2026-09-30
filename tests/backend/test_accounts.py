@@ -15,7 +15,6 @@ Emails land in the `outbox` fixture (tests/backend/conftest.py).
 from __future__ import annotations
 
 import re
-import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -26,7 +25,7 @@ from backend import auth_utils, deps, mailer
 from backend.account_links import LINK_INVALID
 from backend.auth_utils import TokenPayload, hash_link_token
 from backend.deps import get_db
-from backend.login_limiter import MAX_FAILURES_PER_EMAIL
+from backend.login_limiter import MAX_FAILURES_PER_EMAIL, MAX_FAILURES_PER_IP
 from backend.main import app
 from backend.routers import auth as auth_router
 
@@ -83,8 +82,8 @@ class FakeDB:
             return FakeResult(True if taken else None)
         if sql.startswith("SELECT user_id, password_hash, role, full_name FROM users"):
             return FakeResult(self.user(email=p["email"]))
-        if sql.startswith("SELECT user_id, email, full_name, role FROM users WHERE email"):
-            u = self.user(email=p["email"])
+        if sql.startswith("SELECT user_id, email, full_name, role FROM users WHERE lower(email) = lower(:email)"):
+            u = next((x for x in self.users if x["email"].lower() == p["email"].lower()), None)
             return FakeResult({k: u[k] for k in ("user_id", "email", "full_name", "role")} if u else None)
         if sql.startswith("INSERT INTO users"):
             u = {"user_id": max(x["user_id"] for x in self.users) + 1, "email": p["email"],
@@ -155,11 +154,6 @@ def client(db):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def no_wait(monkeypatch):
-    monkeypatch.setattr(auth_router, "FORGOT_PASSWORD_MIN_SECONDS", 0)
 
 
 def admin_headers(session_id="sid-1"):
@@ -274,7 +268,7 @@ def test_an_expired_link_is_refused(client, db, outbox):
     assert client.post("/auth/set-password", json={"token": token, "password": "a-new-password"}).status_code == 400
 
 
-def test_a_newer_link_retires_the_older_one(client, outbox, no_wait):
+def test_a_newer_link_retires_the_older_one(client, outbox):
     first = invite(client, outbox)
     client.post("/auth/forgot-password", json={"email": "new@ssmcapstone.com"})
     second = link_token(outbox[-1])
@@ -295,16 +289,39 @@ def test_passwords_must_be_8_characters_to_72_bytes(client, outbox, password):
 # --- forgot password ---------------------------------------------------------
 
 
-def test_forgot_password_answers_the_same_for_unknown_emails(client, outbox, no_wait):
-    known = client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"})
-    unknown = client.post("/auth/forgot-password", json={"email": "nobody@ssmcapstone.com"})
-    assert known.status_code == unknown.status_code == 202
-    assert known.json() == unknown.json()
+def test_forgot_password_sends_a_link_to_a_registered_email(client, db, outbox):
+    resp = client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"})
+    assert resp.status_code == 202
+    assert resp.json() == {"detail": auth_router.reset_link_sent_message("staff@ssmcapstone.com")}
     assert [m["to"] for m in outbox] == ["staff@ssmcapstone.com"]
     assert "30 minutes" in outbox[0]["body"]
+    assert [a["action"] for a in db.audit] == ["Password Reset Requested"]
 
 
-def test_a_reset_link_replaces_the_old_password(client, db, outbox, no_wait):
+def test_forgot_password_says_when_no_account_uses_the_email(client, db, outbox):
+    """Audrey's decision (2026-09-30): the page tells the person to use the
+    email their account was made with, rather than answering the same way
+    whether or not the account exists."""
+    resp = client.post("/auth/forgot-password", json={"email": "nobody@ssmcapstone.com"})
+    assert resp.status_code == 404
+    assert resp.json() == {"detail": auth_router.EMAIL_NOT_REGISTERED}
+    assert outbox == [] and db.tokens == [] and db.audit == []
+
+
+def test_forgot_password_ignores_capitalisation(client, outbox):
+    resp = client.post("/auth/forgot-password", json={"email": "Staff@SSMcapstone.com"})
+    assert resp.status_code == 202
+    assert [m["to"] for m in outbox] == ["staff@ssmcapstone.com"]
+
+
+@pytest.mark.parametrize("email", ["staff", "staff@", "staff@ssmcapstone", "staff @ssmcapstone.com"])
+def test_forgot_password_refuses_a_malformed_email(client, outbox, email):
+    """422, which the page shows as the same "no account uses this email"."""
+    assert client.post("/auth/forgot-password", json={"email": email}).status_code == 422
+    assert outbox == []
+
+
+def test_a_reset_link_replaces_the_old_password(client, db, outbox):
     client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"})
     token = link_token(outbox[-1])
     assert client.post("/auth/set-password", json={"token": token, "password": "brand-new-pass"}).status_code == 204
@@ -315,17 +332,24 @@ def test_a_reset_link_replaces_the_old_password(client, db, outbox, no_wait):
     assert db.revoked == [2]  # other browsers signed in with the old password are signed out
 
 
-def test_forgot_password_emails_are_rate_limited(client, outbox, no_wait):
-    for _ in range(MAX_FAILURES_PER_EMAIL + 3):
+def test_forgot_password_requests_are_rate_limited(client, outbox):
+    for _ in range(MAX_FAILURES_PER_EMAIL):
         assert client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"}).status_code == 202
+    resp = client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"})
+    assert resp.status_code == 429
+    assert resp.json()["detail"].startswith("Too many reset requests. Try again in")
+    assert int(resp.headers["Retry-After"]) > 0
     assert len(outbox) == MAX_FAILURES_PER_EMAIL
 
 
-def test_forgot_password_takes_a_fixed_minimum_time(client, monkeypatch):
-    monkeypatch.setattr(auth_router, "FORGOT_PASSWORD_MIN_SECONDS", 0.3)
-    started = time.monotonic()
-    client.post("/auth/forgot-password", json={"email": "nobody@ssmcapstone.com"})
-    assert time.monotonic() - started >= 0.3
+def test_checking_which_emails_have_accounts_is_capped(client):
+    """Since the page says which emails have no account, the per-address
+    limit is what stops anyone trying emails in bulk: after 20 tries in 15
+    minutes every email gets 429, registered or not."""
+    for n in range(MAX_FAILURES_PER_IP):
+        assert client.post("/auth/forgot-password", json={"email": f"guess{n}@example.com"}).status_code == 404
+    assert client.post("/auth/forgot-password", json={"email": "guess99@example.com"}).status_code == 429
+    assert client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"}).status_code == 429
 
 
 def test_forgot_password_offers_the_email_when_it_is_set_up(client):

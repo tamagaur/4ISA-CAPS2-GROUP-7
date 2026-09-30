@@ -153,8 +153,10 @@ async function postPublic(path, payload, fallbackError) {
   return res;
 }
 
-// Resolves to the server's message, which is the same whether or not the
-// email has an account — so this can't be used to find out who does.
+// Resolves to the server's "we've sent a link" message. Throws with
+// err.status 404 when no account uses the email (err.message is the server's
+// sentence saying so), 422 when it isn't an email at all, 429 after too many
+// requests.
 export async function requestPasswordReset(email) {
   const res = await postPublic(
     '/auth/forgot-password',
@@ -162,7 +164,7 @@ export async function requestPasswordReset(email) {
     'Could not send the reset link. Please try again.'
   );
   const body = await res.json().catch(() => null);
-  return body?.detail || 'If that email has an account, a link to reset its password is on its way.';
+  return body?.detail || `We've sent a link to ${email} to set a new password.`;
 }
 
 // { email_enabled, detail }: whether "Forgot password?" can email a link at

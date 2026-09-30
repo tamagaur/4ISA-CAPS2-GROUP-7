@@ -6,7 +6,7 @@ backend.routers.auth — sign-in, sessions, invites and password links.
   POST /auth/logout           user    ends the session
   POST /auth/register         admin   creates an account and its invite link
   GET  /auth/forgot-password  public  whether a reset link can be emailed at all
-  POST /auth/forgot-password  public  emails a reset link if the account exists
+  POST /auth/forgot-password  public  emails a reset link, or 404 if no account uses the email
   POST /auth/link-info        public  who a set-password link is for
   POST /auth/set-password     public  sets the password through a link
 
@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import logging
 import math
-import time
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -90,14 +89,23 @@ LOGOUT_SQL = """
      WHERE session_id = :session_id AND ended_at IS NULL
 """
 
-# The same answer whether or not the email has an account.
-FORGOT_PASSWORD_MESSAGE = (
-    "If that email has an account, we've sent it a link to set a new password. "
-    "The link works once and expires in 30 minutes."
+# Forgot password says plainly when no account uses the email (Audrey's
+# decision, 2026-09-30), so a mistyped address is corrected on the spot
+# instead of waiting for an email that never comes. Until then it answered
+# the same either way. The trade-off: anyone can use the page to check
+# whether an email has an account here. reset_limiter caps that at 5 tries
+# per email and 20 per network address in 15 minutes (backend/login_limiter.py).
+EMAIL_NOT_REGISTERED = (
+    "No account uses this email. Enter the email address your account was created with."
 )
-# forgot-password answers no sooner than this, so the database work done only
-# for real accounts can't be timed to tell which emails exist.
-FORGOT_PASSWORD_MIN_SECONDS = 1.0
+
+
+def reset_link_sent_message(email: str) -> str:
+    return (
+        f"We've sent a link to {email} to set a new password. "
+        f"It works once and expires in {account_links.SELF_RESET_MINUTES} minutes. "
+        "Not in your inbox within 5 minutes? Check your spam folder, or ask your administrator."
+    )
 # Said instead when the server has no email set up, as on the live API: no
 # link could reach anyone, so none is made, and every email gets this answer.
 FORGOT_PASSWORD_NO_EMAIL_MESSAGE = (
@@ -138,11 +146,11 @@ def _touch_session(db: Session, session_id: str | None, final_sql: str) -> None:
         logger.warning("Could not update user_session %s.", session_id, exc_info=True)
 
 
-def _too_many_attempts(seconds: int) -> HTTPException:
+def _too_many_attempts(seconds: int, what: str = "failed sign-in attempts") -> HTTPException:
     minutes = max(1, math.ceil(seconds / 60))
     return HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail=f"Too many failed sign-in attempts. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
+        detail=f"Too many {what}. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
         headers={"Retry-After": str(seconds)},
     )
 
@@ -331,34 +339,36 @@ def forgot_password(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     if not mailer.is_configured():
-        # The same answer for every email, with no database work to time.
+        # No link could reach anyone: the same answer for every email.
         return MessageResponse(detail=FORGOT_PASSWORD_NO_EMAIL_MESSAGE)
-    started = time.monotonic()
     client_ip = request.client.host if request.client else "unknown"
-    if reset_limiter.retry_after(body.email, client_ip) is None:
-        reset_limiter.record_failure(body.email, client_ip)  # counts requests, see login_limiter.py
-        row = db.execute(
-            text("SELECT user_id, email, full_name, role FROM users WHERE email = :email"),
-            {"email": body.email},
-        ).mappings().first()
-        if row is not None:
-            token, _ = account_links.issue(
-                db, user_id=row["user_id"], purpose="reset", minutes=account_links.SELF_RESET_MINUTES
-            )
-            audit.record(
-                db, "Password Reset Requested", None,
-                email=row["email"], name=row["full_name"], role=row["role"],
-            )
-            db.commit()
-            # Sent after the response, so the SMTP round trip can't be timed either.
-            background.add_task(
-                account_links.send_link_email, purpose="reset", email=row["email"],
-                full_name=row["full_name"], token=token, minutes=account_links.SELF_RESET_MINUTES,
-            )
-    remaining = FORGOT_PASSWORD_MIN_SECONDS - (time.monotonic() - started)
-    if remaining > 0:
-        time.sleep(remaining)
-    return MessageResponse(detail=FORGOT_PASSWORD_MESSAGE)
+    wait = reset_limiter.retry_after(body.email, client_ip)
+    if wait is not None:
+        raise _too_many_attempts(wait, "reset requests")
+    # Every request counts, found or not: this is what limits checking
+    # which emails have accounts (see EMAIL_NOT_REGISTERED).
+    reset_limiter.record_failure(body.email, client_ip)
+    # Any capitalisation: Ana@x.com and ana@x.com are one account.
+    row = db.execute(
+        text("SELECT user_id, email, full_name, role FROM users WHERE lower(email) = lower(:email)"),
+        {"email": body.email},
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=EMAIL_NOT_REGISTERED)
+    token, _ = account_links.issue(
+        db, user_id=row["user_id"], purpose="reset", minutes=account_links.SELF_RESET_MINUTES
+    )
+    audit.record(
+        db, "Password Reset Requested", None,
+        email=row["email"], name=row["full_name"], role=row["role"],
+    )
+    db.commit()
+    # Sent after the response, so the page doesn't wait on the mail server.
+    background.add_task(
+        account_links.send_link_email, purpose="reset", email=row["email"],
+        full_name=row["full_name"], token=token, minutes=account_links.SELF_RESET_MINUTES,
+    )
+    return MessageResponse(detail=reset_link_sent_message(row["email"]))
 
 
 @router.post("/link-info", response_model=LinkInfo)
