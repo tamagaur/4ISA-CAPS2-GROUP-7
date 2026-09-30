@@ -78,10 +78,13 @@ def test_writes_still_require_a_token(client, method, path, body):
 def test_staff_can_still_read(client):
     """require_admin is only on writes — GET /sku keeps get_current_user.
     Checked on the route table rather than by calling it, which would need
-    the SKU query faked."""
+    the SKU query faked. Walks the SKU router itself: fastapi 0.141 keeps an
+    included router as one nested entry in app.routes instead of copying its
+    routes up, and main.py adds no dependencies when it includes a router."""
     from backend.deps import require_admin
+    from backend.routers import sku
 
-    for route in app.routes:
+    for route in sku.router.routes:
         if getattr(route, "path", None) == "/sku" and "GET" in route.methods:
             deps = [d.call for d in route.dependant.dependencies]
             assert require_admin not in deps
