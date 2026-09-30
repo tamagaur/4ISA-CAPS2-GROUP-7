@@ -1,0 +1,78 @@
+# config/validation_bands.yaml - the slice loader's pre-delete validation bands
+# (scripts/load_slices.py validate_slice). Pre-registered 2026-09-30, committed
+# before any layout drill ran, so no drill result can have tuned a number here.
+#
+# Every number below is a measurement, not a choice. Source: public, real rows
+# only (NOT is_demo), read-only transaction, 2026-09-30.
+#
+# A slice here is the loader's own unit: (family, month, site). Sales rows take
+# month and site from their lineage (infer_sheet_period / infer_sheet_region on
+# _src_file/_src_sheet), exactly as load_slices.row_slices does; every other
+# family uses _period (unilever_sku: calendar_month) and region.
+#
+# ratio = this slice's value / median of the same (family, site)'s up to 6
+#         immediately preceding months, counted only when at least 3 exist.
+#   peso       = sum(amount)          amount: net_amount (inventory: valuation)
+#   unit_price = sum(amount) / sum(qty), over rows whose qty is not null
+#                qty: sell_out quantity, unilever_sku quantity_sold,
+#                inventory quantity_on_hand
+# known_sku_share = share of the slice's distinct sku_codes that appear in any
+#         EARLIER month of the same table and principal (any site); counted only
+#         when at least 3 earlier months exist.
+#
+# What the loader does with them:
+#   peso        outside [min, max]           -> WARNING only (status warning)
+#   unit_price  outside [min*0.9, max*1.1]   -> REFUSED (validation_failed)
+#   known_sku   below min                    -> REFUSED (validation_failed)
+#   fewer than 3 prior months                -> WARNING (not a pass)
+#   null band (no measurable history)        -> that check does not run; say so
+#
+# inventory_sign_off known_sku excludes 2023-08: its workbook carries two
+# physical-count sheets (ACTUAL 090423, ILO 090223) keyed by all-digit codes -
+# 396 codes, none of which appear in any other month; the same month's sign-off
+# sheets have 3 and 6 new codes (reports/PROJECT_STATE_2026-09.md, 2023-08
+# banner/numeric-code section). With it included the minimum would be 0.47.
+
+widen: 0.10   # unit_price refusal band = [min * (1 - widen), max * (1 + widen)]
+
+families:
+  sales_register:
+    slices_measured: 34
+    peso: {min: 0.6708, max: 3.2511}
+    unit_price: null   # 0 slices with >= 3 prior quantity months (quantities exist on 1,888 of 17,426 rows)
+    known_sku: null    # no SKU column in this family
+  purchase_order:
+    slices_measured: 14
+    peso: {min: 0.7122, max: 2.6086}
+    unit_price: null   # units_received is null on all 499 real rows
+    known_sku: null
+  sales_return:
+    slices_measured: 30
+    peso: {min: 0.2650, max: 3.8713}
+    unit_price: null   # 0 slices with >= 3 prior quantity months (quantities on 227 of 1,380 rows)
+    known_sku: null
+  rmr_gs_bo:
+    slices_measured: 0
+    peso: null         # 2 allowed periods only (source_of_truth.yaml rmr_fallback) - no history
+    unit_price: null
+    known_sku: null
+  sell_out:
+    slices_measured: 28
+    peso: {min: 0.7082, max: 3.6058}
+    unit_price: {min: 0.9346, max: 1.1779, n: 28}
+    known_sku: null    # category grain, no SKU column (DEC-03)
+  unilever_sku:
+    slices_measured: 35
+    peso: {min: 0.5592, max: 1.1536}
+    unit_price: {min: 0.8426, max: 1.2533, n: 35}
+    known_sku: {min: 0.8786, n: 35, at: "2024-02"}
+  inventory_sign_off:
+    slices_measured: 27
+    peso: {min: 0.6111, max: 2.8709}
+    unit_price: {min: 0.8086, max: 1.1503, n: 27}
+    known_sku: {min: 0.7130, n: 26, at: "2025-12 pangasinan", excluded_months: ["2023-08"]}
+  ssis_soh:
+    slices_measured: 36
+    peso: {min: 0.4481, max: 1.7674}
+    unit_price: {min: 0.8865, max: 1.1879, n: 36}
+    known_sku: {min: 0.8961, n: 36, at: "2025-08"}
