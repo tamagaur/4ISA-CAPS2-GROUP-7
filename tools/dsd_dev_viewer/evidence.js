@@ -148,7 +148,7 @@ function evPlot(t, fr, o){
 
 // ---- grouped vertical bars: groups x series; per-bar colour; optional labels ------------
 function evGBars(t, fr, o){
-  const M = {l: o.ml ?? 70, r: o.mr ?? 24, t: (o.title ? 30 : 14) + (o.legend ? 22 : 0), b: 40};
+  const M = {l: o.ml ?? 70, r: o.mr ?? 24, t: (o.title ? 30 : 14) + (o.legend ? 22 : 0), b: 40 + (o.gsub ? 15 : 0)};
   const pw = fr.w - M.l - M.r, ph = fr.h - M.t - M.b, X0 = fr.x + M.l, Y0 = fr.y + M.t;
   const G = o.groups.length, S = o.series.length, gw = pw / G, bw = Math.min(gw * 0.72 / S, 58), gap = 4;
   const vals = o.series.flatMap(s => s.vals).filter(v => v != null);
@@ -169,6 +169,7 @@ function evGBars(t, fr, o){
       const lab = s.labels && s.labels[gi]; if (lab) g += txt(t, x + bw / 2, y - 6, lab, {size:10, fill:t.ink, anchor:'middle', weight: s.bold && s.bold(gi) ? 700 : null});
       const sub = s.sub && s.sub[gi]; if (sub) g += txt(t, x + bw / 2, Y0 + ph + 13, sub, {size:9.5, fill: s.subInk ? s.subInk(gi) : t.ink3, anchor:'middle', weight: s.bold && s.bold(gi) ? 700 : null}); });
     g += txt(t, X0 + (gi + 0.5) * gw, Y0 + ph + (o.series.some(s => s.sub) ? 28 : 15), gl, {size:10.5, fill:t.ink2, anchor:'middle', weight: o.boldGroup && o.boldGroup(gi) ? 700 : null});
+    if (o.gsub && o.gsub[gi]) g += txt(t, X0 + (gi + 0.5) * gw, Y0 + ph + (o.series.some(s => s.sub) ? 43 : 30), o.gsub[gi], {size:10.5, fill:t.ours, anchor:'middle', weight:700});
     if (o.gnote && o.gnote[gi]){ const top = Math.min(...o.series.map(s => s.vals[gi] == null ? Infinity : yp(s.vals[gi])));
       g += txt(t, X0 + (gi + 0.5) * gw, top - 22, o.gnote[gi], {size:10.5, fill:t.ink, anchor:'middle', weight:600}); }
   });
@@ -302,19 +303,36 @@ const oursAlt = (t, isOurs) => isOurs ? t.ours : t.alt;
 CARDS[1] = c => {
   const L = evRecs(c.data.lines), V = evRecs(c.data.verdicts), S = evRecs(c.data.sku_series);
   const full = k => L.find(r => r.window === 'full' && r.model === k) || {};
+  const vFull = k => V.find(v => v.cohort === 'ALL' && v.window === 'full' && v.model === k) || {};
   const M = [['ma3', '3-month average', true], ['tsb', 'TSB', true], ['ens_xgb_ma3@A', 'XGBoost + average', true], ['sba', 'SBA', false], ['naive', 'Naive', false]];
-  const used = M.filter(m => m[2]).map(m => full(m[0]).mase_pass_pct), newer = [full('tsb').mase_pass_pct, full('ens_xgb_ma3@A').mase_pass_pct];
+  const newer = [full('tsb').mase_pass_pct, full('ens_xgb_ma3@A').mase_pass_pct];
   const lo = Math.round(Math.min(...newer)), hi = Math.round(Math.max(...newer)), ma = Math.round(full('ma3').mase_pass_pct);
   const blocks = [...new Set(L.filter(r => r.window !== 'full').map(r => r.window))];
-  // served model per product, from the live Forecast_Result already in this page
-  const served = Object.fromEntries((D.skus || []).map(s => [s.pk, s.method]));
+  const pw = (b, k) => (L.find(r => r.window === b && r.model === k) || {}).median_wape;
+  const lowerIn = k => blocks.filter(b => pw(b, k) < pw(b, 'ma3')).length;
+  const used = ['ma3', 'tsb', 'ens_xgb_ma3@A'].map(k => full(k).median_wape);
+  const spread = (Math.max(...used) - Math.min(...used)) * 100, bench = (Math.min(full('sba').median_wape, full('naive').median_wape) - Math.max(...used)) * 100;
+  const p1 = x => (x * 100).toFixed(1) + '%', tv = vFull('tsb'), xv = vFull('ens_xgb_ma3@A');
+  const tie = tv.verdict === 'T' && xv.verdict === 'T';
+  const better = Math.round(-Math.min(tv.ci_lo, xv.ci_lo) * 100), worse = Math.round(Math.max(tv.ci_hi, xv.ci_hi) * 100);
+  const tieText = tie ? `“Tie” even though the numbers differ: TSB ${p1(full('tsb').median_wape)} and XGBoost + average ${p1(full('ens_xgb_ma3@A').median_wape)} vs the 3-month average ${p1(full('ma3').median_wape)}. `
+    + `The margin of error on each gap runs from about ${better} points better to ${worse} point${worse === 1 ? '' : 's'} worse — too close to call. `
+    + (lowerIn('tsb') === lowerIn('ens_xgb_ma3@A') ? `Results this close also flip: each was lower in ${lowerIn('tsb')} of ${blocks.length} test periods and higher in the rest.`
+      : `Results this close also flip: TSB was lower in ${lowerIn('tsb')} of ${blocks.length} test periods, XGBoost + average in ${lowerIn('ens_xgb_ma3@A')}.`) : '';
+  // served model and stored error per product, from the live Forecast_Result already in this page
+  const skd = new Map((D.skus || []).map(s => [s.pk, s]));
   const SERVE = {ma3: ['short history', '3-month average', 'ma3'], tsb: ['medium history', 'TSB', 'tsb'], xgb_ma3_avg: ['long history', 'XGBoost + average', 'ens_xgb_ma3@A'],
                  provisional: ['too little history', 'provisional average', null]};
+  const sv = pk => SERVE[(skd.get(pk) || {}).method] || ['history not on record', 'served model not on record', null];
   const skus = [...new Map(S.map(r => [r.pk, r])).values()].sort((a, b) => String(a.sku_code).localeCompare(String(b.sku_code)));
-  if (EVSTATE[1] == null) EVSTATE[1] = skus[0].pk;
-  const sv = pk => SERVE[served[pk]] || ['history not on record', 'served model not on record', null];
-  const rowsAll = [['medium (served: TSB)', 'tsb', 'TSB, where we use it'], ['long (served: XGBoost+MA3 avg)', 'ens_xgb_ma3@A', 'XGBoost + avg, where we use it'],
-                   ['ALL', 'sba', 'SBA, all products'], ['ALL', 'naive', 'Naive, all products']];
+  const shown = pk => S.filter(r => r.pk === pk).length;
+  const scored = skus.map(s => skd.get(s.pk)).filter(s => s && s.wape != null);
+  const sorted = scored.map(s => s.wape).sort((a, b) => a - b), medW = sorted.length ? (sorted[(sorted.length - 1) >> 1] + sorted[sorted.length >> 1]) / 2 : null;
+  // Representative example: passes the quality check (stored MASE < 1), 2+ years of sales shown, stored error closest to the typical product's.
+  const ex = scored.filter(s => s.mase != null && s.mase < 1 && shown(s.pk) >= 24).sort((a, b) => Math.abs(a.wape - medW) - Math.abs(b.wape - medW))[0];
+  if (EVSTATE[1] == null) EVSTATE[1] = ex ? ex.pk : skus[0].pk;
+  const exRow = ex ? (S.find(r => r.pk === ex.pk) || {}) : {};
+  const e0 = Math.round(full('ma3').median_wape * 100);
   BOARD[1] = ['3-month average; TSB and XGBoost for longer histories', 'SBA, naive (and each other)', 'The simple method is as accurate as the complex ones, so forecasts stay easy to explain.'];
   return {
     question: 'Is any complex model clearly better than a simple 3-month average?',
@@ -322,31 +340,48 @@ CARDS[1] = c => {
       : 'A model we use does worse than the simple average, or a basic rule beats it.',
     main: {file: 'ch01_models', title: 'Forecast error of each model, all test periods together (lower is better)', W: 900, H: 340,
       read: 'Blue = models we use (each for a different history length); grey = benchmarks we tested and rejected. Bars of about equal height = a tie.',
+      shows: [`Each bar = one model’s forecast error over all test periods (Oct 2023 – Feb 2026): how far forecasts were from actual sales. Shorter is better.`,
+              `Blue = the three models we use. They are within ${spread.toFixed(1)} points of each other — a tie.`,
+              `Grey = two basic benchmarks (naive = repeat last month; SBA = an older method for products with patchy sales). They are about ${Math.round(bench)} points worse, so they are not used.`,
+              tieText].filter(Boolean),
       build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evGBars, o: {groups: M.map(m => m[1]), ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(0) + '%',
         series: [{vals: M.map(m => full(m[0]).median_wape), colorAt: gi => oursAlt(t, M[gi][2]), sub: M.map(m => m[2] ? 'Ours (used)' : 'not used'),
                   subInk: gi => M[gi][2] ? t.ink : t.ink3, bold: gi => M[gi][2]}],
         gnote: [null, 'tie', null, null, null],
         tip: k => { const m = M.find(q => q[1] === k); const r = full(m[0]); return `<div class="h">${esc(k)}${m[2] ? ' (ours)' : ''}</div><div class="r"><span>forecast error</span><b>${pc(r.median_wape)}</b></div><div class="r"><span>pass the quality check</span><b>${nf(r.mase_pass_pct)}% of products</b></div>`; }}}]},
     after: [`We still use TSB and XGBoost for longer histories because they tie on error but pass the quality check for more products (${lo === hi ? lo : lo + '–' + hi}% vs ${ma}%), so more products get a reorder plan.`],
+    example: {file: () => `ch01_example_${(S.find(r => r.pk === EVSTATE[1]) || {}).sku_code}`, title: 'Example: one product, what sold vs what the models forecast', W: 900, H: 330,
+      control: {options: skus.map(s => [s.pk, `${s.sku_code} · ${s.product_name} · ${sv(s.pk)[0]} → ${sv(s.pk)[1]}`]), get: () => EVSTATE[1], set: v => { EVSTATE[1] = +v; }},
+      shows: ['Light line with dots = what actually sold each month. Blue = the model that serves this product today, forecasting one month ahead.',
+              'Grey = the other two models we use, for comparison. Pick any product from the list to see its own chart.',
+              ex ? `Shown first: ${exRow.sku_code} · ${exRow.product_name}. Chosen because, among products that pass the quality check and have 2+ years of sales, its forecast error (${Math.round(ex.wape * 100)}%) is the closest to the typical product’s (${Math.round(medW * 100)}%).`
+                 : 'No product with a stored forecast error was available to pick a typical example.'],
+      build: t => { const R = S.filter(r => r.pk === EVSTATE[1]), ms = R.map(r => r.month), [hist, name, key] = sv(EVSTATE[1]);
+        return [{fr: {x: 0, y: 0, w: 900, h: 330}, o: {xs: ms, xticks: ms.filter((m, i) => i % 3 === 0), xlab: mlab, y: {fmt: v => nf(v), title: 'Units sold', zero: true},
+          title: `${R[0].sku_code} · ${R[0].product_name} · ${hist} → served by ${name}`,
+          series: [{key: 'actual', label: 'Actual sales', color: t.actual, width: 2.6, r: 2.5, pts: R.map(r => [r.month, r.actual])}]
+            .concat([['ma3', '3-month average'], ['tsb', 'TSB'], ['ens_xgb_ma3@A', 'XGBoost + avg']].map(([k, lab]) => ({key: k,
+              label: lab + (k === key ? ' (serves it)' : ''), bold: k === key, color: k === key ? t.ours : t.alt, width: k === key ? 3 : 1.3, markers: false,
+              pts: R.map(r => [r.month, r[k]])})))}}]; }},
+    faq: [
+      ['How was the comparison done?', `Each month from October 2023 to February 2026, every model forecast the next month using only the months before it. The forecasts were then compared with what actually sold.`],
+      [`What does “${e0}% forecast error” mean?`,
+       `On a typical product, the forecast was off by about ${e0}% of that month’s actual sales (the middle value across the ${full('ma3').n} products tested).`],
+      ['Which model is used for which product?', 'It depends on how many months of sales the product has: 3–11 months → 3-month average; 12–23 → TSB; 24 or more → XGBoost + average. Decision 2 tests these cut-offs.'],
+      ['What is the “quality check”?', 'A product passes when its forecast beats a naive “same as last month” guess (MASE below 1). Only products that pass get an automatic reorder plan (decision 8).'],
+      [`Is ${e0}% good?`, `Our data has no industry benchmark to compare with, so we can’t say. What we can say: it is about ${Math.round(bench)} points better than the two basic benchmarks.`],
+      [`Why doesn't the forecast follow every up and down?`, `Monthly sales jump around; the models forecast the general level, not each zigzag. That is why even the typical example above is off by about ${ex ? Math.round(ex.wape * 100) : e0}% of its sales.`],
+    ],
     means: 'The simple method is as accurate as the complex ones, so forecasts stay easy to explain; the newer models let more products into the order plan.',
     details: [
-      {file: () => `ch01_sku_${(S.find(r => r.pk === EVSTATE[1]) || {}).sku_code}`, title: 'One product: what sold vs each model (the model that serves it is highlighted)', W: 900, H: 330,
-       control: {options: skus.map(s => [s.pk, `${s.sku_code} · ${s.product_name} · ${sv(s.pk)[0]} → ${sv(s.pk)[1]}`]), get: () => EVSTATE[1], set: v => { EVSTATE[1] = +v; }},
-       read: 'Grey = actual sales; the thick line is the model that serves this product today (from the stored forecast); thin lines = the other models.',
-       build: t => { const R = S.filter(r => r.pk === EVSTATE[1]), ms = R.map(r => r.month), [hist, name, key] = sv(EVSTATE[1]);
-         return [{fr: {x: 0, y: 0, w: 900, h: 330}, o: {xs: ms, xticks: ms.filter((m, i) => i % 3 === 0), xlab: mlab, y: {fmt: v => nf(v), title: 'Units sold', zero: true},
-           title: `${R[0].sku_code} · ${R[0].product_name} · ${hist} → served by ${name}`,
-           series: [{key: 'actual', label: 'Actual sales', color: t.actual, width: 2.4, pts: R.map(r => [r.month, r.actual])}]
-             .concat([['ma3', '3-month average', 'ma3'], ['tsb', 'TSB', 'tsb'], ['ens_xgb_ma3@A', 'XGBoost + avg', 'xgb']].map(([k, lab, col]) => ({key: k,
-               label: lab + (k === key ? ' (serves it)' : ''), bold: k === key, color: t[col], width: k === key ? 3.2 : 1.2, op: k === key ? null : 0.55, markers: false,
-               pts: R.map(r => [r.month, r[k]])})))}}]; }},
-      {file: 'ch01_periods', title: 'Forecast error in each half-year test period, with the test result per period', W: 900, H: 330 + rowsAll.length * 18 + 38,
+      {file: 'ch01_periods', title: 'Forecast error in each half-year test period, with the test result per period', W: 900, H: 330 + 4 * 18 + 38,
        read: 'Each dot = one half-year test period. The squares say whether a model did better or worse than the simple average in that period.',
-       build: t => [{fr: {x: 0, y: 0, w: 900, h: 330 + rowsAll.length * 18 + 38}, o: {ml: 210, xs: blocks, xlab: blab, y: {fmt: v => v.toFixed(2), title: 'Forecast error (lower is better)'},
-         strip: {cmp: 'the simple average', rows: rowsAll.map(([co, m, lab]) => ({label: lab, cells: Object.fromEntries(blocks.map(b => {
+       build: t => [{fr: {x: 0, y: 0, w: 900, h: 330 + 4 * 18 + 38}, o: {ml: 210, xs: blocks, xlab: blab, y: {fmt: v => v.toFixed(2), title: 'Forecast error (lower is better)'},
+         strip: {cmp: 'the simple average', rows: [['medium (served: TSB)', 'tsb', 'TSB, where we use it'], ['long (served: XGBoost+MA3 avg)', 'ens_xgb_ma3@A', 'XGBoost + avg, where we use it'],
+                                                   ['ALL', 'sba', 'SBA, all products'], ['ALL', 'naive', 'Naive, all products']].map(([co, m, lab]) => ({label: lab, cells: Object.fromEntries(blocks.map(b => {
            const r = V.find(v => v.cohort === co && v.model === m && v.window === b); return [b, r ? r.verdict : 'NT']; }))}))},
          series: M.map(([k, lab, u]) => ({key: k, label: lab, color: u ? t[{ma3: 'ma3', tsb: 'tsb', 'ens_xgb_ma3@A': 'xgb'}[k]] : t.base, dash: u ? null : '5 3', width: u ? 2.2 : 1.6,
-           pts: blocks.map(b => [b, (L.find(r => r.window === b && r.model === k) || {}).median_wape ?? null])}))}}]},
+           pts: blocks.map(b => [b, pw(b, k) ?? null])}))}}]},
     ],
   };
 };
@@ -358,25 +393,51 @@ CARDS[2] = c => {
   const gmean = (f, ks, col='median_wape') => { const v = ks.map(k => row(f, k)[col]).filter(x => x != null); return v.reduce((a, b) => a + b, 0) / v.length; };
   const F = [['ma3', '3-month average'], ['tsb', 'TSB'], ['xgb_ma3', 'XGBoost + average']];
   const ourRule = gi => gi <= 1 ? 'ma3' : gi === 2 ? 'tsb' : 'xgb_ma3';
+  const ruleName = gi => F.find(f => f[0] === ourRule(gi))[1];
   const vals = F.map(([f]) => GR.map(([, ks]) => gmean(f, ks)));
+  const vOf = (f, gi) => vals[F.findIndex(x => x[0] === f)][gi];
   const best = f => { const v = GR.map(([, ks]) => gmean(f, ks)); return v.indexOf(Math.min(...v)); };
   const lowOf = gi => ({0: 3, 1: 7, 2: 12, 3: 24})[gi];
   const tsbB = best('tsb'), xgbB = best('xgb_ma3');
+  const xgbLowestAll = GR.every((g, gi) => F.every(([f]) => f === 'xgb_ma3' || vOf('xgb_ma3', gi) < vOf(f, gi)));
+  const gaps = GR.map((g, gi) => ourRule(gi) === 'xgb_ma3' ? null : (vOf(ourRule(gi), gi) - vOf('xgb_ma3', gi)) * 100).filter(x => x != null);
+  const gapTxt = gaps.length ? Math.max(1, Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length)) : null;
+  const pl = gapTxt === 1 ? '' : 's';
+  const periods = String(row('tsb', 3).blocks || '').replace(/-/g, '').length;
+  const spreadOf = f => { const v = GR.map((g, gi) => vOf(f, gi)); return (Math.max(...v) - Math.min(...v)) * 100; };
+  const c1 = EV.charts.find(x => x.chart === 1), l1 = c1 ? evRecs(c1.data.lines).filter(r => r.window === 'full') : [];
+  const w1 = k => (l1.find(r => r.model === k) || {}).median_wape;
+  const gap1 = w1('ma3') != null && w1('ens_xgb_ma3@A') != null ? (w1('ma3') - w1('ens_xgb_ma3@A')) * 100 : null;
   const xs = [...new Set(L.map(r => String(r.k)))].filter(k => k !== 'all').sort((a, b) => a - b).concat(['', 'all']);
   BOARD[2] = ['3-month average from 3 months, TSB from 12, XGBoost from 24', 'Every cut-off from 3 to 24 months', 'Our history rules are safe; XGBoost might start earlier, but that is not proven.'];
   return {
     question: 'How many months of past sales does each model need before it works well?',
     headline: c.verdict === 'CONFIRMS' ? `More history doesn't clearly help: TSB levels off by about ${lowOf(tsbB)} months, XGBoost by about ${lowOf(xgbB)}.`
       : 'A different amount of history works clearly better or worse; our cut-offs are questioned.',
-    main: {file: 'ch02_history', title: 'Forecast error by how many months of history the models were given (lower is better)', W: 900, H: 360,
-      read: 'Each group = a range of history lengths (averaged over the settings in it). Blue = the model our rule uses at that length; grey = the others.',
-      build: t => [{fr: {x: 0, y: 0, w: 900, h: 360}, draw: evGBars, o: {groups: GR.map(g => g[0]), ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(1) + '%',
+    main: {file: 'ch02_history', title: 'Forecast error by how many months of history the models were given (lower is better)', W: 900, H: 380,
+      read: 'Each group = a range of history lengths. Blue = the model our rule uses at that length (named under the group); grey = the other models.',
+      shows: ['Each group = the same products, forecast as if only that many months of sales history existed. Bars = forecast error, averaged over the settings in the group.',
+              'Blue = the model our rule uses at that length: 3–11 months → 3-month average; 12–23 → TSB; 24+ → XGBoost + average.',
+              'The 3-month average’s bar hardly moves: it only ever uses the last 3 months, so extra history can’t change it.',
+              `Within each model the bars differ by less than ${Math.ceil(Math.max(spreadOf('tsb'), spreadOf('xgb_ma3')))} point between groups. TSB is lowest at ${GR[tsbB][0]}, XGBoost + average at ${GR[xgbB][0]}: "levels off" means more history stops helping, not that it hurts.`],
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 380}, draw: evGBars, o: {groups: GR.map(g => g[0]), gsub: GR.map((g, gi) => `we use: ${ruleName(gi)}`),
+        ytitle: 'Forecast error (lower is better)', fmt: v => (v * 100).toFixed(0) + '%',
         legend: [[t.ours, 'Ours: the model our rule uses'], [t.alt, 'Other models']],
         series: F.map(([f, lab], si) => ({vals: vals[si], colorAt: gi => oursAlt(t, ourRule(gi) === f), sub: GR.map(() => lab.replace(' + average', '+avg').replace('3-month average', '3-mo avg')),
           subInk: gi => ourRule(gi) === f ? t.ink : t.ink3, bold: gi => ourRule(gi) === f})),
         tip: k => { const gi = GR.findIndex(g => g[0] === k); return `<div class="h">${esc(k)} of history</div>` + F.map(([f, lab], si) => `<div class="r"><span>${esc(lab)}${ourRule(gi) === f ? ' (ours)' : ''}</span><b>${pc(vals[si][gi], 1)}</b></div>`).join(''); }}}]},
-    after: [c.verdict === 'CONFIRMS' ? 'No setting was clearly better or worse than the simple average.' : ''].filter(Boolean),
-    means: `Our history rules are safe. XGBoost looks best from about ${lowOf(xgbB)} months although our rule starts it at 24 — not proven, only 2 test periods.`,
+    after: [c.verdict === 'CONFIRMS' ? 'No setting was clearly better or worse than the simple average.' : '',
+            xgbLowestAll ? `XGBoost + average is slightly lowest in every group, even where we use other models. The gaps (about ${gapTxt} point${pl}) aren’t proven — only ${periods} test periods. `
+              + 'It can work with shorter histories because it learns from all products together. A possible improvement, not proven — changing the rule is a separate decision.' : ''].filter(Boolean),
+    faq: [
+      ['How was this tested?', 'We took the products with at least 30 months of sales, pretended we only had their last few months (from 3 up to 24), and forecast the months that followed — the same months for every setting.'],
+      [`Why only ${periods} test periods?`, `To compare every setting on the same months, each product first needed 24 months of history. That is only true from January 2025, which leaves ${periods} half-year periods.`],
+      ['Does this mean our cut-offs (12 and 24 months) are wrong?', 'No: no setting was clearly better or worse than the simple average, so the cut-offs pass the test. The XGBoost pattern is a lead to re-check as more months of data arrive.'],
+      ['If XGBoost + average is lowest here, why is decision 1 a tie?', gap1 != null ? `Both cards say the same thing. Decision 1 compares all products: XGBoost + average is ${gap1.toFixed(1)} points below the 3-month average. This card uses only products with 30+ months of sales, where its lead is about ${gapTxt} point${pl}. Neither gap is large enough to be proven.` : 'Decision 1 compares all products; this card only products with 30+ months of sales. Neither gap is proven.'],
+      ['What happens to products with fewer than 3 months of sales?', 'No model can forecast them yet. A provisional average is stored and clearly flagged "insufficient data".'],
+      ['What is TSB?', 'A smoothing method built for products that don’t sell every month (Teunter–Syntetos–Babai).'],
+    ],
+    means: `Our history rules are safe. XGBoost looks best from about ${lowOf(xgbB)} months although our rule starts it at 24 — not proven, only ${periods} test periods.`,
     details: [
       {file: 'ch02_truncation_wape', title: 'All 22 settings: forecast error, with the test result per setting', W: 900, H: 450,
        read: 'Left to right = more months of history. The squares: each is one half-year test period (2 per setting).',
@@ -764,11 +825,13 @@ function evFigHTML(c, f, key){
     + (f.control ? `<select class="evsel" data-c="${c.chart}" data-f="${key}">${f.control.options.map(([v, l]) => `<option value="${v}"${v === f.control.get() ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>` : '')
     + `<span class="evbtns"><button class="evbtn" data-c="${c.chart}" data-f="${key}" data-k="svg">SVG</button><button class="evbtn" data-c="${c.chart}" data-f="${key}" data-k="png">PNG</button></span></div>`
     + (f.read ? `<div class="evread"><b>How to read this:</b> ${esc(f.read)}</div>` : '')
-    + `<div class="evsvg" id="evs-${c.chart}-${key}"></div></figure>`;
+    + `<div class="evsvg" id="evs-${c.chart}-${key}"></div>`
+    + ((f.shows || []).length ? `<div class="evshows"><b>What the chart shows</b><ul>${f.shows.map(b => `<li>${esc(b)}</li>`).join('')}</ul></div>` : '')
+    + `</figure>`;
 }
 function evCard(c){
   const spec = CARDS[c.chart] ? CARDS[c.chart](c) : {question: '', headline: c.title, main: null, details: []};
-  c._spec = spec; c._figs = {m: spec.main};
+  c._spec = spec; c._figs = {m: spec.main}; if (spec.example) c._figs.x = spec.example;
   (spec.details || []).forEach((f, i) => { c._figs['d' + i] = f; });
   const lines = (arr, cls) => (arr || []).map(s => `<p class="${cls}">${spec.afterHTML && cls === 'evafter' ? s : esc(s)}</p>`).join('');
   return `<article class="evcard evslide" id="ev-${c.chart}"><div class="evhead"><span class="evnum">Decision ${c.chart}</span>${evChip(c)}</div>`
@@ -777,6 +840,8 @@ function evCard(c){
     + lines(spec.before, 'evbefore')
     + (spec.main ? evFigHTML(c, spec.main, 'm') : '')
     + lines(spec.after, 'evafter')
+    + (spec.example ? evFigHTML(c, spec.example, 'x') : '')
+    + ((spec.faq || []).length ? `<div class="evfaq"><div class="evfaqh">Questions a first-time reader asks</div><dl>${spec.faq.map(([q, a]) => `<dt>${esc(q)}</dt><dd>${esc(a)}</dd>`).join('')}</dl></div>` : '')
     + `<p class="evmeans"><b>What this means for SSM:</b> ${esc(spec.means || '')}</p>`
     + (c.verdict === 'NOT BUILT' ? '' : evDetailsBlock(c, spec)) + `</article>`;
 }

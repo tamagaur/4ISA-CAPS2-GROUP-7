@@ -10,6 +10,16 @@
 .evmeans{margin:12px 0 4px;padding:10px 14px;border-radius:8px;background:var(--surface-2);border-left:3px solid var(--accent);
   font-size:15px;line-height:1.5;color:var(--ink);max-width:1100px}
 .evboard{margin-bottom:14px}
+.evshows{margin:10px 4px 2px;font-size:14px;line-height:1.5;color:var(--ink);max-width:1100px}
+.evshows>b{font-size:13px;color:var(--ink-2)}
+.evshows ul{margin:4px 0 0;padding-left:20px}
+.evshows li{margin:3px 0}
+.evfaq{margin:12px 0 4px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;max-width:1100px}
+.evfaqh{font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:6px}
+.evfaq dl{margin:0}
+.evfaq dt{font-size:14px;font-weight:700;color:var(--ink);margin-top:8px}
+.evfaq dd{margin:2px 0 0;font-size:14px;line-height:1.5;color:var(--ink-2)}
+#tab-evidence.evpresent .evshows,#tab-evidence.evpresent .evfaq dd,#tab-evidence.evpresent .evfaq dt{font-size:17px}
 .evboardtbl{table-layout:fixed}
 .evboardtbl td{font-size:13px;line-height:1.4;white-space:normal;overflow-wrap:anywhere}
 .evboardtbl th:nth-child(1){width:27%}.evboardtbl th:nth-child(2){width:20%}.evboardtbl th:nth-child(3){width:19%}.evboardtbl th:nth-child(4){width:13%}.evboardtbl th:nth-child(5){width:21%}
