@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import Modal from './Modal';
 import SaveResult from './SaveResult';
 import { getCurrentUser } from '../auth';
+import { usePermissions } from '../permissions/context';
 import { ROLES } from '../permissions/keys';
 import { useSaveResult } from '../utils/useSaveResult';
 import './UserFormModal.css';
@@ -21,6 +22,10 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState('');
   const { saving, result, run, reset } = useSaveResult();
+  // Manager only once the backend accepts it (it has /auth/me): until then
+  // users.role allows admin and staff only, and saving Manager would fail.
+  const { legacy } = usePermissions();
+  const roles = legacy ? ROLES.filter((role) => role.value !== 'manager') : ROLES;
 
   const isEdit = Boolean(user);
   // The server refuses a change to your own role (so an admin can't lock
@@ -164,7 +169,7 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
                 >
                   {/* Admin, Manager, Staff (Kelvin's permissions proposal). The
                       Permissions button sets anything beyond the role's defaults. */}
-                  {ROLES.map((role) => (
+                  {roles.map((role) => (
                     <option key={role.value} value={role.value}>{role.label}</option>
                   ))}
                 </select>

@@ -15,6 +15,7 @@ export const PermissionsContext = createContext(null);
 const DENY_ALL = {
   role: null,
   permissions: [],
+  legacy: false,
   hasPermission: () => false,
   refresh: () => {},
 };

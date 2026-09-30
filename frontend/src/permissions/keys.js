@@ -50,6 +50,17 @@ export const PAGES = [
 
 export const permissionForPath = (path) => PAGES.find((page) => page.path === path)?.permission;
 
+// TEMPORARY, until the backend has GET /auth/me (it returns 404 today): the
+// access the app gave before this change, so deploying the frontend first
+// changes nobody's access. An admin had everything; staff had every page
+// except the Audit Log and User Management, and couldn't accept or dismiss
+// recommendations or add or edit SKUs. PermissionsProvider uses this only
+// when /auth/me is missing; delete it with the dev mock once the endpoint
+// is live (Phase 6 in reports/PERMISSIONS_FRONTEND_2026-09-30.md).
+export const LEGACY_STAFF_ACCESS = [
+  P.DASHBOARD_VIEW, P.FORECAST_VIEW, P.TRENDS_VIEW, P.SKU_VIEW, P.ABC_VIEW, P.LP_VIEW, P.UPLOAD_RUN,
+];
+
 // What a 403 means, in words for the person who got it. A 403 carries the
 // key it was missing; the raw code ("missing_permission") never reaches a page.
 const DENIED_MESSAGES = {

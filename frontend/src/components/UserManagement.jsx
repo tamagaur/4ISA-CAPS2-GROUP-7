@@ -8,6 +8,7 @@ import Modal from './Modal';
 import { useToast } from './ToastProvider';
 import { listUsers, createUser, updateUser, deleteUser, sendUserLink } from '../utils/usersApi';
 import { getCurrentUser } from '../auth';
+import { usePermissions } from '../permissions/context';
 import { formatDate, formatDateTime } from '../utils/formatDate';
 import { LoadingStatus, SkeletonTableRows } from './Skeleton';
 import './UserManagement.css';
@@ -60,6 +61,9 @@ const UserManagement = () => {
   const shareInputRef = useRef(null);
 
   const currentUser = getCurrentUser();
+  // The Permissions screen needs the backend's permission endpoints; until
+  // they exist (PermissionsProvider's `legacy`), its button stays hidden.
+  const { legacy } = usePermissions();
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -288,14 +292,16 @@ const UserManagement = () => {
                             ? <Loader2 size={15} className="user-mgmt-spin" />
                             : <LinkIcon size={15} />}
                         </button>
-                        <button
-                          className="user-mgmt-icon-btn access"
-                          onClick={() => setPermissionsUser(user)}
-                          aria-label={`Permissions for ${user.full_name}`}
-                          title="Permissions"
-                        >
-                          <ShieldCheck size={15} />
-                        </button>
+                        {!legacy && (
+                          <button
+                            className="user-mgmt-icon-btn access"
+                            onClick={() => setPermissionsUser(user)}
+                            aria-label={`Permissions for ${user.full_name}`}
+                            title="Permissions"
+                          >
+                            <ShieldCheck size={15} />
+                          </button>
+                        )}
                         <button
                           className="user-mgmt-icon-btn edit"
                           onClick={() => handleOpenEdit(user)}

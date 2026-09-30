@@ -9,17 +9,23 @@
 //
 // Replaces reading the role off the login token (auth.getCurrentUser), which
 // stayed stale after a role change until the token expired.
+//
+// Until the backend has /auth/me (a 404 today), `legacy` is true and access
+// is what the app gave before: the token's role, with LEGACY_STAFF_ACCESS
+// for staff. So this can deploy ahead of the backend without changing
+// anyone's access, and it switches over by itself once /auth/me exists.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { getMe } from '../api/permissions';
-import { PERMISSION_DENIED_EVENT, logout } from '../auth';
+import { PERMISSION_DENIED_EVENT, getCurrentUser, logout } from '../auth';
 import { PermissionsContext } from './context';
+import { LEGACY_STAFF_ACCESS } from './keys';
 import './AccessGate.css';
 
 const PermissionsProvider = ({ children }) => {
   const navigate = useNavigate();
-  const [state, setState] = useState({ status: 'loading', role: null, permissions: [], error: '' });
+  const [state, setState] = useState({ status: 'loading', role: null, permissions: [], legacy: false, error: '' });
 
   const refresh = useCallback(async () => {
     try {
@@ -28,15 +34,28 @@ const PermissionsProvider = ({ children }) => {
         status: 'ready',
         role: me?.role ?? null,
         permissions: Array.isArray(me?.permissions) ? me.permissions : [],
+        legacy: false,
         error: '',
       });
     } catch (err) {
+      // No /auth/me on this backend yet: keep the access the app gave before.
+      if (err?.status === 404) {
+        const role = getCurrentUser()?.role ?? null;
+        setState({
+          status: 'ready',
+          role,
+          permissions: role === 'staff' ? LEGACY_STAFF_ACCESS : [],
+          legacy: true,
+          error: '',
+        });
+        return;
+      }
       // A failed refresh keeps what was already loaded: the backend still
       // refuses anything this person lost. Only a first load, with nothing
       // to show yet, stops at the error.
       setState((prev) => (prev.status === 'ready'
         ? prev
-        : { status: 'error', role: null, permissions: [], error: err.message }));
+        : { status: 'error', role: null, permissions: [], legacy: false, error: err.message }));
     }
   }, []);
 
@@ -55,12 +74,15 @@ const PermissionsProvider = ({ children }) => {
     return {
       role: state.role,
       permissions: state.permissions,
+      // True while the backend has no /auth/me: hide what needs it (the
+      // Permissions screen, the Manager role).
+      legacy: state.legacy,
       // An admin always has everything (the proposal's rule); anyone else
       // has what /auth/me lists. No key means no access.
       hasPermission: (key) => state.role === 'admin' || (Boolean(key) && granted.has(key)),
       refresh,
     };
-  }, [state.role, state.permissions, refresh]);
+  }, [state.role, state.permissions, state.legacy, refresh]);
 
   if (state.status === 'loading') {
     return (
