@@ -29,7 +29,9 @@ lxml==6.1.1  # 2026-08: required by pandas.read_html for the Unilever La
 # --- Database ---
 SQLAlchemy==2.0.36
 psycopg2-binary==2.9.10
-supabase==2.12.0
+# supabase==2.12.0 removed 2026-09-30: nothing imports it (every database
+# connection is psycopg2/SQLAlchemy over SUPABASE_DB_URL). It was also what
+# pulled in PyJWT, which is now pinned under Auth.
 
 # --- Backend ---
 fastapi==0.141.1  # 2026-09-30: from 0.115.5, together with starlette below.
