@@ -33,6 +33,7 @@ def index_frame(df, principal, series):
     d = d[d.year.isin(YEARS)]
     d["index"] = d.net_amount / d.groupby("year").net_amount.transform("mean")
     d["months_in_year"] = d.groupby("year").month.transform("size")
+    d["partial_year"] = d.months_in_year < 12
     return d.assign(principal=principal, series=series)
 
 
@@ -50,22 +51,38 @@ def main():
         frames.append(index_frame(g, "delmonte", f"branch {b} (2023 only)"))
     I = pd.concat(frames, ignore_index=True)
 
-    pairs, flags = [], {}
+    # The criterion is defined on FULL years: a pair is tested only when both years have 12 months.
+    months_in = I[I.series == "total"].groupby(["principal", "year"]).month.size()
+    pairs, flags, testable = [], {}, {}
     for p in ("delmonte", "unilever"):
         t = I[(I.principal == p) & (I.series == "total")]
-        ok_all = True
+        all_hit, all_testable = True, True
         for a, b in combinations(YEARS, 2):
-            m = t[t.year == a].set_index("moy")["index"].to_frame("a").join(t[t.year == b].set_index("moy")["index"].to_frame("b"), how="inner")
-            rho, pv = spearmanr(m.a, m.b) if len(m) >= 3 else (float("nan"), float("nan"))
-            hit = bool(rho > 0 and pv < 0.05)
-            ok_all &= hit
-            pairs.append(dict(principal=p, years=f"{a}-{b}", months=len(m), rho=rho, p_value=pv, positive_significant=hit))
-        flags[p] = ok_all
+            na, nb_ = int(months_in.get((p, a), 0)), int(months_in.get((p, b), 0))
+            if na == 12 and nb_ == 12:
+                m = t[t.year == a].set_index("moy")["index"].to_frame("a").join(t[t.year == b].set_index("moy")["index"].to_frame("b"))
+                rho, pv = spearmanr(m.a, m.b)
+                hit, reason = bool(rho > 0 and pv < 0.05), ""
+            else:
+                rho, pv, hit = float("nan"), float("nan"), False
+                reason = f"not testable: {a} has {na} of 12 months, {b} has {nb_}"
+                all_testable = False
+            all_hit &= hit
+            pairs.append(dict(principal=p, years=f"{a}-{b}", months_a=na, months_b=nb_, rho=rho, p_value=pv,
+                              positive_significant=hit, note=reason))
+        flags[p], testable[p] = all_hit, all_testable
     Pr = pd.DataFrame(pairs)
     flagged = [p for p, f in flags.items() if f]
-    verdict = "CAVEAT NEEDED" if flagged else "CONFIRMS"
-    detail = "; ".join(f"{p}: " + ", ".join(f"{r.years} rho {r.rho:+.2f} (p {r.p_value:.3f})" for r in Pr[Pr.principal == p].itertuples())
-                       + (" -> every pair positive and significant" if flags[p] else " -> not every pair") for p in flags)
+    untestable = [p for p, t_ in testable.items() if not t_]
+    name = {"delmonte": "Del Monte", "unilever": "Unilever"}
+    parts = []
+    for p in flags:
+        parts.append(f"{name[p]}: " + ("CAVEAT NEEDED" if flags[p] else "NOT TESTABLE" if not testable[p] and
+                                      Pr[(Pr.principal == p) & (Pr.note == "")].empty else
+                                      "no flag" + (" (some pairs not testable)" if not testable[p] else "")))
+    verdict = ("CAVEAT NEEDED" if flagged else "CONFIRMS") if not untestable else " / ".join(parts)
+    pair_txt = lambda r: (f"{r.years} rho {r.rho:+.2f} (p {r.p_value:.3f})" if r.note == "" else f"{r.years} {r.note}")  # noqa: E731
+    detail = "; ".join(f"{name[p]}: " + ", ".join(pair_txt(r) for r in Pr[Pr.principal == p].itertuples()) for p in flags)
 
     rows_year = I[I.series == "total"].groupby(["principal", "year"]).agg(rows=("rows", "sum"), months=("month", "size"),
                                                                          pesos=("net_amount", "sum")).reset_index()
@@ -75,12 +92,15 @@ def main():
     caption = (
         f"Month-of-year index (month's real net pesos / that year's mean month), {YEARS[0]}-{YEARS[-1]}. Spearman correlation of "
         f"the index between years - "
-        + "; ".join(f"{'Del Monte' if p == 'delmonte' else 'Unilever'}: " + ", ".join(
-            f"{r.years} {r.rho:+.2f} (p {r.p_value:.3f})" for r in Pr[Pr.principal == p].itertuples()) for p in flags)
-        + ". " + (f"Every pair is positive and significant for {', '.join(flagged)}: an aggregate seasonal pattern the paper should "
-                  f"mention; it does not overturn the SKU-level finding." if flagged
-                  else "No principal has every pair positive and significant.")
-        + " Peak month by year: " + "; ".join(f"{'DM' if r.principal == 'delmonte' else 'UL'} {r.year} {r.month[5:]} ({r.index:.2f})"
+        + "; ".join(f"{name[p]}: " + ", ".join(pair_txt(r) for r in Pr[Pr.principal == p].itertuples()) for p in flags)
+        + ". " + (f"Every pair is positive and significant for {', '.join(name[p] for p in flagged)}: an aggregate seasonal pattern "
+                  f"the paper should mention; it does not overturn the SKU-level finding. " if flagged
+                  else "No principal has every pair of full years positive and significant. ")
+        + ("".join(f"{name[p]} has no full year in {YEARS[0]}-{YEARS[-1]} ("
+                   + ", ".join(f"{y}: {int(months_in.get((p, y), 0))} of 12 months" for y in YEARS)
+                   + f"), so the pre-registered test cannot be run for it and its curves are partial years. " for p in untestable
+                   if Pr[(Pr.principal == p) & (Pr.note == "")].empty))
+        + "Peak month by year: " + "; ".join(f"{'DM' if r.principal == 'delmonte' else 'UL'} {r.year} {r.month[5:]} ({r.index:.2f})"
                                                for r in peak.sort_values(["principal", "year"]).itertuples())
         + f". Del Monte volume differs sharply by year: " + ", ".join(f"{y} {int(dmr.loc[y, 'rows']):,} invoice rows / PHP "
                                                                     f"{dmr.loc[y, 'pesos'] / 1e6:,.1f}M" for y in YEARS)
