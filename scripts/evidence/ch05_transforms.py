@@ -14,11 +14,13 @@ Sources (read only; the experiment branch is local-only and is NOT merged):
 Harness A (bake-off, 5 half-year blocks), all SKUs, both baselines (MA3 and served),
 testable cells only - the SUMMARY table's population.
 
-Check G8, AMENDED 2026-09-30 (pre-approved by Yuan; source only, not criterion):
+Check G8, AMENDED twice 2026-09-30 (Yuan; source and population, not criterion):
 162 = 50 + 35 + 77 reconstructs - the original 50 from preds_plus.csv.gz, the 35 and
-77 from results_by_bin.csv - and every count matches the SUMMARY table (testable cells,
-exploratory, real, block wins / testable blocks). Any count that does not reconcile
-stops the build.
+77 from results_by_bin.csv - and every count matches the SUMMARY table. Testable
+cells, exploratory and real wins are counted over testable cells; block wins and
+testable blocks over ALL non-control cells (the SUMMARY's population: a cell whose
+full window is not testable can still have testable blocks). Any count that does
+not reconcile stops the build.
 Chance level: 2.5% per testable block, the one tail of a 95% interval.
 """
 import _common as C
@@ -117,13 +119,23 @@ def existing50(P):  # run_experiment.py:1038-1053
 # ---- end verbatim ---------------------------------------------------------------
 
 
+def _blocks(d):
+    b = d.blocks.fillna("")
+    return int(b.str.count("W").sum()), int((b.str.len() - b.str.count("N") - b.str.count("-")).sum())
+
+
 def summarise(df, name, n_candidates):
-    t = df[~df.label.str.contains("NOT_TESTABLE|CONTROL|REFERENCE", regex=True)]
-    blocks = t.blocks.fillna("")
+    """G8 AMENDED 2026-09-30: testable cells, exploratory and real wins over testable cells;
+    block wins and testable blocks over ALL non-control cells (block testability is per
+    block - the SUMMARY table's population). The testable-cells-only block counts are kept
+    as bw_tc / tb_tc for the data note."""
+    d = df[~df.label.str.contains("CONTROL|REFERENCE", regex=True)]
+    t = d[~d.label.str.contains("NOT_TESTABLE")]
+    bw, tb = _blocks(d)
+    bw_tc, tb_tc = _blocks(t)
     return dict(candidate_set=name, candidates=n_candidates, testable_cells=len(t),
                 exploratory=int((t.label == "EXPLORATORY_WIN").sum()), real=int((t.label == "REAL_WIN").sum()),
-                block_wins=int(blocks.str.count("W").sum()),
-                testable_blocks=int((blocks.str.len() - blocks.str.count("N") - blocks.str.count("-")).sum()))
+                block_wins=bw, testable_blocks=tb, block_wins_testable_cells_only=bw_tc, testable_blocks_testable_cells_only=tb_tc)
 
 
 def summary_table():
@@ -177,7 +189,9 @@ def main():
     S = pd.DataFrame(got.values())
     tot = dict(candidate_set="all 162", candidates=int(S.candidates.sum()), testable_cells=int(S.testable_cells.sum()),
                exploratory=int(S.exploratory.sum()), real=int(S.real.sum()), block_wins=int(S.block_wins.sum()),
-               testable_blocks=int(S.testable_blocks.sum()))
+               testable_blocks=int(S.testable_blocks.sum()),
+               block_wins_testable_cells_only=int(S.block_wins_testable_cells_only.sum()),
+               testable_blocks_testable_cells_only=int(S.testable_blocks_testable_cells_only.sum()))
     S = pd.concat([S, pd.DataFrame([tot])], ignore_index=True)
     S["block_win_rate"] = S.block_wins / S.testable_blocks
     S["cp_lo"] = [beta.ppf(0.025, x, n - x + 1) if x > 0 else 0.0 for x, n in zip(S.block_wins, S.testable_blocks)]
@@ -191,12 +205,18 @@ def main():
     detail = (f"real wins {int(T.real)}; pooled block-win rate {T.block_win_rate:.2%} "
               f"(95% CI {T.cp_lo:.2%}-{T.cp_hi:.2%}) vs chance {CHANCE:.1%}: lower bound "
               + ("ABOVE" if T.cp_lo > CHANCE else "not above") + " chance")
+    tc_rate = T.block_wins_testable_cells_only / T.testable_blocks_testable_cells_only
+    pop_note = (f"Block counts, two populations (G8 amendment): over all non-control cells {int(T.block_wins)} of "
+                f"{int(T.testable_blocks):,} blocks ({T.block_win_rate:.2%}) - used in the caption and the verdict, the more "
+                f"conservative (higher) rate; over testable cells only {int(T.block_wins_testable_cells_only)} of "
+                f"{int(T.testable_blocks_testable_cells_only):,} ({tc_rate:.2%}). The difference is phase 2's cells whose full "
+                f"window is not testable but whose blocks are.")
     caption = (
         f"Target transforms and the earlier candidates, bake-off harness (5 half-year blocks), all SKUs, against MA3 and against "
-        f"the served model, testable cells only. {int(T.candidates)} candidates: "
+        f"the served model, block counts over all non-control cells. {int(T.candidates)} candidates: "
         + "; ".join(f"{r.candidate_set} - {r.block_wins} block wins in {r.testable_blocks:,} testable blocks "
                     f"({r.block_win_rate:.1%}, 95% CI {r.cp_lo:.1%}-{r.cp_hi:.1%}), {r.exploratory} exploratory and {r.real} real "
-                    f"wins in {r.testable_cells} cells" for r in S.itertuples() if r.candidate_set != "all 162")
+                    f"wins in {r.testable_cells} testable cells" for r in S.itertuples() if r.candidate_set != "all 162")
         + f". Pooled: {int(T.block_wins)} of {int(T.testable_blocks):,} blocks ({T.block_win_rate:.1%}, 95% CI "
           f"{T.cp_lo:.1%}-{T.cp_hi:.1%}) against a chance level of {CHANCE:.1%} per block (the one tail of a 95% interval). "
           f"A real win needs the full window and a majority of testable blocks; there are {int(T.real)}. "
@@ -205,8 +225,8 @@ def main():
     )
     C.write_result(5, "transforms", "Target transforms", {"rates": S, "original50_cells": ref}, caption, verdict, detail, checks,
                    "ch05_transforms.py",
-                   extra=dict(data_notes=C.null_notes(P.pk.unique()), chance_per_block=CHANCE, experiment_commit=EXP_COMMIT,
-                              amendment="reports/evidence/AMENDMENTS.csv (G8)"))
+                   extra=dict(data_notes=C.null_notes(P.pk.unique()) + [pop_note], chance_per_block=CHANCE, experiment_commit=EXP_COMMIT,
+                              amendment="reports/evidence/AMENDMENTS.csv (G8, two rows)"))
 
 
 if __name__ == "__main__":
