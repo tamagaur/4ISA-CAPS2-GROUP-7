@@ -48,8 +48,11 @@ same data the split becomes 185 CRITICAL / 13 URGENT / 20 PLANNED.
                   cost (the SOH file's own valuation, backend/stock_units.py;
                   pesos, latest snapshot) / average daily sales value
                   (pesos/day) — where the daily rate is the product's
-                  net_amount over the three most recent calendar months
-                  present in Unilever_SKU_Demand_Fact_Real, divided by the
+                  net_amount over the SKU_COVER_HISTORY_MONTHS (3, analytics.
+                  params) most recent calendar months present in
+                  Unilever_SKU_Demand_Fact_Real AT OR BEFORE the stock
+                  snapshot month (since 2026-09-30; it took the table's
+                  latest months whatever the snapshot), divided by the
                   number of those months and by AVG_DAYS_PER_MONTH. A month
                   the table HAS but this product has no row in counts as 0:
                   the table stores no zero-sale rows, so that month is a
@@ -97,6 +100,7 @@ from backend.schemas.recommendations import RecommendationItem, RecommendationDe
 from backend.data_mode import PREVIEW, REAL, get_data_mode, lp_source, predictive_preview, preview_block
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info, stored_run
 from backend.lp_cycle import freshness as lp_freshness
+from analytics.params import DAYS_PER_MONTH, SKU_COVER_HISTORY_MONTHS
 from backend.stock_status import NO_DATA, stock_status
 from backend.stock_units import NO_PACK_SIZE_REASON, STOCK_AT_PERIOD_SQL
 
@@ -147,14 +151,16 @@ _SELECT_ONE = f"""
             FROM unilever_sku_demand_fact_real
             WHERE calendar_month IN (
                 SELECT DISTINCT calendar_month FROM unilever_sku_demand_fact_real
-                ORDER BY calendar_month DESC LIMIT 3
+                WHERE calendar_month <= :inv_period
+                ORDER BY calendar_month DESC LIMIT {SKU_COVER_HISTORY_MONTHS}
             )
             GROUP BY product_key, calendar_month
         ) recent
         CROSS JOIN (
             SELECT COUNT(*) AS months FROM (
                 SELECT DISTINCT calendar_month FROM unilever_sku_demand_fact_real
-                ORDER BY calendar_month DESC LIMIT 3
+                WHERE calendar_month <= :inv_period
+                ORDER BY calendar_month DESC LIMIT {SKU_COVER_HISTORY_MONTHS}
             ) window_months
         ) sales_window
         GROUP BY recent.product_key
@@ -173,10 +179,9 @@ def select_one(mode: str = REAL) -> tuple[str, dict]:
     return (_SELECT_ONE if lp == "lp_recommendation" else _SELECT_ONE.replace(_LP_FROM, f"FROM {lp} lr")), params
 
 
-# Average days per calendar month (365.25 / 12) — the same "documented
-# convention, not a fabricated number" that dashboard.py's
-# AVG_WEEKS_PER_MONTH is built from.
-AVG_DAYS_PER_MONTH = 365.25 / 12
+# Average days per calendar month (analytics.params.DAYS_PER_MONTH, 365.25 /
+# 12) — the convention dashboard.py's AVG_WEEKS_PER_MONTH is built from.
+AVG_DAYS_PER_MONTH = DAYS_PER_MONTH
 
 
 def _opt_float(row, key) -> float | None:
@@ -190,7 +195,8 @@ def _cover(stock_value: float | None, avg_monthly_sales: float | None) -> tuple[
     if stock_value is None:
         return None, "no stock valuation at the latest inventory snapshot (no row, or no unit cost)"
     if avg_monthly_sales is None:
-        return None, "no sales rows for this SKU in the three most recent sales months"
+        return None, (f"no sales rows for this SKU in the {SKU_COVER_HISTORY_MONTHS} sales months "
+                      "up to the stock snapshot")
     if avg_monthly_sales <= 0:
         return None, "average recent sales value is zero or negative — cannot divide"
     daily = avg_monthly_sales / AVG_DAYS_PER_MONTH

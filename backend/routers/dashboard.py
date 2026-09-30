@@ -336,7 +336,11 @@ from backend.data_mode import (
 )
 from analytics.allocation import allocation_levels, basis_year as allocation_basis_year, planning_month_after
 from analytics.classification.abc import abc_rules
-from analytics.params import ALLOCATION_DEFAULT_PCT, MASE_GATE
+from analytics.params import ALLOCATION_DEFAULT_PCT, COVER_KPI_HISTORY_MONTHS, MASE_GATE
+# SSM's "keep 3 weeks of sales" and the weeks-per-month convention, under
+# the names this module and policy_comparison.py already use.
+from analytics.params import POLICY_COVER_WEEKS as POLICY_WEEKS
+from analytics.params import WEEKS_PER_MONTH as AVG_WEEKS_PER_MONTH
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle, stored_run
@@ -350,7 +354,6 @@ from backend.stock_units import STOCK_AT_PERIOD_SQL
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-POLICY_WEEKS = 3
 # The ONE forecast-reliability gate this page applies: MASE < 1 passes
 # (the served model beat a naive last-value forecast on its holdout), so
 # >= 1 is unreliable. Shared by forecast.unreliable_count AND
@@ -378,11 +381,10 @@ LP_WEIGHT_SERVICE_LEVEL = LP_WEIGHTS["service_level"]
 LP_WEIGHT_STORAGE = LP_WEIGHTS["storage"]
 assert abs((LP_WEIGHT_COST + LP_WEIGHT_SERVICE_LEVEL + LP_WEIGHT_STORAGE) - 1.00) < 1e-9
 
-# Average days/month (365.25/12) / 7 — converts an average MONTHLY figure to
-# a weekly rate for kpis.weeks_of_cover. A documented convention, not a
-# fabricated number — same "defensible default, not fact" spirit as
-# analytics/etl/granularity.py's business_days_in_month().
-AVG_WEEKS_PER_MONTH = 365.25 / 12 / 7
+# AVG_WEEKS_PER_MONTH (imported above, analytics.params.WEEKS_PER_MONTH):
+# average days/month (365.25/12) / 7, converting an average MONTHLY figure
+# to a weekly rate for kpis.weeks_of_cover. A documented convention, not a
+# fabricated number.
 
 # See kpis.soh_value's docstring section above for the full evidence trail.
 # Flip to False (and nothing else) if a future Extract/Transform change to
@@ -1207,7 +1209,9 @@ def get_dashboard(
     cover_periods: list[str] = []
     if cover_end is not None:
         end_index = int(cover_end[:4]) * 12 + int(cover_end[5:7]) - 1
-        start_index = end_index - 11
+        # COVER_KPI_HISTORY_MONTHS (12) ending at the stock month: the
+        # portfolio KPI's window, which the range picker does not move.
+        start_index = end_index - (COVER_KPI_HISTORY_MONTHS - 1)
         cover_periods = _month_range(f"{start_index // 12:04d}-{start_index % 12 + 1:02d}", cover_end)
     # The page's own sums are reused where they are the same scope's; only
     # the months they lack are fetched, in one call.

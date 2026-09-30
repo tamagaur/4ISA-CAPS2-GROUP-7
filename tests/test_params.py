@@ -125,3 +125,17 @@ def test_three_volatility_measures_three_names():
     assert baseline._CV2_CUT == params.SBC_CV2_CUT
     for cv in (0.49, 0.5, 0.99, 1.0, 1.5):
         assert segment.cv_band(cv) == bins.volatility_v1(12, cv)[0]
+
+
+def test_two_cover_windows_both_end_at_the_stock_snapshot():
+    """Item 10: 12 months for the dashboard's weeks-of-cover KPI, 3 for the
+    Reorder page's per-SKU days of cover — named apart, and the per-SKU one
+    anchored to the stock snapshot month instead of the table's latest months."""
+    from backend.routers import dashboard, recommendations
+
+    assert (params.COVER_KPI_HISTORY_MONTHS, params.SKU_COVER_HISTORY_MONTHS) == (12, 3)
+    sql = " ".join(recommendations._SELECT_ONE.split())
+    assert sql.count("WHERE calendar_month <= :inv_period ORDER BY calendar_month DESC LIMIT 3") == 2
+    assert dashboard.POLICY_WEEKS is params.POLICY_COVER_WEEKS
+    assert dashboard.AVG_WEEKS_PER_MONTH is params.WEEKS_PER_MONTH
+    assert recommendations.AVG_DAYS_PER_MONTH is params.DAYS_PER_MONTH
