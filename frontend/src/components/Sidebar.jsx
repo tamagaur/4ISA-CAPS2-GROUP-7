@@ -14,6 +14,8 @@ import {
   ChartLine
 } from 'lucide-react';
 import { logout, getCurrentUser, API_URL } from '../auth';
+import { usePermissions } from '../permissions/context';
+import { permissionForPath } from '../permissions/keys';
 import Modal from './Modal';
 import './Sidebar.css';
 
@@ -46,9 +48,9 @@ const navSections = [
   {
     label: 'Admin',
     items: [
-      { name: 'Audit Log', icon: ClipboardList, path: '/audit-log', adminOnly: true },
+      { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
       { name: 'Data Management', icon: Upload, path: '/upload' },
-      { name: 'User Management', icon: Users, path: '/users', adminOnly: true },
+      { name: 'User Management', icon: Users, path: '/users' },
     ],
   },
 ];
@@ -78,8 +80,11 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const currentUser = getCurrentUser();
+  // Role and tabs come from /auth/me (PermissionsProvider), not the login
+  // token, so a change an admin makes shows on the next click.
+  const { role, hasPermission } = usePermissions();
   const displayName = currentUser?.fullName || currentUser?.email || 'Signed in';
-  const displayRole = currentUser?.role ? currentUser.role.toUpperCase() : '';
+  const displayRole = role ? role.toUpperCase() : '';
 
   const handleConfirmLogout = () => {
     setShowLogoutModal(false);
@@ -124,8 +129,9 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
         {/* Navigation */}
         <nav className="sidebar-nav">
           {navSections.map((section) => {
+            // Only the pages this person may open (permissions/keys.js PAGES).
             const visibleItems = section.items.filter(
-              (item) => !item.adminOnly || currentUser?.role === 'admin'
+              (item) => hasPermission(permissionForPath(item.path))
             );
             if (visibleItems.length === 0) return null;
 

@@ -1,0 +1,85 @@
+/* Dev-only mock switch: a small dashed box in the bottom-right corner, so it
+   can't be mistaken for part of the app. */
+.mock-perm-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2000;
+  max-width: 280px;
+  font-size: 0.8rem;
+  color: var(--color-text-body);
+}
+
+.mock-perm-toggle {
+  display: block;
+  margin-left: auto;
+  border: 1px dashed var(--color-border-strong);
+  background-color: var(--color-surface);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.mock-perm-body {
+  margin-top: 0.5rem;
+  border: 1px dashed var(--color-border-strong);
+  background-color: var(--color-surface);
+  border-radius: 12px;
+  padding: 0.8rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.mock-perm-role {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.mock-perm-list {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  margin: 0.6rem 0;
+  padding: 0.3rem 0.6rem 0.5rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.mock-perm-list legend {
+  font-weight: 600;
+  padding: 0 0.3rem;
+}
+
+.mock-perm-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.12rem 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.mock-perm-hint {
+  margin: 0 0 0.6rem;
+  color: var(--color-text-muted);
+  line-height: 1.35;
+}
+
+.mock-perm-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mock-perm-actions button {
+  flex: 1;
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-surface-sunken);
+  border-radius: 6px;
+  padding: 0.35rem;
+  font-weight: 600;
+  cursor: pointer;
+}

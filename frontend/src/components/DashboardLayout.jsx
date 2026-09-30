@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, FlaskConical } from 'lucide-react';
 import Sidebar from './Sidebar';
@@ -8,6 +8,7 @@ import { invalidateCache } from '../api/cache';
 import { getDataModeInfo } from '../api/dataMode';
 import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
+import { MOCK_PERMISSIONS } from '../api/mocks/permissionsMock';
 import { LoadingStatus, PageSkeleton } from './Skeleton';
 import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal, labelForPrincipal } from '../principals';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
@@ -15,6 +16,13 @@ import {
   DATA_MODES, PLACEHOLDER_PRINCIPAL, PLACEHOLDER_START, getDataMode, isPreviewMode, setDataMode as storeDataMode,
 } from '../dataMode';
 import './DashboardLayout.css';
+
+// The dev-only permissions mock switch (api/mocks/permissionsMock.js).
+// Loaded on demand and only on a dev server, so a production build carries
+// neither its code nor its CSS.
+const MockPermissionsPanel = import.meta.env.DEV && MOCK_PERMISSIONS
+  ? lazy(() => import('./dev/MockPermissionsPanel'))
+  : null;
 
 const PageLoadingFallback = () => (
   <>
@@ -381,6 +389,11 @@ const DashboardLayout = () => {
         onNavAttempt={handleNavAttempt}
         currentMonth={realWorldPeriod.month}
       />
+      {MockPermissionsPanel && (
+        <Suspense fallback={null}>
+          <MockPermissionsPanel />
+        </Suspense>
+      )}
       <div className="main-content">
         <Topbar
           toggleSidebar={toggleSidebar}

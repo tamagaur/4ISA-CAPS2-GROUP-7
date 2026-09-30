@@ -1,0 +1,78 @@
+/* The full screen shown while /auth/me loads, or when it can't be loaded:
+   nothing else renders until the app knows what this person may open, so
+   no tab appears and then vanishes. */
+.access-gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.5rem;
+  background-color: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+.access-gate-spin {
+  animation: access-gate-spin 1s linear infinite;
+}
+
+@keyframes access-gate-spin {
+  to { transform: rotate(360deg); }
+}
+
+.access-gate-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 2rem;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+}
+
+.access-gate-icon {
+  color: var(--color-danger-text);
+}
+
+.access-gate-title {
+  margin: 0.6rem 0 0.4rem;
+  font-size: 1.1rem;
+  color: var(--color-text-heading);
+}
+
+.access-gate-text {
+  margin: 0 0 1.2rem;
+  font-size: 0.9rem;
+  color: var(--color-text-body);
+}
+
+.access-gate-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+}
+
+.access-gate-btn {
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.access-gate-btn.primary {
+  background-color: var(--color-brand-primary);
+  border-color: var(--color-brand-primary);
+  color: #fff;
+}
+
+.access-gate-btn:hover {
+  filter: brightness(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .access-gate-spin { animation: none; }
+}
