@@ -52,7 +52,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, REPO)
 
-from analytics.params import FIT_REVIEW_NOT_FIT_MASE  # noqa: E402
+from analytics.params import FIT_REVIEW_HIGH_VOL_CV, FIT_REVIEW_NOT_FIT_MASE  # noqa: E402
 
 PRINCIPAL, ABC_PERIOD, ABC_METHOD = "unilever", "2026-02", "single"
 REAL_START = "2023-01"
@@ -729,7 +729,7 @@ CAUSE_FLAGS = {"cause_is_level_shift": "level shift", "cause_is_spiky": "spiky",
 CAUSE_THRESHOLDS = [
     ("level shift", "mean(last 6) / mean(prior 12) outside 0.7-1.3; needs >=18 months"),
     ("spiky", ">=1 month more than 3 x MAD from the SKU's median (MAD raw/unscaled)"),
-    ("high volatility", "CV(last 12) > cohort p75 = 0.4365 (measured over the 119 scored SKUs)"),
+    ("high volatility", f"CV(last 12) > {FIT_REVIEW_HIGH_VOL_CV} (team-set, source script lost; analytics/params.py)"),
     ("intermittent", "zero-or-missing share >= 0.30 or longest zero run >= 3 months"),
     ("tiny scale", "median monthly units <= cohort lower quartile = 812.5 units (measured)"),
     ("trend reversal", "sign(Theil-Sen slope, last 12) != sign(Theil-Sen slope, full history)"),
@@ -870,10 +870,11 @@ def load_fit_review(payload: dict) -> dict:
         "agree": agree, "counts": counts, "spike_check": spike_check, "level_check": level_check,
         "verdict_order": VERDICT_ORDER, "cause_order": CAUSE_ORDER, "no_better_model": NO_BETTER_MODEL,
         "thresholds": CAUSE_THRESHOLDS,
-        # The two gates are the README's measured figures, quoted, never recomputed.
+        # gate_cv is team-set (its source script is lost: analytics/params.py
+        # FIT_REVIEW_HIGH_VOL_CV); gate_units is the README's measured figure.
         # The two medians ARE computed here, over the CSV rows that carry the column,
         # and the sentence that uses one says so.
-        "gate_cv": 0.4365, "gate_units": 812.5,
+        "gate_cv": FIT_REVIEW_HIGH_VOL_CV, "gate_units": 812.5,
         # The not-fit flag (MASE on the common window): a review flag, not the LP gate.
         "not_fit_mase": FIT_REVIEW_NOT_FIT_MASE,
         "median_cv": _median([num(r["cause_cv_last12"]) for r in rows.values()]),
@@ -1541,7 +1542,7 @@ function seriesSentences(s){
 
   out.push(s.cause_cv == null
     ? sent(`cause_cv_last12 (${CSVSRC})`, 'No CV on record: fewer than 12 months.')
-    : sent(`cause_cv_last12 (${CSVSRC}); the p75 gate ${F.gate_cv} is the README\u2019s measured figure; the cohort median is computed over the ${F.median_cv_n} rows that carry a CV`,
+    : sent(`cause_cv_last12 (${CSVSRC}); the high-volatility cut ${F.gate_cv} is team-set, its source script lost (analytics/params.py); the cohort median is computed over the ${F.median_cv_n} rows that carry a CV`,
       `CV over the last 12 months is <b>${fmt(s.cause_cv)}</b>, against a cohort median of <b>${fmt(F.median_cv)}</b>; it <b>${s.cause_cv > F.gate_cv ? 'clears' : 'does not clear'}</b> the high-volatility gate of ${F.gate_cv}.`));
 
   out.push(sent(`cause_median_units (${CSVSRC}); the ${F.gate_units}-unit gate is the README\u2019s measured lower quartile; the cohort median is computed over ${F.median_units_n} rows`,

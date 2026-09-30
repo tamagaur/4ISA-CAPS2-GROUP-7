@@ -41,12 +41,12 @@ One cause group per SKU: the **first** rule that fires in this precedence.
 |---|---|---|---|
 | level shift | mean(last 6) / mean(prior 12) outside 0.7–1.3 | **0.7 – 1.3** | the same band already used for `recent_level_ratio`; needs ≥18 months, else null |
 | intermittent | zero-or-missing share ≥ 0.30 **or** longest zero run ≥ 3 | **0.30 / 3 months** | declared before computing; fires on **1** of 132 SKUs — intermittency is effectively absent from this cohort |
-| high volatility | CV(last 12) > cohort p75 | **0.4365** | measured: 75th percentile of CV(last 12) across the 119 scored SKUs |
+| high volatility | CV(last 12) > **0.4365** | **0.4365** | **team-set, source script lost** (2026-09-30): first recorded as the p75 across the 119 scored SKUs, but only 92 rows carry `cause_cv_last12`, and their p75 is 0.434–0.446 under numpy's eight percentile methods (0.437 linear), never 0.4365. 23 of 92 fire at 0.4365 and at 0.437. `analytics/params.py` `FIT_REVIEW_HIGH_VOL_CV` |
 | spiky | ≥1 month more than 3 MAD from the SKU's median | **3 × MAD**, MAD raw/unscaled | declared before computing |
 | tiny scale | median monthly units ≤ cohort lower quartile | **812.5 units** | measured: 25th percentile of median monthly units across the 119 scored SKUs |
 | trend reversal | sign(Theil-Sen slope, last 12) ≠ sign(Theil-Sen slope, full history), neither zero | sign flip | declared before computing |
 
-Both measured thresholds come from the **119 scored Tier A SKUs as of 2026-02**.
+The tiny-scale threshold is measured over the **119 scored Tier A SKUs as of 2026-02**; the high-volatility one is team-set (above).
 They are cohort-relative descriptors, not gates: recomputing them on a different
 cohort or period will move them, so any re-run must state the cohort it used.
 

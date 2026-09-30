@@ -109,3 +109,18 @@ def test_one_mase_gate_everywhere():
     assert run_lp.MASE_GATE is dashboard.MASE_GATE is baseline.MASE_GATE is params.MASE_GATE
     assert not hasattr(dashboard, "MASE_UNRELIABLE_GATE")
     assert params.FIT_REVIEW_NOT_FIT_MASE != params.MASE_GATE
+
+
+def test_three_volatility_measures_three_names():
+    """Item 3: sku_traits.cv's XYZ bands (bins and the segment API share
+    them), SBC's CV² of non-zero sizes, and the fit review's CV(last 12) are
+    different measures with different names — never one threshold reused."""
+    from analytics.forecasting import baseline
+    from analytics.segmentation import bins
+    from backend.routers import segment
+
+    assert (bins.VOLATILITY_V1_LOW, bins.VOLATILITY_V1_HIGH) == (params.XYZ_CV_LOW, params.XYZ_CV_HIGH)
+    assert (segment.CV_BAND_MEDIUM, segment.CV_BAND_HIGH) == (params.XYZ_CV_LOW, params.XYZ_CV_HIGH)
+    assert baseline._CV2_CUT == params.SBC_CV2_CUT
+    for cv in (0.49, 0.5, 0.99, 1.0, 1.5):
+        assert segment.cv_band(cv) == bins.volatility_v1(12, cv)[0]

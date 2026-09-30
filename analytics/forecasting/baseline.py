@@ -50,7 +50,7 @@ import pandas as pd
 # validation live in sarima.py and are shared verbatim.
 from analytics.forecasting.sarima import train_holdout_split, HOLDOUT_FRACTION  # noqa: F401
 from analytics.classification.abc import TIER_A_CUTOFF as ABC_TIER_A_CUTOFF  # noqa: F401
-from analytics.params import MASE_GATE
+from analytics.params import MASE_GATE, SBC_ADI_CUT, SBC_CV2_CUT
 
 MIN_MONTHS_WITH_SALES = 3
 MA_WINDOW = 3
@@ -68,10 +68,12 @@ SBA_ALPHA_TUNED = False
 TSB_ALPHA_DEMAND = 0.3
 TSB_ALPHA_PROB = 0.1
 
-# Demand-class thresholds (Syntetos-Boylan-Croston cut points), identical to
-# this session's demand_shape_analysis.
-_ADI_CUT = 1.32
-_CV2_CUT = 0.49
+# Demand-class thresholds: the Syntetos-Boylan-Croston (2005) cut points,
+# from analytics.params. CV² here is of the NON-ZERO demand sizes only —
+# not sku_traits.cv (every month from the first sale), not the fit
+# review's CV(last 12).
+_ADI_CUT = SBC_ADI_CUT
+_CV2_CUT = SBC_CV2_CUT
 
 # ---------------------------------------------------------------------------
 # rule_method mapping - a fixed, named, documented lookup (never inlined).
