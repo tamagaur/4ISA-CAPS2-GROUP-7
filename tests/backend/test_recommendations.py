@@ -284,19 +284,15 @@ def test_freshness_flags_an_lp_older_than_its_forecasts(sample_rows):
 def test_lp_settings_the_api_states_are_the_solvers():
     """GET /recommendations' lp_model and GET /dashboard's lp_weights come
     from backend/lp_cycle.py; analytics/optimization/lp.py is what solves.
-    Read as text: lp.py imports the pulp solver."""
-    import re
-    from pathlib import Path
+    Both read analytics.params, so they are the same objects."""
     from statistics import NormalDist
 
+    from analytics import params
+    from analytics.optimization import lp
     from backend.lp_cycle import LP_SERVICE_LEVEL_PCT, LP_SERVICE_Z, LP_WEIGHTS
 
-    source = (Path(__file__).resolve().parents[2] / "analytics/optimization/lp.py").read_text(encoding="utf-8")
-    w = re.search(r"^W1, W2, W3 = ([0-9.]+), ([0-9.]+), ([0-9.]+)", source, re.M)
-    z = re.search(r"^Z_SCORE = ([0-9.]+)", source, re.M)
-    assert w and z
-    assert [LP_WEIGHTS["cost"], LP_WEIGHTS["service_level"], LP_WEIGHTS["storage"]] == [float(v) for v in w.groups()]
-    assert LP_SERVICE_Z == float(z.group(1))
+    assert LP_WEIGHTS is params.LP_WEIGHTS and LP_SERVICE_Z is params.SERVICE_Z is lp.Z_SCORE
+    assert [LP_WEIGHTS["cost"], LP_WEIGHTS["service_level"], LP_WEIGHTS["storage"]] == [lp.W1, lp.W2, lp.W3]
     assert round(NormalDist().cdf(LP_SERVICE_Z) * 100) == LP_SERVICE_LEVEL_PCT
 
 

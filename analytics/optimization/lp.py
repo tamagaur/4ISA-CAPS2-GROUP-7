@@ -71,9 +71,9 @@ hid that behind its hard Q_i >= ROP_i floor. Here the floor is the target,
 kept as the first priority rather than a hard constraint, so a short
 allocation gives a plan instead of INFEASIBLE.
 
-Constants:
-  Z_SCORE = 1.28
-  W1, W2, W3 = 0.45, 0.35, 0.20
+Constants (from analytics.params):
+  Z_SCORE = SERVICE_Z (1.28)
+  W1, W2, W3 = LP_WEIGHTS (0.45, 0.35, 0.20)
 """
 from __future__ import annotations
 
@@ -81,10 +81,10 @@ from dataclasses import dataclass
 
 import pulp
 
-from analytics.params import BUSINESS_DAYS_PER_WEEK, WEEKS_PER_MONTH
+from analytics.params import BUSINESS_DAYS_PER_WEEK, LP_WEIGHTS, SERVICE_Z, WEEKS_PER_MONTH
 
-Z_SCORE = 1.28
-W1, W2, W3 = 0.45, 0.35, 0.20
+Z_SCORE = SERVICE_Z
+W1, W2, W3 = LP_WEIGHTS["cost"], LP_WEIGHTS["service_level"], LP_WEIGHTS["storage"]
 
 assert abs((W1 + W2 + W3) - 1.00) < 1e-9, "W1+W2+W3 must sum to 1.00 (Step 19 weighting)"
 

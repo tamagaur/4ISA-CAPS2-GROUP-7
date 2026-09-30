@@ -139,3 +139,69 @@ def test_two_cover_windows_both_end_at_the_stock_snapshot():
     assert dashboard.POLICY_WEEKS is params.POLICY_COVER_WEEKS
     assert dashboard.AVG_WEEKS_PER_MONTH is params.WEEKS_PER_MONTH
     assert recommendations.AVG_DAYS_PER_MONTH is params.DAYS_PER_MONTH
+
+
+def _module_level_assignments(path: Path) -> set[str]:
+    names = set()
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
+        names |= {n.id for t in targets for n in ast.walk(t) if isinstance(n, ast.Name)}
+    return names
+
+
+def test_no_module_redefines_a_parameter():
+    """Item 11: a module may import a parameter, never assign one itself.
+    Archived scripts and frozen experiment artifacts are out of scope."""
+    offenders = []
+    for root in ("analytics", "backend", "scripts", "tools"):
+        for path in (REPO / root).rglob("*.py"):
+            rel = path.relative_to(REPO).as_posix()
+            if "/archive/" in rel or rel == "analytics/params.py":
+                continue
+            offenders += [f"{rel}: {n}" for n in sorted(_module_level_assignments(path) & _public_names())]
+    assert offenders == []
+
+
+def test_every_alias_is_the_parameter_itself():
+    """Item 11: the old local names stay (callers and tests use them) but are
+    the params objects, so a retyped literal can't slip back in unnoticed."""
+    from analytics.classification import fsn
+    from analytics.forecasting import baseline
+    from analytics.optimization import lp
+    from analytics.segmentation import bins
+    from backend import lp_cycle
+    from backend.routers import forecast
+    from scripts import run_baseline_forecast
+
+    assert lp.Z_SCORE is lp_cycle.LP_SERVICE_Z is params.SERVICE_Z
+    assert lp_cycle.LP_SERVICE_LEVEL_PCT is params.SERVICE_LEVEL_PCT
+    assert lp_cycle.LP_WEIGHTS is params.LP_WEIGHTS
+    assert (lp.W1, lp.W2, lp.W3) == tuple(params.LP_WEIGHTS[k] for k in ("cost", "service_level", "storage"))
+    assert run_baseline_forecast.CONFIDENCE_Z is forecast.FORECAST_INTERVAL["z"] is params.FORECAST_INTERVAL_Z
+    assert baseline.MIN_MONTHS_WITH_SALES is bins.LENGTH_V1_INSUFFICIENT is params.MIN_MONTHS_WITH_SALES
+    assert fsn.FSN_WINDOW_MONTHS is params.FSN_WINDOW_MONTHS
+    assert fsn.MIN_FAST_SALES_MONTHS is params.FSN_MIN_FAST_SALES_MONTHS
+    assert fsn.NON_MOVING_MONTHS is params.DEAD_SKU_MONTHS
+
+
+@pytest.mark.parametrize("rel, alias", [
+    ("analytics/optimization/lp.py", "Z_SCORE"),
+    ("analytics/segmentation/bins.py", "LENGTH_V1_INSUFFICIENT"),
+    ("analytics/segmentation/bins.py", "VOLATILITY_V1_LOW"),
+    ("analytics/segmentation/bins.py", "VOLATILITY_V1_HIGH"),
+    ("analytics/classification/fsn.py", "NON_MOVING_MONTHS"),
+    ("analytics/classification/fsn.py", "MIN_FAST_SALES_MONTHS"),
+    ("analytics/classification/fsn.py", "FAST_ADI_BELOW"),
+    ("backend/routers/segment.py", "CV_BAND_MEDIUM"),
+    ("backend/routers/segment.py", "CV_BAND_HIGH"),
+    ("backend/routers/recommendations.py", "AVG_DAYS_PER_MONTH"),
+    ("scripts/run_baseline_forecast.py", "CONFIDENCE_Z"),
+])
+def test_alias_is_assigned_from_params_not_a_literal(rel, alias):
+    """`is` can't tell a retyped small int from the parameter (CPython caches
+    them), so the aliases' own assignments are checked: a name, never a number."""
+    tree = ast.parse((REPO / rel).read_text(encoding="utf-8"))
+    values = [node.value for node in tree.body if isinstance(node, ast.Assign)
+              and any(isinstance(t, ast.Name) and t.id == alias for t in node.targets)]
+    assert values, f"{alias} not assigned in {rel}"
+    assert not any(isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) for v in values for n in ast.walk(v))

@@ -36,7 +36,7 @@ Implements:
   RULE_METHOD_MAP: dict[str, str]
 
 Constants:
-  MIN_MONTHS_WITH_SALES = 3     eligibility gate (real observations, not span)
+  MIN_MONTHS_WITH_SALES        analytics.params (3): eligibility gate (real observations, not span)
   HOLDOUT_FRACTION             analytics.params (0.20)
   MASE_GATE                    analytics.params (1.0): a forecast beating the naive benchmark scores < 1
   SBA_ALPHA = 0.1             UNTUNED this pass - stamped alpha_tuned:false everywhere
@@ -51,10 +51,9 @@ import pandas as pd
 from analytics.forecasting.split import train_holdout_split  # noqa: F401
 from analytics.classification.abc import TIER_A_CUTOFF as ABC_TIER_A_CUTOFF  # noqa: F401
 from analytics.forecasting.diagnostic_metrics import mape as _mape
-from analytics.params import HOLDOUT_FRACTION, MASE_GATE, SBC_CV2_CUT  # noqa: F401
+from analytics.params import HOLDOUT_FRACTION, MASE_GATE, MIN_MONTHS_WITH_SALES, SBC_CV2_CUT  # noqa: F401
 from analytics.segmentation.traits import average_demand_interval, is_intermittent_adi
 
-MIN_MONTHS_WITH_SALES = 3
 MA_WINDOW = 3
 
 # SBA smoothing constant. Flagged untuned: no tuning was attempted this pass.

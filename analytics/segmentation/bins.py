@@ -9,16 +9,16 @@ function here plus new sku_segment rows — no schema or trait change.
 """
 from __future__ import annotations
 
-from analytics.params import XYZ_CV_HIGH, XYZ_CV_LOW
+from analytics.params import MIN_MONTHS_WITH_SALES, XYZ_CV_HIGH, XYZ_CV_LOW
 
-LENGTH_V1_INSUFFICIENT = 3
+LENGTH_V1_INSUFFICIENT = MIN_MONTHS_WITH_SALES
 LENGTH_V1_LONG = 12
 
 
 def length_v1(history_months: int) -> tuple[str, str]:
     """insufficient (<3 months with sales), short (3-11), long (12+).
     Cutoffs match the existing ABC/forecasting eligibility gate
-    (analytics/forecasting/baseline.py:38, MIN_MONTHS_WITH_SALES=3) and
+    (analytics.params.MIN_MONTHS_WITH_SALES = 3, the runner's own) and
     the length-scheme cutoff used in reports/ABC_PHASE2_2026-09.md /
     the Round 1 diagnostic (12 months)."""
     if history_months < LENGTH_V1_INSUFFICIENT:

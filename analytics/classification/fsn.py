@@ -31,13 +31,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from analytics.params import SBC_ADI_CUT
+from analytics.params import DEAD_SKU_MONTHS, FSN_MIN_FAST_SALES_MONTHS, FSN_WINDOW_MONTHS, SBC_ADI_CUT
 from analytics.segmentation.traits import average_demand_interval, is_intermittent_adi
 
-FSN_WINDOW_MONTHS = 12
-NON_MOVING_MONTHS = 6
+NON_MOVING_MONTHS = DEAD_SKU_MONTHS
 FAST_ADI_BELOW = SBC_ADI_CUT  # fast needs ADI < this (a tie is intermittent)
-MIN_FAST_SALES_MONTHS = 3
+MIN_FAST_SALES_MONTHS = FSN_MIN_FAST_SALES_MONTHS
 
 FSN_LABELS = {"F": "Fast-moving", "S": "Slow-moving", "N": "Non-moving"}
 

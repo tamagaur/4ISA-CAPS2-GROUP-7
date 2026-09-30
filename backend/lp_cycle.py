@@ -49,23 +49,20 @@ import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from analytics.params import MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION
+from analytics.params import LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION
+from analytics.params import SERVICE_LEVEL_PCT as LP_SERVICE_LEVEL_PCT
+from analytics.params import SERVICE_Z as LP_SERVICE_Z
 from backend.data_mode import REAL, forecast_source, lp_source
 
 # Applied to every LP read. Bound (not interpolated) so it is safe to
 # concatenate into a query string alongside the principal clause.
 CURRENT_CYCLE_CLAUSE = " AND lr.planning_cycle_date = :current_cycle"
 
-# The solver's fixed settings — analytics/optimization/lp.py's W1/W2/W3 and
-# Z_SCORE — kept here because lp.py imports the pulp solver, a batch-job
-# dependency the always-on API should not need just to read four numbers.
-# tests/backend/test_recommendations.py pins them to lp.py. Every screen that
-# describes the LP reads them from here (GET /recommendations' lp_model,
-# GET /dashboard's reorder_preview.lp_weights), so a label can't drift from
-# what the solver does.
-LP_WEIGHTS = {"cost": 0.45, "service_level": 0.35, "storage": 0.20}
-LP_SERVICE_Z = 1.28
-LP_SERVICE_LEVEL_PCT = 90  # the cycle service level Z = 1.28 stands for
+# The solver's fixed settings (LP_WEIGHTS, LP_SERVICE_Z, LP_SERVICE_LEVEL_PCT,
+# imported above) come from analytics.params, the module analytics/
+# optimization/lp.py reads too, so a label can't drift from what the solver
+# does. Every screen that describes the LP reads them from here (GET
+# /recommendations' lp_model, GET /dashboard's reorder_preview.lp_weights).
 
 
 def stored_run(db: Session, cycle: datetime.date | None, principal: str | None = None,

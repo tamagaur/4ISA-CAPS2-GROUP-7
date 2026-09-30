@@ -40,7 +40,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from analytics.forecasting.split import train_holdout_split
-from analytics.params import HOLDOUT_FRACTION
+from analytics.params import FORECAST_INTERVAL_Z, HOLDOUT_FRACTION
 from analytics.forecasting.baseline import (
     MIN_MONTHS_WITH_SALES,
     MASE_GATE,
@@ -827,7 +827,7 @@ def _f(v):
 # modest claim for a forecast scored on one SKU's 20% holdout (a handful of
 # months), not a long rolling-origin residual distribution. Rounder numbers
 # read as more certain than this method earns.
-CONFIDENCE_Z = 1.645
+CONFIDENCE_Z = FORECAST_INTERVAL_Z  # analytics.params: 1.645, two-sided ~90%
 
 
 def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float | None]:
