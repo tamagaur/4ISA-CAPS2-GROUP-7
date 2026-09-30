@@ -11,6 +11,7 @@ from backend.login_limiter import (
     MAX_FAILURES_PER_EMAIL,
     MAX_FAILURES_PER_IP,
     WINDOW_SECONDS,
+    Lock,
     LoginLimiter,
 )
 
@@ -39,7 +40,7 @@ def test_locks_on_the_fifth_failure_not_before():
     limiter, _ = make()
     results = fail(limiter, MAX_FAILURES_PER_EMAIL)
     assert results[:-1] == [None] * (MAX_FAILURES_PER_EMAIL - 1)
-    assert results[-1] == LOCKOUT_SECONDS
+    assert results[-1] == Lock(LOCKOUT_SECONDS, ("email",))
     assert limiter.retry_after("a@x.com", "1.1.1.1") == LOCKOUT_SECONDS
 
 
@@ -66,7 +67,7 @@ def test_email_matching_ignores_case_and_spaces():
     limiter, _ = make()
     for email in ("A@x.com", " a@X.com", "a@x.com ", "A@X.COM"):
         limiter.record_failure(email, "1.1.1.1")
-    assert limiter.record_failure("a@x.com", "1.1.1.1") == LOCKOUT_SECONDS
+    assert limiter.record_failure("a@x.com", "1.1.1.1") == Lock(LOCKOUT_SECONDS, ("email",))
 
 
 def test_success_clears_the_email_count():
@@ -81,13 +82,23 @@ def test_ip_limit_catches_a_few_guesses_on_many_emails():
     per-email rule; the per-IP rule is what stops it."""
     limiter, _ = make()
     total = 0
+    locks = []
     for n in range(10):
         for _ in range(MAX_FAILURES_PER_EMAIL - 1):
             if total < MAX_FAILURES_PER_IP:
-                limiter.record_failure(f"user{n}@x.com", "6.6.6.6")
+                locks.append(limiter.record_failure(f"user{n}@x.com", "6.6.6.6"))
                 total += 1
+    assert locks[-1] == Lock(LOCKOUT_SECONDS, ("ip",))  # the lock says which limit tripped
     assert limiter.retry_after("someone-new@x.com", "6.6.6.6") == LOCKOUT_SECONDS
     assert limiter.retry_after("someone-new@x.com", "7.7.7.7") is None
+
+
+def test_one_failure_can_trip_both_limits():
+    limiter, _ = make()
+    for n in range(MAX_FAILURES_PER_IP - MAX_FAILURES_PER_EMAIL):
+        assert limiter.record_failure(f"other{n}@x.com", "6.6.6.6") is None
+    results = fail(limiter, MAX_FAILURES_PER_EMAIL, ip="6.6.6.6")
+    assert results[-1] == Lock(LOCKOUT_SECONDS, ("email", "ip"))
 
 
 def test_stale_entries_are_pruned(monkeypatch):

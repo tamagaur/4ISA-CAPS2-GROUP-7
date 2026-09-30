@@ -33,6 +33,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 MAX_FAILURES_PER_EMAIL = 5
 MAX_FAILURES_PER_IP = 20
@@ -47,6 +48,12 @@ _PRUNE_ABOVE = 10_000
 class _Record:
     failures: deque = field(default_factory=deque)  # clock times of failures still inside the window
     locked_until: float = 0.0
+
+
+class Lock(NamedTuple):
+    """A lock that one failed sign-in just started."""
+    seconds: int
+    limits: tuple[str, ...]  # which rule tripped: ("email",), ("ip",) or both
 
 
 class LoginLimiter:
@@ -67,13 +74,17 @@ class LoginLimiter:
             ]
         return math.ceil(max(waits)) if waits else None
 
-    def record_failure(self, email: str, ip: str) -> int | None:
+    def record_failure(self, email: str, ip: str) -> Lock | None:
         """Counts one failed sign-in against the email and the IP. Returns the
-        lock length in seconds if this failure started a lock, else None."""
+        lock this failure started (its length and which limit tripped), or
+        None."""
         now = self._clock()
-        started = None
+        tripped = []
         with self._mutex:
-            for key, limit in ((_email_key(email), MAX_FAILURES_PER_EMAIL), (_ip_key(ip), MAX_FAILURES_PER_IP)):
+            for rule, key, limit in (
+                ("email", _email_key(email), MAX_FAILURES_PER_EMAIL),
+                ("ip", _ip_key(ip), MAX_FAILURES_PER_IP),
+            ):
                 rec = self._records.setdefault(key, _Record())
                 while rec.failures and rec.failures[0] <= now - WINDOW_SECONDS:
                     rec.failures.popleft()
@@ -81,10 +92,10 @@ class LoginLimiter:
                 if len(rec.failures) >= limit:
                     rec.locked_until = now + LOCKOUT_SECONDS
                     rec.failures.clear()
-                    started = LOCKOUT_SECONDS
+                    tripped.append(rule)
             if len(self._records) > _PRUNE_ABOVE:
                 self._prune(now)
-        return started
+        return Lock(LOCKOUT_SECONDS, tuple(tripped)) if tripped else None
 
     def record_success(self, email: str) -> None:
         with self._mutex:

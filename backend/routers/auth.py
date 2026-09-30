@@ -30,7 +30,8 @@ anyone's password.
 FAILED SIGN-INS (2026-09-21): repeated wrong passwords lock the email (5 in
 15 min) or the IP address (20 in 15 min) for 15 minutes — see
 backend/login_limiter.py for the rules and why they are shaped that way.
-Each lock is also written to the audit log.
+Each lock is also written to the audit log, naming the limit that tripped
+(per-email or per-IP, 2026-09-30).
 """
 from __future__ import annotations
 
@@ -52,7 +53,14 @@ from backend.auth_utils import (
     verify_password,
 )
 from backend.deps import TokenPayload, get_current_user, get_db, require_admin
-from backend.login_limiter import login_limiter, reset_limiter
+from backend.login_limiter import (
+    MAX_FAILURES_PER_EMAIL,
+    MAX_FAILURES_PER_IP,
+    WINDOW_SECONDS,
+    Lock,
+    login_limiter,
+    reset_limiter,
+)
 from backend.schemas.auth import (
     ForgotPasswordInfo,
     ForgotPasswordRequest,
@@ -142,16 +150,32 @@ def _too_many_attempts(seconds: int) -> HTTPException:
     )
 
 
-def _record_lockout(db: Session, email: str, client_ip: str, seconds: int) -> None:
+_LIMITS = {
+    "email": ("per-email", MAX_FAILURES_PER_EMAIL),
+    "ip": ("per-IP", MAX_FAILURES_PER_IP),
+}
+
+
+def _lockout_details(email: str, client_ip: str, lock: Lock) -> str:
+    """What was locked and which limit did it, e.g. '203.0.113.9 locked for 15
+    minutes: per-IP limit (20 failed sign-ins within 15 minutes). Last
+    attempt: a@x.com from 203.0.113.9'. Before 2026-09-30 every lock read as
+    the email's, even when the per-IP limit tripped."""
+    minutes = max(1, math.ceil(lock.seconds / 60))
+    window = WINDOW_SECONDS // 60
+    locked = " and ".join({"email": email, "ip": client_ip}[rule] for rule in lock.limits)
+    why = " and ".join(
+        f"{label} limit ({count} failed sign-ins within {window} minutes)"
+        for label, count in (_LIMITS[rule] for rule in lock.limits)
+    )
+    return f"{locked} locked for {minutes} minutes: {why}. Last attempt: {email} from {client_ip}"
+
+
+def _record_lockout(db: Session, email: str, client_ip: str, lock: Lock) -> None:
     """Puts the lock in the audit log. A failure to write it must not turn
     the 429 into a 500."""
-    minutes = max(1, math.ceil(seconds / 60))
     try:
-        audit.record(
-            db, "Sign-in Locked",
-            f"{email} locked for {minutes} minutes after repeated failed sign-ins from {client_ip}",
-            email=email,
-        )
+        audit.record(db, "Sign-in Locked", _lockout_details(email, client_ip, lock), email=email)
         db.commit()
     except SQLAlchemyError:
         db.rollback()
@@ -189,11 +213,14 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
     if not password_ok:
         # Counted the same whether or not the email exists, so the lock
         # can't reveal which emails have accounts either.
-        locked_for = login_limiter.record_failure(body.email, client_ip)
-        if locked_for is not None:
-            logger.warning("Sign-in locked for %r from %s after repeated failures.", body.email, client_ip)
-            _record_lockout(db, body.email, client_ip, locked_for)
-            raise _too_many_attempts(locked_for)
+        lock = login_limiter.record_failure(body.email, client_ip)
+        if lock is not None:
+            logger.warning(
+                "Sign-in locked (%s limit) for %r from %s after repeated failures.",
+                "+".join(lock.limits), body.email, client_ip,
+            )
+            _record_lockout(db, body.email, client_ip, lock)
+            raise _too_many_attempts(lock.seconds)
         raise invalid_credentials
     login_limiter.record_success(body.email)
 

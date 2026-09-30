@@ -30,7 +30,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from backend import auth_utils, mailer
 from backend.deps import get_db, get_token_payload
-from backend.login_limiter import MAX_FAILURES_PER_EMAIL
+from backend.login_limiter import MAX_FAILURES_PER_EMAIL, MAX_FAILURES_PER_IP
 from backend.main import app
 from backend.routers import auth as auth_router
 
@@ -550,3 +550,40 @@ def test_lock_on_one_email_does_not_block_another(client, fake_users):
         client.post("/auth/login", json=BAD)
     resp = client.post("/auth/login", json={"email": "staff@ssmcapstone.com", "password": "staff-password-1"})
     assert resp.status_code == 200
+
+
+def _lock_rows(fake_session):
+    return [a for a in fake_session.audit if a["action"] == "Sign-in Locked"]
+
+
+def test_lock_entry_names_the_per_email_limit(client, fake_session):
+    for _ in range(MAX_FAILURES_PER_EMAIL):
+        client.post("/auth/login", json=BAD)
+    [row] = _lock_rows(fake_session)
+    assert row["details"] == (
+        "admin@ssmcapstone.com locked for 15 minutes: per-email limit "
+        "(5 failed sign-ins within 15 minutes). Last attempt: admin@ssmcapstone.com from testclient"
+    )
+
+
+def test_lock_entry_names_the_per_ip_limit(client, fake_session):
+    """Four guesses on each of five emails never trips the per-email limit;
+    the 20th failure from the one address trips the per-IP limit, and the
+    entry must say so instead of blaming the last email."""
+    for n in range(MAX_FAILURES_PER_IP // (MAX_FAILURES_PER_EMAIL - 1)):
+        for _ in range(MAX_FAILURES_PER_EMAIL - 1):
+            client.post("/auth/login", json={"email": f"guess{n}@ssmcapstone.com", "password": "wrong-password"})
+    [row] = _lock_rows(fake_session)
+    assert row["details"] == (
+        "testclient locked for 15 minutes: per-IP limit "
+        "(20 failed sign-ins within 15 minutes). Last attempt: guess4@ssmcapstone.com from testclient"
+    )
+
+
+def test_lock_entry_names_both_limits_when_one_failure_trips_both():
+    lock = auth_router.Lock(900, ("email", "ip"))
+    assert auth_router._lockout_details("a@x.com", "203.0.113.9", lock) == (
+        "a@x.com and 203.0.113.9 locked for 15 minutes: per-email limit (5 failed sign-ins within "
+        "15 minutes) and per-IP limit (20 failed sign-ins within 15 minutes). "
+        "Last attempt: a@x.com from 203.0.113.9"
+    )
