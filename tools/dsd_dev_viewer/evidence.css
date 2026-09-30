@@ -1,6 +1,27 @@
 /* ================= EVIDENCE tab (tools/dsd_dev_viewer/evidence.css) ================= */
 #tab-evidence .evintro{margin-bottom:14px}
+#tab-evidence .evintro h2{font-size:18px;margin:0 0 8px}
 #tab-evidence .evintro p{margin:4px 0;color:var(--ink-2);font-size:12px;max-width:1100px}
+#tab-evidence .evintro p.evlead{font-size:14px;line-height:1.55;color:var(--ink);max-width:1000px;margin:6px 0}
+.evsumgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:6px 18px;margin:14px 0 10px}
+.evsumrow{display:grid;grid-template-columns:28px minmax(170px,1fr) auto;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;
+  color:var(--ink);text-decoration:none;font-size:13px;background:var(--surface-2)}
+.evsumrow:hover{background:var(--surface-3)}
+.evsumrow>span:last-child{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.evgloss{margin-top:10px;font-size:13px}
+.evgloss>summary{cursor:pointer;color:var(--ink-2);font-weight:600;padding:4px 0}
+.evgloss dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:8px 22px;margin:8px 0 0}
+.evgloss dt{font-weight:700;color:var(--ink)}
+.evgloss dd{margin:2px 0 0;color:var(--ink-2);line-height:1.45}
+.evdec{font-size:13px;font-weight:600;color:var(--ink-2)}
+.evheadline{margin:4px 0 6px;font-size:21px;line-height:1.3;font-weight:700;color:var(--ink);max-width:1000px}
+.evtest{margin:0 0 12px;font-size:13px;color:var(--ink-2);max-width:1000px}
+.evtest b,.evread b{color:var(--ink)}
+.evread{font-size:13px;line-height:1.5;color:var(--ink-2);margin:0 0 8px;max-width:1100px}
+.evtoggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);margin:0 0 8px;cursor:pointer}
+.evdetails{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+.evdetails>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-2);padding:4px 0}
+.evdetails[open]>summary{margin-bottom:8px}
 .evsum{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
 .evsum th{color:var(--ink-3);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line-2)}
 .evsum td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}

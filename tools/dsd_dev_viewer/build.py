@@ -2103,6 +2103,10 @@ function showTab(t){
   $$('nav button').forEach(x => x.setAttribute('aria-selected', x.dataset.tab === t));
   ['forecasts', 'pipeline', 'evidence'].forEach(k => $('#tab-' + k).hidden = k !== t);
   $('.kpis').hidden = t !== 'forecasts';
+  // The Forecasts/Pipeline note, the Real/Preview switch and its banner do not apply to the Evidence tab.
+  $('.note').hidden = t === 'evidence';
+  $('#modeSeg').hidden = t === 'evidence';
+  $('#pvbanner').hidden = t === 'evidence' || !V.pv;
   if (t === 'forecasts') drawForecasts();
   if (t === 'pipeline') drawPipeline();
   if (t === 'evidence') drawEvidence();
