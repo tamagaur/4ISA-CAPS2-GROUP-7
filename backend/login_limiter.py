@@ -131,8 +131,9 @@ def _ip_key(ip: str) -> str:
 # addresses together, so at most MAX_LOGGED_FAILURES_PER_WINDOW failures are
 # written in any one 15-minute window. Past that, one row says logging paused;
 # the rest of the window still counts toward locks but is not written.
-# 100 is a chosen bound, not a measured one: five addresses' worth of the
-# per-IP limit, and under 9,700 rows a day even in a flood that never stops.
+# 100 is team-set (Yuan, 2026-09-30), not measured: five addresses' worth of
+# the per-IP limit, and under 9,700 rows a day even in a flood that never
+# stops. It is due to move into the params module (session 5f).
 MAX_LOGGED_FAILURES_PER_WINDOW = 5 * MAX_FAILURES_PER_IP
 
 
