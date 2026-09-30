@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import Modal from './Modal';
 import SaveResult from './SaveResult';
 import { getCurrentUser } from '../auth';
+import { ROLES } from '../permissions/keys';
 import { useSaveResult } from '../utils/useSaveResult';
 import './UserFormModal.css';
 
@@ -161,8 +162,11 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
                   disabled={isSelf}
                   aria-describedby={isSelf ? 'user-form-role-hint' : undefined}
                 >
-                  <option value="staff">Staff</option>
-                  <option value="admin">Admin</option>
+                  {/* Admin, Manager, Staff (Kelvin's permissions proposal). The
+                      Permissions button sets anything beyond the role's defaults. */}
+                  {ROLES.map((role) => (
+                    <option key={role.value} value={role.value}>{role.label}</option>
+                  ))}
                 </select>
                 {/* The tooltip alone never shows on a phone, or to a keyboard user. */}
                 {isSelf && (
