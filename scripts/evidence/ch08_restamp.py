@@ -6,7 +6,7 @@ Reads reports/evidence/ch08.json and ch08_totals.csv as written by lp_charts.py 
 d3dc662. The exact 105% cover (2.999999993) is not in the CSV - it stores floats to
 6 significant figures - so it is read from the result's own verdict_detail, which
 lp_charts.py wrote from the same in-memory value at run time, and cross-checked: the
-peso gap printed there must match the CSV's cover_gap_php to 6 significant figures,
+peso gap printed there (6 decimals) must match the CSV's cover_gap_php within 5e-7,
 and the verdict re-derived from the stored totals with the pre-registered rule must
 equal the stored one. Only caption and data_notes change; the CSVs, checks, verdict
 and the LP run's code commit are kept, and the restamp is recorded beside them.
@@ -30,7 +30,7 @@ def main():
     if not m:
         C.fail("restamp", "ch08.json verdict_detail does not carry the 105% cover and gap")
     cover, target, gap = float(m.group(1)), float(m.group(2)), float(m.group(3))
-    if f"{gap:.6g}" != f"{A.loc[105, 'cover_gap_php']:.6g}":
+    if abs(gap - A.loc[105, "cover_gap_php"]) > 5e-7:          # detail prints 6 decimals; CSV holds 6 s.f.
         C.fail("restamp", f"gap in verdict_detail {gap} != ch08_totals.csv {A.loc[105, 'cover_gap_php']}")
     low_cover = cover < target
     cleared = A.loc[105, "n_short"] > 0 and A.loc[108, "n_short"] == 0
