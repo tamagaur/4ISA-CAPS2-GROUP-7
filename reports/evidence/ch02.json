@@ -1,0 +1,99 @@
+{
+ "chart": 2,
+ "slug": "truncation",
+ "title": "History truncation",
+ "files": {
+  "lines": "reports/evidence/ch02_lines.csv",
+  "verdicts": "reports/evidence/ch02_verdicts.csv",
+  "forecasts": "reports/evidence/ch02_forecasts.csv"
+ },
+ "caption": "History truncation: 61 Unilever Tier A SKUs (ABC 2026-02, single) with >= 30 real sales months, 743 forecast months that have >= 24 months of history (2025-01..2026-02, 2 testable half-year blocks). Every verdict in this chart rests on 2 testable half-year blocks per k (of 5); a majority needs 2 of them. Each is re-forecast with its history cut to the last k months; the global XGBoost model (nthread=1) is refitted for every k and month on equally truncated training rows, and the same harness's full-history run is the reference. MA3 is unchanged for every k >= 3 (verified: identical forecasts), median WAPE 0.263, MASE < 1 (pipeline gate) for 75% of SKUs. Median WAPE at k = 3 / 12 / 24 / full history: TSB 0.266 / 0.257 / 0.257 / 0.257; XGBoost+MA3 avg 0.257 / 0.243 / 0.246 / 0.252. MASE < 1 share at the same k: TSB 74% / 77% / 77% / 77%; XGBoost+MA3 avg 79% / 85% / 80% / 80%. Block wins against MA3 at any k: TSB none; XGBoost+MA3 avg k = 24; block losses: TSB none; XGBoost+MA3 avg none. Current cutoffs: MA3 from 3, TSB from 12, XGBoost+MA3 avg from 24 sales months. MASE uses the untruncated in-sample naive error, so only the forecast changes with k.",
+ "verdict": "CONFIRMS",
+ "verdict_detail": "no k crosses either cutoff's test (2 testable blocks per k)",
+ "criterion": "For TSB (cutoff 12) or XGBoost+MA3 (cutoff 24): some k below the cutoff scores W vs MA3 in a majority of testable blocks (cutoff too high), or some k at or above the cutoff scores L vs MA3 in a majority of testable blocks (cutoff too low). MA3 WAPE is k-invariant for k >= 3 by construction.",
+ "otherwise": "CONFIRMS",
+ "mase_gate_used": "1.0 (share of SKUs with MASE < 1; baseline.py:55)",
+ "rerun_after_5f": "y",
+ "checks": [
+  {
+   "id": "G4",
+   "pass": true,
+   "detail": "(a) tsb: 2711 of 2711 equal the stored values; (b) XGBoost nthread=1 full history, two runs: 2452 of 2452 forecasts identical (29 refits each; 2452 targets)"
+  }
+ ],
+ "script": "scripts/evidence/ch02_truncation.py",
+ "code_commit": "a249cfb",
+ "computed_at": "2026-09-30T18:05:59",
+ "data_notes": [
+  "Data note: product_key 150 / SKU 64861486, 2025-12 has a NULL quantity in Unilever_SKU_Demand_Fact_Real (net PHP 2.89, La Union source); it is counted as 0, the same treatment as the bake-off.",
+  "Measured gap, this harness (XGBoost nthread=1) vs the stored xgb_abs@A (nthread=8), full history, 2452 forecasts: 0 identical; relative |diff| = |ours - stored| / max(stored, 1): median 2.2%, p90 6.6%, worst 48%. XGBoost+MA3 avg vs MA3 in the long bin, by block: stored ---TT, this harness ---TT (unchanged). g4_thread_check.py, months 2023-10 and 2026-02: at nthread=8 the same harness matches the stored values on 176 of 176 forecasts, at nthread=1 on 0 of 176, so the gap is thread count, not harness.",
+  "Note for session 5f: the served XGBoost model fits with nthread=1 (analytics/forecasting/global_model.py:38); the stored bake-off XGBoost forecasts shown here were fitted with nthread=8 (reports/experiment_artifacts/scripts/final_models.py:81)."
+ ],
+ "thread_gap": {
+  "rows": 2452,
+  "exact": 0,
+  "median_rel": 0.0219228635385125,
+  "p90_rel": 0.0662792048509821,
+  "worst_rel": 0.48017137075461724,
+  "long_blocks_stored": "---TT",
+  "long_blocks_nthread1": "---TT"
+ },
+ "thread_check": {
+  "months": [
+   "2023-10",
+   "2026-02"
+  ],
+  "fits_per_setting": 2,
+  "nthread_8": {
+   "rows": 176,
+   "exact": 176,
+   "max_abs_diff": 0.0
+  },
+  "nthread_1": {
+   "rows": 176,
+   "exact": 0,
+   "max_abs_diff": 7544.354653110102
+  },
+  "confirmed": true
+ },
+ "amendment": "reports/evidence/AMENDMENTS.csv (G4)",
+ "ks": [
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24
+ ],
+ "cutoffs": {
+  "ma3": 3,
+  "tsb": 12,
+  "xgb_ma3": 24
+ },
+ "ma3_identical_for_all_k": true,
+ "runtime_s": 51,
+ "xgb_nthread": 1,
+ "blocks": [
+  "2023-10..2024-02",
+  "2024-03..2024-08",
+  "2024-09..2025-02",
+  "2025-03..2025-08",
+  "2025-09..2026-02"
+ ]
+}

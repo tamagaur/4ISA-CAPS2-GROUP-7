@@ -1,0 +1,36 @@
+{
+ "chart": 7,
+ "slug": "pareto",
+ "title": "ABC Pareto",
+ "files": {
+  "curve": "reports/evidence/ch07_curve.csv",
+  "tiers": "reports/evidence/ch07_tiers.csv",
+  "unilever_moves": "reports/evidence/ch07_unilever_moves.csv"
+ },
+ "caption": "ABC Pareto at each principal's latest classification period, from the stored ABC_Classification rows: cumulative revenue share against rank, cut points 0.80 and 0.95 (abc.py). Unilever 2026-02, SKU grain: single 132 A / 194 B / 384 C of 710; trailing-3-month (t3m) 143 A / 215 B / 485 C of 843. Of the 710 SKUs classified by both methods, 93 change class (37 move into or out of Tier A); 0 are classified only by single and 133 only by t3m. Del Monte 2025-12, category grain, single only (no t3m rows exist): 1 A / 1 B / 2 C of 4 - CULINARY 71.1%, FRUITS 17.9%, BEVERAGE 11.0%, INNOVATION 0.1%. Del Monte's category vocabulary changed in January 2025, so 4 categories is the post-change count. The Unilever forecast cohort is Tier A as of 2026-02 (single): 132 SKUs; their stored revenue shares sum to 79.96% (DEC-22's figure), while the stored cumulative share of the last of them reads 79.99% because it is accumulated before rounding; the first Tier B SKU sits at 80.13%. The curve plots the stored cumulative share.",
+ "verdict": "DESCRIPTIVE",
+ "verdict_detail": "no threshold on record; 93 Unilever SKUs change class single vs t3m",
+ "criterion": "No decision threshold on record: descriptive only",
+ "otherwise": "DESCRIPTIVE",
+ "mase_gate_used": "none",
+ "rerun_after_5f": "n",
+ "checks": [
+  {
+   "id": "G6",
+   "pass": true,
+   "detail": "Unilever single 2026-02: 132 Tier A SKUs (expected 132); sum of stored revenue_share 0.7996 (expected 0.7996, DEC-22); stored cumulative_share last A 0.7999 <= 0.80 < first B 0.8013: True"
+  }
+ ],
+ "script": "scripts/evidence/ch07_pareto.py",
+ "code_commit": "a249cfb",
+ "computed_at": "2026-09-30T18:06:01",
+ "data_notes": [],
+ "cutoffs": [
+  0.8,
+  0.95
+ ],
+ "tierA_sum_revenue_share": 0.7996,
+ "tierA_last_cumulative": 0.7999,
+ "tierB_first_cumulative": 0.8013,
+ "amendment": "reports/evidence/AMENDMENTS.csv (G6)"
+}
