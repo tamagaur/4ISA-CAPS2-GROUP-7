@@ -205,3 +205,11 @@ def test_alias_is_assigned_from_params_not_a_literal(rel, alias):
               and any(isinstance(t, ast.Name) and t.id == alias for t in node.targets)]
     assert values, f"{alias} not assigned in {rel}"
     assert not any(isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) for v in values for n in ast.walk(v))
+
+
+def test_the_served_xgboost_is_single_threaded_from_params():
+    """Item 14: the served model's nthread is analytics.params.XGB_NTHREAD (1),
+    so a rerun is bit-identical."""
+    from analytics.forecasting import global_model
+
+    assert global_model.PARAMS["nthread"] is params.XGB_NTHREAD == 1
