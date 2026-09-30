@@ -10,7 +10,7 @@ Backtest
 --------
 Rolling-origin, 1-step-ahead, over the last --test-months months (default 6).
 Refit at every origin. Forecasts clipped at 0. Metrics per SKU:
-  - MAPE   (points with actual == 0 excluded; median reported, mean is
+  - MAPE   (points with actual <= 0 excluded, diagnostic_metrics.mape; median reported, mean is
            unusable here - near-zero actuals blow it to 5-90)
   - MASE   (lag-1 naive scale, computed on the pre-first-origin window)
   - sMAPE  (bounded 0-2; the honest cross-run metric - unlike MASE it does

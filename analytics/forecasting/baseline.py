@@ -50,6 +50,7 @@ import pandas as pd
 # validation live in sarima.py and are shared verbatim.
 from analytics.forecasting.sarima import train_holdout_split, HOLDOUT_FRACTION  # noqa: F401
 from analytics.classification.abc import TIER_A_CUTOFF as ABC_TIER_A_CUTOFF  # noqa: F401
+from analytics.forecasting.diagnostic_metrics import mape as _mape
 from analytics.params import MASE_GATE, SBC_CV2_CUT
 from analytics.segmentation.traits import average_demand_interval, is_intermittent_adi
 
@@ -225,9 +226,11 @@ def evaluate_baseline(forecast, holdout: pd.Series, train: pd.Series) -> dict:
 
     forecast: array-like, same length as `holdout` (aligned positionally).
 
-    MAPE convention matches evaluate_sarima(): holdout points where actual
-    demand is 0 are EXCLUDED (division by zero is neither crashed nor
-    "fixed" with a fake denominator); if every holdout actual is 0, MAPE is
+    MAPE is diagnostic_metrics.mape, the one rule: only holdout months with
+    actual > 0 count. A zero month has no percentage error, and a negative
+    (returns-dominated) month's percentage is meaningless, so both are
+    excluded from MAPE; they stay in the series, MAE, RMSE and MASE (DEC-15:
+    negatives are never clamped). If no holdout month qualifies, MAPE is
     NaN, never silently 0%.
 
     MASE scale - DELIBERATELY DIFFERENT from evaluate_sarima():
@@ -259,8 +262,7 @@ def evaluate_baseline(forecast, holdout: pd.Series, train: pd.Series) -> dict:
     mae = float(abs_errors.mean())
     rmse = float(np.sqrt((errors ** 2).mean()))
 
-    nonzero = actual != 0
-    mape = float((abs_errors[nonzero] / np.abs(actual[nonzero])).mean()) if nonzero.any() else float("nan")
+    mape = _mape(actual, predicted)
 
     lag1 = train.diff().abs().dropna()
     scale = float(lag1.mean()) if not lag1.empty else 0.0
