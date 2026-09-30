@@ -37,7 +37,7 @@ Implements:
 
 Constants:
   MIN_MONTHS_WITH_SALES = 3     eligibility gate (real observations, not span)
-  HOLDOUT_FRACTION             reused from sarima.py (0.20)
+  HOLDOUT_FRACTION             analytics.params (0.20)
   MASE_GATE                    analytics.params (1.0): a forecast beating the naive benchmark scores < 1
   SBA_ALPHA = 0.1             UNTUNED this pass - stamped alpha_tuned:false everywhere
 """
@@ -47,11 +47,11 @@ import numpy as np
 import pandas as pd
 
 # Reuse, do not duplicate - the temporal 80/20 split and its boundary
-# validation live in sarima.py and are shared verbatim.
-from analytics.forecasting.sarima import train_holdout_split, HOLDOUT_FRACTION  # noqa: F401
+# validation live in analytics/forecasting/split.py and are shared verbatim.
+from analytics.forecasting.split import train_holdout_split  # noqa: F401
 from analytics.classification.abc import TIER_A_CUTOFF as ABC_TIER_A_CUTOFF  # noqa: F401
 from analytics.forecasting.diagnostic_metrics import mape as _mape
-from analytics.params import MASE_GATE, SBC_CV2_CUT
+from analytics.params import HOLDOUT_FRACTION, MASE_GATE, SBC_CV2_CUT  # noqa: F401
 from analytics.segmentation.traits import average_demand_interval, is_intermittent_adi
 
 MIN_MONTHS_WITH_SALES = 3

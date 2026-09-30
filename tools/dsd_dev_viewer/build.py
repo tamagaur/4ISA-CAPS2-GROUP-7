@@ -439,7 +439,7 @@ def ma3_same_holdout(monthly: list, periods: list[str]) -> tuple[float | None, i
     """MA3's MASE on the same rolling one-step holdout the served model was
     scored on. Reuses the pipeline's own pieces, no reimplementation:
       series  first row -> last row, gaps zero-filled (run_baseline_forecast.build_series)
-      split   analytics.forecasting.sarima.train_holdout_split (last 20%)
+      split   analytics.forecasting.split.train_holdout_split (last 20%)
       MA3     analytics.forecasting.router.rolling_one_step, column "ma3"
               (router.ma3_value from the first sale, floored at zero)
       metric  diagnostic_metrics.mase with naive_scale(train)
@@ -447,7 +447,8 @@ def ma3_same_holdout(monthly: list, periods: list[str]) -> tuple[float | None, i
     import numpy as np
     from analytics.forecasting.diagnostic_metrics import mase, naive_scale
     from analytics.forecasting.router import rolling_one_step
-    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+    from analytics.forecasting.split import train_holdout_split
+    from analytics.params import HOLDOUT_FRACTION
     series = model_series(monthly, periods)
     if series is None:
         return None, 0
@@ -601,7 +602,8 @@ def add_band_evidence(payload: dict) -> dict:
     from analytics.forecasting.diagnostic_metrics import mase, naive_scale, rmse as rmse_metric, wape
     from analytics.forecasting.global_model import GlobalForecaster
     from analytics.forecasting.router import rolling_one_step
-    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+    from analytics.forecasting.split import train_holdout_split
+    from analytics.params import HOLDOUT_FRACTION
 
     periods = payload["periods"]
     pool = {}
@@ -951,7 +953,8 @@ def assemble_preview(skus: list[dict]) -> dict:
     series, zero-filled first -> last row as the preview script does."""
     import numpy as np
     import pandas as pd
-    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+    from analytics.forecasting.split import train_holdout_split
+    from analytics.params import HOLDOUT_FRACTION
 
     rp = pd.read_csv(os.path.join(DATA_DIR, "router_preview_synth.csv"))
     need = {"ma3_holdout_mase", "ma3_holdout_wape", "holdout_mase", "holdout_wape"}

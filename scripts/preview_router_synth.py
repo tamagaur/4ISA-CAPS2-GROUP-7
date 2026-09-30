@@ -36,7 +36,8 @@ from analytics.forecasting.baseline import MIN_MONTHS_WITH_SALES
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rmse, wape
 from analytics.forecasting.global_model import GlobalForecaster, with_placeholder
 from analytics.forecasting.router import rolling_one_step, route
-from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+from analytics.forecasting.split import train_holdout_split
+from analytics.params import HOLDOUT_FRACTION
 
 FIRST_REAL_ATTR = "first_real_month"   # series.attrs key: the SKU's first non-placeholder row
 

@@ -39,7 +39,8 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from analytics.forecasting.sarima import train_holdout_split, HOLDOUT_FRACTION
+from analytics.forecasting.split import train_holdout_split
+from analytics.params import HOLDOUT_FRACTION
 from analytics.forecasting.baseline import (
     MIN_MONTHS_WITH_SALES,
     MASE_GATE,
