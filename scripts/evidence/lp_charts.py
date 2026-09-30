@@ -158,6 +158,16 @@ def main():
     print(f"total {time.time() - t0:.0f}s")
 
 
+RUN_LP_TOLERANCE_PHP = 1.0   # run_lp.py:556 - its log calls cover met when stock >= required - PHP 1
+
+
+def boundary_note(cover_105: float, gap_105: float) -> str:
+    """The sentence chart 8 carries in its caption and data notes (Yuan, 2026-09-30).
+    Only meaningful when 105% misses the strict test by less than run_lp's own tolerance."""
+    return (f"Boundary result — at 105% month-end cover = {cover_105:.9f} weeks (₱{-gap_105:.2f} short); "
+            f"run_lp's own tolerance is ₱{RUN_LP_TOLERANCE_PHP:g} (run_lp.py:556).")
+
+
 def chart8(cli, base, products, cycle, g7, notes):
     rows = []
     for pct in PCTS:
@@ -201,6 +211,9 @@ def chart8(cli, base, products, cycle, g7, notes):
         + "; ".join(f"{r.allocation_pct:g}% {r.order_changed} of {r.skus_now} orders changed" for r in D.itertuples())
         + ". Inputs are placeholders, not SSM's figures."
     )
+    if low_cover and -r105.cover_gap_php < RUN_LP_TOLERANCE_PHP:
+        bn = boundary_note(r105.month_end_cover_weeks, r105.cover_gap_php)
+        caption, notes = caption + " " + bn, notes + [bn]
     C.write_result(8, "allocation", "Allocation 103/105/108", {"totals": A, "diff_vs_0929": D}, caption, verdict, detail, [g7],
                    "lp_charts.py", extra=dict(data_notes=notes, cli_csvs=[f"reports/evidence/ch08_cli_plan_{p:g}.csv" for p in PCTS]))
 
