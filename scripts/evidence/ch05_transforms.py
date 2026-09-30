@@ -218,8 +218,8 @@ def main():
         + "; ".join(f"{r.candidate_set} - {r.block_wins} block wins in {r.testable_blocks:,} testable blocks "
                     f"({r.block_win_rate:.1%}, 95% CI {r.cp_lo:.1%}-{r.cp_hi:.1%}), {r.exploratory} exploratory and {r.real} real "
                     f"wins in {r.testable_cells} testable cells" for r in S.itertuples() if r.candidate_set != "all 162")
-        + f". Pooled: {int(T.block_wins)} of {int(T.testable_blocks):,} blocks ({T.block_win_rate:.1%}, 95% CI "
-          f"{T.cp_lo:.1%}-{T.cp_hi:.1%}) against a chance level of {CHANCE:.1%} per block (the one tail of a 95% interval). "
+        + f". Pooled: {int(T.block_wins)} of {int(T.testable_blocks):,} blocks ({T.block_win_rate:.2%}, 95% CI "
+          f"{T.cp_lo:.2%}-{T.cp_hi:.2%}) against a chance level of {CHANCE:.1%} per block (the one tail of a 95% interval). "
           f"A real win needs the full window and a majority of testable blocks; there are {int(T.real)}. "
           f"Source: local-only experiment branch at {EXP_COMMIT} (not merged); the original 50 re-scored here from "
           f"preds_plus.csv.gz with that experiment's own code."
