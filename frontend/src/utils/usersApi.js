@@ -4,6 +4,7 @@
 // /users. Admins never set or see a password: new accounts get an emailed
 // one-time link and choose their own (see SetPassword.jsx).
 import { apiFetch } from '../auth';
+import { MOCK_PERMISSIONS, overlayMockRoles } from '../api/mocks/permissionsMock';
 
 async function parseErrorOrThrow(res, fallback) {
   if (res.ok) return res;
@@ -20,7 +21,9 @@ async function parseErrorOrThrow(res, fallback) {
 export async function listUsers() {
   const res = await apiFetch('/users');
   await parseErrorOrThrow(res, 'Failed to load users.');
-  return res.json();
+  const users = await res.json();
+  // Dev permissions mock: show the role saved on the Permissions screen.
+  return import.meta.env.DEV && MOCK_PERMISSIONS ? overlayMockRoles(users) : users;
 }
 
 // -> { user, email_sent, setup_link, expires_at, email_problem }. The

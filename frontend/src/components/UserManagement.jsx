@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Plus, Pencil, Trash2, AlertTriangle, Mail, KeyRound, Link2, Copy, Check, Loader2,
+  Plus, Pencil, Trash2, AlertTriangle, Mail, KeyRound, Link2, Copy, Check, Loader2, ShieldCheck,
 } from 'lucide-react';
 import UserFormModal from './UserFormModal';
+import PermissionsModal from './PermissionsModal';
 import Modal from './Modal';
 import { useToast } from './ToastProvider';
 import { listUsers, createUser, updateUser, deleteUser, sendUserLink } from '../utils/usersApi';
@@ -46,6 +47,8 @@ const UserManagement = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [deletingUser, setDeletingUser] = useState(null);
+  // Whose permissions are open (Kelvin's permissions proposal, task 6).
+  const [permissionsUser, setPermissionsUser] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   // One link send at a time: a second result could open the share dialog
   // over the first and replace its link before the admin had copied it.
@@ -195,8 +198,8 @@ const UserManagement = () => {
           <div>
             <h2 className="user-mgmt-title">User <span className="page-title-accent">management</span></h2>
             <p className="user-mgmt-subtitle">
-              Invite, edit, and remove staff accounts. New users get an email link to set their own
-              password. Only admins can access this page.
+              Invite, edit and remove accounts, and choose what each person can open and do. New users
+              get an email link to set their own password.
             </p>
           </div>
           <button className="user-mgmt-add-btn" onClick={handleOpenAdd}>
@@ -286,6 +289,14 @@ const UserManagement = () => {
                             : <LinkIcon size={15} />}
                         </button>
                         <button
+                          className="user-mgmt-icon-btn access"
+                          onClick={() => setPermissionsUser(user)}
+                          aria-label={`Permissions for ${user.full_name}`}
+                          title="Permissions"
+                        >
+                          <ShieldCheck size={15} />
+                        </button>
+                        <button
                           className="user-mgmt-icon-btn edit"
                           onClick={() => handleOpenEdit(user)}
                           aria-label={`Edit ${user.full_name}`}
@@ -319,6 +330,17 @@ const UserManagement = () => {
           </table>
         </div>
       </div>
+
+      <PermissionsModal
+        isOpen={permissionsUser !== null}
+        user={permissionsUser}
+        isSelf={permissionsUser?.email === currentUser?.email}
+        onClose={() => setPermissionsUser(null)}
+        onSaved={() => {
+          setPermissionsUser(null);
+          loadUsers();
+        }}
+      />
 
       <UserFormModal
         isOpen={isFormOpen}
