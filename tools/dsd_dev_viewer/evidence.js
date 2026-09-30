@@ -148,7 +148,7 @@ function evPlot(t, fr, o){
 
 // ---- grouped vertical bars: groups x series; per-bar colour; optional labels ------------
 function evGBars(t, fr, o){
-  const M = {l: o.ml ?? 70, r: o.mr ?? 24, t: (o.title ? 30 : 14) + (o.legend ? 22 : 0), b: 40 + (o.gsub ? 15 : 0)};
+  const M = {l: o.ml ?? 70, r: o.mr ?? 24, t: (o.title ? 30 : 14) + (o.legend ? 22 : 0), b: 40 + (o.gsub ? 15 * Math.max(1, ...o.gsub.map(q => String(q || '').split('\n').length)) : 0)};
   const pw = fr.w - M.l - M.r, ph = fr.h - M.t - M.b, X0 = fr.x + M.l, Y0 = fr.y + M.t;
   const G = o.groups.length, S = o.series.length, gw = pw / G, bw = Math.min(gw * 0.72 / S, 58), gap = 4;
   const vals = o.series.flatMap(s => s.vals).filter(v => v != null);
@@ -169,7 +169,8 @@ function evGBars(t, fr, o){
       const lab = s.labels && s.labels[gi]; if (lab) g += txt(t, x + bw / 2, y - 6, lab, {size:10, fill:t.ink, anchor:'middle', weight: s.bold && s.bold(gi) ? 700 : null});
       const sub = s.sub && s.sub[gi]; if (sub) g += txt(t, x + bw / 2, Y0 + ph + 13, sub, {size:9.5, fill: s.subInk ? s.subInk(gi) : t.ink3, anchor:'middle', weight: s.bold && s.bold(gi) ? 700 : null}); });
     g += txt(t, X0 + (gi + 0.5) * gw, Y0 + ph + (o.series.some(s => s.sub) ? 28 : 15), gl, {size:10.5, fill:t.ink2, anchor:'middle', weight: o.boldGroup && o.boldGroup(gi) ? 700 : null});
-    if (o.gsub && o.gsub[gi]) g += txt(t, X0 + (gi + 0.5) * gw, Y0 + ph + (o.series.some(s => s.sub) ? 43 : 30), o.gsub[gi], {size:10.5, fill: o.gsubInk || t.ours, anchor:'middle', weight: o.gsubInk ? null : 700});
+    if (o.gsub && o.gsub[gi]){ const ink = (o.gsubInkAt && o.gsubInkAt(gi)) || o.gsubInk || t.ours;
+      String(o.gsub[gi]).split('\n').forEach((ln, li) => { g += txt(t, X0 + (gi + 0.5) * gw, Y0 + ph + (o.series.some(s => s.sub) ? 43 : 30) + li * 14, ln, {size:10.5, fill: ink, anchor:'middle', weight: ink === t.ours ? 700 : null}); }); }
     if (o.gnote && o.gnote[gi]){ const top = Math.min(...o.series.map(s => s.vals[gi] == null ? Infinity : yp(s.vals[gi])));
       g += txt(t, X0 + (gi + 0.5) * gw, top - 22, o.gnote[gi], {size:10.5, fill:t.ink, anchor:'middle', weight:600}); }
   });
@@ -764,36 +765,50 @@ CARDS[7] = c => {
 };
 
 CARDS[8] = c => {
-  const A = evRecs(c.data.totals), r103 = A.find(q => q.allocation_pct === 103) || {}, r105 = A.find(q => q.allocation_pct === 105) || {};
-  const levels = A.map(r => r.allocation_pct + '%'), ours = gi => A[gi].allocation_pct === 105;
-  const gap = r105.cover_gap_php != null && r105.cover_gap_php < 0 ? (-r105.cover_gap_php).toFixed(2) : null;
-  BOARD[8] = ['105% of last year’s sales (team estimate)', '103% and 108%', 'More allocation = fewer shortages; the 3-week stock rule holds at every level.'];
+  // The default allocation is now 103% (SSM's guaranteed minimum). The stored results were computed when 105% was the
+  // placeholder default; they are shown unchanged, and 103% was one of the three levels measured.
+  const OURS = 103, RUN_DEFAULT = 105;
+  const A = evRecs(c.data.totals), r103 = A.find(q => q.allocation_pct === OURS) || {}, r105 = A.find(q => q.allocation_pct === RUN_DEFAULT) || {};
+  const levels = A.map(r => r.allocation_pct + '%'), ours = gi => A[gi].allocation_pct === OURS;
+  const cents = r => r.cover_gap_php != null && r.cover_gap_php < 0 ? (-r.cover_gap_php).toFixed(2) : null;
+  const gap = cents(r105), gap103 = cents(r103), kept = r => !!r.run_lp_says_met;
+  const r108 = A.find(q => q.allocation_pct === 108);
+  const tag = r => r.allocation_pct === OURS ? ' (ours: new default)' : r.allocation_pct === RUN_DEFAULT ? ' (placeholder default when this was run)' : '';
+  BOARD[8] = ['103% of last year’s sales (new default: SSM’s guaranteed minimum)', '105% (placeholder default when this was run) and 108%',
+              `At 103%, ${r103.n_short} products run short (${nf(r103.shortfall)} units)${kept(r103) ? '; the 3-week stock rule is kept' : ''}. More allocation = fewer shortages.`];
   return {
     question: 'How much does the supplier allocation limit what we can order?',
-    headline: 'More supplier allocation means fewer products run short; the 3-week stock rule is always kept.',
-    main: {file: 'ch08_allocation', title: 'Units needed vs units we could order, at each allocation level', W: 900, H: 340,
-      read: `Each group = an allocation level. Light bar = what the products need; solid bar = what the allocation lets us order; the gap = shortage. Blue = ours (105%). The order plan ${PLACEHOLDER}.`,
+    headline: `At our new default (103%), ${r103.n_short} products run short by ${nf(r103.shortfall)} units in total; the 3-week stock rule is ${kept(r103) ? 'kept' : 'not kept'}.`,
+    main: {file: 'ch08_allocation', title: 'Units needed vs units we could order, at each allocation level', W: 900, H: 355,
+      read: `Each group = an allocation level. Light bar = what the products need; solid bar = what the allocation lets us order; the gap = shortage. Blue = ours (103%, the new default). Computed when 105% was the placeholder default. The rest of the order plan ${PLACEHOLDER}.`,
       shows: ['Each group = one allocation level: the most the supplier lets us buy, as a share of last year’s sales for the same months.',
               `Light outlined bar = the units the ${A[0].products} products need; solid bar = what the allocation lets us order. The gap is the shortage.`,
-              A.map(r => `${r.allocation_pct}%${r.allocation_pct === 105 ? ' (ours)' : ''}: ${r.n_short} products short, ${rk(r.shortfall)} units`).join('; ') + '.',
+              A.map(r => `${r.allocation_pct}%${tag(r)}: ${r.n_short} products short, ${nf(r.shortfall)} units`).join('; ') + '.',
               'The 3-week stock rule is kept at every level (see the note below the chart).'],
-      build: t => [{fr: {x: 0, y: 0, w: 900, h: 340}, draw: evGBars, o: {groups: levels.map((l, gi) => l + (ours(gi) ? ' (ours)' : '')), ytitle: 'Units', fmt: v => nf(v / 1e6, 1) + 'M',
-        boldGroup: ours, legend: [[t.need, 'Needed', true], [t.ours, 'Could order']],
+      build: t => [{fr: {x: 0, y: 0, w: 900, h: 355}, draw: evGBars, o: {groups: levels, ytitle: 'Units', fmt: v => nf(v / 1e6, 1) + 'M',
+        gsub: A.map(r => r.allocation_pct === OURS ? 'Ours (new default:\nSSM’s guaranteed minimum)' : r.allocation_pct === RUN_DEFAULT ? 'placeholder default\nwhen this was run' : ''),
+        gsubInkAt: gi => ours(gi) ? null : t.ink3,
+        boldGroup: ours, legend: [[t.need, 'Needed', true], [t.ours, 'Could order: ours (103%)'], [t.alt, 'Could order: other levels']],
         series: [{vals: A.map(r => r.need), colorAt: () => t.need, outline: true}, {vals: A.map(r => r.ordered), colorAt: gi => oursAlt(t, ours(gi))}],
         gnote: A.map(r => `short: ${rk(r.shortfall)} units`),
-        tip: k => { const r = A[levels.findIndex((l, gi) => k.startsWith(l))]; return `<div class="h">allocation ${r.allocation_pct}% of last year’s sales</div>`
+        tip: k => { const r = A[levels.indexOf(k)]; return `<div class="h">allocation ${r.allocation_pct}% of last year’s sales${esc(tag(r))}</div>`
           + `<div class="r"><span>needed</span><b>${nf(r.need)}</b></div><div class="r"><span>could order</span><b>${nf(r.ordered)}</b></div>`
           + `<div class="r"><span>short</span><b>${nf(r.shortfall)} units, ${r.n_short} products</b></div>`; }}}]},
-    after: ['The 3-week stock rule is kept at every level. (The stored test flags 105% because it falls ₱0.02 short of 3 weeks — a rounding gap within the order plan’s own ₱1 tolerance.)'],
+    after: ['The 3-week stock rule is kept at every level. (The stored test flags 105% — the default when it ran — because it falls ₱0.02 short of 3 weeks, a rounding gap within the order plan’s own ₱1 tolerance.'
+            + (gap103 ? ` At 103% the stored month-end stock is also ₱${gap103} short: the same rounding gap.)` : ')')],
     faq: [
-      ['What is the supplier allocation?', `The most the supplier lets us buy: last year’s sales for the same months × 103%, 105% or 108%. The plan ${PLACEHOLDER}.`],
+      ['What is the supplier allocation?', `The most the supplier lets us buy: last year’s sales for the same months × 103%, 105% or 108%. Our new default is 103%, SSM’s guaranteed minimum. The rest of the order plan ${PLACEHOLDER}.`],
+      ['Was the chart re-run at the new default?', 'No. It keeps the stored results, computed when 105% was the placeholder default. 103% was one of the three levels measured in that run, so its figures are measured, not estimated.'],
       ['Which products get cut when there isn’t enough?', `The order plan decides, using the weights for cost, service and storage (decision 9). The ${r103.n_short} products short at 103% are listed under Details.`],
-      ['Why is this card “technically questioned”?', gap ? `The rule written down beforehand says the plan must end the month with 3 weeks of stock. At 105% it ends ₱${gap} short of that — a rounding gap, well inside the order plan’s own ₱1 tolerance. We report it exactly as the rule says.`
+      ['Why is this card “technically questioned”?', gap ? `The rule written down beforehand tests the default at the time, 105%: the plan must end the month with 3 weeks of stock. At 105% it ends ₱${gap} short of that — a rounding gap, well inside the order plan’s own ₱1 tolerance.`
+        + (gap103 ? ` At 103% it is ₱${gap103} short too.` : '') + ' We report it exactly as the rule says.'
         : 'See the stored verdict under Details.'],
     ],
-    means: `At the minimum allocation, ${r103.n_short} products run short but the 3-week stock rule still holds.`,
+    means: `At our new default (103%, SSM’s guaranteed minimum), ${r103.n_short} products run short by ${nf(r103.shortfall)} units, and the 3-week stock rule is ${kept(r103) ? 'kept' : 'not kept'}.`
+      + (r108 ? ` A higher allocation cuts shortages (${r108.n_short} products at 108%).` : ''),
     details: [],
-    detailsHTML: `<p class="evcap"><b>Products short at 103% (${r103.n_short}):</b> ${esc(String(r103.short_skus || '').split(';').join(', '))}.</p>`,
+    detailsHTML: `<p class="evcap"><b>Default changed after this was computed:</b> the stored results and the pre-registered test use 105%, the placeholder default at the time; the default is now 103% (SSM’s guaranteed minimum). The chart data are unchanged.</p>`
+      + `<p class="evcap"><b>Products short at 103% (${r103.n_short}):</b> ${esc(String(r103.short_skus || '').split(';').join(', '))}.</p>`,
   };
 };
 
