@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 from backend import account_links, audit
 from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_db
-from backend.permissions import LAST_ADMIN, admin_count, require_permission, require_role_available
+from backend.permissions import LAST_ADMIN, admin_count, require_permission
 from backend.schemas.auth import SendLinkResponse
 from backend.schemas.users import UserOut, UserUpdate
 from backend.sessions import revoke_user_sessions
@@ -87,8 +87,6 @@ def update_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You can't change your own role. Ask another admin to do it.",
         )
-    if "role" in fields:
-        require_role_available(db, fields["role"])
     if existing["role"] == "admin" and fields.get("role", "admin") != "admin" and admin_count(db) <= 1:
         raise ApiError(409, LAST_ADMIN, code="last_admin")
     if "email" in fields:

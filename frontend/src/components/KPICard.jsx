@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { STATUS_TIERS, SEMANTIC } from '../theme/colors';
+import InfoTip from './InfoTip';
 import './KPICard.css';
 
 // "colour marks what is genuinely wrong" — the caller supplies raw facts
@@ -119,13 +120,15 @@ const KPICard = ({
   const statusColor = STATUS_TIERS[tier === 'danger' ? 'loss' : tier]; // delta text only
   const TrendIcon = trendDirection === 'up' ? ArrowUp : trendDirection === 'down' ? ArrowDown : null;
 
-  // Native title attribute — a plain hover tooltip for cards that need to
-  // hold a technical definition (e.g. MAPE) off the always-visible text
-  // but still available to whoever wants it, with no new dependency.
+  // `tooltip` holds a technical definition (e.g. weeks of cover) off the
+  // always-visible text, behind a "?" that taps, hovers and tabs open.
   return (
-    <div className="kpi-card" style={{ borderTopColor: accentColor }} title={tooltip}>
+    <div className="kpi-card" style={{ borderTopColor: accentColor }}>
       <div className="kpi-header">
-        <h3 className="kpi-title">{title}</h3>
+        <h3 className="kpi-title">
+          {title}
+          {tooltip && <InfoTip label={`About ${title}`}>{tooltip}</InfoTip>}
+        </h3>
         {icon && <div className="kpi-icon" style={{ color: accentColor }}>{icon}</div>}
       </div>
       <div className="kpi-value-row">

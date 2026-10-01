@@ -13,6 +13,8 @@ rather than silently presented as a SKU for both principals.
 """
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -42,8 +44,17 @@ class ABCItem(BaseModel):
     # are different facts and must not be coalesced into the same 0.
     current_stock: float | None = None  # pieces (backend/stock_units.py)
     # 'IN STOCK' | 'LOW' | 'CRITICAL' | 'NO DATA' | 'NO ROP' — cover against
-    # the LP's current-cycle reorder point; routers/abc.py's _stock_status.
+    # the LP's current-cycle target stock (rop_i, the order-up-to level since
+    # the 2026-09-30 run); routers/abc.py's _stock_status. 'NO ROP' keeps its
+    # name because other pages read the value.
     stock_status: str
+    # Why the LP's current cycle gives this product no target stock, in the
+    # words the page shows ("Not planned: forecast accuracy check not passed
+    # (MASE 1.24)"), and a stable code the page groups by. None when it has a
+    # target, and for an account without lp.view (whether the LP plans a
+    # product is LP information). routers/abc.py's _no_target_reason.
+    no_target_reason: str | None = None
+    no_target_code: str | None = None
 
 
 class TierSummary(BaseModel):
@@ -52,9 +63,11 @@ class TierSummary(BaseModel):
     rolls that up so the dashboard doesn't have to sum client-side."""
     tier: str
     sku_count: int
-    # Sum of revenue_share over this tier's CURRENT-run SKUs only. Carried-
-    # forward rows are excluded: their shares are fractions of other months'
-    # revenue, so adding them would push the tiers past 100% combined.
+    # This tier's share of the CURRENT run's revenue. Carried-forward rows
+    # are excluded: their shares are fractions of other months' revenue, so
+    # adding them would push the tiers past 100% combined. Read off the
+    # stored running total at the tier's boundary, not summed from per-row
+    # shares that were each rounded to 4 dp (routers/abc.py's _tier_shares).
     revenue_share_total: float
     # How many of sku_count are carried forward (view=last_known); always 0
     # in the default view.
@@ -76,14 +89,23 @@ class ABCRules(BaseModel):
 
 class ParetoCheck(BaseModel):
     """Manuscript §3.4.4.2.2 for the current run: revenue earned by the top
-    `top_fraction` of ranked items, and whether it falls in the valid band."""
+    `top_fraction` of ranked items, and whether it falls in the valid band.
+
+    status 'not_applicable' (passes None, `reason` says why) when fewer than
+    `min_items` were ranked: with Del Monte's 4 categories the "top 20%" is
+    one category, so pass or fail would only describe that one category's
+    share (routers/abc.py's PARETO_MIN_ITEMS). The measured figures are still
+    sent; a caller must read `status` before `passes`."""
     top_fraction: float
     top_count: int
     ranked_count: int
     revenue_share: float
     band_low: float
     band_high: float
-    passes: bool
+    passes: bool | None
+    status: Literal["pass", "fail", "not_applicable"]
+    min_items: int
+    reason: str | None = None
 
 
 class ABCResponse(BaseModel):

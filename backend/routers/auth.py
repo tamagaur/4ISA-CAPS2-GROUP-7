@@ -53,7 +53,7 @@ from backend.auth_utils import (
 )
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.permissions import (
-    NOT_READY, permissions_for, permissions_ready, require_permission, require_role_available,
+    NOT_READY, permissions_for, permissions_ready, require_permission,
 )
 from backend.login_limiter import login_limiter, reset_limiter
 from backend.schemas.auth import (
@@ -277,7 +277,6 @@ def register(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(require_permission("users.manage")),
 ) -> InviteResponse:
-    require_role_available(db, body.role)
     # Any capitalisation counts as the same email: Ana@x.com and ana@x.com
     # are one person (migration 0034 adds the matching unique index).
     existing = db.execute(

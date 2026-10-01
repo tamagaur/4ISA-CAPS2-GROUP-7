@@ -56,7 +56,6 @@ const PermissionsModal = ({ isOpen, user, newUser = null, isSelf = false, onClos
   const { legacy } = usePermissions();
   // Nothing to tick until the backend can store it: show the role's access.
   const readOnly = creating && legacy;
-  const roles = readOnly ? ROLES.filter((r) => r.value !== 'manager') : ROLES;
   const [catalog, setCatalog] = useState(null);
   const [initial, setInitial] = useState({ role: null, overrides: {} });
   const [role, setRole] = useState(null);
@@ -225,7 +224,7 @@ const PermissionsModal = ({ isOpen, user, newUser = null, isSelf = false, onClos
                   onChange={handleRole}
                   disabled={isSelf || saving}
                 >
-                  {roles.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
                 <span className="form-hint">
                   {isAdminRole && 'Admins can use everything, so there is nothing to tick.'}

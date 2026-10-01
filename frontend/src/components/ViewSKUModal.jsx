@@ -103,7 +103,7 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
               </div>
             )}
 
-            {/* Current Stock — pieces, the unit the reorder point below is in
+            {/* Current Stock — pieces, the unit the target stock below is in
                 (GET /sku), with the warehouse's own case count beside it. It
                 read "423 units" for 121,964 pieces until 2026-09-29. A product
                 with no usable pack size has the case count only. */}
@@ -137,10 +137,13 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
               </div>
             )}
 
-            {/* Reorder Point */}
+            {/* Target stock — GET /sku's reorder_point is the LP's rop_i, which
+                since the 2026-09-30 run is the order-up-to level, not a
+                reorder trigger. The SKU table already calls it Target stock;
+                this label said REORDER POINT until 2026-10-01. */}
             {sku.reorderPt !== undefined && sku.reorderPt !== null && (
               <div className="view-sku-field">
-                <span className="view-sku-label">REORDER POINT</span>
+                <span className="view-sku-label">TARGET STOCK</span>
                 {/* Whole pieces rounded up, as the SKU table shows it. */}
                 <span className="view-sku-value mono-val">{formatUnits(sku.reorderPt)} pieces</span>
               </div>

@@ -15,7 +15,9 @@ async function parseErrorOrThrow(res, fallback) {
     : Array.isArray(detail)
       ? detail.map((e) => e.msg || JSON.stringify(e)).join(' ')
       : fallback;
-  throw new Error(message);
+  const err = new Error(message);
+  err.status = res.status;
+  throw err;
 }
 
 export async function listUsers() {

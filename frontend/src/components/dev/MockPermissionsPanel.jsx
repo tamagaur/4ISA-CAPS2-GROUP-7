@@ -1,4 +1,4 @@
-// DEV ONLY. Act as Admin, Manager or Staff, or tick single permissions, to
+// DEV ONLY. Act as Admin or Staff, or tick single permissions, to
 // try the permission screens before the backend has them. DashboardLayout
 // renders this only on a dev server with VITE_MOCK_PERMISSIONS=true (see
 // api/mocks/permissionsMock.js); it is deleted with the mock in Phase 6.

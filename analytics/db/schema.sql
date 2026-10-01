@@ -700,7 +700,7 @@ CREATE TABLE IF NOT EXISTS Users (
     email           TEXT NOT NULL UNIQUE,
     password_hash   TEXT NOT NULL,
     full_name       TEXT NOT NULL,
-    role            TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'manager', 'staff')),
+    role            TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

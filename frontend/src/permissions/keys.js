@@ -22,11 +22,10 @@ export const P = {
   USERS_MANAGE: 'users.manage',
 };
 
-// The three roles are fixed by the proposal's design. What each one grants
-// comes from the catalog, never from here.
+// Two roles only, Admin and Staff (the proposal's Manager was dropped on
+// 2026-10-01). What each one grants comes from the catalog, never from here.
 export const ROLES = [
   { value: 'admin', label: 'Admin' },
-  { value: 'manager', label: 'Manager' },
   { value: 'staff', label: 'Staff' },
 ];
 
@@ -70,7 +69,7 @@ export const LEGACY_STAFF_ACCESS = [
 export const LEGACY_CATALOG = {
   permissions: [
     { key: P.DASHBOARD_VIEW, label: 'View the dashboard', group: 'Dashboard', description: 'Sales, stock and forecast overview.' },
-    { key: P.ABC_VIEW, label: 'View ABC classification', group: 'ABC classification', description: 'Which products are tier A, B or C.' },
+    { key: P.ABC_VIEW, label: 'View ABC classification', group: 'ABC classification', description: 'Which products are class A, B or C.' },
     { key: P.FORECAST_VIEW, label: 'View forecasts', group: 'Predictive / SKU Forecast', description: 'Each product’s forecast.' },
     { key: P.CATEGORY_TRENDS_VIEW, label: 'View category trends', group: 'Category Trends', description: 'How each category is moving.' },
     { key: P.SKU_VIEW, label: 'View SKU Management', group: 'SKU Management', description: 'The product list.' },

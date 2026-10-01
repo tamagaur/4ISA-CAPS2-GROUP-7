@@ -174,11 +174,6 @@
   color: #4338ca;
 }
 
-.user-mgmt-role-badge.role-manager {
-  background-color: #e0f2fe;
-  color: #0369a1;
-}
-
 .user-mgmt-role-badge.role-staff {
   background-color: var(--color-surface-sunken);
   color: var(--color-text-body);

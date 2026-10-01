@@ -53,9 +53,9 @@ const TREND_META = {
 // "Fewer than 30 selling months". history_months is a separate trait and is
 // shown in its own tile.
 const STABILITY_GLOSS = {
-  all_38: 'Category A in all 38 periods observed',
-  at_least_30: 'Category A in at least 30 of the 38 periods',
-  churn: 'Moves in and out of Category A — fewer than 30 of the 38 periods',
+  all_38: 'Class A in all 38 periods observed',
+  at_least_30: 'Class A in at least 30 of the 38 periods',
+  churn: 'Moves in and out of Class A — fewer than 30 of the 38 periods',
 };
 
 // Bins of the combined_v1 scheme (sales-month length, with the long bin

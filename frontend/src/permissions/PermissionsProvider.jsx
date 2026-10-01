@@ -75,7 +75,7 @@ const PermissionsProvider = ({ children }) => {
       role: state.role,
       permissions: state.permissions,
       // True while the backend has no /auth/me: hide what needs it (the
-      // Permissions screen, the Manager role).
+      // Permissions screen).
       legacy: state.legacy,
       // An admin always has everything (the proposal's rule); anyone else
       // has what /auth/me lists. No key means no access.

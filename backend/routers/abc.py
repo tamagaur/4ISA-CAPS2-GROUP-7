@@ -88,7 +88,20 @@ written. A month in the window resolves to that month's computed run;
 last_known also sees each product's newest placeholder tier, so a product
 whose only tiers are placeholder ones is listed, labelled by its
 tier_period. A month a stored run covers reads the stored run, unchanged.
-Stock and reorder points stay real — there is no placeholder stock.
+Stock and target stock stay real — there is no placeholder stock.
+
+TARGET STOCK (2026-09-30): rop_i is the LP's order-up-to "target stock"
+since the 2026-09-30 run, so this module's text says target stock where it
+said reorder point. Field names (reorder_point in SQL, 'NO ROP') are kept
+because other pages read them.
+
+WHY NO TARGET (2026-10-01): 50 of February's 132 Class A SKUs read "No
+target stock" with nothing saying why, and the page told readers the LP
+plans Class A — so those looked like a fault. The LP's pool is narrower:
+Class A of the latest ABC run whose latest forecast is status 'ok' with
+MASE < 1 (scripts/run_lp.py CANDIDATE_QUERY). Of the 132, 46 failed MASE < 1
+and 13 had too little history ('insufficient_data'). Every row with no
+target now carries the reason, read from the same tables the LP pool is.
 """
 from __future__ import annotations
 
@@ -105,6 +118,7 @@ from backend.data_mode import (
     REAL,
     abc_relation,
     abc_single,
+    forecast_source,
     get_data_mode,
     latest_per_product,
     placeholder_months,
@@ -127,12 +141,146 @@ from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, Tie
 
 router = APIRouter(prefix="/abc", tags=["abc"])
 
+# The fewest ranked items an 80/20 check is run on. The check compares the
+# top fifth of items with the rest, and the top fifth rounds UP to whole
+# items: below 10 it is one or two items (one for 1-5, two for 6-9), so pass
+# or fail would describe the biggest one or two items' share, not how revenue
+# spreads across many. Del Monte's runs since its Jan 2025 regrouping rank
+# 4-5 top-level categories (DEC-03), and the page called 4 categories a
+# failed 80/20 split ("1 of 4 earns 71.1%"). At 10 the top fifth is exactly
+# 20% of the items. Unilever ranks hundreds of SKUs a month, far above it.
+PARETO_MIN_ITEMS = 10
+
+# The LP's forecast-accuracy gate (scripts/run_lp.py MASE_GATE, the same
+# 1.0 as analytics/forecasting/baseline.py's MASE_GATE and the dashboard's
+# MASE_UNRELIABLE_GATE): a forecast enters the plan only if it beat a naive
+# repeat-last-month forecast, MASE < 1. Restated rather than imported because
+# run_lp.py pulls in the pulp solver and baseline.py statsmodels, batch-job
+# dependencies the API doesn't need (and importing a sibling router for one
+# number would couple the two); tests/backend/test_abc.py pins it to
+# baseline.MASE_GATE.
+LP_MASE_GATE = 1.0
+
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _month_label(period: str) -> str:
+    """'2026-02' -> 'Feb 2026', as the page writes months."""
+    year, month = period.split("-")[:2]
+    return f"{_MONTHS[int(month) - 1]} {year}"
+
+
+def _no_target_reason(r, tier: str, tier_period: str | None, *, has_cycle: bool) -> tuple[str | None, str | None]:
+    """(reason, code) for a row the LP's current cycle gives no target stock.
+
+    Follows the LP's own pool rule (scripts/run_lp.py CANDIDATE_QUERY): Class
+    A of the principal's LATEST ABC run (pool_tier / pool_period), then a
+    forecast with status 'ok' and MASE < LP_MASE_GATE (fc_status / fc_mase,
+    the product's latest Forecast_Result row). The pool tier is used rather
+    than the row's own: a row carried forward, or shown for an earlier month,
+    can be Class A on the page and still be outside the plan.
+
+    The row's columns are read with .get(): with no pool columns at all the
+    row's own tier stands in, which is what it is whenever the page shows the
+    latest run."""
+    noun = "category" if r.get("principal") == "delmonte" else "SKU"
+    pool_period = r.get("pool_period")
+    pool_tier = r.get("pool_tier") if pool_period else tier
+    if pool_tier != "A":
+        if pool_period is None or (pool_tier == tier and tier_period == pool_period):
+            return "Not planned: the reorder plan covers Class A only", "not_class_a"
+        if pool_tier is None:
+            return (
+                f"Not planned: the reorder plan covers Class A of the {_month_label(pool_period)} ranking, "
+                f"and this {noun} had no sales that month",
+                "not_ranked",
+            )
+        return (
+            f"Not planned: the reorder plan covers Class A only, and this {noun} is Class {pool_tier} "
+            f"in the {_month_label(pool_period)} ranking",
+            "not_class_a",
+        )
+    if not has_cycle:
+        return "Not planned: there is no current reorder plan for it", "no_plan"
+    status, mase = r.get("fc_status"), r.get("fc_mase")
+    mase = float(mase) if mase is not None else None
+    if status is None:
+        return "Not planned: no forecast exists for it", "no_forecast"
+    if status == "insufficient_data":
+        return "Not planned: too little sales history to forecast", "short_history"
+    if status == "dead_sku":
+        return "Not planned: no recent sales to forecast from", "no_recent_sales"
+    if status == "fit_failed":
+        return "Not planned: the forecast could not be produced", "forecast_failed"
+    if status == "unreliable" or (mase is not None and mase >= LP_MASE_GATE):
+        # Three decimals right at the gate, as SKUForecast.jsx shows it, so
+        # 1.004 doesn't read "1.00" next to a "below 1" rule.
+        figure = f" (MASE {mase:.{3 if abs(mase - 1) < 0.01 else 2}f})" if mase is not None else ""
+        return f"Not planned: forecast accuracy check not passed{figure}", "accuracy"
+    if mase is None:
+        return "Not planned: forecast accuracy could not be measured", "not_measured"
+    # Passes both checks yet has no row in the cycle: the plan was built
+    # before this forecast or ranking. Said as such, never guessed past.
+    return "Not in the current reorder plan, although its forecast passes the accuracy check", "not_in_plan"
+
+
+def _tier_shares(current: list[ABCItem]) -> dict[str, float] | None:
+    """Each tier's share of the run's revenue, from the stored running total
+    at each tier's boundary: A = A's last cumulative share, B = B's last
+    minus A's, C = C's last minus B's.
+
+    Summing per-row shares, as this did until 2026-10-01, adds up values
+    each rounded to 4 dp: Unilever's 2026-02 Class B summed to 0.1493 and
+    read 14.9%, where its revenue is 14.99% of the month (0.9498 - 0.7999 =
+    0.1499 from the running total, rounded once). None — fall back to the
+    sum — when a row has no cumulative share or the boundaries are out of
+    tier order, so a run without a consistent running total is never
+    differenced into nonsense."""
+    if not current or any(i.cumulative_share is None for i in current):
+        return None
+    bounds: dict[str, float] = {}
+    for item in current:
+        bounds[item.tier] = max(bounds.get(item.tier, 0.0), float(item.cumulative_share))
+    ordered = sorted(bounds)  # 'A' < 'B' < 'C'
+    if any(bounds[a] > bounds[b] for a, b in zip(ordered, ordered[1:])):
+        return None
+    shares, previous = {}, 0.0
+    for tier in ordered:
+        shares[tier] = round(bounds[tier] - previous, 6)
+        previous = bounds[tier]
+    return shares
+
+
+def _pareto(current: list[ABCItem]) -> ParetoCheck | None:
+    """pareto_check for one principal's run, or 'not_applicable' below
+    PARETO_MIN_ITEMS. The cumulative shares go along so the check reads the
+    top items' share off one stored running total instead of summing ~140
+    separately rounded shares (see pareto_check)."""
+    check = pareto_check([i.revenue_share for i in current], [i.cumulative_share for i in current])
+    if check is None:
+        return None
+    ranked = check["ranked_count"]
+    if ranked < PARETO_MIN_ITEMS:
+        many = "categories" if current[0].principal == "delmonte" else "SKUs"
+        return ParetoCheck(
+            **{**check, "passes": None},
+            status="not_applicable",
+            min_items=PARETO_MIN_ITEMS,
+            reason=(
+                f"Too few {many} for an 80/20 check ({ranked} ranked; it needs at least {PARETO_MIN_ITEMS}). "
+                f"With so few, the top fifth is only one or two {many}, which says nothing about how "
+                f"revenue is spread."
+            ),
+        )
+    return ParetoCheck(**check, status="pass" if check["passes"] else "fail", min_items=PARETO_MIN_ITEMS)
+
 
 def _summarize(items: list[ABCItem], period: str | None) -> tuple[list[TierSummary], ParetoCheck | None]:
     """tier_summary plus the run's Pareto check (manuscript §3.4.4.2.2).
     Only CURRENT-run rows feed shares: a carried-forward row's revenue_share
-    is a fraction of another month's revenue. The check needs one principal —
-    two principals' shares are fractions of two different totals."""
+    is a fraction of another month's revenue. The shares and the check need
+    one principal — two principals' shares are fractions of two different
+    totals, and their running totals interleave."""
     summary: dict[str, TierSummary] = {}
     current = [i for i in items if i.tier_period == period]
     for item in items:
@@ -143,31 +291,30 @@ def _summarize(items: list[ABCItem], period: str | None) -> tuple[list[TierSumma
         else:
             entry.carried_forward_count += 1
     one_principal = len({i.principal for i in current}) == 1
+    shares = _tier_shares(current) if one_principal else None
     for entry in summary.values():
         ranked_here = entry.sku_count - entry.carried_forward_count
         entry.sku_share = round(ranked_here / len(current), 6) if current and one_principal else None
-    # Cumulative shares go along so the check reads the top items' share off
-    # one stored running total instead of summing ~140 separately rounded
-    # shares (see pareto_check).
-    check = (
-        pareto_check([i.revenue_share for i in current], [i.cumulative_share for i in current])
-        if one_principal else None
-    )
-    return sorted(summary.values(), key=lambda t: t.tier), (ParetoCheck(**check) if check else None)
+        if shares is not None:
+            entry.revenue_share_total = shares.get(entry.tier, 0.0)
+    check = _pareto(current) if one_principal else None
+    return sorted(summary.values(), key=lambda t: t.tier), check
 
 
 def _stock_status(stock_pieces: float | None, reorder_point: float | None) -> str:
-    """Cover against the SKU's own reorder point, both in PIECES
+    """Cover against the SKU's own target stock (rop_i), both in PIECES
     (backend/stock_units.py). Until 2026-09-29 this compared stock in CASES
     with rop_i in pieces, called a SKU with loose pieces but no full case
-    out of stock, and judged every SKU without a reorder point against a
-    flat 100 — so no Class A SKU could ever read as above its reorder point.
+    out of stock, and judged every SKU without one against a flat 100 — so
+    no Class A SKU could ever read as above it.
 
     NO DATA: no stock record at the latest snapshot (or no usable pack size
     to express it in pieces). CRITICAL: no stock at all. NO ROP: stock on
-    hand but no reorder point to judge it by — the LP's current cycle plans
-    Category A only, so most B and C products land here rather than in a
-    comparison against an invented threshold.
+    hand but no target stock to judge it by — the LP's current cycle plans
+    only Class A SKUs whose forecast passed the accuracy check, so every B
+    and C product and part of Class A land here (with the reason, see
+    _no_target_reason) rather than in a comparison against an invented
+    threshold.
     """
     if stock_pieces is None:
         return "NO DATA"
@@ -180,13 +327,72 @@ def _stock_status(stock_pieces: float | None, reorder_point: float | None) -> st
 
 def _status_for(stock_pieces: float | None, reorder_point: float | None, lp_visible: bool) -> str:
     """_stock_status, except for a user without lp.view: "Above / below
-    the reorder point" would reveal the LP's figure, so a product with stock
+    target stock" would reveal the LP's figure, so a product with stock
     on hand reads ON HAND instead (Yuan's permissions proposal: LP figures
     follow lp.view everywhere)."""
     status = _stock_status(stock_pieces, reorder_point)
     if not lp_visible and status in ("IN STOCK", "LOW", "NO ROP"):
         return "ON HAND"
     return status
+
+
+def _plan_pool_joins(fc_src: str) -> str:
+    """The columns _no_target_reason reads, joined onto `ac`: the product's
+    tier in its principal's LATEST stored ABC run (pool_tier, pool_period)
+    and its latest forecast (fc_status, fc_mase) — the two tests the LP's
+    candidate pool applies (scripts/run_lp.py CANDIDATE_QUERY). Stored ABC
+    on purpose: the plan is built from stored runs, never from a preview
+    month's computed one. Columns are qualified (MAX(m.classification_period))
+    so this subquery reads as what it is, not as latest_abc_period's lookup."""
+    return f"""
+        LEFT JOIN (
+            SELECT m.principal, MAX(m.classification_period) AS p
+            FROM abc_classification m
+            WHERE m.method = 'single'
+            GROUP BY m.principal
+        ) pool_run ON pool_run.principal = ac.principal
+        LEFT JOIN abc_classification pool
+               ON pool.product_key = ac.product_key
+              AND pool.classification_period = pool_run.p
+              AND pool.method = 'single'
+        LEFT JOIN (
+            SELECT DISTINCT ON (f.product_key) f.product_key, f.status, f.mase
+            FROM {fc_src} f
+            ORDER BY f.product_key, f.forecast_date DESC, f.generated_at DESC
+        ) fc ON fc.product_key = ac.product_key
+    """
+
+
+_PLAN_POOL_COLUMNS = """,
+            pool_run.p AS pool_period,
+            pool.tier AS pool_tier,
+            fc.status AS fc_status,
+            fc.mase AS fc_mase"""
+
+
+def _item(r, tier_period: str | None, *, lp_visible: bool, has_cycle: bool) -> ABCItem:
+    """One ABCItem from a row of either view's query."""
+    stock = float(r["current_stock"]) if r["current_stock"] is not None else None
+    target = float(r["reorder_point"]) if r["reorder_point"] is not None else None
+    reason, code = (
+        _no_target_reason(r, r["tier"], tier_period, has_cycle=has_cycle)
+        if lp_visible and target is None else (None, None)
+    )
+    return ABCItem(
+        product_key=r["product_key"],
+        sku_id=r["sku_id"] or "",
+        product_name=r["product_name"],
+        principal=r["principal"],
+        tier=r["tier"],
+        tier_period=tier_period,
+        revenue_share=r["revenue_share"],
+        cumulative_share=r["cumulative_share"],
+        boundary_flag=bool(r["boundary_flag"]),
+        current_stock=stock,
+        stock_status=_status_for(stock, target, lp_visible),
+        no_target_reason=reason,
+        no_target_code=code,
+    )
 
 
 @router.get("", response_model=ABCResponse)
@@ -214,7 +420,7 @@ def get_abc(
         else None
     )
     # Without lp.view the stock status can't be judged against the LP's
-    # reorder point in the user's sight (see _status_for).
+    # target stock in the user's sight (see _status_for).
     lp_visible = can_see_lp(db, current_user)
     if view == "last_known":
         return _with_data_mode(
@@ -263,9 +469,14 @@ def _get_abc_period(
             abc_source, source_params = abc_relation(computed, with_stored=False)
     if period is None:
         return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[], rules=ABCRules(**abc_rules()))
-    # The reorder point each row's stock status is judged against: the LP's
+    # The target stock each row's stock status is judged against: the LP's
     # own, or in preview with built outputs the five-year what-if's.
     lp_src, lp_params = lp_source(mode, "lp_recommendation")
+    fc_src, fc_params = forecast_source(mode, "forecast_result")
+    # The LP's current cycle only, like every other LP read
+    # (backend/lp_cycle.py): the newest pending row from ANY cycle let a
+    # three-year-old superseded run supply the target stock.
+    cycle = current_cycle(db, principal, mode)
 
     query = f"""
         SELECT
@@ -278,7 +489,7 @@ def _get_abc_period(
             ac.cumulative_share,
             ac.boundary_flag,
             inv.stock_pieces AS current_stock,
-            rop.rop_i AS reorder_point
+            rop.rop_i AS reorder_point{_PLAN_POOL_COLUMNS}
         FROM {abc_source} ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
@@ -287,6 +498,7 @@ def _get_abc_period(
             FROM {lp_src}
             WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
+        {_plan_pool_joins(fc_src)}
         WHERE ac.classification_period = :period AND ac.method = 'single'
     """
     query += principal_clause(principal, "ac.principal")[0]
@@ -294,36 +506,15 @@ def _get_abc_period(
 
     params: dict = {
         "period": period,
-        # The LP's current cycle only, like every other LP read
-        # (backend/lp_cycle.py): the newest pending row from ANY cycle let a
-        # three-year-old superseded run supply the reorder point.
-        "current_cycle": current_cycle(db, principal, mode),
+        "current_cycle": cycle,
         **scope_params,
         **source_params,
         **lp_params,
+        **fc_params,
     }
 
     rows = db.execute(text(query), params).mappings().all()
-    items = [
-        ABCItem(
-            product_key=r["product_key"],
-            sku_id=r["sku_id"] or "",
-            product_name=r["product_name"],
-            principal=r["principal"],
-            tier=r["tier"],
-            tier_period=period,
-            revenue_share=r["revenue_share"],
-            cumulative_share=r["cumulative_share"],
-            boundary_flag=bool(r["boundary_flag"]),
-            current_stock=float(r["current_stock"]) if r["current_stock"] is not None else None,
-            stock_status=_status_for(
-                float(r["current_stock"]) if r["current_stock"] is not None else None,
-                float(r["reorder_point"]) if r["reorder_point"] is not None else None,
-                lp_visible,
-            ),
-        )
-        for r in rows
-    ]
+    items = [_item(r, period, lp_visible=lp_visible, has_cycle=cycle is not None) for r in rows]
 
     tier_summary, check = _summarize(items, period)
     return ABCResponse(
@@ -386,6 +577,8 @@ def _get_abc_last_known(
 
     ac_scope_sql, ac_scope_params = principal_clause(principal, "principal")
     lp_src, lp_params = lp_source(mode, "lp_recommendation")
+    fc_src, fc_params = forecast_source(mode, "forecast_result")
+    cycle = current_cycle(db, principal, mode)
     # method='single' inside the DISTINCT ON is what keeps this one row per
     # product_key (migration 0017) — see the module docstring.
     query = f"""
@@ -408,7 +601,7 @@ def _get_abc_last_known(
             ac.cumulative_share,
             ac.boundary_flag,
             inv.stock_pieces AS current_stock,
-            rop.rop_i AS reorder_point
+            rop.rop_i AS reorder_point{_PLAN_POOL_COLUMNS}
         FROM latest ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
@@ -417,6 +610,7 @@ def _get_abc_last_known(
             FROM {lp_src}
             WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
+        {_plan_pool_joins(fc_src)}
         ORDER BY ac.tier,
                  (ac.classification_period = :period) DESC,
                  ac.classification_period DESC,
@@ -424,33 +618,15 @@ def _get_abc_last_known(
     """
     params: dict = {
         "period": period,
-        "current_cycle": current_cycle(db, principal, mode),
+        "current_cycle": cycle,
         **ac_scope_params,
         **source_params,
         **lp_params,
+        **fc_params,
     }
     rows = db.execute(text(query), params).mappings().all()
 
-    items = [
-        ABCItem(
-            product_key=r["product_key"],
-            sku_id=r["sku_id"] or "",
-            product_name=r["product_name"],
-            principal=r["principal"],
-            tier=r["tier"],
-            tier_period=r["tier_period"],
-            revenue_share=r["revenue_share"],
-            cumulative_share=r["cumulative_share"],
-            boundary_flag=bool(r["boundary_flag"]),
-            current_stock=float(r["current_stock"]) if r["current_stock"] is not None else None,
-            stock_status=_status_for(
-                float(r["current_stock"]) if r["current_stock"] is not None else None,
-                float(r["reorder_point"]) if r["reorder_point"] is not None else None,
-                lp_visible,
-            ),
-        )
-        for r in rows
-    ]
+    items = [_item(r, r["tier_period"], lp_visible=lp_visible, has_cycle=cycle is not None) for r in rows]
 
     tier_summary, check = _summarize(items, period)
     return ABCResponse(

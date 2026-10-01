@@ -24,7 +24,7 @@ class CatalogEntry(BaseModel):
 
 class CatalogResponse(BaseModel):
     permissions: list[CatalogEntry]
-    # {"admin": "all", "manager": [...], "staff": [...]}
+    # {"admin": "all", "staff": [...]}
     roles: dict[str, str | list[str]]
 
 
@@ -40,5 +40,5 @@ class UserPermissionsUpdate(BaseModel):
     dropped, so what is stored is only the differences."""
     model_config = ConfigDict(extra="forbid")
 
-    role: Literal["admin", "manager", "staff"]
+    role: Literal["admin", "staff"]
     overrides: dict[str, bool] = {}

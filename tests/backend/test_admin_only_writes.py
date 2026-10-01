@@ -5,7 +5,7 @@ data need a write permission (backend/permissions.py; deps.require_admin until
 /recommendations/{key} needs lp.decide.
 
 Staff have neither, so they get the contract's 403 before any query runs: the
-NoQuerySession here fails the test if one is issued. Admins and managers have
+NoQuerySession here fails the test if one is issued. Admins have
 both; each of their cases sends a body the endpoint rejects with 400 on its
 own validation, which proves the request got past the permission check
 without needing a database.
@@ -68,10 +68,9 @@ def test_staff_cannot_write(client, method, path, permission, body):
     assert resp.json() == {"detail": MISSING_PERMISSION, "code": "missing_permission", "permission": permission}
 
 
-@pytest.mark.parametrize("role", ["admin", "manager"])
 @pytest.mark.parametrize("method,path,permission,body", WRITES)
-def test_admin_and_manager_pass_the_permission_check(client, role, method, path, permission, body):
-    resp = client.request(method, path, json=body, headers={"Authorization": f"Bearer {_token(role)}"})
+def test_admin_passes_the_permission_check(client, method, path, permission, body):
+    resp = client.request(method, path, json=body, headers={"Authorization": f"Bearer {_token('admin')}"})
     assert resp.status_code == 400, resp.text
 
 

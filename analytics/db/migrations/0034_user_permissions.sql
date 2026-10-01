@@ -5,7 +5,9 @@
 -- hand and not from Audrey's side.
 --
 -- Backs Yuan's permissions proposal (revised 2026-09-30), backend step 2,
--- plus one account per email:
+-- plus one account per email. Two roles only, admin and staff: the
+-- proposal's Manager role was dropped (Audrey, 2026-10-01), so users.role's
+-- CHECK is left as it is:
 --
 -- 1. user_permission_override: one row per (user, permission) where that
 --    user differs from their role's preset. granted = true adds the
@@ -19,9 +21,7 @@
 --    grants to the API roles, like every public table since
 --    scripts/sql/2026-09-28_lock_down_data_api.sql and migration 0031.
 --
--- 2. users.role gains 'manager' (was admin | staff).
---
--- 3. One account per email in any capitalisation: a unique index on
+-- 2. One account per email in any capitalisation: a unique index on
 --    lower(email). The existing UNIQUE (email) only catches exact matches,
 --    so Ana@x.com and ana@x.com could be two accounts. Checked read-only
 --    on the live database first (2026-09-30): no two users share an email
@@ -49,18 +49,12 @@ ALTER TABLE user_permission_override ENABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE user_permission_override IS
     'Per-user permission exceptions to the role preset (backend/permissions.py). granted=true adds, false removes.';
 
-ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'manager', 'staff'));
-
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON users (lower(email));
 
 COMMIT;
 
--- Rollback (not run, kept for review). The role CHECK fails while any user
--- is a manager; change those users' role first.
+-- Rollback (not run, kept for review).
 -- BEGIN;
 -- DROP INDEX IF EXISTS users_email_lower_key;
--- ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
--- ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'staff'));
 -- DROP TABLE IF EXISTS user_permission_override;
 -- COMMIT;

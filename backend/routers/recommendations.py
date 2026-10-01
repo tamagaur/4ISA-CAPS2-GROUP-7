@@ -72,6 +72,30 @@ same data the split becomes 185 CRITICAL / 13 URGENT / 20 PLANNED.
                   row at the latest snapshot (39 of the 250 live rows) was
                   read as "0 on hand" and therefore CRITICAL — a fabricated
                   alert. It is now None, and urgency is 'NO DATA'.
+
+NOT IN THE STOCK COUNT = 0 ON HAND, AS THE LP READS IT (2026-10-01). The
+2026-09-30 LP (scripts/run_lp.py product_input) plans a product with no row
+in its principal's latest stock count as 0 on hand, because the stock file
+lists no zero-stock rows (0 of 785 Unilever rows at 2026-03, re-checked
+2026-10-01): no row means nothing on hand. Reading such a row as 'NO DATA'
+here made the page disagree with the plan it explains. Live, 3 of the 73
+rows in the 2026-03 cycle (64971078, 65071335, 69731884) are absent from
+the count; the LP cut all three to fit the allocation (1,272 / 542 / 653
+pieces short), yet the page counted 37 cut SKUs instead of 40 and left the
+three unranked at the bottom. Such a row now gets current_stock 0 and is
+ranked, bucketed and cut-checked like any other, with stock_not_in_count
+set so the page says the 0 is inferred, not counted. Two cases keep the
+old 'NO DATA': a stock row that can't be put in pieces (no usable pack
+size; the LP skips those products too), and a principal with no stock
+count at that snapshot at all, where a missing row says nothing about
+stock (in_stock_count is NULL then, see _SELECT_ONE).
+
+PACK SIZE (2026-10-01). Every quantity here is in PIECES, while SSM buys
+in cases: an order of 104,575 pieces is about 363 cases of 288. pack_size
+(Product_Dimension's pieces per case, None when unusable — the same rule
+backend/stock_units.py converts stock with) lets the page show the case
+count beside each quantity. Only 6 of the 73 live orders are whole cases;
+the LP doesn't round to cases, and nothing here does either.
 """
 from __future__ import annotations
 
@@ -97,7 +121,7 @@ from backend.schemas.recommendations import RecommendationItem, RecommendationDe
 from backend.data_mode import PREVIEW, REAL, forecast_source, get_data_mode, lp_source, predictive_preview, preview_block
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info
 from backend.lp_cycle import freshness as lp_freshness
-from backend.stock_units import NO_PACK_SIZE_REASON, STOCK_AT_PERIOD_SQL
+from backend.stock_units import NO_PACK_SIZE_REASON, PACK_SIZE_NUMERIC, STOCK_AT_PERIOD_SQL
 
 # Order quantities are counted in whole units rounded UP, the rule the Reorder
 # page applies to every row (frontend/src/utils/formatNumber.js wholeUnits),
@@ -111,12 +135,24 @@ def whole_units(value: float) -> int:
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
+# stock_units.PACK_SIZE_NUMERIC is written against its own pd_pack alias;
+# the row query reads Product_Dimension as pd.
+_PACK_SIZE_USABLE = PACK_SIZE_NUMERIC.replace("pd_pack.", "pd.")
+assert "pd_pack" not in _PACK_SIZE_USABLE
+
+# in_stock_count — TRUE: the product has a row in the stock count. FALSE:
+# its principal was counted at this snapshot but the product wasn't, which
+# the LP reads as 0 on hand (the file lists no zero-stock rows). NULL: the
+# principal has no count at this snapshot (none loaded yet, or a mixed-
+# principal list anchored on the other principal's latest), so a missing
+# row says nothing about stock and stays 'NO DATA'.
 _SELECT_ONE = f"""
     SELECT
         lr.recommendation_key,
         COALESCE(pd.sku_code, pd.category_path) AS sku_id,
         pd.product_name,
         pd.principal,
+        CASE WHEN {_PACK_SIZE_USABLE} THEN pd.pack_size::numeric END AS pack_size,
         lr.planning_cycle_date,
         lr.q_i,
         lr.rop_i,
@@ -125,6 +161,9 @@ _SELECT_ONE = f"""
         inv.stock_pieces AS current_stock,
         inv.stock_cases AS current_stock_cases,
         inv.stock_value_pesos AS stock_value_pesos,
+        CASE WHEN inv.product_key IS NOT NULL THEN TRUE
+             WHEN counted.principal IS NOT NULL THEN FALSE
+        END AS in_stock_count,
         abc.revenue_share AS revenue_share,
         abc.tier AS tier,
         sales.avg_monthly_sales_pesos AS avg_monthly_sales_pesos,
@@ -136,6 +175,9 @@ _SELECT_ONE = f"""
     LEFT JOIN (
         {STOCK_AT_PERIOD_SQL}
     ) inv ON inv.product_key = lr.product_key
+    LEFT JOIN (
+        SELECT DISTINCT principal FROM inventory_fact_real WHERE _period = :inv_period
+    ) counted ON counted.principal = pd.principal
     LEFT JOIN (
         SELECT DISTINCT ON (product_key) product_key, revenue_share, tier
         FROM abc_classification
@@ -215,14 +257,27 @@ def _to_item(r) -> RecommendationItem:
     # and they are reported apart rather than both as a bare "NO DATA".
     stock = None if r["current_stock"] is None else float(r["current_stock"])
     stock_cases = _opt_float(r, "current_stock_cases")
+    stock_value = _opt_float(r, "stock_value_pesos")
+    # Absent from a stock count that did happen: 0 on hand, the LP's own
+    # reading (see the module docstring), so this row is ranked and checked
+    # for a cut like any other. Only an explicit FALSE counts — NULL (no
+    # count to be absent from) and callers that don't project the column
+    # keep the 'NO DATA' path below.
+    in_count = r.get("in_stock_count") if hasattr(r, "get") else None
+    stock_not_in_count = in_count is False
+    if stock_not_in_count:
+        stock, stock_value = 0.0, 0.0
     rop = float(r["rop_i"])
     stock_blocked_reason = None
     if stock is None:
         urgency = "NO DATA"
-        stock_blocked_reason = (
-            NO_PACK_SIZE_REASON if stock_cases is not None
-            else "no Inventory_Fact_Real row for this product at the latest snapshot"
-        )
+        if in_count or stock_cases is not None:
+            # In the count, but its cases can't be put in pieces.
+            stock_blocked_reason = NO_PACK_SIZE_REASON
+        elif "in_stock_count" in r:
+            stock_blocked_reason = "no stock count for this product's principal at the latest snapshot"
+        else:
+            stock_blocked_reason = "no Inventory_Fact_Real row for this product at the latest snapshot"
     else:
         urgency = "CRITICAL" if stock < rop * 0.5 else ("URGENT" if stock < rop else "PLANNED")
 
@@ -233,7 +288,7 @@ def _to_item(r) -> RecommendationItem:
         if revenue_share is not None and stockout_gap is not None
         else None
     )
-    days_of_cover, cover_reason = _cover(_opt_float(r, "stock_value_pesos"), _opt_float(r, "avg_monthly_sales_pesos"))
+    days_of_cover, cover_reason = _cover(stock_value, _opt_float(r, "avg_monthly_sales_pesos"))
 
     # The LP's own arithmetic since the 2026-09-30 run (scripts/run_lp.py):
     # need = the cycle month's forecast + target stock (rop_i) - stock on
@@ -261,6 +316,8 @@ def _to_item(r) -> RecommendationItem:
         status=r["status"],
         current_stock=stock,
         current_stock_cases=stock_cases,
+        stock_not_in_count=stock_not_in_count,
+        pack_size=_opt_float(r, "pack_size"),
         stock_blocked_reason=stock_blocked_reason,
         urgency=urgency,
         revenue_share=revenue_share,

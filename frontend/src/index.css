@@ -544,15 +544,27 @@ table td.table-center {
      pairing appears. Additive: these are new tokens, nothing existing
      was renamed, so this can't silently change an unrelated component. */
   --color-nav-bg: #1C2230;
+  /* The sidebar's ombre: the same navy, a shade lighter at the top (behind
+     the logo) and a shade deeper at the bottom. --color-nav-bg stays the
+     middle stop and the flat fallback (Login.css's panel uses it too). */
+  --color-nav-bg-top: #262F42;
+  --color-nav-bg-bottom: #131823;
   --color-nav-border: #2C3444;
-  --color-nav-group-label: #7C8598;
-  --color-nav-item: #B9C0CC;
+  /* Text brightened for the gradient's lightest stop (#262F42), 2026-10-01:
+     labels 3.6:1 -> 5.9:1, items 7.3:1 -> 10.3:1, sub-headings 4.4:1 ->
+     6.5:1, and all still >= 4.9:1 on the hover wash. */
+  --color-nav-group-label: #A4ACBA;
+  --color-nav-item: #DDE2EA;
+  --color-nav-item-hover-text: #FFFFFF;
+  /* The logout hover: brand red is 2.9:1 on this navy, so a lighter coral
+     of it (5.1:1 or more on every stop). */
+  --color-nav-danger-text: #EE8070;
   --color-nav-item-hover-bg: rgba(255, 255, 255, 0.06);
   --color-nav-item-active-bg: rgba(199, 78, 61, 0.16);
   --color-nav-item-active-text: #F5F1EE;
   --color-nav-item-active-rail: #C74E3D;
   --color-nav-heading: #F5F1EE;
-  --color-nav-subheading: #8D93A0;
+  --color-nav-subheading: #AEB5C2;
 
   /* Reorder urgency — a real three-step scale (was: CRITICAL/URGENT/PLANNED
      text colors hardcoded ad hoc in ReorderRecommendations.css, with

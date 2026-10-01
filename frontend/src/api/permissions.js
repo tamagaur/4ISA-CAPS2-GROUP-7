@@ -40,7 +40,7 @@ export async function getMe() {
 }
 
 // GET /admin/permissions/catalog ->
-//   { permissions: [{ key, label, group, description }], roles: { admin: 'all', manager: [...], staff: [...] } }
+//   { permissions: [{ key, label, group, description }], roles: { admin: 'all', staff: [...] } }
 export async function getPermissionCatalog() {
   const res = MOCK ? mockCatalog() : await apiFetch('/admin/permissions/catalog');
   return readJson(res, 'Could not load the list of permissions.');

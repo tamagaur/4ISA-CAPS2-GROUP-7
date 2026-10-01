@@ -470,3 +470,16 @@
   color: var(--color-severity-urgent);
   white-space: nowrap;
 }
+
+/* A quiet second line under a quantity: the order's rough case count
+   ("≈ 363 cases of 288" — every quantity here is in pieces) or "not in
+   count" under a 0 the plan inferred rather than counted. Its own colour
+   and weight, so it stays muted inside a red/amber stock cell. */
+.reorder-cell-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}

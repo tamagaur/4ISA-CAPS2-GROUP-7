@@ -204,7 +204,7 @@ def test_role_preset_plus_grants_minus_removals():
 
 def test_only_differences_from_the_preset_are_stored():
     assert normalize("staff", {"lp.view": True, "audit_log.view": True, "sku.edit": False}) == {"audit_log.view": True}
-    assert normalize("manager", {"sku.edit": False}) == {"sku.edit": False}
+    assert normalize("staff", {"lp.view": False}) == {"lp.view": False}
 
 
 def test_deny_by_default():
@@ -223,7 +223,7 @@ def test_require_permission_only_takes_catalog_keys():
 def test_the_presets_are_the_proposals_design_table():
     staff = {"dashboard.view", "abc.view", "forecast.view", "category_trends.view", "sku.view", "lp.view"}
     assert set(PRESETS["staff"]) == staff
-    assert set(PRESETS["manager"]) == staff | {"sku.edit", "lp.decide"}
+    assert set(PRESETS) == {"staff"}  # admin has everything; there is no Manager
     assert len(ALL_KEYS) == len(set(ALL_KEYS)) == 11
 
 
@@ -258,7 +258,8 @@ def test_frontend_legacy_staff_access_is_the_staff_preset():
 
 
 def test_frontend_dev_mock_presets_match():
-    for role in ("manager", "staff"):
+    assert not re.search(r"^\s+manager:", MOCK_JS, re.M)
+    for role in ("staff",):
         block = re.search(rf"^\s+{role}: \[(.*?)\],$", MOCK_JS, re.M).group(1)
         assert set(re.findall(r"'([a-z_]+\.[a-z_]+)'", block)) == set(PRESETS[role]), role
 
@@ -431,7 +432,7 @@ def test_catalog_for_an_admin():
     with client_for(FakeStore(team())) as c:
         body = c.get("/admin/permissions/catalog", headers=auth(1, "admin")).json()
     assert body["permissions"] == CATALOG
-    assert body["roles"] == {"admin": "all", "manager": list(PRESETS["manager"]), "staff": list(PRESETS["staff"])}
+    assert body["roles"] == {"admin": "all", "staff": list(PRESETS["staff"])}
 
 
 @pytest.mark.real_permission_store
@@ -484,12 +485,12 @@ def test_put_stores_only_the_differences_and_is_audited():
 def test_a_role_change_signs_the_user_out_like_edit_user_does():
     store = FakeStore(team(), overrides={2: {"audit_log.view": True}})
     with client_for(store) as c:
-        resp = c.put("/admin/users/2/permissions", json={"role": "manager"}, headers=auth(1, "admin"))
+        resp = c.put("/admin/users/2/permissions", json={"role": "admin"}, headers=auth(1, "admin"))
     assert resp.status_code == 200
-    assert resp.json() == {"user_id": 2, "role": "manager", "overrides": {}, "permissions": sorted(PRESETS["manager"])}
-    assert store.users[2]["role"] == "manager" and 2 not in store.overrides
+    assert resp.json() == {"user_id": 2, "role": "admin", "overrides": {}, "permissions": sorted(ALL_KEYS)}
+    assert store.users[2]["role"] == "admin" and 2 not in store.overrides
     assert store.revoked == [2]
-    assert store.audit[0]["details"] == "user2@ssmcapstone.com: role staff → manager; overrides +audit_log.view → none"
+    assert store.audit[0]["details"] == "user2@ssmcapstone.com: role staff → admin; overrides +audit_log.view → none"
 
 
 @pytest.mark.real_permission_store
@@ -642,7 +643,7 @@ def test_postman_staff_cannot_promote_themselves(method, path, body):
 @pytest.mark.real_permission_store
 @pytest.mark.parametrize("body", [
     {"role": "admin", "overrides": {}},
-    {"role": "manager", "overrides": {"users.manage": True}},
+    {"role": "staff", "overrides": {"users.manage": True, "sku.edit": True}},
     {"role": "staff", "overrides": {"users.manage": True, "audit_log.view": True}},
 ])
 def test_postman_someone_given_users_manage_cannot_widen_their_own_access(body):
@@ -699,25 +700,27 @@ def test_before_0034_me_is_404_so_the_frontend_keeps_todays_access():
 def test_before_0034_the_admin_endpoints_are_503(method, path):
     store = FakeStore(team(), table_exists=False)
     with client_for(store) as c:
-        resp = c.request(method, path, json={"role": "manager"}, headers=auth(1, "admin"))
+        resp = c.request(method, path, json={"role": "staff"}, headers=auth(1, "admin"))
     assert resp.status_code == 503
     assert resp.json() == {"detail": NOT_READY, "code": "permissions_not_ready"}
     assert store.users[2]["role"] == "staff" and store.commits == 0
 
 
 @pytest.mark.real_permission_store
+@pytest.mark.parametrize("table_exists", [False, True])
 @pytest.mark.parametrize("method,path,body", [
     ("POST", "/auth/register", {"email": "new@ssmcapstone.com", "full_name": "New", "role": "manager"}),
     ("PATCH", "/users/2", {"role": "manager"}),
+    ("PUT", "/admin/users/2/permissions", {"role": "manager"}),
 ])
-def test_before_0034_the_manager_role_is_refused_with_a_clear_error(method, path, body):
-    """users.role's CHECK only allows admin and staff until 0034; say so
-    rather than let the database fail with a 500."""
-    store = FakeStore(team(), table_exists=False)
+def test_there_is_no_manager_role(method, path, body, table_exists):
+    """Two roles only, admin and staff: any other role is refused by request
+    validation, before or after 0034, and nothing is written."""
+    store = FakeStore(team(), table_exists=table_exists)
     with client_for(store) as c:
         resp = c.request(method, path, json=body, headers=auth(1, "admin"))
-    assert resp.status_code == 503 and resp.json()["code"] == "permissions_not_ready"
-    assert store.commits == 0
+    assert resp.status_code == 422
+    assert store.users[2]["role"] == "staff" and store.commits == 0
 
 
 @pytest.mark.real_permission_store
@@ -817,7 +820,7 @@ def test_the_smoke_map_covers_every_page():
             _route_path(method, url)  # every listed endpoint exists
 
 
-@pytest.mark.parametrize("role", ["admin", "manager", "staff"])
+@pytest.mark.parametrize("role", ["admin", "staff"])
 def test_every_page_works_for_each_preset_with_any_one_box_unticked(role, monkeypatch):
     base = preset(role)
     problems = []

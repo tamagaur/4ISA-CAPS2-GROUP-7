@@ -15,6 +15,11 @@ for the derivations and the unit caveats):
                     COALESCE to 0, which _to_item then read as CRITICAL —
                     "no stock record" and "confirmed empty" are different
                     facts. urgency is 'NO DATA' in that case.
+                    2026-10-01: narrowed. A product absent from a stock
+                    count that did happen is 0 again — the LP reads it that
+                    way and the file lists no zero-stock rows — flagged by
+                    stock_not_in_count. 'NO DATA' remains for a stock row
+                    with no usable pack size, or no count for the principal.
   revenue_share   — the SKU's share of period revenue at its latest
                     single-period ABC run; None when never classified.
   stockout_gap    — max(0, rop_i - current_stock); None when stock unknown.
@@ -54,8 +59,19 @@ class RecommendationItem(BaseModel):
     # there is no snapshot row, or no usable pack size to convert with.
     current_stock: float | None = None
     current_stock_cases: float | None = None  # the raw snapshot figure, for display
+    # True when the product has no row in its principal's latest stock count
+    # and current_stock is therefore 0 — the LP's own reading, since the
+    # stock file lists no zero-stock rows (2026-10-01). Inferred, not
+    # counted, so the page says so beside the 0.
+    stock_not_in_count: bool = False
+    # Pieces per case (Product_Dimension.pack_size), None when the column is
+    # not a usable positive number. Every quantity on this row is in pieces;
+    # this is only for showing the approximate case count beside them.
+    pack_size: float | None = None
     urgency: str  # 'CRITICAL' | 'URGENT' | 'PLANNED' | 'NO DATA' — derived from current_stock vs rop_i
-    # Why urgency is 'NO DATA': no snapshot row, or no usable pack size.
+    # Why urgency is 'NO DATA': a stock row with no usable pack size, or no
+    # stock count for the principal at all (no longer: a product merely
+    # absent from a count that happened — see stock_not_in_count).
     stock_blocked_reason: str | None = None
     revenue_share: float | None = None
     # The product's tier in the latest ABC run (None when that run did not

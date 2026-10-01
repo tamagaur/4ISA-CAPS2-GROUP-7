@@ -22,6 +22,7 @@ import { ChartTable, ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import RefreshingNote from './RefreshingNote';
+import InfoTip from './InfoTip';
 import { LoadingStatus, SkeletonChart, SkeletonLine, SkeletonTable } from './Skeleton';
 import './CategoryTrends.css';
 
@@ -251,13 +252,19 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
                 <th>Category</th>
                 <th className="table-num">Revenue, last {method?.trailing_months} months</th>
                 <th>Trend</th>
-                <th
-                  className="table-num"
-                  title={`The next ${method?.projection_months} months on the trend line against the last ${method?.trailing_months} on the same line`}
-                >
+                <th className="table-num">
                   Next {method?.projection_months} months vs last {method?.trailing_months}
+                  <InfoTip label="About this projection">
+                    The next {method?.projection_months} months on the trend line against the last {method?.trailing_months} on the same line.
+                  </InfoTip>
                 </th>
-                <th className="table-num" title={`Mann–Kendall p-value; below ${method?.significance_alpha} the direction is statistically real`}>Significance</th>
+                <th className="table-num">
+                  Trend confidence
+                  <InfoTip label="About trend confidence">
+                    Strong means the direction is unlikely to be chance: a Mann–Kendall test p-value below{' '}
+                    {method?.significance_alpha}. Weak means it could be noise.
+                  </InfoTip>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -296,7 +303,14 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
                         <span className="ct-muted">—</span>
                       )}
                     </td>
-                    <td className="table-num">{c.mk_p == null ? '—' : c.mk_p < 0.001 ? 'p < 0.001' : `p = ${c.mk_p.toFixed(3)}`}</td>
+                    <td className="table-num">
+                      {c.mk_p == null ? '—' : (
+                        <>
+                          {method?.significance_alpha != null && (c.mk_p < method.significance_alpha ? 'Strong' : 'Weak')}
+                          <span className="ct-range"> ({c.mk_p < 0.001 ? 'p < 0.001' : `p = ${c.mk_p.toFixed(3)}`})</span>
+                        </>
+                      )}
+                    </td>
                   </tr>
                 );
               })}

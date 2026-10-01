@@ -1,0 +1,6 @@
+/* Inside the layout the card sits in the page area, not over the whole
+   screen, so the sidebar stays usable to go somewhere else. */
+.error-boundary-page {
+  min-height: 60vh;
+  background-color: transparent;
+}

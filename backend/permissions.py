@@ -4,9 +4,10 @@ proposal, revised 2026-09-30 after Audrey's review).
 
 THE MODEL
 ---------
-Each user has one role (users.role: admin | manager | staff), which gives a
-preset. An admin can then add or remove single permissions for one user
-(user_permission_override, migration 0034):
+Each user has one of two roles (users.role: admin | staff; the proposal's
+Manager was dropped on 2026-10-01), which gives a preset. An admin can then
+add or remove single permissions for one user (user_permission_override,
+migration 0034):
 
     effective = role preset + per-user grants - per-user removals
 
@@ -40,7 +41,7 @@ errors); until it exists:
     today's staff access, and admins keep everything;
   - GET /auth/me answers 404 permissions_not_ready, which the frontend
     already treats as "keep today's behaviour" (its `legacy` mode, which
-    also hides the Manager role and the Permissions screen);
+    also hides the Permissions screen);
   - the /admin/... permission endpoints answer 503 permissions_not_ready.
 Once Kelvin applies 0034 through the runner, it switches over within a
 minute, with no restart.
@@ -56,17 +57,17 @@ from sqlalchemy.orm import Session
 from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_current_user, get_db
 
-ROLES = ("admin", "manager", "staff")
+ROLES = ("admin", "staff")
 
 # The catalog: one entry per permission, grouped by page as the admin screen
 # shows them. The frontend never hard-codes this; it reads it from
-# GET /admin/permissions/catalog. A new key is off for Manager and Staff
-# until someone adds it to their preset below (deny by default).
+# GET /admin/permissions/catalog. A new key is off for Staff until someone
+# adds it to its preset below (deny by default).
 CATALOG = [
     {"key": "dashboard.view", "label": "View the dashboard", "group": "Dashboard",
      "description": "Sales, stock and forecast overview."},
     {"key": "abc.view", "label": "View ABC classification", "group": "ABC classification",
-     "description": "Which products are tier A, B or C."},
+     "description": "Which products are class A, B or C."},
     {"key": "forecast.view", "label": "View forecasts", "group": "Predictive / SKU Forecast",
      "description": "Each product’s forecast."},
     {"key": "category_trends.view", "label": "View category trends", "group": "Category Trends",
@@ -91,8 +92,6 @@ ALL_KEYS = tuple(entry["key"] for entry in CATALOG)
 # The proposal's Design table. Staff's preset is also today's staff access,
 # which is why this code changes nobody's access before 0034 is applied.
 PRESETS = {
-    "manager": ("dashboard.view", "abc.view", "forecast.view", "category_trends.view",
-                "sku.view", "sku.edit", "lp.view", "lp.decide"),
     "staff": ("dashboard.view", "abc.view", "forecast.view", "category_trends.view",
               "sku.view", "lp.view"),
 }
@@ -122,14 +121,6 @@ def permissions_ready(db: Session) -> bool:
 
 def require_ready(db: Session) -> None:
     if not permissions_ready(db):
-        raise ApiError(503, NOT_READY, code="permissions_not_ready")
-
-
-def require_role_available(db: Session, role: str) -> None:
-    """Manager exists once 0034 widens users.role's CHECK. Before that, say
-    so instead of letting the constraint fail as a 500. (The frontend already
-    hides Manager until GET /auth/me answers.)"""
-    if role == "manager" and not permissions_ready(db):
         raise ApiError(503, NOT_READY, code="permissions_not_ready")
 
 

@@ -368,6 +368,27 @@
   font-weight: 600;
 }
 
+/* A sentence under the figures (an unusual stock count's reason, the
+   forecast range's assumption): wraps at a readable width instead of
+   stretching the tooltip across the chart. */
+.chart-tooltip-note {
+  max-width: 17rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+/* Legend key for a stock count flagged as unusual — the same hollow slate
+   ring the chart draws at that point (Charts.jsx stockDot). */
+.legend-unusual {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--color-text-muted);
+  background-color: var(--color-surface);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
 .abc-bars {
   display: flex;
   flex-direction: column;
@@ -900,8 +921,12 @@
   color: var(--color-text);
 }
 
+/* A full sentence since 2026-10-01 (what the weights actually do), so it
+   takes its own line under the title instead of squeezing in beside it. */
 .reorder-priorities-caption {
-  font-size: 0.65rem;
+  flex-basis: 100%;
+  font-size: 0.72rem;
+  line-height: 1.45;
   color: var(--color-text-subtle);
 }
 
@@ -940,66 +965,6 @@
   font-weight: 700;
   color: var(--color-text);
   margin-left: auto;
-}
-
-/* ── "?" info affordance + CSS-only hover/focus tooltip ─────────────────── */
-.reorder-priority-info {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-text-subtle);
-  cursor: help;
-  flex-shrink: 0;
-}
-
-.reorder-priority-info:hover,
-.reorder-priority-info:focus-visible {
-  color: var(--color-text-body);
-  outline: none;
-}
-
-.reorder-priority-tip {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  width: max-content;
-  /* Bigger and more readable, but never wider than the viewport has room
-     for — important since this card can end up quite narrow once
-     chart-duo stacks to one column on smaller screens. */
-  max-width: min(22rem, calc(100vw - 3rem));
-  padding: 0.75rem 0.9rem;
-  border-radius: 8px;
-  background-color: var(--color-text);
-  color: var(--color-surface);
-  font-size: 0.8rem;
-  font-weight: 400;
-  line-height: 1.55;
-  text-transform: none;
-  letter-spacing: normal;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-  pointer-events: none;
-}
-
-/* Little pointer triangle under the bubble. */
-.reorder-priority-tip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: var(--color-text);
-}
-
-.reorder-priority-info:hover .reorder-priority-tip,
-.reorder-priority-info:focus-visible .reorder-priority-tip {
-  opacity: 1;
-  visibility: visible;
 }
 
 /* ── Read-only weight bar ────────────────────────────────────────────────

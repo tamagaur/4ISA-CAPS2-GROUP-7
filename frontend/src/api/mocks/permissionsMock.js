@@ -25,7 +25,6 @@ export const MOCK_CATALOG = {
   permissions: LEGACY_CATALOG.permissions,
   roles: {
     admin: 'all',
-    manager: ['dashboard.view', 'abc.view', 'forecast.view', 'category_trends.view', 'sku.view', 'sku.edit', 'lp.view', 'lp.decide'],
     staff: ['dashboard.view', 'abc.view', 'forecast.view', 'category_trends.view', 'sku.view', 'lp.view'],
   },
 };

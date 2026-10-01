@@ -345,11 +345,11 @@ const SKUManagement = () => {
   // compare dates.
   const catTitle = (sku) => {
     if (!sku.cat) return 'No ABC classification in any period';
-    if (!sku.catPeriod) return `Category ${sku.cat}`;
+    if (!sku.catPeriod) return `Class ${sku.cat}`;
     const when = formatMonth(sku.catPeriod);
     return isCurrentTier(sku)
-      ? `Category ${sku.cat} — current run (${when})`
-      : `Category ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
+      ? `Class ${sku.cat} — current run (${when})`
+      : `Class ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
   };
 
   return (
@@ -388,7 +388,7 @@ const SKUManagement = () => {
             )}
           </div>
           <div className="sku-summary-card summary-cat-a">
-            <span className="summary-label">CATEGORY A</span>
+            <span className="summary-label">CLASS A</span>
             <span className="summary-value">{categoryASKUs.toLocaleString()}</span>
             <span className="summary-desc">
               {categoryACarried > 0
@@ -567,15 +567,15 @@ const SKUManagement = () => {
                 </div>
 
                 <div className="sku-filter-select-wrapper">
-                  <span className="sku-filter-icon-label"><Layers size={12} /> Category:</span>
+                  <span className="sku-filter-icon-label"><Layers size={12} /> ABC class:</span>
                   <select
                     value={categoryFilter}
                     onChange={(e) => setCategoryFilter(e.target.value)}
                   >
-                    <option value="All">Category (A/B/C)</option>
-                    <option value="A">Category A</option>
-                    <option value="B">Category B</option>
-                    <option value="C">Category C</option>
+                    <option value="All">All classes</option>
+                    <option value="A">Class A</option>
+                    <option value="B">Class B</option>
+                    <option value="C">Class C</option>
                     <option value={NOT_CLASSIFIED}>Not classified</option>
                   </select>
                 </div>
@@ -609,7 +609,7 @@ const SKUManagement = () => {
 
                 {categoryFilter !== 'All' && (
                   <span className="sku-active-chip">
-                    Category: {categoryFilter === NOT_CLASSIFIED ? 'Not classified' : `Category ${categoryFilter}`}
+                    Class: {categoryFilter === NOT_CLASSIFIED ? 'Not classified' : `Class ${categoryFilter}`}
                     <button className="sku-chip-remove" onClick={() => setCategoryFilter('All')}>
                       <X size={12} />
                     </button>
@@ -636,7 +636,7 @@ const SKUManagement = () => {
                     <th className="col-fit">SKU code</th>
                     <th className="col-fit">Brand</th>
                     <th className="col-text col-product">Product</th>
-                    <th className="table-center col-fit">Cat</th>
+                    <th className="table-center col-fit">Class</th>
                     <th className="table-num col-fit" title="The stock level the LP orders up to: demand expected before the next delivery, plus safety stock">Target stock</th>
                     <th className="table-center col-fit"><span className="visually-hidden">Actions</span></th>
                   </tr>

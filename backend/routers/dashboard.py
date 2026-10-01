@@ -183,18 +183,29 @@ zero):
   sales_vs_stock[].received
     — SUPPLIER-ALLOCATION PROXY, not a fabricated fixed_allocation
     constant: no supplier allocation schedule exists anywhere in the
-    schema or the source files — SSM has never provided one. SUM(
-    Purchase_Fact_Real.net_amount) per period, in pesos (same axis as
-    sales/stock_on_hand), via _received_by_period(). Null (a real gap,
-    never 0) for any period Purchase_Fact_Real has no matching rows for.
+    schema or the source files — SSM has never provided one. Purchase_Fact_Real
+    pesos per period (same axis as sales/stock_on_hand), via
+    _received_by_period(), on the same tax basis as that principal's sales
+    line since 2026-10-01 — Del Monte's ex-VAT (net_amount - tax_amount),
+    Unilever's VAT-inclusive; sales_vs_stock_basis names it for the legend.
+    Null (a real gap, never 0) for any period Purchase_Fact_Real has no
+    matching rows for.
+  sales_vs_stock[].stock_on_hand flags
+    — stock_on_hand_flags lists the chart's stock counts the team reviewed
+    and judged unusual (backend/data_notes.py), with the reason. The points
+    stay; the chart marks them, and neither the stock card's change nor the
+    chart's sentence is measured from one.
     Deliberately isolated in its own function (_received_by_period, one
     call site) so a future swap to a real Supplier_Allocation table is a
     source change inside that one function, not a rewrite of this
     endpoint — see that function's own docstring.
 
-  abc_mix[].revenue_share_pct
-    — real: SUM(revenue_share) * 100 per tier at the latest
-    classification_period.
+  abc_mix[].revenue_share_pct / abc_mix[].revenue
+    — real: each class's revenue (the ranked products' own net_amount for
+    the classification_period, summed unrounded — _abc_class_revenue) and
+    its share of the ranked total, since 2026-10-01. Falls back to
+    SUM(revenue_share) * 100 with revenue null if a ranked product's
+    revenue can no longer be found.
 
   tier_stock[]
     — real: per-tier counts of PRODUCTS by dead-stock status, from
@@ -250,7 +261,10 @@ zero):
     real forecast_date buckets exist among those gated rows (usually one,
     sometimes a few if products' own latest periods differ), which land
     past the picker's range whenever its end predates the forecast month.
-    Never fabricated into a clean synchronized run.
+    Never fabricated into a clean synchronized run. A bucket's band is the
+    SKUs' half-widths combined as a root-sum-of-squares (an approximate 90%
+    range if the SKUs' misses are independent), not their bounds summed —
+    see the comment at the bucket loop.
     gated_sku_count is computed from the same gated-row set. Null/empty
     across the board (gated_sku_count=0, series=[]) when nothing passes
     the gate.
@@ -278,11 +292,12 @@ zero):
   (never hardcoded; a null here becomes an honest "not available" line):
 
   abc_revenue
-    — {period, total, blocked_reason}. SUM(net_amount) for the resolved
-    abc_period, from the same per-principal demand facts kpis.sales reads
-    (_sales_by_period) — the same net_amount basis
-    analytics/classification/orchestrate_abc.py classifies on, so the
-    donut's centre figure is the revenue the ring's shares are shares OF.
+    — {period, total, ranked_total, blocked_reason}. total is SUM(net_amount)
+    for the resolved abc_period, from the same per-principal demand facts
+    kpis.sales reads (_sales_by_period). ranked_total is the revenue the
+    ring's shares are shares OF: only the products
+    analytics/classification/orchestrate_abc.py ranked (net revenue > 0), so
+    it is total plus the net returns of the products it left out.
     Null under 'all' unless both principals have a real figure (the
     both-sides-real rule), or when no ABC run exists.
   safety_stock_exposure
@@ -343,6 +358,7 @@ from backend.data_mode import (
 from analytics.classification.abc import abc_rules
 from analytics.optimization.lp_inputs import PLACEHOLDERS
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
+from backend.data_notes import unusual_stock_snapshots
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle
@@ -605,15 +621,31 @@ def _sales_by_period(
 def _received_by_period(
     db: Session, periods: list[str], principal: str = "unilever"
 ) -> dict[str, float | None]:
-    """SUM(Purchase_Fact_Real.net_amount) per period. Unlike sales/soh,
-    both principals live in ONE table here (Purchase_Fact.principal), so
-    this is a straight WHERE filter rather than a source swap — but the
-    combine rule under 'all' is identical (both sides real, or null).
+    """Purchases received per period, in pesos, on the SAME tax basis as
+    that principal's sales line. Unlike sales/soh, both principals live in
+    ONE table here (Purchase_Fact.principal), so this is a straight WHERE
+    filter rather than a source swap — but the combine rule under 'all' is
+    identical (both sides real, or null).
 
-    LIVE CAVEAT (2026-09-17): purchase_fact_real holds 499 Del Monte rows
-    and ZERO Unilever rows, so the Unilever side of this is null for every
-    period today. That is a genuine source gap, not a filter mistake — and
-    it means 'all' is null here too, by the both-sides-real rule."""
+    TAX BASIS (2026-10-01). Purchase_Fact.net_amount is the purchase file's
+    "Net Amount" (config/column_maps/purchase_order.yaml), which INCLUDES
+    VAT: tax_amount / net_amount is 12/112 on all 499 Del Monte rows
+    (0.107140-0.107146 live). Del Monte's sell-out sales are ex-VAT ("Total
+    Without Tax"), so the line was plotted ~12% high against the sales it
+    sits beside — Dec 2025 read ₱23.0M of purchases against ₱22.1M of sales
+    when the ex-VAT purchases were ₱20.5M. Del Monte is therefore
+    net_amount - tax_amount (a NULL tax_amount counts as 0: none live).
+    Unilever's sales are VAT-inclusive ("Total Sales Amt Inc. Tax"), so its
+    branch keeps net_amount as is, on the same basis — but there is no
+    Unilever purchase source at all (the purchase map is Del Monte's file;
+    0 Unilever rows live), so whoever loads one must confirm its Net Amount
+    includes VAT before this branch is trusted.
+
+    LIVE CAVEAT (2026-09-17, still true 2026-10-01): purchase_fact_real
+    holds 499 Del Monte rows and ZERO Unilever rows, so the Unilever side
+    of this is null for every period today. That is a genuine source gap,
+    not a filter mistake — and it means 'all' is null here too, by the
+    both-sides-real rule."""
     unilever = (
         _query_period_sums(db, """
             SELECT _period AS period, SUM(net_amount) AS total
@@ -625,7 +657,7 @@ def _received_by_period(
     )
     delmonte = (
         _query_period_sums(db, """
-            SELECT _period AS period, SUM(net_amount) AS total
+            SELECT _period AS period, SUM(net_amount - COALESCE(tax_amount, 0)) AS total
             FROM Purchase_Fact_Real
             WHERE principal = 'delmonte' AND _period = ANY(:periods)
             GROUP BY _period
@@ -764,6 +796,51 @@ def _nearest_abc_period_at_or_before(
         params["principal"] = principal
     row = db.execute(text(sql), params).mappings().first()
     return row["p"] if row else None
+
+
+def _abc_class_revenue(
+    db: Session,
+    abc_source: str,
+    abc_source_params: dict,
+    period: str,
+    scope: str,
+    abc_scope: str,
+    mode: str = REAL,
+) -> dict[str, tuple[float, int]]:
+    """{tier: (revenue, product count)} for the products ranked at `period`,
+    from each product's own net_amount that month — the same per-principal
+    sources and grain the ABC run classified on (Unilever's demand fact, one
+    row per product; Del Monte's sell-out summed across regions per
+    category) — counting only products that sold more than they took back,
+    as the run does (orchestrate_abc: net-negative clamped to 0, then zeros
+    excluded). Unrounded, so a class's share is its revenue over their sum,
+    not a sum of 4-dp per-product shares. The caller compares the counts
+    with abc_mix's to confirm every ranked product was found."""
+    sources = []
+    if scope in ("all", "unilever"):
+        sources.append(f"""
+            SELECT product_key, SUM(net_amount) AS revenue
+            FROM {unilever_demand(mode)}
+            WHERE calendar_month = :period
+            GROUP BY product_key""")
+    if scope in ("all", "delmonte"):
+        sources.append("""
+            SELECT product_key, SUM(net_amount) AS revenue
+            FROM SellOut_Fact_Real
+            WHERE _period = :period
+            GROUP BY product_key""")
+    rows = db.execute(
+        text(f"""
+            SELECT ac.tier, SUM(rev.revenue) AS class_revenue, COUNT(*) AS cnt
+            FROM {abc_source} ac
+            JOIN ({" UNION ALL ".join(sources)}) rev ON rev.product_key = ac.product_key
+            WHERE ac.classification_period = :period AND ac.method = 'single' {abc_scope}
+                  AND rev.revenue > 0
+            GROUP BY ac.tier
+        """),
+        {"period": period, **abc_source_params},
+    ).mappings().all()
+    return {r["tier"]: (float(r["class_revenue"]), int(r["cnt"])) for r in rows if r["class_revenue"] is not None}
 
 
 def _avg_weekly_demand(period_values: dict[str, float | None]) -> tuple[float | None, str | None]:
@@ -1005,18 +1082,29 @@ def get_dashboard(
             )
         else:
             ytd_sales = sum(ytd_values) if ytd_values else None
+            basis_months = len(basis_values)
             allocation.update({
                 "basis_sales": round(basis_sales, 2),
                 # 12 real months make a true calendar-year basis; fewer and
                 # the card must say the basis is partial, not imply a year.
-                "basis_months": len(basis_values),
+                "basis_months": basis_months,
                 "ytd_sales": round(ytd_sales, 2) if ytd_sales is not None else None,
                 "ytd_months": len(ytd_values),
+                # monthly = an average month of the basis x pct. It was
+                # basis x pct / 12 whatever the basis held, which spread
+                # Del Monte's TWO months of 2024 sales (₱21.3M) over twelve:
+                # a ₱1.86M/month allocation drawn beside ~₱10.8M/month of
+                # sales. Over a full year this is the same figure as before.
+                # annual is the rule's yearly figure, given only when the
+                # basis IS a year: a partial basis x pct is not a year's
+                # allocation, and x12 would be an extrapolation the card
+                # would have to present as one — so it is null, the footnote
+                # already calls the basis partial.
                 "levels": [
                     {
                         "pct": pct,
-                        "annual": round(basis_sales * pct / 100.0, 2),
-                        "monthly": round(basis_sales * pct / 100.0 / 12.0, 2),
+                        "annual": round(basis_sales * pct / 100.0, 2) if basis_months == 12 else None,
+                        "monthly": round(basis_sales * pct / 100.0 / basis_months, 2),
                     }
                     for pct in ALLOCATION_LEVELS
                 ],
@@ -1239,18 +1327,41 @@ def get_dashboard(
         }
         for p in periods
     ]
+    # The tax basis of the chart's two flow lines, for its legend and
+    # tooltip. Purchases are put on the sales line's basis per principal
+    # (_received_by_period), so one word per line is true. Under 'all' the
+    # combined pesos mix both bases and vat_note says so instead.
+    sales_vs_stock_basis = (
+        {"sales": "incl. VAT", "received": "incl. VAT"} if scope == "unilever"
+        else {"sales": "ex-VAT" + _dm_tax_exception(periods), "received": "ex-VAT"} if scope == "delmonte"
+        else {"sales": None, "received": None}
+    )
+
+    # Stock counts the team has reviewed and judged unusual (backend/
+    # data_notes.py), for the chart's own principals: marked on the chart,
+    # passed over as a comparison point. Only points the chart actually
+    # draws are listed — under 'all' a month without both principals' counts
+    # has no point to mark.
+    chart_unusual_stock = {
+        p: reason for p, reason in unusual_stock_snapshots(scope, periods).items()
+        if soh_by_period.get(p) is not None
+    }
+    stock_on_hand_flags = [{"period": p, "reason": chart_unusual_stock[p]} for p in sorted(chart_unusual_stock)]
 
     # ---- chart story fields (backend/chart_insights.py) -----------------
     # The hero chart's one-sentence takeaway + its peak/low sales months,
     # and each value card's sparkline points + month-over-month delta —
     # all computed from the SAME dicts the chart/cards above read, so a
     # sentence can never disagree with the plot under it.
-    svs_insight = sales_vs_stock_insight(sales_vs_stock)
+    svs_insight = sales_vs_stock_insight(sales_vs_stock, chart_unusual_stock)
     sales_trend = kpi_trend(sales_by_period, current_period)
     # The card's own series, so its sparkline and delta cover the same
-    # principals as its value.
+    # principals as its value — and the same principals' unusual counts,
+    # which the delta skips: Mar 2026 vs Unilever's Feb 2026 outlier read
+    # "−51.3%"; against Jan 2026, the last ordinary count, it is −6.7%.
     soh_trend = kpi_trend(
-        {p: soh_card_by_period.get(p) for p in soh_periods}, inventory_period
+        {p: soh_card_by_period.get(p) for p in soh_periods}, inventory_period,
+        unusual=unusual_stock_snapshots(cover_scope, soh_periods),
     )
 
     # ---- abc_mix -----------------------------------------------------
@@ -1290,9 +1401,34 @@ def get_dashboard(
                 "tier": r["tier"],
                 "count": int(r["cnt"]),
                 "revenue_share_pct": round(float(r["rev_share_sum"] or 0) * 100, 2),
+                "revenue": None,
             }
             for r in sorted(mix_rows, key=lambda r: r["tier"])
         ]
+
+    # Each class's revenue, and its share, from the products' own unrounded
+    # revenue (_abc_class_revenue). The stored shares are NUMERIC(7,4) per
+    # product, so summing them adds up 132-384 roundings: Class B read 14.93%
+    # when its products earn 14.99% (Unilever 2026-02). And the card used to
+    # get each class's pesos by applying the shares to the month's NET sales,
+    # which include 69 SKUs that netted negative (returns, −₱142,554) that
+    # the ABC run leaves out of the ranking — Class A read ₱22.3M when its
+    # SKUs sold ₱22,443,150. Kept on the stored sums only if any classified
+    # product's revenue can't be found any more (a reload since the run),
+    # with no peso figure rather than a guessed one.
+    class_revenue: dict[str, tuple[float, int]] = {}
+    if abc_mix and len(abc_coverage) <= 1:
+        class_revenue = _abc_class_revenue(
+            db, abc_source, abc_source_params, abc_display_period, scope, abc_scope, mode
+        )
+        if all(class_revenue.get(row["tier"], (0.0, 0))[1] == row["count"] for row in abc_mix):
+            ranked_total = sum(rev for rev, _ in class_revenue.values())
+            for row in abc_mix:
+                rev = class_revenue[row["tier"]][0]
+                row["revenue"] = round(rev, 2)
+                row["revenue_share_pct"] = round(rev / ranked_total * 100, 2) if ranked_total > 0 else None
+        else:
+            class_revenue = {}
 
     # Two principals' revenue shares are fractions of two different totals,
     # so a month both principals were ranked in cannot be read as one ring:
@@ -1301,6 +1437,7 @@ def get_dashboard(
     if len(abc_coverage) > 1:
         for row in abc_mix:
             row["revenue_share_pct"] = None
+            row["revenue"] = None
 
     # ---- abc_revenue (donut centre) -------------------------------------
     # The revenue the ring's shares are shares of — same per-principal
@@ -1308,11 +1445,18 @@ def get_dashboard(
     # ring actually covers: under 'all' the ranked run is usually Unilever's
     # alone, and the both-sides rule then left the centre "Revenue not
     # available" beside an 80% share. The card labels the coverage.
+    # `total` is the month's NET sales (the sales card's own figure);
+    # `ranked_total` is what the ring's shares are shares OF — the revenue of
+    # the products the ABC run ranked, i.e. those that sold more than they
+    # took back that month (analytics/classification/orchestrate_abc.py
+    # leaves net-negative and zero products out). They differ by those
+    # products' net returns: ₱27,914,344 vs ₱28,056,898 for Unilever
+    # 2026-02. The card multiplies shares by ranked_total, never total.
     if abc_display_period is None:
-        abc_revenue = {"period": None, "total": None,
+        abc_revenue = {"period": None, "total": None, "ranked_total": None,
                        "blocked_reason": f"ABC_Classification has no rows for {_scope_label(scope)} yet."}
     elif len(abc_coverage) > 1:
-        abc_revenue = {"period": abc_display_period, "total": None,
+        abc_revenue = {"period": abc_display_period, "total": None, "ranked_total": None,
                        "blocked_reason": "Each principal's tiers are shares of its own revenue, so they are "
                                          "not combined — pick one principal to see them."}
     else:
@@ -1321,6 +1465,7 @@ def get_dashboard(
         abc_revenue = {
             "period": abc_display_period,
             "total": _to_float(abc_total),
+            "ranked_total": round(sum(rev for rev, _ in class_revenue.values()), 2) if class_revenue else None,
             "blocked_reason": (
                 None if abc_total is not None
                 else f"No sales rows for {_scope_label(revenue_scope)} in {abc_display_period} to total."
@@ -1487,27 +1632,38 @@ def get_dashboard(
             series_by_period[p] = {"period": p, "actual": actual_totals.get(p), "forecast": None,
                                     "confidence_lower": None, "confidence_upper": None}
 
+        # The portfolio band combines the SKUs' bands as a root-sum-of-
+        # squares, not a sum. Each SKU's band is forecast ± 1.645 x its own
+        # holdout RMSE (scripts/run_baseline_forecast.py, ~90%), so its
+        # half-width is upper - forecast — the upper side, because the lower
+        # one is floored at 0 per SKU. Adding the bounds assumed every SKU
+        # misses as far as it can, in the same direction, in the same month:
+        # 443,592-1,763,518 around 1,085,193 (±62%) for Mar 2026. If the
+        # SKUs' misses are independent the spread of the total is
+        # sqrt(sum of half-width²), ±159k (±15%). Independence is an
+        # assumption — a seasonal swing that hits every SKU at once makes the
+        # true range wider — and the card says so. The lower bound is floored
+        # at 0 like each SKU's. A SKU with no band (no holdout RMSE) adds
+        # nothing to it; none of the 73 gated SKUs lacks one (2026-10-01).
         forecast_buckets: dict[str, dict] = {}
         for r in gated_rows:
             d = r["forecast_date"]
             p = f"{d.year:04d}-{d.month:02d}" if hasattr(d, "year") else str(d)[:7]
-            b = forecast_buckets.setdefault(p, {"forecast": 0.0, "lower": None, "upper": None,
-                                                 "lower_seen": False, "upper_seen": False})
-            b["forecast"] += float(r["forecast_value"] or 0)
-            if r["confidence_lower"] is not None:
-                b["lower"] = (b["lower"] or 0.0) + float(r["confidence_lower"])
-                b["lower_seen"] = True
+            b = forecast_buckets.setdefault(p, {"forecast": 0.0, "half_width_sq": 0.0, "band_seen": False})
+            value = float(r["forecast_value"] or 0)
+            b["forecast"] += value
             if r["confidence_upper"] is not None:
-                b["upper"] = (b["upper"] or 0.0) + float(r["confidence_upper"])
-                b["upper_seen"] = True
+                b["half_width_sq"] += (float(r["confidence_upper"]) - value) ** 2
+                b["band_seen"] = True
 
         for p, b in forecast_buckets.items():
             entry = series_by_period.setdefault(
                 p, {"period": p, "actual": None, "forecast": None, "confidence_lower": None, "confidence_upper": None}
             )
             entry["forecast"] = b["forecast"]
-            entry["confidence_lower"] = b["lower"] if b["lower_seen"] else None
-            entry["confidence_upper"] = b["upper"] if b["upper_seen"] else None
+            half_width = b["half_width_sq"] ** 0.5
+            entry["confidence_lower"] = round(max(0.0, b["forecast"] - half_width), 2) if b["band_seen"] else None
+            entry["confidence_upper"] = round(b["forecast"] + half_width, 2) if b["band_seen"] else None
 
     portfolio_series = [series_by_period[p] for p in sorted(series_by_period.keys())]
     portfolio_forecast = {
@@ -1557,8 +1713,10 @@ def get_dashboard(
         "rows": [item.model_dump() for item in rp_items_sorted[:5]],
         "critical_count": sum(1 for it in rp_items if it.urgency == "CRITICAL"),
         "urgent_count": sum(1 for it in rp_items if it.urgency == "URGENT"),
-        # Products with no Inventory_Fact_Real row at the latest snapshot —
-        # reported as their own count, never folded into critical.
+        # Products whose stock can't be known — their principal has no stock
+        # count at this snapshot, or no usable pack size. A product merely
+        # absent from a count that was taken reads as 0 on hand, as the LP
+        # treats it, and is ranked like any other (recommendations._to_item).
         "no_data_count": sum(1 for it in rp_items if it.urgency == "NO DATA"),
         # Whole units per row, summed — the Reorder page's own total, so the
         # two screens agree (they differed by 123.6 units, 2026-09-29).
@@ -1725,6 +1883,14 @@ def get_dashboard(
         # older pending rows were withheld.
         "lp": lp_freshness_info,
         "sales_vs_stock": sales_vs_stock,
+        # {sales, received}: the tax basis of each flow line ('incl. VAT' /
+        # 'ex-VAT'), for the chart's legend and tooltip. Null under 'all',
+        # where vat_note says the combined pesos mix the two.
+        "sales_vs_stock_basis": sales_vs_stock_basis,
+        # [{period, reason}]: stock counts on the chart the team reviewed
+        # and judged unusual (backend/data_notes.py). The point stays; the
+        # chart marks it and gives the reason in its tooltip.
+        "stock_on_hand_flags": stock_on_hand_flags,
         # {text, peak, low} — the hero chart's takeaway sentence and the
         # sales months it should label, from the same rows it plots.
         "sales_vs_stock_insight": svs_insight,

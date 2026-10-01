@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2 } from 'lucide-react';
+import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -23,6 +23,7 @@ import { useBrandLookup } from '../utils/useBrandLookup';
 import { labelForPrincipal } from '../principals';
 import { isPlaceholderPeriod } from '../dataMode';
 import Pagination from './Pagination';
+import InfoTip from './InfoTip';
 import RefreshingNote from './RefreshingNote';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
@@ -40,7 +41,7 @@ const asPct = (fraction, digits = 1) => `${Number((fraction * 100).toFixed(digit
 const asPp = (fraction) => `${Number((fraction * 100).toFixed(1))}pp`;
 // "A makes up the first 80% of revenue, B the next 15%, C the last 5%."
 const tierRuleText = (rules) =>
-  `Category A makes up the first ${asPct(rules.tier_a_cutoff, 0)} of revenue, `
+  `Class A makes up the first ${asPct(rules.tier_a_cutoff, 0)} of revenue, `
   + `B the next ${asPct(rules.tier_b_cutoff - rules.tier_a_cutoff, 0)}, C the last ${asPct(1 - rules.tier_b_cutoff, 0)}.`;
 
 // Del Monte regrouped its product categories in Jan 2025 (about 63
@@ -92,13 +93,46 @@ const CLASS_ARCHETYPE = {
   C: 'Low-Value, Trivial Many',
 };
 
-// Copy for the drill-down panel's footer note, one per class — swapped
-// in based on whichever class the user has clicked in the chart above.
-const CLASS_DRILLDOWN_NOTE = {
-  A: 'Top-value SKUs below their target stock or out of stock are the highest-priority reorders — a stockout here has the biggest revenue impact.',
-  B: 'Mid-value SKUs below their target stock are worth a proactive reorder check before they slip toward a stockout.',
-  C: 'Long-tail SKUs below their target stock are the lowest-priority reorders by revenue, but still worth a periodic check so they don\u2019t go fully out of stock unnoticed.',
+// Copy for the drill-down panel's footer note — swapped in based on
+// whichever class the user has clicked in the chart above. B and C used to
+// talk about SKUs "below their target stock", a state the page can't show:
+// the reorder plan follows Class A of the latest ranking, so a B or C SKU
+// has a target only when it ranks A there (an earlier month on the page).
+// The note counts them instead of assuming either way.
+const classDrilldownNote = (cat, breakdown) => {
+  if (cat === 'A') {
+    return 'Top-value SKUs below their target stock or out of stock are the highest-priority reorders — a stockout here has the biggest revenue impact.';
+  }
+  const withTarget = breakdown
+    .filter((r) => r.status === 'IN STOCK' || r.status === 'LOW')
+    .reduce((sum, r) => sum + r.count, 0);
+  if (withTarget > 0) {
+    return `${withTarget.toLocaleString()} of these Class ${cat} SKUs have a target stock because they rank Class A in the latest month, which the reorder plan follows. The rest have none, so the plan won\u2019t flag them if they run out.`;
+  }
+  return cat === 'B'
+    ? 'The reorder plan covers Class A only, so no Class B SKU has a target stock to fall below. Watch the out-of-stock count instead: the plan won\u2019t flag a mid-value SKU that runs out, so it needs a proactive check.'
+    : 'The reorder plan covers Class A only, so no Class C SKU has a target stock. These earn the least revenue, but an out-of-stock one is still worth a periodic check, since the plan won\u2019t flag it.';
 };
+
+// GET /abc's no_target_code, in the words the drill-down groups by (each
+// row's own no_target_reason, with its MASE figure, is in the table). The
+// plan's pool is Class A of the latest ranking whose forecast passed the
+// accuracy check (scripts/run_lp.py), so these are the ways a SKU misses it.
+const NO_TARGET_LABELS = {
+  not_class_a: 'Not Class A in the latest ranking (the plan covers Class A only)',
+  not_ranked: 'No sales in the latest ranking month',
+  accuracy: 'Forecast accuracy check not passed',
+  short_history: 'Too little sales history to forecast',
+  no_recent_sales: 'No recent sales to forecast from',
+  forecast_failed: 'Forecast could not be produced',
+  not_measured: 'Forecast accuracy could not be measured',
+  no_forecast: 'No forecast',
+  no_plan: 'No current reorder plan',
+  not_in_plan: 'Passes both checks but is not in the current plan',
+};
+// What the accuracy check is, in the page's plain words (the same test the
+// reorder page calls beating "a simple last-month guess").
+const ACCURACY_CHECK_NOTE = 'The plan only uses forecasts that beat simply repeating last month\u2019s sales (MASE below 1).';
 
 // GET /abc's stock_status values are a COVER-vs-TARGET-STOCK test (rop_i, the LP's target stock since the 2026-09-30 run)
 // (backend/routers/abc.py's _stock_status): current stock in pieces against
@@ -124,7 +158,7 @@ const STATUS_LABELS = {
 const statusLabel = (status) => STATUS_LABELS[status] || status;
 
 // Colours follow the app-wide SEMANTIC rule (theme/colors.js): green =
-// healthy (above ROP), amber = watch (below ROP), red = act now (out of
+// healthy (above target stock), amber = watch (below it), red = act now (out of
 // stock), slate = no data. NO DATA is its own status, not folded into
 // CRITICAL — Inventory_Fact_Real only covers a subset of classified
 // products, so "no record yet" and "confirmed zero stock" stay distinct.
@@ -137,8 +171,8 @@ const STOCK_STATUS_COLORS = {
   'ON HAND': SEMANTIC.notPlanned,
 };
 
-// The statuses GET /abc can send, in drill-down order: with the LP's reorder
-// point, or without it (no lp.view).
+// The statuses GET /abc can send, in drill-down order: with the LP's target
+// stock, or without it (no lp.view).
 const STATUSES_WITH_ROP = ['CRITICAL', 'LOW', 'IN STOCK', 'NO ROP', 'NO DATA'];
 const STATUSES_WITHOUT_ROP = ['CRITICAL', 'ON HAND', 'NO DATA'];
 
@@ -221,7 +255,7 @@ const ABCClassification = () => {
   // and never writes back to the shared range (same local-state pattern
   // as SKUForecast.jsx's own picker).
   const dashboardRange = useOutletContext() || {};
-  // Without lp.view the stock statuses carry no reorder-point comparison
+  // Without lp.view the stock statuses carry no target-stock comparison
   // (ON HAND instead), so the chart, legend and drill-down show those.
   const { hasPermission } = usePermissions();
   const lpHidden = !hasPermission(P.LP_VIEW);
@@ -372,6 +406,10 @@ const ABCClassification = () => {
         // review, so the flag only counts on current-run rows.
         nearBoundary: !!item.boundary_flag && item.tier_period === classificationPeriod,
         status: item.stock_status,
+        // Why the LP's current cycle gives this SKU no target stock (GET
+        // /abc's _no_target_reason). Null when it has one, or without lp.view.
+        noTargetReason: item.no_target_reason ?? null,
+        noTargetCode: item.no_target_code ?? null,
       })),
     [rawData, brandLookup, classificationPeriod]
   );
@@ -457,6 +495,10 @@ const ABCClassification = () => {
       : `${ranked.toLocaleString()} ranked in this run`;
   };
 
+  // 'pass' | 'fail' | 'not_applicable' (too few ranked rows for an 80/20
+  // check). `passes` is the fallback for a response from before the status.
+  const paretoState = paretoCheck ? (paretoCheck.status ?? (paretoCheck.passes ? 'pass' : 'fail')) : null;
+
   // Carried-forward Del Monte rows from before the Jan 2025 regrouping —
   // explained in a Del Monte-only note, but only for a run after the
   // regrouping: in an earlier run those sub-categories were the live scheme.
@@ -485,7 +527,7 @@ const ABCClassification = () => {
   }, [sourceData]);
 
   // Roll per-item revenue share + stock_status up to the 3 tiers.
-  const buildClassAggregates = (items) => {
+  const buildClassAggregates = (items, summary) => {
     const totalCount = items.length;
     // Each principal's shares are fractions of its OWN revenue, so shares
     // from two principals cannot be added (a month both principals ranked
@@ -496,6 +538,7 @@ const ABCClassification = () => {
       const catItems = items.filter((d) => d.cat === cat);
       const n = catItems.length || 1; // guard divide-by-zero for an empty tier
       const countOf = (status) => catItems.filter((d) => d.status === status).length;
+      const tierRow = summary.find((t) => t.tier === cat);
       return {
         cat,
         label: `Class ${cat}`,
@@ -503,10 +546,10 @@ const ABCClassification = () => {
         skuSharePct: totalCount > 0 ? (catItems.length / totalCount) * 100 : 0,
         // This run's revenue only — a carried-forward share is a fraction of
         // another month's revenue, and adding it would push the three
-        // classes past 100% combined.
-        revenueTotal: onePrincipal
-          ? catItems.filter((d) => d.isCurrent).reduce((sum, d) => sum + (d.revPct || 0), 0)
-          : null,
+        // classes past 100% combined. GET /abc's tier_summary figure, the
+        // same one the cards show: summing the rows' 4-dp shares here read
+        // February's Class B as 14.9% where it is 15.0%.
+        revenueTotal: onePrincipal ? (tierRow?.revenue_share_total ?? 0) * 100 : null,
         inStockPct: (countOf('IN STOCK') / n) * 100,
         lowPct: (countOf('LOW') / n) * 100,
         criticalPct: (countOf('CRITICAL') / n) * 100,
@@ -530,8 +573,8 @@ const ABCClassification = () => {
   };
 
   const classAggregates = useMemo(
-    () => buildClassAggregates(dataWithCumulative),
-    [dataWithCumulative]
+    () => buildClassAggregates(dataWithCumulative, tierSummary),
+    [dataWithCumulative, tierSummary]
   );
   // Drill-down now follows whichever class is selected (click a bar, or
   // a tab) instead of always being Class C.
@@ -539,6 +582,18 @@ const ABCClassification = () => {
     () => buildStockBreakdown(dataWithCumulative.filter((d) => d.cat === selectedClass), lpHidden),
     [dataWithCumulative, selectedClass, lpHidden]
   );
+  // Why the selected class's "No target stock" rows have none, grouped by
+  // GET /abc's no_target_code, largest group first — the drill-down's count
+  // used to stand there with no reason (50 of February's Class A).
+  const noTargetGroups = useMemo(() => {
+    const counts = new Map();
+    dataWithCumulative
+      .filter((d) => d.cat === selectedClass && d.status === 'NO ROP' && d.noTargetCode)
+      .forEach((d) => counts.set(d.noTargetCode, (counts.get(d.noTargetCode) || 0) + 1));
+    return [...counts.entries()]
+      .map(([code, count]) => ({ code, count, label: NO_TARGET_LABELS[code] || code }))
+      .sort((a, b) => b.count - a.count);
+  }, [dataWithCumulative, selectedClass]);
 
   const filteredData = useMemo(() => {
     return dataWithCumulative.filter(item => {
@@ -619,16 +674,16 @@ const ABCClassification = () => {
   // Hover text for a category badge: which run it came from, and an explicit
   // note when it is carried forward — same wording as SKU Management.
   const catTitle = (item) => {
-    if (!item.catPeriod) return `Category ${item.cat}`;
+    if (!item.catPeriod) return `Class ${item.cat}`;
     const when = isPlaceholderPeriod(item.catPeriod, placeholder)
       ? `${formatMonth(item.catPeriod)} (placeholder data)`
       : formatMonth(item.catPeriod);
-    if (item.isCurrent) return `Category ${item.cat} — current run (${when})`;
+    if (item.isCurrent) return `Class ${item.cat} — current run (${when})`;
     // Per row, so a Del Monte row keeps its reason in the All view too.
     if (item.principal === 'delmonte' && item.catPeriod < DEL_MONTE_REGROUP_PERIOD) {
-      return `Category ${item.cat} — last classified ${when}: an older Del Monte sub-category from before the Jan 2025 regrouping, carried forward`;
+      return `Class ${item.cat} — last classified ${when}: an older Del Monte sub-category from before the Jan 2025 regrouping, carried forward`;
     }
-    return `Category ${item.cat} — last classified ${when}; no sales since, so this is carried forward`;
+    return `Class ${item.cat} — last classified ${when}; no sales since, so this is carried forward`;
   };
 
   const getStatusClass = (status) => {
@@ -657,7 +712,7 @@ const ABCClassification = () => {
   // while refetching removed the control the user had just changed. Same
   // fix as Dashboard.jsx's `header`.
   const periodPlaceholderNote = isPlaceholderPeriod(classificationPeriod, placeholder)
-    ? " — a placeholder month: these tiers come from placeholder sales, not SSM's"
+    ? " — a placeholder month: these classes come from placeholder sales, not SSM's"
     : '';
   const header = (
     <div className="abc-page-header">
@@ -689,8 +744,11 @@ const ABCClassification = () => {
             {' '}SKUs with no sales that month keep their most recent category, shown faded with the month it was set.
           </>
         )}
+        {/* "More likely", not "likely": measured, 42% of flagged SKUs change
+            class the next month against 17% of unflagged ones — most flagged
+            SKUs stay put. */}
         {rules && (
-          <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a {rowNoun.one} within {asPp(rules.boundary_margin)} of a tier cutoff — likely to reclassify next review cycle.</span>
+          <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a {rowNoun.one} within {asPp(rules.boundary_margin)} of a class cutoff — more likely to change class next month.</span>
         )}
       </p>
       {/* Del Monte's rows are product categories, not SKUs. Said once, up
@@ -700,7 +758,7 @@ const ABCClassification = () => {
       {isDelMonte && (
         <p className="abc-principal-note">
           <strong>Del Monte is ranked by product category, not SKU.</strong> Its sales data has no SKU-level
-          detail, so each row below is a product category, and its A/B/C is that category&apos;s ABC tier.
+          detail, so each row below is a product category, and its A/B/C is that category&apos;s ABC class.
         </p>
       )}
       {!isDelMonte && hasDelMonteRows && (
@@ -779,7 +837,7 @@ const ABCClassification = () => {
           {/* Summary Cards */}
           <div className="abc-summary-grid">
             <div className="abc-summary-card abc-card-a">
-              <span className="abc-card-label">CATEGORY A</span>
+              <span className="abc-card-label">CLASS A</span>
               <span className="abc-card-value">{catACount.toLocaleString()}</span>
               {measuredShares('A') && <span className="abc-card-desc">{measuredShares('A')}</span>}
               {carriedCountOf('A') > 0 && (
@@ -787,7 +845,7 @@ const ABCClassification = () => {
               )}
             </div>
             <div className="abc-summary-card abc-card-b">
-              <span className="abc-card-label">CATEGORY B</span>
+              <span className="abc-card-label">CLASS B</span>
               <span className="abc-card-value">{catBCount.toLocaleString()}</span>
               {measuredShares('B') && <span className="abc-card-desc">{measuredShares('B')}</span>}
               {carriedCountOf('B') > 0 && (
@@ -795,7 +853,7 @@ const ABCClassification = () => {
               )}
             </div>
             <div className="abc-summary-card abc-card-c">
-              <span className="abc-card-label">CATEGORY C</span>
+              <span className="abc-card-label">CLASS C</span>
               <span className="abc-card-value">{catCCount.toLocaleString()}</span>
               {measuredShares('C') && <span className="abc-card-desc">{measuredShares('C')}</span>}
               {carriedCountOf('C') > 0 && (
@@ -823,7 +881,7 @@ const ABCClassification = () => {
               </span>
               {boundaryCount > 0 && (
                 <span className="abc-card-desc abc-card-desc-warning">
-                  <AlertTriangle size={11} /> {boundaryCount} near a tier boundary
+                  <AlertTriangle size={11} /> {boundaryCount} near a class boundary
                 </span>
               )}
             </div>
@@ -831,8 +889,19 @@ const ABCClassification = () => {
 
           {/* The manuscript's validation of the classification (§3.4.4.2.2),
               computed by the backend for this run: the revenue earned by the
-              top fifth of ranked rows, against the range it has to fall in. */}
-          {paretoCheck && (
+              top fifth of ranked rows, against the range it has to fall in.
+              Below GET /abc's min_items it is 'not_applicable' and shown as a
+              neutral note: Del Monte's 4 categories read as a red "fails"
+              when the top fifth was simply one category. */}
+          {paretoCheck && paretoState === 'not_applicable' && (
+            <p className="abc-pareto-check is-na">
+              <Info size={14} aria-hidden="true" />
+              <span>
+                <strong>Pareto check not applicable:</strong> {paretoCheck.reason}
+              </span>
+            </p>
+          )}
+          {paretoCheck && paretoState !== 'not_applicable' && (
             <p className={`abc-pareto-check${paretoCheck.passes ? ' is-pass' : ' is-fail'}`}>
               {paretoCheck.passes
                 ? <CheckCircle2 size={14} aria-hidden="true" />
@@ -891,9 +960,10 @@ const ABCClassification = () => {
                       ) : (
                         <>
                           Compares each SKU&apos;s current stock, in pieces, with its own target stock from the LP&apos;s
-                          current planning cycle. The LP plans Category A only, so most B and C SKUs have no reorder
-                          point to compare against. Not the warehouse&apos;s Active/Inactive flag, which is what the
-                          Dashboard&apos;s warehouse-status chart shows.
+                          current planning cycle. The plan covers only Class A SKUs whose forecast passed the
+                          accuracy check; every other SKU shows No target stock, and the ? beside it says why.
+                          Not the warehouse&apos;s Active/Inactive flag, which is what the Dashboard&apos;s
+                          warehouse-status chart shows.
                         </>
                       )}
                     </p>
@@ -1067,6 +1137,22 @@ const ABCClassification = () => {
                         <td>
                           <span className="abc-drilldown-dot" style={{ backgroundColor: STOCK_STATUS_COLORS[row.status] }} />
                           {statusLabel(row.status)}
+                          {row.status === 'NO ROP' && noTargetGroups.length > 0 && (
+                            <InfoTip label={`Why Class ${selectedClass} ${rowNoun.many} have no target stock`}>
+                              <span className="abc-no-target-tip-title">
+                                Why {row.count.toLocaleString()} Class {selectedClass} {row.count === 1 ? rowNoun.one : rowNoun.many} have no target stock
+                              </span>
+                              {noTargetGroups.map((g) => (
+                                <span key={g.code} className="abc-no-target-tip-row">
+                                  <span>{g.label}</span>
+                                  <strong>{g.count.toLocaleString()}</strong>
+                                </span>
+                              ))}
+                              {noTargetGroups.some((g) => g.code === 'accuracy') && (
+                                <span className="abc-no-target-tip-foot">{ACCURACY_CHECK_NOTE}</span>
+                              )}
+                            </InfoTip>
+                          )}
                         </td>
                         <td className="table-num">{row.count}</td>
                         <td className="table-num">{row.pct.toFixed(0)}%</td>
@@ -1079,7 +1165,7 @@ const ABCClassification = () => {
                     subtitle says so), so there is nothing here to act on. */}
                 {!isDelMonte && (
                   <p className="abc-page-grain-note">
-                    {CLASS_DRILLDOWN_NOTE[selectedClass]}
+                    {classDrilldownNote(selectedClass, panel.selectedClassStockBreakdown)}
                   </p>
                 )}
               </div>
@@ -1245,7 +1331,7 @@ const ABCClassification = () => {
                     className={`abc-cat-toggle-btn ${categoryFilter === cat ? 'active' : ''}`}
                     onClick={() => setCategoryFilter(cat)}
                   >
-                    {cat === 'ALL' ? 'ALL' : `CAT ${cat}`}
+                    {cat === 'ALL' ? 'ALL' : `Class ${cat}`}
                   </button>
                 ))}
               </div>
@@ -1288,7 +1374,7 @@ const ABCClassification = () => {
 
               {categoryFilter !== 'ALL' && (
                 <span className="abc-active-chip">
-                  Category: CAT {categoryFilter}
+                  Class {categoryFilter}
                   <button className="abc-chip-remove" onClick={() => setCategoryFilter('ALL')}>
                     <X size={12} />
                   </button>
@@ -1333,7 +1419,7 @@ const ABCClassification = () => {
                   <th className="col-fit">{rowNoun.header}</th>
                   <th className="col-text col-product">Product</th>
                   <th className="col-fit">Brand</th>
-                  <th className="table-center col-fit">Cat</th>
+                  <th className="table-center col-fit">Class</th>
                   <th className="table-center col-fit" title="Fast / Slow / Non-moving over the 12 months with data up to this run">FSN</th>
                   <th className="table-num col-fit" title={`Share of revenue in the run the ${rowNoun.one} was classified in`}>Rev %</th>
                   <th className="col-fit" title="Current stock, in pieces, against the LP's target stock for the SKU">Cover vs target</th>
@@ -1361,9 +1447,9 @@ const ABCClassification = () => {
                             <AlertTriangle
                               size={13}
                               className="abc-boundary-icon"
-                              aria-label="Near a tier boundary"
+                              aria-label="Near a class boundary"
                             >
-                              <title>{`Cumulative revenue ${item.cumulativePct.toFixed(1)}%${rules ? ` — within ${asPp(rules.boundary_margin)} of a tier cutoff` : ' — near a tier cutoff'}`}</title>
+                              <title>{`Cumulative revenue ${item.cumulativePct.toFixed(1)}%${rules ? ` — within ${asPp(rules.boundary_margin)} of a class cutoff` : ' — near a class cutoff'}`}</title>
                             </AlertTriangle>
                           )}
                         </span>
@@ -1388,7 +1474,20 @@ const ABCClassification = () => {
                         <span className="abc-rev-period">{formatMonth(item.catPeriod)}</span>
                       </td>
                     )}
-                    <td><span className={getStatusClass(item.status)} title={`stock_status: ${item.status}`}>{statusLabel(item.status)}</span></td>
+                    <td>
+                      <span className={getStatusClass(item.status)} title={`stock_status: ${item.status}`}>{statusLabel(item.status)}</span>
+                      {/* The reason sits on the label it explains. 50 of
+                          February's Class A read "No target stock" with no
+                          why, beside copy saying the LP plans Class A. */}
+                      {item.status === 'NO ROP' && item.noTargetReason && (
+                        <InfoTip label={`Why ${formatSKU(item.sku)} has no target stock`}>
+                          {item.noTargetReason}.
+                          {item.noTargetCode === 'accuracy' && (
+                            <span className="abc-no-target-tip-foot">{ACCURACY_CHECK_NOTE}</span>
+                          )}
+                        </InfoTip>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {filteredData.length === 0 && (

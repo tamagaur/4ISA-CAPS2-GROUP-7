@@ -11,6 +11,7 @@ import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
 import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL } from '../principals';
 import { staleCoverageNotice } from '../dataCoverage';
+import { usePermissions } from '../permissions/context';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
@@ -87,8 +88,14 @@ const trendExtras = (trend, color) => {
   if (trend.delta_pct != null && trend.prev_period) {
     // The comparison month is the nearest earlier one WITH data (backend/
     // chart_insights.kpi_trend); months_apart says when that is not simply
-    // last month, e.g. Del Monte's Dec 2025 against Sep 2025.
-    const gap = trend.months_apart > 1 ? ` (${trend.months_apart} months earlier)` : '';
+    // last month, e.g. Del Monte's Dec 2025 against Sep 2025. When the gap
+    // is a month the backend passed over as an unusual count (backend/
+    // data_notes.py — Unilever's Feb 2026 stock), the pill stays as short as
+    // the other cards' (Audrey, 2026-10-01): the chart below marks that
+    // month as unusual and says why.
+    const gap = (trend.skipped || []).length === 0 && trend.months_apart > 1
+      ? ` (${trend.months_apart} months earlier)`
+      : '';
     extras.deltaLine = `${Math.abs(trend.delta_pct).toFixed(1)}% vs ${periodLabel(trend.prev_period)}${gap}`;
     extras.trendDirection = trend.delta_pct > 0 ? 'up' : trend.delta_pct < 0 ? 'down' : undefined;
     extras.deltaTone = trend.delta_pct > 0 ? 'positive' : trend.delta_pct < 0 ? 'negative' : 'neutral';
@@ -177,7 +184,7 @@ const DashboardSkeleton = () => (
 const DASH_SECTIONS = [
   { id: 'dash-summary', label: 'Summary', hint: 'The four headline numbers' },
   { id: 'dash-sales', label: 'Sales & stock', hint: 'What happened: monthly sales against stock on hand' },
-  { id: 'dash-abc', label: 'ABC tiers', hint: 'What happened: which products earn the most, and their stock status' },
+  { id: 'dash-abc', label: 'ABC classes', hint: 'What happened: which products earn the most, and their stock status' },
   { id: 'dash-forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast and the reorder list" },
   { id: 'dash-policy', label: 'Client policy', hint: "What to do: the LP safety stock against SSM's 3-week policy, and sales against the supplier allocation" },
 ];
@@ -264,6 +271,7 @@ const DashSectionNav = ({ active, enabled }) => {
 };
 
 const Dashboard = () => {
+  const isAdmin = usePermissions().role === 'admin';
   const { startMonth, startYear, endMonth, endYear, principal, dataMode } = useOutletContext() || {};
   const preview = isPreviewMode(dataMode);
   const period = toPeriod(endMonth, endYear);
@@ -390,7 +398,7 @@ const Dashboard = () => {
   const portfolioRealOnly = preview && realOnly.has('portfolio_forecast');
   const placeholderNote = (period) => (
     isPlaceholderPeriod(period, placeholder)
-      ? `${periodLabel(period)} is a placeholder month — these tiers come from placeholder sales, not SSM's.`
+      ? `${periodLabel(period)} is a placeholder month — these classes come from placeholder sales, not SSM's.`
       : null
   );
 
@@ -440,17 +448,22 @@ const Dashboard = () => {
       .filter(Boolean).join(' · '),
   );
 
+  // stock_on_hand_flags: counts the team reviewed and judged unusual — the
+  // chart marks those points and gives the reason, it never drops them.
+  const stockFlags = new Map((data.stock_on_hand_flags || []).map((f) => [f.period, f.reason]));
   const salesVsStock = (data.sales_vs_stock || []).map((pt) => ({
     period: pt.period,
     sales: pt.sales,
     stockOnHand: pt.stock_on_hand,
     received: pt.received,
+    stockUnusual: stockFlags.get(pt.period) || null,
   }));
 
   const abcMix = (data.abc_mix || []).map((d) => ({
     tier: d.tier,
     count: d.count,
     sharePct: d.revenue_share_pct,
+    revenue: d.revenue ?? null,
   }));
   // The principals the ABC run covers (GET /dashboard's abc_coverage), named
   // when narrower than the page's filter: under All principals the latest
@@ -514,7 +527,7 @@ const Dashboard = () => {
   const belowSs = kpiDisplay(
     exposure.below_count ?? null, exposure.below_count == null ? exposureReason : null,
     (v) => `${v.toLocaleString()} of ${(exposure.comparable_count ?? 0).toLocaleString()}`,
-    ['Measurable Category A SKUs below their safety stock', abcCoverage].filter(Boolean).join(' · ')
+    ['Measurable Class A SKUs below their safety stock', abcCoverage].filter(Boolean).join(' · ')
   );
 
   // Pending action count — the "what to do" figure in the hero strip. Now
@@ -527,7 +540,7 @@ const Dashboard = () => {
   const coverageStale = staleCoverageNotice(data.latest_data_period);
   const lpCycleLabel = periodLabel(lp.cycle_date ? String(lp.cycle_date).slice(0, 7) : null);
   const pendingContext = [
-    'LP recommendations awaiting a decision',
+    'Reorder suggestions awaiting a decision',
     lpCycleLabel ? `${lpCycleLabel} cycle` : null,
   ].filter(Boolean).join(' · ');
 
@@ -550,16 +563,18 @@ const Dashboard = () => {
           {/* The date picker's ceiling and the app's pinned "today" are a
               hand-edited constant. When the database moves past it, every
               page quietly keeps ending at the old month — so the page says
-              so instead, naming the one file to edit. */}
+              so in plain words, and names the one file to edit only to
+              admins, who can get it changed. */}
           {coverageStale && (
             <div className="dash-stale-note" role="status">
               <AlertTriangle size={14} aria-hidden="true" />
               <span>
-                <strong>New data has loaded past the date picker&apos;s range.</strong>{' '}
-                The database now holds sales through {coverageStale.live}, but this app is pinned to{' '}
-                {coverageStale.pinned}. Update <code>LATEST_DATA_PERIOD</code> in{' '}
-                <code>frontend/src/dataCoverage.js</code> so the picker and every default range
-                reach the newest month.
+                <strong>Newer sales data is available than this app shows.</strong>{' '}
+                Sales are loaded through {coverageStale.live}, but the date range still ends at{' '}
+                {coverageStale.pinned}, so the newest months don&apos;t appear on any page yet.
+                {isAdmin
+                  ? <> To fix it, update <code>LATEST_DATA_PERIOD</code> in <code>frontend/src/dataCoverage.js</code>.</>
+                  : ' Let an admin know.'}
               </span>
             </div>
           )}
@@ -635,7 +650,7 @@ const Dashboard = () => {
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
           <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} /></Slot>
+            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} /></Slot>
           </div>
 
           <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">

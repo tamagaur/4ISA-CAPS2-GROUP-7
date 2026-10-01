@@ -55,7 +55,7 @@ const navSections = [
   },
 ];
 
-const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SYS ONLINE', offline: 'SYS OFFLINE' };
+const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SERVER ONLINE', offline: 'SERVER OFFLINE' };
 
 const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
 
@@ -114,78 +114,86 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
           page instead of pushing it, with a click-outside-to-close scrim. */}
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
-      <aside className={`sidebar ${isOpen ? '' : 'sidebar-hidden'}`}>
-        {/* App identity — the real SAN2 logo (cropped to its own content
-            bounding box in public/logo-navbar.png; the source logo.png is a
-            1920x1080 canvas with the mark filling only the middle ~627px,
-            so using it uncropped here left the sidebar version tiny with
-            huge dead padding above/below it) instead of a text lockup that
-            just repeated the company name reworded. The "who am I" identity
-            still lives only in .sidebar-bottom, unchanged. */}
-        <div className="sidebar-profile-top">
-          <img src="/logo-navbar.png" alt="SAN2 Corporation" className="sidebar-logo" />
-        </div>
+      {/* Desktop: the shell holds the sidebar's place in the layout — the
+          icon rail's width, or the full width when pinned open with the
+          topbar's menu button. The sidebar inside stretches open over the
+          page on hover or keyboard focus without pushing the page, so charts
+          don't re-flow every time the pointer passes. Below 900px the shell
+          takes no space and the sidebar is the old slide-over. */}
+      <div className={`sidebar-shell ${isOpen ? 'is-open' : 'is-closed'}`}>
+        <aside className={`sidebar ${isOpen ? 'is-open' : 'is-closed'}`} aria-label="Main navigation">
+          {/* App identity — the real SAN2 logo (cropped to its own content
+              bounding box in public/logo-navbar.png; the source logo.png is a
+              1920x1080 canvas with the mark filling only the middle ~627px,
+              so using it uncropped here left the sidebar version tiny with
+              huge dead padding above/below it) instead of a text lockup that
+              just repeated the company name reworded. The "who am I" identity
+              still lives only in .sidebar-bottom, unchanged. */}
+          <div className="sidebar-profile-top">
+            <img src="/logo-navbar.png" alt="SAN2 Corporation" className="sidebar-logo" />
+          </div>
 
-        {/* Navigation */}
-        <nav className="sidebar-nav">
-          {navSections.map((section) => {
-            // Only the pages this person may open (permissions/keys.js PAGES).
-            const visibleItems = section.items.filter(
-              (item) => hasPermission(permissionForPath(item.path))
-            );
-            if (visibleItems.length === 0) return null;
+          {/* Navigation */}
+          <nav className="sidebar-nav">
+            {navSections.map((section) => {
+              // Only the pages this person may open (permissions/keys.js PAGES).
+              const visibleItems = section.items.filter(
+                (item) => hasPermission(permissionForPath(item.path))
+              );
+              if (visibleItems.length === 0) return null;
 
-            return (
-              <div className="sidebar-nav-section" key={section.label}>
-                <div className="sidebar-modules-header">
-                  <span className="modules-title">{section.label.toUpperCase()}</span>
+              return (
+                <div className="sidebar-nav-section" key={section.label}>
+                  <div className="sidebar-modules-header">
+                    <span className="modules-title">{section.label.toUpperCase()}</span>
+                  </div>
+                  {visibleItems.map((item) => (
+                    <NavLink
+                      key={item.name}
+                      to={item.path}
+                      onClick={(e) => handleNavClick(e, item.path)}
+                      className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}
+                    >
+                      <div className="nav-item-left">
+                        <item.icon className="nav-icon" size={18} />
+                        <span className="nav-item-text">
+                          {item.name}
+                        </span>
+                      </div>
+                    </NavLink>
+                  ))}
                 </div>
-                {visibleItems.map((item) => (
-                  <NavLink
-                    key={item.name}
-                    to={item.path}
-                    onClick={(e) => handleNavClick(e, item.path)}
-                    className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}
-                  >
-                    <div className="nav-item-left">
-                      <item.icon className="nav-icon" size={18} />
-                      <span className="nav-item-text">
-                        {item.name}
-                      </span>
-                    </div>
-                  </NavLink>
-                ))}
+              );
+            })}
+          </nav>
+
+          {/* Bottom Profile */}
+          <div className="sidebar-bottom">
+            <div className="sidebar-profile-bottom">
+              <div className="avatar blue-avatar">{getInitials(displayName)}</div>
+              <div className="profile-info">
+                <span className="profile-name">{displayName}</span>
+                <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
               </div>
-            );
-          })}
-        </nav>
-
-        {/* Bottom Profile */}
-        <div className="sidebar-bottom">
-          <div className="sidebar-profile-bottom">
-            <div className="avatar blue-avatar">{getInitials(displayName)}</div>
-            <div className="profile-info">
-              <span className="profile-name">{displayName}</span>
-              <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
             </div>
-          </div>
-          
-          {/* Was a hardcoded green "SYS ONLINE" (shown even with the backend
-              down) next to the computer's real date, which disagreed with the
-              app's own "today" (Feb 2026). Now reflects GET /status. */}
-          <div className="sidebar-status">
-            <div className={`status-indicator status-${apiStatus}`} role="status">
-              <span className="status-dot"></span>
-              <span className="status-text">{API_STATUS_LABEL[apiStatus]}</span>
+            
+            {/* Was a hardcoded green "SYS ONLINE" (shown even with the backend
+                down) next to the computer's real date, which disagreed with the
+                app's own "today" (Feb 2026). Now reflects GET /status. */}
+            <div className="sidebar-status">
+              <div className={`status-indicator status-${apiStatus}`} role="status">
+                <span className="status-dot"></span>
+                <span className="status-text">{API_STATUS_LABEL[apiStatus]}</span>
+              </div>
             </div>
-          </div>
 
-          <button className="logout-btn" onClick={() => setShowLogoutModal(true)}>
-            <LogOut size={16} className="logout-icon" />
-            <span>Log out</span>
-          </button>
-        </div>
-      </aside>
+            <button className="logout-btn" onClick={() => setShowLogoutModal(true)}>
+              <LogOut size={16} className="logout-icon" />
+              <span className="logout-text">Log out</span>
+            </button>
+          </div>
+        </aside>
+      </div>
 
       {/* Logout Confirmation Modal Popup */}
       {showLogoutModal && (

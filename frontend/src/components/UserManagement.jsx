@@ -166,27 +166,46 @@ const UserManagement = () => {
   // Add User's Save, in the Permissions modal: creates the account with the
   // chosen role, then stores the pages ticked on or off.
   const handleCreate = async (values) => {
-    const result = await createUser(values);
+    let result;
+    try {
+      result = await createUser(values);
+    } catch (err) {
+      // Someone added this email since the list loaded (step 1 checks the
+      // list): back to step 1, where the email can be changed, with the
+      // error on the field and the chosen access kept.
+      if (err.status === 409) {
+        setNewUser((prev) => ({
+          ...prev,
+          access: { role: values.role, overrides: values.overrides || {} },
+          emailError: err.message,
+        }));
+        setChoosingAccess(false);
+        setIsFormOpen(true);
+        loadUsers();
+      }
+      throw err;
+    }
     // The pages ticked on or off, stored once the account exists. The account is already made if this part fails, so it
     // is reported rather than thrown: saving again would only hit "a user
     // with this email already exists".
     const exceptions = values.overrides || {};
-    let accessNote = '';
+    let accessFailed = '';
     if (!legacy && Object.keys(exceptions).length > 0) {
       try {
         await saveUserPermissions(result.user, { role: values.role, overrides: exceptions });
       } catch (err) {
-        accessNote = ` Their page choices didn't save (${err.message}), so they have the ${roleLabel(values.role)} defaults;`
-          + ' change them with the Permissions button on their row.';
+        accessFailed = err.message || 'unknown error';
       }
     }
     loadUsers();
-    const invite = result.email_sent
-      ? `An invite was emailed to ${values.email}.`
-      : "The invite email didn't go out, so you'll get a link to send them next.";
+    // Short enough to read before the check mark closes (1.3 s). A failure
+    // to store the page choices is not tucked in here: handleCreated raises
+    // it as an error toast that stays until dismissed.
     return {
-      message: `${values.fullName} is set up as ${roleLabel(values.role)}. ${invite}${accessNote}`,
+      message: `${values.fullName} added as ${roleLabel(values.role)}.`,
       invite: { result, name: values.fullName, email: values.email },
+      accessFailed,
+      role: values.role,
     };
   };
 
@@ -199,6 +218,13 @@ const UserManagement = () => {
   // from one dialog to the other.
   const handleCreated = (outcome) => {
     closeAddUser();
+    if (outcome?.accessFailed) {
+      toast.error(
+        `${outcome.invite.name}'s account was created, but their page choices didn't save `
+        + `(${outcome.accessFailed}). For now they have the ${roleLabel(outcome.role)} defaults. `
+        + 'Set them again with the Permissions button on their row.',
+      );
+    }
     const invite = outcome?.invite;
     if (invite && !invite.result.email_sent) {
       reportLink(invite.result, { purpose: 'invite', name: invite.name, email: invite.email, isNew: true });
@@ -410,6 +436,7 @@ const UserManagement = () => {
         isOpen={isFormOpen}
         user={editingUser}
         draft={editingUser ? null : newUser}
+        existingEmails={users.filter((u) => u.user_id !== editingUser?.user_id).map((u) => u.email)}
         onClose={() => {
           setIsFormOpen(false);
           if (!editingUser) setNewUser(null);
