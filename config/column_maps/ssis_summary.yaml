@@ -65,3 +65,12 @@ remarks:
 # "__col1__" - unlabeled column, purpose not confirmed in profiling
 #   (always empty/null in every sampled sheet so far). Left unmapped
 #   rather than guessed; flag if a non-null sample ever turns up.
+
+# --- layout signature (analytics/etl/extract/layout.py) ------------------------------------
+# Reserved keys, not columns. Identification only (no fact loads it - DEC-04):
+# all 105 RAW DATA sheets carry these, including the 3 early-2021 workbooks that
+# have no SOH sheet.
+sheet_names: 'raw\s*data'
+required:
+  - [calendar_day, salesman, outlet_code, outlet_name, gsv, net_amount]
+ignored: []

@@ -120,3 +120,15 @@ pieces_breakdown:
 
 cases_breakdown:
   - "in Cases"      # confirmed header, 2023 exports only
+
+# --- layout signature (analytics/etl/extract/layout.py) ------------------------------------
+# Reserved keys, not columns. 2026-09-30 corpus, 35 loaded sheets, two layouts:
+#   33 sign-off sheets (2023 and 2025 eras): Quantity / Cost / Valuation
+#    2 physical-count sheets of the August 2023 workbook (ACTUAL 090423,
+#      ILO 090223): raw ITEM CODE / ITEM DESCRIPTION headers plus pieces
+sheet_names: 'sign\s*of|signof|actual|^ilo\s*\d'
+required:
+  - [quantity_on_hand, cost, valuation]
+  - ["ITEM CODE", "ITEM DESCRIPTION", pieces]
+ignored: ["PRICE/PCS", "PRICE/CS", "case", "TOTAL PCS", "CASE", "NEAR EXPIRY/ EXPIRED", "DAMAGED", "VARIANCE",
+          "AMOUNT", "WH-BO (FEB-AUG24)", "OLD VARIANCE"]

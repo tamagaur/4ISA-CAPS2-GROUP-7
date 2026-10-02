@@ -986,3 +986,23 @@ recovery cutover created it (§17.2, migrations 0024–0027). Item 1 is therefor
 migration. Earlier notes in `reports/diagnostics/README.md` and `WHY_SOME_SKUS_ARE_UNFIT.md` state that
 `etl_quarantine` is absent from `public`; that was true when written, earlier the same day, and is now stale —
 those two files need the line corrected.
+
+**Correction (2026-09-23, recon session).** Three lines in this section need fixing, all verified read-only
+against `public` over the session pooler on 5432:
+
+- The **"56 numeric codes with exactly one prefixed match"** rule **does not reproduce**. The count 56 is real
+  but it is only `203 numeric codes − 147 rows in reports/dm_code_review_2026-09-21.csv`; it is not a
+  match-count result. Matching a numeric code to prefixed codes by trailing digits gives, within those 56:
+  **44 with one candidate, 10 with two, 2 with three** — and **19 of the 147 review rows also have exactly
+  one**. Whatever rule produced the split was not written down, so "exactly one prefixed match" is a
+  **reconstruction, not a recorded definition**. Treat the 56 as an unexplained residual until the rule is
+  restated.
+- The **"14 SKUs with 2021-22 SOH but no 2023+ SOH row"** figure is **126**, not 14, under the only definition
+  that can be reconstructed: `unilever_inventory_monthly` holds 2023-01…2026-03 for 1,718 SKUs, so all 2021-22
+  SOH is staged-only (102 staged `ssis_summary` SOH sheets; 2021-22 = 1,402 distinct 8-digit articles); of
+  those, 126 exist in `product_dimension` with no 2023+ SOH row. Also a **reconstruction** — the original
+  definition is not on record. Those sheets can supply `Article Description` (name), `CATEGORY DESC`
+  (category) and `PACK SIZE`; **brand is not a column** and would still come from the first-token rule
+  (migration 0026). All 126 currently sit at `category_path = 'UNCLASSIFIED'`.
+- The State note above says `public.etl_quarantine` holds **0 rows**. That was true after batch 1; batches 2–4
+  have since landed and it holds **7,805** (§17.2).

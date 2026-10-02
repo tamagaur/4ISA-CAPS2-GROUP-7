@@ -193,8 +193,57 @@ def test_every_reason_the_loader_writes_is_allowed_by_0033():
     sql = (MIGRATIONS_DIR / "0033_etl_load_event_and_coverage.sql").read_text(encoding="utf-8")
     src = (REPO / "scripts/load_slices.py").read_text(encoding="utf-8")
     import re
-    for reason in set(re.findall(r'Refused\("([a-z_]+)"', src)) | {"partial_month", "shrink_allowed", "key_conflict_other_slice", "error"}:
+    # 2026-09-30 layout guard: file problems pass their reason through
+    # (Refused(fl.reason ...)), and warnings are written as reasons too.
+    layout_guard = {"unknown_layout", "layout_changed", "month_unknown", "validation_failed", "validation_warning",
+                    "unmapped_column"}
+    for reason in (set(re.findall(r'Refused\("([a-z_]+)"', src)) | layout_guard
+                   | {"partial_month", "shrink_allowed", "key_conflict_other_slice", "error"}):
         assert f"'{reason}'" in sql, reason
+
+
+def test_0033_allows_a_file_event_to_leave_what_the_file_does_not_say_null():
+    sql = (MIGRATIONS_DIR / "0033_etl_load_event_and_coverage.sql").read_text(encoding="utf-8")
+    assert "slice LIKE 'file:%' OR (principal IS NOT NULL AND table_name IS NOT NULL AND month IS NOT NULL)" in sql
+    assert "principal               TEXT CHECK" in sql
+
+
+# --- layout guard (2026-09-30) -------------------------------------------------------------------------------------
+
+def _fake_layouts(monkeypatch, layouts: dict):
+    monkeypatch.setattr(ls, "layout_of", lambda f: layouts[f])
+
+
+def test_a_file_with_no_month_is_never_matched_to_a_slice(monkeypatch):
+    from analytics.etl.extract.layout import FileLayout
+    dec, none = Path("dec.xlsx"), Path("none.xlsx")
+    _fake_layouts(monkeypatch, {dec: FileLayout(dec, "sell_out", "sell_out", "2025-12", "path"),
+                                none: FileLayout(none, "unknown", "sell_out", None, "none")})
+    sell_out = ls.parse_spec("delmonte:sellout_fact:2025-12").family
+    assert ls.slice_files([dec, none], sell_out, "2025-12") == [dec]
+    assert ls.slice_files([dec, none], sell_out, "2025-11") == []
+
+
+def test_unilever_rows_carry_their_own_month_so_its_file_serves_every_slice(monkeypatch):
+    from analytics.etl.extract.layout import FileLayout
+    f = Path("lu.xls")
+    _fake_layouts(monkeypatch, {f: FileLayout(f, "unilever_sku", "unilever_sku", None, "rows")})
+    fam = ls.parse_spec("unilever:unilever_sku_demand_fact:2026-02").family
+    assert ls.slice_files([f], fam, "2026-02") == [f] and ls.slice_files([f], fam, "2024-07") == [f]
+
+
+def test_warnings_make_a_loaded_slice_a_warning_and_never_hide_another_reason():
+    ev = {"status": "loaded", "reason": None, "detail": None}
+    ls._apply_warnings(ev, [("unmapped_column", "x.xlsx: Truck Plate"), ("validation_warning", "peso: 3.9x")])
+    assert (ev["status"], ev["reason"]) == ("warning", "unmapped_column") and "peso" in ev["detail"]
+    ev = {"status": "partial", "reason": "partial_month", "detail": "no real rows for branch(es): ilocos"}
+    ls._apply_warnings(ev, [("unmapped_column", "x.xlsx: Truck Plate")])
+    assert (ev["status"], ev["reason"]) == ("partial", "partial_month") and "Truck Plate" in ev["detail"]
+
+
+def test_the_loader_no_longer_selects_files_by_name():
+    src = (REPO / "scripts/load_slices.py").read_text(encoding="utf-8")
+    assert "infer_doc_type" not in src
 
 
 def test_events_store_file_names_never_paths():

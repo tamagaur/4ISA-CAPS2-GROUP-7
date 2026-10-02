@@ -68,14 +68,15 @@ FAMILY_PARSERS = [
 
 
 def extract_file(path: Path, staging_dir: Path) -> tuple[int, str | None]:
-    """Stage one raw file under staging_dir, doc_type from its file name
-    (profiling.profile_files.infer_doc_type, the same frozen classification
-    the family drivers select on). Returns (sheets staged, problem or None)."""
-    from profiling.profile_files import infer_doc_type
-    doc_type = infer_doc_type(path)
-    if doc_type == "unknown":
-        return 0, f"{path.name}: file name matches no doc-type pattern"
-    result = process_file(path, doc_type)
+    """Stage one raw file under staging_dir. Its family is read from its
+    content (analytics.etl.extract.layout.identify - the file name is only a
+    hint), so a renamed file is staged as what it is and an unrecognised one
+    is refused, never guessed. Returns (sheets staged, problem or None)."""
+    from analytics.etl.extract.layout import identify
+    layout = identify(path)
+    if not layout.ok:
+        return 0, f"{path.name}: {layout.reason}: {layout.problem}"
+    result = process_file(path, layout.family, layout=layout)
     if result.file_reject is not None:
         return 0, f"{path.name}: {result.file_reject.reason}"
     for df, outcome in result.dfs:

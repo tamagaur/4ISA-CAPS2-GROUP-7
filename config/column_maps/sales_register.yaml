@@ -89,3 +89,15 @@ quantity_pieces:
 branch_code:
   - "Branch Code"
   - "Outlet"
+
+# --- layout signature (analytics/etl/extract/layout.py) ------------------------------------
+# Reserved keys, not columns (transform.load_column_map skips them). Measured on
+# the 2026-09-30 corpus (194 real files), header rows only:
+#   required     all 123 loaded sheets carry these 7 (vocabularies A and B)
+#   sheet_names  "... SALES REGISTER", "..._SALES REG", and the per-day sheets
+#                of the 2023 daily-sheet workbooks ("1106", "1029-30")
+#   ignored      the named headers of those sheets that no alias above maps
+sheet_names: 'sale[s]?\s*reg|^\d{4}(\s*-\s*\d+)?$'
+required:
+  - [invoice_date, invoice_num, customer_name, salesman, untaxed_amount, tax_amount, net_amount]
+ignored: ["Posted", "REMARKS"]

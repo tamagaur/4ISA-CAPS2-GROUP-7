@@ -22,6 +22,7 @@ from pathlib import Path
 import pandas as pd
 
 from profiling.detect import (
+    HeaderDetection,
     contains_magnolia,
     detect_header,
     infer_dtype,
@@ -399,12 +400,17 @@ def totals_row_checksum(
 # line-item sums — one sheet's stray numeric totals-row cell produced a
 # nonsensical negative "expected" when blindly compared) — never checksum
 # those; always unverified.
+#
+# 2026-09-30 (layout guard): the column is named by its CANONICAL field and
+# found through the doc_type's column-map aliases, so a header renamed to a
+# known alias is still checked - matching the raw text "Net Amount" let a
+# renamed header turn the check silently "unverified".
 CANONICAL_CHECKSUM_COLUMN: dict[str, str] = {
-    "sales_register": "Net Amount",
-    "daily_sales_report": "Net Amount",
-    "purchase_order": "Untaxed Amount",
-    "rmr_gs_bo": "Net Amount",
-    "sales_return": "Net Amount",
+    "sales_register": "net_amount",
+    "daily_sales_report": "net_amount",
+    "purchase_order": "untaxed_amount",
+    "rmr_gs_bo": "net_amount",
+    "sales_return": "net_amount",
 }
 
 
@@ -420,8 +426,10 @@ def aggregate_checksum(
     canonical_col = CANONICAL_CHECKSUM_COLUMN.get(doc_type)
     if canonical_col is None:
         return "unverified", None, None, None, None
+    from analytics.etl.extract.layout import aliases_of  # layout imports this module
+    aliases = aliases_of(doc_type)
     for o in outcomes:
-        if o.column == canonical_col:
+        if aliases.get(re.sub(r"\s+", " ", str(o.column).strip()).lower()) == canonical_col:
             return o.status, o.column, o.expected, o.actual, o.diff
     return "unverified", canonical_col, None, None, None
 
@@ -455,7 +463,8 @@ class RejectRecord:
     evidence: str
 
 
-def extract_sheet(rel_path: str, abs_path: Path, sheet, doc_type: str, real_format: str = "xlsx"):
+def extract_sheet(rel_path: str, abs_path: Path, sheet, doc_type: str, real_format: str = "xlsx",
+                  header_row: int | None = None, period_hint: str | None = None, principal_hint: str | None = None):
     """Returns (DataFrame | None, SheetOutcome, list[ChecksumOutcome]).
 
     staging/_rejects/ is reserved for: unreadable (handled by the caller,
@@ -464,6 +473,11 @@ def extract_sheet(rel_path: str, abs_path: Path, sheet, doc_type: str, real_form
     recorded, not dropped (see SSM_EXTRACT_FIX_AND_REVIEW_PROMPT.md Part A)."""
     trimmed = trim_grid(sheet.rows)
     hd = detect_header(trimmed)
+    if header_row is not None:
+        # layout.identify verified this row by content (it carries the family's
+        # required headers) - it replaces the label-score guess.
+        hd = HeaderDetection(header_row_index=header_row, confidence=1.0,
+                             junk_ranges=[(0, header_row - 1)] if header_row > 0 else [])
     if hd.header_row_index < 0 or not trimmed:
         return None, SheetOutcome(rel_path, sheet.name, "rejected", 0, "no detectable header"), []
 
@@ -515,7 +529,9 @@ def extract_sheet(rel_path: str, abs_path: Path, sheet, doc_type: str, real_form
 
     path_principal = infer_principal_from_path(abs_path)
     content_principal, _evidence = infer_principal_from_content(header_row, data_rows)
-    principal = path_principal if path_principal != "ambiguous" else content_principal
+    # principal_hint: the content-identified family's principal (layout) -
+    # before the content heuristic, which a sell-out sheet gives no evidence to.
+    principal = path_principal if path_principal != "ambiguous" else (principal_hint or content_principal)
     region = infer_sheet_region(abs_path, sheet.name)
     sheet_role = infer_sheet_role(sheet.name, synthetic_name=real_format in ("mhtml", "csv"))
     grain = infer_grain(header_row, data_rows)
@@ -527,6 +543,8 @@ def extract_sheet(rel_path: str, abs_path: Path, sheet, doc_type: str, real_form
         period_for_manifest = f"{distinct[0]}..{distinct[-1]}" if distinct else "unknown"
     else:
         period_col = infer_sheet_period(abs_path, sheet.name)
+        if period_col == "unknown" and period_hint:
+            period_col = period_hint  # layout.identify: the invoice dates' month (no month in the path)
         period_for_manifest = period_col
 
     n = len(data_rows)
@@ -565,10 +583,14 @@ class FileExtractResult:
     file_reject: RejectRecord | None = None
 
 
-def process_file(abs_path: Path, doc_type: str, repo_root: Path = REPO_ROOT) -> FileExtractResult:
+def process_file(abs_path: Path, doc_type: str, repo_root: Path = REPO_ROOT, layout=None) -> FileExtractResult:
     """result.dfs is a list of (DataFrame, SheetOutcome) pairs — one per
     staged sheet, kept paired so callers never have to zip two lists back
-    together by position."""
+    together by position.
+
+    layout (analytics.etl.extract.layout.FileLayout, optional): its verified
+    sheets take their header row from it, and a file whose path names no
+    month takes layout.month as the sheets' period."""
     rel = abs_path.relative_to(repo_root).as_posix()
     wb: WorkbookRead = read_workbook(abs_path, full_read=True)
     if wb.error and not wb.sheets:
@@ -577,7 +599,12 @@ def process_file(abs_path: Path, doc_type: str, repo_root: Path = REPO_ROOT) -> 
         )
     result = FileExtractResult()
     for sheet in wb.sheets:
-        df, outcome, checksums = extract_sheet(rel, abs_path, sheet, doc_type, real_format=wb.real_format)
+        verified = layout.sheets.get(sheet.name) if layout is not None else None
+        df, outcome, checksums = extract_sheet(
+            rel, abs_path, sheet, doc_type, real_format=wb.real_format,
+            header_row=verified.header_row if verified else None,
+            period_hint=layout.month if layout is not None else None,
+            principal_hint=layout.principal if layout is not None else None)
         result.outcomes.append(outcome)
         result.checksums.extend(checksums)
         if df is not None:
