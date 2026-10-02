@@ -1,0 +1,121 @@
+/* Builds on UserFormModal.css (the Add/Edit User card), wider for the grid. */
+.permissions-modal-card {
+  max-width: 560px;
+}
+
+.perm-status {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.perm-note {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
+  font-size: 0.85rem;
+}
+
+.perm-group {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  margin: 0 0 0.9rem;
+  padding: 0.4rem 0.8rem 0.6rem;
+}
+
+.perm-group-title {
+  padding: 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.perm-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.45rem 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.perm-row input {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 0.15rem;
+  accent-color: var(--color-brand-primary);
+}
+
+/* A box that differs from the role's default stands out, so an admin sees
+   the exceptions at a glance. */
+.perm-row-changed {
+  background-color: var(--color-surface-sunken);
+}
+
+.perm-group:disabled .perm-row {
+  cursor: default;
+}
+
+.perm-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.perm-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.perm-desc {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.perm-change {
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.perm-change.added {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.perm-change.removed {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.perm-summary {
+  margin: 0.1rem 0 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+/* Left of Cancel/Save, so it isn't mistaken for the main action. */
+.perm-reset {
+  margin-right: auto;
+}
+
+/* Add User, step 2: Back is leftmost. When "Reset to role defaults" is
+   shown too, it sits next to Back and takes the push to the right. */
+.perm-back {
+  margin-right: auto;
+}
+
+.perm-back:has(+ .perm-reset) {
+  margin-right: 0;
+}

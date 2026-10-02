@@ -27,6 +27,7 @@ import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
+import InfoTip from './InfoTip';
 import './SKUForecast.css';
 
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
@@ -865,7 +866,7 @@ const SKUForecast = () => {
               Demand <span className="page-title-accent">forecasted</span>
             </h2>
             <p className="forecast-subtitle">
-              Next-month forecast for Category A SKUs, from Forecast_Result. Each SKU&apos;s model depends on
+              Next-month forecast for Class A SKUs, from Forecast_Result. Each SKU&apos;s model depends on
               how many months of sales it has.
             </p>
             {whatIf && (
@@ -917,7 +918,7 @@ const SKUForecast = () => {
             <h3 className="forecast-empty-title">{DEL_MONTE_NO_FORECAST}</h3>
             <p className="forecast-empty-body">
               Del Monte is ranked by product category on the ABC Classification page. Switch the scope to
-              Unilever or All principals to forecast a SKU.
+              Unilever to forecast a SKU.
             </p>
             <button className="forecast-range-fix-btn" onClick={() => navigate('/abc')}>
               Open ABC Classification
@@ -942,7 +943,7 @@ const SKUForecast = () => {
             {/* Filter Chips / Dropdowns */}
             <div className="forecast-filter-group">
               <div className="filter-dropdown-wrapper">
-                <span className="filter-icon-label"><Filter size={12} /> Cat:</span>
+                <span className="filter-icon-label"><Filter size={12} /> Class:</span>
                 <select
                   className="filter-select"
                   value={selectedCategory}
@@ -951,10 +952,10 @@ const SKUForecast = () => {
                     setIsDropdownOpen(true);
                   }}
                 >
-                  <option value="ALL">All Categories</option>
-                  <option value="A">Category A</option>
-                  <option value="B">Category B</option>
-                  <option value="C">Category C</option>
+                  <option value="ALL">All classes</option>
+                  <option value="A">Class A</option>
+                  <option value="B">Class B</option>
+                  <option value="C">Class C</option>
                 </select>
               </div>
 
@@ -1102,7 +1103,7 @@ const SKUForecast = () => {
                       {catASKUObjects.length > 0 && (
                         <div className="combobox-section">
                           <div className="section-header-title">
-                            <span>CATEGORY A SKUS (HIGH PRIORITY)</span>
+                            <span>CLASS A SKUS (HIGH PRIORITY)</span>
                           </div>
                           {catASKUObjects.map(sku => (
                             <div
@@ -1198,7 +1199,7 @@ const SKUForecast = () => {
                 </div>
               </div>
               <div className="sku-info-right">
-                <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Category {selectedSKU.cat}</span>
+                <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Class {selectedSKU.cat}</span>
               </div>
             </div>
 
@@ -1281,7 +1282,7 @@ const SKUForecast = () => {
                 <p className="forecast-subtitle">
                   {selectedSKU.cat === 'A'
                     ? `No forecast has been generated for ${selectedSKU.code} yet.`
-                    : `Forecasts are only produced for Category A SKUs.${selectedSKU.cat ? ` ${selectedSKU.code} is Category ${selectedSKU.cat}.` : ''}`}
+                    : `Forecasts are only produced for Class A SKUs.${selectedSKU.cat ? ` ${selectedSKU.code} is Class ${selectedSKU.cat}.` : ''}`}
                 </p>
               )}
 
@@ -1426,7 +1427,7 @@ const SKUForecast = () => {
                           ? [`for ${formatPeriod(derivedForecast.period)}`, servedModel?.label].filter(Boolean).join(' · ')
                           : storedForecast
                             ? 'no sales in the selected range'
-                            : selectedSKU.cat === 'A' ? 'no forecast yet' : 'Category A SKUs only'}
+                            : selectedSKU.cat === 'A' ? 'no forecast yet' : 'Class A SKUs only'}
                       </span>
                     </div>
 
@@ -1493,11 +1494,15 @@ const SKUForecast = () => {
                     {derivedForecast?.source === 'stored' && storedParams.wape != null && (
                       <>
                         <div className="forecast-stat-divider" />
-                        <div
-                          className="forecast-stat-block"
-                          title={storedParams.holdout_protocol ? `Holdout protocol: ${storedParams.holdout_protocol}` : undefined}
-                        >
-                          <span className="forecast-stat-label">Holdout error</span>
+                        <div className="forecast-stat-block">
+                          <span className="forecast-stat-label">
+                            Typical forecast miss
+                            <InfoTip label="About typical forecast miss">
+                              How far off this model was, on average, when it forecast past months it hadn&apos;t seen,
+                              one month ahead at a time (WAPE, weighted absolute percentage error). Lower is better.
+                              {storedParams.holdout_protocol ? ` Test protocol: ${storedParams.holdout_protocol}.` : ''}
+                            </InfoTip>
+                          </span>
                           <span className="forecast-stat-value forecast-stat-value-neutral">
                             {(storedParams.wape * 100).toFixed(1)}%
                           </span>
@@ -1542,7 +1547,7 @@ const SKUForecast = () => {
                         )}
                         {storedParams.ma3_value != null && (
                           <div className="forecast-howmade-item">
-                            <dt>MA3 benchmark</dt>
+                            <dt>3-month average (MA3)</dt>
                             <dd>{Math.round(storedParams.ma3_value).toLocaleString()} pieces</dd>
                           </div>
                         )}
@@ -1552,7 +1557,13 @@ const SKUForecast = () => {
                             on its own rolling holdout. */}
                         {storedForecast?.mase != null && (
                           <div className="forecast-howmade-item">
-                            <dt>Reliability</dt>
+                            <dt>
+                              Reliability
+                              <InfoTip label="About reliability">
+                                MASE compares this model&apos;s errors with simply repeating last month&apos;s sales.
+                                Below 1 means the model does better than that; 1 or more means it doesn&apos;t.
+                              </InfoTip>
+                            </dt>
                             <dd className={storedForecast.mase < 1 ? '' : 'forecast-howmade-warn'}>
                               {/* Three decimals near 1, where two would round
                                   0.996 up to "1.00" beside "beats a naive

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, ArrowRight } from 'lucide-react';
 import Modal from './Modal';
 import SaveResult from './SaveResult';
 import { getCurrentUser } from '../auth';
+import { ROLES } from '../permissions/keys';
 import { useSaveResult } from '../utils/useSaveResult';
 import './UserFormModal.css';
 
@@ -12,10 +13,16 @@ const emptyForm = { fullName: '', email: '', role: 'staff' };
 // field: a new account gets an emailed link to choose its own, so no admin
 // ever knows anyone's password.
 //
-// onSubmit(values) saves and resolves with { message } for the green check
-// (it throws when the save fails, which shows a red X); onSaved(outcome)
-// runs once the check has played, and closes the dialog.
-const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
+// Edit: name, email and role, saved here. onSubmit(values) resolves with
+// { message } for the green check (it throws when the save fails, which
+// shows a red X); onSaved(outcome) runs once the check has played, and
+// closes the dialog.
+//
+// Add is step 1 of 2: name and email, then Next hands them to onNext and
+// the Permissions modal takes over for the role and pages (step 2), where
+// Save creates the account. `draft` refills the fields when that modal's
+// Back returns here.
+const UserFormModal = ({ isOpen, user, draft = null, existingEmails = [], onClose, onSubmit, onSaved, onNext }) => {
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState('');
@@ -28,16 +35,14 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
 
   useEffect(() => {
     if (isOpen) {
-      setForm(
-        user
-          ? { fullName: user.full_name, email: user.email, role: user.role }
-          : emptyForm
-      );
-      setErrors({});
+      if (user) setForm({ fullName: user.full_name, email: user.email, role: user.role });
+      else setForm(draft ? { ...emptyForm, fullName: draft.fullName, email: draft.email } : emptyForm);
+      // Back from step 2 after the server said the email is taken.
+      setErrors(!user && draft?.emailError ? { email: draft.emailError } : {});
       setApiError('');
       reset();
     }
-  }, [isOpen, user, reset]);
+  }, [isOpen, user, draft, reset]);
 
   if (!isOpen) return null;
 
@@ -54,6 +59,9 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       newErrors.email = 'Enter a valid email address';
+    } else if (existingEmails.some((email) => email.toLowerCase() === form.email.trim().toLowerCase())) {
+      // Any capitalisation is the same account (the server's rule too).
+      newErrors.email = 'A user with this email already exists.';
     }
     return newErrors;
   };
@@ -66,9 +74,15 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
       return;
     }
 
+    // Add: on to the Permissions modal.
+    if (!isEdit) {
+      onNext({ fullName: form.fullName.trim(), email: form.email.trim() });
+      return;
+    }
+
     const values = { fullName: form.fullName.trim(), email: form.email.trim(), role: form.role };
     // Nothing changed means nothing to save, so no "saved" either.
-    if (isEdit && values.fullName === user.full_name && values.email === user.email && values.role === user.role) {
+    if (values.fullName === user.full_name && values.email === user.email && values.role === user.role) {
       onClose();
       return;
     }
@@ -93,7 +107,7 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
       {result ? (
         <SaveResult
           ok={result.ok}
-          title={result.ok ? (isEdit ? 'Changes saved' : 'User added') : "Couldn't save"}
+          title={result.ok ? 'Changes saved' : "Couldn't save"}
           message={result.ok ? result.value?.message : result.message}
         />
       ) : (
@@ -104,7 +118,7 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
               <p className="modal-subtitle">
                 {isEdit
                   ? 'Update this account’s details.'
-                  : 'They’ll get an email with a link to set their own password.'}
+                  : 'Step 1 of 2 · Their name and email. They’ll get an email with a link to set their own password.'}
               </p>
             </div>
             <button className="modal-close-btn" onClick={onClose} disabled={saving} aria-label="Close modal">
@@ -115,10 +129,11 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
           <form onSubmit={handleSubmit} className="modal-form" noValidate>
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">
+                <label className="form-label" htmlFor="user-form-name">
                   FULL NAME <span className="required">*</span>
                 </label>
                 <input
+                  id="user-form-name"
                   type="text"
                   name="fullName"
                   value={form.fullName}
@@ -132,10 +147,11 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">
+                <label className="form-label" htmlFor="user-form-email">
                   EMAIL <span className="required">*</span>
                 </label>
                 <input
+                  id="user-form-email"
                   type="email"
                   name="email"
                   value={form.email}
@@ -147,29 +163,33 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
               </div>
             </div>
 
-            <div className="form-row">
-              <div className="form-group" title={isSelf ? "You can't change your own role" : undefined}>
-                <label className="form-label" htmlFor="user-form-role">
-                  ROLE <span className="required">*</span>
-                </label>
-                <select
-                  id="user-form-role"
-                  name="role"
-                  value={form.role}
-                  onChange={handleChange}
-                  className="form-input form-select"
-                  disabled={isSelf}
-                  aria-describedby={isSelf ? 'user-form-role-hint' : undefined}
-                >
-                  <option value="staff">Staff</option>
-                  <option value="admin">Admin</option>
-                </select>
-                {/* The tooltip alone never shows on a phone, or to a keyboard user. */}
-                {isSelf && (
-                  <span id="user-form-role-hint" className="form-hint">You can&apos;t change your own role.</span>
-                )}
+            {/* Edit keeps the role here; Add chooses it in the Permissions modal. */}
+            {isEdit && (
+              <div className="form-row">
+                <div className="form-group" title={isSelf ? "You can't change your own role" : undefined}>
+                  <label className="form-label" htmlFor="user-form-role">
+                    ROLE <span className="required">*</span>
+                  </label>
+                  <select
+                    id="user-form-role"
+                    name="role"
+                    value={form.role}
+                    onChange={handleChange}
+                    className="form-input form-select"
+                    disabled={isSelf}
+                    aria-describedby={isSelf ? 'user-form-role-hint' : undefined}
+                  >
+                    {ROLES.map((role) => (
+                      <option key={role.value} value={role.value}>{role.label}</option>
+                    ))}
+                  </select>
+                  {/* The tooltip alone never shows on a phone, or to a keyboard user. */}
+                  {isSelf && (
+                    <span id="user-form-role-hint" className="form-hint">You can&apos;t change your own role.</span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {apiError && <div className="form-api-error">{apiError}</div>}
 
@@ -178,7 +198,12 @@ const UserFormModal = ({ isOpen, user, onClose, onSubmit, onSaved }) => {
                 Cancel
               </button>
               <button type="submit" className="btn-submit" disabled={saving}>
-                {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add User'}
+                {isEdit ? (saving ? 'Saving...' : 'Save Changes') : (
+                  <>
+                    Next
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </>
+                )}
               </button>
             </div>
           </form>

@@ -4,9 +4,13 @@ import Login from './Login';
 import ForgotPassword from './ForgotPassword';
 import SetPassword from './SetPassword';
 import ProtectedRoute from './components/ProtectedRoute';
-import AdminRoute from './components/AdminRoute';
+import PermissionRoute from './components/PermissionRoute';
+import NoAccess from './components/NoAccess';
 import DashboardLayout from './components/DashboardLayout';
 import ToastProvider from './components/ToastProvider';
+import PermissionsProvider from './permissions/PermissionsProvider';
+import { usePermissions } from './permissions/context';
+import { P, PAGES } from './permissions/keys';
 import { pageLoaders } from './pageLoaders';
 import './App.css';
 
@@ -47,6 +51,19 @@ function DynamicTitle() {
   return null;
 }
 
+// "/" is the Dashboard for anyone who may open it. Anyone else lands on the
+// first page they can open, or the no-access screen if there is none.
+function HomeRoute() {
+  const { hasPermission } = usePermissions();
+  if (hasPermission(P.DASHBOARD_VIEW)) return <Dashboard />;
+  const firstPage = PAGES.find((page) => hasPermission(page.permission));
+  return firstPage ? <Navigate to={firstPage.path} replace /> : <NoAccess />;
+}
+
+// Every page is wrapped in the permission that opens it (permissions/keys.js
+// PAGES); the backend refuses the page's data on its own as well.
+const guard = (permission, page) => <PermissionRoute permission={permission}>{page}</PermissionRoute>;
+
 function App() {
   return (
     <ToastProvider>
@@ -61,33 +78,21 @@ function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <DashboardLayout />
+              <PermissionsProvider>
+                <DashboardLayout />
+              </PermissionsProvider>
             </ProtectedRoute>
           }
         >
-          <Route index element={<Dashboard />} />
-          <Route path="sku-management" element={<SKUManagement />} />
-          <Route path="abc" element={<ABCClassification />} />
-          <Route path="forecast" element={<SKUForecast />} />
-          <Route path="reorder" element={<ReorderRecommendations />} />
-          <Route path="category-trends" element={<CategoryTrends />} />
-          <Route
-            path="audit-log"
-            element={
-              <AdminRoute>
-                <AuditLog />
-              </AdminRoute>
-            }
-          />
-          <Route path="upload" element={<DataUpload />} />
-          <Route
-            path="users"
-            element={
-              <AdminRoute>
-                <UserManagement />
-              </AdminRoute>
-            }
-          />
+          <Route index element={<HomeRoute />} />
+          <Route path="sku-management" element={guard(P.SKU_VIEW, <SKUManagement />)} />
+          <Route path="abc" element={guard(P.ABC_VIEW, <ABCClassification />)} />
+          <Route path="forecast" element={guard(P.FORECAST_VIEW, <SKUForecast />)} />
+          <Route path="reorder" element={guard(P.LP_VIEW, <ReorderRecommendations />)} />
+          <Route path="category-trends" element={guard(P.CATEGORY_TRENDS_VIEW, <CategoryTrends />)} />
+          <Route path="audit-log" element={guard(P.AUDIT_LOG_VIEW, <AuditLog />)} />
+          <Route path="upload" element={guard(P.UPLOAD_RUN, <DataUpload />)} />
+          <Route path="users" element={guard(P.USERS_MANAGE, <UserManagement />)} />
         </Route>
         {/* Unknown or retired URLs land on the dashboard instead of a
             blank page. */}

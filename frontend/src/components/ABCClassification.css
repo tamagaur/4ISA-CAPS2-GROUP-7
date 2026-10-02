@@ -173,6 +173,37 @@
   color: var(--color-warning);
 }
 
+/* Not applicable (too few ranked rows for an 80/20 check): neither a pass
+   nor a warning, so it takes the neutral note's slate rail, not green or
+   amber. */
+.abc-pareto-check.is-na {
+  border-left-color: var(--color-slate-400);
+}
+
+.abc-pareto-check.is-na svg {
+  color: var(--color-text-muted);
+}
+
+/* "Why no target stock" InfoTips (table cell and drill-down row). The
+   popover is portalled to <body>, so these lay out its lines there. */
+.abc-no-target-tip-title {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+}
+
+.abc-no-target-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.abc-no-target-tip-foot {
+  display: block;
+  margin-top: 0.4rem;
+  opacity: 0.85;
+}
+
 .abc-principal-note {
   margin: 0.6rem 0 0 0;
   padding: 0.6rem 0.9rem;

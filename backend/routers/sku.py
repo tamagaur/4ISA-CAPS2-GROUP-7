@@ -24,7 +24,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend import audit
-from backend.deps import TokenPayload, get_current_user, get_db, require_admin
+from backend.deps import TokenPayload, get_current_user, get_db
+from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import current_cycle
 from backend.principals import (
     PrincipalQuery,
@@ -152,6 +153,10 @@ def get_skus(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(get_current_user),
 ) -> SKUListResponse:
+    # Sign-in only, on purpose (Yuan's permissions proposal): the ABC,
+    # Reorder and SKU Forecast pages read product and brand names from here
+    # too, so reading the product catalog needs no page permission. Its one
+    # LP figure, reorder_point, still follows lp.view (below).
     # Both principals again (2026-09-17) — see backend/principals.py.
     # Unlike the ABC/forecast endpoints, Del Monte DOES have real rows
     # here (15,127 sku-grain + 182 category-grain product_dimension rows),
@@ -178,6 +183,9 @@ def get_skus(
 
     rows = db.execute(text(query), params).mappings().all()
     items = [_to_item(r) for r in rows]
+    if not can_see_lp(db, current_user):
+        for item in items:
+            item.reorder_point = None
     return SKUListResponse(items=items, count=len(items))
 
 
@@ -185,7 +193,7 @@ def get_skus(
 def create_sku(
     payload: SKUCreate,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_admin),
+    current_user: TokenPayload = Depends(require_permission("sku.edit")),
 ) -> SKUItem:
     # Unilever-only (2026-09): hard-reject anything else rather than
     # silently coercing — a client believing a non-Unilever SKU was
@@ -238,7 +246,7 @@ def update_sku(
     product_key: int,
     payload: SKUUpdate,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_admin),
+    current_user: TokenPayload = Depends(require_permission("sku.edit")),
 ) -> SKUItem:
     if payload.status is not None and payload.status not in ("ACTIVE", "DISABLED"):
         raise HTTPException(status_code=400, detail="status must be 'ACTIVE' or 'DISABLED'")

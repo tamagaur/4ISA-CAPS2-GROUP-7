@@ -9,6 +9,7 @@
 // tool, worth revisiting if the dashboard ever embeds third-party scripts.
 
 import { invalidateCache } from './api/cache';
+import { MOCK_PERMISSIONS, mockDeniedPermission } from './api/mocks/permissionsMock';
 import { dataModeHeaders } from './dataMode';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -152,8 +153,10 @@ async function postPublic(path, payload, fallbackError) {
   return res;
 }
 
-// Resolves to the server's message, which is the same whether or not the
-// email has an account — so this can't be used to find out who does.
+// Resolves to the server's "we've sent a link" message. Throws with
+// err.status 404 when no account uses the email (err.message is the server's
+// sentence saying so), 422 when it isn't an email at all, 429 after too many
+// requests.
 export async function requestPasswordReset(email) {
   const res = await postPublic(
     '/auth/forgot-password',
@@ -161,7 +164,7 @@ export async function requestPasswordReset(email) {
     'Could not send the reset link. Please try again.'
   );
   const body = await res.json().catch(() => null);
-  return body?.detail || 'If that email has an account, a link to reset its password is on its way.';
+  return body?.detail || `We've sent a link to ${email} to set a new password.`;
 }
 
 // { email_enabled, detail }: whether "Forgot password?" can email a link at
@@ -227,6 +230,19 @@ export function authHeaders(extraHeaders = {}) {
     : extraHeaders;
 }
 
+// Fired when the backend refuses a request for a missing permission, so
+// PermissionsProvider reloads /auth/me: an admin may just have changed this
+// person's access (Yuan's permissions proposal).
+export const PERMISSION_DENIED_EVENT = 'dsd:permission-denied';
+
+// The proposal's 403 body is {"detail": "<a sentence>", "code":
+// "missing_permission", "permission": key}. Every api/*.js wrapper already
+// shows `detail` as its error text, so the response passes through as it is;
+// this only tells PermissionsProvider, going by `code` (never by detail).
+function notifyPermissionDenied(permission) {
+  window.dispatchEvent(new CustomEvent(PERMISSION_DENIED_EVENT, { detail: { permission } }));
+}
+
 // Thin fetch wrapper so future API calls don't each have to remember
 // authHeaders() themselves. Story #91: checks expiry *before* firing the
 // request — no point round-tripping to the API with a token that's already
@@ -238,6 +254,19 @@ export async function apiFetch(path, options = {}) {
     clearSession();
     redirectToLogin();
     throw new Error('Session expired. Please log in again.');
+  }
+
+  // Dev mock only (api/mocks/permissionsMock.js): refuse what the backend
+  // will refuse, so the 403 path can be tried before the backend has it.
+  if (import.meta.env.DEV && MOCK_PERMISSIONS) {
+    const missing = mockDeniedPermission(options.method, path, getCurrentUser()?.role);
+    if (missing) {
+      notifyPermissionDenied(missing);
+      return new Response(
+        JSON.stringify({ detail: "You don't have access to this. Ask an admin.", code: 'missing_permission', permission: missing }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
   }
 
   // Preview mode rides on every read as X-Data-Mode (src/dataMode.js), so
@@ -253,6 +282,10 @@ export async function apiFetch(path, options = {}) {
   if (res.status === 401) {
     clearSession();
     redirectToLogin();
+  }
+  if (res.status === 403) {
+    const body = await res.clone().json().catch(() => null);
+    if (body?.code === 'missing_permission') notifyPermissionDenied(body.permission);
   }
   return res;
 }

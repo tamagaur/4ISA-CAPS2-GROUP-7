@@ -26,7 +26,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from jose import jwt
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from backend import auth_utils, mailer
 from backend.deps import get_db, get_token_payload
@@ -67,6 +67,8 @@ class FakeSession:
         self.session_updates: list[tuple[str, dict]] = []
         # Simulates migration 0023 not being applied yet.
         self.fail_session_insert = False
+        # Simulates another invite for the same address landing first.
+        self.fail_insert_unique = False
         # Invite links (auth_token, migration 0031) and audit entries written.
         self.tokens: list[dict] = []
         self.audit: list[dict] = []
@@ -78,9 +80,14 @@ class FakeSession:
             row = next((u for u in self.users if u["email"] == params["email"]), None)
             return FakeResult(row)
         if "SELECT 1 FROM users" in sql:
-            exists = any(u["email"] == params["email"] for u in self.users)
+            assert "lower(email) = lower(:email)" in sql
+            exists = any(u["email"].lower() == params["email"].lower() for u in self.users)
             return FakeResult(True if exists else None)
         if "INSERT INTO users" in sql:
+            if self.fail_insert_unique:
+                raise IntegrityError(
+                    sql, params, Exception('duplicate key value violates unique constraint "users_email_lower_key"')
+                )
             new_user = {
                 "user_id": len(self.users) + 1,
                 "email": params["email"],
@@ -377,6 +384,31 @@ def test_register_conflict_on_existing_email(client):
         headers={"Authorization": f"Bearer {admin_token()}"},
     )
     assert resp.status_code == 409
+
+
+def test_register_conflict_ignores_capitalisation(client):
+    """Ana@x.com and ana@x.com are one person (migration 0034's
+    users_email_lower_key index backs this up in the database)."""
+    resp = client.post(
+        "/auth/register",
+        json={**NEW_USER, "email": "ADMIN@SSMcapstone.com"},
+        headers={"Authorization": f"Bearer {admin_token()}"},
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "A user with this email already exists."
+
+
+def test_register_conflict_when_the_unique_index_wins_a_race(client, fake_session):
+    """Two invites for one address at once: the check passes for both, the
+    index refuses the second INSERT, and that is a 409, not a 500."""
+    fake_session.fail_insert_unique = True
+    resp = client.post(
+        "/auth/register", json=NEW_USER, headers={"Authorization": f"Bearer {admin_token()}"}
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "A user with this email already exists."
+    assert fake_session.rolled_back is True
+    assert fake_session.committed is False
 
 
 def test_register_rejects_invalid_role(client):

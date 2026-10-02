@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_db
+from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -12,7 +13,7 @@ def get_inventory_current(
     to_date: str = Query(None, alias="to"),
     principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
 ):
     # Both principals again (2026-09-17) — see backend/principals.py.
     # Del Monte has 5,164 real inventory rows, so this endpoint returns
@@ -68,7 +69,7 @@ def get_inventory_movement(
     to_date: str = Query(None, alias="to"),
     principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
 ):
     # Both principals again (2026-09-17) — see backend/principals.py.
     # NOTE, still true: sales_fact_real is Del Monte-only at the schema

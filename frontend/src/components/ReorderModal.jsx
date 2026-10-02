@@ -2,6 +2,7 @@ import React from 'react';
 import { X } from 'lucide-react';
 import Modal from './Modal';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
+import InfoTip from './InfoTip';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
 import { CHART_COLORS } from '../theme/colors';
@@ -45,6 +46,10 @@ const COVER_BASIS_NOTE =
 const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
   if (!isOpen || !data) return null;
   const weightRows = objectiveWeights(lpModel);
+  const inputs = lpModel?.inputs || {};
+  // 'aggregate' (the placeholder) makes the 3-week rule its own stage in
+  // deciding a cut; 'per-sku' folds it into each target instead.
+  const coverRuleDecides = inputs.cover_rule !== 'per-sku';
 
   return (
     <Modal
@@ -58,8 +63,11 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
         <div className="reorder-modal-header">
           <div>
             <h3 className="reorder-modal-title">Reorder: {data.product}</h3>
+            {/* Pieces, the LP's unit, with the rough case count beside it
+                (worked out once on the row by ReorderRecommendations). */}
             <p className="reorder-modal-subtitle">
-              Order <strong>{formatUnits(data.orderQty)}</strong> units — LP optimization breakdown for this SKU's recommended order.
+              Order <strong>{formatUnits(data.orderQty)}</strong> pieces
+              {data.cases?.order ? ` (${data.cases.order})` : ''}. Below is how the optimizer (LP) arrived at this suggestion.
             </p>
           </div>
           <button className="reorder-modal-close" onClick={onClose} aria-label="Close modal">
@@ -69,7 +77,8 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
 
         {/* Data Grid — fields not already visible in the table row, plus
             the two ranking inputs so the "why is this #3" question is
-            answerable here. */}
+            answerable here, and the target and current stock with their
+            case counts (the table shows those only on hover). */}
         <div className="reorder-modal-grid">
           <div className="reorder-grid-item">
             <span className="reorder-grid-label">PLANNING CYCLE</span>
@@ -87,11 +96,30 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
               {data.revenueShare != null ? `${(data.revenueShare * 100).toFixed(2)}%` : '—'}
             </span>
           </div>
-          <div className="reorder-grid-item" title={data.daysOfCover != null ? COVER_BASIS_NOTE : (data.coverReason || COVER_BASIS_NOTE)}>
-            <span className="reorder-grid-label">COVER (DAYS, ₱ BASIS)</span>
+          <div className="reorder-grid-item">
+            <span className="reorder-grid-label">
+              COVER (DAYS, ₱ BASIS)
+              <InfoTip label="About cover">{data.daysOfCover != null ? COVER_BASIS_NOTE : (data.coverReason || COVER_BASIS_NOTE)}</InfoTip>
+            </span>
             <span className="reorder-grid-value">
               {data.daysOfCover != null ? data.daysOfCover.toFixed(1) : '—'}
             </span>
+          </div>
+          <div className="reorder-grid-item">
+            <span className="reorder-grid-label">TARGET STOCK</span>
+            <span className="reorder-grid-value">{formatUnits(data.rop)} pieces</span>
+            {data.cases?.target && <span className="reorder-grid-sub">{data.cases.target}</span>}
+          </div>
+          <div className="reorder-grid-item">
+            <span className="reorder-grid-label">CURRENT STOCK</span>
+            <span className="reorder-grid-value">
+              {data.stock != null ? `${formatUnits(data.stock)} pieces` : '—'}
+            </span>
+            {data.stockNotInCount
+              ? <span className="reorder-grid-sub">Not in the latest stock count — treated as 0, as the plan does</span>
+              : data.stock == null
+                ? data.stockBlockedReason && <span className="reorder-grid-sub">{data.stockBlockedReason}</span>
+                : data.cases?.stock && <span className="reorder-grid-sub">{data.cases.stock}</span>}
           </div>
         </div>
 
@@ -105,8 +133,21 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
         {/* How the LP arrived at this quantity — Story #80 */}
         <div className="reorder-why-section">
           <h4 className="reorder-section-title">How this recommendation was made</h4>
+          {/* The 2026-09-30 model (analytics/optimization/lp.py, solved in
+              stages): order up to a target, net of stock on hand. Only a
+              short allocation forces a cut, taken from the rest of the
+              target first and this month's demand last; within the part
+              being cut, the aggregate 3-week rule (stage 2) and then the
+              weights (stage 3) pick who comes up short. Until 2026-10-01
+              this credited the weights alone, and said the 3-week rule held
+              "across the whole warehouse" — it sums the planned SKUs only. */}
           <p className="reorder-why-intro">
-            The LP model weighs three objectives when solving for this SKU's order quantity:
+            The LP orders each SKU up to its target stock, net of what is already on hand. Only when the supplier
+            allocation can&apos;t cover every SKU does it cut, taking the rest of the target first, then safety stock,
+            and this month&apos;s demand last. Which SKUs take the cut is decided
+            {coverRuleDecides
+              ? <> first by SSM&apos;s {inputs.target_weeks ?? 3}-week stock rule (below), then by these weights:</>
+              : <> by these weights:</>}
           </p>
           {/* Single 100%-stacked bar — these three weights are shares of one
               whole (they sum to 100%), so one composite bar is the correct
@@ -132,10 +173,33 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
               ))}
             </div>
           </div>
+          {/* One storage cost for every SKU makes the storage term the same
+              whichever SKUs are cut (the total ordered is already fixed by
+              then), so its 20% can't move a single piece. Said here so the
+              bar above isn't read as three live levers. */}
+          {inputs.storage_cost_per_unit != null && (
+            <p className="reorder-why-caveat">
+              Storage cost has no effect for now: its placeholder is the same
+              ₱{Number(inputs.storage_cost_per_unit).toFixed(2)} a piece for every SKU, so it can&apos;t favour one
+              over another.
+            </p>
+          )}
           <p className="reorder-why-note">
-            Constraints applied: each SKU is ordered at least up to its reorder point
-            {lpModel?.z_score != null && <> (forecast + safety stock at Z = {lpModel.z_score})</>}, and the
-            cycle&apos;s total must fit the warehouse capacity and each principal&apos;s supplier limit.
+            Target stock = demand expected over the review period and delivery lead time
+            {inputs.review_days != null && inputs.lead_days != null
+              && <> ({inputs.review_days} + {inputs.lead_days} business days)</>}
+            {' '}plus safety stock{lpModel?.z_score != null && <> at Z = {lpModel.z_score}</>}. The cycle&apos;s
+            total order stays within the supplier allocation
+            {inputs.allocation_pct != null && <> ({inputs.allocation_pct}% of last year&apos;s sales)</>} and the
+            warehouse capacity.
+            {coverRuleDecides
+              ? <>
+                  {' '}SSM&apos;s {inputs.target_weeks ?? 3}-week rule asks that the stock left at month end of the SKUs
+                  in this plan — not the whole warehouse — be worth at least {inputs.target_weeks ?? 3} weeks of their
+                  sales, at cost; the LP keeps it where the allocation allows.
+                </>
+              : <> SSM&apos;s {inputs.target_weeks ?? 3}-week rule is built into each SKU&apos;s target stock as a floor.</>}
+            {lpModel?.inputs_are_placeholders && ' These inputs are placeholders until SSM confirms them.'}
           </p>
         </div>
     </Modal>

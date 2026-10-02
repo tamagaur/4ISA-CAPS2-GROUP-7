@@ -29,7 +29,8 @@ from analytics.forecasting.category_trend import (
     MANN_KENDALL_ALPHA, PROJECTION_MONTHS, TRAILING_MONTHS, method_constants, project_category,
 )
 from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_db
+from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
 
 router = APIRouter(prefix="/category-trends", tags=["category-trends"])
@@ -105,7 +106,7 @@ def get_category_trends(
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("category_trends.view")),
 ) -> dict:
     scope = normalize_principal(principal)
     payload = {

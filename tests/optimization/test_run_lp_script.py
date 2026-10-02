@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import argparse
+import datetime
 import math
 
 import pandas as pd
@@ -21,14 +22,18 @@ import pytest
 from analytics.optimization.lp import Z_SCORE, weekly_demand
 from analytics.optimization.lp_inputs import PLACEHOLDERS
 from scripts.run_lp import (
+    RETIRE_QUERY,
     UPSERT_QUERY,
     ProductInput,
     _non_negative_float,
     _positive_float,
     allocation_ceilings,
     build_parser,
+    cycle_transaction,
     plan_cycle,
     product_input,
+    retire_stale_pending,
+    rows_to_retire,
     safety_stock_for,
 )
 
@@ -174,3 +179,140 @@ def test_dry_run_is_transaction_scoped_never_session_scoped():
     assert "conn.set_session(autocommit=not args.dry_run)" in source
     assert source.count('cur.execute("SET TRANSACTION READ ONLY")') == 1
     assert "conn.commit()" not in source
+
+
+# ---- --retire-stale-pending ------------------------------------------------
+# A rerun refreshes only the products in its pool, so the cycle's other
+# pending rows kept q_i/rop_i from the old forecasts and stayed on screen
+# (live 2026-09-30: 73 refreshed, 177 left stale). The flag removes those,
+# in the cycle's own transaction, after saving them to a CSV.
+
+CYCLE = datetime.date(2026, 3, 1)
+_LP_COLUMNS = ["recommendation_key", "product_key", "planning_cycle_date", "q_i", "rop_i", "ss_i",
+               "status", "decided_at", "decided_by", "generated_at"]
+
+
+def _lp_row(key, product_key, status="pending", cycle=CYCLE):
+    return {"recommendation_key": key, "product_key": product_key, "planning_cycle_date": cycle,
+            "q_i": 10.0, "rop_i": 20.0, "ss_i": 5.0, "status": status,
+            "decided_at": None, "decided_by": None, "generated_at": "2026-08-24 07:12:56+00"}
+
+
+class _RecordingCursor:
+    """Stands in for the psycopg2 cursor: answers the read with `rows` and
+    records every statement, so a test sees exactly what reached the
+    database. With watch_dir, it also notes which files existed when the
+    DELETE arrived."""
+
+    def __init__(self, rows=(), delete_rowcount=None, watch_dir=None):
+        self._rows = [tuple(r.values()) for r in rows]
+        self._delete_rowcount = delete_rowcount
+        self._watch_dir = watch_dir
+        self.statements: list[tuple[str, object]] = []
+        self.files_at_delete: list[list[Path]] = []
+        self.description = None
+        self.rowcount = -1
+
+    def execute(self, sql, params=None):
+        sql = " ".join(sql.split())
+        self.statements.append((sql, params))
+        if sql.startswith("SELECT"):
+            self.description = [(c,) for c in _LP_COLUMNS]
+        elif sql.startswith("DELETE"):
+            if self._watch_dir is not None:
+                self.files_at_delete.append(sorted(self._watch_dir.iterdir()))
+            self.rowcount = len(params[0]) if self._delete_rowcount is None else self._delete_rowcount
+
+    def fetchall(self):
+        return list(self._rows)
+
+
+def test_retire_takes_only_pending_rows_outside_the_pool():
+    rows = [_lp_row(1, 101), _lp_row(2, 102), _lp_row(3, 103)]
+    assert [r["product_key"] for r in rows_to_retire(rows, CYCLE, solved_keys={101})] == [102, 103]
+
+
+def test_retire_keeps_accepted_and_dismissed_rows():
+    rows = [_lp_row(1, 101, "accepted"), _lp_row(2, 102, "dismissed"), _lp_row(3, 103)]
+    assert [r["product_key"] for r in rows_to_retire(rows, CYCLE, solved_keys=set())] == [103]
+
+
+def test_retire_keeps_other_cycles():
+    rows = [_lp_row(1, 101, cycle=datetime.date(2026, 2, 1)), _lp_row(2, 102)]
+    assert [r["product_key"] for r in rows_to_retire(rows, CYCLE, solved_keys=set())] == [102]
+
+
+def test_retire_delete_is_still_guarded_on_cycle_and_status():
+    normalized = " ".join(RETIRE_QUERY.split())
+    assert normalized.startswith("DELETE FROM LP_Recommendation WHERE recommendation_key = ANY(%s)")
+    assert "planning_cycle_date = %s" in normalized
+    assert "status = 'pending'" in normalized
+
+
+def test_dry_run_retire_reports_and_writes_nothing(tmp_path):
+    cur = _RecordingCursor([_lp_row(1, 101), _lp_row(2, 102)])
+    retired, path = retire_stale_pending(cur, CYCLE, {101}, dry_run=True, out_dir=tmp_path)
+    assert [r["product_key"] for r in retired] == [102]
+    assert path is None
+    assert [s for s, _ in cur.statements if not s.startswith("SELECT")] == []
+    # A READ ONLY transaction refuses row locks, so the dry run's read takes none.
+    assert not any("FOR UPDATE" in s for s, _ in cur.statements)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_real_retire_saves_every_column_before_deleting(tmp_path):
+    rows = [_lp_row(1, 101), _lp_row(2, 102), _lp_row(3, 103, "accepted")]
+    cur = _RecordingCursor(rows, watch_dir=tmp_path)
+    retired, path = retire_stale_pending(cur, CYCLE, {101}, dry_run=False, out_dir=tmp_path)
+
+    assert [r["product_key"] for r in retired] == [102]
+    assert path.name.startswith("retired_2026-03-01_") and path.suffix == ".csv"
+    assert cur.files_at_delete == [[path]]  # the CSV was on disk before the DELETE ran
+    saved = pd.read_csv(path)
+    assert list(saved.columns) == _LP_COLUMNS
+    assert saved["recommendation_key"].tolist() == [2]
+    assert "FOR UPDATE" in cur.statements[0][0]  # nobody can decide a row between the read and the delete
+    delete_sql, delete_params = cur.statements[-1]
+    assert delete_sql.startswith("DELETE") and delete_params == ([2], CYCLE)
+
+
+def test_nothing_stale_writes_no_csv_and_deletes_nothing(tmp_path):
+    cur = _RecordingCursor([_lp_row(1, 101), _lp_row(3, 103, "accepted")])
+    retired, path = retire_stale_pending(cur, CYCLE, {101}, dry_run=False, out_dir=tmp_path)
+    assert (retired, path) == ([], None)
+    assert [s for s, _ in cur.statements if s.startswith("DELETE")] == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_retire_raises_when_the_delete_removes_a_different_count(tmp_path):
+    cur = _RecordingCursor([_lp_row(2, 102)], delete_rowcount=0)
+    with pytest.raises(RuntimeError, match="expected 1"):
+        retire_stale_pending(cur, CYCLE, set(), dry_run=False, out_dir=tmp_path)
+
+
+def test_cycle_transaction_commits_a_real_runs_writes_together():
+    cur = _RecordingCursor()
+    with cycle_transaction(cur, dry_run=False):
+        cur.execute("INSERT INTO LP_Recommendation VALUES (1)")
+    assert [s for s, _ in cur.statements] == ["BEGIN", "INSERT INTO LP_Recommendation VALUES (1)", "COMMIT"]
+
+
+def test_cycle_transaction_rolls_back_on_error():
+    cur = _RecordingCursor()
+    with pytest.raises(RuntimeError):
+        with cycle_transaction(cur, dry_run=False):
+            raise RuntimeError("retire count mismatch")
+    assert [s for s, _ in cur.statements] == ["BEGIN", "ROLLBACK"]
+
+
+def test_cycle_transaction_sends_nothing_in_a_dry_run():
+    """The dry run is already one READ ONLY transaction that nothing commits."""
+    cur = _RecordingCursor()
+    with cycle_transaction(cur, dry_run=True):
+        pass
+    assert cur.statements == []
+
+
+def test_retire_stale_pending_is_opt_in():
+    assert _args().retire_stale_pending is False
+    assert _args("--retire-stale-pending").retire_stale_pending is True

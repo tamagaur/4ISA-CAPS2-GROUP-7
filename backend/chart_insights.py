@@ -62,7 +62,11 @@ def _months_between(earlier: str, later: str) -> int:
     return (ly - ey) * 12 + (lm - em)
 
 
-def kpi_trend(by_period: dict[str, float | None], latest_period: str | None) -> dict | None:
+def kpi_trend(
+    by_period: dict[str, float | None],
+    latest_period: str | None,
+    unusual: dict[str, str] | None = None,
+) -> dict | None:
     """Sparkline points + month-over-month delta for one KPI card.
 
     points: every period with a real value, oldest first — nulls are
@@ -73,7 +77,17 @@ def kpi_trend(by_period: dict[str, float | None], latest_period: str | None) -> 
     far back that is, so a card can say so when it is not the month before
     (Del Monte's sell-out skips Oct–Nov 2025; the stock card's latest
     snapshot can sit well past the picked range). None when there is
-    nothing real to plot."""
+    nothing real to plot.
+
+    unusual: {period: reason} for months the team has reviewed and judged
+    unusual (backend/data_notes.py). Such a month stays in `points` — it
+    really was counted — but the walk-back passes over it, and `skipped`
+    lists what it passed so the card can say so. The stock card read
+    "−51.3% vs Feb 2026" against Unilever's outlier count; it now compares
+    Mar 2026 with Jan 2026. If the card's own month is the unusual one, no
+    delta is given (latest_unusual says why): a change measured from an
+    outlier is no more true than one measured to it."""
+    unusual = unusual or {}
     points = [
         {"period": p, "value": round(float(v), 2)}
         for p, v in sorted(by_period.items())
@@ -84,7 +98,16 @@ def kpi_trend(by_period: dict[str, float | None], latest_period: str | None) -> 
     latest = next((pt for pt in reversed(points) if latest_period is None or pt["period"] <= latest_period), None)
     if latest is None:
         return None
-    prev = next((pt for pt in reversed(points) if pt["period"] < latest["period"]), None)
+    latest_unusual = unusual.get(latest["period"])
+    prev = None if latest_unusual else next(
+        (pt for pt in reversed(points) if pt["period"] < latest["period"] and pt["period"] not in unusual),
+        None,
+    )
+    skipped = [
+        {"period": pt["period"], "reason": unusual[pt["period"]]}
+        for pt in points
+        if prev is not None and prev["period"] < pt["period"] < latest["period"] and pt["period"] in unusual
+    ]
     return {
         "points": points,
         "latest_period": latest["period"],
@@ -92,19 +115,28 @@ def kpi_trend(by_period: dict[str, float | None], latest_period: str | None) -> 
         "prev_value": prev["value"] if prev else None,
         "delta_pct": _pct_change(latest["value"], prev["value"]) if prev else None,
         "months_apart": _months_between(prev["period"], latest["period"]) if prev else None,
+        "skipped": skipped,
+        "latest_unusual": latest_unusual,
     }
 
 
-def sales_vs_stock_insight(series: list[dict]) -> dict | None:
+def sales_vs_stock_insight(series: list[dict], unusual_stock: dict[str, str] | None = None) -> dict | None:
     """One sentence + the sales peak/low, from sales_vs_stock's own rows.
 
     The sentence compares the latest real sales month with the previous
     one and states the latest stock valuation; the highlights mark the
     window's best and worst sales months so the chart can label them.
     Peak/low need >= 3 real months and distinct months, or they are None —
-    two points have no 'extreme' worth labelling."""
+    two points have no 'extreme' worth labelling.
+
+    unusual_stock: {period: reason} for stock counts the team judged unusual
+    (backend/data_notes.py). The sentence quotes the latest stock month that
+    is NOT one of them — it said stock "stood at ₱46.6M in Feb 2026", which
+    was Unilever's outlier count — and says a later count was passed over."""
+    unusual_stock = unusual_stock or {}
     sales_pts = [r for r in series if r.get("sales") is not None]
-    stock_pts = [r for r in series if r.get("stock_on_hand") is not None]
+    all_stock_pts = [r for r in series if r.get("stock_on_hand") is not None]
+    stock_pts = [r for r in all_stock_pts if r["period"] not in unusual_stock]
     if not sales_pts:
         return None
 
@@ -128,7 +160,14 @@ def sales_vs_stock_insight(series: list[dict]) -> dict | None:
 
     if stock_pts:
         s = stock_pts[-1]
-        stock_part = f"; stock on hand stood at {compact_pesos(s['stock_on_hand'])} in {month_label(s['period'])}."
+        passed = [r["period"] for r in all_stock_pts if r["period"] > s["period"]]
+        aside = (
+            f" ({' and '.join(month_label(p) for p in passed)}'s count is marked as unusual on the chart)"
+            if passed else ""
+        )
+        stock_part = (
+            f"; stock on hand stood at {compact_pesos(s['stock_on_hand'])} in {month_label(s['period'])}{aside}."
+        )
     else:
         stock_part = "."
 

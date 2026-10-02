@@ -118,6 +118,13 @@ class FakeSession:
         # weeks_of_cover on the requested scope as it was before.
         stock_coverage: list | None = None,
         abc_coverage: list | None = None,
+        # Each ranked product's own net revenue at the ABC period
+        # (_abc_class_revenue). Empty = not found, which keeps abc_mix on
+        # the stored revenue_share sums, as before.
+        abc_product_revenue: dict | None = None,
+        # VAT inside Purchase_Fact.net_amount per period (Del Monte's is
+        # 12/112 of it); subtracted only by a query that asks for it.
+        received_tax: dict | None = None,
     ):
         self.recommendation_count = recommendation_count
         self.forecast_total = forecast_total
@@ -149,7 +156,7 @@ class FakeSession:
         self.scoped_forecast_count = scoped_forecast_count
         self.portfolio_actual = portfolio_actual or {}
         self.reco_preview_rows = reco_preview_rows or []
-        # policy_comparison rows: [{planning_cycle_date, ss_i, forecast_value}]
+        # policy_comparison rows: [{planning_cycle_date, ss_i, rop_i, forecast_value}]
         self.policy_rows = policy_rows or []
         self.lp_cycle_date = lp_cycle_date
         self.lp_superseded_pending = lp_superseded_pending
@@ -159,6 +166,8 @@ class FakeSession:
         self.lp_stale_rows = lp_stale_rows
         self.stock_coverage = stock_coverage or []
         self.abc_coverage = abc_coverage or []
+        self.abc_product_revenue = abc_product_revenue or {}
+        self.received_tax = received_tax or {}
         # Every (sql, params) issued, so a test can assert on the query text
         # itself — the only way to check scope/unit handling that lives in
         # SQL rather than in Python (see this module's docstring).
@@ -221,6 +230,20 @@ class FakeSession:
         if "net_amount_tax_inclusive" in sql:
             return FakeResult([{"p": p} for p in self.dm_tax_inclusive_periods])
 
+        # _abc_class_revenue — checked before the demand-fact sums below,
+        # whose table names its subqueries also carry. Mirrors the SQL: the
+        # period's ranked products joined to their own revenue, positive only.
+        if "AS class_revenue" in sql:
+            period = params["period"]
+            by_tier: dict = {}
+            for r in self.abc_rows:
+                rev = self.abc_product_revenue.get(r["product_key"])
+                if r["period"] == period and rev is not None and rev > 0:
+                    b = by_tier.setdefault(r["tier"], {"class_revenue": 0.0, "cnt": 0})
+                    b["class_revenue"] += rev
+                    b["cnt"] += 1
+            return FakeResult([{"tier": t, **b} for t, b in by_tier.items()])
+
         if "FROM SellOut_Fact_Real" in sql and "SUM(net_amount)" in sql:
             periods = params["periods"]
             return FakeResult([
@@ -230,8 +253,10 @@ class FakeSession:
 
         if "FROM Purchase_Fact_Real" in sql:
             periods = params["periods"]
+            ex_vat = "net_amount - COALESCE(tax_amount, 0)" in sql
             return FakeResult([
-                {"period": p, "total": v} for p, v in self.received.items() if p in periods and v is not None
+                {"period": p, "total": v - (self.received_tax.get(p, 0.0) if ex_vat else 0.0)}
+                for p, v in self.received.items() if p in periods and v is not None
             ])
 
         if "FROM Unilever_SKU_Demand_Fact_Real" in sql and "SUM(net_amount)" in sql:
@@ -755,8 +780,47 @@ def test_portfolio_forecast_scope_label_and_series():
     assert by_period["2024-01"]["actual"] == pytest.approx(90.0)
     assert by_period["2024-02"]["actual"] == pytest.approx(95.0)
     assert by_period["2024-03"]["forecast"] == pytest.approx(150.0)
-    assert by_period["2024-03"]["confidence_lower"] == pytest.approx(120.0)
+    # Half-widths 20 and 10 combine as sqrt(20² + 10²) = 22.36, not 30 (the
+    # summed bounds, 120-180, that assumed both SKUs miss together).
+    assert by_period["2024-03"]["confidence_lower"] == pytest.approx(127.64)
+    assert by_period["2024-03"]["confidence_upper"] == pytest.approx(172.36)
     assert by_period["2024-03"]["actual"] is None
+
+
+def test_portfolio_band_is_root_sum_of_squares_from_the_unfloored_upper_side():
+    """Summing per-SKU bounds read 443,592-1,763,518 around 1,085,193 (±62%)
+    for Mar 2026. Each SKU's half-width is upper - forecast (its lower bound
+    is floored at 0, so it understates); the total's is sqrt(sum of squares),
+    and the total's own lower bound is floored at 0."""
+    d = datetime.date(2024, 3, 1)
+    gated_rows = [
+        # Floored per SKU: lower 0 though forecast - 1.645 x RMSE = -30.
+        {"product_key": 1, "forecast_date": d, "forecast_value": 30.0,
+         "confidence_lower": 0.0, "confidence_upper": 90.0, "mase": 0.5},
+        {"product_key": 2, "forecast_date": d, "forecast_value": 1000.0,
+         "confidence_lower": 920.0, "confidence_upper": 1080.0, "mase": 0.5},
+        # No holdout RMSE: no band, adds nothing to the total's.
+        {"product_key": 3, "forecast_date": d, "forecast_value": 70.0,
+         "confidence_lower": None, "confidence_upper": None, "mase": 0.5},
+    ]
+    session = FakeSession(latest_forecast_date=d, gated_forecast_rows=gated_rows)
+    with make_client(session) as c:
+        series = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()[
+            "portfolio_forecast"]["series"]
+    bucket = next(pt for pt in series if pt["period"] == "2024-03")
+    half = (60.0 ** 2 + 80.0 ** 2) ** 0.5  # 100
+    assert bucket["forecast"] == pytest.approx(1100.0)
+    assert bucket["confidence_lower"] == pytest.approx(1100.0 - half)
+    assert bucket["confidence_upper"] == pytest.approx(1100.0 + half)
+
+    # A small total with a wide band floors at 0, never a negative demand.
+    session = FakeSession(latest_forecast_date=d, gated_forecast_rows=gated_rows[:1])
+    with make_client(session) as c:
+        series = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()[
+            "portfolio_forecast"]["series"]
+    bucket = next(pt for pt in series if pt["period"] == "2024-03")
+    assert bucket["confidence_lower"] == 0.0
+    assert bucket["confidence_upper"] == pytest.approx(90.0)
 
 
 def test_portfolio_forecast_all_scope_says_which_principal_it_covers():
@@ -940,8 +1004,8 @@ def test_safety_stock_exposure_blocked_when_nothing_measurable():
 
 def test_policy_comparison_sums_lp_ss_against_three_week_rule():
     session = FakeSession(policy_rows=[
-        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "forecast_value": 100.0},
-        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 10.0, "forecast_value": 50.0},
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "rop_i": 120.0, "forecast_value": 100.0},
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 10.0, "rop_i": 30.0, "forecast_value": 50.0},
     ])
     with make_client(session) as c:
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
@@ -954,6 +1018,28 @@ def test_policy_comparison_sums_lp_ss_against_three_week_rule():
     assert pc["lp_vs_rule_pct"] == pytest.approx(round((rule - 50.0) / rule * 100, 1))
     assert pc["rule_weeks"] == 3
     assert pc["blocked_reason"] is None
+
+
+def test_policy_comparison_headline_is_target_stock_vs_rule():
+    """rop_i is the LP's target stock since the 2026-09-30 run. SSM's 3 weeks
+    is a target for ALL stock, so the headline compares the targets with it:
+    comparing safety stock alone read "less" when the targets hold more."""
+    session = FakeSession(policy_rows=[
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "rop_i": 120.0, "forecast_value": 100.0},
+        {"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 10.0, "rop_i": 30.0, "forecast_value": 50.0},
+    ])
+    with make_client(session) as c:
+        pc = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["policy_comparison"]
+    rule = 3 * 150.0 / AVG_WEEKS_PER_MONTH
+    assert pc["lp_target_stock_units"] == pytest.approx(150.0)
+    assert pc["rule_stock_units"] == pytest.approx(rule, rel=1e-4)
+    # Targets above the rule read as MORE (negative), while ss alone reads less.
+    assert pc["target_vs_rule_pct"] == pytest.approx(round((rule - 150.0) / rule * 100, 1))
+    assert pc["target_vs_rule_pct"] < 0 < pc["lp_vs_rule_pct"]
+    assert pc["lp_target_weeks"] == pytest.approx(round(150.0 / (150.0 / AVG_WEEKS_PER_MONTH), 2))
+    assert pc["skus_above_rule"] == 1  # 120 > 3 weeks of 100; 30 < 3 weeks of 50
+    assert pc["window_business_days"] == 8.0
+    assert pc["inputs_are_placeholders"] is True
 
 
 def test_principal_echoes_the_requested_scope():
@@ -971,13 +1057,19 @@ def test_policy_comparison_blocked_when_no_comparable_rows():
     assert pc["lp_safety_stock_units"] is None
     assert pc["rule_safety_stock_units"] is None
     assert pc["lp_vs_rule_pct"] is None
+    assert pc["target_vs_rule_pct"] is None
+    assert pc["lp_target_stock_units"] is None
     assert pc["blocked_reason"]
 
 
-def test_reorder_preview_no_stock_row_is_no_data_not_critical():
-    """A product with no Inventory_Fact_Real row used to COALESCE to 0 and
-    read as CRITICAL — a fabricated alert. It must now be 'NO DATA'."""
-    rows = [_reco_row(1, urgency_stock=None, rop_i=100), _reco_row(2, urgency_stock=0, rop_i=100)]
+def test_reorder_preview_unknown_stock_is_no_data_not_critical():
+    """Stock that can't be known (no count for the principal at this
+    snapshot: in_stock_count is NULL) must stay 'NO DATA', never a
+    fabricated CRITICAL from COALESCE(stock, 0)."""
+    rows = [
+        {**_reco_row(1, urgency_stock=None, rop_i=100), "in_stock_count": None},
+        _reco_row(2, urgency_stock=0, rop_i=100),
+    ]
     session = FakeSession(reco_preview_rows=rows)
     with make_client(session) as c:
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
@@ -988,6 +1080,24 @@ def test_reorder_preview_no_stock_row_is_no_data_not_critical():
     assert by_key[2]["urgency"] == "CRITICAL"
     assert preview["critical_count"] == 1
     assert preview["no_data_count"] == 1
+
+
+def test_reorder_preview_product_absent_from_a_taken_count_reads_as_zero():
+    """The stock file never lists zero rows, and the LP treats a product
+    missing from the count as 0 on hand (scripts/run_lp.py). The preview
+    must agree with the plan: 0 on hand, ranked like any other, and flagged
+    so the page can say why (2026-10-01; it was 'NO DATA' before)."""
+    rows = [{**_reco_row(1, urgency_stock=None, rop_i=100), "in_stock_count": False}]
+    session = FakeSession(reco_preview_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    preview = resp.json()["reorder_preview"]
+    row = preview["rows"][0]
+    assert row["current_stock"] == 0
+    assert row["stock_not_in_count"] is True
+    assert row["urgency"] == "CRITICAL"
+    assert preview["critical_count"] == 1
+    assert preview["no_data_count"] == 0
 
 
 # ─── Units, LP cycle scoping and self-labelling (2026-09-23) ──────────────
@@ -1076,7 +1186,9 @@ def test_lp_rerun_that_left_rows_behind_is_still_flagged():
     assert lp["is_stale"] is True
     assert (lp["row_count"], lp["stale_row_count"]) == (250, 177)
     assert "177 of the 250 rows" in lp["reason"]
-    assert "rerun will not change them" in lp["reason"].lower()
+    # A plain rerun still leaves them; only --retire-stale-pending clears them.
+    assert "plain rerun leaves them" in lp["reason"].lower()
+    assert "--retire-stale-pending" in lp["reason"]
 
     # Counted against the forecast run, within the page's own principal.
     sql, params = _sql_for(session, "MAX(lr.generated_at) AS t")
@@ -1392,3 +1504,195 @@ def test_vat_note_names_del_montes_tax_inclusive_month_when_the_range_holds_it()
     with make_client(session) as c:
         note = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"}).json()["vat_note"]
     assert "except" not in note
+
+
+# ---- LP figures follow lp.view (Yuan's permissions proposal, 2026-09-30) ----
+
+def _lp_rich_session():
+    return FakeSession(
+        recommendation_count=5,
+        reco_preview_rows=[_reco_row(1, urgency_stock=0, rop_i=100)],
+        policy_rows=[{"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "rop_i": 120.0, "forecast_value": 100.0}],
+        latest_abc_period="2024-02",
+        abc_rows=[_abc_row(1, "A", "2024-02", 0.30, current_stock=10, ss_i=50)],
+        tier_stock_rows=[
+            {"product_key": 1, "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": False},
+        ],
+        tier_pending_reorder_rows=[{"product_key": 1, "tier": "A", "period": "2024-02"}],
+    )
+
+
+def test_lp_figures_are_there_for_a_user_with_lp_view():
+    with make_client(_lp_rich_session()) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["lp_hidden"] is False
+    assert body["reorder_preview"]["critical_count"] == 1
+    assert body["policy_comparison"]["sku_count"] == 1
+    assert body["safety_stock_exposure"]["below_count"] == 1
+    assert body["recommendations"]["product_count"] == 5
+    assert body["tier_stock"][0]["pending_reorder_count"] == 1
+
+
+def test_lp_figures_are_left_out_for_a_user_without_lp_view(monkeypatch):
+    """Server-side, not just a hidden tab: the numbers never reach the
+    browser. Everything not derived from LP_Recommendation stays."""
+    from backend import permissions
+    from backend.routers.dashboard import LP_HIDDEN_REASON
+
+    monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {"lp.view": False})
+    with make_client(_lp_rich_session()) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["lp_hidden"] is True
+    for key in ("reorder_preview", "policy_comparison", "lp", "safety_stock_exposure"):
+        assert body[key] is None, key
+    assert body["recommendations"] == {"order_value": None, "product_count": None}
+    assert body["kpis"]["safety_stock_rate"] is None
+    assert body["kpis"]["safety_stock_rate_blocked_reason"] == LP_HIDDEN_REASON
+    assert body["tier_stock"] == [
+        {"tier": "A", "in_stock": 1, "dead_stock": 0, "no_data": 0, "pending_reorder_count": None}
+    ]
+    assert body["abc_mix"] and body["forecast"]["total_count"] == 0
+
+
+# ---- display fixes (2026-10-01) ------------------------------------------
+
+def _get(session, query):
+    with make_client(session) as c:
+        resp = c.get(f"/dashboard?{query}", headers={"Authorization": f"Bearer {user_token()}"})
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_stock_card_compares_with_the_last_count_not_flagged_as_unusual():
+    """Unilever's Feb 2026 count (₱46.6M, about twice Jan and Mar) is in the
+    reviewed registry (backend/data_notes.py). The card read "↓51.3% vs Feb
+    2026"; it now compares Mar 2026 with Jan 2026 and says it skipped Feb.
+    The point itself stays — on the sparkline and on the chart, flagged."""
+    session = FakeSession(
+        latest_sales_period="2026-02",
+        sales={"2026-01": 37_165_964.39, "2026-02": 27_914_343.91},
+        latest_inventory_period="2026-03",
+        soh={"2026-01": 24_339_386.24, "2026-02": 46_576_778.51, "2026-03": 22_700_825.83},
+    )
+    body = _get(session, "principal=unilever&period=2026-02&start_period=2025-03")
+    trend = body["kpis"]["soh_trend"]
+    assert trend["latest_period"] == "2026-03"
+    assert trend["prev_period"] == "2026-01"
+    assert trend["delta_pct"] == pytest.approx(-6.7)
+    assert trend["months_apart"] == 2
+    assert [s["period"] for s in trend["skipped"]] == ["2026-02"]
+    assert "outlier" in trend["skipped"][0]["reason"]
+    assert "2026-02" in [pt["period"] for pt in trend["points"]], "the count is kept, only not compared against"
+
+    flags = body["stock_on_hand_flags"]
+    assert [f["period"] for f in flags] == ["2026-02"]
+    assert "₱46.6M" in flags[0]["reason"]
+    svs = {pt["period"]: pt for pt in body["sales_vs_stock"]}
+    assert svs["2026-02"]["stock_on_hand"] == pytest.approx(46_576_778.51)
+
+    text = body["sales_vs_stock_insight"]["text"]
+    assert "stood at ₱24.3M in Jan 2026" in text
+    assert "₱46.6M" not in text
+    assert "Feb 2026's count is marked as unusual" in text
+
+
+def test_kpi_trend_gives_no_delta_from_an_unusual_latest_month():
+    from backend.chart_insights import kpi_trend
+
+    t = kpi_trend({"2026-01": 24.3, "2026-02": 46.6}, "2026-02", unusual={"2026-02": "outlier"})
+    assert t["delta_pct"] is None and t["prev_period"] is None
+    assert t["latest_unusual"] == "outlier"
+    # Without flags, the walk-back is exactly what it was.
+    t = kpi_trend({"2026-01": 24.3, "2026-02": 46.6}, "2026-02")
+    assert t["prev_period"] == "2026-01" and t["skipped"] == [] and t["latest_unusual"] is None
+
+
+def test_all_principals_point_carries_a_contributors_unusual_count():
+    """Under 'all' a month is the sum of both principals' counts, so Del
+    Monte's Ilocos-only Feb 2023 count makes the combined point unusual too,
+    and the reason says whose count it is."""
+    session = FakeSession(soh={"2023-01": 30_000_000.0, "2023-02": 26_000_000.0, "2023-03": 31_000_000.0})
+    body = _get(session, "period=2023-03&start_period=2023-01")
+    flags = body["stock_on_hand_flags"]
+    assert [f["period"] for f in flags] == ["2023-02"]
+    assert flags[0]["reason"].startswith("Del Monte: Ilocos warehouse only")
+    # Unilever's own view of the same month has nothing to flag.
+    unilever = _get(FakeSession(soh={"2023-02": 23_000_000.0}), "principal=unilever&period=2023-03&start_period=2023-01")
+    assert unilever["stock_on_hand_flags"] == []
+
+
+def test_del_monte_purchases_are_plotted_ex_vat_like_its_sales():
+    """Purchase_Fact.net_amount includes VAT (tax is 12/112 of it); Del
+    Monte's sell-out is ex-VAT. Dec 2025 read ₱23.0M of purchases against
+    ₱22.1M of sales; ex-VAT it is ₱20.5M."""
+    session = FakeSession(
+        latest_sales_period=None,
+        received={"2025-12": 23_006_527.51},
+        received_tax={"2025-12": 2_464_985.05},
+    )
+    session.delmonte_latest_sales_period = "2025-12"
+    session.delmonte_sales = {"2025-12": 22_134_295.57}
+    body = _get(session, "principal=delmonte&period=2025-12&start_period=2025-01")
+    dec = next(pt for pt in body["sales_vs_stock"] if pt["period"] == "2025-12")
+    assert dec["received"] == pytest.approx(20_541_542.46)
+    assert body["sales_vs_stock_basis"] == {"sales": "ex-VAT", "received": "ex-VAT"}
+    sql = next(s for s, _ in session.calls if "principal = 'delmonte'" in s and "Purchase_Fact_Real" in s)
+    assert "net_amount - COALESCE(tax_amount, 0)" in sql
+
+
+def test_unilever_purchases_stay_on_its_vat_inclusive_sales_basis():
+    current = _periods()[-1]
+    session = FakeSession(received={current: 700.0}, received_tax={current: 75.0})
+    body = _get(session, "principal=unilever")
+    assert body["sales_vs_stock"][-1]["received"] == 700.0
+    assert body["sales_vs_stock_basis"] == {"sales": "incl. VAT", "received": "incl. VAT"}
+    # Under 'all' the pesos mix the two bases; vat_note says so instead.
+    assert _get(FakeSession(), "principal=all")["sales_vs_stock_basis"] == {"sales": None, "received": None}
+
+
+def test_allocation_monthly_is_an_average_basis_month_when_the_basis_is_partial():
+    """Del Monte's 2024 basis holds two months (₱21.3M). basis x pct / 12
+    drew a ₱1.86M/month allocation beside ~₱10.8M/month of sales; an
+    average basis month x pct is ₱11.2M. No annual figure on a partial
+    basis — that would be an extrapolation presented as the rule's year."""
+    session = FakeSession(latest_sales_period=None)
+    session.delmonte_latest_sales_period = "2025-12"
+    session.delmonte_sales = {"2024-01": 10_000_000.0, "2024-02": 11_313_205.91, "2025-12": 22_134_295.57}
+    a = _get(session, "principal=delmonte&period=2025-12")["allocation"]
+    assert a["basis_months"] == 2
+    mid = next(level for level in a["levels"] if level["pct"] == 105)
+    assert mid["monthly"] == pytest.approx(21_313_205.91 * 1.05 / 2, abs=0.01)
+    assert mid["annual"] is None
+
+
+def test_abc_class_shares_and_revenue_come_from_unrounded_product_revenue():
+    """Stored shares are 4-dp per product, so summing them drifts (Class B
+    read 14.93% for 14.99%), and the card multiplied them by the month's NET
+    sales, which include products that netted negative and were never
+    ranked (Class A ₱22.3M for ₱22,443,150)."""
+    rows = [
+        _abc_row(1, "A", "2024-02", 0.8000),
+        _abc_row(2, "B", "2024-02", 0.0499), _abc_row(3, "B", "2024-02", 0.0499),
+        _abc_row(4, "B", "2024-02", 0.0499),
+        _abc_row(5, "C", "2024-02", 0.0501),
+    ]
+    revenue = {1: 7_999.60, 2: 499.95, 3: 499.95, 4: 499.95, 5: 500.55, 6: -50.0}  # 6: net returns, not ranked
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows, abc_product_revenue=revenue,
+                          sales={"2024-02": 9_950.0})
+    body = _get(session, "principal=unilever")
+    mix = {m["tier"]: m for m in body["abc_mix"]}
+    assert mix["B"]["revenue_share_pct"] == pytest.approx(15.0, abs=0.005)   # stored sum: 14.97
+    assert mix["A"]["revenue"] == pytest.approx(7_999.60)
+    assert mix["B"]["revenue"] == pytest.approx(1_499.85)
+    assert body["abc_revenue"]["total"] == pytest.approx(9_950.0)            # the month's net sales
+    assert body["abc_revenue"]["ranked_total"] == pytest.approx(10_000.0)    # what the shares are of
+
+
+def test_abc_mix_keeps_the_stored_shares_when_a_ranked_products_revenue_is_missing():
+    rows = [_abc_row(1, "A", "2024-02", 0.6), _abc_row(2, "A", "2024-02", 0.2), _abc_row(3, "B", "2024-02", 0.2)]
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows, abc_product_revenue={1: 600.0, 3: 200.0})
+    body = _get(session, "principal=unilever")
+    mix = {m["tier"]: m for m in body["abc_mix"]}
+    assert mix["A"]["revenue_share_pct"] == pytest.approx(80.0)
+    assert mix["A"]["revenue"] is None
+    assert body["abc_revenue"]["ranked_total"] is None

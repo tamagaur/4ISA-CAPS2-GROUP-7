@@ -238,12 +238,14 @@ def test_unconvertible_stock_is_no_data_not_a_false_critical(sample_rows):
     """A product whose cases can't be converted to pieces (no usable pack
     size) must drop out of the comparison, not be judged with the wrong
     unit — which is what made 215 of 429 rows CRITICAL."""
+    # stock_pieces NULL while the snapshot row exists (cases present) —
+    # projected explicitly since 2026-10-01, when a product with NO row
+    # became 0 on hand instead (test_not_in_stock_count_is_zero_as_the_lp_reads_it).
+    sample_rows[0].update(in_stock_count=True, current_stock_cases=42.0)
     session = FakeSession(
         sample_rows, stock_by_period={}, inventory_period_by_scope={"unilever": "2026-03"},
         abc_period_by_scope={"unilever": "2026-02"},
     )
-    # stock_pieces NULL while the snapshot row exists (cases present).
-    session.stock_by_period = {}
     app.dependency_overrides[get_db] = lambda: session
     app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
     with TestClient(app) as c:
@@ -252,7 +254,89 @@ def test_unconvertible_stock_is_no_data_not_a_false_critical(sample_rows):
     item = body["items"][0]
     assert item["urgency"] == "NO DATA"
     assert item["current_stock"] is None
-    assert item["stock_blocked_reason"]
+    assert item["stock_not_in_count"] is False
+    assert "pack size" in item["stock_blocked_reason"]
+    assert item["priority_score"] is None  # unranked, never ranked as zero
+
+
+# ---- not in the stock count = 0, as the LP reads it; pack size (2026-10-01) --
+
+def test_not_in_stock_count_is_zero_as_the_lp_reads_it():
+    """scripts/run_lp.py plans a product missing from its principal's latest
+    stock count as 0 on hand (the file lists no zero-stock rows). The API
+    read it as 'NO DATA', so the page counted 37 cut SKUs where the LP cut
+    40. Live figures for 64971078, one of the three: cut 1,272 pieces."""
+    from backend.routers.recommendations import _to_item
+
+    item = _to_item(_item_row(
+        in_stock_count=False, current_stock=None, forecast_units=3456.0, rop_i=3364.96, q_i=5549.27,
+        revenue_share=0.0025, avg_monthly_sales_pesos=90000.0, pack_size=48,
+    ))
+    assert item.stock_not_in_count is True
+    assert item.current_stock == 0.0
+    assert item.stock_blocked_reason is None
+    assert item.urgency == "CRITICAL"
+    assert item.short_units == pytest.approx(3456.0 + 3364.96 - 5549.27)
+    assert item.stockout_gap == 3364.96
+    assert item.priority_score == pytest.approx(0.0025 * 3364.96, abs=1e-4)
+    assert item.days_of_cover == 0.0  # nothing on hand, sales known
+    assert item.pack_size == 48.0
+
+
+def test_no_count_for_the_principal_stays_no_data():
+    """A missing row only means 0 when the principal WAS counted at that
+    snapshot. With no count at all (in_stock_count NULL) — or a caller that
+    doesn't project the flag — it says nothing, so 'NO DATA' as before."""
+    from backend.routers.recommendations import _to_item
+
+    for row in (_item_row(in_stock_count=None, current_stock=None, forecast_units=100.0, rop_i=50.0, q_i=10.0),
+                _item_row(current_stock=None, forecast_units=100.0, rop_i=50.0, q_i=10.0)):
+        item = _to_item(row)
+        assert item.urgency == "NO DATA"
+        assert item.current_stock is None
+        assert item.stock_not_in_count is False
+        assert item.short_units is None
+        assert item.stock_blocked_reason
+
+
+def test_not_in_count_reaches_the_response(sample_rows):
+    sample_rows[0].update(in_stock_count=False, forecast_units=40.0, pack_size=12)
+    session = FakeSession(
+        sample_rows, stock_by_period={}, inventory_period_by_scope={"unilever": "2026-03"},
+        abc_period_by_scope={"unilever": "2026-02"},
+    )
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
+    with TestClient(app) as c:
+        item = c.get("/recommendations?principal=unilever",
+                     headers={"Authorization": f"Bearer {user_token()}"}).json()["items"][0]
+    assert item["stock_not_in_count"] is True
+    assert item["current_stock"] == 0.0
+    assert item["urgency"] == "CRITICAL"
+    assert item["short_units"] == pytest.approx(40.0 + 30.0 - 50.0)  # forecast + target - q_i
+    assert item["priority_score"] == pytest.approx(0.6 * 30.0)
+    assert item["pack_size"] == 12.0
+
+
+def test_row_query_carries_pack_size_and_the_count_flag():
+    """pack_size uses stock_units' usable-number rule on the row's own
+    Product_Dimension; the count flag is FALSE only when the principal has
+    a stock count at :inv_period that the product is missing from."""
+    from backend.routers.recommendations import select_one
+
+    sql = " ".join(select_one()[0].split())
+    assert "CASE WHEN pd.pack_size ~ '^[0-9]+(\\.[0-9]+)?$' AND pd.pack_size::numeric > 0 THEN pd.pack_size::numeric END AS pack_size" in sql
+    assert "WHEN inv.product_key IS NOT NULL THEN TRUE WHEN counted.principal IS NOT NULL THEN FALSE END AS in_stock_count" in sql
+    assert "SELECT DISTINCT principal FROM inventory_fact_real WHERE _period = :inv_period" in sql
+    assert "counted.principal = pd.principal" in sql
+
+
+def test_pack_size_is_passed_through_or_none():
+    from backend.routers.recommendations import _to_item
+
+    assert _to_item(_item_row(current_stock=10.0, rop_i=50.0, q_i=10.0, pack_size=288)).pack_size == 288.0
+    assert _to_item(_item_row(current_stock=10.0, rop_i=50.0, q_i=10.0, pack_size=None)).pack_size is None
+    assert _to_item(_item_row(current_stock=10.0, rop_i=50.0, q_i=10.0)).pack_size is None
 
 
 def test_freshness_flags_an_lp_older_than_its_forecasts(sample_rows):
@@ -325,3 +409,63 @@ def test_whole_units_round_up_but_ignore_float_noise():
     assert whole_units(9818339.99) == 9818340
     assert whole_units(1782.0000000002) == 1782
     assert whole_units(10.0) == 10
+
+
+def _item_row(**overrides):
+    row = {"recommendation_key": 1, "sku_id": "U-1", "product_name": "Uni One", "principal": "unilever",
+           "planning_cycle_date": "2026-03-01", "status": "pending", "tier": "A", "revenue_share": 0.03,
+           "ss_i": 10.0, "current_stock_cases": None, "stock_value_pesos": None, "avg_monthly_sales_pesos": None}
+    return {**row, **overrides}
+
+
+def test_short_units_is_the_lp_arithmetic_since_the_target_stock_run():
+    """Since the 2026-09-30 run, q_i = the month's forecast + target (rop_i)
+    - stock, less any cut to fit the allocation. The live figures for the
+    Reorder page's #1 (filled) and #11 (cut) rows, and an overstocked SKU."""
+    from backend.routers.recommendations import _to_item
+
+    filled = _to_item(_item_row(forecast_units=20970.0, rop_i=14418.0, current_stock=22.0, q_i=35366.0))
+    assert filled.forecast_units == 20970.0
+    assert filled.short_units == 0.0
+
+    cut = _to_item(_item_row(forecast_units=5800.0, rop_i=3867.0, current_stock=8.0, q_i=7524.0))
+    assert cut.short_units == pytest.approx(5800.0 + 3867.0 - 8.0 - 7524.0)
+
+    # Stock above forecast + target: the need floors at 0 and orders 0 — not short.
+    over = _to_item(_item_row(forecast_units=677.78, rop_i=504.9, current_stock=2689.0, q_i=0.0))
+    assert over.short_units == 0.0
+
+    # Float noise under a piece is rounding, not a cut.
+    assert _to_item(_item_row(forecast_units=100.0, rop_i=50.0, current_stock=0.0, q_i=149.4)).short_units == 0.0
+
+    # Nothing to work it out from: unknown, never 0.
+    assert _to_item(_item_row(forecast_units=None, rop_i=50.0, current_stock=0.0, q_i=10.0)).short_units is None
+    assert _to_item(_item_row(forecast_units=100.0, rop_i=50.0, current_stock=None, q_i=10.0)).short_units is None
+
+
+def test_forecast_is_the_cycle_months_own():
+    """The forecast the row is explained by is the one for its planning
+    month — joined on the cycle date, never the product alone (which would
+    fan a row out across every forecast month)."""
+    from backend.routers.recommendations import select_one
+
+    sql, _ = select_one()
+    assert "fr.forecast_date = lr.planning_cycle_date" in " ".join(sql.split())
+    assert "fr.forecast_value AS forecast_units" in sql
+
+
+def test_response_carries_forecast_and_short(sample_rows):
+    sample_rows[0].update(forecast_units=40.0)  # need = 40 + 30 - 120 < 0 -> 0
+    session = FakeSession(
+        sample_rows,
+        stock_by_period={(1, "2026-03"): 120.0},
+        inventory_period_by_scope={None: "2026-03", "unilever": "2026-03", "delmonte": "2025-12"},
+        abc_period_by_scope={None: "2026-02", "unilever": "2026-02", "delmonte": None},
+    )
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
+    with TestClient(app) as c:
+        item = c.get("/recommendations?principal=unilever",
+                     headers={"Authorization": f"Bearer {user_token()}"}).json()["items"][0]
+    assert item["forecast_units"] == 40.0
+    assert item["short_units"] == 0.0

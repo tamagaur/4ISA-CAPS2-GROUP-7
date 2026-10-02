@@ -48,6 +48,15 @@
   letter-spacing: -0.5px;
 }
 
+/* The count's unit ("SKUs"), read as part of the figure but quieter than it. */
+.kpi-unit {
+  margin-left: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  letter-spacing: 0;
+}
+
 /* Value + sparkline on one row: the number leads, the 12-point history
    sits quietly at the right (stat-tile contract — trend in a de-emphasis
    hue, the current period marked in the series hue). */

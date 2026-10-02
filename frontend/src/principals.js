@@ -12,6 +12,19 @@ export const PRINCIPALS = [
 
 export const PRINCIPAL_KEYS = PRINCIPALS.map((p) => p.key);
 
+// All principals is hidden from every filter for now (2026-09-30, Audrey):
+// the Topbar offers Del Monte and Unilever only. Everything that handles
+// 'all' stays in place — flip this to true to bring the option back. The
+// Dashboard forecast card's own principal filter was removed at the same
+// time; the code as it was is on branch parked/all-principals-filter.
+export const SHOW_ALL_PRINCIPALS = false;
+
+// The options a filter offers, and the only values a stored choice may
+// restore to.
+export const SELECTABLE_PRINCIPALS = SHOW_ALL_PRINCIPALS
+  ? PRINCIPALS
+  : PRINCIPALS.filter((p) => p.key !== 'all');
+
 // The combined scope. Named, so the checks that mean "all principals" say
 // so instead of leaning on DEFAULT_PRINCIPAL (which was 'all' until
 // 2026-09-24).
@@ -35,8 +48,10 @@ export const DEFAULT_PRINCIPAL = 'unilever';
 // on are remembered as before.
 export const PRINCIPAL_STORAGE_KEY = 'san2_principal_v2';
 
+// Selectable, not merely known: a stored 'all' from before the option was
+// hidden falls back to DEFAULT_PRINCIPAL instead of reopening on it.
 export function isValidPrincipal(value) {
-  return PRINCIPAL_KEYS.includes(value);
+  return SELECTABLE_PRINCIPALS.some((p) => p.key === value);
 }
 
 export function labelForPrincipal(key) {

@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, FlaskConical } from 'lucide-react';
 import Sidebar from './Sidebar';
@@ -8,6 +8,9 @@ import { invalidateCache } from '../api/cache';
 import { getDataModeInfo } from '../api/dataMode';
 import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
+import ErrorBoundary from './ErrorBoundary';
+import { usePermissions } from '../permissions/context';
+import { MOCK_PERMISSIONS } from '../api/mocks/permissionsMock';
 import { LoadingStatus, PageSkeleton } from './Skeleton';
 import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal, labelForPrincipal } from '../principals';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
@@ -15,6 +18,13 @@ import {
   DATA_MODES, PLACEHOLDER_PRINCIPAL, PLACEHOLDER_START, getDataMode, isPreviewMode, setDataMode as storeDataMode,
 } from '../dataMode';
 import './DashboardLayout.css';
+
+// The dev-only permissions mock switch (api/mocks/permissionsMock.js).
+// Loaded on demand and only on a dev server, so a production build carries
+// neither its code nor its CSS.
+const MockPermissionsPanel = import.meta.env.DEV && MOCK_PERMISSIONS
+  ? lazy(() => import('./dev/MockPermissionsPanel'))
+  : null;
 
 const PageLoadingFallback = () => (
   <>
@@ -152,12 +162,23 @@ const clearSavedRange = (mode) => {
   }
 };
 
-// On phone/tablet widths the sidebar becomes a slide-over overlay (see
-// Sidebar.css's matching max-width: 900px breakpoint) rather than a
-// permanently docked column, so it shouldn't default open and immediately
-// cover the page on first load there — computed once at mount, not
-// live-tracked across resizes.
-const startsWithSidebarOpen = () => !window.matchMedia('(max-width: 900px)').matches;
+// "Open" means two things by width (Sidebar.css):
+// - desktop: pinned at full width. Closed is the icon rail, which stretches
+//   open on hover, so closed is the default and the menu button pins it,
+//   remembered per browser.
+// - phone/tablet (max-width: 900px): a slide-over. It starts closed so it
+//   doesn't cover the page on first load.
+// Computed once at mount, not live-tracked across resizes.
+const SIDEBAR_PINNED_KEY = 'san2_sidebar_pinned';
+const isNarrow = () => window.matchMedia('(max-width: 900px)').matches;
+const startsWithSidebarOpen = () => {
+  if (isNarrow()) return false;
+  try {
+    return localStorage.getItem(SIDEBAR_PINNED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
 
 const DashboardLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(startsWithSidebarOpen);
@@ -233,6 +254,7 @@ const DashboardLayout = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const isAdmin = usePermissions().role === 'admin';
 
   // Top-bar Refresh: drop every cached response and remount the current page
   // so its effects fetch again. Remounting (rather than asking each page to
@@ -284,7 +306,15 @@ const DashboardLayout = () => {
   const canApplyPendingPeriod = isPendingRangeValid && isPendingRangeLongEnough;
 
   const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
+    const next = !isSidebarOpen;
+    setIsSidebarOpen(next);
+    if (!isNarrow()) {
+      try {
+        localStorage.setItem(SIDEBAR_PINNED_KEY, next ? '1' : '0');
+      } catch {
+        // Private mode or blocked storage: it just isn't remembered.
+      }
+    }
   };
 
   const handleApplyPeriod = () => {
@@ -381,6 +411,11 @@ const DashboardLayout = () => {
         onNavAttempt={handleNavAttempt}
         currentMonth={realWorldPeriod.month}
       />
+      {MockPermissionsPanel && (
+        <Suspense fallback={null}>
+          <MockPermissionsPanel />
+        </Suspense>
+      )}
       <div className="main-content">
         <Topbar
           toggleSidebar={toggleSidebar}
@@ -423,7 +458,8 @@ const DashboardLayout = () => {
                   were built on with the one in the database now. */}
               {previewInfo?.outputs_stale && (
                 <> <strong>That what-if run is outdated:</strong> the placeholder data has changed since it was built,
-                  so rebuild it (scripts/build_preview_outputs.py) before relying on those figures.</>
+                  so those figures may not match the months shown.
+                  {isAdmin ? ' Rebuild it with scripts/build_preview_outputs.py.' : ' Let an admin know.'}</>
               )}
               {principal !== PLACEHOLDER_PRINCIPAL && (
                 <> The placeholder is Unilever&apos;s, so under {labelForPrincipal(principal)} those months stay empty.</>
@@ -434,20 +470,22 @@ const DashboardLayout = () => {
             </button>
           </div>
         )}
-        <Suspense fallback={<PageLoadingFallback />}>
-          <Outlet key={refreshKey} context={{
-            startMonth, startYear, endMonth, endYear,
-            pendingStartMonth, setPendingStartMonth,
-            pendingStartYear, setPendingStartYear,
-            pendingEndMonth, setPendingEndMonth,
-            pendingEndYear, setPendingEndYear,
-            isPending, isPendingRangeValid, isPendingRangeLongEnough, canApplyPendingPeriod,
-            handleApplyPeriod, handleResetToToday,
-            updatePeriodImmediately, realWorldPeriod,
-            principal, setPrincipal,
-            dataMode, previewInfo,
-          }} />
-        </Suspense>
+        <ErrorBoundary resetKey={`${location.pathname}:${refreshKey}`}>
+          <Suspense fallback={<PageLoadingFallback />}>
+            <Outlet key={refreshKey} context={{
+              startMonth, startYear, endMonth, endYear,
+              pendingStartMonth, setPendingStartMonth,
+              pendingStartYear, setPendingStartYear,
+              pendingEndMonth, setPendingEndMonth,
+              pendingEndYear, setPendingEndYear,
+              isPending, isPendingRangeValid, isPendingRangeLongEnough, canApplyPendingPeriod,
+              handleApplyPeriod, handleResetToToday,
+              updatePeriodImmediately, realWorldPeriod,
+              principal, setPrincipal,
+              dataMode, previewInfo,
+            }} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
 
       {/* Nav Interception Confirmation Dialog */}

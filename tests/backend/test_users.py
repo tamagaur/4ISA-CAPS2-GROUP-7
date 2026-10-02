@@ -1,5 +1,5 @@
 """
-tests/backend/test_users.py — admin-only user management: GET /users,
+tests/backend/test_users.py — user management (users.manage): GET /users,
 PATCH /users/{user_id}, DELETE /users/{user_id}, POST /users/{user_id}/send-link.
 
 Same FakeSession-over-TestClient approach as tests/backend/test_auth.py, so
@@ -27,10 +27,14 @@ def jwt_env(monkeypatch):
 
 
 class FakeResult:
-    def __init__(self, row=None, rows=None, rowcount=0):
+    def __init__(self, row=None, rows=None, rowcount=0, scalar=None):
         self._row = row
         self._rows = rows or []
         self.rowcount = rowcount
+        self._scalar = scalar
+
+    def scalar(self):
+        return self._scalar
 
     def mappings(self):
         return self
@@ -70,12 +74,15 @@ class FakeSession:
         if sql.startswith("SELECT") and sql.endswith("FROM users ORDER BY user_id"):
             return FakeResult(rows=[self._out(u) for u in self.users])
 
-        if sql.startswith("SELECT 1 FROM users WHERE email = :email AND user_id != :user_id"):
+        if sql.startswith("SELECT 1 FROM users WHERE lower(email) = lower(:email) AND user_id != :user_id"):
             exists = any(
-                u["email"] == params["email"] and u["user_id"] != params["user_id"]
+                u["email"].lower() == params["email"].lower() and u["user_id"] != params["user_id"]
                 for u in self.users
             )
             return FakeResult(row=True if exists else None)
+
+        if "FROM users WHERE role = 'admin' FOR UPDATE" in sql:
+            return FakeResult(scalar=sum(u["role"] == "admin" for u in self.users))
 
         if sql.startswith("SELECT") and sql.endswith("FROM users WHERE user_id = :user_id"):
             user = self._find(params["user_id"])
@@ -274,6 +281,20 @@ def test_update_user_email_conflict(client):
         "/users/2", json={"email": "admin@ssmcapstone.com"}, headers=admin_headers()
     )
     assert resp.status_code == 409
+
+
+def test_update_user_email_conflict_ignores_capitalisation(client):
+    resp = client.patch(
+        "/users/2", json={"email": "Admin@SSMcapstone.com"}, headers=admin_headers()
+    )
+    assert resp.status_code == 409
+
+
+def test_a_user_may_change_the_case_of_their_own_email(client):
+    resp = client.patch(
+        "/users/2", json={"email": "Staff@ssmcapstone.com"}, headers=admin_headers()
+    )
+    assert resp.status_code == 200
 
 
 def test_update_user_empty_body_rejected(client):

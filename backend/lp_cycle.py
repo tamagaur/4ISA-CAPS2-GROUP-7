@@ -189,7 +189,7 @@ def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> di
         if is_stale and stale_count == row_count:
             reason = (
                 f"The LP was last run {lp_at:%Y-%m-%d %H:%M UTC}, before the forecasts were "
-                f"rewritten {fc_at:%Y-%m-%d %H:%M UTC}. Order quantities (q_i) and reorder points "
+                f"rewritten {fc_at:%Y-%m-%d %H:%M UTC}. Order quantities (q_i) and target stock "
                 "(rop_i) were solved against forecasts that are no longer the served ones. Safety "
                 "stock (ss_i) doesn't use the forecasts, but it reflects the demand history as of that "
                 "run, and the history has changed since. Rerun scripts/run_lp.py "
@@ -202,9 +202,9 @@ def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> di
                 f"rewritten {fc_at:%Y-%m-%d %H:%M UTC}. The LP last ran {lp_at:%Y-%m-%d %H:%M UTC} "
                 "but refreshes only the products in that run (Tier A, forecast status ok, MASE < 1) "
                 "and leaves the cycle's other rows as they were, so these still carry order "
-                "quantities (q_i) and reorder points (rop_i) solved against forecasts that are no "
-                "longer the served ones. A rerun will not change them; keeping or dropping them is "
-                "a planning decision."
+                "quantities (q_i) and target stock (rop_i) solved against forecasts that are no "
+                "longer the served ones. A plain rerun leaves them as they are; "
+                "scripts/run_lp.py --retire-stale-pending saves them to a CSV and removes them."
             )
     elif lp_at is None:
         reason = "No pending LP recommendations, so there is nothing to date."

@@ -9,8 +9,9 @@ import {
 } from './Charts';
 import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
-import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
+import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL } from '../principals';
 import { staleCoverageNotice } from '../dataCoverage';
+import { usePermissions } from '../permissions/context';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
@@ -87,8 +88,14 @@ const trendExtras = (trend, color) => {
   if (trend.delta_pct != null && trend.prev_period) {
     // The comparison month is the nearest earlier one WITH data (backend/
     // chart_insights.kpi_trend); months_apart says when that is not simply
-    // last month, e.g. Del Monte's Dec 2025 against Sep 2025.
-    const gap = trend.months_apart > 1 ? ` (${trend.months_apart} months earlier)` : '';
+    // last month, e.g. Del Monte's Dec 2025 against Sep 2025. When the gap
+    // is a month the backend passed over as an unusual count (backend/
+    // data_notes.py — Unilever's Feb 2026 stock), the pill stays as short as
+    // the other cards' (Audrey, 2026-10-01): the chart below marks that
+    // month as unusual and says why.
+    const gap = (trend.skipped || []).length === 0 && trend.months_apart > 1
+      ? ` (${trend.months_apart} months earlier)`
+      : '';
     extras.deltaLine = `${Math.abs(trend.delta_pct).toFixed(1)}% vs ${periodLabel(trend.prev_period)}${gap}`;
     extras.trendDirection = trend.delta_pct > 0 ? 'up' : trend.delta_pct < 0 ? 'down' : undefined;
     extras.deltaTone = trend.delta_pct > 0 ? 'positive' : trend.delta_pct < 0 ? 'negative' : 'neutral';
@@ -177,11 +184,15 @@ const DashboardSkeleton = () => (
 const DASH_SECTIONS = [
   { id: 'dash-summary', label: 'Summary', hint: 'The four headline numbers' },
   { id: 'dash-sales', label: 'Sales & stock', hint: 'What happened: monthly sales against stock on hand' },
-  { id: 'dash-abc', label: 'ABC tiers', hint: 'What happened: which products earn the most, and their stock status' },
+  { id: 'dash-abc', label: 'ABC classes', hint: 'What happened: which products earn the most, and their stock status' },
   { id: 'dash-forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast and the reorder list" },
   { id: 'dash-policy', label: 'Client policy', hint: "What to do: the LP safety stock against SSM's 3-week policy, and sales against the supplier allocation" },
 ];
 const DASH_SECTION_IDS = DASH_SECTIONS.map((s) => s.id);
+
+// The reason on the LP cards for an account without lp.view (GET
+// /dashboard's lp_hidden).
+const LP_HIDDEN_NOTE = 'Needs the reorder-recommendation permission';
 
 // Which section is being read, and whether the toolbar has stuck under the
 // top bar. Both are read off `.dashboard` — the element that scrolls on this
@@ -260,6 +271,7 @@ const DashSectionNav = ({ active, enabled }) => {
 };
 
 const Dashboard = () => {
+  const isAdmin = usePermissions().role === 'admin';
   const { startMonth, startYear, endMonth, endYear, principal, dataMode } = useOutletContext() || {};
   const preview = isPreviewMode(dataMode);
   const period = toPeriod(endMonth, endYear);
@@ -286,34 +298,11 @@ const Dashboard = () => {
   const [error, setError] = useState(null); // { key, message }
   const loadedKey = loaded?.key;
 
-  // The portfolio forecast card has its OWN principal filter, independent
-  // of the Topbar's page-wide one — switching it re-scopes that card only.
-  // When the two match, the card reads the page's own payload; otherwise
-  // it fetches GET /dashboard for its own scope (same period range),
-  // through the same response cache, so flipping back and forth never
-  // refetches a scope already loaded this session.
-  //
-  // Deliberately not remembered (no localStorage, unlike the Topbar's
-  // filter): every visit to the dashboard starts this card on the default
-  // scope, Unilever (principals.js), and its Reset button returns it there.
+  // Every card, the portfolio forecast included, follows the Topbar's
+  // principal filter (2026-09-30). The forecast card's own filter, and the
+  // separate GET /dashboard it fetched for that scope, are on branch
+  // parked/all-principals-filter.
   const pagePrincipal = principal ?? DEFAULT_PRINCIPAL;
-  const [forecastPrincipal, setForecastPrincipal] = useState(DEFAULT_PRINCIPAL);
-  const forecastKey = `${period ?? ''}|${startPeriod ?? ''}|${forecastPrincipal}`;
-  const forecastFollowsPage = forecastPrincipal === pagePrincipal;
-  const [cardForecast, setCardForecast] = useState(null); // { key, data, reliability, error }
-  const cardForecastKey = cardForecast?.key;
-  useEffect(() => {
-    if (forecastFollowsPage || cardForecastKey === forecastKey) return undefined;
-    let cancelled = false;
-    getDashboardData({ period, startPeriod, principal: forecastPrincipal })
-      .then((res) => {
-        if (!cancelled) setCardForecast({ key: forecastKey, data: res.portfolio_forecast || {}, reliability: res.forecast || null });
-      })
-      .catch(() => {
-        if (!cancelled) setCardForecast({ key: forecastKey, data: null, error: true });
-      });
-    return () => { cancelled = true; };
-  }, [forecastFollowsPage, cardForecastKey, forecastKey, period, startPeriod, forecastPrincipal]);
 
   useEffect(() => {
     if (loadedKey === requestKey) return undefined;
@@ -409,7 +398,7 @@ const Dashboard = () => {
   const portfolioRealOnly = preview && realOnly.has('portfolio_forecast');
   const placeholderNote = (period) => (
     isPlaceholderPeriod(period, placeholder)
-      ? `${periodLabel(period)} is a placeholder month — these tiers come from placeholder sales, not SSM's.`
+      ? `${periodLabel(period)} is a placeholder month — these classes come from placeholder sales, not SSM's.`
       : null
   );
 
@@ -459,17 +448,22 @@ const Dashboard = () => {
       .filter(Boolean).join(' · '),
   );
 
+  // stock_on_hand_flags: counts the team reviewed and judged unusual — the
+  // chart marks those points and gives the reason, it never drops them.
+  const stockFlags = new Map((data.stock_on_hand_flags || []).map((f) => [f.period, f.reason]));
   const salesVsStock = (data.sales_vs_stock || []).map((pt) => ({
     period: pt.period,
     sales: pt.sales,
     stockOnHand: pt.stock_on_hand,
     received: pt.received,
+    stockUnusual: stockFlags.get(pt.period) || null,
   }));
 
   const abcMix = (data.abc_mix || []).map((d) => ({
     tier: d.tier,
     count: d.count,
     sharePct: d.revenue_share_pct,
+    revenue: d.revenue ?? null,
   }));
   // The principals the ABC run covers (GET /dashboard's abc_coverage), named
   // when narrower than the page's filter: under All principals the latest
@@ -490,20 +484,10 @@ const Dashboard = () => {
     pendingReorderCount: t.pending_reorder_count,
   }));
 
-  // While the card's own scope is loading, keep the last thing it showed
-  // on screen (dimmed) rather than blanking it.
-  const cardForecastReady = cardForecast?.key === forecastKey;
-  const forecastUpdating = !forecastFollowsPage && !cardForecastReady;
-  const forecastError = !forecastFollowsPage && cardForecastReady && cardForecast.error;
-  const portfolioForecast = forecastFollowsPage
-    ? data.portfolio_forecast || {}
-    : (cardForecast?.data ?? data.portfolio_forecast) || {};
-  // The card's own scope for the MASE reliability count too (GET
-  // /dashboard's forecast block), so the two never describe different
-  // principals. Null while that scope is still loading.
-  const forecastReliability = forecastFollowsPage
-    ? data.forecast || null
-    : (cardForecastReady ? cardForecast?.reliability ?? null : null);
+  // The page's own payload, so the card and the MASE reliability count
+  // (GET /dashboard's forecast block) describe the page's principal.
+  const portfolioForecast = data.portfolio_forecast || {};
+  const forecastReliability = data.forecast || null;
   // A real-only forecast card in preview has nothing in the placeholder
   // months by construction — dropped rather than drawn as a blank run.
   const portfolioSeries = (portfolioForecast.series || [])
@@ -528,15 +512,22 @@ const Dashboard = () => {
   // below it is drawn from, so a card and its chart can never disagree; a
   // missing field renders "—" with the reason, never 0.
 
+  // An account without lp.view gets GET /dashboard with every LP-derived
+  // figure left out and lp_hidden set (Yuan's permissions proposal): those
+  // cards say why they're empty, and the reorder and policy widgets are
+  // not drawn at all rather than drawn with zeros.
+  const lpHidden = data.lp_hidden === true;
   const exposure = data.safety_stock_exposure || {};
-  const exposureReason = exposure.blocked_reason || 'Safety-stock exposure cannot be measured yet';
+  const exposureReason = lpHidden
+    ? LP_HIDDEN_NOTE
+    : exposure.blocked_reason || 'Safety-stock exposure cannot be measured yet';
   // Health tier for the safety-stock card, from the same rate the
   // exposure figures are derived from.
   const ssTier = safetyStockMetricType(kpis.safety_stock_rate ?? null);
   const belowSs = kpiDisplay(
     exposure.below_count ?? null, exposure.below_count == null ? exposureReason : null,
     (v) => `${v.toLocaleString()} of ${(exposure.comparable_count ?? 0).toLocaleString()}`,
-    ['Measurable Category A SKUs below their safety stock', abcCoverage].filter(Boolean).join(' · ')
+    ['Measurable Class A SKUs below their safety stock', abcCoverage].filter(Boolean).join(' · ')
   );
 
   // Pending action count — the "what to do" figure in the hero strip. Now
@@ -549,7 +540,7 @@ const Dashboard = () => {
   const coverageStale = staleCoverageNotice(data.latest_data_period);
   const lpCycleLabel = periodLabel(lp.cycle_date ? String(lp.cycle_date).slice(0, 7) : null);
   const pendingContext = [
-    'LP recommendations awaiting a decision',
+    'Reorder suggestions awaiting a decision',
     lpCycleLabel ? `${lpCycleLabel} cycle` : null,
   ].filter(Boolean).join(' · ');
 
@@ -572,16 +563,18 @@ const Dashboard = () => {
           {/* The date picker's ceiling and the app's pinned "today" are a
               hand-edited constant. When the database moves past it, every
               page quietly keeps ending at the old month — so the page says
-              so instead, naming the one file to edit. */}
+              so in plain words, and names the one file to edit only to
+              admins, who can get it changed. */}
           {coverageStale && (
             <div className="dash-stale-note" role="status">
               <AlertTriangle size={14} aria-hidden="true" />
               <span>
-                <strong>New data has loaded past the date picker&apos;s range.</strong>{' '}
-                The database now holds sales through {coverageStale.live}, but this app is pinned to{' '}
-                {coverageStale.pinned}. Update <code>LATEST_DATA_PERIOD</code> in{' '}
-                <code>frontend/src/dataCoverage.js</code> so the picker and every default range
-                reach the newest month.
+                <strong>Newer sales data is available than this app shows.</strong>{' '}
+                Sales are loaded through {coverageStale.live}, but the date range still ends at{' '}
+                {coverageStale.pinned}, so the newest months don&apos;t appear on any page yet.
+                {isAdmin
+                  ? <> To fix it, update <code>LATEST_DATA_PERIOD</code> in <code>frontend/src/dataCoverage.js</code>.</>
+                  : ' Let an admin know.'}
               </span>
             </div>
           )}
@@ -639,15 +632,17 @@ const Dashboard = () => {
             <KPICard
               title="Below safety stock"
               value={belowSs.value}
+              unit={belowSs.value === '—' ? undefined : exposure.comparable_count === 1 ? 'SKU' : 'SKUs'}
               metricType={belowSs.value === '—' ? undefined : ssTier}
               contextLine={belowSs.contextLine}
               icon={<AlertTriangle size={20} />}
             />
             <KPICard
               title="Pending reorder actions"
-              value={pendingCount.toLocaleString()}
-              metricType="recommendation"
-              contextLine={pendingContext}
+              value={lpHidden ? '—' : pendingCount.toLocaleString()}
+              unit={lpHidden ? undefined : pendingCount === 1 ? 'SKU' : 'SKUs'}
+              metricType={lpHidden ? undefined : 'recommendation'}
+              contextLine={lpHidden ? LP_HIDDEN_NOTE : pendingContext}
               icon={<ClipboardList size={20} />}
             />
           </div>
@@ -655,7 +650,7 @@ const Dashboard = () => {
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
           <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} /></Slot>
+            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} /></Slot>
           </div>
 
           <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
@@ -680,7 +675,7 @@ const Dashboard = () => {
           </div>
 
           {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
-          <div className="dash-row dash-row-even dash-section-anchor" id="dash-forecast">
+          <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-forecast">
             <Slot kind="Predictive" realOnly={portfolioRealOnly}>
               <PortfolioForecastWidget
                 series={portfolioSeries}
@@ -691,47 +686,48 @@ const Dashboard = () => {
                 // The local sentence only stands in if it is ever missing,
                 // so the card can't fall back to a generic "No forecast data".
                 emptyReason={
-                  forecastError
-                    ? `Couldn't load the forecast for ${labelForPrincipal(forecastPrincipal)}.`
-                    : portfolioForecast.scope_label
-                      || (forecastPrincipal === 'delmonte'
-                        ? 'No SKU-level forecasts for Del Monte — it has no SKU-level sales data, only category sell-out.'
-                        : undefined)
+                  portfolioForecast.scope_label
+                    || (pagePrincipal === 'delmonte'
+                      ? 'No SKU-level forecasts for Del Monte — it has no SKU-level sales data, only category sell-out.'
+                      : undefined)
                 }
-                principal={forecastPrincipal}
-                onPrincipalChange={setForecastPrincipal}
-                isUpdating={forecastUpdating}
                 reliability={forecastReliability}
                 insight={portfolioForecast.insight}
               />
             </Slot>
-            <Slot kind="Prescriptive" realOnly={preview && realOnly.has('reorder_preview')}>
-              <ReorderRecommendationWidget
-                rows={reorderRows}
-                criticalCount={reorderPreview.critical_count ?? 0}
-                urgentCount={reorderPreview.urgent_count ?? 0}
-                totalOrderQty={reorderPreview.total_order_qty ?? 0}
-                weights={reorderPreview.lp_weights}
-              />
-            </Slot>
+            {!lpHidden && (
+              <Slot kind="Prescriptive" realOnly={preview && realOnly.has('reorder_preview')}>
+                <ReorderRecommendationWidget
+                  rows={reorderRows}
+                  criticalCount={reorderPreview.critical_count ?? 0}
+                  urgentCount={reorderPreview.urgent_count ?? 0}
+                  totalOrderQty={reorderPreview.total_order_qty ?? 0}
+                  weights={reorderPreview.lp_weights}
+                />
+              </Slot>
+            )}
           </div>
 
           {/* PRESCRIPTIVE — the policy question this project exists to answer,
               beside SSM's own allocation rule applied to the sales data */}
-          <div className="dash-row dash-row-even dash-section-anchor" id="dash-policy">
-            <Slot kind="Prescriptive" realOnly={preview && realOnly.has('policy_comparison')}>
-              <PolicyComparisonWidget comparison={data.policy_comparison} />
-            </Slot>
+          <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-policy">
+            {!lpHidden && (
+              <Slot kind="Prescriptive" realOnly={preview && realOnly.has('policy_comparison')}>
+                <PolicyComparisonWidget comparison={data.policy_comparison} />
+              </Slot>
+            )}
             <Slot kind="Descriptive">
               <AllocationWidget allocation={data.allocation} />
             </Slot>
           </div>
 
-          <p className="dash-footnote">
-            Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as
-            &ldquo;Act now&rdquo;.{' '}
-            <Link to="/reorder" className="band-link">Open Reorder Recs <ArrowRight size={12} /></Link>
-          </p>
+          {!lpHidden && (
+            <p className="dash-footnote">
+              Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as
+              &ldquo;Act now&rdquo;.{' '}
+              <Link to="/reorder" className="band-link">Open Reorder Recs <ArrowRight size={12} /></Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

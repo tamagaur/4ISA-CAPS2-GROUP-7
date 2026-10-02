@@ -704,6 +704,23 @@ CREATE TABLE IF NOT EXISTS Users (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- One account per email in any capitalisation (migration 0034): UNIQUE
+-- (email) above only catches exact matches.
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON Users (lower(email));
+
+-- Per-user exceptions to the role's permission preset (migration 0034,
+-- backend/permissions.py): granted = true adds a permission, false removes
+-- it. Keys are checked in code, not here, so a new permission needs no
+-- migration.
+CREATE TABLE IF NOT EXISTS user_permission_override (
+    user_id         BIGINT NOT NULL REFERENCES Users (user_id) ON DELETE CASCADE,
+    permission_key  TEXT NOT NULL,
+    granted         BOOLEAN NOT NULL,
+    set_by          BIGINT REFERENCES Users (user_id) ON DELETE SET NULL,
+    set_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, permission_key)
+);
+
 -- Application audit trail (who did what, when) — dashboard application
 -- state, not ETL output, same reasoning as Users above. Replaces the
 -- earlier localStorage-only audit log (frontend/src/utils/auditLogger.js),

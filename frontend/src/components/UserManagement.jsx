@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Plus, Pencil, Trash2, AlertTriangle, Mail, KeyRound, Link2, Copy, Check, Loader2,
+  Plus, Pencil, Trash2, AlertTriangle, Mail, KeyRound, Link2, Copy, Check, Loader2, ShieldCheck,
 } from 'lucide-react';
 import UserFormModal from './UserFormModal';
+import PermissionsModal from './PermissionsModal';
 import Modal from './Modal';
 import { useToast } from './ToastProvider';
 import { listUsers, createUser, updateUser, deleteUser, sendUserLink } from '../utils/usersApi';
 import { getCurrentUser } from '../auth';
+import { saveUserPermissions } from '../api/permissions';
+import { usePermissions } from '../permissions/context';
+import { roleLabel } from '../permissions/keys';
 import { formatDate, formatDateTime } from '../utils/formatDate';
 import { LoadingStatus, SkeletonTableRows } from './Skeleton';
 import './UserManagement.css';
@@ -45,7 +49,14 @@ const UserManagement = () => {
   const [loadError, setLoadError] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  // Add User is two modals: the form (name, email), then Next opens the
+  // Permissions modal for the new person. newUser carries what they typed,
+  // and the access chosen so far if they went Back.
+  const [newUser, setNewUser] = useState(null);
+  const [choosingAccess, setChoosingAccess] = useState(false);
   const [deletingUser, setDeletingUser] = useState(null);
+  // Whose permissions are open (Kelvin's permissions proposal, task 6).
+  const [permissionsUser, setPermissionsUser] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   // One link send at a time: a second result could open the share dialog
   // over the first and replace its link before the admin had copied it.
@@ -57,6 +68,9 @@ const UserManagement = () => {
   const shareInputRef = useRef(null);
 
   const currentUser = getCurrentUser();
+  // The Permissions screen needs the backend's permission endpoints; until
+  // they exist (PermissionsProvider's `legacy`), its button stays hidden.
+  const { legacy } = usePermissions();
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -77,7 +91,28 @@ const UserManagement = () => {
 
   const handleOpenAdd = () => {
     setEditingUser(null);
+    setNewUser(null);
     setIsFormOpen(true);
+  };
+
+  // The form's Next: on to the Permissions modal, same render so focus
+  // passes straight from one dialog to the other.
+  const handleNext = (details) => {
+    setNewUser((prev) => ({ ...details, access: prev?.access }));
+    setIsFormOpen(false);
+    setChoosingAccess(true);
+  };
+
+  // The Permissions modal's Back: the form again, filled in as it was.
+  const handleBackToDetails = (access) => {
+    setNewUser((prev) => ({ ...prev, access }));
+    setChoosingAccess(false);
+    setIsFormOpen(true);
+  };
+
+  const closeAddUser = () => {
+    setChoosingAccess(false);
+    setNewUser(null);
   };
 
   const handleOpenEdit = (user) => {
@@ -112,37 +147,84 @@ const UserManagement = () => {
     });
   };
 
-  // Saves the form and resolves with what its green check says;
+  // Edit User's Save, resolving with what its green check says;
   // handleFormSaved runs once that has played. A failure throws, and the
   // form shows it with a red X instead.
   const handleFormSubmit = async (values) => {
-    if (editingUser) {
-      // Only what changed: the server's audit entry then records exactly
-      // that, and an unchanged role never trips its own-role check.
-      const changes = {};
-      if (values.fullName !== editingUser.full_name) changes.fullName = values.fullName;
-      if (values.email !== editingUser.email) changes.email = values.email;
-      if (values.role !== editingUser.role) changes.role = values.role;
-      if (Object.keys(changes).length === 0) return { message: 'Nothing needed changing.' };
-      await updateUser(editingUser.user_id, changes);
-      loadUsers();
-      return { message: `${values.email} was updated.` };
-    }
-    const result = await createUser(values);
+    // Only what changed: the server's audit entry then records exactly
+    // that, and an unchanged role never trips its own-role check.
+    const changes = {};
+    if (values.fullName !== editingUser.full_name) changes.fullName = values.fullName;
+    if (values.email !== editingUser.email) changes.email = values.email;
+    if (values.role !== editingUser.role) changes.role = values.role;
+    if (Object.keys(changes).length === 0) return { message: 'Nothing needed changing.' };
+    await updateUser(editingUser.user_id, changes);
     loadUsers();
+    return { message: `${values.email} was updated.` };
+  };
+
+  // Add User's Save, in the Permissions modal: creates the account with the
+  // chosen role, then stores the pages ticked on or off.
+  const handleCreate = async (values) => {
+    let result;
+    try {
+      result = await createUser(values);
+    } catch (err) {
+      // Someone added this email since the list loaded (step 1 checks the
+      // list): back to step 1, where the email can be changed, with the
+      // error on the field and the chosen access kept.
+      if (err.status === 409) {
+        setNewUser((prev) => ({
+          ...prev,
+          access: { role: values.role, overrides: values.overrides || {} },
+          emailError: err.message,
+        }));
+        setChoosingAccess(false);
+        setIsFormOpen(true);
+        loadUsers();
+      }
+      throw err;
+    }
+    // The pages ticked on or off, stored once the account exists. The account is already made if this part fails, so it
+    // is reported rather than thrown: saving again would only hit "a user
+    // with this email already exists".
+    const exceptions = values.overrides || {};
+    let accessFailed = '';
+    if (!legacy && Object.keys(exceptions).length > 0) {
+      try {
+        await saveUserPermissions(result.user, { role: values.role, overrides: exceptions });
+      } catch (err) {
+        accessFailed = err.message || 'unknown error';
+      }
+    }
+    loadUsers();
+    // Short enough to read before the check mark closes (1.3 s). A failure
+    // to store the page choices is not tucked in here: handleCreated raises
+    // it as an error toast that stays until dismissed.
     return {
-      message: result.email_sent
-        ? `An invite was emailed to ${values.email}.`
-        : "The account is ready. The invite email didn't go out, so you'll get a link to send them next.",
+      message: `${values.fullName} added as ${roleLabel(values.role)}.`,
       invite: { result, name: values.fullName, email: values.email },
+      accessFailed,
+      role: values.role,
     };
   };
 
-  // After the check mark: close the form and, when the invite email didn't go
+  const handleFormSaved = () => {
+    setIsFormOpen(false);
+  };
+
+  // After Add User's check mark: close and, when the invite email didn't go
   // out, open the link to share in the same render, so focus passes straight
   // from one dialog to the other.
-  const handleFormSaved = (outcome) => {
-    setIsFormOpen(false);
+  const handleCreated = (outcome) => {
+    closeAddUser();
+    if (outcome?.accessFailed) {
+      toast.error(
+        `${outcome.invite.name}'s account was created, but their page choices didn't save `
+        + `(${outcome.accessFailed}). For now they have the ${roleLabel(outcome.role)} defaults. `
+        + 'Set them again with the Permissions button on their row.',
+      );
+    }
     const invite = outcome?.invite;
     if (invite && !invite.result.email_sent) {
       reportLink(invite.result, { purpose: 'invite', name: invite.name, email: invite.email, isNew: true });
@@ -195,8 +277,8 @@ const UserManagement = () => {
           <div>
             <h2 className="user-mgmt-title">User <span className="page-title-accent">management</span></h2>
             <p className="user-mgmt-subtitle">
-              Invite, edit, and remove staff accounts. New users get an email link to set their own
-              password. Only admins can access this page.
+              Invite, edit and remove accounts, and choose what each person can open and do. New users
+              get an email link to set their own password.
             </p>
           </div>
           <button className="user-mgmt-add-btn" onClick={handleOpenAdd}>
@@ -285,6 +367,16 @@ const UserManagement = () => {
                             ? <Loader2 size={15} className="user-mgmt-spin" />
                             : <LinkIcon size={15} />}
                         </button>
+                        {!legacy && (
+                          <button
+                            className="user-mgmt-icon-btn access"
+                            onClick={() => setPermissionsUser(user)}
+                            aria-label={`Permissions for ${user.full_name}`}
+                            title="Permissions"
+                          >
+                            <ShieldCheck size={15} />
+                          </button>
+                        )}
                         <button
                           className="user-mgmt-icon-btn edit"
                           onClick={() => handleOpenEdit(user)}
@@ -320,12 +412,38 @@ const UserManagement = () => {
         </div>
       </div>
 
+      <PermissionsModal
+        isOpen={permissionsUser !== null}
+        user={permissionsUser}
+        isSelf={permissionsUser?.email === currentUser?.email}
+        onClose={() => setPermissionsUser(null)}
+        onSaved={() => {
+          setPermissionsUser(null);
+          loadUsers();
+        }}
+      />
+
+      <PermissionsModal
+        isOpen={choosingAccess}
+        newUser={newUser}
+        onBack={handleBackToDetails}
+        onClose={closeAddUser}
+        onCreate={handleCreate}
+        onSaved={handleCreated}
+      />
+
       <UserFormModal
         isOpen={isFormOpen}
         user={editingUser}
-        onClose={() => setIsFormOpen(false)}
+        draft={editingUser ? null : newUser}
+        existingEmails={users.filter((u) => u.user_id !== editingUser?.user_id).map((u) => u.email)}
+        onClose={() => {
+          setIsFormOpen(false);
+          if (!editingUser) setNewUser(null);
+        }}
         onSubmit={handleFormSubmit}
         onSaved={handleFormSaved}
+        onNext={handleNext}
       />
 
       {deletingUser && (

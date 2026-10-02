@@ -243,6 +243,17 @@
   border-color: var(--color-info);
 }
 
+.user-mgmt-icon-btn.access {
+  color: #4338ca;
+  background-color: #eef0ff;
+  border-color: #c7d2fe;
+}
+
+.user-mgmt-icon-btn.access:hover:not(:disabled) {
+  background-color: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
 .user-mgmt-icon-btn.edit {
   color: var(--color-warning-text);
   background-color: var(--color-warning-bg);

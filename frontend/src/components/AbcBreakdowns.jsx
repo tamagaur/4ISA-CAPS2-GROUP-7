@@ -81,7 +81,10 @@ export const ParetoCard = ({ principal, period }) => {
     [section]
   );
   const tierCounts = rows.reduce((acc, r) => ({ ...acc, [r.tier]: (acc[r.tier] || 0) + 1 }), {});
-  const aShare = rows.filter((r) => r.tier === 'A').reduce((sum, r) => sum + r.revenue_share, 0);
+  // Read off the running total at Class A's last row (rounded once), not
+  // summed from per-row shares each rounded to 4 dp — the same fix as GET
+  // /abc's class totals, where the sum read Class B 14.9% for 15.0%.
+  const aShare = rows.filter((r) => r.tier === 'A').reduce((top, r) => Math.max(top, r.cumulative_share), 0);
   // The ABC run's own cutoffs, from GET /pareto's payload — the reference
   // lines state the constants the ranking used, not numbers retyped here.
   const cutoffs = state.data?.cutoffs || null;

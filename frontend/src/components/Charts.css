@@ -368,6 +368,27 @@
   font-weight: 600;
 }
 
+/* A sentence under the figures (an unusual stock count's reason, the
+   forecast range's assumption): wraps at a readable width instead of
+   stretching the tooltip across the chart. */
+.chart-tooltip-note {
+  max-width: 17rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+/* Legend key for a stock count flagged as unusual — the same hollow slate
+   ring the chart draws at that point (Charts.jsx stockDot). */
+.legend-unusual {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--color-text-muted);
+  background-color: var(--color-surface);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
 .abc-bars {
   display: flex;
   flex-direction: column;
@@ -579,24 +600,69 @@
 }
 
 /* ── Stock status by ABC tier — horizontal composition bars ───────────── */
-/* Fixed at the same height as .donut-container (180px) — its sibling in
-   this row — and space-between instead of a fixed gap so the three rows
-   spread out to fill that height exactly, whatever it is. That's what
-   makes this widget's legend land at the same vertical level as the ABC
-   donut's legend: both "chart body" blocks are the same height, so
-   centering each within the (height-matched) card puts both legends at
-   an identical offset from the top. */
+/* 8px grid (2026-09-30): every gap in this card is a multiple of 8. The
+   body stacks note → bars → detail line → legend → pending note 16px
+   apart, set once on the container so no child carries its own margin.
+   The bars sit 16px apart; until now they were spread across a fixed
+   180px (to match the donut's height beside them), which left ~54px of
+   air between three 24px bars. The body is still centred in the card, so
+   any height the row adds lands evenly above and below it. */
+.tier-stock-widget .chart-header {
+  margin-bottom: 16px;
+}
+
+.tier-stock-widget .chart-widget-body.tier-stock-body {
+  gap: 16px;
+}
+
 .tier-stock-bars {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  height: 180px;
+  gap: 16px;
 }
 
 .tier-stock-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 8px;
+  border-radius: 4px;
+  transition: opacity 150ms ease-out;
+}
+
+/* The picked tier stays full strength and the others step back, tying
+   the bar to the counts in the detail line below. */
+.tier-stock-bars.has-active .tier-stock-row:not(.is-active) {
+  opacity: 0.5;
+}
+
+.tier-stock-row:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 4px;
+}
+
+/* What the native title tooltip used to show, under the bars. One line
+   reserved (the hint fills it) so picking a tier never moves the legend. */
+.tier-stock-detail {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.tier-stock-detail.is-hint {
+  color: var(--color-text-subtle);
+}
+
+.tier-stock-body .chart-placeholder-note {
+  margin: 0;
+  padding: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tier-stock-row {
+    transition: none;
+  }
 }
 
 .tier-stock-label {
@@ -637,8 +703,8 @@
 .tier-stock-note {
   display: flex;
   align-items: flex-start;
-  gap: 0.45rem;
-  margin: 0 0 0.75rem;
+  gap: 8px;
+  margin: 0;
   font-size: 0.78rem;
   line-height: 1.5;
   color: var(--color-text-body);
@@ -855,8 +921,12 @@
   color: var(--color-text);
 }
 
+/* A full sentence since 2026-10-01 (what the weights actually do), so it
+   takes its own line under the title instead of squeezing in beside it. */
 .reorder-priorities-caption {
-  font-size: 0.65rem;
+  flex-basis: 100%;
+  font-size: 0.72rem;
+  line-height: 1.45;
   color: var(--color-text-subtle);
 }
 
@@ -895,66 +965,6 @@
   font-weight: 700;
   color: var(--color-text);
   margin-left: auto;
-}
-
-/* ── "?" info affordance + CSS-only hover/focus tooltip ─────────────────── */
-.reorder-priority-info {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-text-subtle);
-  cursor: help;
-  flex-shrink: 0;
-}
-
-.reorder-priority-info:hover,
-.reorder-priority-info:focus-visible {
-  color: var(--color-text-body);
-  outline: none;
-}
-
-.reorder-priority-tip {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  width: max-content;
-  /* Bigger and more readable, but never wider than the viewport has room
-     for — important since this card can end up quite narrow once
-     chart-duo stacks to one column on smaller screens. */
-  max-width: min(22rem, calc(100vw - 3rem));
-  padding: 0.75rem 0.9rem;
-  border-radius: 8px;
-  background-color: var(--color-text);
-  color: var(--color-surface);
-  font-size: 0.8rem;
-  font-weight: 400;
-  line-height: 1.55;
-  text-transform: none;
-  letter-spacing: normal;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-  pointer-events: none;
-}
-
-/* Little pointer triangle under the bubble. */
-.reorder-priority-tip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: var(--color-text);
-}
-
-.reorder-priority-info:hover .reorder-priority-tip,
-.reorder-priority-info:focus-visible .reorder-priority-tip {
-  opacity: 1;
-  visibility: visible;
 }
 
 /* ── Read-only weight bar ────────────────────────────────────────────────
@@ -1527,5 +1537,46 @@
   .policy-bar-track span,
   .abc-share-track span {
     animation: none;
+  }
+}
+
+/* Stacked parts inside one policy bar (the LP target = sales until the
+   next delivery + safety stock): side by side, a 2px surface gap between
+   them, and only the outer data end rounded. */
+.policy-bar-track {
+  display: flex;
+}
+
+.policy-bar-track span + span {
+  margin-left: 2px;
+}
+
+.policy-bar-track span:not(:last-child) {
+  border-radius: 0;
+}
+
+/* The LP bar's parts, named with their figures under the bars. Left-aligned
+   under the bars' column; text in text tokens, the swatch carries identity. */
+.policy-parts-legend {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: -0.25rem 0 0.5rem calc(12rem + 0.75rem);
+  font-size: 0.78rem;
+  color: var(--color-text-body);
+}
+
+.policy-parts-legend strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.policy-part-note {
+  color: var(--color-text-subtle);
+}
+
+@media (max-width: 640px) {
+  .policy-parts-legend {
+    margin-left: 0;
   }
 }

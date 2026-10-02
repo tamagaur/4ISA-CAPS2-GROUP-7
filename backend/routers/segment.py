@@ -64,7 +64,8 @@ from backend.data_mode import (
     preview_block,
     series_traits,
 )
-from backend.deps import TokenPayload, get_current_user, get_db
+from backend.deps import TokenPayload, get_db
+from backend.permissions import require_permission
 from backend.principals import (
     PrincipalQuery,
     principal_clause,
@@ -116,7 +117,7 @@ def get_segment(
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(require_permission("forecast.view", "lp.view")),
 ) -> SegmentResponse:
     scope_sql, scope_params = principal_clause(principal, "principal")
     product = db.execute(

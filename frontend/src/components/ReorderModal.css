@@ -263,3 +263,20 @@
 .reorder-modal-card {
   max-width: 640px;
 }
+
+/* A grid value's second line: the rough case count under a quantity in
+   pieces, or why there is no stock figure / why it reads 0. */
+.reorder-grid-sub {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+/* The one-line "storage cost has no effect" caveat under the weights bar. */
+.reorder-why-caveat {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin: 0 0 0.9rem 0;
+}

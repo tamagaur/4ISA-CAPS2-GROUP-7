@@ -425,3 +425,203 @@ def test_pareto_check_reads_the_running_total_not_a_sum_of_rounded_shares():
     assert check["top_count"] == 120
     assert check["revenue_share"] == pytest.approx(0.8484)
     assert check["passes"] is True
+
+
+# ---- stock status follows lp.view (Yuan's permissions proposal, 2026-09-30) ----
+
+def _rows_with_reorder_points():
+    base = {"principal": "unilever", "revenue_share": 0.25, "cumulative_share": 0.5,
+            "boundary_flag": False, "_period": "2024-02"}
+    return [
+        {**base, "product_key": 1, "sku_id": "ABOVE", "product_name": "P1", "tier": "A", "current_stock": 120, "reorder_point": 100},
+        {**base, "product_key": 2, "sku_id": "BELOW", "product_name": "P2", "tier": "A", "current_stock": 40, "reorder_point": 100},
+        {**base, "product_key": 3, "sku_id": "NOROP", "product_name": "P3", "tier": "B", "current_stock": 40, "reorder_point": None},
+        {**base, "product_key": 4, "sku_id": "EMPTY", "product_name": "P4", "tier": "C", "current_stock": 0, "reorder_point": 100},
+    ]
+
+
+def _statuses():
+    session = FakeSession(_rows_with_reorder_points(), latest_period="2024-02")
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
+    with TestClient(app) as c:
+        body = c.get("/abc").json()
+    app.dependency_overrides.clear()
+    return {i["sku_id"]: i["stock_status"] for i in body["items"]}
+
+
+def test_stock_status_is_judged_against_the_reorder_point_with_lp_view():
+    assert _statuses() == {"ABOVE": "IN STOCK", "BELOW": "LOW", "NOROP": "NO ROP", "EMPTY": "CRITICAL"}
+
+
+def test_without_lp_view_stock_on_hand_reads_on_hand(monkeypatch):
+    """Above/below the reorder point would reveal the LP's figure; being out
+    of stock doesn't, so CRITICAL (and NO DATA) stay."""
+    from backend import permissions
+
+    monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {"lp.view": False})
+    assert _statuses() == {"ABOVE": "ON HAND", "BELOW": "ON HAND", "NOROP": "ON HAND", "EMPTY": "CRITICAL"}
+
+
+def test_status_for_keeps_no_data_and_critical():
+    from backend.routers.abc import _status_for
+
+    assert _status_for(None, 100.0, lp_visible=False) == "NO DATA"
+    assert _status_for(0.0, 100.0, lp_visible=False) == "CRITICAL"
+    assert _status_for(500.0, 100.0, lp_visible=False) == "ON HAND"
+    assert _status_for(500.0, 100.0, lp_visible=True) == "IN STOCK"
+
+
+# ---- 80/20 check minimum, no-target reasons, class shares (2026-10-01) ------
+
+def _ranked(n, principal="unilever", period="2024-02"):
+    """n current-run rows with a steep, consistent running total."""
+    weights = [0.5 ** i for i in range(n)]
+    total = sum(weights)
+    rows, cumulative = [], 0.0
+    for i, w in enumerate(weights):
+        cumulative += w / total
+        tier = "A" if cumulative <= 0.80 else ("B" if cumulative <= 0.95 else "C")
+        rows.append({"product_key": i + 1, "sku_id": f"R-{i + 1}", "product_name": f"R{i + 1}", "principal": principal,
+                     "tier": tier, "revenue_share": round(w / total, 4), "cumulative_share": round(cumulative, 4),
+                     "boundary_flag": False, "current_stock": None, "reorder_point": None, "_period": period})
+    return rows
+
+
+def test_pareto_check_is_not_applicable_below_the_minimum():
+    """Del Monte's 2025-12 run ranks 4 categories: the top fifth is ONE
+    category, and the page called that a failed 80/20 split (71.1%)."""
+    from backend.routers.abc import PARETO_MIN_ITEMS
+
+    session = FakeSession(_ranked(4, principal="delmonte"), latest_period="2024-02")
+    check = _get(session, "principal=delmonte")["pareto_check"]
+    assert check["status"] == "not_applicable"
+    assert check["passes"] is None
+    assert check["ranked_count"] == 4 and check["min_items"] == PARETO_MIN_ITEMS
+    assert check["reason"].startswith("Too few categories for an 80/20 check (4 ranked")
+
+
+def test_pareto_check_is_unchanged_at_and_above_the_minimum():
+    """From PARETO_MIN_ITEMS up, the check is pareto_check's own verdict."""
+    from analytics.classification.abc import pareto_check
+    from backend.routers.abc import PARETO_MIN_ITEMS
+
+    for n in (PARETO_MIN_ITEMS, 40):
+        rows = _ranked(n)
+        check = _get(FakeSession(rows, latest_period="2024-02"), "principal=unilever")["pareto_check"]
+        expected = pareto_check([r["revenue_share"] for r in rows], [r["cumulative_share"] for r in rows])
+        assert {k: check[k] for k in expected} == expected
+        assert check["status"] == ("pass" if expected["passes"] else "fail")
+        assert check["reason"] is None
+
+
+def test_class_shares_come_from_the_running_total_not_rounded_row_shares():
+    """Unilever 2026-02: Class B's 194 shares, each rounded to 4 dp, summed to
+    0.1493 (14.9%) while B is 14.99% of the month. Built the way the run
+    stores it — row shares and the running total each rounded once — the
+    sum drifts by more than half a point and the boundaries don't."""
+    from backend.routers.abc import _summarize
+    from backend.schemas.abc import ABCItem
+
+    true = {"A": (132, 0.79992), "B": (194, 0.14990), "C": (384, 0.05018)}
+    items, cumulative = [], 0.0
+    for tier, (n, share) in true.items():
+        for _ in range(n):
+            cumulative += share / n
+            items.append(ABCItem(sku_id="x", principal="unilever", tier=tier, tier_period="2026-02",
+                                 revenue_share=round(share / n, 4), cumulative_share=round(cumulative, 4),
+                                 stock_status="NO DATA"))
+    summary = {t.tier: t.revenue_share_total for t in _summarize(items, "2026-02")[0]}
+    for tier, (n, share) in true.items():
+        assert summary[tier] == pytest.approx(share, abs=1e-4)
+        assert abs(n * round(share / n, 4) - share) > 0.005  # what the old sum read
+    assert sum(summary.values()) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_lp_mase_gate_matches_the_forecast_gate():
+    from analytics.forecasting.baseline import MASE_GATE
+    from backend.routers.abc import LP_MASE_GATE
+
+    assert LP_MASE_GATE == MASE_GATE
+
+
+def _reason(row, tier="A", tier_period="2026-02", has_cycle=True):
+    from backend.routers.abc import _no_target_reason
+
+    base = {"principal": "unilever", "pool_period": "2026-02", "pool_tier": tier}
+    return _no_target_reason({**base, **row}, tier, tier_period, has_cycle=has_cycle)
+
+
+def test_no_target_reason_for_each_way_out_of_the_lp_pool():
+    """The LP plans Class A of the latest run whose forecast is 'ok' with
+    MASE < 1 (scripts/run_lp.py). Each way out of that pool has its reason."""
+    assert _reason({}, tier="B") == ("Not planned: the reorder plan covers Class A only", "not_class_a")
+    assert _reason({}, tier="C") == ("Not planned: the reorder plan covers Class A only", "not_class_a")
+    assert _reason({"fc_status": "ok", "fc_mase": 1.24}) == (
+        "Not planned: forecast accuracy check not passed (MASE 1.24)", "accuracy")
+    assert _reason({"fc_status": "ok", "fc_mase": 1.004})[0].endswith("(MASE 1.004)")
+    assert _reason({"fc_status": "insufficient_data", "fc_mase": None}) == (
+        "Not planned: too little sales history to forecast", "short_history")
+    assert _reason({"fc_status": "dead_sku"})[1] == "no_recent_sales"
+    assert _reason({"fc_status": "fit_failed"})[1] == "forecast_failed"
+    assert _reason({"fc_status": "unreliable"})[1] == "accuracy"
+    assert _reason({"fc_status": "ok", "fc_mase": None})[1] == "not_measured"
+    assert _reason({"fc_status": None}) == ("Not planned: no forecast exists for it", "no_forecast")
+    assert _reason({"fc_status": "ok", "fc_mase": 0.8})[1] == "not_in_plan"
+    assert _reason({"fc_status": "ok", "fc_mase": 0.8}, has_cycle=False)[1] == "no_plan"
+
+
+def test_no_target_reason_follows_the_latest_ranking_not_the_row_tier():
+    """A Class A row carried forward (no sales in the plan's month), or shown
+    for an earlier month where it was A, is outside the plan all the same."""
+    carried = _reason({"pool_tier": None}, tier_period="2025-11")
+    assert carried == ("Not planned: the reorder plan covers Class A of the Feb 2026 ranking, "
+                       "and this SKU had no sales that month", "not_ranked")
+    earlier = _reason({"pool_tier": "B"}, tier_period="2025-11")
+    assert earlier == ("Not planned: the reorder plan covers Class A only, and this SKU is Class B "
+                       "in the Feb 2026 ranking", "not_class_a")
+    assert "this category" in _reason({"principal": "delmonte", "pool_tier": None}, tier_period="2024-12")[0]
+
+
+class CycleFakeSession(FakeSession):
+    """FakeSession with a current LP cycle, so a planned row has a target."""
+
+    def execute(self, stmt, params=None):
+        if "MAX(lr.planning_cycle_date)" in str(stmt):
+            return FakeResult([{"d": "2026-03-01"}])
+        return super().execute(stmt, params)
+
+
+def _reason_rows():
+    base = {"principal": "unilever", "revenue_share": 0.2, "cumulative_share": 0.5, "boundary_flag": False,
+            "current_stock": 50, "_period": "2024-02", "pool_period": "2024-02"}
+    return [
+        {**base, "product_key": 1, "sku_id": "PLANNED", "product_name": "P1", "tier": "A", "pool_tier": "A",
+         "reorder_point": 100, "fc_status": "ok", "fc_mase": 0.7},
+        {**base, "product_key": 2, "sku_id": "MASE", "product_name": "P2", "tier": "A", "pool_tier": "A",
+         "reorder_point": None, "fc_status": "ok", "fc_mase": 1.24},
+        {**base, "product_key": 3, "sku_id": "SHORT", "product_name": "P3", "tier": "A", "pool_tier": "A",
+         "reorder_point": None, "fc_status": "insufficient_data", "fc_mase": None},
+        {**base, "product_key": 4, "sku_id": "CLASSB", "product_name": "P4", "tier": "B", "pool_tier": "B",
+         "reorder_point": None, "fc_status": None, "fc_mase": None},
+    ]
+
+
+def test_items_carry_the_no_target_reason_and_the_query_joins_the_pool(monkeypatch):
+    session = CycleFakeSession(_reason_rows(), latest_period="2024-02")
+    items = {i["sku_id"]: i for i in _get(session, "principal=unilever")["items"]}
+    assert items["PLANNED"]["stock_status"] == "LOW"
+    assert items["PLANNED"]["no_target_reason"] is None and items["PLANNED"]["no_target_code"] is None
+    assert items["MASE"]["stock_status"] == "NO ROP"
+    assert items["MASE"]["no_target_reason"] == "Not planned: forecast accuracy check not passed (MASE 1.24)"
+    assert items["SHORT"]["no_target_code"] == "short_history"
+    assert items["CLASSB"]["no_target_reason"] == "Not planned: the reorder plan covers Class A only"
+    row_sql = [sql for sql, _ in session.calls if "FROM abc_classification ac" in sql]
+    assert row_sql and "pool_run" in row_sql[0] and "DISTINCT ON (f.product_key)" in row_sql[0]
+
+    # Whether the LP plans a product is LP information: hidden without lp.view.
+    from backend import permissions
+
+    monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {"lp.view": False})
+    hidden = _get(CycleFakeSession(_reason_rows(), latest_period="2024-02"), "principal=unilever")["items"]
+    assert all(i["no_target_reason"] is None and i["no_target_code"] is None for i in hidden)

@@ -6,17 +6,17 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine
 } from 'recharts';
-import { HelpCircle, ArrowRight, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
 import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { ChartTable, ChartViewToggle } from './ChartTable';
-import { DEFAULT_PRINCIPAL, PRINCIPALS, labelForPrincipal } from '../principals';
 import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
+import InfoTip from './InfoTip';
 import './Charts.css';
 
 // Legend entry for the placeholder band (utils/placeholderBand.jsx).
@@ -312,11 +312,42 @@ const SalesStockTooltip = ({ active, payload, label, placeholder }) => {
           {p.name}: <strong>{formatCompactPesos(p.value)}</strong>
         </p>
       ))}
+      {/* A stock count the team reviewed and judged unusual (GET
+          /dashboard's stock_on_hand_flags) — the reason sits with the point. */}
+      {rows[0]?.payload?.stockUnusual && (
+        <p className="chart-tooltip-placeholder chart-tooltip-note">Unusual count: {rows[0].payload.stockUnusual}</p>
+      )}
       {isPlaceholderPeriod(label, placeholder) && (
         <p className="chart-tooltip-placeholder">Placeholder month — not SSM&apos;s data</p>
       )}
     </div>
   );
+};
+
+// The stock line's dot, except at a count GET /dashboard flags as unusual
+// (stock_on_hand_flags, from the team's reviewed list in backend/
+// data_notes.py): there a hollow slate ring, drawn at every density, so the
+// point stays on the line — it was counted — without reading as an ordinary
+// month. The tooltip gives the reason.
+const stockDot = (color) => {
+  const base = seriesDot({ color });
+  const StockDot = (props) => {
+    const { cx, cy, payload } = props;
+    if (payload?.stockUnusual && cx != null && cy != null) {
+      return (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={5}
+          fill="var(--color-surface, #fff)"
+          stroke="var(--color-text-muted, #556070)"
+          strokeWidth={2}
+        />
+      );
+    }
+    return base(props);
+  };
+  return StockDot;
 };
 
 // No supplier allocation schedule exists anywhere in the schema or the
@@ -345,8 +376,25 @@ const RECEIVED_LABEL = 'Purchases received';
 // `insight` is GET /dashboard's sales_vs_stock_insight: the one-sentence
 // takeaway under the title and the peak/low sales months this chart
 // labels — computed by the backend from the same rows, never typed here.
-export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null, insight = null, note = null }) => {
+//
+// `basis` is GET /dashboard's sales_vs_stock_basis ({sales, received}):
+// the tax basis of the two flow lines, named in the legend and tooltip.
+// Del Monte's purchases were plotted VAT-inclusive beside its ex-VAT sales
+// until 2026-10-01 (₱23.0M vs ₱22.1M in Dec 2025, ₱20.5M ex-VAT); the
+// backend now puts both on one basis per principal, and the label says
+// which. Null under All principals, where `note` (vat_note) explains the mix.
+// A point's `stockUnusual` is the reason a stock count was flagged (GET
+// /dashboard's stock_on_hand_flags): marked, never dropped.
+export const SalesVsStockWidget = ({
+  data = [], emptyReason, placeholder = null, insight = null, note = null, basis = null,
+}) => {
   const hasData = data.length > 0;
+  // "Sales · ex-VAT" — a middle dot, not brackets: a Del Monte range holding
+  // Aug 2023 brings its own "(except Aug 2023, recorded with tax)".
+  const withBasis = (label, key) => (basis?.[key] ? `${label} · ${basis[key]}` : label);
+  const salesLabel = withBasis('Sales', 'sales');
+  const receivedLabel = withBasis(RECEIVED_LABEL, 'received');
+  const hasUnusual = data.some((pt) => pt.stockUnusual && pt.stockOnHand != null);
   // Windows over whatever range the page's date filter fetched. At a wide
   // range that is 38 months, far more than the XAxis can label without
   // skipping — narrowing the window is what puts every month back on screen.
@@ -403,10 +451,12 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
         salesEntries.push({ period: mark.period, text: mark.label, below: mark === insight?.low });
       }
     }
+    // A flagged count keeps its end label, but says it is unusual — the
+    // label is where the eye lands first.
     const stockEntries = lastStock && !collide
       ? [{
           period: lastStock.period,
-          text: `Stock ${formatCompactPesos(lastStock.stockOnHand)}`,
+          text: `Stock ${formatCompactPesos(lastStock.stockOnHand)}${lastStock.stockUnusual ? ' (unusual)' : ''}`,
           below: !(lastSales && lastSales.sales < (lastStock.stockOnHand ?? -Infinity)),
         }]
       : [];
@@ -418,9 +468,12 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
 
   const tableColumns = [
     { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
-    { key: 'sales', label: 'Sales', format: (v) => formatCompactPesos(v) },
+    { key: 'sales', label: salesLabel, format: (v) => formatCompactPesos(v) },
     { key: 'stockOnHand', label: 'Stock on hand', format: (v) => formatCompactPesos(v) },
-    ...(hasReceived ? [{ key: 'received', label: RECEIVED_LABEL, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasReceived ? [{ key: 'received', label: receivedLabel, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasUnusual
+      ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Unusual count: ${v}`, align: 'left' }]
+      : []),
   ];
 
   return (
@@ -428,16 +481,10 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Sales vs Stock on Hand <span className="chart-unit">₱</span></h4>
-          <p>
-            Monthly revenue and stock-on-hand valuation, in pesos.
-            {hasReceived
-              ? ' The purchases-received line stands in for the supplier allocation schedule, which SSM has not yet provided — it is what was bought, not an allocation.'
-              : ' No purchases line: Unilever has no purchase records, so the line appears only in the Del Monte view.'}
-            {/* GET /dashboard's vat_note — only under All principals, where the
-                combined pesos mix Unilever's VAT-inclusive amounts with Del
-                Monte's VAT-exclusive ones. */}
-            {note ? ` ${note}` : ''}
-          </p>
+          {/* GET /dashboard's vat_note — only under All principals, where the
+              combined pesos mix Unilever's VAT-inclusive amounts with Del
+              Monte's VAT-exclusive ones. */}
+          {note && <p>{note}</p>}
           {/* The backend's takeaway sentence, from the same rows this
               chart plots (sales_vs_stock_insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
@@ -461,7 +508,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
               {...focusHandlers('sales')}
             >
               <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
-              Sales
+              {salesLabel}
             </li>
             <li
               className="legend-item"
@@ -473,7 +520,13 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
             {hasReceived && (
               <li className="legend-item" {...focusHandlers('received')}>
                 <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
-                {RECEIVED_LABEL}
+                {receivedLabel}
+              </li>
+            )}
+            {hasUnusual && (
+              <li className="legend-item">
+                <span className="legend-unusual" aria-hidden="true" />
+                Unusual stock count — hover or tap it for why
               </li>
             )}
             {hasPlaceholder && <PlaceholderLegendItem />}
@@ -522,7 +575,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
                 <Line
                   type="linear"
                   dataKey="sales"
-                  name="Sales"
+                  name={salesLabel}
                   stroke={CHART_COLORS.salesSeries}
                   strokeWidth={2}
                   strokeLinecap="round"
@@ -541,7 +594,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
                   strokeWidth={2}
                   strokeLinecap="round"
                   strokeOpacity={dimmable('stockOnHand')}
-                  dot={seriesDot({ color: CHART_COLORS.stockSeries })}
+                  dot={stockDot(CHART_COLORS.stockSeries)}
                   activeDot={{ r: 6 }}
                   label={labels.stock}
                   {...focusHandlers('stockOnHand')}
@@ -551,7 +604,7 @@ export const SalesVsStockWidget = ({ data = [], emptyReason, placeholder = null,
                   <Line
                     type="linear"
                     dataKey="received"
-                    name={RECEIVED_LABEL}
+                    name={receivedLabel}
                     stroke={COLORS.forecast}
                     strokeDasharray="7 5"
                     strokeWidth={2}
@@ -581,7 +634,7 @@ const abcTierColor = (tier) => ABC_TIER_COLORS[tier] || CHART_COLORS.abcRamp[0];
 // minimal monitoring. Without this the card showed "A / B / C" and left the
 // reader to guess why a tier matters.
 const ABC_TIER_ROLE = {
-  A: { name: 'Top sellers', role: 'The only tier the app forecasts and plans reorders for.' },
+  A: { name: 'Top sellers', role: 'The only class the app forecasts and plans reorders for.' },
   B: { name: 'Middle sellers', role: 'Watched on this dashboard only — not forecast, no reorder plan.' },
   C: { name: 'Long tail', role: 'Lowest revenue — kept on minimal monitoring.' },
 };
@@ -589,7 +642,7 @@ const ABC_TIER_ROLE = {
 // nothing of Del Monte's is forecast or reordered, so the roles above would
 // be false for it.
 const DEL_MONTE_TIER_ROLE =
-  'Ranked by category sell-out. Del Monte has no SKU-level sales, so no tier here is forecast or reordered.';
+  'Ranked by category sell-out. Del Monte has no SKU-level sales, so no class here is forecast or reordered.';
 
 // The ring is plain SVG so each segment can be a real keyboard button. Same
 // layout the Recharts ring had: it starts at 3 o'clock, runs
@@ -654,7 +707,7 @@ const AbcTierCard = ({ facts }) => {
     <div className="abc-tier-card" aria-live="polite">
       <p className="abc-tier-card-name">
         <span className="legend-color" style={{ backgroundColor: abcTierColor(facts.tier) }} aria-hidden="true" />
-        Tier {facts.tier}{role && <span className="abc-tier-card-alias">· {role.name}</span>}
+        Class {facts.tier}{role && <span className="abc-tier-card-alias">· {role.name}</span>}
       </p>
       {/* What the tier is FOR, before any number: the one line that says
           why a reader should care which tier a SKU is in. */}
@@ -677,16 +730,16 @@ const AbcTierCard = ({ facts }) => {
           <p className="abc-tier-card-insight">
             <span>
               {Number(y) > Number(x) ? (
-                <>Tier {facts.tier} is only <strong>{x}%</strong> of {facts.units} but brings in <strong>{y}%</strong> of revenue.</>
+                <>Class {facts.tier} is only <strong>{x}%</strong> of {facts.units} but brings in <strong>{y}%</strong> of revenue.</>
               ) : (
-                <>Tier {facts.tier} is <strong>{x}%</strong> of {facts.units} but brings in only <strong>{y}%</strong> of revenue.</>
+                <>Class {facts.tier} is <strong>{x}%</strong> of {facts.units} but brings in only <strong>{y}%</strong> of revenue.</>
               )}
             </span>
           </p>
         )}
       </div>
       <Link to="/abc" className="abc-tier-card-link">
-        See every SKU and its tier <ArrowRight size={12} aria-hidden="true" />
+        See every SKU and its class <ArrowRight size={12} aria-hidden="true" />
       </Link>
     </div>
   );
@@ -755,7 +808,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
       role="tooltip"
       style={pos ? { left: pos.left, top: pos.top } : { left: 0, top: 0, visibility: 'hidden' }}
     >
-      <span className="abc-hover-tip-title">Tier {facts.tier}</span>
+      <span className="abc-hover-tip-title">Class {facts.tier}</span>
       <span>{facts.count.toLocaleString()} {facts.units} · {facts.skuPct.toFixed(0)}% of {facts.units}</span>
       <span>{revenueLine}</span>
     </div>,
@@ -763,8 +816,10 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
   );
 };
 
-// ABC classification — `data` is [{ tier: 'A'|'B'|'C', count, sharePct }],
-// `revenue` is GET /dashboard's abc_revenue {period, total, blocked_reason}.
+// ABC classification — `data` is [{ tier: 'A'|'B'|'C', count, sharePct,
+// revenue }] (revenue: the class's own pesos, GET /dashboard's
+// abc_mix[].revenue), `revenue` is GET /dashboard's abc_revenue {period,
+// total, ranked_total, blocked_reason}.
 // The ring encodes each tier's share of revenue, with the selected tier's
 // share written in its centre; clicking a segment or its legend item picks
 // the tier the card beside it describes (Tier A on load, never nothing). The
@@ -789,7 +844,15 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
   const total = data.reduce((sum, d) => sum + d.count, 0);
   const skuSharePct = (d) => (total > 0 ? (d.count / total) * 100 : 0);
 
-  const revenueTotal = revenue?.total != null && Number.isFinite(Number(revenue.total)) ? Number(revenue.total) : null;
+  // The revenue the ring's shares are shares OF: the ranked products' own
+  // (abc_revenue.ranked_total), not the month's net sales (`total`), which
+  // also carry the net returns of the products the ABC run left unranked.
+  // Shares x net sales put Class A at ₱22.3M when its SKUs sold ₱22,443,150
+  // (Unilever 2026-02). Each class's exact revenue (abc_mix[].revenue) is
+  // used first; the share x ranked total is only its fallback.
+  const rankedTotal = revenue?.ranked_total != null && Number.isFinite(Number(revenue.ranked_total))
+    ? Number(revenue.ranked_total)
+    : null;
   const shareSum = data.reduce((sum, d) => sum + Number(d.sharePct), 0);
   const sharesAddUp = Number.isFinite(shareSum) && Math.abs(shareSum - 100) <= ABC_SHARE_SUM_TOLERANCE;
   // GET /dashboard withholds revenue shares a run can't support (two
@@ -806,7 +869,10 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     units,
     skuPct: skuSharePct(d),
     revenuePct: sharesAddUp ? d.sharePct : null,
-    amount: sharesAddUp && revenueTotal != null ? (revenueTotal * d.sharePct) / 100 : null,
+    amount: !sharesAddUp ? null
+      : d.revenue != null ? Number(d.revenue)
+        : rankedTotal != null ? (rankedTotal * d.sharePct) / 100
+          : null,
   });
 
   const selected = data.find((d) => d.tier === selectedTier) || data.find((d) => d.tier === 'A') || data[0];
@@ -837,14 +903,14 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
           <p>
             Which products earn the most. {unitsTitle} are ranked by revenue{rankedMonth ? ` in ${rankedMonth}` : ''}
             {rules
-              ? `: Tier A makes up the first ${Math.round(rules.tier_a_cutoff * 100)}%, `
+              ? `: Class A makes up the first ${Math.round(rules.tier_a_cutoff * 100)}%, `
                 + `B the next ${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, `
                 + `C the last ${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`
               : '.'}
             {/* With only a handful of categories a tier can't land on its
                 cut-off (Del Monte 2025-12: A 71%, B 18%, C 11%). */}
-            {units === 'categories' && ' With only a few categories, a tier cannot land exactly on its cut-off.'}
-            {' '}Click a tier for details.
+            {units === 'categories' && ' With only a few categories, a class cannot land exactly on its cut-off.'}
+            {' '}Click a class for details.
           </p>
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
           {!sharesAddUp && revenue?.blocked_reason && <p className="chart-placeholder-note">{revenue.blocked_reason}</p>}
@@ -865,7 +931,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                 height={ABC_DONUT_SIZE}
                 viewBox={`0 0 ${ABC_DONUT_SIZE} ${ABC_DONUT_SIZE}`}
                 role="group"
-                aria-label={sharesAddUp ? 'Share of revenue by tier' : `Share of ${units} by tier`}
+                aria-label={sharesAddUp ? 'Share of revenue by class' : `Share of ${units} by class`}
               >
                 {segments.map((s) => s.path && (
                   <path
@@ -876,7 +942,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                     role="button"
                     tabIndex={0}
                     aria-pressed={s.tier === selected.tier}
-                    aria-label={`Tier ${s.tier}`}
+                    aria-label={`Class ${s.tier}`}
                     onClick={() => setSelectedTier(s.tier)}
                     onKeyDown={selectOnKey(s.tier)}
                     onPointerEnter={trackHover(s.tier)}
@@ -890,7 +956,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                 {selectedFacts && (
                   <g className="abc-donut-centre" aria-hidden="true">
                     <text x={centre} y={centre - 18} textAnchor="middle" className="abc-donut-centre-tier">
-                      Tier {selectedFacts.tier}
+                      Class {selectedFacts.tier}
                     </text>
                     <text x={centre} y={centre + 9} textAnchor="middle" className="abc-donut-centre-value">
                       {selectedFacts.revenuePct != null
@@ -910,7 +976,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                       type="button"
                       className={`abc-legend-btn${d.tier === selected.tier ? ' is-selected' : ''}`}
                       aria-pressed={d.tier === selected.tier}
-                      aria-label={`Tier ${d.tier}${ABC_TIER_ROLE[d.tier] ? `, ${ABC_TIER_ROLE[d.tier].name}` : ''}`}
+                      aria-label={`Class ${d.tier}${ABC_TIER_ROLE[d.tier] ? `, ${ABC_TIER_ROLE[d.tier].name}` : ''}`}
                       onClick={() => setSelectedTier(d.tier)}
                     >
                       <span className="legend-color" style={{ backgroundColor: abcTierColor(d.tier) }} aria-hidden="true" />
@@ -926,7 +992,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
           <div
             className="abc-share-pair"
             role="img"
-            aria-label={sharesAddUp ? `Share of revenue versus share of ${units}, by tier` : `Share of ${units}, by tier`}
+            aria-label={sharesAddUp ? `Share of revenue versus share of ${units}, by class` : `Share of ${units}, by class`}
           >
             {sharePairs.map((pair) => (
               <div className="abc-share-row" key={pair.key}>
@@ -938,7 +1004,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                       <span
                         key={d.tier}
                         style={{ width: `${v}%`, backgroundColor: abcTierColor(d.tier) }}
-                        title={`Tier ${d.tier}: ${v.toFixed(0)}% ${pair.key === 'skuPct' ? `of ${units} (${d.count})` : 'of revenue'}`}
+                        title={`Class ${d.tier}: ${v.toFixed(0)}% ${pair.key === 'skuPct' ? `of ${units} (${d.count})` : 'of revenue'}`}
                       />
                     );
                   })}
@@ -965,6 +1031,17 @@ const WAREHOUSE_STATUS_COLORS = {
   active: SEMANTIC.healthy,
   deadStock: SEMANTIC.watch,
   noData: SEMANTIC.noData,
+};
+
+// One tier's exact counts, for the detail line under the bars. Pending
+// reorder is null when the account can't see LP figures (no lp.view).
+const tierStockDetail = (row) => {
+  const pending = row.pendingReorderCount ?? null;
+  const noData = row.noData || 0;
+  return `Class ${row.tier} — active: ${(row.inStock || 0).toLocaleString()}, `
+    + `dead stock (Inactive): ${(row.deadStock || 0).toLocaleString()}`
+    + (pending != null ? `, pending reorder: ${pending.toLocaleString()}` : '')
+    + (noData ? `, no inventory record: ${noData.toLocaleString()}` : '');
 };
 
 // One bar per ABC tier — `data` is
@@ -1003,16 +1080,21 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
   // CSS (no Recharts here), so it's applied by hand rather than picked up
   // for free.
   const disableAnim = prefersReducedMotion();
+  // The tier whose counts the detail line under the bars shows — set by
+  // hover, keyboard focus or a tap (2026-09-30: was a native title tooltip
+  // that floated over the bars below it).
+  const [activeTier, setActiveTier] = useState(null);
+  const activeRow = data.find((row) => row.tier === activeTier) || null;
 
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+    <div className={`chart-widget tier-stock-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Active / dead stock by ABC tier (warehouse status)</h4>
+          <h4>Active / dead stock by ABC class (warehouse status)</h4>
           <p>
-            Counts each tier&apos;s products by the warehouse&apos;s own Active/Inactive flag on the latest
-            stock snapshot — not by whether stock covers the reorder point (that is the ABC page&apos;s
-            &ldquo;Cover vs reorder point&rdquo;).
+            Counts each class&apos;s products by the warehouse&apos;s own Active/Inactive flag on the latest
+            stock snapshot — not by whether stock covers the LP&apos;s target stock (that is the ABC page&apos;s
+            &ldquo;Cover vs target stock&rdquo;).
           </p>
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
           {note && <p className="chart-placeholder-note">{note}</p>}
@@ -1022,7 +1104,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
       {!hasData ? (
         <p className="dashboard-empty-note">{emptyReason || 'No stock status data available'}</p>
       ) : (
-        <div className="chart-widget-body">
+        <div className="chart-widget-body tier-stock-body">
           {/* When no tier has a single Inactive product, the bars alone
               just read "everything is green" — say the finding outright.
               The month is GET /dashboard's tier_stock_period (the snapshot
@@ -1036,11 +1118,13 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
               </span>
             </p>
           )}
-          <div className="tier-stock-bars">
+          <div
+            className={`tier-stock-bars${activeRow ? ' has-active' : ''}`}
+            onMouseLeave={() => setActiveTier(null)}
+          >
             {data.map((row, index) => {
               const inStock = row.inStock || 0;
               const deadStock = row.deadStock || 0;
-              const pendingReorderCount = row.pendingReorderCount || 0;
               const noData = row.noData || 0;
               const total = inStock + deadStock + noData;
               // Floor at a visible width for any segment that's genuinely
@@ -1049,16 +1133,12 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
               // indistinguishable from "actually zero." A truly-zero count
               // stays at 0% — this never invents a value, it only keeps a
               // real one from being visually erased. Exact figures are
-              // still in this row's title tooltip regardless.
+              // still in the detail line under the bars regardless.
               const MIN_VISIBLE_PCT = 1.5;
               const pct = (v) => {
                 if (total <= 0 || v <= 0) return 0;
                 return Math.max((v / total) * 100, MIN_VISIBLE_PCT);
               };
-              const title =
-                `Tier ${row.tier} — active: ${inStock.toLocaleString()}, ` +
-                `dead stock (Inactive): ${deadStock.toLocaleString()}, pending reorder: ${pendingReorderCount.toLocaleString()}` +
-                (noData ? `, no inventory record: ${noData.toLocaleString()}` : '');
               // Each row's bar sweeps in staggered by tier — same duration/
               // easing/stagger constants the Recharts widgets on this page
               // use (CHART_ANIM_DURATION/STAGGER), just applied as CSS
@@ -1069,8 +1149,20 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
                     '--tier-anim-duration': `${CHART_ANIM_DURATION}ms`,
                     '--tier-anim-delay': `${index * CHART_ANIM_STAGGER}ms`,
                   };
+              // Focusable so keyboard users reach the same detail line;
+              // a tap sets it too (touch has no hover), and it clears when
+              // focus or the pointer leaves the bars.
               return (
-                <div className="tier-stock-row" key={row.tier} title={title}>
+                <div
+                  className={`tier-stock-row${row.tier === activeTier ? ' is-active' : ''}`}
+                  key={row.tier}
+                  tabIndex={0}
+                  aria-label={tierStockDetail(row)}
+                  onMouseEnter={() => setActiveTier(row.tier)}
+                  onFocus={() => setActiveTier(row.tier)}
+                  onBlur={() => setActiveTier(null)}
+                  onClick={() => setActiveTier(row.tier)}
+                >
                   <span className="tier-stock-label">{row.tier}</span>
                   <div className={`tier-stock-track${disableAnim ? '' : ' is-animated'}`} style={animStyle}>
                     {total <= 0 ? (
@@ -1087,6 +1179,12 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
               );
             })}
           </div>
+          {/* The hovered / focused / tapped tier's exact counts, under the
+              bars instead of over them. The hint holds the line's height so
+              the legend doesn't jump when a tier is picked. */}
+          <p className={`tier-stock-detail${activeRow ? '' : ' is-hint'}`} aria-live="polite">
+            {activeRow ? tierStockDetail(activeRow) : 'Hover or tap a bar for its counts.'}
+          </p>
           <ul className="custom-legend">
             <li className="legend-item">
               <span className="legend-color" style={{ backgroundColor: WAREHOUSE_STATUS_COLORS.active, borderRadius: '3px' }} />
@@ -1112,7 +1210,12 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
             <p className="chart-placeholder-note">
               Pending reorder recommendations in the LP&apos;s current cycle:{' '}
               {data.map((row) => `${row.tier} ${(row.pendingReorderCount || 0).toLocaleString()}`).join(' · ')}.
-              {' '}The LP plans Category A; rows now in B or C come from a cycle solved against an earlier ABC run.
+              {' '}The LP plans Class A
+              {/* Only true while an older run's rows linger in the cycle —
+                  the 2026-09-30 run retired them, leaving B and C at 0. */}
+              {data.some((row) => row.tier !== 'A' && (row.pendingReorderCount || 0) > 0)
+                ? '; rows now in B or C come from a cycle solved against an earlier ABC run.'
+                : '.'}
             </p>
           )}
         </div>
@@ -1130,43 +1233,55 @@ const PortfolioForecastTooltip = ({ active, payload, label }) => {
       {row.actual != null && (
         <p className="chart-tooltip-row">
           <span className="chart-tooltip-swatch" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />
-          Actual demand: <strong>{Math.round(row.actual).toLocaleString()} units</strong>
+          Actual demand: <strong>{Math.round(row.actual).toLocaleString()} pieces</strong>
         </p>
       )}
       {row.forecast != null && (
         <p className="chart-tooltip-row">
           <span className="chart-tooltip-swatch" style={{ backgroundColor: COLORS.forecast }} aria-hidden="true" />
-          Forecast: <strong>{Math.round(row.forecast).toLocaleString()} units</strong>
+          Forecast: <strong>{Math.round(row.forecast).toLocaleString()} pieces</strong>
         </p>
       )}
       {row.confidenceBase != null && row.confidenceBand != null && row.confidenceBand > 0 && (
-        <p className="chart-tooltip-row">
-          <span className="chart-tooltip-swatch" style={{ backgroundColor: COLORS.forecastBg }} aria-hidden="true" />
-          Range: <strong>
-            {Math.round(row.confidenceBase).toLocaleString()} – {Math.round(row.confidenceBase + row.confidenceBand).toLocaleString()}
-          </strong>
-        </p>
+        <>
+          <p className="chart-tooltip-row">
+            <span className="chart-tooltip-swatch" style={{ backgroundColor: COLORS.forecastBg }} aria-hidden="true" />
+            About 90% likely: <strong>
+              {Math.round(row.confidenceBase).toLocaleString()} – {Math.round(row.confidenceBase + row.confidenceBand).toLocaleString()} pieces
+            </strong>
+          </p>
+          <p className="chart-tooltip-placeholder chart-tooltip-note">
+            Assumes each SKU&apos;s forecast misses independently; a shared seasonal swing would widen it.
+          </p>
+        </>
       )}
     </div>
   );
 };
 
 // 236k / 1.2M / 940 — the same compaction the pieces axis uses.
-const formatCompactQty = (value) => {
+// millionDigits: the axis passes 2 so a 1,350k tick reads 1.35M, not a
+// rounded 1.4M that sits beside a gridline it doesn't match; trailing
+// zeros are dropped (1.80M -> 1.8M).
+const formatCompactQty = (value, millionDigits = 1) => {
   const n = Math.abs(value);
-  if (n >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  // 999,600 rounds to "1000k" in thousands, so it is shown as 1M instead.
+  if (Math.round(n / 1_000) >= 1_000) return `${parseFloat((value / 1_000_000).toFixed(millionDigits))}M`;
   if (n >= 1_000) return `${Math.round(value / 1_000)}k`;
   return `${Math.round(value)}`;
 };
 
 // Portfolio-level aggregate forecast — sums forecast_value across every
-// gated (MASE < 1, the LP's own gate) Category A SKU per period and plots it as one line
-// with a confidence band (sum of confidence_lower/confidence_upper)
-// against actual aggregate demand. Deliberately a directional visual, not
-// a statistically rigorous aggregate interval — summing independent
-// per-SKU confidence intervals overstates the true aggregate interval, so
-// this trades SKU-level nuance for an at-a-glance "is demand trending up
-// or down overall" read.
+// gated (MASE < 1, the LP's own gate) Class A SKU per period and plots it
+// as one line against actual aggregate demand, with an approximate 90%
+// range. The range used to be the per-SKU bounds summed, which assumed
+// every SKU misses as far as it can in the same direction at once — ±62%
+// around Mar 2026's 1,085,193 pieces, an overstatement this comment used
+// to admit. Since 2026-10-01 GET /dashboard combines the SKUs' half-widths
+// (1.645 x each one's holdout RMSE) as a root-sum-of-squares: ±159k (±15%).
+// That assumes the SKUs' misses are independent; demand that swings
+// together (a seasonal month) makes the true range wider, and the legend
+// and tooltip say so rather than presenting the band as exact.
 //
 // series: [{ period, actual, forecast, confidenceLower, confidenceUpper }].
 // actual is only present for historical periods, forecast/confidence only
@@ -1176,8 +1291,6 @@ export const PortfolioForecastWidget = ({
   series = [],
   scopeLabel,
   emptyReason,
-  principal,
-  onPrincipalChange,
   isUpdating = false,
   insight = null,
   // How many SKUs the series sums (GET /dashboard's gated_sku_count) out of
@@ -1255,12 +1368,12 @@ export const PortfolioForecastWidget = ({
     { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
     { key: 'actual', label: 'Actual (pieces)', format: (v) => Math.round(v).toLocaleString() },
     { key: 'forecast', label: 'Forecast (pieces)', format: (v) => Math.round(v).toLocaleString() },
-    { key: 'confidenceLower', label: 'Range low', format: (v) => Math.round(v).toLocaleString() },
-    { key: 'confidenceUpper', label: 'Range high', format: (v) => Math.round(v).toLocaleString() },
+    { key: 'confidenceLower', label: 'Approx. 90% range, low', format: (v) => Math.round(v).toLocaleString() },
+    { key: 'confidenceUpper', label: 'Approx. 90% range, high', format: (v) => Math.round(v).toLocaleString() },
   ];
 
   return (
-    <div className={`chart-widget${onPrincipalChange ? ' chart-widget-filterable' : ''}${hasData ? '' : ' chart-widget-empty'}`}>
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           {/* The unit is PIECES here and pesos on the chart above it; the
@@ -1269,52 +1382,18 @@ export const PortfolioForecastWidget = ({
           <p>
             {gatedSkuCount != null && tierACount
               ? `Summed demand across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} `
-                + 'Category A SKUs (those whose forecasts beat a naive baseline — MASE < 1, '
+                + 'Class A SKUs (those whose forecasts beat a naive baseline — MASE < 1, '
                 + 'the same gate the reorder plan uses) vs. forecast'
-              : 'Summed demand across gated Category A SKUs vs. forecast'}
+              : 'Summed demand across gated Class A SKUs vs. forecast'}
           </p>
           {/* The card's takeaway, composed by the backend from this same
               series (portfolio_forecast.insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
         </div>
-        {/* Card-scoped principal filter — re-scopes THIS card only, never
-            the page (the Topbar's filter does that). Rendered in the empty
-            state too, so a scope with no forecasts can be switched back
-            out of. Own class names, not the Topbar's .principal-segment:
-            CSS is global and that one carries viewport breakpoints meant
-            for the topbar, not a card. */}
-        {onPrincipalChange && (
-          <div className="card-filter-controls">
-            {hasData && <ChartViewToggle view={view} onChange={setView} label="Portfolio forecast: chart or table" />}
-            <div className="card-principal-filter" role="radiogroup" aria-label="Forecast principal">
-              {PRINCIPALS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  role="radio"
-                  aria-checked={principal === p.key}
-                  className={`card-principal-option${principal === p.key ? ' active' : ''}`}
-                  onClick={() => onPrincipalChange(p.key)}
-                >
-                  {p.key === 'all' ? 'All' : p.label}
-                </button>
-              ))}
-            </div>
-            {/* Back to the default scope (Unilever), where this card starts on every visit. */}
-            <button
-              type="button"
-              className="card-filter-reset"
-              onClick={() => onPrincipalChange(DEFAULT_PRINCIPAL)}
-              disabled={principal === DEFAULT_PRINCIPAL}
-              title={principal === DEFAULT_PRINCIPAL
-                ? `Already showing ${labelForPrincipal(DEFAULT_PRINCIPAL)}`
-                : `Reset to ${labelForPrincipal(DEFAULT_PRINCIPAL)}`}
-            >
-              <RotateCcw size={12} aria-hidden="true" />
-              Reset
-            </button>
-          </div>
-        )}
+        {/* The card follows the Topbar's principal filter like the rest of
+            the page (2026-09-30). Its own All / Del Monte / Unilever + Reset
+            filter is on branch parked/all-principals-filter. */}
+        {hasData && <ChartViewToggle view={view} onChange={setView} label="Portfolio forecast: chart or table" />}
       </div>
 
       {!hasData && isUpdating ? (
@@ -1356,7 +1435,7 @@ export const PortfolioForecastWidget = ({
                 </li>
                 <li className="legend-item">
                   <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
-                  Confidence band
+                  Approx. 90% range (if SKUs miss independently)
                 </li>
               </ul>
               <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
@@ -1377,7 +1456,7 @@ export const PortfolioForecastWidget = ({
                       tickLine={false}
                       domain={['auto', 'auto']}
                       tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
-                      tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                      tickFormatter={(v) => formatCompactQty(v, 2)}
                     />
                     <Tooltip content={<PortfolioForecastTooltip />} />
                     {/* The uncertainty cone is this chart's ONE fill — the
@@ -1449,19 +1528,22 @@ const URGENCY_STYLES = {
 // analytics/optimization/lp.py's W1/W2/W3 — the weights the LP solver
 // actually used for every currently-pending recommendation).
 //
-// The sliders below are a WHAT-IF control, not a re-solve: moving one
-// changes the displayed weight only. The recommendations underneath keep
-// reflecting the weights the solver actually ran with, because there is no
-// warehouse-capacity/supplier-ceiling/storage-cost data anywhere in the
-// schema to re-solve the LP against (see reorder_preview.lp_weights's
-// docstring in dashboard.py). Rather than silently implying the list
-// updated, the widget shows an explicit "not re-solved" note the moment
-// the sliders diverge from the solver's real weights.
+// The bars below are read-only (they were sliders): the API never re-solves
+// the LP, so a control that moved would change nothing underneath it.
 //
-// `blurb` states each weight's term in the LP objective as
-// analytics/optimization/lp.py actually defines it (Step 19's
-// Z = w1·TC − w2·SL + w3·SC) — real methodology wording, replacing the
-// "Placeholder:" copy that shipped before 2026-09-26.
+// `blurb` says what each weight actually does in the LP since the
+// 2026-09-30 rework (analytics/optimization/lp.py's docstring). The LP
+// first orders every SKU up to its target stock, in layers (this month's
+// demand, then safety stock, then the rest of the target, which carries
+// SSM's 3-week rule). The weights (w1·TC − w2·SL + w3·SC) only decide
+// anything when the supplier allocation can't cover every order: then they
+// pick which SKUs come up short within the layer being cut. With enough
+// allocation they change nothing. The old blurbs described the retired
+// model — "reorder-point demand", and storage keeping orders "within what
+// the warehouse can affordably hold" — and storage has no effect at all
+// today: every SKU carries the same placeholder storage cost per piece
+// (lp_inputs.PLACEHOLDERS), so it scores every SKU alike (raising its
+// weight to 0.8 changed 0 SKUs' orders).
 //
 // One colour for all three rows (CHART_COLORS.lpWeight, the model-output
 // indigo): they are co-equal weights of a single objective, not three
@@ -1471,29 +1553,24 @@ const LP_PRIORITY_ROWS = [
   {
     key: 'cost',
     label: 'Cost',
-    blurb: 'The weight on total procurement cost in the LP objective — how strongly the solver favours cheaper order quantities. Cost is minimized: the sum of each SKU’s procurement cost times its order quantity.',
+    blurb: 'Only matters when the supplier allocation can’t cover every order. Then SKUs that cost more per piece are cut first. With enough allocation it changes nothing.',
   },
   {
     key: 'service_level',
     label: 'Service level',
-    blurb: 'The weight on service level — total ordered quantity relative to total reorder-point demand. It enters the objective negatively, so the solver is rewarded for covering more of the demand and avoiding stockouts.',
+    blurb: 'Only matters when the supplier allocation can’t cover every order. Then SKUs that bring in more revenue keep their orders longest, so the best sellers are the last to come up short.',
   },
   {
     key: 'storage',
     label: 'Storage',
-    blurb: 'The weight on storage cost — each SKU’s storage cost per unit times its order quantity, minimized so orders stay within what the warehouse can affordably hold.',
+    blurb: 'Meant to cut SKUs that are costly to store first. It has no effect today: every SKU has the same placeholder storage cost per piece until SSM gives real per-SKU costs, so it can’t tell one SKU from another.',
   },
 ];
 
 // Small "?" affordance — hover (or keyboard focus) reveals the blurb.
 // Pure CSS visibility off :hover/:focus-within, so there's no popover
 // dependency and nothing to position in JS.
-const PriorityInfo = ({ text }) => (
-  <span className="reorder-priority-info" tabIndex={0} role="button" aria-label="More information">
-    <HelpCircle size={12} />
-    <span className="reorder-priority-tip" role="tooltip">{text}</span>
-  </span>
-);
+const PriorityInfo = ({ text }) => <InfoTip label="About this priority" size={12}>{text}</InfoTip>;
 
 // Compact dashboard-card version of the ReorderRecommendations page.
 // rows: [{ sku, product, urgency, orderQty }] — rendered below the
@@ -1545,7 +1622,7 @@ export const ReorderRecommendationWidget = ({
           {/* GET /dashboard's reorder_preview has been scoped to the LP's
               current cycle since 2026-09-23 (backend/lp_cycle.py), the same
               rows Reorder Recs lists by default. */}
-          <p>LP-optimized purchase quantities for the SKUs the LP planned as Category A · current planning cycle</p>
+          <p>LP-optimized purchase quantities for the SKUs the LP planned as Class A · current planning cycle</p>
         </div>
       </div>
 
@@ -1570,14 +1647,18 @@ export const ReorderRecommendationWidget = ({
             </div>
             <div className="reorder-mini-chip">
               <span className="reorder-mini-value">{totalOrderQty.toLocaleString()}</span>
-              <span className="reorder-mini-label">Total order qty</span>
+              <span className="reorder-mini-label">Pieces to order</span>
             </div>
           </div>
 
           <div className="reorder-priorities">
             <div className="reorder-priorities-header">
               <span className="reorder-priorities-title">How this was optimized</span>
-              <span className="reorder-priorities-caption">Weights the solver used for these recommendations</span>
+              <span className="reorder-priorities-caption">
+                The LP orders each SKU up to its target stock. These weights only matter when the supplier
+                allocation can&apos;t cover every order: together with SSM&apos;s 3-week stock rule, they decide
+                which SKUs come up short.
+              </span>
             </div>
 
             {/* Read-only bar per weight — was a draggable slider, but
@@ -1610,7 +1691,7 @@ export const ReorderRecommendationWidget = ({
                   <th>SKU</th>
                   <th>Product</th>
                   <th>Urgency</th>
-                  <th>Qty</th>
+                  <th>Pieces</th>
                 </tr>
               </thead>
               <tbody>
@@ -1662,35 +1743,71 @@ export const ReorderRecommendationWidget = ({
   );
 };
 
-// LP safety stock vs SSM's own 3-week stock policy — GET /dashboard's
-// policy_comparison. Two bars on one scale, in the demand series' unit
-// (pieces): what the LP's per-SKU safety stock (SS_i) sums to across the
-// latest planning cycle, and what holding three weeks of each SKU's own
-// forecast would sum to. The 3 weeks is SSM's stated policy (client
-// meeting, Sep 2026: keep three weeks of sales in the warehouse), applied
-// here per SKU to the same forecasts the LP used, so the two sides are
-// like for like. Units, not pesos — no per-piece cost exists to
-// value the difference honestly (backend/routers/dashboard.py's
-// policy_comparison docstring). The policy bar is slate (a baseline, no
-// verdict) and the LP bar indigo (a model output), per the SEMANTIC rule.
+// LP target stock vs SSM's own 3-week stock policy — GET /dashboard's
+// policy_comparison, in the demand series' unit (pieces). SSM's policy
+// (client meeting, Sep 2026: keep three weeks of sales in the warehouse)
+// is applied per SKU to the same forecasts the LP used. Since the
+// 2026-09-30 LP run each SKU has a target stock (demand over the review +
+// lead window plus safety stock), and THAT is what compares with 3 weeks:
+// both are how much stock to hold. Until then this card set the LP's
+// safety stock alone against the rule's whole 3 weeks, which read "35.2%
+// less" when the targets hold 18.2% more. The LP bar is stacked into its
+// two parts — sales until the next delivery, then safety stock — so the
+// buffer is visible inside the target. Units, not pesos — no
+// agreed per-piece cost exists (the backend's policy_comparison
+// docstring). The policy bar is slate (a baseline, no verdict), the LP
+// bars indigo (model output), per the SEMANTIC rule.
 export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
   const c = comparison || {};
-  const hasData = c.lp_safety_stock_units != null && c.rule_safety_stock_units != null;
-  const max = hasData ? Math.max(c.lp_safety_stock_units, c.rule_safety_stock_units, 1) : 1;
+  const ruleUnits = c.rule_stock_units ?? c.rule_safety_stock_units;
+  const hasData = c.lp_target_stock_units != null && ruleUnits != null;
+  const max = hasData ? Math.max(c.lp_target_stock_units, ruleUnits, 1) : 1;
+  const ruleWeeks = c.rule_weeks ?? 3;
+  // The LP target is two parts added together, so it is ONE stacked bar
+  // rather than a target bar plus a separate safety-stock bar (which read as
+  // a third policy): the sales expected until the next delivery arrives,
+  // and the safety stock on top for demand above the forecast. Both are
+  // steps of the LP's indigo, validated as a pair (dataviz
+  // validate_palette.js: CVD ΔE 19.9, normal 21.5); the lighter one is
+  // under 3:1 against the surface, so the legend below labels both parts
+  // with their figures rather than leaving them to colour.
+  const windowDays = c.window_business_days != null ? Number(c.window_business_days) : null;
+  const safetyUnits = c.lp_safety_stock_units;
+  const cycleUnits = hasData && safetyUnits != null ? Math.max(c.lp_target_stock_units - safetyUnits, 0) : null;
+  const lpParts = cycleUnits != null
+    ? [
+      {
+        key: 'cycle',
+        label: 'Sales until the next delivery',
+        note: windowDays != null ? `${windowDays.toFixed(0)} business days of forecast sales` : 'forecast sales over the review period + lead time',
+        value: cycleUnits,
+        color: SEMANTIC.recommendation,
+      },
+      {
+        key: 'safety',
+        label: 'Safety stock',
+        note: 'buffer for demand above the forecast',
+        value: safetyUnits,
+        color: '#A5A7F6',
+      },
+    ]
+    : [{ key: 'target', label: 'LP target stock', value: c.lp_target_stock_units, color: SEMANTIC.recommendation }];
   const rows = [
-    { key: 'rule', label: `SSM ${c.rule_weeks ?? 3}-week policy`, value: c.rule_safety_stock_units, color: SEMANTIC.noData },
-    { key: 'lp', label: 'LP safety stock (SS\u1d62)', value: c.lp_safety_stock_units, color: SEMANTIC.recommendation },
-  ];
+    { key: 'rule', label: `SSM ${ruleWeeks}-week policy`, value: ruleUnits, color: SEMANTIC.noData,
+      parts: [{ key: 'rule', label: `SSM ${ruleWeeks}-week policy`, value: ruleUnits, color: SEMANTIC.noData }] },
+    { key: 'target', label: 'LP target stock', value: c.lp_target_stock_units, color: SEMANTIC.recommendation, parts: lpParts },
+  ].filter((r) => r.value != null);
+  const pieces = (v) => `${Math.round(v).toLocaleString()} pieces`;
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Safety stock: LP vs SSM&apos;s 3-week policy</h4>
+          <h4>Stock target: LP vs SSM&apos;s 3-week policy</h4>
           <p>
-            Total buffer stock each policy would hold across the latest planning cycle, in demand units.
-            SSM&apos;s policy (client meeting, Sep 2026) keeps three weeks of sales in stock — applied here as
-            3 weeks of each SKU&apos;s own forecast; LP = the per-SKU safety stock the optimizer solved for.
+            How much stock each policy would hold across the latest planning cycle, in pieces.
+            SSM&apos;s policy keeps three weeks of each SKU&apos;s own forecast in stock; the LP sets a
+            per-SKU target instead — the demand expected before the next delivery plus a safety buffer.
           </p>
         </div>
       </div>
@@ -1700,15 +1817,26 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
       ) : (
         <div className="chart-widget-body">
           {/* The one-number headline (IMPLEMENTATION_PLAN Phase 1.1-1.2):
-              units and percent, never pesos. lp_vs_rule_pct is how much
-              less buffer the LP holds than the rule; negative = more. */}
-          {c.lp_vs_rule_pct != null && (
+              units and percent, never pesos. target_vs_rule_pct is how much
+              less stock the LP's targets hold than the rule; negative = more. */}
+          {c.target_vs_rule_pct != null && (
             <p className="policy-headline">
-              <span className="policy-headline-number">{Math.abs(c.lp_vs_rule_pct).toFixed(1)}%</span>
+              <span className="policy-headline-number">{Math.abs(c.target_vs_rule_pct).toFixed(1)}%</span>
               <span className="policy-headline-text">
-                {c.lp_vs_rule_pct >= 0 ? 'less' : 'more'} safety stock under the LP policy than SSM&apos;s{' '}
-                {c.rule_weeks ?? 3}-week policy, across {c.sku_count} SKUs
+                {c.target_vs_rule_pct >= 0 ? 'less' : 'more'} stock under the LP&apos;s per-SKU targets than
+                SSM&apos;s {ruleWeeks}-week policy
+                {c.lp_target_weeks != null ? ` — ${Number(c.lp_target_weeks).toFixed(2)} weeks of sales against ${ruleWeeks}` : ''},
+                across {c.sku_count} SKUs
               </span>
+            </p>
+          )}
+          {/* Where the difference comes from: the targets move stock between
+              SKUs by how volatile each one's demand is, rather than giving
+              every SKU the same 3 weeks. */}
+          {c.skus_above_rule != null && (
+            <p className="dashboard-chart-footnote">
+              {c.skus_above_rule} of {c.sku_count} SKUs get a target above {ruleWeeks} weeks (the ones with the
+              most volatile demand); the other {c.sku_count - c.skus_above_rule} get less.
             </p>
           )}
           <div className="policy-bars">
@@ -1716,33 +1844,55 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
               <div className="policy-bar-row" key={r.key}>
                 <span className="policy-bar-label">{r.label}</span>
                 {/* Meter rule: the unfilled track is a lighter step of the
-                    fill's own hue, so each bar reads as one meter. */}
+                    fill's own hue, so each bar reads as one meter. Each part
+                    of a stacked bar carries its own hover title. */}
                 <div
                   className="policy-bar-track"
                   role="img"
-                  aria-label={`${r.label}: ${Math.round(r.value).toLocaleString()} units`}
+                  aria-label={r.parts.length > 1
+                    ? `${r.label}: ${pieces(r.value)} — ${r.parts.map((part) => `${part.label.toLowerCase()} ${pieces(part.value)}`).join(' + ')}`
+                    : `${r.label}: ${pieces(r.value)}`}
                   style={{ background: `color-mix(in srgb, ${r.color} 12%, var(--color-surface))` }}
                 >
-                  <span style={{ width: `${(r.value / max) * 100}%`, backgroundColor: r.color }} />
+                  {r.parts.map((part) => (
+                    <span
+                      key={part.key}
+                      title={`${part.label}: ${pieces(part.value)}`}
+                      style={{ width: `${(part.value / max) * 100}%`, backgroundColor: part.color }}
+                    />
+                  ))}
                 </div>
-                <span className="policy-bar-value">{Math.round(r.value).toLocaleString()} units</span>
+                <span className="policy-bar-value">{pieces(r.value)}</span>
               </div>
             ))}
           </div>
+          {/* What the LP bar is made of, with each part's figure — the
+              labels the lighter segment's contrast requires. */}
+          {lpParts.length > 1 && (
+            <ul className="custom-legend policy-parts-legend">
+              {lpParts.map((part) => (
+                <li className="legend-item" key={part.key}>
+                  <span className="legend-color" style={{ backgroundColor: part.color, borderRadius: '3px' }} />
+                  <span>
+                    <strong>{part.label}</strong> {pieces(part.value)}
+                    <span className="policy-part-note"> · {part.note}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="dashboard-chart-footnote">
-            {c.sku_count} SKUs in the {formatMonth(c.cycle_date)} cycle with a forecast for that month; both sides in
-            units of the demand series (pieces), the unit the safety stock itself is solved in, so the two
-            are compared without a peso conversion.
+            {c.sku_count} SKUs in the {formatMonth(c.cycle_date)} cycle with a forecast for that month, all in
+            pieces — the unit the LP solves in — so the policies compare without a peso conversion.
           </p>
-          {/* The headline depends on how many days of demand variability the
-              LP's safety stock covers — run_lp.py's --protection-days, 1
-              business day by default. Stated beside the number, since it
-              changes the answer (reports/PROJECT_DIAGNOSIS_2026-09-21.md). */}
+          {/* The headline moves most with the safety stock's window and the
+              placeholders behind it (analytics/optimization/lp_inputs.py),
+              so they are stated beside the number. */}
           <p className="policy-assumption">
-            <strong>Assumption:</strong> the LP&apos;s safety stock covers the demand variability of the protection
-            period it was run with (scripts/run_lp.py --protection-days; the default is 1 business day, with no
-            review period or lead time). The comparison is sensitive to that setting, which is still an open
-            planning decision.
+            <strong>Assumption:</strong> the safety stock covers
+            {c.window_business_days != null ? ` ${Number(c.window_business_days).toFixed(0)} business days` : ' the review period plus lead time'}{' '}
+            (weekly orders, delivered 2–3 days later), assuming demand is independent from one day to the
+            next.{c.inputs_are_placeholders ? ' These are placeholder inputs until SSM confirms them, and the headline is sensitive to them.' : ''}
           </p>
         </div>
       )}
@@ -1778,10 +1928,14 @@ export const AllocationWidget = ({ allocation }) => {
     : [];
   const max = rows.length ? Math.max(...rows.map((r) => r.value), 1) : 1;
   const mid = hasData ? a.levels.find((l) => l.pct === 105) || a.levels[0] : null;
-  // The headline ratio only stands on a FULL prior year: annual x pct ÷ 12
-  // over a partial basis understates the allocation and the percentage
-  // explodes (Del Monte's 2-month 2024 basis read "578%"). The bars and the
-  // footnote's "partial basis" wording still show what data exists.
+  // `monthly` is an average month of the basis x pct (GET /dashboard, since
+  // 2026-10-01). It was basis x pct ÷ 12 whatever the basis held, which
+  // spread Del Monte's two months of 2024 over twelve: ₱1.86M/month beside
+  // ~₱10.8M/month of sales, and a "578%" headline. `annual` is null on a
+  // partial basis and is not drawn here. The headline ratio still needs a
+  // FULL prior year: two months are not a year's pace, and which two they
+  // are would decide the percentage. The bars and the footnote show what
+  // data exists.
   const usedPct = mid && mid.monthly > 0 && avgMonthlySales != null && a.basis_months === 12
     ? (avgMonthlySales / mid.monthly) * 100
     : null;
@@ -1832,6 +1986,9 @@ export const AllocationWidget = ({ allocation }) => {
           <p className="dashboard-chart-footnote">
             Basis: {a.basis_year} sales of {formatCompactPesos(a.basis_sales)} ({a.vat_basis}
             {a.basis_months < 12 ? `, ${a.basis_months} of 12 months on record — a partial basis` : ''}).
+            {a.basis_months < 12
+              ? ` Each allocation bar is an average month of those ${a.basis_months} × the percentage.`
+              : ''}{' '}
             SSM has not shared the real allocation figures, so these are the rule applied to the sales data;
             which percentage applies in {latestYear} is a question for SSM.
           </p>

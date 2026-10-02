@@ -1,9 +1,14 @@
 /* Ink navy — matches Login.css's dark panel (#1C2230), so the sidebar and
    the login screen read as the same product instead of the brand pairing
-   only ever showing up on the one screen before a user signs in. */
+   only ever showing up on the one screen before a user signs in. A subtle
+   top-to-bottom ombre in that navy, with a faint cool sheen behind the
+   logo, so the pane has depth instead of reading as a flat block. */
 .sidebar {
   width: 250px;
   background-color: var(--color-nav-bg);
+  background-image:
+    radial-gradient(120% 40% at 0% 0%, rgba(120, 140, 180, 0.10) 0%, rgba(120, 140, 180, 0) 70%),
+    linear-gradient(180deg, var(--color-nav-bg-top) 0%, var(--color-nav-bg) 45%, var(--color-nav-bg-bottom) 100%);
   border-right: 1px solid var(--color-nav-border);
   display: flex;
   flex-direction: column;
@@ -15,8 +20,105 @@
   white-space: nowrap;
 }
 
-.sidebar-hidden {
-  margin-left: -250px;
+/* ── Desktop: a floating icon rail that stretches open ─────────────────
+   Closed (the default), the sidebar is a 72px rail of icons floating on
+   the page canvas: inset 12px from the window's edges, with rounded
+   corners and a soft shadow. Hovering it or tabbing into it stretches it
+   to full width, and leaving folds it back. The shell around it is a real
+   column of the layout, so the page slides over as it opens instead of
+   being covered (Audrey, 2026-10-01: nothing on the dashboard may be
+   hidden behind it). The topbar's menu button pins it open (is-open).
+   Every icon sits on the rail's centre line (36px) in both states, so
+   nothing jumps sideways while it stretches; only widths and the labels'
+   opacity animate. A short delay before opening keeps a pointer that is
+   just passing by from flashing it open. */
+@media (min-width: 901px) {
+  .sidebar-shell {
+    flex-shrink: 0;
+    width: 96px; /* 72px rail + 12px gap either side */
+    height: 100%;
+    padding: 12px;
+    box-sizing: border-box;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: 100%;
+    border-radius: 18px;
+    border: 1px solid var(--color-nav-border);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
+    transition: none;
+  }
+
+  .sidebar-shell.is-open,
+  .sidebar-shell.is-closed:focus-within {
+    width: 274px; /* 250px sidebar + the gaps */
+    transition-delay: 0s;
+  }
+
+  /* Labels fade out quickly as the rail folds, and back in once it has
+     started to stretch, so text never shows squeezed mid-animation. */
+  .sidebar-shell.is-closed .nav-item-text,
+  .sidebar-shell.is-closed .modules-title,
+  .sidebar-shell.is-closed .profile-info,
+  .sidebar-shell.is-closed .status-text,
+  .sidebar-shell.is-closed .logout-text {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+
+  .sidebar-shell.is-closed:focus-within .nav-item-text,
+  .sidebar-shell.is-closed:focus-within .modules-title,
+  .sidebar-shell.is-closed:focus-within .profile-info,
+  .sidebar-shell.is-closed:focus-within .status-text,
+  .sidebar-shell.is-closed:focus-within .logout-text {
+    opacity: 1;
+    transition: opacity 0.2s ease 0.12s;
+  }
+
+  /* The logo: only the swoosh shows on the rail; the full "SAN2" is
+     revealed (not scaled) as the sidebar stretches. */
+  .sidebar-shell.is-closed .sidebar-profile-top {
+    width: 44px;
+    margin-left: 14px;
+  }
+
+  .sidebar-shell.is-closed:focus-within .sidebar-profile-top {
+    width: 202px;
+    margin-left: 24px;
+  }
+}
+
+/* Hover only where there is a real pointer: on touch screens a tap would
+   otherwise open it with no way to "leave". */
+@media (min-width: 901px) and (hover: hover) {
+  .sidebar-shell.is-closed:hover {
+    width: 274px;
+    transition-delay: 0.08s;
+  }
+
+  .sidebar-shell.is-closed:hover .nav-item-text,
+  .sidebar-shell.is-closed:hover .modules-title,
+  .sidebar-shell.is-closed:hover .profile-info,
+  .sidebar-shell.is-closed:hover .status-text,
+  .sidebar-shell.is-closed:hover .logout-text {
+    opacity: 1;
+    transition: opacity 0.2s ease 0.16s;
+  }
+
+  .sidebar-shell.is-closed:hover .sidebar-profile-top {
+    width: 202px;
+    margin-left: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebar-shell,
+  .sidebar-profile-top {
+    transition: none !important;
+  }
 }
 
 /* Click-outside-to-close scrim behind the overlay sidebar — only ever
@@ -41,6 +143,11 @@
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
   }
 
+  /* No rail on phones and tablets: closed means slid away. */
+  .sidebar.is-closed {
+    margin-left: -250px;
+  }
+
   .sidebar-backdrop {
     display: block;
     position: fixed;
@@ -59,13 +166,18 @@
 /* Holds the real logo image now (logo-navbar.png) instead of an "S"
    avatar + text lockup. */
 .sidebar-profile-top {
-  padding: 0 1.5rem;
-  margin-bottom: 1.75rem;
+  width: 202px;
+  margin: 0 0 1.75rem 24px;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* A fixed width, not 100%: the rail clips it rather than shrinking it. */
 .sidebar-logo {
   display: block;
-  width: 100%;
+  width: 202px;
+  max-width: none;
   height: auto;
 }
 
@@ -139,7 +251,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.8rem 1.5rem;
+  padding: 0.8rem 27px;
   color: var(--color-nav-item);
   text-decoration: none;
   font-size: 0.9rem;
@@ -149,6 +261,14 @@
 
 .nav-item:hover {
   background-color: var(--color-nav-item-hover-bg);
+  color: var(--color-nav-item-hover-text);
+}
+
+.nav-item:focus-visible,
+.logout-btn:focus-visible {
+  outline: 2px solid var(--color-nav-danger-text);
+  outline-offset: -2px;
+  border-radius: 8px;
 }
 
 /* A tinted wash + a left accent rail, not a solid fill — on navy a solid
@@ -159,8 +279,9 @@
   background-color: var(--color-nav-item-active-bg);
   color: var(--color-nav-item-active-text);
   border-radius: 8px;
-  margin: 0 0.75rem;
-  padding-left: calc(1.5rem - 3px);
+  margin: 0 12px;
+  /* 12px margin + 15px = the same 27px every icon starts at. */
+  padding-left: 15px;
   box-shadow: inset 3px 0 0 var(--color-nav-item-active-rail);
 }
 
@@ -171,18 +292,21 @@
 }
 
 .nav-item-text {
-  white-space: normal;
+  /* One line: the label is revealed as the sidebar stretches, and would
+     wrap mid-animation otherwise. */
+  white-space: nowrap;
   line-height: 1.25;
   display: inline-block;
 }
 
 .nav-badge {
   font-size: 0.7rem;
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
 .sidebar-bottom {
-  padding: 0 1.5rem;
+  /* 20px puts the 32px avatar on the rail's 36px centre line. */
+  padding: 0 20px;
   margin-top: auto;
   border-top: 1px solid var(--color-nav-border);
   padding-top: 1.5rem;
@@ -200,6 +324,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
+  /* Puts the 6px dot on the rail's 36px centre line. */
+  padding-left: 13px;
   font-size: 0.75rem;
 }
 
@@ -257,7 +383,8 @@
 .logout-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* Left-aligned with the icon on the rail's centre line (20 + 8 + 8). */
+  justify-content: flex-start;
   gap: 0.5rem;
   width: 100%;
   background: none;
@@ -265,14 +392,14 @@
   color: var(--color-nav-item);
   font-size: 0.9rem;
   font-weight: 500;
-  padding: 0.5rem 0;
+  padding: 0.5rem 0 0.5rem 8px;
   cursor: pointer;
   margin-top: 0.75rem;
   transition: color 0.2s ease;
 }
 
 .logout-btn:hover {
-  color: var(--color-nav-item-active-rail);
+  color: var(--color-nav-danger-text);
 }
 
 .logout-icon {
@@ -280,8 +407,16 @@
   transition: color 0.2s ease;
 }
 
+/* On the 72px rail the hidden labels still take their width, and a flex
+   row would squeeze the icons to nothing to make room. */
+.logout-icon,
+.nav-icon,
+.avatar {
+  flex-shrink: 0;
+}
+
 .logout-btn:hover .logout-icon {
-  color: var(--color-nav-item-active-rail);
+  color: var(--color-nav-danger-text);
 }
 
 /* Logout Confirmation Modal */

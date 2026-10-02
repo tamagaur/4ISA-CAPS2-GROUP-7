@@ -9,8 +9,10 @@ the same transaction: no change without its entry, and no entry without the
 change. POST /audit-log is gone.
 
 Actions: Add User, Edit User, Delete User, Invite Resent, Reset Link Sent,
-Password Reset Requested, Password Set, Password Reset, Sign-in Locked,
-Add SKU, Edit SKU, Reorder Recommendation Accepted / Dismissed.
+Change Access (a user's role and permission boxes, PUT
+/admin/users/{id}/permissions), Password Reset Requested, Password Set,
+Password Reset, Sign-in Locked, Add SKU, Edit SKU, Reorder Recommendation
+Accepted / Dismissed.
 """
 from __future__ import annotations
 

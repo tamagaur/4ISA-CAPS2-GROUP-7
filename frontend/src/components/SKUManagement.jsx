@@ -6,7 +6,8 @@ import { useToast } from './ToastProvider';
 import ViewSKUModal from './ViewSKUModal';
 import EditSKUModal from './EditSKUModal';
 import { getSKUs, createSKU, updateSKU } from '../api/sku';
-import { getCurrentUser } from '../auth';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
 import { formatMonth } from '../utils/formatDate';
 import Pagination from './Pagination';
@@ -32,9 +33,10 @@ const SKUManagement = () => {
   // Shared principal scope (Topbar's segmented control) — the SKU list
   // reloads whenever it changes, via loadSKUs' effect dep below.
   const { principal } = useOutletContext() || {};
-  // Adding and editing SKUs is admin-only (backend: require_admin on
-  // POST/PATCH /sku); staff see the list read-only.
-  const isAdmin = getCurrentUser()?.role === 'admin';
+  // Adding and editing SKUs needs sku.edit (Kelvin's permissions proposal;
+  // the backend checks POST/PATCH /sku). Without it the list is read-only.
+  const { hasPermission } = usePermissions();
+  const canEdit = hasPermission(P.SKU_EDIT);
   const [rawItems, setRawItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -343,11 +345,11 @@ const SKUManagement = () => {
   // compare dates.
   const catTitle = (sku) => {
     if (!sku.cat) return 'No ABC classification in any period';
-    if (!sku.catPeriod) return `Category ${sku.cat}`;
+    if (!sku.catPeriod) return `Class ${sku.cat}`;
     const when = formatMonth(sku.catPeriod);
     return isCurrentTier(sku)
-      ? `Category ${sku.cat} — current run (${when})`
-      : `Category ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
+      ? `Class ${sku.cat} — current run (${when})`
+      : `Class ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
   };
 
   return (
@@ -358,12 +360,12 @@ const SKUManagement = () => {
           <div>
             <h2 className="sku-page-title">SKU <span className="page-title-accent">Management</span></h2>
             <p className="sku-page-subtitle">
-              {isAdmin
+              {canEdit
                 ? 'Add products or edit their name and brand. This is the master product list the forecasts draw from.'
-                : 'The master product list the forecasts draw from. View only — adding and editing SKUs is limited to admin accounts.'}
+                : "The master product list the forecasts draw from. View only — your account can't add or edit SKUs."}
             </p>
           </div>
-          {isAdmin && (
+          {canEdit && (
             <button className="add-sku-btn" onClick={() => setIsAddModalOpen(true)}>
               <Plus size={16} />
               Add SKU
@@ -386,7 +388,7 @@ const SKUManagement = () => {
             )}
           </div>
           <div className="sku-summary-card summary-cat-a">
-            <span className="summary-label">CATEGORY A</span>
+            <span className="summary-label">CLASS A</span>
             <span className="summary-value">{categoryASKUs.toLocaleString()}</span>
             <span className="summary-desc">
               {categoryACarried > 0
@@ -565,15 +567,15 @@ const SKUManagement = () => {
                 </div>
 
                 <div className="sku-filter-select-wrapper">
-                  <span className="sku-filter-icon-label"><Layers size={12} /> Category:</span>
+                  <span className="sku-filter-icon-label"><Layers size={12} /> ABC class:</span>
                   <select
                     value={categoryFilter}
                     onChange={(e) => setCategoryFilter(e.target.value)}
                   >
-                    <option value="All">Category (A/B/C)</option>
-                    <option value="A">Category A</option>
-                    <option value="B">Category B</option>
-                    <option value="C">Category C</option>
+                    <option value="All">All classes</option>
+                    <option value="A">Class A</option>
+                    <option value="B">Class B</option>
+                    <option value="C">Class C</option>
                     <option value={NOT_CLASSIFIED}>Not classified</option>
                   </select>
                 </div>
@@ -607,7 +609,7 @@ const SKUManagement = () => {
 
                 {categoryFilter !== 'All' && (
                   <span className="sku-active-chip">
-                    Category: {categoryFilter === NOT_CLASSIFIED ? 'Not classified' : `Category ${categoryFilter}`}
+                    Class: {categoryFilter === NOT_CLASSIFIED ? 'Not classified' : `Class ${categoryFilter}`}
                     <button className="sku-chip-remove" onClick={() => setCategoryFilter('All')}>
                       <X size={12} />
                     </button>
@@ -634,8 +636,8 @@ const SKUManagement = () => {
                     <th className="col-fit">SKU code</th>
                     <th className="col-fit">Brand</th>
                     <th className="col-text col-product">Product</th>
-                    <th className="table-center col-fit">Cat</th>
-                    <th className="table-num col-fit">Reorder pt</th>
+                    <th className="table-center col-fit">Class</th>
+                    <th className="table-num col-fit" title="The stock level the LP orders up to: demand expected before the next delivery, plus safety stock">Target stock</th>
                     <th className="table-center col-fit"><span className="visually-hidden">Actions</span></th>
                   </tr>
                 </thead>
@@ -732,7 +734,7 @@ const SKUManagement = () => {
         isOpen={isViewModalOpen}
         sku={selectedSKU}
         onClose={() => setIsViewModalOpen(false)}
-        onEdit={isAdmin ? handleOpenEditModal : undefined}
+        onEdit={canEdit ? handleOpenEditModal : undefined}
       />
 
       <EditSKUModal
