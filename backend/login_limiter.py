@@ -33,6 +33,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 MAX_FAILURES_PER_EMAIL = 5
 MAX_FAILURES_PER_IP = 20
@@ -47,6 +48,12 @@ _PRUNE_ABOVE = 10_000
 class _Record:
     failures: deque = field(default_factory=deque)  # clock times of failures still inside the window
     locked_until: float = 0.0
+
+
+class Lock(NamedTuple):
+    """A lock that one failed sign-in just started."""
+    seconds: int
+    limits: tuple[str, ...]  # which rule tripped: ("email",), ("ip",) or both
 
 
 class LoginLimiter:
@@ -67,13 +74,17 @@ class LoginLimiter:
             ]
         return math.ceil(max(waits)) if waits else None
 
-    def record_failure(self, email: str, ip: str) -> int | None:
+    def record_failure(self, email: str, ip: str) -> Lock | None:
         """Counts one failed sign-in against the email and the IP. Returns the
-        lock length in seconds if this failure started a lock, else None."""
+        lock this failure started (its length and which limit tripped), or
+        None."""
         now = self._clock()
-        started = None
+        tripped = []
         with self._mutex:
-            for key, limit in ((_email_key(email), MAX_FAILURES_PER_EMAIL), (_ip_key(ip), MAX_FAILURES_PER_IP)):
+            for rule, key, limit in (
+                ("email", _email_key(email), MAX_FAILURES_PER_EMAIL),
+                ("ip", _ip_key(ip), MAX_FAILURES_PER_IP),
+            ):
                 rec = self._records.setdefault(key, _Record())
                 while rec.failures and rec.failures[0] <= now - WINDOW_SECONDS:
                     rec.failures.popleft()
@@ -81,10 +92,10 @@ class LoginLimiter:
                 if len(rec.failures) >= limit:
                     rec.locked_until = now + LOCKOUT_SECONDS
                     rec.failures.clear()
-                    started = LOCKOUT_SECONDS
+                    tripped.append(rule)
             if len(self._records) > _PRUNE_ABOVE:
                 self._prune(now)
-        return started
+        return Lock(LOCKOUT_SECONDS, tuple(tripped)) if tripped else None
 
     def record_success(self, email: str) -> None:
         with self._mutex:
@@ -113,8 +124,53 @@ def _ip_key(ip: str) -> str:
     return "ip:" + ip
 
 
+# Failed sign-ins are written to the audit log (backend/routers/auth.py,
+# 2026-09-30). The limits above already cap that per email (5) and per IP
+# (20) in any 15 minutes: while locked, a request is refused before its
+# password is checked and nothing is logged for it. They don't cap many
+# addresses together, so at most MAX_LOGGED_FAILURES_PER_WINDOW failures are
+# written in any one 15-minute window. Past that, one row says logging paused;
+# the rest of the window still counts toward locks but is not written.
+# 100 is team-set (Yuan, 2026-09-30), not measured: five addresses' worth of
+# the per-IP limit, and under 9,700 rows a day even in a flood that never
+# stops. It is due to move into the params module (session 5f).
+MAX_LOGGED_FAILURES_PER_WINDOW = 5 * MAX_FAILURES_PER_IP
+
+
+class FailureLogBudget:
+    """Decides, per failed sign-in, whether it goes into the audit log:
+    'log' while this fixed 15-minute window has room, 'pause' once when it
+    runs out (the caller writes one row saying so), then 'skip' until the
+    next window. In memory, like LoginLimiter, and for the same reason."""
+
+    def __init__(self, limit: int = MAX_LOGGED_FAILURES_PER_WINDOW, clock=time.monotonic) -> None:
+        self.limit = limit
+        self._clock = clock
+        self._mutex = threading.Lock()
+        self._window: int | None = None
+        self._used = 0
+
+    def take(self) -> str:
+        window = int(self._clock() // WINDOW_SECONDS)
+        with self._mutex:
+            if window != self._window:
+                self._window, self._used = window, 0
+            self._used += 1
+            if self._used <= self.limit:
+                return "log"
+            return "pause" if self._used == self.limit + 1 else "skip"
+
+    def reset(self) -> None:
+        """Starts a fresh window (tests)."""
+        with self._mutex:
+            self._window, self._used = None, 0
+
+
 # The one limiter POST /auth/login uses.
 login_limiter = LoginLimiter()
+
+# How many of its failures reach the audit log.
+failure_log_budget = FailureLogBudget()
 
 # POST /auth/forgot-password counts every request here (not just failures):
 # at most 5 reset emails per address, and 20 per IP, every 15 minutes, so the

@@ -82,8 +82,13 @@ def test_writes_still_require_a_token(client, method, path, permission, body):
 def test_staff_can_still_read(client):
     """GET /sku needs sign-in only (the ABC, Reorder and SKU Forecast pages
     read product names from it). Checked on the route table rather than by
-    calling it, which would need the SKU query faked."""
-    for route in app.routes:
+    calling it, which would need the SKU query faked. Walks the SKU router
+    itself: fastapi 0.141 keeps an included router as one nested entry in
+    app.routes instead of copying its routes up, and main.py adds no
+    dependencies when it includes a router."""
+    from backend.routers import sku
+
+    for route in sku.router.routes:
         if getattr(route, "path", None) == "/sku" and "GET" in route.methods:
             calls = [d.call for d in route.dependant.dependencies]
             assert get_current_user in calls
