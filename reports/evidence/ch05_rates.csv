@@ -1,0 +1,5 @@
+candidate_set,candidates,testable_cells,exploratory,real,block_wins,testable_blocks,block_wins_testable_cells_only,testable_blocks_testable_cells_only,block_win_rate,cp_lo,cp_hi,exploratory_rate,chance_per_block
+original 50,50,294,15,0,10,1074,10,1074,0.00931099,0.00447375,0.0170564,0.0510204,0.025
+phase 1 (35),35,184,10,0,6,658,6,658,0.00911854,0.00335349,0.0197409,0.0543478,0.025
+phase 2 (77),77,280,6,0,8,1024,6,880,0.0078125,0.00337874,0.0153354,0.0214286,0.025
+all 162,162,758,31,0,24,2756,22,2612,0.00870827,0.0055873,0.0129297,0.0408971,0.025

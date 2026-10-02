@@ -1,0 +1,31 @@
+{
+ "chart": 11,
+ "slug": "seasonality",
+ "title": "Month-of-year index",
+ "files": {
+  "index": "reports/evidence/ch11_index.csv",
+  "pairs": "reports/evidence/ch11_pairs.csv",
+  "rows_by_year": "reports/evidence/ch11_rows_by_year.csv"
+ },
+ "caption": "Month-of-year index (month's real net pesos / that year's mean month), 2023-2025. Spearman correlation of the index between years - Del Monte: 2023-2024 not testable: 2023 has 10 of 12 months, 2024 has 2, 2023-2025 not testable: 2023 has 10 of 12 months, 2025 has 8, 2024-2025 not testable: 2024 has 2 of 12 months, 2025 has 8; Unilever: 2023-2024 rho +0.02 (p 0.948), 2023-2025 rho +0.36 (p 0.255), 2024-2025 rho +0.66 (p 0.018). No principal has every pair of full years positive and significant. Del Monte has no full year in 2023-2025 (2023: 10 of 12 months, 2024: 2 of 12 months, 2025: 8 of 12 months), so the pre-registered test cannot be run for it and its curves are partial years. Peak month by year: DM 2023 11 (1.36); DM 2024 01 (1.15); DM 2025 12 (2.12); UL 2023 03 (1.11); UL 2024 11 (1.14); UL 2025 01 (1.14). Del Monte volume differs sharply by year: 2023 7,493 invoice rows / PHP 91.3M, 2024 1,514 invoice rows / PHP 15.9M, 2025 8,419 invoice rows / PHP 97.1M; 2024 has the fewest rows, so its index rests on the least data. The branch split exists for 2023 only (100% of 2023 invoice rows carry a branch; later rows carry a town).",
+ "verdict": "Del Monte: NOT TESTABLE / Unilever: no flag",
+ "verdict_detail": "Del Monte: 2023-2024 not testable: 2023 has 10 of 12 months, 2024 has 2, 2023-2025 not testable: 2023 has 10 of 12 months, 2025 has 8, 2024-2025 not testable: 2024 has 2 of 12 months, 2025 has 8; Unilever: 2023-2024 rho +0.02 (p 0.948), 2023-2025 rho +0.36 (p 0.255), 2024-2025 rho +0.66 (p 0.018)",
+ "criterion": "Flag 'aggregate caveat needed' if the monthly index correlates positively (Spearman, p < 0.05) in every pair of full years 2023-2025 for a principal. Cannot overturn the SKU-level no-seasonal-model decision",
+ "otherwise": "CONFIRMS",
+ "mase_gate_used": "none",
+ "rerun_after_5f": "n",
+ "checks": [],
+ "script": "scripts/evidence/ch11_seasonality.py",
+ "code_commit": "d4b77bd",
+ "computed_at": "2026-09-30T18:30:18",
+ "data_notes": [
+  "Del Monte has no branch field: branch_code is outlet-level (config/column_maps/sales_register.yaml:89-91); region holds the branch in 2023 rows and a town from 2024. Towns are not mapped to branches (no documented mapping).",
+  "Unilever: 2 demand rows have no net_amount and are left out of the monthly sums (La Union source only).",
+  "Nominal pesos; the index divides within each year, so price level cancels."
+ ],
+ "years": [
+  2023,
+  2024,
+  2025
+ ]
+}

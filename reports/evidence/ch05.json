@@ -1,0 +1,33 @@
+{
+ "chart": 5,
+ "slug": "transforms",
+ "title": "Target transforms",
+ "files": {
+  "rates": "reports/evidence/ch05_rates.csv",
+  "original50_cells": "reports/evidence/ch05_original50_cells.csv"
+ },
+ "caption": "Target transforms and the earlier candidates, bake-off harness (5 half-year blocks), all SKUs, against MA3 and against the served model, block counts over all non-control cells. 162 candidates: original 50 - 10 block wins in 1,074 testable blocks (0.9%, 95% CI 0.4%-1.7%), 15 exploratory and 0 real wins in 294 testable cells; phase 1 (35) - 6 block wins in 658 testable blocks (0.9%, 95% CI 0.3%-2.0%), 10 exploratory and 0 real wins in 184 testable cells; phase 2 (77) - 8 block wins in 1,024 testable blocks (0.8%, 95% CI 0.3%-1.5%), 6 exploratory and 0 real wins in 280 testable cells. Pooled: 24 of 2,756 blocks (0.87%, 95% CI 0.56%-1.29%) against a chance level of 2.5% per block (the one tail of a 95% interval). A real win needs the full window and a majority of testable blocks; there are 0. Source: local-only experiment branch at fce007e (not merged); the original 50 re-scored here from preds_plus.csv.gz with that experiment's own code.",
+ "verdict": "CONFIRMS",
+ "verdict_detail": "real wins 0; pooled block-win rate 0.87% (95% CI 0.56%-1.29%) vs chance 2.5%: lower bound not above chance",
+ "criterion": "Chance level = 2.5% per testable block (one tail of the 95% interval). FLAWED if real wins > 0, or the Clopper-Pearson 95% lower bound of the observed block-win rate > 2.5%",
+ "otherwise": "CONFIRMS",
+ "mase_gate_used": "none (WAPE two-condition test)",
+ "rerun_after_5f": "n",
+ "checks": [
+  {
+   "id": "G8",
+   "pass": true,
+   "detail": "candidates 50 + 35 + 77 = 162 (SUMMARY: 162); the original 50 are not scored in results_by_bin.csv (0 appear as candidates; comb_simple, tsb appear only as base models of transformed candidates) and are scored from preds_plus.csv.gz with run_experiment.py's own loop; SUMMARY table counts all match"
+  }
+ ],
+ "script": "scripts/evidence/ch05_transforms.py",
+ "code_commit": "d77c294",
+ "computed_at": "2026-09-30T18:22:05",
+ "data_notes": [
+  "Data note: product_key 150 / SKU 64861486, 2025-12 has a NULL quantity in Unilever_SKU_Demand_Fact_Real (net PHP 2.89, La Union source); it is counted as 0, the same treatment as the bake-off.",
+  "Block counts, two populations (G8 amendment): over all non-control cells 24 of 2,756 blocks (0.87%) - used in the caption and the verdict, the more conservative (higher) rate; over testable cells only 22 of 2,612 (0.84%). The difference is phase 2's cells whose full window is not testable but whose blocks are."
+ ],
+ "chance_per_block": 0.025,
+ "experiment_commit": "fce007e",
+ "amendment": "reports/evidence/AMENDMENTS.csv (G8, two rows)"
+}

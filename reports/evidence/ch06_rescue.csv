@@ -1,0 +1,17 @@
+approach,methods,best_single_method,any_method,held_earlier,products,status
+Ours: the served model,1,0,0,,25,stored
+TSB,1,0,0,not checked,25,stored
+XGBoost + 3-month average,1,1,1,not checked,25,stored
+Average of 3 simple methods,1,0,0,not checked,25,stored
+Auto-ARIMA,1,0,0,0,25,stored
+Auto-ARIMA on log sales,1,0,0,0,25,stored
+Fixed SARIMA,1,0,0,0,25,stored
+Spike capping (winsorize),4,2,4,not checked,25,stored
+Differencing,15,1,1,0,25,stored
+"Transforms (log, square root, ...)",66,2,7,0,25,stored
+Transform + differencing,32,3,3,2,25,stored
+ETS,,,,,25,not available from stored results (scored only as a group: 0 of 50 passed)
+XGBoost alone,,,,,25,not available from stored results (scored only as a group: 0 of 50 passed)
+Ridge regression,,,,,25,not available from stored results (scored only as a group: 0 of 50 passed)
+12-month average,,,,,25,not available from stored results (scored only as a group: 0 of 50 passed)
+SBA,,,,,25,not available from stored results (scored only as a group: 0 of 50 passed)

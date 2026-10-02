@@ -1,0 +1,51 @@
+{
+ "chart": 1,
+ "slug": "models",
+ "title": "Model comparison",
+ "files": {
+  "lines": "reports/evidence/ch01_lines.csv",
+  "verdicts": "reports/evidence/ch01_verdicts.csv",
+  "sku_series": "reports/evidence/ch01_sku_series.csv",
+  "g1_reproduction": "reports/evidence/ch01_g1_reproduction.csv"
+ },
+ "caption": "Median WAPE per half-year block, rolling one-step forecasts, 119 Unilever Tier A SKUs (ABC 2026-02, single), real data only. Over 2023-10..2026-02 on the 114 SKUs every model can score: MA3 0.280, TSB 0.278, XGBoost+MA3 avg 0.277, SBA (alpha 0.1) 0.355, Naive 0.351. Against MA3 by block (two-condition WAPE test, 95% bootstrap over SKUs, seed 20260921): TSB TTTWT (1 win, 4 tie, 0 loss, 0 not testable); XGBoost+MA3 avg LTTTT (0 win, 4 tie, 1 loss, 0 not testable); SBA (alpha 0.1) LLTTT (0 win, 3 tie, 2 loss, 0 not testable); Naive LTLLL (0 win, 1 tie, 4 loss, 0 not testable). In the bins where they are served: TSB (medium) -TTTT, XGBoost+MA3 avg (long) ---TT. TSB wins 0 of 4 testable and loses 0 blocks: a tie with MA3; XGBoost+MA3 avg wins 0 of 2 testable and loses 0 blocks: a tie with MA3. Share of SKUs with MASE < 1 (pipeline gate) over the full window: MA3 69%, TSB 75%, XGBoost+MA3 avg 75%, SBA (alpha 0.1) 55%, Naive 37%. Bins are the bake-off's stored bins: the length rule plus an ADI >= 1.32 carve-out that moves 20 SKU-months to 'intermittent' (0 of them from long).",
+ "verdict": "CONFIRMS",
+ "verdict_detail": "TSB in medium loses to MA3: no (0 of 4 testable); XGBoost+MA3 in long loses to MA3: no (0 of 2 testable); SBA beats MA3 (ALL): no (0 of 5 testable); Naive beats MA3 (ALL): no (0 of 5 testable)",
+ "criterion": "TSB (medium bin) or XGBoost+MA3 (long bin) scores L vs MA3 in a majority of the testable blocks of its served bin; or SBA alpha=0.1 or naive scores W vs MA3 in a majority of testable blocks (ALL cohort)",
+ "otherwise": "CONFIRMS",
+ "mase_gate_used": "1.0 (MASE < 1 pass share, caption only; analytics/forecasting/baseline.py:55)",
+ "rerun_after_5f": "y (caption only)",
+ "checks": [
+  {
+   "id": "G3",
+   "pass": true,
+   "detail": "2711 of 2711 stored actuals equal the real series exactly (NULL quantity counted as 0); 0 differ"
+  },
+  {
+   "id": "G1",
+   "pass": true,
+   "detail": "25 of 25 logged block_tests_tierA rows reproduce (verdict, n, n_better, n_worse)"
+  }
+ ],
+ "script": "scripts/evidence/ch01_models.py",
+ "code_commit": "a72b2a3",
+ "computed_at": "2026-09-30T17:58:41",
+ "data_notes": [
+  "Data note: product_key 150 / SKU 64861486, 2025-12 has a NULL quantity in Unilever_SKU_Demand_Fact_Real (net PHP 2.89, La Union source); it is counted as 0, the same treatment as the bake-off.",
+  "Note for session 5f: the served XGBoost model fits with nthread=1 (analytics/forecasting/global_model.py:38); the stored bake-off XGBoost forecasts shown here were fitted with nthread=8 (reports/experiment_artifacts/scripts/final_models.py:81)."
+ ],
+ "models": {
+  "ma3": "MA3",
+  "tsb": "TSB",
+  "ens_xgb_ma3@A": "XGBoost+MA3 avg",
+  "sba": "SBA (alpha 0.1)",
+  "naive": "Naive"
+ },
+ "blocks": [
+  "2023-10..2024-02",
+  "2024-03..2024-08",
+  "2024-09..2025-02",
+  "2025-03..2025-08",
+  "2025-09..2026-02"
+ ]
+}

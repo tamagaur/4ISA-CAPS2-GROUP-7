@@ -1,0 +1,77 @@
+month,net_amount,rows,year,moy,index,months_in_year,partial_year,principal,series
+2023-01,7.08234e+06,781,2023,1,0.775467,10,True,delmonte,total
+2023-02,8.16926e+06,781,2023,2,0.894477,10,True,delmonte,total
+2023-03,9.30694e+06,872,2023,3,1.01905,10,True,delmonte,total
+2023-04,8.64824e+06,675,2023,4,0.946921,10,True,delmonte,total
+2023-05,8.0995e+06,862,2023,5,0.886839,10,True,delmonte,total
+2023-06,7.6618e+06,722,2023,6,0.838914,10,True,delmonte,total
+2023-08,7.84538e+06,703,2023,8,0.859014,10,True,delmonte,total
+2023-09,1.04056e+07,793,2023,9,1.13934,10,True,delmonte,total
+2023-11,1.24219e+07,719,2023,11,1.36011,10,True,delmonte,total
+2023-12,1.16891e+07,585,2023,12,1.27987,10,True,delmonte,total
+2024-01,9.19369e+06,686,2024,1,1.15334,2,True,delmonte,total
+2024-02,6.74903e+06,828,2024,2,0.84666,2,True,delmonte,total
+2025-03,8.22428e+06,1123,2025,3,0.677252,8,True,delmonte,total
+2025-04,9.6999e+06,962,2025,4,0.798767,8,True,delmonte,total
+2025-06,9.59652e+06,1230,2025,6,0.790254,8,True,delmonte,total
+2025-08,9.43222e+06,1004,2025,8,0.776724,8,True,delmonte,total
+2025-09,9.50318e+06,954,2025,9,0.782567,8,True,delmonte,total
+2025-10,1.12785e+07,1124,2025,10,0.928763,8,True,delmonte,total
+2025-11,1.36349e+07,1088,2025,11,1.12281,8,True,delmonte,total
+2025-12,2.57792e+07,934,2025,12,2.12286,8,True,delmonte,total
+2023-01,3.17294e+07,593,2023,1,0.989377,12,False,unilever,total
+2023-02,2.95639e+07,589,2023,2,0.921853,12,False,unilever,total
+2023-03,3.57529e+07,587,2023,3,1.11484,12,False,unilever,total
+2023-04,2.56269e+07,576,2023,4,0.79909,12,False,unilever,total
+2023-05,3.53554e+07,619,2023,5,1.10244,12,False,unilever,total
+2023-06,3.47787e+07,608,2023,6,1.08446,12,False,unilever,total
+2023-07,2.93381e+07,610,2023,7,0.914812,12,False,unilever,total
+2023-08,3.05632e+07,627,2023,8,0.953013,12,False,unilever,total
+2023-09,3.54748e+07,589,2023,9,1.10617,12,False,unilever,total
+2023-10,3.3405e+07,596,2023,10,1.04163,12,False,unilever,total
+2023-11,2.80712e+07,597,2023,11,0.875308,12,False,unilever,total
+2023-12,3.51815e+07,563,2023,12,1.09702,12,False,unilever,total
+2024-01,3.55117e+07,582,2024,1,1.10028,12,False,unilever,total
+2024-02,3.11437e+07,659,2024,2,0.964944,12,False,unilever,total
+2024-03,3.35403e+07,560,2024,3,1.0392,12,False,unilever,total
+2024-04,3.13971e+07,597,2024,4,0.972794,12,False,unilever,total
+2024-05,3.13014e+07,627,2024,5,0.969827,12,False,unilever,total
+2024-06,3.55357e+07,644,2024,6,1.10102,12,False,unilever,total
+2024-07,2.85614e+07,680,2024,7,0.884935,12,False,unilever,total
+2024-08,3.20645e+07,637,2024,8,0.993472,12,False,unilever,total
+2024-09,3.30327e+07,649,2024,9,1.02347,12,False,unilever,total
+2024-10,3.41336e+07,666,2024,10,1.05758,12,False,unilever,total
+2024-11,3.69318e+07,691,2024,11,1.14428,12,False,unilever,total
+2024-12,2.41485e+07,660,2024,12,0.748206,12,False,unilever,total
+2025-01,3.7309e+07,699,2025,1,1.138,12,False,unilever,total
+2025-02,3.00744e+07,666,2025,2,0.917331,12,False,unilever,total
+2025-03,3.39139e+07,674,2025,3,1.03444,12,False,unilever,total
+2025-04,3.38424e+07,665,2025,4,1.03226,12,False,unilever,total
+2025-05,3.67546e+07,732,2025,5,1.12109,12,False,unilever,total
+2025-06,3.6824e+07,708,2025,6,1.12321,12,False,unilever,total
+2025-07,2.84956e+07,708,2025,7,0.869175,12,False,unilever,total
+2025-08,3.26684e+07,716,2025,8,0.996453,12,False,unilever,total
+2025-09,3.53892e+07,774,2025,9,1.07944,12,False,unilever,total
+2025-10,3.57911e+07,768,2025,10,1.0917,12,False,unilever,total
+2025-11,3.31818e+07,754,2025,11,1.01211,12,False,unilever,total
+2025-12,1.91717e+07,687,2025,12,0.584777,12,False,unilever,total
+2023-01,5.74589e+06,607,2023,1,0.787826,10,True,delmonte,branch pangasinan (2023 only)
+2023-02,6.52538e+06,620,2023,2,0.894703,10,True,delmonte,branch pangasinan (2023 only)
+2023-03,7.36884e+06,670,2023,3,1.01035,10,True,delmonte,branch pangasinan (2023 only)
+2023-04,6.78221e+06,496,2023,4,0.929916,10,True,delmonte,branch pangasinan (2023 only)
+2023-05,6.27185e+06,635,2023,5,0.85994,10,True,delmonte,branch pangasinan (2023 only)
+2023-06,6.00131e+06,576,2023,6,0.822846,10,True,delmonte,branch pangasinan (2023 only)
+2023-08,5.80524e+06,571,2023,8,0.795963,10,True,delmonte,branch pangasinan (2023 only)
+2023-09,7.8302e+06,630,2023,9,1.07361,10,True,delmonte,branch pangasinan (2023 only)
+2023-11,1.05726e+07,517,2023,11,1.44962,10,True,delmonte,branch pangasinan (2023 only)
+2023-12,1.00301e+07,426,2023,12,1.37523,10,True,delmonte,branch pangasinan (2023 only)
+2023-01,1.33645e+06,174,2023,1,0.72647,10,True,delmonte,branch ilocos (2023 only)
+2023-02,1.64388e+06,161,2023,2,0.893583,10,True,delmonte,branch ilocos (2023 only)
+2023-03,1.9381e+06,202,2023,3,1.05352,10,True,delmonte,branch ilocos (2023 only)
+2023-04,1.86603e+06,179,2023,4,1.01434,10,True,delmonte,branch ilocos (2023 only)
+2023-05,1.82765e+06,227,2023,5,0.99348,10,True,delmonte,branch ilocos (2023 only)
+2023-06,1.6605e+06,146,2023,6,0.902616,10,True,delmonte,branch ilocos (2023 only)
+2023-08,2.04014e+06,132,2023,8,1.10898,10,True,delmonte,branch ilocos (2023 only)
+2023-09,2.57542e+06,163,2023,9,1.39995,10,True,delmonte,branch ilocos (2023 only)
+2023-11,1.84931e+06,202,2023,11,1.00525,10,True,delmonte,branch ilocos (2023 only)
+2023-12,1.65901e+06,159,2023,12,0.90181,10,True,delmonte,branch ilocos (2023 only)

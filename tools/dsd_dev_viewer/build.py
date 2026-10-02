@@ -29,6 +29,11 @@ page, both checked against what the pipeline stored):
     month. Costs ~10s (one XGBoost booster per distinct holdout month, cached
     across SKUs); there is no cheaper way, because the numbers do not exist.
 
+The Evidence tab (evidence.py / evidence.js / evidence.css) reads reports/evidence/
+only - one chart per modelling decision, each written by scripts/evidence/*.py with
+its pre-registered criterion, verdict and caption. Nothing there is queried or
+recomputed; exports re-render each chart as SVG/PNG in a light print palette.
+
 ETL and dashboard-API numbers on the Pipeline tab are NOT computed or queried:
 every one is copied from a file under reports/ and carries its citation (see
 ETL_NODES). Where no report states a number, the page prints "not on record".
@@ -805,7 +810,7 @@ def load_fit_review(payload: dict) -> dict:
             verdict_source=r["verdict_source"],
             mase_common=num(r["mase_common"]), mase_pipeline=num(r["mase_pipeline"]),
             ma3_mase_common=num(r["ma3_mase_common"]),
-            ma3_fails=r["ma3_also_fails_common"] == "1",
+            ma3_fails=num(r["ma3_also_fails_common"]) == 1,   # stored as "1.0" / "0.0" / blank - compare as a number
             rlr_fit=num(r["recent_level_ratio"]),
             bw_csv=num(r["band_width_over_forecast_stored"]),
             flags=[k[5:].replace("_", " ") for k in
@@ -1081,8 +1086,18 @@ def main():
     payload["etl"] = ETL_NODES
     payload["preview"] = assemble_preview(payload["skus"])
     payload["backup_options"] = load_backup_options()
+    # Evidence tab: reports/evidence/ only (evidence.py); its JS/CSS live beside this file
+    # and are inlined so the page stays one self-contained file.
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import evidence
+    payload["evidence"] = evidence.load(REPO)
+    with open(os.path.join(HERE, "evidence.css"), encoding="utf-8") as fh:
+        ev_css = fh.read()
+    with open(os.path.join(HERE, "evidence.js"), encoding="utf-8") as fh:
+        ev_js = fh.read()
     data = json.dumps(payload, separators=(",", ":"), allow_nan=False, default=str).replace("</", "<\\/")
-    html = TEMPLATE.replace("__DATA__", data)
+    html = TEMPLATE.replace("/*__EVIDENCE_CSS__*/", ev_css).replace("//__EVIDENCE_JS__", ev_js).replace("__DATA__", data)
     out = os.path.join(HERE, "dsd_dev_viewer.html")
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(html)
@@ -1400,6 +1415,7 @@ details.legendbox>summary{color:var(--ink-3);font-size:11.5px;font-weight:600;pa
 .mini td.l,.mini th.l{text-align:left}
 .pvgrid{display:grid;grid-template-columns:auto auto 1fr;gap:18px;align-items:start}
 @media (max-width:1200px){.pvgrid{grid-template-columns:1fr}}
+/*__EVIDENCE_CSS__*/
 </style>
 </head>
 <body>
@@ -1408,6 +1424,7 @@ details.legendbox>summary{color:var(--ink-3);font-size:11.5px;font-weight:600;pa
   <nav role="tablist">
     <button role="tab" data-tab="forecasts" aria-selected="true">Forecasts</button>
     <button role="tab" data-tab="pipeline" aria-selected="false">Pipeline</button>
+    <button role="tab" data-tab="evidence" aria-selected="false">Evidence</button>
   </nav>
   <div class="seg modeSeg" id="modeSeg" role="group" aria-label="Data mode"></div>
   <div class="meta" id="meta"></div>
@@ -1459,8 +1476,11 @@ details.legendbox>summary{color:var(--ink-3);font-size:11.5px;font-weight:600;pa
       <aside class="card sticky" id="pDock" hidden></aside>
     </div>
   </section>
+
+  <section id="tab-evidence" hidden><div id="evidence"></div></section>
 </div>
 <div id="tip"></div>
+<div id="etip"></div>
 
 <script id="data" type="application/json">__DATA__</script>
 <script>
@@ -2089,10 +2109,15 @@ let tab = 'forecasts';
 function showTab(t){
   tab = t;
   $$('nav button').forEach(x => x.setAttribute('aria-selected', x.dataset.tab === t));
-  ['forecasts', 'pipeline'].forEach(k => $('#tab-' + k).hidden = k !== t);
-  $('.kpis').hidden = t === 'pipeline';
+  ['forecasts', 'pipeline', 'evidence'].forEach(k => $('#tab-' + k).hidden = k !== t);
+  $('.kpis').hidden = t !== 'forecasts';
+  // The Forecasts/Pipeline note, the Real/Preview switch and its banner do not apply to the Evidence tab.
+  $('.note').hidden = t === 'evidence';
+  $('#modeSeg').hidden = t === 'evidence';
+  $('#pvbanner').hidden = t === 'evidence' || !V.pv;
   if (t === 'forecasts') drawForecasts();
   if (t === 'pipeline') drawPipeline();
+  if (t === 'evidence') drawEvidence();
 }
 $$('nav button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
@@ -2614,6 +2639,7 @@ const acP = autocomplete($('#acP'), 'Find a SKU to trace its path…', pk => sel
 function selectPipelineSku(pk){ pSku = pk; drawPipeline(); }
 $('#pclr').onclick = () => { pSku = null; acP.clear(); drawPipeline(); };
 
+//__EVIDENCE_JS__
 setMode('real');
 </script>
 </body>
