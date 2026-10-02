@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SSM DSD — Routing Viewer</title>
+<style>
+  :root{
+    --bg:#05060b; --bg2:#0a0d18; --surface:#0d1120; --surface2:#131830;
+    --ink:#eef1fb; --ink-soft:#8b93b8; --ink-mute:#5d6488;
+    --border:rgba(255,255,255,0.09); --border-strong:rgba(255,255,255,0.22);
+    /* chart marks: validated on --surface (dataviz validate_palette, dark mode) */
+    --ma3:#3987e5; --best:#d95926; --other:#8b93b8;
+    --warn:#ffb454; --bad:#ff6b7a; --ok:#57e39c;
+    --font-ui:-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+    --font-mono:"SF Mono","Cascadia Code","Consolas","Courier New",monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14px;}
+  body{background:radial-gradient(1200px 600px at 15% -10%,rgba(57,135,229,0.10),transparent 60%),linear-gradient(180deg,var(--bg2),var(--bg) 60%);min-height:100vh;}
+  header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:12px 22px;
+    background:rgba(14,17,30,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);}
+  header h1{font-size:17px;margin:0;font-weight:700;}
+  .chip{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);border:1px solid var(--border);border-radius:999px;padding:3px 10px;}
+  .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;}
+  .seg button{background:transparent;color:var(--ink-soft);border:0;padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer;}
+  .seg button+button{border-left:1px solid var(--border);}
+  .seg button[aria-pressed="true"]{background:var(--surface2);color:var(--ink);}
+  .seg button:disabled{opacity:.35;cursor:not-allowed;}
+  .seg button:focus-visible, th:focus-visible, .bincard:focus-visible{outline:2px solid #8fa6ff;outline-offset:-2px;}
+  main{max-width:1180px;margin:0 auto;padding:20px 22px 60px;}
+  section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:18px;}
+  h2{font-size:14px;margin:0 0 4px;letter-spacing:.02em;}
+  .sub{color:var(--ink-soft);font-size:12.5px;margin:0 0 12px;line-height:1.5;}
+  #banner{display:none;border:1px solid var(--warn);color:var(--warn);background:rgba(255,180,84,0.08);border-radius:10px;padding:10px 14px;margin-bottom:18px;font-size:13px;}
+  #headline{font-size:15px;line-height:1.55;}
+  #headline b{color:var(--ink);} #headline{color:var(--ink-soft);}
+  .bins{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;}
+  .bincard{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;text-align:left;color:inherit;font:inherit;}
+  .bincard[aria-pressed="true"]{border-color:var(--border-strong);box-shadow:0 0 0 1px var(--border-strong) inset;}
+  .bincard .nm{font-family:var(--font-mono);font-size:13px;font-weight:600;}
+  .bincard .n{color:var(--ink-soft);font-size:12px;margin:2px 0 6px;}
+  .bincard .kv{font-size:12px;color:var(--ink-soft);line-height:1.5;}
+  .bincard .kv b{color:var(--ink);font-weight:600;font-family:var(--font-mono);}
+  .tag{display:inline-block;margin-top:6px;font-size:10.5px;letter-spacing:.06em;padding:2px 7px;border-radius:4px;border:1px solid var(--border-strong);color:var(--ink-soft);}
+  .tag.decisive{border-color:var(--ok);color:var(--ok);} .tag.thin{border-color:var(--warn);color:var(--warn);margin-left:4px;}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-soft);margin:6px 0 8px;}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px;}
+  .legend i.band{width:18px;border-radius:2px;background:rgba(57,135,229,0.16);border-left:1px solid var(--ma3);border-right:1px solid var(--ma3);}
+  svg text{font-family:var(--font-ui);} .mono{font-family:var(--font-mono);}
+  .row-hit{fill:transparent;cursor:default;} .row-hit:hover,.row-hit:focus{fill:rgba(255,255,255,0.045);outline:none;}
+  table{border-collapse:collapse;width:100%;font-size:12.5px;}
+  th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
+  th:first-child,td:first-child,td.l,th.l{text-align:left;}
+  th{color:var(--ink-soft);font-weight:600;font-size:11.5px;letter-spacing:.03em;}
+  th.sortable{cursor:pointer;user-select:none;} th.sortable:hover{color:var(--ink);}
+  td{font-family:var(--font-mono);} td.l{font-family:var(--font-ui);}
+  tr.ma3 td:first-child{box-shadow:3px 0 0 var(--ma3) inset;} tr.best td:first-child{box-shadow:3px 0 0 var(--best) inset;}
+  tr.dropped td{color:var(--ink-mute);}
+  .heat td{text-align:center;border:2px solid var(--surface);border-radius:4px;min-width:64px;}
+  .heat td.l{text-align:left;}
+  .heat td.diag{outline:1px solid var(--border-strong);outline-offset:-3px;}
+  .bar{display:inline-block;height:8px;border-radius:0 4px 4px 0;vertical-align:middle;background:var(--other);}
+  .bar.ma3{background:var(--ma3);} .bar.best{background:var(--best);}
+  .scroll{max-height:460px;overflow:auto;border:1px solid var(--border);border-radius:8px;}
+  .scroll th{position:sticky;top:0;background:var(--surface2);z-index:1;}
+  input[type=search],select{background:var(--surface2);border:1px solid var(--border-strong);color:var(--ink);border-radius:7px;padding:6px 10px;font:inherit;font-size:12.5px;}
+  .controls{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center;}
+  #tip{position:fixed;z-index:20;pointer-events:none;display:none;background:#1a2040;border:1px solid var(--border-strong);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:280px;}
+  #tip .v{font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--ink);} #tip .k{color:var(--ink-soft);}
+  .up{color:var(--ok);} .dn{color:var(--bad);}
+  footer{color:var(--ink-mute);font-size:11.5px;line-height:1.6;max-width:1180px;margin:0 auto;padding:0 22px 40px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Routing Viewer</h1>
+  <span class="chip" id="cohortChip"></span>
+  <div class="seg" id="armSeg" role="group" aria-label="Training data">
+    <button data-arm="real" aria-pressed="true">Real only</button>
+    <button data-arm="A">+ synthetic, calendar-true</button>
+    <button data-arm="B">+ synthetic, spliced</button>
+  </div>
+  <span class="chip" id="genChip"></span>
+</header>
+<main>
+  <div id="banner"><b>DIAGNOSTIC ONLY.</b> Models in this view were trained with the synthetic (is_demo) 2021–22 months prepended. Test months, actuals, MASE scale and bins are still real. Not reportable — synthetic data is approved for frontend validation only.</div>
+
+  <section><h2>Does routing by combined_v1 bin beat always-MA3?</h2><p id="headline"></p></section>
+
+  <section>
+    <h2>Bins</h2>
+    <p class="sub">Click a bin to inspect it below. A winner is DECISIVE only if its 95% interval on median WAPE does not overlap MA3's in that bin. Bins flagged underpowered get no named winner.</p>
+    <div class="bins" id="binCards"></div>
+  </section>
+
+  <section>
+    <h2 id="plotTitle"></h2>
+    <p class="sub" id="plotSub"></p>
+    <div class="legend">
+      <span><i style="background:var(--ma3)"></i>MA3 (deployed default)</span>
+      <span><i style="background:var(--best)"></i>lowest median WAPE in bin</span>
+      <span><i style="background:var(--other)"></i>other models</span>
+      <span><i class="band"></i>MA3's 95% interval — a dot's whisker must clear this band to be decisive</span>
+    </div>
+    <div id="plot"></div>
+    <div class="scroll" style="margin-top:12px;max-height:none"><table id="binTable"></table></div>
+  </section>
+
+  <section>
+    <h2>Routing value</h2>
+    <p class="sub" id="routeSub"></p>
+    <table id="routeTable"></table>
+  </section>
+
+  <section>
+    <h2>Fittability</h2>
+    <p class="sub">SKUs where the model returns a finite forecast at every test origin. A model fitting fewer than half a bin's SKUs is dropped from that bin's comparison. Shading = share of the bin.</p>
+    <table class="heat" id="fitTable"></table>
+  </section>
+
+  <section>
+    <h2>Stability of the bin assignment</h2>
+    <p class="sub" id="stabSub"></p>
+    <table class="heat" id="stabTable"></table>
+  </section>
+
+  <section>
+    <h2>Per-SKU (real-only arm)</h2>
+    <div class="controls">
+      <input type="search" id="q" placeholder="Search SKU code or name" aria-label="Search SKUs">
+      <select id="binFilter" aria-label="Filter by bin"></select>
+      <span class="sub" id="skuCount" style="margin:0"></span>
+    </div>
+    <div class="scroll"><table id="skuTable"></table></div>
+  </section>
+</main>
+<footer id="foot"></footer>
+<div id="tip"></div>
+
+<script type="application/json" id="routing-data">__ROUTING_DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById('routing-data').textContent);
+const state = {arm:'real', bin:'long_flat', sort:{key:'delta', dir:1}};
+const $ = id => document.getElementById(id);
+const f3 = v => v==null ? '–' : v.toFixed(3);
+const el = (tag, attrs={}, text) => { const e=document.createElement(tag); for(const k in attrs){ if(k==='class') e.className=attrs[k]; else e.setAttribute(k,attrs[k]); } if(text!=null) e.textContent=text; return e; };
+const svgEl = (tag, attrs={}, text) => { const e=document.createElementNS('http://www.w3.org/2000/svg',tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(text!=null) e.textContent=text; return e; };
+const tip = $('tip');
+function showTip(evt, rows, title){
+  tip.replaceChildren(); if(title) tip.append(el('div',{class:'k'},title));
+  rows.forEach(([k,v])=>{ const r=el('div'); r.append(el('span',{class:'v'},v), el('span',{class:'k'},'  '+k)); tip.append(r); });
+  tip.style.display='block';
+  const x = evt.clientX ?? evt.target.getBoundingClientRect().right, y = evt.clientY ?? evt.target.getBoundingClientRect().top;
+  tip.style.left=Math.min(x+14, innerWidth-300)+'px'; tip.style.top=(y+14)+'px';
+}
+const hideTip = () => tip.style.display='none';
+const arm = () => D.arms[state.arm];
+
+function renderHeader(){
+  $('cohortChip').textContent = `${D.meta.cohort} · ${D.meta.n_skus} SKUs · ${D.meta.eval_skus} evaluable`;
+  $('genChip').textContent = 'built ' + D.meta.generated.replace('T',' ');
+  document.querySelectorAll('#armSeg button').forEach(b=>{
+    b.disabled = !D.arms[b.dataset.arm];
+    if(b.disabled) b.title = 'Rebuild with --with-synthetic to enable';
+    b.setAttribute('aria-pressed', b.dataset.arm===state.arm);
+    b.onclick = () => { state.arm=b.dataset.arm; renderAll(); };
+  });
+  $('banner').style.display = state.arm==='real' ? 'none' : 'block';
+}
+
+function renderHeadline(){
+  const v = arm().verdict, r = arm().routing, named = D.order.filter(b=>v[b].tag!=='NOT EVALUABLE' && v[b].tag!=='UNDERPOWERED');
+  const dec = named.filter(b=>v[b].tag==='DECISIVE'), s = D.stability;
+  const p = $('headline'); p.replaceChildren();
+  const add = (t,bold) => p.append(bold?el('b',{},t):document.createTextNode(t));
+  add(dec.length ? `${dec.length} bin(s) beat MA3 decisively: ${dec.join(', ')}. ` : 'No bin winner beats MA3 decisively. ', true);
+  add(`Of ${named.length} bins with enough SKUs to name a winner, ${named.filter(b=>v[b].tag==='MA3 IS BEST').length} already have MA3 as best and ${named.filter(b=>v[b].tag==='NOT DECISIVE').length} have a winner whose interval overlaps MA3's. `);
+  add(`Routing anyway moves median WAPE ${f3(r[0].median)} → ${f3(r[1].median)} (${r[1].improved} SKUs better, ${r[1].worsened} worse). `);
+  add(`${s.changed} of ${s.total} SKUs (${(100*s.changed/s.total).toFixed(1)}%) change bin between ${s.from_period} and ${s.to_period}.`, true);
+}
+
+function renderBins(){
+  const box = $('binCards'); box.replaceChildren();
+  D.bins.forEach(b=>{
+    const v = arm().verdict[b.bin];
+    const c = el('button',{class:'bincard','aria-pressed':b.bin===state.bin});
+    c.append(el('div',{class:'nm'},b.bin), el('div',{class:'n'},`${b.n} SKUs · ${b.evaluable} evaluable`));
+    const kv = el('div',{class:'kv'});
+    if(b.evaluable){
+      kv.append('train ', el('b',{},String(b.med_train)), ' mo · test ', el('b',{},String(b.med_test)), ' mo', el('br'));
+      if(v.tag==='UNDERPOWERED') kv.append('MA3 ', el('b',{},f3(v.ma3_wape)));
+      else kv.append('best ', el('b',{},v.best), ' ', el('b',{},f3(v.best_wape)), el('br'), 'MA3 ', el('b',{},f3(v.ma3_wape)));
+    } else kv.append(`median ${b.med_active} active months — nothing fittable`);
+    c.append(kv, el('span',{class:'tag'+(v.tag==='DECISIVE'?' decisive':'')}, v.tag));
+    if(b.thin) c.append(el('span',{class:'tag thin'},'THIN TEST WINDOW'));
+    c.onclick = () => { state.bin=b.bin; renderBins(); renderPlot(); };
+    box.append(c);
+  });
+}
+
+function renderPlot(){
+  const b = D.bins.find(x=>x.bin===state.bin), v = arm().verdict[state.bin];
+  const rows = arm().perbin[state.bin].filter(r=>r.wape!=null).sort((a,c)=>a.wape-c.wape);
+  $('plotTitle').textContent = `${state.bin} — median WAPE per model, with bootstrap 95% interval`;
+  const sub = $('plotSub'), plot = $('plot'); plot.replaceChildren();
+  if(!rows.length){ sub.textContent = `Not evaluable: median ${b.med_active} active months, so no model can be fitted and tested. These SKUs should carry an "insufficient data" status.`; $('binTable').replaceChildren(); return; }
+  sub.textContent = `${b.n} SKUs, median ${b.med_train} training / ${b.med_test} test months. ` +
+    (v.tag==='UNDERPOWERED' ? 'Underpowered — shown for inspection, no winner named.' :
+     v.tag==='MA3 IS BEST' ? 'MA3 already has the lowest median WAPE here.' :
+     `Best = ${v.best}; paired interval on (best − MA3) median WAPE is [${v.diff_lo>0?'+':''}${f3(v.diff_lo)}, ${v.diff_hi>0?'+':''}${f3(v.diff_hi)}] — ${v.diff_hi<0?'excludes':'includes'} zero.`) +
+    (b.thin ? ' Test window under 3 months: treat with caution.' : '');
+  const W=1100, L=130, R=70, rowH=26, top=26, H=top+rows.length*rowH+8;
+  const xmax = Math.max(...rows.map(r=>r.hi))*1.04, xmin = Math.max(0, Math.min(...rows.map(r=>r.lo))*0.9);
+  const x = val => L + (val-xmin)/(xmax-xmin)*(W-L-R);
+  const svg = svgEl('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',role:'img','aria-label':`Median WAPE with 95% interval per model, bin ${state.bin}`});
+  const ticks = 5; for(let i=0;i<=ticks;i++){ const t=xmin+(xmax-xmin)*i/ticks;
+    svg.append(svgEl('line',{x1:x(t),x2:x(t),y1:top-4,y2:H-6,stroke:'rgba(255,255,255,0.06)'}), svgEl('text',{x:x(t),y:12,'text-anchor':'middle','font-size':11,fill:'#5d6488'},t.toFixed(2))); }
+  const ma3 = rows.find(r=>r.model==='ma3');
+  svg.append(svgEl('rect',{x:x(ma3.lo),y:top-4,width:x(ma3.hi)-x(ma3.lo),height:H-top-2,fill:'rgba(57,135,229,0.13)'}),
+             svgEl('line',{x1:x(ma3.lo),x2:x(ma3.lo),y1:top-4,y2:H-6,stroke:'#3987e5','stroke-width':1,'stroke-dasharray':'3 3'}),
+             svgEl('line',{x1:x(ma3.hi),x2:x(ma3.hi),y1:top-4,y2:H-6,stroke:'#3987e5','stroke-width':1,'stroke-dasharray':'3 3'}));
+  const named = v.tag!=='UNDERPOWERED';
+  rows.forEach((r,i)=>{
+    const y = top+i*rowH+rowH/2, isMa3=r.model==='ma3', isBest=named && i===0 && !isMa3;
+    const col = isMa3?'#3987e5':isBest?'#d95926':'#8b93b8';
+    svg.append(svgEl('text',{x:L-12,y:y+4,'text-anchor':'end','font-size':12,fill:(isMa3||isBest)?'#eef1fb':'#8b93b8','font-weight':(isMa3||isBest)?700:400,class:'mono'},r.model));
+    svg.append(svgEl('line',{x1:x(r.lo),x2:x(r.hi),y1:y,y2:y,stroke:col,'stroke-width':2,'stroke-linecap':'round'}));
+    svg.append(svgEl('circle',{cx:x(r.wape),cy:y,r:5,fill:col,stroke:'#0d1120','stroke-width':2}));
+    if(isMa3||isBest||i<3) svg.append(svgEl('text',{x:x(r.hi)+8,y:y+4,'font-size':11.5,fill:'#eef1fb',class:'mono'},f3(r.wape)));
+    const hit = svgEl('rect',{x:0,y:y-rowH/2,width:W,height:rowH,class:'row-hit',tabindex:0});
+    const show = e => showTip(e, [['median WAPE',f3(r.wape)],['95% interval',`${f3(r.lo)} – ${f3(r.hi)}`],['median sMAPE',f3(r.smape)],['median MASE',f3(r.mase)],['SKUs scored',String(r.n)]], `${r.model} · rank ${i+1}/${rows.length}`);
+    hit.addEventListener('pointermove',show); hit.addEventListener('focus',show); hit.addEventListener('pointerleave',hideTip); hit.addEventListener('blur',hideTip);
+    svg.append(hit);
+  });
+  plot.append(svg);
+
+  const tbl = $('binTable'); tbl.replaceChildren();
+  const hr = el('tr'); ['model','median WAPE','95% lo','95% hi','median sMAPE','median MASE','SKUs scored','fittable'].forEach((h,i)=>hr.append(el('th',i?{}:{class:'l'},h))); tbl.append(hr);
+  const all = arm().perbin[state.bin].slice().sort((a,c)=>(a.wape??9)-(c.wape??9));
+  all.forEach((r,i)=>{ const tr = el('tr',{class:r.model==='ma3'?'ma3':(named&&i===0&&r.wape!=null?'best':(r.dropped?'dropped':''))});
+    tr.append(el('td',{class:'l mono'}, r.model+(r.dropped?'  (dropped: fits < half the bin)':'')));
+    [f3(r.wape),f3(r.lo),f3(r.hi),f3(r.smape),f3(r.mase),String(r.n),`${r.fittable}/${b.n}`].forEach(t=>tr.append(el('td',{},t))); tbl.append(tr); });
+}
+
+function renderRouting(){
+  const rows = arm().routing, max = Math.max(...rows.map(r=>r.median));
+  $('routeSub').textContent = `Scored on the same ${D.meta.eval_skus} SKUs and the same real test months; improved / worsened are against always-MA3 trained on real data. Underpowered bins stay on MA3. A SKU the bin winner cannot score falls back to MA3. The leave-one-out row picks each SKU's bin winner without that SKU, so it shows how much of the gain is selection luck. The oracle picks the best of ${D.models.length} models per SKU after the fact — a ceiling, not a strategy.`;
+  const t = $('routeTable'); t.replaceChildren();
+  const hr = el('tr'); ['strategy','median WAPE','','mean WAPE','SKUs improved','SKUs worsened'].forEach((h,i)=>hr.append(el('th',i?{}:{class:'l'},h))); t.append(hr);
+  rows.forEach((r,i)=>{ const tr = el('tr',{class:i===0?'ma3':''});
+    tr.append(el('td',{class:'l'},r.strategy), el('td',{},f3(r.median)));
+    const bc = el('td',{class:'l',style:'width:34%'}); bc.append(el('span',{class:'bar'+(i===0?' ma3':''),style:`width:${(r.median/max*100).toFixed(1)}%`})); tr.append(bc);
+    tr.append(el('td',{},f3(r.mean)), el('td',{},i?String(r.improved):'–'), el('td',{},i?String(r.worsened):'–')); t.append(tr); });
+}
+
+function heatCell(v, max, extra=''){ const td = el('td',{class:extra}, v?String(v):'·'); td.style.background = v ? `rgba(57,135,229,${(0.10+0.55*v/max).toFixed(3)})` : 'transparent'; if(!v) td.style.color='#5d6488'; return td; }
+
+function renderFit(){
+  const t = $('fitTable'); t.replaceChildren(); const hr = el('tr'); hr.append(el('th',{class:'l'},'model'));
+  D.bins.forEach(b=>hr.append(el('th',{style:'text-align:center'},`${b.bin} (${b.n})`))); t.append(hr);
+  D.models.forEach(m=>{ const tr = el('tr'); tr.append(el('td',{class:'l mono'},m));
+    D.bins.forEach(b=>{ const r = arm().perbin[b.bin].find(x=>x.model===m); const td = heatCell(r.fittable,b.n);
+      td.title = `${m} · ${b.bin}: ${r.fittable} of ${b.n} SKUs` + (r.dropped && b.evaluable ? ' — dropped from comparison' : ''); tr.append(td); }); t.append(tr); });
+}
+
+function renderStab(){
+  const s = D.stability;
+  $('stabSub').textContent = `Same ${s.total} SKUs, combined_v1 re-derived from data through ${s.from_period} (rows) vs ${s.to_period} (columns). ${s.changed} change bin: ${s.length_moves} by gaining history (one-way: insufficient → short → medium → long), ${s.trend_flips} of the ${s.long_at_from} already-long SKUs by flipping trend label. ${s.no_sales_at_from} SKUs had no sales yet at ${s.from_period}. Outlined diagonal = stayed.`;
+  const t = $('stabTable'); t.replaceChildren(); const max = Math.max(...s.matrix.flat());
+  const hr = el('tr'); hr.append(el('th',{class:'l'},`${s.from_period} ↓  /  ${s.to_period} →`)); D.order.forEach(b=>hr.append(el('th',{style:'text-align:center'},b))); hr.append(el('th',{},'total')); t.append(hr);
+  s.matrix.forEach((row,i)=>{ const tr = el('tr'); tr.append(el('td',{class:'l mono'},D.order[i]));
+    row.forEach((v,j)=>{ const td = heatCell(v,max,i===j?'diag':''); td.title = `${v} SKUs: ${D.order[i]} → ${D.order[j]}`; tr.append(td); });
+    tr.append(el('td',{},String(row.reduce((a,c)=>a+c,0)))); t.append(tr); });
+}
+
+const SKU_COLS = [['code','SKU','l'],['name','product','l'],['bin','bin','l'],['bin_prev','bin @'+D.stability.from_period,'l'],['hm','sales mo'],['ntr','train'],['nte','test'],['ma3','MA3 WAPE'],['routed','routed WAPE'],['delta','routed − MA3'],['oracle_model','oracle model','l'],['oracle','oracle WAPE']];
+function renderSkus(){
+  const q = $('q').value.trim().toLowerCase(), bf = $('binFilter').value;
+  let rows = D.skus.map(s=>({...s, delta:(s.ma3!=null&&s.routed!=null)? +(s.routed-s.ma3).toFixed(4) : null}))
+    .filter(s=>(!bf||s.bin===bf) && (!q || (s.code||'').toLowerCase().includes(q) || (s.name||'').toLowerCase().includes(q)));
+  const {key,dir} = state.sort;
+  rows.sort((a,b)=>{ const x=a[key], y=b[key]; if(x==null) return 1; if(y==null) return -1; return (typeof x==='string'? x.localeCompare(y) : x-y)*dir; });
+  $('skuCount').textContent = `${rows.length} of ${D.skus.length} SKUs`;
+  const t = $('skuTable'); t.replaceChildren(); const hr = el('tr');
+  SKU_COLS.forEach(([k,h,c])=>{ const th = el('th',{class:'sortable'+(c?' l':''),tabindex:0}, h+(state.sort.key===k?(dir>0?' ▲':' ▼'):''));
+    const go = () => { state.sort = {key:k, dir: state.sort.key===k ? -dir : 1}; renderSkus(); };
+    th.onclick = go; th.onkeydown = e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } }; hr.append(th); }); t.append(hr);
+  rows.forEach(s=>{ const tr = el('tr'); SKU_COLS.forEach(([k,,c])=>{ let v=s[k], txt = v==null?'–':(typeof v==='number' && !Number.isInteger(v) ? (k==='delta'&&v>0?'+':'')+v.toFixed(3) : String(v));
+      const td = el('td',c?{class:'l'}:{},txt); if(k==='delta'&&v){ td.className = v<0?'up':'dn'; td.textContent = (v<0?'▼ ':'▲ ')+txt; }
+      if(k==='bin_prev' && s.bin_prev!==s.bin) td.style.color='#ffb454'; if(k==='name') { td.style.maxWidth='190px'; td.style.overflow='hidden'; td.style.textOverflow='ellipsis'; td.title=txt; } tr.append(td); }); t.append(tr); });
+}
+
+function renderAll(){ renderHeader(); renderHeadline(); renderBins(); renderPlot(); renderRouting(); renderFit(); }
+(function init(){
+  const bf = $('binFilter'); bf.append(new Option('All bins','')); D.order.forEach(b=>bf.append(new Option(b,b)));
+  bf.onchange = renderSkus; $('q').oninput = renderSkus;
+  $('foot').textContent = `Method: series from Unilever_SKU_Demand_Fact_Real, first sale → ${D.meta.span.split('..')[1]}, zero-filled (${D.meta.real_rows} rows, ${D.meta.null_qty} NULL qty treated as 0). 80/20 time split per SKU, rolling-origin 1-step-ahead, refit at every origin, training floor ${D.meta.min_train} months, forecasts clipped at 0, ARIMA divergence guard as in scripts/model_bakeoff.py. Intervals: ${D.meta.nboot} bootstrap resamples over SKUs within bin, seed ${D.meta.seed}. One holdout period ending ${D.meta.span.split('..')[1]} — a second cutoff is needed before any of this is reported. Dev tool, not the product dashboard; regenerate with python tools/routing_viewer/build.py [--with-synthetic].`;
+  renderAll(); renderStab(); renderSkus();
+})();
+</script>
+</body>
+</html>
