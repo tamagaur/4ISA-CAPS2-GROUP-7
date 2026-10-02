@@ -44,6 +44,7 @@ from analytics.classification.abc import classify_abc  # noqa: E402
 from analytics.forecasting.diagnostic_metrics import mase  # noqa: E402
 
 LABEL = "SIMULATION — real + 2021–22 placeholder data; not served, not used in the LP or in accuracy claims"
+REAL_LABEL = "REAL — real rows only (Unilever_SKU_Demand_Fact_Real); the served run, reproduces forecast_result"
 SCOPE = ("Del Monte has no product-level sales, so it is not forecast. Product-level simulation and fit "
          "diagnosis are Unilever-only; Del Monte gets the category-level and coverage view.")
 DM_TABLES = ("sales_fact", "sellout_fact", "purchase_fact", "salesreturn_fact", "inventory_fact")
@@ -94,7 +95,7 @@ def unilever(inp: dict) -> tuple[pd.DataFrame, dict]:
     check = {"rows": len(recs_r), "rows_matching": len(recs_r) - len({b[0] for b in bad}), "ok_rows_mase_checked": n_ok,
              "mismatches": bad}
     if bad:
-        return pd.DataFrame(), check
+        return pd.DataFrame(), check, pd.DataFrame()
     hold = F.verdict_holdouts(recs_r, ser_r)
     sc_r = F.score_holdouts(recs_r, ser_r, fc_r, hold)
 
@@ -141,7 +142,41 @@ def unilever(inp: dict) -> tuple[pd.DataFrame, dict]:
             "live_mase_stored": None if pd.isna(live.loc[k, "mase"]) else float(live.loc[k, "mase"]),
             "real_reproduces_live": True,
         })
-    return pd.DataFrame(rows), check
+    ser = series_rows(keys, names, hold, ("REAL", recs_r, ser_r, sc_r), ("SIMULATION", recs_s, ser_s, sc_s))
+    return pd.DataFrame(rows), check, ser
+
+
+def series_rows(keys: list, names: pd.DataFrame, hold: dict, *runs) -> pd.DataFrame:
+    """series.csv: the month-by-month rows behind unilever_per_sku.csv, per product and run.
+      history           the monthly series the run trains on. REAL: every month. SIMULATION: only its
+                        2021-22 placeholder months (its other months are the REAL rows, unchanged).
+      holdout           the one-step forecasts the MASE is computed from (same months and scale in both runs).
+      forecast_2026_03  the forecast for the planning month (REAL = the served forecast_result value)."""
+    rows = []
+    for k in keys:
+        h = hold.get(k)
+        for run, recs, ser, sc in runs:
+            r, s = recs[k], ser.get(k)
+            base = {"label": LABEL if run == "SIMULATION" else REAL_LABEL, "product_key": k,
+                    "sku_code": names.loc[k, "sku_code"], "run": run, "status": r["status"], "bin": r["bin"]}
+            if s is not None:
+                ph = s.index.isin(list(s.attrs.get("placeholder_months", ())))
+                for (m, v), is_ph in zip(s.items(), ph):
+                    if run == "REAL" or is_ph:
+                        rows.append({**base, "kind": "history", "month": m, "actual": float(v), "is_placeholder": bool(is_ph)})
+            if k in sc:
+                for x in sc[k].itertuples():
+                    rows.append({**base, "kind": "holdout", "month": x.month, "actual": x.actual,
+                                 "forecast": round(float(x.value), 6), "ma3": round(float(x.ma3), 6),
+                                 "method": x.method, "backup_fired": bool(x.backup_fired), "is_placeholder": False,
+                                 "score_source": h["source"], "mase_scale": h["scale"]})
+            rows.append({**base, "kind": "forecast_2026_03", "month": F.PLANNING_MONTH,
+                         "forecast": round(float(r["forecast"]), 6), "method": r["method"]})
+    out = pd.DataFrame(rows, columns=["label", "product_key", "sku_code", "run", "status", "bin", "kind", "month",
+                                      "actual", "forecast", "ma3", "method", "backup_fired", "is_placeholder",
+                                      "score_source", "mase_scale"])
+    out["month"] = pd.to_datetime(out["month"]).dt.strftime("%Y-%m")
+    return out
 
 
 def pick_examples(df: pd.DataFrame) -> list:
@@ -368,7 +403,7 @@ def write_reports(u: pd.DataFrame, check: dict, picks: list, dmf: pd.DataFrame, 
           "series, so placeholder rows change it for all long-bin SKUs, including those with no placeholder rows of "
           "their own. MA3 and TSB use only the SKU's own history, and none of their SKUs gets placeholder rows, "
           "so they are unchanged.", "",
-          "Examples: `examples.md`. Per SKU: `unilever_per_sku.csv`.", "",
+          "Examples: `examples.md`. Per SKU: `unilever_per_sku.csv`. Per SKU and month, both runs: `series.csv`.", "",
          "## B. Del Monte - category level, descriptive", "",
          "No product-level sales exist for Del Monte, so nothing is forecast; this is coverage and category "
          "revenue only. Real rows are `is_demo = false`; placeholder rows dated 2021-22 are the only ones added.", "",
@@ -428,7 +463,7 @@ def main():
     inp = F.cached_inputs(ap.parse_args().cache, load_all)
     print(LABEL)
     print(f"[{SCOPE}]")
-    u, check = unilever(inp)
+    u, check, ser = unilever(inp)
     print(f"REAL vs live forecast_result: {check['rows_matching']}/{check['rows']} rows; stored MASE on "
           f"{check['ok_rows_mase_checked']} ok rows; mismatches={len(check['mismatches'])}")
     if check["mismatches"]:
@@ -438,6 +473,7 @@ def main():
     picks = pick_examples(u)
     dmf, info = delmonte(inp["delmonte"])
     s = write_reports(u, check, picks, dmf, info)
+    ser.to_csv(os.path.join(HERE, "series.csv"), index=False)
     print(s)
     print(info["coverage"].to_string(index=False))
     print({k: v for k, v in info["abc"].items()})

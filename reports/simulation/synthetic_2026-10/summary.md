@@ -56,7 +56,7 @@ Where the change comes from (scored SKUs, REAL bin x whether the SKU has placeho
 
 **What changes, in one line:** the MASE moves only for SKUs served by XGBoost+MA3 (71 SKUs move, all served by xgb_ma3_avg), because the global XGBoost model trains on every Tier A series, so placeholder rows change it for all long-bin SKUs, including those with no placeholder rows of their own. MA3 and TSB use only the SKU's own history, and none of their SKUs gets placeholder rows, so they are unchanged.
 
-Examples: `examples.md`. Per SKU: `unilever_per_sku.csv`.
+Examples: `examples.md`. Per SKU: `unilever_per_sku.csv`. Per SKU and month, both runs: `series.csv`.
 
 ## B. Del Monte - category level, descriptive
 
