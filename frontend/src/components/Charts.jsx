@@ -1927,7 +1927,10 @@ export const AllocationWidget = ({ allocation }) => {
       ]
     : [];
   const max = rows.length ? Math.max(...rows.map((r) => r.value), 1) : 1;
-  const mid = hasData ? a.levels.find((l) => l.pct === 105) || a.levels[0] : null;
+  // The level the headline compares against: GET /dashboard's default_pct
+  // (analytics.params.ALLOCATION_DEFAULT_PCT, 103 until SSM says which level
+  // applies), not a percentage fixed here.
+  const level = hasData ? a.levels.find((l) => l.pct === a.default_pct) || a.levels[0] : null;
   // `monthly` is an average month of the basis x pct (GET /dashboard, since
   // 2026-10-01). It was basis x pct ÷ 12 whatever the basis held, which
   // spread Del Monte's two months of 2024 over twelve: ₱1.86M/month beside
@@ -1936,8 +1939,8 @@ export const AllocationWidget = ({ allocation }) => {
   // FULL prior year: two months are not a year's pace, and which two they
   // are would decide the percentage. The bars and the footnote show what
   // data exists.
-  const usedPct = mid && mid.monthly > 0 && avgMonthlySales != null && a.basis_months === 12
-    ? (avgMonthlySales / mid.monthly) * 100
+  const usedPct = level && level.monthly > 0 && avgMonthlySales != null && a.basis_months === 12
+    ? (avgMonthlySales / level.monthly) * 100
     : null;
 
   return (
@@ -1961,8 +1964,8 @@ export const AllocationWidget = ({ allocation }) => {
             <p className="policy-headline">
               <span className="policy-headline-number">{usedPct.toFixed(0)}%</span>
               <span className="policy-headline-text">
-                of the mid (105%) allocation pace — {latestYear} sales average {formatCompactPesos(avgMonthlySales)}/month
-                over {a.ytd_months} month{a.ytd_months === 1 ? '' : 's'}, vs {formatCompactPesos(mid.monthly)}/month allocated
+                of the {level.pct}% allocation pace — {latestYear} sales average {formatCompactPesos(avgMonthlySales)}/month
+                over {a.ytd_months} month{a.ytd_months === 1 ? '' : 's'}, vs {formatCompactPesos(level.monthly)}/month allocated
               </span>
             </p>
           )}
