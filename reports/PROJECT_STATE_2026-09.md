@@ -986,3 +986,80 @@ recovery cutover created it (§17.2, migrations 0024–0027). Item 1 is therefor
 migration. Earlier notes in `reports/diagnostics/README.md` and `WHY_SOME_SKUS_ARE_UNFIT.md` state that
 `etl_quarantine` is absent from `public`; that was true when written, earlier the same day, and is now stale —
 those two files need the line corrected.
+
+## 18. DEC-31 data fills — BUILT on `feat/data-fills`, rehearsed in `ssm_fills`, NOT applied to `public` (2026-10-02)
+
+Yuan's decision 2026-10-02 (overrides DEC-29's "never fill"): fill every missing dataset for both principals, permanently, as one step
+after every load; real data always replaces a fill. Rule and details: ARCHITECTURE.md DEC-31. Code: `scripts/fill_missing.py`, hooks in
+`scripts/load_slices.py` (end of every non-dry-run load; `--no-fill` to skip) and `scripts/build_synthetic_v2_clean_pool.py` (after `--write`),
+migration `0038_data_fills.sql`, rehearsal `scripts/rehearse_fills.py`.
+
+### 18.1 Rows the fill step wrote in the rehearsal (scratch `ssm_fills` = copy of public 2026-10-02, window 2021-01..2026-09)
+
+| fill | where | months | rows |
+|---|---|---|---|
+| 1 `derived_stock_balance` | `derived_receipt_fact` (Unilever) | 2023-02..2026-02 (37) | 23,100 (5,392 flagged `negative_balance`; 26 SKU-months skipped: NULL `quantity_sold`) |
+| 2 `synthetic_rate_transfer` | `salesreturn_fact` (Unilever, is_demo) | 2021-01..2026-08 (68) | 68 (20 own Del Monte rate, 48 nearest month-of-year) |
+| 3 `synthetic_category_split` | `sku_demand_fill` (Del Monte, is_demo) | 17 real sell-out months | 3,130 (374 SKUs; 20 SKUs excluded: average stock value <= 0); principal level 17/17 |
+| 4 `synthetic_v2_gap` | Del Monte `salesreturn_fact` | 19 DEC-29 months + 2026-09 | 1,667 |
+| | Del Monte `purchase_fact` | 2025-09, 2026-09 | 68 |
+| | Del Monte `sales_fact` / `sellout_fact` / `inventory_fact` | 2026-09 | 954 / 8 / 303 |
+| | Unilever `inventory_fact` | 2026-04..09 | 3,603 |
+| — | `etl_load_event` (source `fill_missing`) | | 153 cells |
+
+Second run: 0 rows, 0 events, 0 coverage rows (idempotent). Coverage after: Unilever purchases 37 derived / 33 missing; Unilever returns 68
+synthetic / 2 missing; Del Monte product sales 17 synthetic / 53 missing; Unilever demand 2026-09 missing (D4: no DB generator).
+
+### 18.2 Guardrails (all pass)
+
+| check | result |
+|---|---|
+| `rehearse_fills --verify` (scratch vs public, public read-only): `_Real` view definitions, real rows (count + md5) of all 6 fact tables, no demo row in any `_Real` view, every demo row tagged / no real row tagged, no demo row in a real cell, public's demo rows unchanged, `forecast_result` / `abc_classification` / `lp_recommendation` / `sku_traits` / `sku_segment` identical, split totals, derived identity, NaN | 63/63 |
+| `tests/etl/test_fills_db.py` on `ssm_fills` (each test rolled back): idempotence; real rows replace a fill (loader predicate + `remove_derived`) and the cell is never refilled; sweep; a once-real cell stays empty; a new real sales month gives new derived receipts; split totals = real totals (17 months, shares sum to 1); `assert_real_rows` on all 6 `_Real` views; the estimated series reads only the derived table | 8/8 |
+| `tests/etl/test_fills.py` (no DB) | 16/16 |
+
+### 18.3 Data flags found while building
+
+- **Del Monte stock 2025-03 = 2025-04**, row for row (292 rows, 0 differences in SKU, site, quantities, valuation) although they come from two
+  workbooks (`2025 MARCH INVENTORY.xlsx`, `2025 APRIL INVENTORY.xlsx`). Possible duplicate snapshot in SSM's files — ask SSM. It double-weights
+  that snapshot in item 3's stock shares.
+- **Unilever derived receipts swing in high/low pairs** (2024-07 2.36x sales then 2024-08 0.56x; 2026-01 0.57x then 2026-02 2.20x). The SOH is
+  dated the 1st-6th of the next month, so a delivery can land on the other side of a snapshot (UNVERIFIED cause). Not smoothed.
+- Both earlier `reports/unilever_derived_receipts*` files were wrong: v1 used only the loose-piece remainder (received = sold every month within
+  0.1%), the untracked v2 dropped the remainder. No producer script for either was in the repo; `fill_missing.py` replaces them.
+- Del Monte purchases 2025-09 is now synthetic next to its 18 real lines held in `etl_quarantine` (D12).
+
+### 18.4 Apply to `public` (after the pending merges) — not run
+
+Order: 0032 -> 0033 -> 0035 -> 0036 -> 0038 (`python -m scripts.run_canonical_load --schema public --target-public --schema-only`), then
+`--refresh-coverage`, then `python -m scripts.fill_missing --schema public --target-public --dry-run`, then without `--dry-run`. Expected on
+today's public: 0038 tags 89,304 existing demo rows `synthetic_v2`; the fill step adds the 18.1 counts if public is unchanged. Re-run
+`scripts/rehearse_fills.py` on a fresh scratch copy first if public changed.
+
+### 18.5 Del Monte preview pipeline (ABC SKU level, forecast router, LP) — NOT built; what is left
+
+1. **Decision: the quantity unit.** `sku_demand_fill.quantity` inherits sell-out's quantity, which `Product_Demand_View` labels
+   `'unconfirmed'` (schema.sql:802). Pesos per unit run about 830-910 (cases? UNVERIFIED). The LP plans in pieces, and 0 of the 374 split SKUs
+   carry `pack_size`, `lead_time_days` or `unit_price` in `product_dimension`.
+2. **ABC (SKU level, preview):** on-request preview ABC is Unilever-only (backend/data_mode.py `abc_single` / `abc_relation`, the Unilever
+   relation at :364); extend it to rank `sku_demand_fill.net_amount` and lift the principal gate in backend/routers/abc.py.
+3. **Forecast router:** scripts/build_preview_outputs.py is Unilever-only — Tier A pool (:65), `build_series` (:73), and its acceptance check
+   `verify_against_live` (:94) needs a live `Forecast_Result` to reproduce, which Del Monte does not have: a Del Monte acceptance rule is a
+   decision. The series is 17 of 36 months (gapped); how the router treats gap months on this branch is UNVERIFIED (the params branch's
+   "gap months not zeros for ADI" is unmerged).
+4. **LP:** `run_lp.py`'s Del Monte path is category grain (`resolve_delmonte_category_grain`, :103 / :299) and `CANDIDATE_QUERY` (:143) needs
+   a `Forecast_Result` row; `build_preview_outputs.lp_rows` (:152) needs Del Monte SKU stock/cost (latest real snapshot 2025-12) and lead times.
+5. **Backend/frontend gates:** `run_baseline_forecast.py --principal` accepts only `unilever` (:280); `/forecast/{sku}` actuals read the
+   Unilever relation (backend/routers/forecast.py:95); `DEL_MONTE_NO_FORECAST` (frontend/src/components/SKUForecast.jsx:42); dashboard
+   "The LP does not plan Del Monte" (backend/routers/dashboard.py:1161).
+
+### 18.6 Frontend changes for Audrey (API live on this branch; frontend not changed)
+
+| where | change |
+|---|---|
+| `GET /dashboard` -> `sales_vs_stock[]` | new keys per point: `received_estimated` (pesos at cost; Unilever scope only; null under `all` / `delmonte` and before 0038), `received_estimated_negative_skus`, and `provenance: {sales, stock_on_hand, received, received_estimated}`, each `real` / `derived` / `synthetic` / null |
+| SalesVsStockWidget (Charts.jsx) | draw `received_estimated` as its own series, legend **"Estimated from stock and sales"**; tooltip "N SKUs had a negative stock balance (counted as 0)". The existing `received` line is already dashed (Charts.jsx:556, meaning *allocation proxy*), so the estimate needs a distinct style |
+| any synthetic point (`provenance.* == 'synthetic'`) | legend **"Synthetic — SSM data not received"** |
+| Del Monte | forecasts and LP in PREVIEW only, labelled preview-only (once 18.5 is built); product-level sales label **"Demo: Del Monte product sales estimated from total sales × stock share — SSM has no product-level sales"** |
+| returns | no endpoint reads `salesreturn_fact` yet; Unilever returns are preview-only data with no chart |
+| coverage | `etl_coverage` now says real / derived / synthetic / partial / missing per principal × table × month; no endpoint serves it yet (`GET /admin/data-loads` still planned, DEC-30) |
