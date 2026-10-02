@@ -118,6 +118,9 @@ class FakeSession:
         # weeks_of_cover on the requested scope as it was before.
         stock_coverage: list | None = None,
         abc_coverage: list | None = None,
+        # DEC-31 derived Unilever receipts: None = no derived_receipt_fact table
+        # (public before migration 0038); a dict = the table, {period: (value, negative_skus, skus)}.
+        derived: dict | None = None,
     ):
         self.recommendation_count = recommendation_count
         self.forecast_total = forecast_total
@@ -159,6 +162,7 @@ class FakeSession:
         self.lp_stale_rows = lp_stale_rows
         self.stock_coverage = stock_coverage or []
         self.abc_coverage = abc_coverage or []
+        self.derived = derived
         # Every (sql, params) issued, so a test can assert on the query text
         # itself — the only way to check scope/unit handling that lives in
         # SQL rather than in Python (see this module's docstring).
@@ -226,6 +230,16 @@ class FakeSession:
             return FakeResult([
                 {"period": p, "total": v}
                 for p, v in self.delmonte_sales.items() if p in periods and v is not None
+            ])
+
+        if "to_regclass('derived_receipt_fact')" in sql:
+            return FakeResult(["derived_receipt_fact"] if self.derived is not None else [])
+
+        if "FROM derived_receipt_fact" in sql:
+            periods = params["periods"]
+            return FakeResult([
+                {"period": p, "total": v, "negative_skus": neg, "skus": n}
+                for p, (v, neg, n) in (self.derived or {}).items() if p in periods
             ])
 
         if "FROM Purchase_Fact_Real" in sql:
@@ -523,7 +537,9 @@ def test_sales_vs_stock_has_12_points_with_nulls_for_missing_periods():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     series = resp.json()["sales_vs_stock"]
     assert len(series) == 12
-    assert series[-1] == {"period": current, "sales": 100.0, "stock_on_hand": None, "received": None}
+    assert series[-1] == {"period": current, "sales": 100.0, "stock_on_hand": None, "received": None,
+                          "received_estimated": None, "received_estimated_negative_skus": None,
+                          "provenance": {"sales": "real", "stock_on_hand": None, "received": None, "received_estimated": None}}
     assert all(pt["sales"] is None for pt in series[:-1])
 
 
@@ -644,6 +660,37 @@ def test_sales_vs_stock_received_null_gap_when_purchase_fact_has_no_rows():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     series = resp.json()["sales_vs_stock"]
     assert series[-1]["received"] is None
+
+
+# ---- sales_vs_stock[].received_estimated (DEC-31 derived Unilever receipts) ----
+
+def test_estimated_received_is_its_own_series_labelled_derived():
+    current = _periods()[-1]
+    session = FakeSession(received={}, derived={current: (1234.5, 7, 600)})
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    pt = resp.json()["sales_vs_stock"][-1]
+    assert pt["received"] is None                                   # never folded into the real series
+    assert pt["received_estimated"] == 1234.5 and pt["received_estimated_negative_skus"] == 7
+    assert pt["provenance"]["received_estimated"] == "derived" and pt["provenance"]["received"] is None
+
+
+def test_estimated_received_is_never_shown_under_all_or_delmonte():
+    current = _periods()[-1]
+    for scope in ("all", "delmonte"):
+        session = FakeSession(received={}, derived={current: (1234.5, 7, 600)})
+        with make_client(session) as c:
+            resp = c.get(f"/dashboard?principal={scope}", headers={"Authorization": f"Bearer {user_token()}"})
+        assert all(pt["received_estimated"] is None for pt in resp.json()["sales_vs_stock"])
+        assert not any("FROM derived_receipt_fact" in sql for sql, _ in session.calls)
+
+
+def test_estimated_received_is_null_before_migration_0038():
+    session = FakeSession(received={})                              # derived=None: no table
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    assert all(pt["received_estimated"] is None for pt in resp.json()["sales_vs_stock"])
+    assert not any("FROM derived_receipt_fact" in sql for sql, _ in session.calls)
 
 
 # ---- abc_mix ---------------------------------------------------------
