@@ -41,8 +41,9 @@ class FakeResult:
 
 
 class FakeSession:
-    def __init__(self, rows=None, missing_table=False, log_rows=None):
+    def __init__(self, rows=None, missing_table=False, log_rows=None, log_error=False):
         self.rows = rows or []
+        self.log_error = log_error
         self.missing_table = missing_table
         self.rolled_back = False
         # audit_log rows for GET /audit-log, newest first.
@@ -54,6 +55,8 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
         if "SELECT * FROM audit_log" in sql:
+            if self.log_error:
+                raise ProgrammingError(sql, params, Exception("connection reset"))
             rows = [r for r in self.log_rows if r["action"] not in params.get("exclude_action", [])]
             return FakeResult(rows[: params["limit"]])
         if "FROM user_session" in sql:
@@ -197,3 +200,12 @@ def _get_path(session, path):
         resp = c.get(path, headers={"Authorization": f"Bearer {admin_token()}"})
     app.dependency_overrides.clear()
     return resp
+
+
+def test_audit_log_read_error_is_a_503_not_an_empty_list():
+    """An empty list would read as 'No changes recorded yet' (2026-10-02)."""
+    session = FakeSession(log_error=True)
+    resp = _get_path(session, "/audit-log?limit=10")
+    assert resp.status_code == 503
+    assert "couldn't be read" in resp.json()["detail"]
+    assert session.rolled_back

@@ -502,7 +502,9 @@ def _get_abc_period(
         WHERE ac.classification_period = :period AND ac.method = 'single'
     """
     query += principal_clause(principal, "ac.principal")[0]
-    query += " ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST"
+    # product_key last: equal shares otherwise come back in whatever order the
+    # joins leave them, so the list reshuffled between loads (2026-10-02).
+    query += " ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST, ac.product_key"
 
     params: dict = {
         "period": period,
@@ -614,7 +616,8 @@ def _get_abc_last_known(
         ORDER BY ac.tier,
                  (ac.classification_period = :period) DESC,
                  ac.classification_period DESC,
-                 ac.revenue_share DESC NULLS LAST
+                 ac.revenue_share DESC NULLS LAST,
+                 ac.product_key
     """
     params: dict = {
         "period": period,

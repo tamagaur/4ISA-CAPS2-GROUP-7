@@ -18,7 +18,10 @@ const formatSKU = (sku) => {
 // Helper to parse product string into name, size value, and unit of measurement
 const parseProductComponents = (fullProduct) => {
   if (!fullProduct) return { baseName: '', sizeVal: '', sizeUnit: 'L' };
-  const regex = /\b(\d+(?:\.\d+)?)\s*(g|ml|l|kg|L|KG|ML|G)\b/;
+  // A size only when it stands on its own: not glued to a letter, digit or
+  // point before it. "24X13.5ML" has no separate size (it used to split as
+  // "24X13." + "5ml" and save back as "24X13. 5ml"); "16(5+1)120G" does.
+  const regex = /(?<![\w.])(\d+(?:\.\d+)?)\s*(g|ml|l|kg|L|KG|ML|G)\b/;
   const match = fullProduct.match(regex);
   if (match) {
     const val = match[1];
@@ -87,8 +90,16 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
-  // Helper to construct full product title with separate size and unit
+  // Helper to construct full product title with separate size and unit.
+  // Untouched name and size fields give back the stored name exactly: the
+  // split-and-rebuild is only for edits, so it can never reformat a name
+  // nobody changed (it rewrote 361 Unilever names that way, 2026-10-02).
   const constructFullProduct = () => {
+    const original = parseProductComponents(sku.product);
+    if (form.productNameOnly === original.baseName && form.sizeVal === original.sizeVal
+        && (!original.sizeVal || form.sizeUnit === original.sizeUnit)) {
+      return sku.product || '';
+    }
     const pName = form.productNameOnly.trim();
     if (form.sizeVal.trim()) {
       return `${pName} ${form.sizeVal.trim()}${form.sizeUnit}`;

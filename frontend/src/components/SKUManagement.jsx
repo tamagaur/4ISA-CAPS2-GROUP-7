@@ -289,7 +289,12 @@ const SKUManagement = () => {
     // lead time, status and notes have no column yet, so the edit form locks
     // them). Brand is sent only when it actually changed, so saving an
     // unrelated edit can never rewrite it.
-    const payload = { product_name: updatedSKU.product };
+    // The name is sent only when it changed, like the brand: a save must
+    // never rewrite a name the user didn't touch.
+    const payload = {};
+    if (!previousSKU || (previousSKU.product || '') !== (updatedSKU.product || '')) {
+      payload.product_name = updatedSKU.product;
+    }
     if (previousSKU && (previousSKU.brand || '') !== (updatedSKU.brand || '') && updatedSKU.brand) {
       payload.brand = updatedSKU.brand;
     }

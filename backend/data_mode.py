@@ -59,6 +59,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from analytics.classification.abc import classify_abc
+from analytics.optimization.lp_inputs import PLACEHOLDERS
 from analytics.classification.orchestrate_abc import _split_negative_revenue, _split_zero_revenue
 from analytics.segmentation.traits import (
     average_demand_interval,
@@ -150,12 +151,35 @@ def _outputs_stale(outputs: dict | None, placeholder: dict | None) -> bool | Non
     2026-09-23 on the v1 placeholder, the 2026-09-28 synthetic v2 cutover
     replaced it, and nothing said so. None when it cannot be told: no files,
     or files built before the build recorded this fingerprint."""
-    built = (outputs or {}).get("meta", {}).get("placeholder_window")
+    meta = (outputs or {}).get("meta", {})
+    built = meta.get("placeholder_window")
     if not built:
         return None
     live_rows = placeholder["rows"] if placeholder else 0
     live_qty = placeholder["quantity_total"] if placeholder else 0.0
-    return int(built["rows"]) != live_rows or abs(float(built["quantity_total"]) - live_qty) > 0.5
+    if int(built["rows"]) != live_rows or abs(float(built["quantity_total"]) - live_qty) > 0.5:
+        return True
+    return _lp_model_changed(meta.get("lp_model"))
+
+
+def _lp_model_changed(built_model: dict | None) -> bool:
+    """Whether the what-if LP was solved with other settings than the live
+    LP uses now. Found 2026-10-02: app_lp.csv was built 2026-09-29 under the
+    old model (order = target stock on 72 of 75 rows) and still read as
+    current, because only the placeholder data was compared. A build that
+    recorded no model at all predates the net-of-stock model (aa315f8), so
+    it is stale too."""
+    inputs = (built_model or {}).get("inputs")
+    if not isinstance(inputs, dict):
+        return True
+
+    def same(a, b) -> bool:
+        try:
+            return abs(float(a) - float(b)) < 1e-9
+        except (TypeError, ValueError):
+            return a == b
+
+    return any(key not in inputs or not same(inputs[key], value) for key, value in PLACEHOLDERS.items())
 
 
 def is_placeholder_period(period: str | None, window: dict | None) -> bool:

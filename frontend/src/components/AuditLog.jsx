@@ -121,7 +121,7 @@ const AuditLog = () => {
         <div className="audit-page-header">
           <div className="audit-header-left">
             <h2 className="audit-page-title">Audit <span className="page-title-accent">log</span></h2>
-            <p className="audit-page-subtitle">Who signs in, and what they change. Visible to admins only.</p>
+            <p className="audit-page-subtitle">Who signs in, and what they change. Visible to people with Audit Log access.</p>
           </div>
         </div>
 

@@ -151,12 +151,16 @@ def get_skus(
     status: str | None = Query(None, description="Filter to 'ACTIVE' or 'DISABLED'. Omit for both."),
     principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(
+        require_permission("sku.view", "abc.view", "lp.view", "forecast.view")
+    ),
 ) -> SKUListResponse:
-    # Sign-in only, on purpose (Yuan's permissions proposal): the ABC,
-    # Reorder and SKU Forecast pages read product and brand names from here
-    # too, so reading the product catalog needs no page permission. Its one
-    # LP figure, reorder_point, still follows lp.view (below).
+    # Any one of the four pages that read it (was sign-in only, from Yuan's
+    # permissions proposal): the ABC, Reorder and SKU Forecast pages read
+    # product and brand names from here too, so each of their permissions
+    # opens it, but someone with none of them no longer gets the whole
+    # catalog with its stock and classes (2026-10-02). Its one LP figure,
+    # reorder_point, still follows lp.view (below).
     # Both principals again (2026-09-17) — see backend/principals.py.
     # Unlike the ABC/forecast endpoints, Del Monte DOES have real rows
     # here (15,127 sku-grain + 182 category-grain product_dimension rows),

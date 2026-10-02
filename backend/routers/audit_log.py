@@ -111,10 +111,16 @@ def get_audit_log(
     query += " ORDER BY created_at DESC LIMIT :limit"
     params["limit"] = limit
 
+    # A failed read is a 503, not an empty list: an empty list reads as
+    # "nobody has changed anything", the same trap the sign-ins summary
+    # above avoids (2026-10-02).
     try:
         rows = db.execute(text(query), params).mappings().all()
-        items = [AuditLogEntry(**dict(r)) for r in rows]
-    except Exception:
+    except SQLAlchemyError as exc:
         db.rollback()
-        items = []
+        raise HTTPException(
+            status_code=503,
+            detail="The audit log couldn't be read right now. Try again in a moment.",
+        ) from exc
+    items = [AuditLogEntry(**dict(r)) for r in rows]
     return AuditLogListResponse(items=items, count=len(items))

@@ -270,7 +270,6 @@ def test_frontend_dev_mock_presets_match():
 
 SIGN_IN_ONLY = {
     ("GET", "/auth/me"), ("POST", "/auth/heartbeat"), ("POST", "/auth/logout"),
-    ("GET", "/sku"),        # product and brand names for the ABC, Reorder and SKU Forecast pages
     ("GET", "/data-mode"),  # the data-mode banner on every page
 }
 PUBLIC = {
@@ -841,3 +840,22 @@ def test_each_page_works_on_its_own_permission_alone(only, monkeypatch):
     monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: overrides)
     with client_for(FakeStore([], strict=False), raise_errors=False) as c:
         assert _smoke(c, {only}, auth(9, "staff")) == []
+
+
+@pytest.mark.real_permission_store
+def test_the_product_list_needs_one_of_the_pages_that_read_it():
+    """GET /sku opens with any of sku.view, abc.view, lp.view, forecast.view
+    (the four pages that read product names), and only with one of them:
+    it used to be sign-in only, so someone with none of these pages still
+    got the whole catalog with its stock and classes (2026-10-02)."""
+    readers = ("sku.view", "abc.view", "lp.view", "forecast.view")
+    nothing_else = {key: False for key in PRESETS["staff"] if key in readers}
+    with client_for(FakeStore(team(), overrides={2: nothing_else}), raise_errors=False) as c:
+        denied = c.get("/sku", headers=auth(2, "staff"))
+    assert denied.status_code == 403
+    assert denied.json()["code"] == "missing_permission"
+    for keep in readers:
+        overrides = {key: False for key in readers if key != keep and key in PRESETS["staff"]}
+        with client_for(FakeStore(team(), overrides={2: overrides}), raise_errors=False) as c:
+            resp = c.get("/sku", headers=auth(2, "staff"))
+        assert resp.status_code != 403, keep

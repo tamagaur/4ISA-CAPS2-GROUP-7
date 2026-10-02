@@ -1,5 +1,5 @@
 {
-  "built_at": "2026-09-29T04:16:02+00:00",
+  "built_at": "2026-10-02T09:56:54+00:00",
   "target_month": "2026-03",
   "abc_period": "2026-02",
   "first_real_month": "2023-01",
@@ -27,6 +27,23 @@
     "mase_compared": 119,
     "passed": true
   },
-  "lp_limits": "non-binding (10 x total ROP); uniform unit cost 1.0 where unit_price is null",
-  "protection_days": 1.0
+  "lp_model": {
+    "cover_rule": "aggregate",
+    "inputs": {
+      "allocation_pct": 105.0,
+      "review_days": 5.0,
+      "lead_days": 3.0,
+      "target_weeks": 3.0,
+      "cover_rule": "aggregate",
+      "warehouse_capacity": 3800000.0,
+      "default_procurement_cost_per_unit": 25.0,
+      "storage_cost_per_unit": 0.5
+    },
+    "allocation": {
+      "unilever": 1136158.89
+    },
+    "need": 1199288.41,
+    "ordered": 1136158.88,
+    "short_skus": 46
+  }
 }

@@ -264,7 +264,7 @@ def test_placeholder_mark_outside_the_series_does_not_trip():
 
 
 def test_router_default_path_is_unchanged():
-    """The flag defaults to False everywhere, the live runner never passes it, and only the preview script sets it."""
+    """The flag defaults to False everywhere, the live runner never passes it, and only the preview script and the what-if simulation set it."""
     import ast, inspect
     for fn in (router.route, router.rolling_one_step, router.assert_real_rows, gm.assert_real_history,
                gm.training_rows, gm.GlobalForecaster.__init__):
@@ -280,7 +280,11 @@ def test_router_default_path_is_unchanged():
                    and n.value.value is True for n in ast.walk(tree))
     setters = sorted(p.relative_to(REPO).as_posix() for p in REPO.glob("**/*.py")
                      if not {".venv", "node_modules", "tests"} & set(p.relative_to(REPO).parts) and passes_true(p))
-    assert setters == ["scripts/preview_router_synth.py"]
+    # The sanctioned placeholder users: the app's preview build, and Kelvin's
+    # 2021-22 what-if simulation (exp/fit-and-simulation, 2026-10-02), which
+    # reads in a READ ONLY transaction and writes only report files. Neither
+    # touches Forecast_Result; the live runner stays off this list.
+    assert setters == ["reports/simulation/synthetic_2026-10/run_simulation.py", "scripts/preview_router_synth.py"]
     s = _sales(30); pool = _pool()
     assert router.route(s, _next(s), gm.GlobalForecaster(pool)) == router.route(s, _next(s), gm.GlobalForecaster(pool), allow_placeholder=False)
 
