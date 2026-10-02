@@ -54,7 +54,12 @@ WINDOW_START = WINDOW[0]
 NOT_FIT_MASE = 1.1
 BORDERLINE_MASE = 0.9
 # Part 2 rules, as given 2026-10-02 (README.md beside this file)
-OVERFIT_RATIO = 2.07          # stated as the 95th percentile of MA3's own ratio on the same products and months
+# Overfit, MA3 as the control (MA3 has no fitted parameters, so it cannot memorise): a served model is
+# overfit only if its holdout / in-sample ratio exceeds BOTH this percentile of MA3's own ratio (same
+# products, same months - measured each run, 2.691 on 2026-10-02) AND that product's own MA3 ratio.
+MA3_CONTROL_PERCENTILE = 95
+CONTROL = "not assessable (control)"     # MA3-served products: MA3 is the yardstick, it cannot be judged against itself
+NO_INSAMPLE = "not testable (no in-sample months)"
 UNDERFIT_MASE = 1.0           # in-sample >= 1 and holdout >= 1
 BIAS_T = 2.571                # two-sided 95% t critical value, 5 degrees of freedom (6 months)
 BIAS_MONTHS = 6
@@ -339,7 +344,19 @@ def diagnose(recs: dict, series: dict, forecaster: GlobalForecaster, holdouts: d
             "verdict": verdict(hold_mase),
         })
     df = pd.DataFrame(rows)
-    df["overfit"] = df["ratio"] > OVERFIT_RATIO
+    ma3_p95 = float(np.nanpercentile(df["ma3_ratio"], MA3_CONTROL_PERCENTILE))
+    df["ma3_p95_ratio"] = ma3_p95
+
+    def overfit_status(r):
+        if r.served_model == "ma3":
+            return CONTROL
+        if not (np.isfinite(r.ratio) and np.isfinite(r.ma3_ratio)):
+            return NO_INSAMPLE
+        return "overfit" if (r.ratio > ma3_p95 and r.ratio > r.ma3_ratio) else "not overfit"
+
+    df["overfit_status"] = df.apply(overfit_status, axis=1)
+    df["overfit"] = pd.array([True if s == "overfit" else False if s == "not overfit" else pd.NA
+                              for s in df["overfit_status"]], dtype="boolean")
     df["underfit"] = (df["insample_mase"] >= UNDERFIT_MASE) & (df["holdout_mase"] >= UNDERFIT_MASE)
     df["bias_tested"] = df["holdout_months"] == BIAS_MONTHS
     df["biased"] = df["bias_tested"] & (df["t_stat"].abs() >= BIAS_T)
@@ -348,14 +365,20 @@ def diagnose(recs: dict, series: dict, forecaster: GlobalForecaster, holdouts: d
 
 
 def classify(df: pd.DataFrame) -> pd.DataFrame:
+    def yes(v) -> bool:
+        return v is not pd.NA and v is not None and bool(v)
+
     def label(r):
-        parts = [x for x, f in (("overfit", r.overfit), ("underfit", r.underfit), (f"biased ({r.bias_direction})", r.biased)) if f]
+        parts = [x for x, f in (("overfit", r.overfit), ("underfit", r.underfit), (f"biased ({r.bias_direction})", r.biased))
+                 if yes(f)]
         if parts:
             return " + ".join(parts)
-        return "fit not testable (no in-sample months)" if not np.isfinite(r.ratio) else "none of the three"
+        if not np.isfinite(r.insample_mase):
+            return "fit not testable (no in-sample months)"
+        return "none (overfit not assessable: MA3 is the control)" if r.overfit_status == CONTROL else "none of the three"
     out = df[["scope", "product_key", "sku_code", "product_name", "bin", "served_model", "verdict_source", "verdict",
-              "holdout_mase", "insample_mase", "ratio", "overfit", "underfit", "bias_tested", "t_stat", "biased",
-              "bias_direction"]].copy()
+              "holdout_mase", "insample_mase", "ratio", "ma3_ratio", "ma3_p95_ratio", "overfit_status", "overfit",
+              "underfit", "bias_tested", "t_stat", "biased", "bias_direction"]].copy()
     out["fit_class"] = df.apply(label, axis=1)
     return out
 
@@ -383,23 +406,25 @@ def main():
     scored = score_holdouts(recs, series, fc, hold)
     df = diagnose(recs, series, fc, hold, scored, inp["tier_a"])
     cls = classify(df)
-    p95 = float(np.nanpercentile(df["ma3_ratio"], 95))
-    df["overfit_at_recomputed_p95"] = df["ratio"] > p95       # sensitivity only; the rule is OVERFIT_RATIO
+    p95 = float(df["ma3_p95_ratio"].iloc[0])
     os.makedirs(HERE, exist_ok=True)
     df.to_csv(os.path.join(HERE, "per_sku.csv"), index=False)
     cls.to_csv(os.path.join(HERE, "classified.csv"), index=False)
 
     print(f"scored {len(df)} SKUs: common {int((df.verdict_source == 'common').sum())}, "
           f"20% split {int((df.verdict_source != 'common').sum())}; verdicts {df.verdict.value_counts().to_dict()}")
-    print(f"MA3 ratio p95 recomputed here = {p95:.3f} (rule uses {OVERFIT_RATIO}); "
-          f"MA3 ratio defined on {int(df.ma3_ratio.notna().sum())} SKUs; served ratio defined on {int(df.ratio.notna().sum())}")
-    print(f"overfit {int(df.overfit.sum())} (at recomputed p95: {int(df.overfit_at_recomputed_p95.sum())}) | underfit {int(df.underfit.sum())} | bias tested {int(df.bias_tested.sum())}, "
-          f"biased {int(df.biased.sum())}")
+    print(f"MA3 control: p{MA3_CONTROL_PERCENTILE} of MA3's own ratio = {p95:.3f} over {int(df.ma3_ratio.notna().sum())} SKUs "
+          f"with a defined ratio; overfit_status {df.overfit_status.value_counts().to_dict()}")
+    print(f"non-MA3 products above p95 only (not above own MA3 ratio): "
+          f"{int(((df.served_model != 'ma3') & (df.ratio > p95) & ~(df.ratio > df.ma3_ratio)).sum())}; "
+          f"above own MA3 ratio only (not above p95): {int(((df.served_model != 'ma3') & ~(df.ratio > p95) & (df.ratio > df.ma3_ratio)).sum())}")
+    print(f"underfit {int(df.underfit.sum())} | bias tested {int(df.bias_tested.sum())}, biased {int(df.biased.sum())}")
     print("pooled bias sum(f-a)/sum(a) by served model:")
     for m, g in df.groupby("served_model"):
         print(f"   {m:<12} n={len(g):>3}  {g.sum_forecast_minus_actual.sum() / g.sum_actual.sum():+.4f}")
     print("\nOVERFIT:")
-    print(df[df.overfit][["sku_code", "product_name", "served_model", "insample_mase", "holdout_mase", "ratio"]]
+    print(df[df.overfit_status == "overfit"][["sku_code", "product_name", "served_model", "verdict", "insample_mase",
+                                              "holdout_mase", "ratio", "ma3_ratio", "insample_months"]]
           .sort_values("ratio", ascending=False).to_string(index=False, float_format=lambda v: f"{v:.3f}"))
     print("\nBIASED:")
     print(df[df.biased][["sku_code", "product_name", "served_model", "mean_error", "t_stat", "bias_direction"]]
