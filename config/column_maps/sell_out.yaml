@@ -54,3 +54,12 @@ quantity_cases:
 # No other columns exist in this file family. No date/period column either -
 # _period is expected to come from Extract's filename/sheet tagging
 # (e.g. "2025 AUGUST SELL OUT.xlsx"), not from a cell in the sheet itself.
+
+# --- layout signature (analytics/etl/extract/layout.py) ------------------------------------
+# Reserved keys, not columns. 2026-09-30 corpus: all 34 loaded sheets.
+# category_path is the header-less first column (__col0__), read only once the
+# header row itself is verified by its two named columns.
+sheet_names: 'sell\s*out'
+required:
+  - [category_path, net_amount, quantity]
+ignored: []

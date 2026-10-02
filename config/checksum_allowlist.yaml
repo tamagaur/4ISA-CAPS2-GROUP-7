@@ -1,0 +1,50 @@
+# config/checksum_allowlist.yaml - totals-row mismatches that are the SOURCE's
+# fault, not the parser's. The slice loader refuses a slice whose file has a
+# totals-row mismatch (reason validation_failed) unless that exact file (by
+# sha256 of its bytes) and sheet are listed here. A changed file has a new hash
+# and is checked again from scratch.
+#
+# 2026-09-30: full sweep of all 54 real files in the four checksummed families
+# (sales_register, purchase_order, sales_return, rmr_gs_bo) found these 6
+# mismatching sheets and no others. Each was opened read-only (openpyxl,
+# formulas and cached values): in all 6 the parser's sum equals the sum of every
+# data row exactly, and the difference is exactly what the sheet's own totals
+# formula leaves out. 6 source problems, 0 parser problems. These go to SSM.
+
+sheets:
+  - sha256: 21275eb9a9f604314179f9214ff6d72d309c53a4edf2fdd88f4f0a6ee4288471
+    file: "data/raw/Del Monte/MONTHLY REPORT - MARCH 2025/2025 MARCH SALES REGISTER.xlsx"
+    sheet: "PANGASINAN SALES REGISTER"
+    column: net_amount
+    totals_cell: "L1 =(SUM(L4:L2083))"
+    reason: "totals formula starts at row 4 and skips the first data row (row 3, 8,224.23)"
+  - sha256: 7de677ebcda92a7d936d646ea21a7884002dd55ba17f6adaee5afe1f3a39326b
+    file: "data/raw/Del Monte/MONTHLY REPORT - NOVEMBER 2023/NOVEMBER 2023 SALES REGISTER.xlsx"
+    sheet: "ILOCOS_SALES REG"
+    column: net_amount
+    totals_cell: "J1 =SUM(J23:J150)"
+    reason: "totals formula covers rows 23-150 only; 74 of 202 data rows outside it (506,003.96)"
+  - sha256: 4406d81aa2391656c557bfce1b1f7f0e62f4ac85e760f470c7354326d6cb3dee
+    file: "data/raw/Del Monte/MONTHLY REPORT - DECEMBER 2025/2025 DECMBER PURCHASES.xlsx"
+    sheet: "PANGASINAN PURCHASE"
+    column: untaxed_amount
+    totals_cell: "H1 =SUM(H7:H99)"
+    reason: "totals formula starts at row 7; rows 3-6 (BILL/2025/0370-0373, the newest bills) outside it (2,867,226.84)"
+  - sha256: 4406d81aa2391656c557bfce1b1f7f0e62f4ac85e760f470c7354326d6cb3dee
+    file: "data/raw/Del Monte/MONTHLY REPORT - DECEMBER 2025/2025 DECMBER PURCHASES.xlsx"
+    sheet: "ILOCOS PURCHASE"
+    column: untaxed_amount
+    totals_cell: "H1 =SUM(H7:H122)"
+    reason: "totals formula starts at row 7; rows 3-6 (BILL/2025/0216-0219, the newest bills) outside it (63,905.10)"
+  - sha256: 9f36509978d02f4eae7b25864c4b2189910bd08bcf713a0d99cd66a6dcdc1e58
+    file: "data/raw/Del Monte/MONTHLY REPORT - FEBRUARY 2024/2024 FEBRUARY SALES RETURN.xlsx"
+    sheet: "PANGASINAN SALES RETURN"
+    column: net_amount
+    totals_cell: "L1 =SUM(H3:H100)"
+    reason: "totals cell above Net Amount (L) sums column H (Untaxed Amount)"
+  - sha256: 47111506f0b20547ea100d5f99549afec83b44d3f74461824bcff88f3442f8fc
+    file: "data/raw/Del Monte/MONTHLY REPORT - JANUARY 2024/2024 JANUARY SALES RETURN.xlsx"
+    sheet: "PANGASINAN SALES RETURN"
+    column: net_amount
+    totals_cell: "L1 =SUM(H3:H100)"
+    reason: "totals cell above Net Amount (L) sums column H (Untaxed Amount)"

@@ -55,3 +55,13 @@ return_slip_num:
 
 return_type:
   - "Return Type"   # values confirmed: "GS" / "BO"
+
+# --- layout signature (analytics/etl/extract/layout.py) ------------------------------------
+# Reserved keys, not columns. 2026-09-30 corpus: all 12 sheets (4 one pager,
+# 4 gs, 4 bo) carry the required 7. The ONE PAGER names the family: sales-return
+# GS/BO sheets carry the same headers, and the sales register's ONE PAGER has no
+# Return Slip # / Return Type.
+sheet_names: 'one\s*pager'
+required:
+  - [invoice_date, customer_name, salesman, untaxed_amount, net_amount, return_slip_num, return_type]
+ignored: []

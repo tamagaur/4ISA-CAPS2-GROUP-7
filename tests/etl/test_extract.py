@@ -175,13 +175,23 @@ def test_aggregate_checksum_unverified_when_doc_type_has_no_canonical_column():
 
 
 def test_aggregate_checksum_unverified_when_canonical_column_absent_from_sheet():
-    # Vocab-variant sheet without the literal "Net Amount" column — don't
-    # guess an equivalent column, just report unverified.
+    # Vocab-variant sheet whose only amount column is not net_amount under the
+    # column map (NET VALUE is untaxed_amount there) - don't guess an
+    # equivalent column, just report unverified.
     outcomes = [ChecksumOutcome("f.xlsx", "sheet1", "NET VALUE", "pass", 100.0, 100.0, 0.0, 1.0)]
     status, column, expected, got, diff = aggregate_checksum(outcomes, "sales_register")
     assert status == "unverified"
-    assert column == "Net Amount"  # names the column that was sought, for legibility
+    assert column == "net_amount"  # names the (canonical) column that was sought, for legibility
     assert expected is None
+
+
+def test_aggregate_checksum_follows_the_column_map_aliases():
+    # 2026-09-30 (layout guard): a header renamed to a known alias of the
+    # checksum field is still checked - matching the raw text "Net Amount" let a
+    # renamed header turn the check silently "unverified".
+    outcomes = [ChecksumOutcome("f.xlsx", "sheet1", "AMOUNT", "mismatch", 100.0, 90.0, 10.0, 1.0)]
+    status, column, expected, got, diff = aggregate_checksum(outcomes, "sales_register")
+    assert (status, column, expected) == ("mismatch", "AMOUNT", 100.0)
 
 
 def test_aggregate_checksum_unverified_when_no_columns():

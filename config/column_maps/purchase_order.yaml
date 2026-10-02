@@ -120,3 +120,12 @@ return_type:
 # Also note: no literal "units" column exists anywhere in this file
 # family - Purchase_Fact.units_received will need a decision on what
 # feeds it (this file has no quantity column at all).
+
+# --- layout signature (analytics/etl/extract/layout.py) ------------------------------------
+# Reserved keys, not columns. 2026-09-30 corpus: all 22 loaded sheets carry the
+# required 6. The header template is the sales register's own - the sheet name
+# is what says "purchase".
+sheet_names: 'purchase'
+required:
+  - [invoice_date, invoice_num, supplier_name, untaxed_amount, tax_amount, net_amount]
+ignored: ["Town Display", "Posted", "Net Amount ( Actual Invoice)"]
