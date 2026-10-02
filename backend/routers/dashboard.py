@@ -672,6 +672,54 @@ def _received_by_period(
     return _combine_principal_sums(periods, unilever, delmonte, principal)
 
 
+# DEC-31 item 1 (2026-10-02): Unilever has no purchase records, so the chart may
+# show an ESTIMATE next to `received` - SUM(derived_receipt_fact.receipt_value)
+# per period (closing - opening stock + sales, at cost; scripts/fill_missing.py).
+# Never folded into `received`, never summed under 'all' (that would mix an
+# estimate into a real total), Unilever scope only. The frontend draws it as a
+# labelled estimate ("Estimated from stock and sales"); negative_skus is the
+# month's count of SKUs whose stock balance came out negative (flagged, counted
+# as zero receipts) for the tooltip. Absent table (public before migration
+# 0038) = every period null.
+def _estimated_received_by_period(
+    db: Session, periods: list[str], principal: str = "unilever"
+) -> dict[str, dict]:
+    empty = {p: {"value": None, "negative_skus": None, "skus": None} for p in periods}
+    if principal != "unilever":
+        return empty
+    if db.execute(text("SELECT to_regclass('derived_receipt_fact')")).scalar() is None:
+        return empty
+    rows = db.execute(text("""
+        SELECT _period AS period, SUM(receipt_value) AS total,
+               COUNT(*) FILTER (WHERE flag = 'negative_balance') AS negative_skus, COUNT(*) AS skus
+        FROM derived_receipt_fact
+        WHERE principal = 'unilever' AND _period = ANY(:periods)
+        GROUP BY _period
+    """), {"periods": periods}).mappings().all()
+    out = dict(empty)
+    for r in rows:
+        out[r["period"]] = {
+            "value": float(r["total"]) if r["total"] is not None else None,
+            "negative_skus": int(r["negative_skus"]),
+            "skus": int(r["skus"]),
+        }
+    return out
+
+
+def _point_provenance(point: dict, synthetic_sales: bool) -> dict[str, str | None]:
+    """Per-point source of each value on the sales/stock chart: 'real',
+    'derived' (an estimate from real data), 'synthetic' (preview placeholder),
+    or None (a gap - render null, never 0)."""
+    def tag(value, kind):
+        return None if value is None else kind
+    return {
+        "sales": tag(point["sales"], "synthetic" if synthetic_sales else "real"),
+        "stock_on_hand": tag(point["stock_on_hand"], "real"),
+        "received": tag(point["received"], "real"),
+        "received_estimated": tag(point["received_estimated"], "derived"),
+    }
+
+
 def _latest_inventory_period(db: Session, principal: str = "unilever") -> str | None:
     """Latest Inventory_Fact_Real._period within the selected scope.
     Inventory_Fact_Real carries both principals, so an unfiltered MAX
@@ -1325,16 +1373,25 @@ def get_dashboard(
     # ---- sales_vs_stock series -------------------------------------------
 
     received_by_period = _received_by_period(db, periods, scope)
+    estimated_received = _estimated_received_by_period(db, periods, scope)
+    # Preview's placeholder sales months (Unilever, before the first real month).
+    placeholder = placeholder_window(db) if mode == PREVIEW and scope in ("all", "unilever") else None
 
-    sales_vs_stock = [
-        {
+    sales_vs_stock = []
+    for p in periods:
+        point = {
             "period": p,
             "sales": sales_by_period[p],
             "stock_on_hand": soh_by_period.get(p),
             "received": received_by_period.get(p),
+            "received_estimated": estimated_received[p]["value"],
+            "received_estimated_negative_skus": estimated_received[p]["negative_skus"],
         }
-        for p in periods
-    ]
+        point["provenance"] = _point_provenance(
+            point, bool(placeholder and placeholder["start"] <= p <= placeholder["end"])
+        )
+        sales_vs_stock.append(point)
+
     # The tax basis of the chart's two flow lines, for its legend and
     # tooltip. Purchases are put on the sales line's basis per principal
     # (_received_by_period), so one word per line is true. Under 'all' the

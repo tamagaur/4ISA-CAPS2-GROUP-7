@@ -1733,6 +1733,9 @@ def main() -> int:
     parser.add_argument("--refresh-coverage", action="store_true",
                         help="Recompute etl_coverage for every principal x table x month (2021-01 .. this month).")
     parser.add_argument("--quiet", action="store_true", help="Suppress per-SKU backfill log lines.")
+    parser.add_argument("--no-fill", action="store_true",
+                        help="Skip the DEC-31 fill step (scripts/fill_missing.py) that otherwise runs after every --slice / "
+                             "--all-slices load.")
     args = parser.parse_args()
 
     modes = [bool(args.schema_only), bool(args.slice), bool(args.all_slices), bool(args.refresh_coverage)]

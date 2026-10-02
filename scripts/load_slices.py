@@ -103,7 +103,8 @@ FAMILY_ORDER = {f.key: i for i, f in enumerate(FAMILIES)}
 ITEMS = {(i.fact, i.principal): i for i in rcl.FACT_PLAN}
 
 # principal x table -> the branches a complete month has (coverage 'partial' when one is missing).
-# Unilever has no sales/sell-out/purchase/return source (DEC-29 "not applicable - never fill").
+# Unilever purchases/returns and Del Monte product sales have no SSM source; their months are filled by the
+# DEC-31 fill step (scripts/fill_missing.py) and tracked here as derived / synthetic / missing.
 COVERAGE = {
     ("delmonte", "sales_fact"): SITES,
     ("delmonte", "purchase_fact"): SITES,
@@ -112,7 +113,14 @@ COVERAGE = {
     ("delmonte", "inventory_fact"): SITES,
     ("unilever", "unilever_sku_demand_fact"): ("la_union",),
     ("unilever", "inventory_fact"): (),
+    ("unilever", "purchase_fact"): (),
+    ("unilever", "salesreturn_fact"): (),
+    ("delmonte", "sku_demand_fill"): (),
 }
+# A (principal, fact table) whose months the fill step estimates in a table of its own: when real rows for the
+# month load, the estimate goes in the same transaction (DEC-31: real data wins).
+DERIVED_FOR = {("unilever", "purchase_fact"): "derived_receipt_fact"}
+NO_SITE_TABLES = {"sku_demand_fill"}  # no region column: a fill-only table, never real rows
 
 
 @dataclass(frozen=True)
@@ -620,6 +628,15 @@ def synthetic_where(fam: Family) -> str:
     return f"is_demo AND principal = '{fam.principal}' AND _period = :m"
 
 
+def remove_derived(conn: Connection, principal: str, table: str, month: str) -> int:
+    """DEC-31: real rows for a month replace that month's estimate (derived_receipt_fact for Unilever purchases).
+    No-op for a table with no estimate, or a schema without migration 0038."""
+    dt = DERIVED_FOR.get((principal, table))
+    if dt is None or conn.execute(text("SELECT to_regclass(:t)"), {"t": dt}).scalar() is None:
+        return 0
+    return conn.execute(text(f"DELETE FROM {dt} WHERE principal = :p AND _period = :m"), {"p": principal, "m": month}).rowcount
+
+
 def _quarantine_where(table: str, ordinals: list[int] | None) -> str:
     w = "table_name = :qt AND _src_file || chr(31) || _src_sheet = ANY(CAST(:qpairs AS text[]))"
     return w + (" AND _row_ordinal = ANY(CAST(:qords AS bigint[]))" if ordinals is not None else "")
@@ -708,9 +725,11 @@ def would_shrink(before: int, after: int) -> bool:
     return before > 0 and after < SHRINK_FLOOR * before
 
 
-def coverage_status(real: int, synthetic: int, real_sites: set, expected: tuple) -> str:
+def coverage_status(real: int, synthetic: int, real_sites: set, expected: tuple, derived: int = 0) -> str:
     if real:
         return "partial" if expected and not set(expected) <= set(real_sites) else "real"
+    if derived:
+        return "derived"
     return "synthetic" if synthetic else "missing"
 
 
@@ -730,8 +749,15 @@ def coverage_rows(conn: Connection, principal: str, table: str, months: set[str]
     counts: dict[str, list[int]] = {}
     for m, demo, n in conn.execute(text(f"SELECT {mcol}, is_demo, count(*) FROM {table} WHERE {pcond}{mfilter} GROUP BY 1, 2"), params):
         counts.setdefault(m, [0, 0])[1 if demo else 0] += n
+    derived: dict[str, int] = {}
+    if (principal, table) in DERIVED_FOR:
+        dt = DERIVED_FOR[(principal, table)]
+        derived = dict(conn.execute(text(f"SELECT _period, count(*) FROM {dt} WHERE principal = :p{mfilter.replace(mcol, '_period')} "
+                                         f"GROUP BY 1"), params).all())
     sites: dict[str, set] = {}
-    if table == "sales_fact":
+    if table in NO_SITE_TABLES:
+        pass
+    elif table == "sales_fact":
         q = f"SELECT {mcol}, _src_file, _src_sheet FROM sales_fact WHERE NOT is_demo AND {pcond}{mfilter} GROUP BY 1, 2, 3"
         for m, f, s in conn.execute(text(q), params):
             sites.setdefault(m, set()).add(lineage(f, s)[1])
@@ -747,36 +773,44 @@ def coverage_rows(conn: Connection, principal: str, table: str, months: set[str]
             continue
         real, demo = counts.get(m, [0, 0])
         real_sites = sorted(sites.get(m, set()))
-        status = coverage_status(real, demo, set(real_sites), expected)
+        status = coverage_status(real, demo, set(real_sites), expected, derived.get(m, 0))
         out.append({"principal": principal, "table_name": table, "month": m, "status": status, "real_rows": real,
-                    "synthetic_rows": demo, "real_sites": real_sites, "expected_sites": list(expected)})
+                    "synthetic_rows": demo, "derived_rows": derived.get(m, 0), "real_sites": real_sites,
+                    "expected_sites": list(expected)})
     return out
 
 
-def upsert_coverage(conn: Connection, rows: list[dict], event_key: int | None) -> None:
+def upsert_coverage(conn: Connection, rows: list[dict], event_key: int | None, only_changed: bool = False) -> int:
     """One statement for any number of months (a row-by-row executemany costs one
-    pooler round trip per month)."""
+    pooler round trip per month). only_changed: leave a row whose counts and
+    status are already the same untouched (the fill step's no-op run writes nothing).
+    Returns the number of rows written."""
     if not rows:
-        return
+        return 0
     col = lambda k: [r[k] for r in rows]  # noqa: E731
-    conn.execute(text("""
-        INSERT INTO etl_coverage (principal, table_name, month, status, real_rows, synthetic_rows, real_sites,
+    changed_only = ("WHERE (etl_coverage.status, etl_coverage.real_rows, etl_coverage.synthetic_rows, etl_coverage.derived_rows, "
+                    "etl_coverage.real_sites, etl_coverage.expected_sites) IS DISTINCT FROM (EXCLUDED.status, EXCLUDED.real_rows, "
+                    "EXCLUDED.synthetic_rows, EXCLUDED.derived_rows, EXCLUDED.real_sites, EXCLUDED.expected_sites)") if only_changed else ""
+    return conn.execute(text(f"""
+        INSERT INTO etl_coverage (principal, table_name, month, status, real_rows, synthetic_rows, derived_rows, real_sites,
                                   expected_sites, last_load_event_key, refreshed_at)
-        SELECT v.principal, v.table_name, v.month, v.status, v.real_rows, v.synthetic_rows,
+        SELECT v.principal, v.table_name, v.month, v.status, v.real_rows, v.synthetic_rows, v.derived_rows,
                string_to_array(v.real_sites, chr(31)), string_to_array(v.expected_sites, chr(31)), CAST(:event_key AS bigint), now()
         FROM unnest(CAST(:principal AS text[]), CAST(:table_name AS text[]), CAST(:month AS text[]), CAST(:status AS text[]),
-                    CAST(:real_rows AS int[]), CAST(:synthetic_rows AS int[]), CAST(:real_sites AS text[]),
+                    CAST(:real_rows AS int[]), CAST(:synthetic_rows AS int[]), CAST(:derived_rows AS int[]), CAST(:real_sites AS text[]),
                     CAST(:expected_sites AS text[]))
-             AS v(principal, table_name, month, status, real_rows, synthetic_rows, real_sites, expected_sites)
+             AS v(principal, table_name, month, status, real_rows, synthetic_rows, derived_rows, real_sites, expected_sites)
         ON CONFLICT (principal, table_name, month) DO UPDATE SET
             status = EXCLUDED.status, real_rows = EXCLUDED.real_rows, synthetic_rows = EXCLUDED.synthetic_rows,
-            real_sites = EXCLUDED.real_sites, expected_sites = EXCLUDED.expected_sites,
+            derived_rows = EXCLUDED.derived_rows, real_sites = EXCLUDED.real_sites, expected_sites = EXCLUDED.expected_sites,
             last_load_event_key = COALESCE(EXCLUDED.last_load_event_key, etl_coverage.last_load_event_key),
             refreshed_at = now()
+        {changed_only}
     """), {"principal": col("principal"), "table_name": col("table_name"), "month": col("month"), "status": col("status"),
            "real_rows": col("real_rows"), "synthetic_rows": col("synthetic_rows"),
+           "derived_rows": [r.get("derived_rows", 0) for r in rows],
            "real_sites": [SEP.join(r["real_sites"]) for r in rows], "expected_sites": [SEP.join(r["expected_sites"]) for r in rows],
-           "event_key": event_key})
+           "event_key": event_key}).rowcount
 
 
 def refresh_all_coverage(conn: Connection) -> dict[str, int]:
@@ -958,6 +992,7 @@ def write_slice(ctx: RunContext, sl: Slice, prep_rows: pd.DataFrame, records: li
             ev["real_rows_removed"] = len(gone)
             if len(rows):
                 ev["synthetic_rows_removed"] = _run(conn, f"DELETE FROM {t} WHERE {synthetic_where(fam)}", params).rowcount
+                ev["synthetic_rows_removed"] += remove_derived(conn, fam.principal, fam.table, sl.month)
             q_deleted = _run(conn, f"DELETE FROM etl_quarantine WHERE {qw} RETURNING to_jsonb(etl_quarantine) {QUARANTINE_VOLATILE}",
                              qparams).scalars().all()
             ev["quarantine_rows_removed"] = len(q_deleted)
@@ -1157,9 +1192,14 @@ def run(engine: Engine, args) -> int:
     for f in overrides:
         if not f.is_file() or REPO_ROOT not in f.parents:
             raise SystemExit(f"--file {f.name}: must be an existing file under the repository")
-    if args.all_slices:
-        return run_full(ctx, overrides)
-    return run_incremental(ctx, [parse_spec(s) for s in args.slice], overrides)
+    code = run_full(ctx, overrides) if args.all_slices else run_incremental(ctx, [parse_spec(s) for s in args.slice], overrides)
+    # DEC-31: the fill step re-runs after every load - after a refused slice too (it fills only cells with no
+    # real rows, and removes fills from cells that have them). Never on a dry run.
+    if not ctx.dry_run and not getattr(args, "no_fill", False):
+        from scripts import fill_missing
+        fill_missing.run_step(engine, ctx.schema, run_by=ctx.run_by, trigger=f"load_slices run_id={run_id}",
+                              allow_public=ctx.target_public)
+    return code
 
 
 def run_incremental(ctx: RunContext, slices: list[Slice], overrides: list[Path]) -> int:
