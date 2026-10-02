@@ -12,7 +12,8 @@ Actions: Add User, Edit User, Delete User, Invite Resent, Reset Link Sent,
 Change Access (a user's role and permission boxes, PUT
 /admin/users/{id}/permissions), Password Reset Requested, Password Set,
 Password Reset, Sign-in Locked, Add SKU, Edit SKU, Reorder Recommendation
-Accepted / Dismissed.
+Accepted / Dismissed, Two-Step Sign-In On / Off / Reset, Recovery Codes
+Replaced, Recovery Code Used (backend/mfa.py).
 """
 from __future__ import annotations
 

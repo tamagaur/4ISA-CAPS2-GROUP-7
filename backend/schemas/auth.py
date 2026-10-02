@@ -24,10 +24,56 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    access_token: str
+    """A sign-in token, or, when a second step is needed (backend/mfa.py),
+    mfa_step and mfa_token instead: 'verify' = enter the code from the
+    authenticator app; 'setup' = this role must use two-step sign-in and the
+    account hasn't set it up yet. Fields left empty are omitted."""
+    access_token: str | None = None
     token_type: str = "bearer"
-    role: str
-    full_name: str
+    role: str | None = None
+    full_name: str | None = None
+    mfa_step: Literal["verify", "setup"] | None = None
+    mfa_token: str | None = None
+
+
+class MfaCodeRequest(BaseModel):
+    # A 6-digit app code or a recovery code; spaces and dashes are ignored.
+    code: str = Field(min_length=1, max_length=40)
+
+
+class MfaLoginRequest(MfaCodeRequest):
+    mfa_token: str = Field(min_length=20, max_length=2000)
+
+
+class MfaPendingRequest(BaseModel):
+    mfa_token: str = Field(min_length=20, max_length=2000)
+
+
+class MfaSetupResponse(BaseModel):
+    """What the setup screen shows: the QR code carries otpauth_uri, and
+    secret is the same key for typing into the app by hand."""
+    secret: str
+    otpauth_uri: str
+
+
+class RecoveryCodesResponse(BaseModel):
+    recovery_codes: list[str]
+
+
+class MfaSetupDoneResponse(LoginResponse):
+    """Setup finished during sign-in: the recovery codes to save, and the
+    sign-in token."""
+    recovery_codes: list[str]
+
+
+class MfaStatus(BaseModel):
+    """GET /auth/mfa. available is false until migration 0035 is applied and
+    the server has MFA_ENCRYPTION_KEY."""
+    available: bool
+    enabled: bool
+    required: bool
+    required_roles: list[str]
+    recovery_codes_left: int | None = None
 
 
 class RegisterRequest(BaseModel):

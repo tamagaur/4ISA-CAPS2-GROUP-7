@@ -129,6 +129,10 @@ export async function login(email, password) {
   // backend/routers/auth.py) — the Audit Log page counts sign-ins from
   // there, so nothing is posted to /audit-log from here.
   const data = await res.json();
+  // Two-step sign-in (backend/mfa.py): a right password for an account with
+  // an authenticator app answers { mfa_step: 'verify' | 'setup', mfa_token }
+  // instead of a session. The login page takes it from there.
+  if (data.mfa_step) return data;
   setSession(data.access_token, data.role);
   return data;
 }
@@ -148,9 +152,51 @@ async function postPublic(path, payload, fallbackError) {
     const body = await res.json().catch(() => null);
     const err = new Error(extractErrorMessage(body, fallbackError));
     err.status = res.status;
+    err.code = body?.code;
     throw err;
   }
   return res;
+}
+
+// ── Two-step sign-in, the step after the password ─────────────────────────
+// Public like the password links: no session exists yet, only the 5-minute
+// mfa_token login() returned. A thrown error with err.code 'mfa_expired'
+// means that token ran out: back to the password.
+
+// The 6-digit code from the app, or a recovery code. Signs in.
+export async function verifyLoginCode(mfaToken, code) {
+  const res = await postPublic(
+    '/auth/login/verify',
+    { mfa_token: mfaToken, code },
+    'Could not check the code. Please try again.'
+  );
+  const data = await res.json();
+  setSession(data.access_token, data.role);
+  return data;
+}
+
+// A role that must use two-step sign-in, setting it up at sign-in:
+// -> { secret, otpauth_uri } for the QR code.
+export async function startLoginMfaSetup(mfaToken) {
+  const res = await postPublic(
+    '/auth/login/setup',
+    { mfa_token: mfaToken },
+    'Could not start setting up two-step sign-in. Please try again.'
+  );
+  return res.json();
+}
+
+// Its first code turns it on and signs in: -> { recovery_codes, access_token, ... }.
+// The session starts now; the page shows the recovery codes before going on.
+export async function confirmLoginMfaSetup(mfaToken, code) {
+  const res = await postPublic(
+    '/auth/login/setup/confirm',
+    { mfa_token: mfaToken, code },
+    'Could not check the code. Please try again.'
+  );
+  const data = await res.json();
+  setSession(data.access_token, data.role);
+  return data;
 }
 
 // Resolves to the server's "we've sent a link" message. Throws with

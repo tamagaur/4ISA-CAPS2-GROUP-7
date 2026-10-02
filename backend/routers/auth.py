@@ -1,7 +1,10 @@
 """
 backend.routers.auth — sign-in, sessions, invites and password links.
 
-  POST /auth/login            public  email + password -> JWT
+  POST /auth/login            public  email + password -> JWT, or a second step
+  POST /auth/login/verify     public  second step: the authenticator or a recovery code -> JWT
+  POST /auth/login/setup      public  second step for a role that must use it: a new secret
+  POST /auth/login/setup/confirm  public  its first code -> recovery codes + JWT
   POST /auth/heartbeat        user    keeps the session alive
   POST /auth/logout           user    ends the session
   POST /auth/register         admin   creates an account and its invite link
@@ -31,6 +34,15 @@ FAILED SIGN-INS (2026-09-21): repeated wrong passwords lock the email (5 in
 15 min) or the IP address (20 in 15 min) for 15 minutes — see
 backend/login_limiter.py for the rules and why they are shaped that way.
 Each lock is also written to the audit log.
+
+TWO-STEP SIGN-IN (2026-10-02, migration 0035, backend/mfa.py): for an
+account with an authenticator app set up, a correct password answers
+mfa_step 'verify' and a 5-minute mfa_token instead of a sign-in token, and
+/auth/login/verify takes the code. A role in MFA_REQUIRED_ROLES without it
+gets mfa_step 'setup' and sets it up on the spot. Wrong codes count toward
+the same lock as wrong passwords, and the email's count is only cleared once
+the whole sign-in succeeds: clearing it at the password would let someone
+who knows the password guess codes forever, 4 at a time.
 """
 from __future__ import annotations
 
@@ -43,7 +55,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend import account_links, audit, mailer
+from backend import account_links, audit, mailer, mfa
 from backend.api_errors import ApiError
 from backend.auth_utils import (
     create_access_token,
@@ -64,6 +76,10 @@ from backend.schemas.auth import (
     LoginRequest,
     LoginResponse,
     MessageResponse,
+    MfaLoginRequest,
+    MfaPendingRequest,
+    MfaSetupDoneResponse,
+    MfaSetupResponse,
     RegisterRequest,
     SetPasswordRequest,
     TokenRequest,
@@ -171,7 +187,24 @@ def _record_lockout(db: Session, email: str, client_ip: str, seconds: int) -> No
         logger.warning("Could not write the sign-in lock to audit_log.", exc_info=True)
 
 
-@router.post("/login", response_model=LoginResponse)
+def _complete_sign_in(db: Session, *, user_id: int, email: str, full_name: str, role: str) -> dict:
+    """Opens the session and returns the sign-in token's fields."""
+    session_id = _start_session(db, user_id=user_id, email=email, full_name=full_name, role=role)
+    if session_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Signing in isn't available right now. Please try again in a minute.",
+        )
+    token = create_access_token(
+        user_id=user_id, email=email, role=role, full_name=full_name, session_id=session_id,
+    )
+    return {"access_token": token, "role": role, "full_name": full_name}
+
+
+MFA_UNAVAILABLE = HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=mfa.NOT_CONFIGURED)
+
+
+@router.post("/login", response_model=LoginResponse, response_model_exclude_none=True)
 def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -> LoginResponse:
     client_ip = request.client.host if request.client else "unknown"
     # Checked before the password so that nothing about a locked account's
@@ -208,21 +241,130 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
             _record_lockout(db, body.email, client_ip, locked_for)
             raise _too_many_attempts(locked_for)
         raise invalid_credentials
-    login_limiter.record_success(body.email)
 
-    session_id = _start_session(
+    # Two-step sign-in: the password was right, but no session yet, and the
+    # email's failure count is kept until the code is right too.
+    try:
+        step = mfa.sign_in_step(db, row["user_id"], row["role"])
+    except mfa.MfaUnavailable:
+        logger.error("Account %s has two-step sign-in on but the server can't check codes "
+                     "(MFA_ENCRYPTION_KEY).", row["user_id"])
+        raise MFA_UNAVAILABLE from None
+    if step is not None:
+        return LoginResponse(mfa_step=step, mfa_token=mfa.issue_pending_token(row["user_id"], step))
+
+    login_limiter.record_success(body.email)
+    return LoginResponse(**_complete_sign_in(
         db, user_id=row["user_id"], email=body.email, full_name=row["full_name"], role=row["role"]
-    )
-    if session_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Signing in isn't available right now. Please try again in a minute.",
-        )
-    token = create_access_token(
-        user_id=row["user_id"], email=body.email, role=row["role"], full_name=row["full_name"],
-        session_id=session_id,
-    )
-    return LoginResponse(access_token=token, role=row["role"], full_name=row["full_name"])
+    ))
+
+
+# ── The second step ────────────────────────────────────────────────────────
+STEP_EXPIRED = "This sign-in took too long. Please sign in again."
+WRONG_CODE = "That code didn't work. Check the app and try again."
+
+
+def _pending_account(db: Session, mfa_token: str, step: str):
+    """The account a second-step token was issued for, read fresh. 401
+    mfa_expired (the page goes back to the password) if the token is
+    expired, forged or for the other step, or the account is gone."""
+    user_id = mfa.read_pending_token(mfa_token, step)
+    row = None
+    if user_id is not None:
+        row = db.execute(
+            text("SELECT user_id, email, full_name, role FROM users WHERE user_id = :user_id"),
+            {"user_id": user_id},
+        ).mappings().first()
+    if row is None:
+        raise ApiError(401, STEP_EXPIRED, code="mfa_expired")
+    return row
+
+
+def _check_not_locked(email: str, client_ip: str) -> None:
+    wait = login_limiter.retry_after(email, client_ip)
+    if wait is not None:
+        raise _too_many_attempts(wait)
+
+
+def _wrong_code(db: Session, email: str, client_ip: str) -> HTTPException:
+    """Counts a wrong code like a wrong password; the exception to raise."""
+    db.rollback()
+    locked_for = login_limiter.record_failure(email, client_ip)
+    if locked_for is not None:
+        logger.warning("Sign-in locked for %r from %s after repeated wrong codes.", email, client_ip)
+        _record_lockout(db, email, client_ip, locked_for)
+        return _too_many_attempts(locked_for)
+    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=WRONG_CODE)
+
+
+@router.post("/login/verify", response_model=LoginResponse, response_model_exclude_none=True)
+def login_verify(body: MfaLoginRequest, request: Request, db: Session = Depends(get_db)) -> LoginResponse:
+    """The code from the authenticator app, or one recovery code."""
+    account = _pending_account(db, body.mfa_token, "verify")
+    client_ip = request.client.host if request.client else "unknown"
+    _check_not_locked(account["email"], client_ip)
+    try:
+        method = mfa.verify(db, account["user_id"], body.code)
+    except mfa.MfaUnavailable:
+        db.rollback()
+        logger.error("Can't check a code for account %s (MFA_ENCRYPTION_KEY).", account["user_id"])
+        raise MFA_UNAVAILABLE from None
+    if method is None:
+        raise _wrong_code(db, account["email"], client_ip)
+    if method == "recovery":
+        left = mfa.status(db, account["user_id"])["recovery_left"]
+        audit.record(db, "Recovery Code Used", f"{left} recovery code{'' if left == 1 else 's'} left",
+                     email=account["email"], name=account["full_name"], role=account["role"])
+    db.commit()
+    login_limiter.record_success(account["email"])
+    return LoginResponse(**_complete_sign_in(
+        db, user_id=account["user_id"], email=account["email"],
+        full_name=account["full_name"], role=account["role"],
+    ))
+
+
+@router.post("/login/setup", response_model=MfaSetupResponse)
+def login_setup(body: MfaPendingRequest, db: Session = Depends(get_db)) -> MfaSetupResponse:
+    """A new authenticator secret, for an account whose role must use
+    two-step sign-in (MFA_REQUIRED_ROLES) and hasn't set it up."""
+    account = _pending_account(db, body.mfa_token, "setup")
+    try:
+        started = mfa.start_setup(db, account["user_id"], account["email"])
+    except mfa.MfaUnavailable:
+        db.rollback()
+        raise MFA_UNAVAILABLE from None
+    if started is None:
+        # Set up from another tab since the password step: sign in again.
+        db.rollback()
+        raise ApiError(401, STEP_EXPIRED, code="mfa_expired")
+    db.commit()
+    secret, uri = started
+    return MfaSetupResponse(secret=secret, otpauth_uri=uri)
+
+
+@router.post("/login/setup/confirm", response_model=MfaSetupDoneResponse, response_model_exclude_none=True)
+def login_setup_confirm(
+    body: MfaLoginRequest, request: Request, db: Session = Depends(get_db)
+) -> MfaSetupDoneResponse:
+    """The first code from the app turns two-step sign-in on and signs in."""
+    account = _pending_account(db, body.mfa_token, "setup")
+    client_ip = request.client.host if request.client else "unknown"
+    _check_not_locked(account["email"], client_ip)
+    try:
+        codes = mfa.confirm_setup(db, account["user_id"], body.code)
+    except mfa.MfaUnavailable:
+        db.rollback()
+        raise MFA_UNAVAILABLE from None
+    if codes is None:
+        raise _wrong_code(db, account["email"], client_ip)
+    audit.record(db, "Two-Step Sign-In On", "Set up at sign-in (required for the role)",
+                 email=account["email"], name=account["full_name"], role=account["role"])
+    db.commit()
+    login_limiter.record_success(account["email"])
+    return MfaSetupDoneResponse(recovery_codes=codes, **_complete_sign_in(
+        db, user_id=account["user_id"], email=account["email"],
+        full_name=account["full_name"], role=account["role"],
+    ))
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT, response_model=None)

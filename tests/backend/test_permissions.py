@@ -271,9 +271,14 @@ def test_frontend_dev_mock_presets_match():
 SIGN_IN_ONLY = {
     ("GET", "/auth/me"), ("POST", "/auth/heartbeat"), ("POST", "/auth/logout"),
     ("GET", "/data-mode"),  # the data-mode banner on every page
+    # Your own two-step sign-in (backend/routers/two_factor.py).
+    ("GET", "/auth/mfa"), ("POST", "/auth/mfa/setup"), ("POST", "/auth/mfa/confirm"),
+    ("POST", "/auth/mfa/recovery-codes"), ("POST", "/auth/mfa/disable"),
 }
 PUBLIC = {
     ("POST", "/auth/login"), ("GET", "/auth/forgot-password"), ("POST", "/auth/forgot-password"),
+    # Sign-in's second step: carries the 5-minute mfa_token instead of a session.
+    ("POST", "/auth/login/verify"), ("POST", "/auth/login/setup"), ("POST", "/auth/login/setup/confirm"),
     ("POST", "/auth/link-info"), ("POST", "/auth/set-password"), ("GET", "/status"), ("GET", "/health"),
 }
 
@@ -320,7 +325,8 @@ ADMIN_ONLY_BEFORE = {
     ("GET", "/audit-log"), ("GET", "/audit-log/users"),
 }
 NEW_ROUTES = {("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/{user_id}/permissions"),
-              ("PUT", "/admin/users/{user_id}/permissions")}
+              ("PUT", "/admin/users/{user_id}/permissions"),
+              ("POST", "/users/{user_id}/mfa/reset")}  # 2026-10-02, users.manage like the rest of /users
 
 
 def test_the_staff_preset_opens_exactly_what_staff_could_open_before():

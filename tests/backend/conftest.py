@@ -17,12 +17,16 @@ No test may send a real email: backend.mailer.send is replaced for every test
 by the `outbox` list, which a test can ask for to see what would have gone out.
 Email also counts as set up (mailer.is_configured), whatever this machine's
 .env holds; tests of the no-email case switch it off themselves.
+
+Two-step sign-in (backend/mfa.py) defaults to "migration 0035 not applied":
+password-only sign-in, no user_mfa queries, so no module has to fake that
+table. tests/backend/test_mfa.py opts back in with @pytest.mark.real_mfa.
 """
 from __future__ import annotations
 
 import pytest
 
-from backend import deps, mailer, permissions
+from backend import deps, mailer, mfa, permissions
 from backend.login_limiter import login_limiter, reset_limiter
 
 
@@ -32,6 +36,9 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "real_permission_store: look permissions up in the database instead of presets only"
+    )
+    config.addinivalue_line(
+        "markers", "real_mfa: two-step sign-in reads its table instead of acting as if 0035 weren't applied"
     )
 
 
@@ -50,6 +57,12 @@ def _presets_only(request, monkeypatch):
         # Every such test starts as a fresh server would: nothing cached.
         monkeypatch.setitem(permissions._ready_cache, "value", False)
         monkeypatch.setitem(permissions._ready_cache, "checked_at", 0.0)
+
+
+@pytest.fixture(autouse=True)
+def _mfa_not_applied(request, monkeypatch):
+    if request.node.get_closest_marker("real_mfa") is None:
+        monkeypatch.setattr(mfa, "mfa_ready", lambda db: False)
 
 
 @pytest.fixture(autouse=True)

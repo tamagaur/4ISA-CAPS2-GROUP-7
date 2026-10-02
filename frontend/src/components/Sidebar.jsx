@@ -17,6 +17,7 @@ import { logout, getCurrentUser, API_URL } from '../auth';
 import { usePermissions } from '../permissions/context';
 import { permissionForPath } from '../permissions/keys';
 import Modal from './Modal';
+import AccountSecurityModal from './AccountSecurityModal';
 import './Sidebar.css';
 
 // Initials for the bottom-profile avatar, e.g. "Audrey Bugayong" -> "AB".
@@ -79,6 +80,8 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
   }, []);
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  // Your own two-step sign-in, opened from your name below.
+  const [showSecurity, setShowSecurity] = useState(false);
   const currentUser = getCurrentUser();
   // Role and tabs come from /auth/me (PermissionsProvider), not the login
   // token, so a change an admin makes shows on the next click.
@@ -169,13 +172,19 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
 
           {/* Bottom Profile */}
           <div className="sidebar-bottom">
-            <div className="sidebar-profile-bottom">
+            <button
+              type="button"
+              className="sidebar-profile-bottom sidebar-profile-btn"
+              onClick={() => setShowSecurity(true)}
+              title="Account security"
+            >
               <div className="avatar blue-avatar">{getInitials(displayName)}</div>
               <div className="profile-info">
                 <span className="profile-name">{displayName}</span>
                 <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
+                <span className="profile-security">Account security</span>
               </div>
-            </div>
+            </button>
             
             {/* Was a hardcoded green "SYS ONLINE" (shown even with the backend
                 down) next to the computer's real date, which disagreed with the
@@ -194,6 +203,8 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
           </div>
         </aside>
       </div>
+
+      <AccountSecurityModal isOpen={showSecurity} onClose={() => setShowSecurity(false)} />
 
       {/* Logout Confirmation Modal Popup */}
       {showLogoutModal && (

@@ -721,6 +721,19 @@ CREATE TABLE IF NOT EXISTS user_permission_override (
     PRIMARY KEY (user_id, permission_key)
 );
 
+-- Two-step sign-in with an authenticator app (migration 0035,
+-- backend/mfa.py). secret_encrypted is Fernet-encrypted with the server's
+-- MFA_ENCRYPTION_KEY; enabled_at stays NULL until setup is confirmed with a
+-- first code; recovery_hashes holds the sha256 of each unused recovery code.
+CREATE TABLE IF NOT EXISTS user_mfa (
+    user_id           BIGINT PRIMARY KEY REFERENCES Users (user_id) ON DELETE CASCADE,
+    secret_encrypted  TEXT NOT NULL,
+    enabled_at        TIMESTAMPTZ,
+    last_used_step    BIGINT,
+    recovery_hashes   TEXT[] NOT NULL DEFAULT '{}',
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Application audit trail (who did what, when) — dashboard application
 -- state, not ETL output, same reasoning as Users above. Replaces the
 -- earlier localStorage-only audit log (frontend/src/utils/auditLogger.js),

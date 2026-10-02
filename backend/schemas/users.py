@@ -20,6 +20,11 @@ class UserOut(BaseModel):
     # 'invited' until the person sets a password through their invite link.
     status: Literal["active", "invited"] = "active"
     created_at: datetime
+    # Two-step sign-in on (backend/mfa.py). Always false before migration 0035.
+    mfa_enabled: bool = False
+    # Latest sign-in, from user_session (backend/routers/users.py
+    # USER_COLUMNS). None = never signed in.
+    last_sign_in_at: datetime | None = None
 
 
 class UserUpdate(BaseModel):

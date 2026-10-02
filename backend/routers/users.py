@@ -2,11 +2,13 @@
 backend.routers.users — user management (needs users.manage; see
 backend/permissions.py).
 
-  GET    /users                      every account, with its status
+  GET    /users                      every account, with its status and last sign-in
   PATCH  /users/{user_id}            name, email, role
   DELETE /users/{user_id}
   POST   /users/{user_id}/send-link  a new invite (invite pending) or a
                                      password reset link (active account)
+  POST   /users/{user_id}/mfa/reset  turns off someone's two-step sign-in
+                                     (lost phone and recovery codes)
 
 Creating an account goes through POST /auth/register (backend/routers/auth.py),
 which owns the permission and duplicate-email checks for create.
@@ -27,7 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend import account_links, audit
+from backend import account_links, audit, mfa
 from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_db
 from backend.permissions import LAST_ADMIN, admin_count, require_permission
@@ -37,9 +39,15 @@ from backend.sessions import revoke_user_sessions
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+# last_sign_in_at (2026-10-02, for the security audit): the latest sign-in
+# from user_session, which records every sign-in with its date and time
+# (migration 0023; older sign-ins backfilled from the audit log with their
+# user_id). Read there rather than copied onto users, so there is no second
+# copy to keep in step and no migration. NULL = never signed in.
 USER_COLUMNS = (
     "user_id, email, full_name, role, created_at, "
-    "CASE WHEN password_hash IS NULL THEN 'invited' ELSE 'active' END AS status"
+    "CASE WHEN password_hash IS NULL THEN 'invited' ELSE 'active' END AS status, "
+    "(SELECT max(s.started_at) FROM user_session s WHERE s.user_id = users.user_id) AS last_sign_in_at"
 )
 _FIELD_LABELS = {"email": "email", "full_name": "name", "role": "role"}
 
@@ -64,7 +72,8 @@ def list_users(
     current_user: TokenPayload = Depends(manage_users),
 ) -> list[UserOut]:
     rows = db.execute(text(f"SELECT {USER_COLUMNS} FROM users ORDER BY user_id")).mappings().all()
-    return [UserOut(**row) for row in rows]
+    with_mfa = mfa.enabled_user_ids(db)
+    return [UserOut(**row, mfa_enabled=row["user_id"] in with_mfa) for row in rows]
 
 
 @router.patch("/{user_id}", response_model=UserOut)
@@ -114,7 +123,7 @@ def update_user(
         details = "; ".join(f"{_FIELD_LABELS[col]}: {existing[col]} → {value}" for col, value in changed.items())
         audit.record(db, "Edit User", f"{existing['email']}: {details}", actor=current_user)
     db.commit()
-    return UserOut(**row)
+    return UserOut(**row, mfa_enabled=mfa.is_enabled(db, user_id))
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
@@ -167,3 +176,30 @@ def send_link(
         expires_at=expires_at,
         email_problem=problem,
     )
+
+
+@router.post("/{user_id}/mfa/reset", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+def reset_mfa(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(manage_users),
+) -> None:
+    """For someone who lost their phone and their recovery codes: turns
+    their two-step sign-in off and signs them out. If their role requires it
+    (MFA_REQUIRED_ROLES), they set it up again at their next sign-in. Your
+    own is turned off from your account, with a code, not from here."""
+    if user_id == current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You can't reset your own two-step sign-in here. Use Account security, or ask another admin.",
+        )
+    user = _get_user(db, user_id)
+    if not mfa.mfa_ready(db) or not mfa.remove(db, user_id):
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Two-step sign-in isn't on for {user['email']}.",
+        )
+    revoke_user_sessions(db, user_id)
+    audit.record(db, "Two-Step Sign-In Reset", user["email"], actor=current_user)
+    db.commit()

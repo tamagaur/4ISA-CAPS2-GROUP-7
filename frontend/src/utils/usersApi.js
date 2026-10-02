@@ -64,6 +64,13 @@ export async function sendUserLink(userId) {
   return res.json();
 }
 
+// Turns off someone's two-step sign-in (they lost their phone and their
+// recovery codes) and signs them out.
+export async function resetUserMfa(userId) {
+  const res = await apiFetch(`/users/${userId}/mfa/reset`, { method: 'POST' });
+  await parseErrorOrThrow(res, 'Failed to reset two-step sign-in.');
+}
+
 export async function deleteUser(userId) {
   const res = await apiFetch(`/users/${userId}`, { method: 'DELETE' });
   await parseErrorOrThrow(res, 'Failed to delete user.');

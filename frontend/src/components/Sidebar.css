@@ -319,6 +319,41 @@
   margin-bottom: 1rem;
 }
 
+/* The profile opens Account security (two-step sign-in). */
+.sidebar-profile-btn {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  margin-left: -0.25rem;
+  border-radius: 8px;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sidebar-profile-btn:hover,
+.sidebar-profile-btn:focus-visible {
+  background-color: var(--color-nav-item-hover-bg);
+}
+
+.sidebar-profile-btn:focus-visible {
+  outline: 2px solid var(--color-nav-item-active-rail);
+  outline-offset: 1px;
+}
+
+.profile-security {
+  color: var(--color-nav-item);
+  font-size: 0.7rem;
+  margin-top: 0.1rem;
+}
+
+.sidebar-profile-btn:hover .profile-security {
+  color: var(--color-nav-item-hover-text);
+  text-decoration: underline;
+}
+
 .sidebar-status {
   display: flex;
   justify-content: space-between;

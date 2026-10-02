@@ -1,21 +1,21 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Plus, Pencil, Trash2, AlertTriangle, Mail, KeyRound, Link2, Copy, Check, Loader2, ShieldCheck,
+  Plus, Pencil, Trash2, AlertTriangle, Mail, KeyRound, Link2, Copy, Check, Loader2, ShieldCheck, ShieldOff,
 } from 'lucide-react';
 import UserFormModal from './UserFormModal';
 import PermissionsModal from './PermissionsModal';
 import Modal from './Modal';
 import { useToast } from './ToastProvider';
-import { listUsers, createUser, updateUser, deleteUser, sendUserLink } from '../utils/usersApi';
+import { listUsers, createUser, updateUser, deleteUser, sendUserLink, resetUserMfa } from '../utils/usersApi';
+import { getMfaStatus } from '../api/mfa';
 import { getCurrentUser } from '../auth';
 import { saveUserPermissions } from '../api/permissions';
 import { usePermissions } from '../permissions/context';
 import { roleLabel } from '../permissions/keys';
-import { formatDate, formatDateTime } from '../utils/formatDate';
+import { formatDateTime } from '../utils/formatDate';
 import { LoadingStatus, SkeletonTableRows } from './Skeleton';
 import './UserManagement.css';
 
-const COLUMN_COUNT = 6;
 
 // Selects the whole link, then scrolls the field back to its start (the
 // site's address): focusing it leaves it scrolled to the end of the token.
@@ -58,6 +58,11 @@ const UserManagement = () => {
   // Whose permissions are open (Kelvin's permissions proposal, task 6).
   const [permissionsUser, setPermissionsUser] = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  // Two-step sign-in (backend/mfa.py): whether the server has it at all, and
+  // which roles must use it. The column and Reset button show only when it does.
+  const [mfaInfo, setMfaInfo] = useState({ available: false, requiredRoles: [] });
+  const [resettingMfaUser, setResettingMfaUser] = useState(null);
+  const [resetMfaError, setResetMfaError] = useState('');
   // One link send at a time: a second result could open the share dialog
   // over the first and replace its link before the admin had copied it.
   const [sendingLinkFor, setSendingLinkFor] = useState(null);
@@ -88,6 +93,14 @@ const UserManagement = () => {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  useEffect(() => {
+    getMfaStatus()
+      .then((s) => setMfaInfo({ available: s.available, requiredRoles: s.required_roles || [] }))
+      .catch(() => {});
+  }, []);
+
+  const columnCount = mfaInfo.available ? 8 : 7;
 
   const handleOpenAdd = () => {
     setEditingUser(null);
@@ -257,6 +270,19 @@ const UserManagement = () => {
     }
   };
 
+  const handleConfirmResetMfa = async () => {
+    if (!resettingMfaUser) return;
+    setResetMfaError('');
+    try {
+      await resetUserMfa(resettingMfaUser.user_id);
+      toast.success(`Two-step sign-in reset for ${resettingMfaUser.email}`);
+      setResettingMfaUser(null);
+      await loadUsers();
+    } catch (err) {
+      setResetMfaError(err.message || 'Failed to reset two-step sign-in.');
+    }
+  };
+
   const handleConfirmDelete = async () => {
     if (!deletingUser) return;
     setDeleteError('');
@@ -303,13 +329,15 @@ const UserManagement = () => {
                 <th>Email</th>
                 <th>Role</th>
                 <th>Status</th>
-                <th>Created</th>
+                {mfaInfo.available && <th>Two-step</th>}
+                <th title="When the account was created">Joined</th>
+                <th title="The account's most recent sign-in">Last sign-in</th>
                 <th className="user-mgmt-actions-col">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <SkeletonTableRows rows={4} columns={COLUMN_COUNT} />
+                <SkeletonTableRows rows={4} columns={columnCount} />
               ) : users.length > 0 ? (
                 users.map((user) => {
                   // Invited = the account exists but no password has been set
@@ -349,8 +377,32 @@ const UserManagement = () => {
                           <span className="user-mgmt-status-active">Active</span>
                         )}
                       </td>
+                      {mfaInfo.available && (
+                        <td>
+                          {user.mfa_enabled ? (
+                            <span className="user-mgmt-mfa on">On</span>
+                          ) : mfaInfo.requiredRoles.includes(user.role) ? (
+                            <span
+                              className="user-mgmt-mfa due"
+                              title="Required for this role: they set it up at their next sign-in"
+                            >
+                              Setup due
+                            </span>
+                          ) : (
+                            <span className="user-mgmt-mfa off">Off</span>
+                          )}
+                        </td>
+                      )}
                       <td className="user-mgmt-date-cell">
-                        {formatDate(user.created_at)}
+                        {formatDateTime(user.created_at)}
+                      </td>
+                      {/* From the sign-in history (user_session), for the security audit. */}
+                      <td className="user-mgmt-date-cell">
+                        {user.last_sign_in_at ? (
+                          formatDateTime(user.last_sign_in_at)
+                        ) : (
+                          <span className="user-mgmt-never">Never</span>
+                        )}
                       </td>
                       <td className="user-mgmt-actions-col">
                         {/* aria-busy rather than disabled while its own request
@@ -375,6 +427,16 @@ const UserManagement = () => {
                             title="Permissions"
                           >
                             <ShieldCheck size={15} />
+                          </button>
+                        )}
+                        {mfaInfo.available && user.mfa_enabled && user.email !== currentUser?.email && (
+                          <button
+                            className="user-mgmt-icon-btn mfa-reset"
+                            onClick={() => { setResetMfaError(''); setResettingMfaUser(user); }}
+                            aria-label={`Reset two-step sign-in for ${user.full_name}`}
+                            title="Reset two-step sign-in"
+                          >
+                            <ShieldOff size={15} />
                           </button>
                         )}
                         <button
@@ -404,7 +466,7 @@ const UserManagement = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={COLUMN_COUNT} className="user-mgmt-empty">No users found.</td>
+                  <td colSpan={columnCount} className="user-mgmt-empty">No users found.</td>
                 </tr>
               )}
             </tbody>
@@ -469,6 +531,38 @@ const UserManagement = () => {
               </button>
               <button className="user-mgmt-confirm-delete-btn" onClick={handleConfirmDelete}>
                 Delete User
+              </button>
+            </div>
+        </Modal>
+      )}
+
+      {resettingMfaUser && (
+        <Modal
+          isOpen={!!resettingMfaUser}
+          onClose={() => setResettingMfaUser(null)}
+          label="Reset two-step sign-in confirmation"
+          overlayClassName="user-mgmt-modal-overlay"
+          containerClassName="user-mgmt-confirm-card"
+        >
+            <div className="user-mgmt-confirm-icon">
+              <ShieldOff size={20} />
+            </div>
+            <h3 className="user-mgmt-confirm-title">Reset two-step sign-in?</h3>
+            <p className="user-mgmt-confirm-body">
+              For when <strong>{resettingMfaUser.full_name}</strong> ({resettingMfaUser.email}) has lost
+              their phone and their recovery codes. Their authenticator stops working and they&apos;re
+              signed out.{' '}
+              {mfaInfo.requiredRoles.includes(resettingMfaUser.role)
+                ? 'Their role requires it, so they set it up again at their next sign-in.'
+                : 'They can sign in with their password alone until they set it up again.'}
+            </p>
+            {resetMfaError && <div className="form-api-error">{resetMfaError}</div>}
+            <div className="user-mgmt-confirm-actions">
+              <button className="btn-cancel" onClick={() => setResettingMfaUser(null)}>
+                Cancel
+              </button>
+              <button className="user-mgmt-confirm-delete-btn" onClick={handleConfirmResetMfa}>
+                Reset
               </button>
             </div>
         </Modal>
