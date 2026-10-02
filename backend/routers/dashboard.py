@@ -81,7 +81,7 @@ zero):
     total_count is every row; evaluated_count the rows with a holdout MASE
     (status 'ok' — provisional and no-order rows have none); unreliable_count
     the evaluated rows that FAIL the pass gate MASE < 1
-    (MASE_UNRELIABLE_GATE), i.e. whose served model did no better on its
+    (analytics.params.MASE_GATE), i.e. whose served model did no better on its
     rolling one-step holdout than a naive last-value forecast. The gate was
     `mape >= 20` until 2026-09-21: that flagged 100 of 132 Tier A SKUs
     whatever the model, so it told the user nothing; MASE < 1 is also the
@@ -245,9 +245,9 @@ zero):
     horizon anywhere in Forecast_Result to report (neither SARIMA's
     retirement nor the per-bin routing changed that one-step-per-product
     shape, so no aggregation logic below needed to change, only this
-    wording). The portfolio gate is MASE < 1 (MASE_UNRELIABLE_GATE) since
+    wording). The portfolio gate is MASE < 1 (analytics.params.MASE_GATE) since
     2026-09-29 — the same gate forecast.unreliable_count and the LP's
-    candidate pool apply (scripts/run_lp.py MASE_GATE), so every screen
+    candidate pool apply (the same analytics.params.MASE_GATE), so every screen
     calls the same SKUs reliable. It was `mape < 20` before, which passed
     19 of 132 Tier A SKUs against the LP's 73 and made the card describe
     a different population than the reorder plan (the MODEL_BAKEOFF
@@ -273,7 +273,8 @@ zero):
     — real: top 5 pending LP_Recommendation rows by urgency, reusing
     backend.routers.recommendations._to_item / _SELECT_ONE verbatim
     (imported, not reimplemented) for the exact same urgency derivation
-    GET /recommendations uses. critical_count / urgent_count /
+    GET /recommendations uses (backend/stock_status.py). critical_count /
+    low_count (urgent_count: the same number under its old name) /
     total_order_qty are computed over the FULL pending set (not just the
     5 previewed rows) — a portfolio-wide summary next to a 5-row preview,
     same relationship ABC's tier_summary has to its own items list.
@@ -355,36 +356,41 @@ from backend.data_mode import (
     preview_block,
     unilever_demand,
 )
+from analytics.allocation import allocation_levels, basis_year as allocation_basis_year, planning_month_after
 from analytics.classification.abc import abc_rules
-from analytics.optimization.lp_inputs import PLACEHOLDERS
+from analytics.params import ALLOCATION_DEFAULT_PCT, COVER_KPI_HISTORY_MONTHS, MASE_GATE, PLACEHOLDERS
+# SSM's "keep 3 weeks of sales" and the weeks-per-month convention, under
+# the names this module and policy_comparison.py already use.
+from analytics.params import POLICY_COVER_WEEKS as POLICY_WEEKS
+from analytics.params import WEEKS_PER_MONTH as AVG_WEEKS_PER_MONTH
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
 from backend.data_notes import unusual_stock_snapshots
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle, stored_run
 from backend.lp_cycle import freshness as lp_freshness
 from backend.principals import PrincipalQuery, latest_abc_period, normalize_principal
 from backend.routers.recommendations import select_one as _recommendation_select_one
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 from backend.routers.recommendations import whole_units
+from backend.stock_status import CRITICAL, NO_DATA, URGENCY_RANK, URGENT
 from backend.stock_units import STOCK_AT_PERIOD_SQL
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-POLICY_WEEKS = 3
 # The ONE forecast-reliability gate this page applies: MASE < 1 passes
 # (the served model beat a naive last-value forecast on its holdout), so
 # >= 1 is unreliable. Shared by forecast.unreliable_count AND
 # portfolio_forecast's gated SKU set, and it is the LP's own candidate
-# gate too (scripts/run_lp.py MASE_GATE) — since 2026-09-29 every screen
+# gate too (scripts/run_lp.py) — since 2026-09-29 every screen
 # calls the same SKUs reliable. portfolio_forecast gated on mape < 20
 # before, a stale gate the MODEL_BAKEOFF report concluded against.
-MASE_UNRELIABLE_GATE = 1.0
+# The value is analytics.params.MASE_GATE (Hyndman & Koehler 2006's MASE < 1).
 
 # Sir Abe's allocation rule (client meeting, Sep 2026): the principal sets
 # the year's allocation from the previous year's total sales — minimum
 # x103%, mid x105%, maximum x108%, revised in Q4 on how the market went.
-ALLOCATION_LEVELS = (103, 105, 108)
+# One definition with the LP's ceiling: analytics/allocation.py.
 
 # Step 19's LP objective weights (analytics/optimization/lp.py's W1/W2/W3:
 # 0.45/0.35/0.20) — hardcoded module constants there, not stored per-
@@ -399,11 +405,10 @@ LP_WEIGHT_SERVICE_LEVEL = LP_WEIGHTS["service_level"]
 LP_WEIGHT_STORAGE = LP_WEIGHTS["storage"]
 assert abs((LP_WEIGHT_COST + LP_WEIGHT_SERVICE_LEVEL + LP_WEIGHT_STORAGE) - 1.00) < 1e-9
 
-# Average days/month (365.25/12) / 7 — converts an average MONTHLY figure to
-# a weekly rate for kpis.weeks_of_cover. A documented convention, not a
-# fabricated number — same "defensible default, not fact" spirit as
-# analytics/etl/granularity.py's business_days_in_month().
-AVG_WEEKS_PER_MONTH = 365.25 / 12 / 7
+# AVG_WEEKS_PER_MONTH (imported above, analytics.params.WEEKS_PER_MONTH):
+# average days/month (365.25/12) / 7, converting an average MONTHLY figure
+# to a weekly rate for kpis.weeks_of_cover. A documented convention, not a
+# fabricated number.
 
 # See kpis.soh_value's docstring section above for the full evidence trail.
 # Flip to False (and nothing else) if a future Extract/Transform change to
@@ -416,7 +421,7 @@ _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON = (
     "cases — see UNILEVER_SOH_UNIT_CONFIRMED in backend/routers/dashboard.py."
 )
 
-_URGENCY_RANK = {"CRITICAL": 0, "URGENT": 1, "PLANNED": 2}
+_URGENCY_RANK = URGENCY_RANK  # backend/stock_status.py: CRITICAL, URGENT, PLANNED
 
 
 def _scope_label(principal: str) -> str:
@@ -925,6 +930,7 @@ def get_dashboard(
     # cycle the page is showing.
     lp_freshness_info = lp_freshness(db, scope, mode)
     lp_cycle = current_cycle(db, scope, mode)
+    lp_run = stored_run(db, lp_cycle, scope, mode)
     lp_cycle_filter = CURRENT_CYCLE_CLAUSE if lp_cycle is not None else " AND 1=0"
     # The LP's rows and the forecasts: the stored tables, or in preview with
     # built outputs the five-year what-if's (backend/data_mode.py). Every
@@ -957,7 +963,7 @@ def get_dashboard(
             JOIN latest ON fr.forecast_date = latest.forecast_date
             WHERE 1=1 {principal_filter}
         """),
-        {"mase_gate": MASE_UNRELIABLE_GATE, **fc_params},
+        {"mase_gate": MASE_GATE, **fc_params},
     ).mappings().first()
     total_count = int(forecast_row["total_count"])
     evaluated_count = int(forecast_row["evaluated_count"])
@@ -1047,6 +1053,11 @@ def get_dashboard(
         "basis_year": None, "basis_sales": None, "basis_months": 0,
         "latest_month": None, "ytd_sales": None, "ytd_months": 0,
         "levels": [], "vat_basis": None, "blocked_reason": None,
+        # analytics/allocation.py: the basis is the calendar year before the
+        # planning month (the month after the latest sales month), in pesos
+        # here (Del Monte has no pieces); default_pct is the placeholder level.
+        "planning_month": None, "allocation_year": None,
+        "unit": "pesos", "default_pct": ALLOCATION_DEFAULT_PCT,
     }
     if scope == "all":
         allocation["blocked_reason"] = (
@@ -1057,10 +1068,16 @@ def get_dashboard(
         allocation["blocked_reason"] = f"No sales rows for {_scope_label(scope)} at all."
     else:
         latest_month = latest_by_principal[scope]
-        latest_year = int(latest_month[:4])
-        basis_year = latest_year - 1
+        planning_month = planning_month_after(latest_month)
+        allocation_year = int(planning_month[:4])
+        basis_year = allocation_basis_year(planning_month)
         basis_periods = [f"{basis_year:04d}-{m:02d}" for m in range(1, 13)]
-        ytd_periods = [f"{latest_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
+        # Sales so far in the allocation year. A January plan (latest data
+        # in December) has none yet: the card shows the allocation alone.
+        ytd_periods = (
+            [f"{allocation_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
+            if int(latest_month[:4]) == allocation_year else []
+        )
         # Reuse the months the page already summed (same scope, same mode),
         # and fetch only the rest in ONE call — basis and YTD are disjoint.
         missing = [p for p in basis_periods + ytd_periods if p not in sales_by_period]
@@ -1070,6 +1087,8 @@ def get_dashboard(
         basis_sales = sum(basis_values) if basis_values else None
         allocation["basis_year"] = basis_year
         allocation["latest_month"] = latest_month
+        allocation["planning_month"] = planning_month
+        allocation["allocation_year"] = allocation_year
         if not basis_values:
             allocation["blocked_reason"] = (
                 f"No {basis_year} sales rows for {_scope_label(scope)}, so the prior-year "
@@ -1090,24 +1109,11 @@ def get_dashboard(
                 "basis_months": basis_months,
                 "ytd_sales": round(ytd_sales, 2) if ytd_sales is not None else None,
                 "ytd_months": len(ytd_values),
-                # monthly = an average month of the basis x pct. It was
-                # basis x pct / 12 whatever the basis held, which spread
-                # Del Monte's TWO months of 2024 sales (₱21.3M) over twelve:
-                # a ₱1.86M/month allocation drawn beside ~₱10.8M/month of
-                # sales. Over a full year this is the same figure as before.
-                # annual is the rule's yearly figure, given only when the
-                # basis IS a year: a partial basis x pct is not a year's
-                # allocation, and x12 would be an extrapolation the card
-                # would have to present as one — so it is null, the footnote
-                # already calls the basis partial.
-                "levels": [
-                    {
-                        "pct": pct,
-                        "annual": round(basis_sales * pct / 100.0, 2) if basis_months == 12 else None,
-                        "monthly": round(basis_sales * pct / 100.0 / basis_months, 2),
-                    }
-                    for pct in ALLOCATION_LEVELS
-                ],
+                # monthly = an average month of the basis x pct, and annual
+                # only when the basis IS a year (null otherwise; the footnote
+                # already calls the basis partial) — analytics/allocation.py's
+                # allocation_levels, see its docstring for why.
+                "levels": allocation_levels(basis_sales, unit="pesos", basis_months=basis_months),
                 # The tax basis the pesos above are on (see vat_note's sources),
                 # naming any Del Monte month in the basis or YTD recorded with tax.
                 "vat_basis": (
@@ -1293,7 +1299,9 @@ def get_dashboard(
     cover_periods: list[str] = []
     if cover_end is not None:
         end_index = int(cover_end[:4]) * 12 + int(cover_end[5:7]) - 1
-        start_index = end_index - 11
+        # COVER_KPI_HISTORY_MONTHS (12) ending at the stock month: the
+        # portfolio KPI's window, which the range picker does not move.
+        start_index = end_index - (COVER_KPI_HISTORY_MONTHS - 1)
         cover_periods = _month_range(f"{start_index // 12:04d}-{start_index % 12 + 1:02d}", cover_end)
     # The page's own sums are reused where they are the same scope's; only
     # the months they lack are fetched, in one call.
@@ -1550,7 +1558,7 @@ def get_dashboard(
                   AND fr.mase < :mase_gate
                   {principal_filter}
             """),
-            {"forecast_date": latest_forecast_date, "mase_gate": MASE_UNRELIABLE_GATE, **fc_params},
+            {"forecast_date": latest_forecast_date, "mase_gate": MASE_GATE, **fc_params},
         ).mappings().all()
 
     gated_sku_count = len({r["product_key"] for r in gated_rows})
@@ -1597,7 +1605,7 @@ def get_dashboard(
     else:
         scope_label = (
             f"No forecasts for this scope currently beat the naive baseline "
-            f"(MASE < {MASE_UNRELIABLE_GATE:.0f})."
+            f"(MASE < {MASE_GATE:g})."
         )
 
     series_by_period: dict[str, dict] = {}
@@ -1672,7 +1680,7 @@ def get_dashboard(
         "scope_label": scope_label,
         # The gate the count above was filtered by — the same value as
         # forecast.mase_gate, stated here too so the card never hardcodes it.
-        "mase_gate": MASE_UNRELIABLE_GATE,
+        "mase_gate": MASE_GATE,
         # One sentence comparing the forecast bucket with the last actual
         # month — the card renders it verbatim (backend/chart_insights.py).
         "insight": portfolio_forecast_insight(portfolio_series),
@@ -1711,21 +1719,29 @@ def get_dashboard(
 
     reorder_preview = {
         "rows": [item.model_dump() for item in rp_items_sorted[:5]],
-        "critical_count": sum(1 for it in rp_items if it.urgency == "CRITICAL"),
-        "urgent_count": sum(1 for it in rp_items if it.urgency == "URGENT"),
-        # Products whose stock can't be known — their principal has no stock
-        # count at this snapshot, or no usable pack size. A product merely
-        # absent from a count that was taken reads as 0 on hand, as the LP
-        # treats it, and is ranked like any other (recommendations._to_item).
-        "no_data_count": sum(1 for it in rp_items if it.urgency == "NO DATA"),
+        "critical_count": sum(1 for it in rp_items if it.urgency == CRITICAL),
+        # Below the target stock (backend/stock_status.py's LOW, URGENT on the
+        # reorder page). Both names, the same number: the frontend reads
+        # urgent_count; low_count is params consolidation's (2026-09-30).
+        "urgent_count": sum(1 for it in rp_items if it.urgency == URGENT),
+        "low_count": sum(1 for it in rp_items if it.urgency == URGENT),
+        # Products whose stock can't be known: no usable pack size, no stock
+        # count for their principal at this snapshot, or missing from a count
+        # that does list zero-stock items (Del Monte). Missing from a Unilever
+        # count reads as 0 on hand, as the LP treats it, and is ranked like
+        # any other (recommendations._to_item, backend/stock_status.py).
+        "no_data_count": sum(1 for it in rp_items if it.urgency == NO_DATA),
         # Whole units per row, summed — the Reorder page's own total, so the
         # two screens agree (they differed by 123.6 units, 2026-09-29).
         "total_order_qty": sum(whole_units(it.q_i) for it in rp_items) if rp_items else 0,
-        "lp_weights": {
+        # The weights the run behind this cycle used (lp_run), else the
+        # current constants; lp_weights_source says which.
+        "lp_weights": (lp_run["model"]["weights"] if lp_run else {
             "cost": LP_WEIGHT_COST,
             "service_level": LP_WEIGHT_SERVICE_LEVEL,
             "storage": LP_WEIGHT_STORAGE,
-        },
+        }),
+        "lp_weights_source": "run" if lp_run else "defaults",
     }
 
     # ---- policy_comparison (band 4: LP target stock vs SSM's 3-week policy) --
@@ -1827,7 +1843,7 @@ def get_dashboard(
             "total_count": total_count,
             # The pass gate unreliable_count was counted against, so the
             # card's "Beat naive (MASE < N)" label states it from here.
-            "mase_gate": MASE_UNRELIABLE_GATE,
+            "mase_gate": MASE_GATE,
         },
         "latest_data_period": max(filter(None, latest_by_principal.values()), default=None),
         "latest_data_period_by_principal": latest_by_principal,

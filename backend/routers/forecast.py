@@ -37,16 +37,19 @@ from backend.data_mode import (
     preview_block,
     unilever_demand,
 )
+from analytics.params import FORECAST_INTERVAL_LEVEL_PCT, FORECAST_INTERVAL_Z
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
 
 # The band the forecast runner stores: forecast +/- CONFIDENCE_Z x the served
-# model's holdout RMSE (scripts/run_baseline_forecast.py, which pulls in the
-# model libraries, so the constant is mirrored here and pinned to the script
-# by tests/backend/test_forecast.py). 1.645 is a two-sided ~90% normal band.
-FORECAST_INTERVAL = {"z": 1.645, "level_pct": 90, "basis": "the served model's holdout RMSE"}
+# model's holdout RMSE (scripts/run_baseline_forecast.py). Both read
+# analytics.params: 1.645 is a two-sided ~90% normal band.
+FORECAST_INTERVAL = {
+    "z": FORECAST_INTERVAL_Z, "level_pct": FORECAST_INTERVAL_LEVEL_PCT,
+    "basis": "the served model's holdout RMSE",
+}
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 

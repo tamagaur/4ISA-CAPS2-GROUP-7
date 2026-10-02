@@ -139,6 +139,7 @@ class FakeSession:
         # most periods. Tests that care about Del Monte set these.
         self.delmonte_latest_sales_period = None
         self.delmonte_sales = {}
+        self.lp_run = None  # the lp_run row stored_run finds; None = table not applied
         # Del Monte months whose sell-out net_amount is tax-inclusive
         # (Kelvin's X2 rule, SellOut_Fact.net_amount_tax_inclusive). Live:
         # 2023-08 only. Empty = every Del Monte peso is ex-VAT.
@@ -178,6 +179,12 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
 
+        # backend/lp_cycle.stored_run (migration 0035). Before every
+        # lp_recommendation matcher: its subquery reads that table too.
+        if "to_regclass('lp_run')" in sql:
+            return FakeResult([{"present": self.lp_run is not None}])
+        if "FROM lp_run r" in sql:
+            return FakeResult([self.lp_run] if self.lp_run else [])
         # LP cycle + freshness (backend/lp_cycle.py) — checked BEFORE the
         # _SELECT_ONE matcher below, which would otherwise claim these:
         # they read the same table with the same status predicate.
@@ -882,9 +889,10 @@ def test_portfolio_forecast_empty_when_forecast_result_has_no_rows_at_all():
 
 # ---- reorder_preview -----------------------------------------------------
 
-def _reco_row(key, urgency_stock, rop_i):
-    """urgency_stock chosen relative to rop_i to land in a specific urgency
-    bucket, matching backend.routers.recommendations._to_item's own rule."""
+def _reco_row(key, urgency_stock, rop_i, ss_i=50.0):
+    """urgency_stock chosen relative to ss_i and rop_i to land in a specific
+    urgency bucket (backend/stock_status.py): CRITICAL below ss_i, LOW below
+    rop_i, OK at or above it."""
     return {
         "recommendation_key": key,
         "sku_id": f"SKU-{key}",
@@ -893,7 +901,7 @@ def _reco_row(key, urgency_stock, rop_i):
         "planning_cycle_date": "2024-02-01",
         "q_i": 10.0,
         "rop_i": rop_i,
-        "ss_i": 5.0,
+        "ss_i": ss_i,
         "status": "pending",
         "current_stock": urgency_stock,
     }
@@ -901,13 +909,13 @@ def _reco_row(key, urgency_stock, rop_i):
 
 def test_reorder_preview_top5_sorted_by_urgency_full_set_counts():
     rows = [
-        _reco_row(1, urgency_stock=0, rop_i=100),    # CRITICAL (0 < 50)
-        _reco_row(2, urgency_stock=90, rop_i=100),   # URGENT (50 <= 90 < 100)
-        _reco_row(3, urgency_stock=150, rop_i=100),  # PLANNED (150 >= 100)
+        _reco_row(1, urgency_stock=0, rop_i=100),    # CRITICAL (0 < ss 50)
+        _reco_row(2, urgency_stock=90, rop_i=100),   # LOW (50 <= 90 < 100)
+        _reco_row(3, urgency_stock=150, rop_i=100),  # OK (150 >= 100)
         _reco_row(4, urgency_stock=10, rop_i=100),   # CRITICAL
         _reco_row(5, urgency_stock=20, rop_i=100),   # CRITICAL
         _reco_row(6, urgency_stock=30, rop_i=100),   # CRITICAL
-        _reco_row(7, urgency_stock=95, rop_i=100),   # URGENT
+        _reco_row(7, urgency_stock=95, rop_i=100),   # LOW
         _reco_row(8, urgency_stock=40, rop_i=100),   # CRITICAL
     ]
     session = FakeSession(reco_preview_rows=rows)
@@ -917,8 +925,23 @@ def test_reorder_preview_top5_sorted_by_urgency_full_set_counts():
     assert len(preview["rows"]) == 5
     assert all(r["urgency"] == "CRITICAL" for r in preview["rows"])
     assert preview["critical_count"] == 5
-    assert preview["urgent_count"] == 2
+    assert preview["low_count"] == preview["urgent_count"] == 2
     assert preview["total_order_qty"] == pytest.approx(80.0)  # 8 rows x q_i=10, full set not just top 5
+
+
+def test_reorder_preview_critical_means_below_safety_stock_not_half_the_target():
+    """Item 9: CRITICAL is stock below ss_i. The old rule said below
+    0.5 x rop_i, a threshold with no source."""
+    rows = [
+        _reco_row(1, urgency_stock=30, rop_i=100, ss_i=20.0),  # was CRITICAL (30 < 50): now URGENT
+        _reco_row(2, urgency_stock=70, rop_i=100, ss_i=80.0),  # was URGENT: now CRITICAL (70 < 80)
+    ]
+    session = FakeSession(reco_preview_rows=rows)
+    with make_client(session) as c:
+        preview = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["reorder_preview"]
+    # Below the target stock is URGENT on the reorder page (backend/stock_status.URGENCY).
+    assert {r["sku_id"]: r["urgency"] for r in preview["rows"]} == {"SKU-1": "URGENT", "SKU-2": "CRITICAL"}
+    assert (preview["critical_count"], preview["low_count"], preview["urgent_count"]) == (1, 1, 1)
 
 
 def test_reorder_preview_empty_when_no_pending_recommendations():
@@ -927,8 +950,9 @@ def test_reorder_preview_empty_when_no_pending_recommendations():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     preview = resp.json()["reorder_preview"]
     assert preview == {
-        "rows": [], "critical_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
+        "rows": [], "critical_count": 0, "low_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
         "lp_weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
+        "lp_weights_source": "defaults",
     }
 
 
@@ -1466,11 +1490,31 @@ def test_allocation_and_combined_pesos_are_withheld_under_all_principals():
     assert set(body["allocation"]) == {
         "basis_year", "basis_sales", "basis_months", "latest_month", "ytd_sales",
         "ytd_months", "levels", "vat_basis", "blocked_reason",
+        "planning_month", "allocation_year", "unit", "default_pct",
     }
     assert body["allocation"]["levels"] == [] and body["allocation"]["basis_sales"] is None
     assert body["vat_note"] == (
         "Unilever pesos include VAT; Del Monte pesos exclude it — combined totals mix the two tax bases."
     )
+
+
+def test_allocation_basis_is_the_year_before_the_planning_month():
+    """Item 7: one rule with the LP (analytics/allocation.py). Data through
+    December plans January, so the basis is that December's own year and the
+    allocation year has no sales yet; the Del Monte card still renders (pesos,
+    since Del Monte has no pieces)."""
+    session = FakeSession(latest_sales_period=None)
+    session.delmonte_sales = {f"2025-{m:02d}": 1_000.0 for m in range(1, 13)}
+    session.delmonte_latest_sales_period = "2025-12"
+    with make_client(session) as c:
+        a = c.get("/dashboard?principal=delmonte", headers={"Authorization": f"Bearer {user_token()}"}).json()["allocation"]
+    assert a["blocked_reason"] is None
+    assert (a["planning_month"], a["allocation_year"], a["basis_year"]) == ("2026-01", 2026, 2025)
+    assert a["basis_sales"] == pytest.approx(12_000.0) and a["basis_months"] == 12
+    assert a["ytd_months"] == 0 and a["ytd_sales"] is None
+    assert a["unit"] == "pesos" and a["default_pct"] == 103
+    assert [level["pct"] for level in a["levels"]] == [103, 105, 108]
+    assert a["levels"][0]["monthly"] == pytest.approx(12_000.0 * 1.03 / 12)
 
 
 def test_allocation_is_withheld_when_the_prior_year_nets_to_zero():
@@ -1655,10 +1699,13 @@ def test_allocation_monthly_is_an_average_basis_month_when_the_basis_is_partial(
     drew a ₱1.86M/month allocation beside ~₱10.8M/month of sales; an
     average basis month x pct is ₱11.2M. No annual figure on a partial
     basis — that would be an extrapolation presented as the rule's year."""
+    # The basis is the calendar year before the PLANNING month (analytics/
+    # allocation.py, 2026-09-30): data through 2025-11 plans 2025-12, so
+    # 2024 is the basis. (Through 2025-12 would plan 2026-01, basis 2025.)
     session = FakeSession(latest_sales_period=None)
-    session.delmonte_latest_sales_period = "2025-12"
-    session.delmonte_sales = {"2024-01": 10_000_000.0, "2024-02": 11_313_205.91, "2025-12": 22_134_295.57}
-    a = _get(session, "principal=delmonte&period=2025-12")["allocation"]
+    session.delmonte_latest_sales_period = "2025-11"
+    session.delmonte_sales = {"2024-01": 10_000_000.0, "2024-02": 11_313_205.91, "2025-11": 22_134_295.57}
+    a = _get(session, "principal=delmonte&period=2025-11")["allocation"]
     assert a["basis_months"] == 2
     mid = next(level for level in a["levels"] if level["pct"] == 105)
     assert mid["monthly"] == pytest.approx(21_313_205.91 * 1.05 / 2, abs=0.01)

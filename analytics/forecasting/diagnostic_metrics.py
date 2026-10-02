@@ -1,8 +1,9 @@
 """
-analytics.forecasting.diagnostic_metrics — the one place the DIAGNOSTIC
-accuracy metrics are defined (bake-off scripts, forecast viewer, xlsx
-export). Not used by the deployed path: run_baseline_forecast.py /
-baseline.py / Forecast_Result keep their own conventions untouched.
+analytics.forecasting.diagnostic_metrics — the one place the accuracy
+metrics are defined: the deployed path (run_baseline_forecast.py writes
+Forecast_Result.mape from mape(), DEC-25; baseline.evaluate_baseline's
+MAPE is mape()), the bake-off scripts, the forecast viewer and the xlsx
+export.
 
 One negative-actual rule, applied everywhere:
     negative (and zero) actuals are EXCLUDED from MAPE;
@@ -35,7 +36,9 @@ def _pair(actual, pred) -> tuple[np.ndarray, np.ndarray]:
 
 
 def mape(actual, pred) -> float:
-    """Mean |a-p|/a over the months with actual > 0. NaN if there are none."""
+    """Mean |a-p|/a over the months with actual > 0. NaN if there are none.
+    Zero and negative (returns) months are excluded here only — the series
+    and every other metric keep them."""
     a, p = _pair(actual, pred)
     ok = a > 0
     return float(np.mean(np.abs(a[ok] - p[ok]) / a[ok])) if ok.any() else float("nan")

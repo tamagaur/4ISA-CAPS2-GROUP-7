@@ -3,9 +3,11 @@ backend.routers.recommendations — GET /recommendations, PATCH /recommendations
 
 Returns LP-derived replenishment quantities Q_i per SKU, joined to
 Product_Dimension for identity and to the latest Inventory_Fact_Real period
-for current_stock. urgency is derived from current_stock vs rop_i (same
-CRITICAL/URGENT/PLANNED thresholds a reviewer would apply reading the ROP
-column), not stored anywhere.
+for current_stock. urgency is backend/stock_status.py's one rule under the
+reorder page's names (CRITICAL below ss_i, URGENT below the target stock
+rop_i, PLANNED at or above it, NO DATA), not stored anywhere. Until
+2026-09-30 it was CRITICAL below 0.5 x rop_i, URGENT below rop_i and PLANNED
+otherwise — the 0.5 had no source.
 
 ?from=/?to= (shared date-range picker, 2026-09) — OPTIONAL, both must be
 given together or neither is used (matching backend/routers/dashboard.py's
@@ -47,8 +49,11 @@ same data the split becomes 185 CRITICAL / 13 URGENT / 20 PLANNED.
                   cost (the SOH file's own valuation, backend/stock_units.py;
                   pesos, latest snapshot) / average daily sales value
                   (pesos/day) — where the daily rate is the product's
-                  net_amount over the three most recent calendar months
-                  present in Unilever_SKU_Demand_Fact_Real, divided by the
+                  net_amount over the SKU_COVER_HISTORY_MONTHS (3, analytics.
+                  params) most recent calendar months present in
+                  Unilever_SKU_Demand_Fact_Real AT OR BEFORE the stock
+                  snapshot month (since 2026-09-30; it took the table's
+                  latest months whatever the snapshot), divided by the
                   number of those months and by AVG_DAYS_PER_MONTH. A month
                   the table HAS but this product has no row in counts as 0:
                   the table stores no zero-sale rows, so that month is a
@@ -84,11 +89,16 @@ the count; the LP cut all three to fit the allocation (1,272 / 542 / 653
 pieces short), yet the page counted 37 cut SKUs instead of 40 and left the
 three unranked at the bottom. Such a row now gets current_stock 0 and is
 ranked, bucketed and cut-checked like any other, with stock_not_in_count
-set so the page says the 0 is inferred, not counted. Two cases keep the
+set so the page says the 0 is inferred, not counted. Three cases keep the
 old 'NO DATA': a stock row that can't be put in pieces (no usable pack
-size; the LP skips those products too), and a principal with no stock
-count at that snapshot at all, where a missing row says nothing about
-stock (in_stock_count is NULL then, see _SELECT_ONE).
+size; the LP skips those products too), a principal with no stock count
+at that snapshot at all, where a missing row says nothing about stock
+(in_stock_count is NULL then, see _SELECT_ONE), and — since 2026-10-02 — a
+principal whose count DOES list zero-stock items: Del Monte's inventory
+files hold 24 explicit Quantity-0 rows, so a Del Monte product missing from
+one is unknown, not empty. Only Unilever's count omits zeros (0 of 27,321
+raw SOH rows across all 39 sheets read 0/0; backend/stock_status.py's
+COUNT_OMITS_ZERO_STOCK has the evidence).
 
 PACK SIZE (2026-10-01). Every quantity here is in PIECES, while SSM buys
 in cases: an order of 104,575 pieces is about 363 cases of 288. pack_size
@@ -119,8 +129,10 @@ from backend.principals import (
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
 from backend.data_mode import PREVIEW, REAL, forecast_source, get_data_mode, lp_source, predictive_preview, preview_block
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info, stored_run
 from backend.lp_cycle import freshness as lp_freshness
+from analytics.params import DAYS_PER_MONTH, SKU_COVER_HISTORY_MONTHS
+from backend.stock_status import COUNT_OMITS_ZERO_STOCK, NO_DATA, URGENCY, stock_status
 from backend.stock_units import NO_PACK_SIZE_REASON, PACK_SIZE_NUMERIC, STOCK_AT_PERIOD_SQL
 
 # Order quantities are counted in whole units rounded UP, the rule the Reorder
@@ -142,7 +154,8 @@ assert "pd_pack" not in _PACK_SIZE_USABLE
 
 # in_stock_count — TRUE: the product has a row in the stock count. FALSE:
 # its principal was counted at this snapshot but the product wasn't, which
-# the LP reads as 0 on hand (the file lists no zero-stock rows). NULL: the
+# the LP reads as 0 on hand, and so does _to_item where the principal's file
+# lists no zero-stock rows (Unilever; Del Monte's does, so NO DATA). NULL: the
 # principal has no count at this snapshot (none loaded yet, or a mixed-
 # principal list anchored on the other principal's latest), so a missing
 # row says nothing about stock and stays 'NO DATA'.
@@ -191,14 +204,16 @@ _SELECT_ONE = f"""
             FROM unilever_sku_demand_fact_real
             WHERE calendar_month IN (
                 SELECT DISTINCT calendar_month FROM unilever_sku_demand_fact_real
-                ORDER BY calendar_month DESC LIMIT 3
+                WHERE calendar_month <= :inv_period
+                ORDER BY calendar_month DESC LIMIT {SKU_COVER_HISTORY_MONTHS}
             )
             GROUP BY product_key, calendar_month
         ) recent
         CROSS JOIN (
             SELECT COUNT(*) AS months FROM (
                 SELECT DISTINCT calendar_month FROM unilever_sku_demand_fact_real
-                ORDER BY calendar_month DESC LIMIT 3
+                WHERE calendar_month <= :inv_period
+                ORDER BY calendar_month DESC LIMIT {SKU_COVER_HISTORY_MONTHS}
             ) window_months
         ) sales_window
         GROUP BY recent.product_key
@@ -225,10 +240,9 @@ def select_one(mode: str = REAL) -> tuple[str, dict]:
     return sql, {**params, **fc_params}
 
 
-# Average days per calendar month (365.25 / 12) — the same "documented
-# convention, not a fabricated number" that dashboard.py's
-# AVG_WEEKS_PER_MONTH is built from.
-AVG_DAYS_PER_MONTH = 365.25 / 12
+# Average days per calendar month (analytics.params.DAYS_PER_MONTH, 365.25 /
+# 12) — the convention dashboard.py's AVG_WEEKS_PER_MONTH is built from.
+AVG_DAYS_PER_MONTH = DAYS_PER_MONTH
 
 
 def _opt_float(row, key) -> float | None:
@@ -242,7 +256,8 @@ def _cover(stock_value: float | None, avg_monthly_sales: float | None) -> tuple[
     if stock_value is None:
         return None, "no stock valuation at the latest inventory snapshot (no row, or no unit cost)"
     if avg_monthly_sales is None:
-        return None, "no sales rows for this SKU in the three most recent sales months"
+        return None, (f"no sales rows for this SKU in the {SKU_COVER_HISTORY_MONTHS} sales months "
+                      "up to the stock snapshot")
     if avg_monthly_sales <= 0:
         return None, "average recent sales value is zero or negative — cannot divide"
     daily = avg_monthly_sales / AVG_DAYS_PER_MONTH
@@ -258,28 +273,36 @@ def _to_item(r) -> RecommendationItem:
     stock = None if r["current_stock"] is None else float(r["current_stock"])
     stock_cases = _opt_float(r, "current_stock_cases")
     stock_value = _opt_float(r, "stock_value_pesos")
-    # Absent from a stock count that did happen: 0 on hand, the LP's own
-    # reading (see the module docstring), so this row is ranked and checked
-    # for a cut like any other. Only an explicit FALSE counts — NULL (no
-    # count to be absent from) and callers that don't project the column
-    # keep the 'NO DATA' path below.
+    # Absent from a stock count that did happen. Where the principal's count
+    # never lists a zero-stock item (Unilever: backend/stock_status.py's
+    # COUNT_OMITS_ZERO_STOCK) that is 0 on hand, the LP's own reading (see
+    # the module docstring), so this row is ranked and checked for a cut like
+    # any other. Where the count does list zeros (Del Monte), missing says
+    # nothing, and the row stays 'NO DATA'. Only an explicit FALSE counts —
+    # NULL (no count to be absent from) and callers that don't project the
+    # column keep the 'NO DATA' path below.
     in_count = r.get("in_stock_count") if hasattr(r, "get") else None
-    stock_not_in_count = in_count is False
+    stock_not_in_count = in_count is False and r["principal"] in COUNT_OMITS_ZERO_STOCK
     if stock_not_in_count:
         stock, stock_value = 0.0, 0.0
     rop = float(r["rop_i"])
     stock_blocked_reason = None
     if stock is None:
-        urgency = "NO DATA"
+        urgency = NO_DATA
         if in_count or stock_cases is not None:
             # In the count, but its cases can't be put in pieces.
             stock_blocked_reason = NO_PACK_SIZE_REASON
+        elif in_count is False:
+            stock_blocked_reason = (
+                "not in its principal's latest stock count, which lists zero-stock items, "
+                "so its stock is unknown rather than 0"
+            )
         elif "in_stock_count" in r:
             stock_blocked_reason = "no stock count for this product's principal at the latest snapshot"
         else:
             stock_blocked_reason = "no Inventory_Fact_Real row for this product at the latest snapshot"
     else:
-        urgency = "CRITICAL" if stock < rop * 0.5 else ("URGENT" if stock < rop else "PLANNED")
+        urgency = URGENCY[stock_status(stock, float(r["ss_i"]), rop)]
 
     revenue_share = _opt_float(r, "revenue_share")
     stockout_gap = None if stock is None else max(0.0, rop - stock)
@@ -395,7 +418,7 @@ def get_recommendations(
             # promise. An empty list with the reason is the honest answer.
             return _with_data_mode(RecommendationsResponse(
                 items=[], count=0, planning_cycle_date=None,
-                superseded_count=0, freshness=freshness, lp_model=lp_model_info(),
+                superseded_count=0, freshness=freshness, lp_model=lp_model_info(),  # no cycle: defaults
             ), db, mode)
         query += CURRENT_CYCLE_CLAUSE
         params["current_cycle"] = current
@@ -409,7 +432,8 @@ def get_recommendations(
         planning_cycle_date=freshness["cycle_date"],
         superseded_count=freshness["superseded_pending_count"] if cycle == "current" else 0,
         freshness=freshness,
-        lp_model=lp_model_info(),
+        # What the run behind the current cycle used (lp_run), else the defaults, labelled.
+        lp_model=lp_model_info(stored_run(db, freshness["cycle_date"], principal, mode)),
     ), db, mode)
 
 

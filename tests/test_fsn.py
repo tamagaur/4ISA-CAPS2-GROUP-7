@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from analytics.classification.fsn import FAST_ADI_MAX, classify_fsn
+from analytics.classification.fsn import FAST_ADI_BELOW, classify_fsn
 
 
 def test_sold_every_month_is_fast():
@@ -12,11 +12,11 @@ def test_sold_every_month_is_fast():
 
 
 def test_ten_of_twelve_is_fast_nine_is_slow():
-    # ADI 12/10 = 1.2 <= 1.32; 12/9 = 1.333 > 1.32 (the Syntetos–Boylan cut-off).
+    # ADI 12/10 = 1.2 < 1.32; 12/9 = 1.333 >= 1.32 (the Syntetos–Boylan cut-off).
     assert classify_fsn([1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1])["fsn"] == "F"
     nine = classify_fsn([1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1])
     assert nine["fsn"] == "S"
-    assert nine["adi"] > FAST_ADI_MAX
+    assert nine["adi"] >= FAST_ADI_BELOW
 
 
 def test_no_sale_in_last_six_observed_months_is_non_moving():

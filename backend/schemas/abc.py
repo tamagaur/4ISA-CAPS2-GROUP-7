@@ -44,9 +44,11 @@ class ABCItem(BaseModel):
     # are different facts and must not be coalesced into the same 0.
     current_stock: float | None = None  # pieces (backend/stock_units.py)
     # 'IN STOCK' | 'LOW' | 'CRITICAL' | 'NO DATA' | 'NO ROP' — cover against
-    # the LP's current-cycle target stock (rop_i, the order-up-to level since
-    # the 2026-09-30 run); routers/abc.py's _stock_status. 'NO ROP' keeps its
-    # name because other pages read the value.
+    # the LP's current-cycle ss_i and target stock rop_i (the order-up-to
+    # level since the 2026-09-30 run); backend/stock_status.py. 'ON HAND'
+    # instead of the first three and NO ROP for an account without lp.view
+    # (routers/abc.py's _status_for). 'NO ROP' keeps its name because other
+    # pages read the value.
     stock_status: str
     # Why the LP's current cycle gives this product no target stock, in the
     # words the page shows ("Not planned: forecast accuracy check not passed

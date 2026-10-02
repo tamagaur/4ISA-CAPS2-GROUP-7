@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from analytics.etl.extract._shared import PROVENANCE_COLUMNS  # noqa: E402
+from analytics.params import DEAD_SKU_MONTHS  # noqa: E402
 
 REAL_STAGING_DIR = REPO_ROOT / "staging"
 OUT_DIR = REPO_ROOT / "staging_synthetic"
@@ -110,7 +111,10 @@ RESIDUAL_WINDOW = (-6, 5)         # months around a month that define its local 
 ANCHOR_MONTHS = 3                 # D2
 ANCHOR_FALLBACK_WINDOW = 6        # D2 fallback: positive months within the first 6 from debut
 POOL_TRIM = (5, 95)               # percentiles; one untrimmed residual reached 86.4
-DEAD_TAIL_MONTHS = 6              # scripts/run_baseline_forecast.py:309-318
+# analytics.params. Its tail-sum predicate below mirrors the runner's rule as
+# it was when the live synthetic v2 was generated; left as is so a rerun
+# reproduces that data (the runner now uses fsn.no_sale_in_last_months).
+DEAD_TAIL_MONTHS = DEAD_SKU_MONTHS
 
 CAL_MONTH_COL = "Calendar\r\n  Month"
 PRODUCT_COL = "Product"

@@ -218,7 +218,7 @@ def test_check_reject_rate_gate_passes_when_under_threshold(tmp_path):
 
 
 def test_load_to_supabase_blocked_when_reject_rate_gate_fails(tmp_path):
-    """DEC-12: Load must refuse to run at all - not even reach the
+    """DEC-14: Load must refuse to run at all - not even reach the
     empty-dataframe short circuit - when the reject-rate gate fails."""
     manifest_path = tmp_path / "_manifest.json"
     manifest_path.write_text(json.dumps({"staged": [{}] * 50, "reject": [{}] * 50}), encoding="utf-8")

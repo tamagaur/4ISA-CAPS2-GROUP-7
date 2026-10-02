@@ -135,6 +135,7 @@ from backend.principals import (
     normalize_principal,
     principal_clause,
 )
+from backend.stock_status import CRITICAL, NO_DATA, stock_status
 from backend.stock_units import STOCK_AT_LATEST_SQL
 from analytics.classification.abc import abc_rules, pareto_check
 from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
@@ -301,39 +302,37 @@ def _summarize(items: list[ABCItem], period: str | None) -> tuple[list[TierSumma
     return sorted(summary.values(), key=lambda t: t.tier), check
 
 
-def _stock_status(stock_pieces: float | None, reorder_point: float | None) -> str:
-    """Cover against the SKU's own target stock (rop_i), both in PIECES
-    (backend/stock_units.py). Until 2026-09-29 this compared stock in CASES
-    with rop_i in pieces, called a SKU with loose pieces but no full case
-    out of stock, and judged every SKU without one against a flat 100 — so
-    no Class A SKU could ever read as above it.
+def _stock_status(
+    stock_pieces: float | None, safety_stock: float | None, target_stock: float | None, has_stock_row: bool,
+) -> str:
+    """backend/stock_status.py's one rule, in PIECES (backend/stock_units.py),
+    against the LP's current-cycle ss_i and target stock rop_i: CRITICAL
+    below ss_i, LOW below rop_i, IN STOCK at or above it. The LP's current
+    cycle plans only Class A SKUs whose forecast passed the accuracy check,
+    so every B and C product (and every Del Monte one) and part of Class A
+    read NO ROP when they have a stock row — with the reason, see
+    _no_target_reason — and NO DATA only when they have none. Until
+    2026-09-30 this route had its own rule (CRITICAL at <= 0, IN STOCK
+    above rop_i, else LOW; NO ROP without one)."""
+    return stock_status(stock_pieces, safety_stock, target_stock, has_stock_row)
 
-    NO DATA: no stock record at the latest snapshot (or no usable pack size
-    to express it in pieces). CRITICAL: no stock at all. NO ROP: stock on
-    hand but no target stock to judge it by — the LP's current cycle plans
-    only Class A SKUs whose forecast passed the accuracy check, so every B
-    and C product and part of Class A land here (with the reason, see
-    _no_target_reason) rather than in a comparison against an invented
-    threshold.
-    """
+
+def _status_for(
+    stock_pieces: float | None, safety_stock: float | None, target_stock: float | None, has_stock_row: bool,
+    lp_visible: bool,
+) -> str:
+    """_stock_status for a user with lp.view. Without it, the shared rule's
+    statuses would reveal the LP's figures (CRITICAL below ss_i, LOW below
+    the target stock, IN STOCK, and NO ROP: whether the LP plans the
+    product), so such a user sees only what the stock count itself says:
+    NO DATA (no figure in pieces), CRITICAL (nothing on hand — being out of
+    stock reveals no LP figure), else ON HAND (Yuan's permissions proposal:
+    LP figures follow lp.view everywhere)."""
+    if lp_visible:
+        return _stock_status(stock_pieces, safety_stock, target_stock, has_stock_row)
     if stock_pieces is None:
-        return "NO DATA"
-    if stock_pieces <= 0:
-        return "CRITICAL"
-    if reorder_point is None:
-        return "NO ROP"
-    return "IN STOCK" if stock_pieces > reorder_point else "LOW"
-
-
-def _status_for(stock_pieces: float | None, reorder_point: float | None, lp_visible: bool) -> str:
-    """_stock_status, except for a user without lp.view: "Above / below
-    target stock" would reveal the LP's figure, so a product with stock
-    on hand reads ON HAND instead (Yuan's permissions proposal: LP figures
-    follow lp.view everywhere)."""
-    status = _stock_status(stock_pieces, reorder_point)
-    if not lp_visible and status in ("IN STOCK", "LOW", "NO ROP"):
-        return "ON HAND"
-    return status
+        return NO_DATA
+    return CRITICAL if stock_pieces <= 0 else "ON HAND"
 
 
 def _plan_pool_joins(fc_src: str) -> str:
@@ -374,6 +373,7 @@ def _item(r, tier_period: str | None, *, lp_visible: bool, has_cycle: bool) -> A
     """One ABCItem from a row of either view's query."""
     stock = float(r["current_stock"]) if r["current_stock"] is not None else None
     target = float(r["reorder_point"]) if r["reorder_point"] is not None else None
+    safety = float(r["safety_stock"]) if r["safety_stock"] is not None else None
     reason, code = (
         _no_target_reason(r, r["tier"], tier_period, has_cycle=has_cycle)
         if lp_visible and target is None else (None, None)
@@ -389,7 +389,7 @@ def _item(r, tier_period: str | None, *, lp_visible: bool, has_cycle: bool) -> A
         cumulative_share=r["cumulative_share"],
         boundary_flag=bool(r["boundary_flag"]),
         current_stock=stock,
-        stock_status=_status_for(stock, target, lp_visible),
+        stock_status=_status_for(stock, safety, target, bool(r["has_stock_row"]), lp_visible),
         no_target_reason=reason,
         no_target_code=code,
     )
@@ -489,12 +489,14 @@ def _get_abc_period(
             ac.cumulative_share,
             ac.boundary_flag,
             inv.stock_pieces AS current_stock,
-            rop.rop_i AS reorder_point{_PLAN_POOL_COLUMNS}
+            inv.product_key IS NOT NULL AS has_stock_row,
+            rop.rop_i AS reorder_point,
+            rop.ss_i AS safety_stock{_PLAN_POOL_COLUMNS}
         FROM {abc_source} ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
         LEFT JOIN (
-            SELECT product_key, rop_i
+            SELECT product_key, rop_i, ss_i
             FROM {lp_src}
             WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
@@ -601,12 +603,14 @@ def _get_abc_last_known(
             ac.cumulative_share,
             ac.boundary_flag,
             inv.stock_pieces AS current_stock,
-            rop.rop_i AS reorder_point{_PLAN_POOL_COLUMNS}
+            inv.product_key IS NOT NULL AS has_stock_row,
+            rop.rop_i AS reorder_point,
+            rop.ss_i AS safety_stock{_PLAN_POOL_COLUMNS}
         FROM latest ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
         LEFT JOIN (
-            SELECT product_key, rop_i
+            SELECT product_key, rop_i, ss_i
             FROM {lp_src}
             WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key

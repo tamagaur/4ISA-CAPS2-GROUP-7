@@ -52,6 +52,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, REPO)
 
+from analytics.params import FIT_REVIEW_HIGH_VOL_CV, FIT_REVIEW_NOT_FIT_MASE  # noqa: E402
+
 PRINCIPAL, ABC_PERIOD, ABC_METHOD = "unilever", "2026-02", "single"
 REAL_START = "2023-01"
 COMBINED_ORDER = ["insufficient", "short", "medium", "long_down", "long_flat", "long_up"]
@@ -437,7 +439,7 @@ def ma3_same_holdout(monthly: list, periods: list[str]) -> tuple[float | None, i
     """MA3's MASE on the same rolling one-step holdout the served model was
     scored on. Reuses the pipeline's own pieces, no reimplementation:
       series  first row -> last row, gaps zero-filled (run_baseline_forecast.build_series)
-      split   analytics.forecasting.sarima.train_holdout_split (last 20%)
+      split   analytics.forecasting.split.train_holdout_split (last 20%)
       MA3     analytics.forecasting.router.rolling_one_step, column "ma3"
               (router.ma3_value from the first sale, floored at zero)
       metric  diagnostic_metrics.mase with naive_scale(train)
@@ -445,7 +447,8 @@ def ma3_same_holdout(monthly: list, periods: list[str]) -> tuple[float | None, i
     import numpy as np
     from analytics.forecasting.diagnostic_metrics import mase, naive_scale
     from analytics.forecasting.router import rolling_one_step
-    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+    from analytics.forecasting.split import train_holdout_split
+    from analytics.params import HOLDOUT_FRACTION
     series = model_series(monthly, periods)
     if series is None:
         return None, 0
@@ -599,7 +602,8 @@ def add_band_evidence(payload: dict) -> dict:
     from analytics.forecasting.diagnostic_metrics import mase, naive_scale, rmse as rmse_metric, wape
     from analytics.forecasting.global_model import GlobalForecaster
     from analytics.forecasting.router import rolling_one_step
-    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+    from analytics.forecasting.split import train_holdout_split
+    from analytics.params import HOLDOUT_FRACTION
 
     periods = payload["periods"]
     pool = {}
@@ -727,7 +731,7 @@ CAUSE_FLAGS = {"cause_is_level_shift": "level shift", "cause_is_spiky": "spiky",
 CAUSE_THRESHOLDS = [
     ("level shift", "mean(last 6) / mean(prior 12) outside 0.7-1.3; needs >=18 months"),
     ("spiky", ">=1 month more than 3 x MAD from the SKU's median (MAD raw/unscaled)"),
-    ("high volatility", "CV(last 12) > cohort p75 = 0.4365 (measured over the 119 scored SKUs)"),
+    ("high volatility", f"CV(last 12) > {FIT_REVIEW_HIGH_VOL_CV} (team-set, source script lost; analytics/params.py)"),
     ("intermittent", "zero-or-missing share >= 0.30 or longest zero run >= 3 months"),
     ("tiny scale", "median monthly units <= cohort lower quartile = 812.5 units (measured)"),
     ("trend reversal", "sign(Theil-Sen slope, last 12) != sign(Theil-Sen slope, full history)"),
@@ -868,10 +872,13 @@ def load_fit_review(payload: dict) -> dict:
         "agree": agree, "counts": counts, "spike_check": spike_check, "level_check": level_check,
         "verdict_order": VERDICT_ORDER, "cause_order": CAUSE_ORDER, "no_better_model": NO_BETTER_MODEL,
         "thresholds": CAUSE_THRESHOLDS,
-        # The two gates are the README's measured figures, quoted, never recomputed.
+        # gate_cv is team-set (its source script is lost: analytics/params.py
+        # FIT_REVIEW_HIGH_VOL_CV); gate_units is the README's measured figure.
         # The two medians ARE computed here, over the CSV rows that carry the column,
         # and the sentence that uses one says so.
-        "gate_cv": 0.4365, "gate_units": 812.5,
+        "gate_cv": FIT_REVIEW_HIGH_VOL_CV, "gate_units": 812.5,
+        # The not-fit flag (MASE on the common window): a review flag, not the LP gate.
+        "not_fit_mase": FIT_REVIEW_NOT_FIT_MASE,
         "median_cv": _median([num(r["cause_cv_last12"]) for r in rows.values()]),
         "median_cv_n": sum(1 for r in rows.values() if num(r["cause_cv_last12"]) is not None),
         "median_units": _median([num(r["cause_median_units"]) for r in rows.values()]),
@@ -946,7 +953,8 @@ def assemble_preview(skus: list[dict]) -> dict:
     series, zero-filled first -> last row as the preview script does."""
     import numpy as np
     import pandas as pd
-    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+    from analytics.forecasting.split import train_holdout_split
+    from analytics.params import HOLDOUT_FRACTION
 
     rp = pd.read_csv(os.path.join(DATA_DIR, "router_preview_synth.csv"))
     need = {"ma3_holdout_mase", "ma3_holdout_wape", "holdout_mase", "holdout_wape"}
@@ -1537,7 +1545,7 @@ function seriesSentences(s){
 
   out.push(s.cause_cv == null
     ? sent(`cause_cv_last12 (${CSVSRC})`, 'No CV on record: fewer than 12 months.')
-    : sent(`cause_cv_last12 (${CSVSRC}); the p75 gate ${F.gate_cv} is the README\u2019s measured figure; the cohort median is computed over the ${F.median_cv_n} rows that carry a CV`,
+    : sent(`cause_cv_last12 (${CSVSRC}); the high-volatility cut ${F.gate_cv} is team-set, its source script lost (analytics/params.py); the cohort median is computed over the ${F.median_cv_n} rows that carry a CV`,
       `CV over the last 12 months is <b>${fmt(s.cause_cv)}</b>, against a cohort median of <b>${fmt(F.median_cv)}</b>; it <b>${s.cause_cv > F.gate_cv ? 'clears' : 'does not clear'}</b> the high-volatility gate of ${F.gate_cv}.`));
 
   out.push(sent(`cause_median_units (${CSVSRC}); the ${F.gate_units}-unit gate is the README\u2019s measured lower quartile; the cohort median is computed over ${F.median_units_n} rows`,
@@ -1574,7 +1582,7 @@ function honestySentences(s){
       `<b>Not fit to use on this SKU.</b> Cause group: <b>${esc(s.cause)}</b>`
       + (s.cause === 'none of the above' ? ' (no cause rule fires on this SKU)' : '')
       + (s.causes_all && s.causes_all.length > 1 ? `, first match; also fired: ${esc(s.causes_all.filter(c => c !== s.cause).join(', '))}` : '') + '.')];
-    bits.push(sent(`mase_common, flag_* columns (${CSVSRC}); the not-fit gate is MASE >= 1.1, reports/diagnostics/README.md`,
+    bits.push(sent(`mase_common, flag_* columns (${CSVSRC}); the not-fit review flag is MASE >= ${F.not_fit_mase} (analytics/params.py), reports/diagnostics/README.md`,
       `MASE is <b>${fmt(s.mase_common)}</b> on the common window`
       + (s.flags && s.flags.length ? `, flags: ${esc(s.flags.join(', '))}` : '') + '.'));
     if (s.ma3_fails) bits.push(sent(`ma3_also_fails_common, ma3_mase_common (${CSVSRC})`,
@@ -1631,13 +1639,13 @@ function verdictBlock(s){
   return `<div class="verdictline ${cls}" title="verdict, cause_group (${esc(CSVSRC)}); recent_level_ratio; spike months and level windows re-derived on this series">${txt}</div>`;
 }
 // The four that answer "what is the number and can I use it". MASE on the
-// common window is the one the verdict is made on, so it carries the 1.1 gate.
+// common window is the one the verdict is made on, so it carries the not-fit flag (F.not_fit_mase).
 function topTiles(s){
   const p = PROV(s);
   return `<div class="stats four">` + [
     [fmt(s.served), `Served forecast${s.provisional ? ' (provisional)' : ''}`, false],
     [fmt(s.ma3), 'MA3 forecast', false],
-    [p ? NT : fmt(s.mase_common), 'MASE (common window)', !p && s.mase_common != null && s.mase_common >= 1.1],
+    [p ? NT : fmt(s.mase_common), 'MASE (common window)', !p && s.mase_common != null && s.mase_common >= F.not_fit_mase],
     [fmt(s.rlr_fit != null ? s.rlr_fit : s.rlr), 'Recent level ratio (3 / 12 mo)', false],
   ].map(([v, l, f]) => `<div class="stat${f ? ' flag' : ''}" title="${esc(v)}"><div class="v">${esc(v)}</div><div class="l">${l}</div></div>`).join('') + `</div>`;
 }

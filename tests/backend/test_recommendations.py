@@ -76,6 +76,7 @@ class FakeSession:
         self.superseded_pending = superseded_pending
         self.lp_generated_at = lp_generated_at
         self.forecast_generated_at = forecast_generated_at
+        self.lp_run = None  # the lp_run row stored_run finds; None = table not applied
         self.calls: list[tuple[str, dict]] = []
 
     def execute(self, stmt, params=None):
@@ -83,6 +84,12 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
         scope = params.get("principal")
+        # backend/lp_cycle.stored_run (migration 0035). Before every
+        # lp_recommendation matcher: its subquery reads that table too.
+        if "to_regclass('lp_run')" in sql:
+            return FakeResult([{"present": self.lp_run is not None}])
+        if "FROM lp_run r" in sql:
+            return FakeResult([self.lp_run] if self.lp_run else [])
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult([{"p": self.inventory_period_by_scope.get(scope)}])
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql:
@@ -299,6 +306,21 @@ def test_no_count_for_the_principal_stays_no_data():
         assert item.stock_blocked_reason
 
 
+def test_missing_from_a_count_that_lists_zeros_stays_no_data():
+    """Only Unilever's stock file omits zero-stock items (0 of 27,321 raw SOH
+    rows read 0/0, checked 2026-10-02). Del Monte's inventory files list
+    Quantity-0 rows, so a Del Monte product missing from one is unknown, not
+    0 on hand (backend/stock_status.COUNT_OMITS_ZERO_STOCK)."""
+    from backend.routers.recommendations import _to_item
+
+    item = _to_item(_item_row(principal="delmonte", in_stock_count=False, current_stock=None,
+                              forecast_units=100.0, rop_i=50.0, q_i=10.0))
+    assert item.urgency == "NO DATA"
+    assert item.current_stock is None
+    assert item.stock_not_in_count is False
+    assert "lists zero-stock items" in item.stock_blocked_reason
+
+
 def test_not_in_count_reaches_the_response(sample_rows):
     sample_rows[0].update(in_stock_count=False, forecast_units=40.0, pack_size=12)
     session = FakeSession(
@@ -361,27 +383,23 @@ def test_freshness_flags_an_lp_older_than_its_forecasts(sample_rows):
 def test_lp_settings_the_api_states_are_the_solvers():
     """GET /recommendations' lp_model and GET /dashboard's lp_weights come
     from backend/lp_cycle.py; analytics/optimization/lp.py is what solves.
-    Read as text: lp.py imports the pulp solver."""
-    import re
-    from pathlib import Path
+    Both read analytics.params, so they are the same objects."""
     from statistics import NormalDist
 
+    from analytics import params
+    from analytics.optimization import lp
     from backend.lp_cycle import LP_SERVICE_LEVEL_PCT, LP_SERVICE_Z, LP_WEIGHTS
 
-    source = (Path(__file__).resolve().parents[2] / "analytics/optimization/lp.py").read_text(encoding="utf-8")
-    w = re.search(r"^W1, W2, W3 = ([0-9.]+), ([0-9.]+), ([0-9.]+)", source, re.M)
-    z = re.search(r"^Z_SCORE = ([0-9.]+)", source, re.M)
-    assert w and z
-    assert [LP_WEIGHTS["cost"], LP_WEIGHTS["service_level"], LP_WEIGHTS["storage"]] == [float(v) for v in w.groups()]
-    assert LP_SERVICE_Z == float(z.group(1))
+    assert LP_WEIGHTS is params.LP_WEIGHTS and LP_SERVICE_Z is params.SERVICE_Z is lp.Z_SCORE
+    assert [LP_WEIGHTS["cost"], LP_WEIGHTS["service_level"], LP_WEIGHTS["storage"]] == [lp.W1, lp.W2, lp.W3]
     assert round(NormalDist().cdf(LP_SERVICE_Z) * 100) == LP_SERVICE_LEVEL_PCT
 
 
 def test_lp_inputs_the_api_states_are_the_ones_run_lp_uses():
-    """lp_model_info serves analytics/optimization/lp_inputs.PLACEHOLDERS, the
+    """lp_model_info serves analytics/params.PLACEHOLDERS, the
     dict scripts/run_lp.py takes its defaults from, flagged as placeholders.
     The LP's weeks convention and 3-week rule are the dashboard's own."""
-    from analytics.optimization.lp_inputs import PLACEHOLDERS, WEEKS_PER_MONTH
+    from analytics.params import PLACEHOLDERS, WEEKS_PER_MONTH
     from backend.lp_cycle import lp_model_info
     from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, POLICY_WEEKS
 
@@ -391,6 +409,35 @@ def test_lp_inputs_the_api_states_are_the_ones_run_lp_uses():
     assert "independent" in info["safety_stock_assumption"]
     assert WEEKS_PER_MONTH == AVG_WEEKS_PER_MONTH
     assert PLACEHOLDERS["target_weeks"] == POLICY_WEEKS
+
+
+def test_lp_model_states_defaults_when_no_run_is_recorded(client):
+    """Item 8: without lp_run (migration 0035 unapplied) the model is the
+    defaults, and says so."""
+    body = client.get("/recommendations?principal=unilever").json()
+    assert body["lp_model"]["inputs_source"] == "defaults"
+    assert body["lp_model"]["run"] is None
+
+
+def test_lp_model_serves_what_the_stored_run_used(session, client):
+    """Item 8: with an lp_run behind the current cycle, the API states that
+    run's inputs, not the defaults, and names the ones that differ."""
+    from analytics.params import PLACEHOLDERS
+
+    inputs = {**PLACEHOLDERS, "allocation_pct": 108.0}
+    session.lp_run = {
+        "run_key": 7, "planning_cycle_date": datetime.date(2026, 3, 1), "principal_scope": "both",
+        "inputs": inputs, "code_version": "abc123",
+        "created_at": datetime.datetime(2026, 3, 2, 8, 0, tzinfo=datetime.timezone.utc),
+        "model": {"weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
+                  "z_score": 1.28, "service_level_pct": 90,
+                  "allocation": {"pct": 108.0, "unit": "pieces", "basis_year": 2025}},
+    }
+    lp_model = client.get("/recommendations?principal=unilever").json()["lp_model"]
+    assert lp_model["inputs_source"] == "run"
+    assert lp_model["inputs"]["allocation_pct"] == 108.0
+    assert lp_model["inputs_differing_from_defaults"] == ["allocation_pct"]
+    assert lp_model["run"]["run_key"] == 7 and lp_model["allocation"]["basis_year"] == 2025
 
 
 def test_response_carries_the_lp_model_and_each_rows_tier(client):

@@ -182,6 +182,15 @@ def test_on_request_abc_reproduces_every_stored_unilever_run(live_db):
 
 
 @LIVE
+# Read-only check, 2026-10-02: exactly the 8 stored products with a negative
+# month differ, on cv only (19, 174, 345, 644, 666, 674, 832, 1037); with
+# negatives clipped to 0 (the old rule) all 132 match. Strict: once the
+# recompute lands this XPASSes and fails, so the marker has to come off.
+@pytest.mark.xfail(
+    strict=True,
+    reason="stored 2026-02 segmentation predates 6c6f741 (negatives kept, DEC-15); "
+           "recompute scheduled in the DB-apply session",
+)
 def test_on_request_traits_reproduce_the_stored_segmentation_run(live_db):
     from sqlalchemy import text
     stored = live_db.execute(text("""

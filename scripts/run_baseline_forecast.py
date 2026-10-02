@@ -39,7 +39,9 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from analytics.forecasting.sarima import train_holdout_split, HOLDOUT_FRACTION
+from analytics.forecasting.split import train_holdout_split
+from analytics.classification.fsn import no_sale_in_last_months
+from analytics.params import DEAD_SKU_MONTHS, FORECAST_INTERVAL_Z, HOLDOUT_FRACTION
 from analytics.forecasting.baseline import (
     MIN_MONTHS_WITH_SALES,
     MASE_GATE,
@@ -236,7 +238,7 @@ def pick_oracle(per_method: dict) -> str:
     return sorted(tied)[0]
 
 
-def evaluate_sku(series: pd.Series) -> dict:
+def evaluate_sku(series: pd.Series, gap_months=None) -> dict:
     """Run all 3 methods + both selection methods for one status='ok' SKU."""
     train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
     horizon = len(holdout)
@@ -253,7 +255,7 @@ def evaluate_sku(series: pd.Series) -> dict:
             metrics["window"] = MA_WINDOW
         per_method[m] = metrics
 
-    train_class = demand_class(train)
+    train_class = demand_class(train, gap_months)
     oracle_method = pick_oracle(per_method)
     rule_method = RULE_METHOD_MAP.get(train_class, "naive")
 
@@ -316,6 +318,10 @@ def main():
         print("\n  All 38 expected months have demand rows - a per-SKU missing month")
         print("  reads as 'this SKU had zero sales that month'.")
 
+    # A principal-wide missing month is a file gap, not a zero-sale month: ADI
+    # (demand_class) drops these instead of counting them as zeros.
+    gap_months = [pd.Timestamp(f"{m}-01") for m in etl_gaps]
+
     # ---- per-SKU loop --------------------------------------------------- #
     demand_by_key = {k: g for k, g in demand.groupby("product_key")}
     sku_code_by_key = demand.groupby("product_key")["sku_code"].first().to_dict()
@@ -335,7 +341,7 @@ def main():
         series = build_series(sku_df)
         months_span = int(len(series))
         months_with_sales = int((series > 0).sum())
-        full_class = demand_class(series)
+        full_class = demand_class(series, gap_months)
 
         # first/last month with a real positive sale, from the UNtrimmed rows
         sold_months = sorted(
@@ -354,12 +360,18 @@ def main():
                                                    months_with_sales, full_class, "insufficient_data")))
             continue
 
-        if months_span >= 6 and series.tail(6).sum() <= 0:
+        # Dead: no sale in the last DEAD_SKU_MONTHS CALENDAR months up to the
+        # latest demand month (fsn.no_sale_in_last_months, FSN's own rule).
+        # Anchored on latest_demand_month, not on the series' own end:
+        # build_series stops at the SKU's last row (session 6's fix), and a
+        # series that stops early must not have its old tail read as recent.
+        if months_span >= DEAD_SKU_MONTHS and no_sale_in_last_months(
+                series.index.strftime("%Y-%m"), series.to_numpy(), latest_demand_month):
             records.append(_with_window(_row_shell(p_key, sku_code, abc_period, months_span,
                                                    months_with_sales, full_class, "dead_sku")))
             continue
 
-        ev = evaluate_sku(series)
+        ev = evaluate_sku(series, gap_months)
         rec = _with_window(_row_shell(p_key, sku_code, abc_period, months_span, months_with_sales,
                                       full_class, "ok"))
         rec["train_months"] = ev["train_len"]
@@ -509,8 +521,8 @@ def _print_report(df, abc_period, latest_demand_month):
 
     line("MASE median", lambda m: fmt(mase[m].median()))
     line("MASE mean", lambda m: fmt(mase[m].mean()))
-    line("MASE<1.0 pass count", lambda m: f"{int((mase[m] < 1.0).sum())}/{len(mase[m])}")
-    line("MASE<1.0 pass %", lambda m: fmt(_pct((mase[m] < 1.0).sum(), len(mase[m]))))
+    line(f"MASE<{MASE_GATE} pass count", lambda m: f"{int((mase[m] < MASE_GATE).sum())}/{len(mase[m])}")
+    line(f"MASE<{MASE_GATE} pass %", lambda m: fmt(_pct((mase[m] < MASE_GATE).sum(), len(mase[m]))))
     line("MAPE median", lambda m: fmt(mape[m].median()))
     line("MAPE<20% pass count", lambda m: f"{int((mape[m] < 0.20).sum())}/{len(mape[m])}")
     line("MAPE<20% pass %", lambda m: fmt(_pct((mape[m] < 0.20).sum(), len(mape[m]))))
@@ -559,15 +571,15 @@ def _print_report(df, abc_period, latest_demand_month):
     print("  Numeric fallback + provisional flag = --write-path work, not done this pass.")
 
     print("\n" + "=" * 78)
-    print("5. PASS RATES - oracle vs. rule vs. plain-MA3-alone (MASE<1.0)")
+    print(f"5. PASS RATES - oracle vs. rule vs. plain-MA3-alone (MASE<{MASE_GATE})")
     print("=" * 78)
     oracle_pass, oracle_n = _selected_pass(df_ok, "oracle_method")
     rule_pass, rule_n = _selected_pass(df_ok, "rule_method")
     ma3 = mase["ma3"]
-    ma3_pass, ma3_n = int((ma3 < 1.0).sum()), len(ma3)
-    print(f"  oracle-selected  MASE<1.0 : {oracle_pass}/{oracle_n}  ({_pct(oracle_pass, oracle_n):.1f}%)   [UPPER BOUND - peeks at holdout]")
-    print(f"  rule-selected    MASE<1.0 : {rule_pass}/{rule_n}  ({_pct(rule_pass, rule_n):.1f}%)   [deployable]")
-    print(f"  plain MA3 alone  MASE<1.0 : {ma3_pass}/{ma3_n}  ({_pct(ma3_pass, ma3_n):.1f}%)")
+    ma3_pass, ma3_n = int((ma3 < MASE_GATE).sum()), len(ma3)
+    print(f"  oracle-selected  MASE<{MASE_GATE} : {oracle_pass}/{oracle_n}  ({_pct(oracle_pass, oracle_n):.1f}%)   [UPPER BOUND - peeks at holdout]")
+    print(f"  rule-selected    MASE<{MASE_GATE} : {rule_pass}/{rule_n}  ({_pct(rule_pass, rule_n):.1f}%)   [deployable]")
+    print(f"  plain MA3 alone  MASE<{MASE_GATE} : {ma3_pass}/{ma3_n}  ({_pct(ma3_pass, ma3_n):.1f}%)")
     print(f"  gap rule vs oracle : {_pct(oracle_pass, oracle_n) - _pct(rule_pass, rule_n):+.1f} pp")
     print(f"  gap rule vs MA3    : {_pct(ma3_pass, ma3_n) - _pct(rule_pass, rule_n):+.1f} pp")
     print("  (rule below MA3-alone is the EXPECTED honest result - see class evidence below.)")
@@ -583,7 +595,7 @@ def _print_report(df, abc_period, latest_demand_month):
 
 
 def _selected_pass(df_ok, col):
-    """Count ok SKUs whose `col`-selected method has MASE < 1.0 (undefined
+    """Count ok SKUs whose `col`-selected method has MASE < MASE_GATE (undefined
     MASE does not count as a pass)."""
     n = 0
     passed = 0
@@ -593,7 +605,7 @@ def _selected_pass(df_ok, col):
             continue
         n += 1
         v = r[f"{method}_mase"]
-        if v is not None and not (isinstance(v, float) and np.isnan(v)) and v < 1.0:
+        if v is not None and not (isinstance(v, float) and np.isnan(v)) and v < MASE_GATE:
             passed += 1
     return passed, n
 
@@ -753,7 +765,7 @@ def _write_md(df, abc_period, latest_demand_month):
     mape = {m: ms(m, "mape") for m in METHODS}
     lines.append(f"| MASE median | {cell(lambda m: f3(mase[m].median()))} |")
     lines.append(f"| MASE mean | {cell(lambda m: f3(mase[m].mean()))} |")
-    lines.append(f"| MASE<1.0 % | {cell(lambda m: f3(_pct((mase[m] < 1.0).sum(), len(mase[m]))))} |")
+    lines.append(f"| MASE<{MASE_GATE} % | {cell(lambda m: f3(_pct((mase[m] < MASE_GATE).sum(), len(mase[m]))))} |")
     lines.append(f"| MAPE median | {cell(lambda m: f3(mape[m].median()))} |")
     lines.append(f"| MAPE<20% % | {cell(lambda m: f3(_pct((mape[m] < 0.20).sum(), len(mape[m]))))} |")
     lines.append(f"| MAE median | {cell(lambda m: f3(ms(m, 'mae').median()))} |")
@@ -764,12 +776,12 @@ def _write_md(df, abc_period, latest_demand_month):
     oracle_pass, oracle_n = _selected_pass(df_ok, "oracle_method")
     rule_pass, rule_n = _selected_pass(df_ok, "rule_method")
     ma3v = mase["ma3"]
-    lines.append("## Pass rates (MASE<1.0)\n")
+    lines.append(f"## Pass rates (MASE<{MASE_GATE})\n")
     lines.append("| selection | pass | rate |")
     lines.append("|---|---|---|")
     lines.append(f"| oracle (upper bound) | {oracle_pass}/{oracle_n} | {_pct(oracle_pass, oracle_n):.1f}% |")
     lines.append(f"| rule (deployable) | {rule_pass}/{rule_n} | {_pct(rule_pass, rule_n):.1f}% |")
-    lines.append(f"| plain MA3 alone | {int((ma3v < 1.0).sum())}/{len(ma3v)} | {_pct((ma3v < 1.0).sum(), len(ma3v)):.1f}% |\n")
+    lines.append(f"| plain MA3 alone | {int((ma3v < MASE_GATE).sum())}/{len(ma3v)} | {_pct((ma3v < MASE_GATE).sum(), len(ma3v)):.1f}% |\n")
 
     lines.append("## rule_method mapping\n")
     lines.append("Derived from the full 1,807-SKU catalog (1,096 evaluable, all tiers), applied to Tier A only.\n")
@@ -830,7 +842,7 @@ def _f(v):
 # modest claim for a forecast scored on one SKU's 20% holdout (a handful of
 # months), not a long rolling-origin residual distribution. Rounder numbers
 # read as more certain than this method earns.
-CONFIDENCE_Z = 1.645
+CONFIDENCE_Z = FORECAST_INTERVAL_Z  # analytics.params: 1.645, two-sided ~90%
 
 
 def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float | None]:
@@ -1074,7 +1086,7 @@ def _write_forecast_result(cur, df):
                     "provisional": False,
                     "lp_input_method": "zero_no_order",
                     "mase_gate_passed": None,
-                    "note": "no sale in the last 6 months — LP orders nothing.",
+                    "note": f"no sale in the last {DEAD_SKU_MONTHS} months — LP orders nothing.",
                 }
                 cur.execute(upsert, (
                     p_key, planning_date, 0.0, None, None, None, None, "dead_sku", json.dumps(mp),

@@ -28,7 +28,7 @@ Anti-fabrication: rows with NULL or negative revenue are never coerced
 to zero or silently dropped — they're excluded from classify_abc()'s
 input and counted in AbcRunReport so a human can see exactly what was
 left out and why, same "flag, never drop" precedent as
-transform.dedup_facts()'s null_key_rows and DEC-13.
+transform.dedup_facts()'s null_key_rows and DEC-15.
 
 Needs Extract → Transform → Load to have populated Unilever_SKU_Demand_Fact
 and SellOut_Fact for the requested period first.

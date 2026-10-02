@@ -26,7 +26,7 @@ Classification (zero silent skips — every staged sheet is accounted for):
 promoted + demoted -> manifest "staged" (routine).
 conflict + blocked -> manifest "reject" (needs a human look).
 
-DEC-13: the manifest also carries a top-level "quantity_issues" section —
+DEC-15: the manifest also carries a top-level "quantity_issues" section —
 per (fact, principal), zero/negative/outlier counts and flagged rows for
 each fact's real quantity column(s) (clean.py::flag_quantity_issues()).
 Never drops or clamps a value; only makes it visible. Surfaced in
@@ -73,12 +73,12 @@ AMOUNT_COL_BY_FACT = {
     "sell_out": "net_amount",
 }
 
-# DEC-13: quantity column(s) checked per fact for zero/negative/outlier
+# DEC-15: quantity column(s) checked per fact for zero/negative/outlier
 # values (clean.py::flag_quantity_issues() — flagged, never dropped). Not
 # every fact has a real quantity field (e.g. "sales" is invoice-grain, no
 # quantity anywhere). Inventory lists both fields: quantity_pieces is the
-# DEC-09-confirmed-pieces figure; quantity_on_hand's own unit is still
-# unconfirmed (see DEC-09) — that's a separate, already-logged gap, not
+# DEC-11-confirmed-pieces figure; quantity_on_hand's own unit is still
+# unconfirmed (see DEC-11) — that's a separate, already-logged gap, not
 # something this flagging needs to resolve to still be useful here.
 QUANTITY_COLS_BY_FACT = {
     "sales_unilever_sku_demand": ["quantity_sold"],

@@ -20,7 +20,7 @@ import pandas as pd
 import pytest
 
 from analytics.optimization.lp import Z_SCORE, weekly_demand
-from analytics.optimization.lp_inputs import PLACEHOLDERS
+from analytics.params import PLACEHOLDERS
 from scripts.run_lp import (
     RETIRE_QUERY,
     UPSERT_QUERY,
@@ -67,7 +67,7 @@ def test_the_order_moves_with_allocation_pct():
 
 
 def test_flags_default_to_the_placeholders():
-    """One place (analytics/optimization/lp_inputs.PLACEHOLDERS) feeds both
+    """One place (analytics/params.PLACEHOLDERS) feeds both
     the CLI defaults and backend/lp_cycle.lp_model_info()."""
     args = _args()
     for key, value in PLACEHOLDERS.items():
@@ -316,3 +316,33 @@ def test_cycle_transaction_sends_nothing_in_a_dry_run():
 def test_retire_stale_pending_is_opt_in():
     assert _args().retire_stale_pending is False
     assert _args("--retire-stale-pending").retire_stale_pending is True
+
+
+# ---- item 8: every real run records what it used (lp_run, migration 0035) ----
+
+
+def test_run_record_holds_every_flag_and_the_fixed_model():
+    import datetime
+    import json
+
+    from analytics.params import LP_WEIGHTS, MASE_GATE
+    from scripts.run_lp import run_record
+
+    args = _args("--allocation-pct", "108")
+    plan = plan_cycle([_product(1)], args)
+    record = run_record(args, plan, datetime.date(2026, 3, 1))
+    assert record["inputs"] == {key: getattr(args, key) for key in PLACEHOLDERS}
+    assert record["inputs"]["allocation_pct"] == 108.0
+    assert record["principal_scope"] == "both"
+    model = record["model"]
+    assert model["weights"] == LP_WEIGHTS and model["mase_gate"] == MASE_GATE
+    assert model["allocation"]["basis_year"] == 2025 and model["allocation"]["unit"] == "pieces"
+    assert model["allocation"]["monthly_ceiling"] == {k: round(v, 2) for k, v in plan.allocation.items()}
+    json.dumps(record["inputs"])
+    json.dumps(model)  # both go to JSONB columns
+
+
+def test_each_refreshed_row_points_at_its_run():
+    normalized = " ".join(UPSERT_QUERY.split())
+    assert "(product_key, planning_cycle_date, q_i, rop_i, ss_i, status, lp_run_key)" in normalized
+    assert "lp_run_key = EXCLUDED.lp_run_key" in normalized

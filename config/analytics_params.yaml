@@ -1,8 +1,0 @@
-service_level:
-  z_score: 1.28
-  description: "Z-score for safety stock calculation (SS_i = Z × σ_di)"
-lp_weights:
-  w1: 0.45
-  w2: 0.35
-  w3: 0.20
-  description: "Multi-objective LP weights. Must sum to 1.00."

@@ -36,9 +36,9 @@ Implements:
   RULE_METHOD_MAP: dict[str, str]
 
 Constants:
-  MIN_MONTHS_WITH_SALES = 3     eligibility gate (real observations, not span)
-  HOLDOUT_FRACTION             reused from sarima.py (0.20)
-  MASE_GATE = 1.0              a forecast beating the naive benchmark scores < 1
+  MIN_MONTHS_WITH_SALES        analytics.params (3): eligibility gate (real observations, not span)
+  HOLDOUT_FRACTION             analytics.params (0.20)
+  MASE_GATE                    analytics.params (1.0): a forecast beating the naive benchmark scores < 1
   SBA_ALPHA = 0.1             UNTUNED this pass - stamped alpha_tuned:false everywhere
 """
 from __future__ import annotations
@@ -47,12 +47,13 @@ import numpy as np
 import pandas as pd
 
 # Reuse, do not duplicate - the temporal 80/20 split and its boundary
-# validation live in sarima.py and are shared verbatim.
-from analytics.forecasting.sarima import train_holdout_split, HOLDOUT_FRACTION  # noqa: F401
+# validation live in analytics/forecasting/split.py and are shared verbatim.
+from analytics.forecasting.split import train_holdout_split  # noqa: F401
 from analytics.classification.abc import TIER_A_CUTOFF as ABC_TIER_A_CUTOFF  # noqa: F401
+from analytics.forecasting.diagnostic_metrics import mape as _mape
+from analytics.params import HOLDOUT_FRACTION, MASE_GATE, MIN_MONTHS_WITH_SALES, SBC_CV2_CUT  # noqa: F401
+from analytics.segmentation.traits import average_demand_interval, is_intermittent_adi
 
-MIN_MONTHS_WITH_SALES = 3
-MASE_GATE = 1.0
 MA_WINDOW = 3
 
 # SBA smoothing constant. Flagged untuned: no tuning was attempted this pass.
@@ -68,10 +69,11 @@ SBA_ALPHA_TUNED = False
 TSB_ALPHA_DEMAND = 0.3
 TSB_ALPHA_PROB = 0.1
 
-# Demand-class thresholds (Syntetos-Boylan-Croston cut points), identical to
-# this session's demand_shape_analysis.
-_ADI_CUT = 1.32
-_CV2_CUT = 0.49
+# Demand-class thresholds: the Syntetos-Boylan-Croston (2005) cut points,
+# from analytics.params. CV² here is of the NON-ZERO demand sizes only —
+# not sku_traits.cv (every month from the first sale), not the fit
+# review's CV(last 12).
+_CV2_CUT = SBC_CV2_CUT
 
 # ---------------------------------------------------------------------------
 # rule_method mapping - a fixed, named, documented lookup (never inlined).
@@ -186,15 +188,18 @@ def tsb_forecast(train: pd.Series, horizon: int, alpha_demand: float = TSB_ALPHA
     return np.full(horizon, float(demand * prob), dtype=float)
 
 
-def demand_class(series: pd.Series) -> str:
+def demand_class(series: pd.Series, gap_months=None) -> str:
     """smooth / erratic / intermittent / lumpy / unclassifiable, via ADI
     (average inter-demand interval) and CV^2 of the nonzero demand sizes.
 
     Callable on a training-only slice (for rule_method) or on the full series
     (for reporting) - it just measures whatever `series` it is given.
 
-    ADI = len(series) / (# months with demand); CV^2 = (std/mean)^2 of the
-    nonzero values (sample std, ddof=1). Cut points: ADI 1.32, CV^2 0.49.
+    ADI is traits.average_demand_interval: from the first sale, with the
+    principal-wide gap months in `gap_months` (month-start timestamps)
+    dropped, never counted as zero-sale months. CV^2 = (std/mean)^2 of the
+    nonzero values (sample std, ddof=1). Cut points: SBC 2005, ADI 1.32 and
+    CV^2 0.49, the tie going to intermittent / erratic.
     Fewer than 2 nonzero months -> variance is not estimable -> unclassifiable.
     """
     values = series.to_numpy(dtype=float)
@@ -203,18 +208,16 @@ def demand_class(series: pd.Series) -> str:
     if n_demand < 2 or nonzero.mean() <= 0:
         return "unclassifiable"
 
-    adi = len(values) / n_demand
+    observed = None if not gap_months else ~series.index.isin(pd.DatetimeIndex(list(gap_months)))
+    adi = average_demand_interval(values, observed)
     cv2 = (nonzero.std(ddof=1) / nonzero.mean()) ** 2
     if np.isnan(cv2):
         return "unclassifiable"
 
-    if adi < _ADI_CUT and cv2 < _CV2_CUT:
-        return "smooth"
-    if adi < _ADI_CUT and cv2 >= _CV2_CUT:
-        return "erratic"
-    if adi >= _ADI_CUT and cv2 < _CV2_CUT:
-        return "intermittent"
-    return "lumpy"
+    intermittent, erratic = is_intermittent_adi(adi), cv2 >= _CV2_CUT
+    if not intermittent:
+        return "erratic" if erratic else "smooth"
+    return "lumpy" if erratic else "intermittent"
 
 
 def evaluate_baseline(forecast, holdout: pd.Series, train: pd.Series) -> dict:
@@ -222,9 +225,11 @@ def evaluate_baseline(forecast, holdout: pd.Series, train: pd.Series) -> dict:
 
     forecast: array-like, same length as `holdout` (aligned positionally).
 
-    MAPE convention matches evaluate_sarima(): holdout points where actual
-    demand is 0 are EXCLUDED (division by zero is neither crashed nor
-    "fixed" with a fake denominator); if every holdout actual is 0, MAPE is
+    MAPE is diagnostic_metrics.mape, the one rule: only holdout months with
+    actual > 0 count. A zero month has no percentage error, and a negative
+    (returns-dominated) month's percentage is meaningless, so both are
+    excluded from MAPE; they stay in the series, MAE, RMSE and MASE (DEC-15:
+    negatives are never clamped). If no holdout month qualifies, MAPE is
     NaN, never silently 0%.
 
     MASE scale - DELIBERATELY DIFFERENT from evaluate_sarima():
@@ -256,8 +261,7 @@ def evaluate_baseline(forecast, holdout: pd.Series, train: pd.Series) -> dict:
     mae = float(abs_errors.mean())
     rmse = float(np.sqrt((errors ** 2).mean()))
 
-    nonzero = actual != 0
-    mape = float((abs_errors[nonzero] / np.abs(actual[nonzero])).mean()) if nonzero.any() else float("nan")
+    mape = _mape(actual, predicted)
 
     lag1 = train.diff().abs().dropna()
     scale = float(lag1.mean()) if not lag1.empty else 0.0

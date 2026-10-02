@@ -14,7 +14,10 @@ Pure functions, no DB access. The caller passes real-only series; the router
 (analytics.forecasting.router) enforces that.
 
 Fixed on purpose, not tuned: one configuration, one seed, one thread. Nothing
-here was tuned on test months, and nthread=1 keeps a rerun bit-identical. No
+here was tuned on test months, and nthread=1 (analytics.params.XGB_NTHREAD)
+keeps a rerun bit-identical. The stored bake-off artifacts were not all fitted
+single-threaded (8 or 4 threads; params.py lists which), so a served-vs-
+artifact comparison can differ in the last digits for that reason alone. No
 model file is saved - training takes seconds, so the model is refit from the
 pool on every run and a missing or stale artifact cannot happen.
 
@@ -28,6 +31,8 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
+from analytics.params import XGB_NTHREAD
+
 PLACEHOLDER_ATTR = "placeholder_months"  # series.attrs key marking is_demo months (see with_placeholder)
 MIN_HISTORY = 3                          # months of history before a month can be a training row
 MIN_TRAINING_ROWS = 100                  # below this no model is returned (the diagnostics' own floor)
@@ -35,7 +40,7 @@ SCALE_WINDOW = 6
 SEED = 20260921
 PARAMS = {
     "max_depth": 4, "eta": 0.05, "subsample": 0.8, "colsample_bytree": 0.8,
-    "objective": "reg:absoluteerror", "seed": SEED, "nthread": 1,
+    "objective": "reg:absoluteerror", "seed": SEED, "nthread": XGB_NTHREAD,
 }
 NUM_ROUNDS = 300
 
