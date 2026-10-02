@@ -1,14 +1,11 @@
--- analytics/db/migrations/0036_idle_in_transaction_timeout.sql.draft
+-- analytics/db/migrations/0036_idle_in_transaction_timeout.sql
 --
--- DRAFT - NOT APPLIED. <X> below is a placeholder until measured.
--- Rename to .sql only once <X> is filled in: the runner picks up 0*.sql, and
--- a scratch run would ledger this placeholder version, so filling in <X>
--- afterwards would change the checksum it recorded ("a migration was edited
--- after it was applied"). Left as-is, <X> is not a valid value, so an
--- accidental apply to public fails instead of setting anything.
+-- NOT APPLIED. X = 600 s (10 minutes), decided 2026-10-02; until then this
+-- was 0036_...sql.draft with a placeholder value, kept out of the runner's
+-- 0*.sql glob so no ledger row could record the placeholder's checksum.
 --
 -- Ends any postgres-role session that sits idle INSIDE an open transaction
--- for longer than <X>, releasing its locks (security audit 2026-09-30 #3: a
+-- for longer than X, releasing its locks (security audit 2026-09-30 #3: a
 -- leaked test session held a lock on abc_classification). Idle sessions
 -- outside a transaction are not affected.
 --
@@ -17,10 +14,9 @@
 --   postgres's role settings (pg_db_role_setting): search_path only
 --   supabase_auth_admin (Supabase's own role): 60000 ms - a reference point,
 --   not a decision.
--- Measure <X> before choosing it: the longest idle-in-transaction gap of a
--- backup_everything run and a loader slice (after test C ends). Every tool
--- logs in as postgres - backend, loader, backups, apply_* scripts, SQL
--- Editor - so <X> must exceed the longest legitimate gap of all of them.
+-- X must exceed the longest legitimate idle-in-transaction gap of every tool
+-- that logs in as postgres - backend, loader, backups, apply_* scripts, SQL
+-- Editor (e.g. a backup_everything run, a loader slice).
 --
 -- Per role, not per database: ALTER DATABASE would also reach Supabase's own
 -- roles (pg_net, realtime, storage).
@@ -43,6 +39,6 @@ BEGIN
         RAISE NOTICE '0036 skipped: target schema is %, and a role setting is cluster-wide', current_schema();
         RETURN;
     END IF;
-    ALTER ROLE postgres SET idle_in_transaction_session_timeout = '<X>';
+    ALTER ROLE postgres SET idle_in_transaction_session_timeout = '600s';
 END
 $$;
