@@ -31,7 +31,7 @@ One transaction for the whole step. An etl_load_event (source 'fill_missing') pe
 
   python -m scripts.fill_missing --schema ssm_fills                  fill a scratch schema
   python -m scripts.fill_missing --schema ssm_fills --dry-run        the same, rolled back
-  python -m scripts.fill_missing --schema public --target-public     public (only after 0032/0033/0035/0036/0038)
+  python -m scripts.fill_missing --schema public --target-public     public (only after 0032/0033/0036/0037/0038)
 """
 from __future__ import annotations
 

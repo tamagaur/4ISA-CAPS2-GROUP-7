@@ -100,6 +100,19 @@ one is unknown, not empty. Only Unilever's count omits zeros (0 of 27,321
 raw SOH rows across all 39 sheets read 0/0; backend/stock_status.py's
 COUNT_OMITS_ZERO_STOCK has the evidence).
 
+STOCK TIMING (2026-10-03). The stock on this page is the count that OPENS
+the cycle month, the month before it (backend/stock_units.opening_period),
+because that is the count scripts/run_lp.py now plans from. Until this date
+both used each principal's LATEST count: for cycle 2026-03 that was the count
+of 2026-04-06, the stock left after March's sales, so need = forecast +
+target - stock counted March twice (reports/diagnostics/lp_logic_check_
+2026-10-03). Wherever this docstring says "latest snapshot" for a row's stock
+or cover, read "the cycle's opening count". The response's stock_counts says
+which count that is and when it was counted, or, when the principal has
+none, the reason the plan can't be made from it ("no opening stock count for
+<month>"). cycle=all reads each cycle's own opening count. "Stock now"
+screens keep the latest count (GET /dashboard's kpis.stock_counts).
+
 PACK SIZE (2026-10-01). Every quantity here is in PIECES, while SSM buys
 in cases: an order of 104,575 pieces is about 363 cases of 288. pack_size
 (Product_Dimension's pieces per case, None when unusable — the same rule
@@ -124,7 +137,6 @@ from backend.permissions import require_permission
 from backend.principals import (
     PrincipalQuery,
     latest_abc_period,
-    latest_inventory_period,
     principal_clause,
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
@@ -133,7 +145,14 @@ from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info,
 from backend.lp_cycle import freshness as lp_freshness
 from analytics.params import DAYS_PER_MONTH, SKU_COVER_HISTORY_MONTHS
 from backend.stock_status import COUNT_OMITS_ZERO_STOCK, NO_DATA, URGENCY, stock_status
-from backend.stock_units import NO_PACK_SIZE_REASON, PACK_SIZE_NUMERIC, STOCK_AT_PERIOD_SQL
+from backend.stock_units import (
+    NO_PACK_SIZE_REASON,
+    PACK_SIZE_NUMERIC,
+    STOCK_AT_PERIOD_SQL,
+    missing_opening_count_reason,
+    opening_period,
+    stock_counts,
+)
 
 # Order quantities are counted in whole units rounded UP, the rule the Reorder
 # page applies to every row (frontend/src/utils/formatNumber.js wholeUnits),
@@ -152,13 +171,13 @@ router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 _PACK_SIZE_USABLE = PACK_SIZE_NUMERIC.replace("pd_pack.", "pd.")
 assert "pd_pack" not in _PACK_SIZE_USABLE
 
+# :inv_period is the cycle's opening count (opening_period), never the latest.
 # in_stock_count — TRUE: the product has a row in the stock count. FALSE:
 # its principal was counted at this snapshot but the product wasn't, which
 # the LP reads as 0 on hand, and so does _to_item where the principal's file
 # lists no zero-stock rows (Unilever; Del Monte's does, so NO DATA). NULL: the
-# principal has no count at this snapshot (none loaded yet, or a mixed-
-# principal list anchored on the other principal's latest), so a missing
-# row says nothing about stock and stays 'NO DATA'.
+# principal has no count at this snapshot (no opening count for the cycle),
+# so a missing row says nothing about stock and stays 'NO DATA'.
 _SELECT_ONE = f"""
     SELECT
         lr.recommendation_key,
@@ -254,7 +273,7 @@ def _opt_float(row, key) -> float | None:
 
 def _cover(stock_value: float | None, avg_monthly_sales: float | None) -> tuple[float | None, str | None]:
     if stock_value is None:
-        return None, "no stock valuation at the latest inventory snapshot (no row, or no unit cost)"
+        return None, "no stock valuation in the cycle's opening stock count (no row, or no unit cost)"
     if avg_monthly_sales is None:
         return None, (f"no sales rows for this SKU in the {SKU_COVER_HISTORY_MONTHS} sales months "
                       "up to the stock snapshot")
@@ -294,13 +313,13 @@ def _to_item(r) -> RecommendationItem:
             stock_blocked_reason = NO_PACK_SIZE_REASON
         elif in_count is False:
             stock_blocked_reason = (
-                "not in its principal's latest stock count, which lists zero-stock items, "
+                "not in its principal's opening stock count for this cycle, which lists zero-stock items, "
                 "so its stock is unknown rather than 0"
             )
         elif "in_stock_count" in r:
-            stock_blocked_reason = "no stock count for this product's principal at the latest snapshot"
+            stock_blocked_reason = missing_opening_count_reason(r["principal"], r["planning_cycle_date"])
         else:
-            stock_blocked_reason = "no Inventory_Fact_Real row for this product at the latest snapshot"
+            stock_blocked_reason = "no Inventory_Fact_Real row for this product in the cycle's opening stock count"
     else:
         urgency = URGENCY[stock_status(stock, float(r["ss_i"]), rop)]
 
@@ -422,27 +441,27 @@ def get_recommendations(
     # honestly returns an empty list until the LP is run for Del Monte.
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     select_sql, lp_params = select_one(mode)
-    query = select_sql + " WHERE 1=1" + scope_sql
-    # Both anchors resolve under the SAME scope as the rows. The ABC anchor
-    # replaces a per-product "latest classification_period" walk, which
-    # quietly mixed classification vintages: a SKU last classified months
-    # ago contributed a stale revenue_share alongside current ones. Pinned
-    # to one period, such a SKU now yields revenue_share None and therefore
-    # priority_score None — already null-guarded below.
+    filters = scope_sql
+    # The ABC anchor resolves under the SAME scope as the rows. It replaces a
+    # per-product "latest classification_period" walk, which quietly mixed
+    # classification vintages: a SKU last classified months ago contributed
+    # a stale revenue_share alongside current ones. Pinned to one period,
+    # such a SKU now yields revenue_share None and therefore priority_score
+    # None — already null-guarded below. The stock anchor (:inv_period) is
+    # set per cycle below: the count that opens it.
     params: dict = {
-        "inv_period": latest_inventory_period(db, principal),
         "abc_period": latest_abc_period(db, principal),
         **scope_params,
         **lp_params,
     }
     if status:
-        query += " AND lr.status = :status"
+        filters += " AND lr.status = :status"
         params["status"] = status
     # Shared date-range picker (2026-09) — planning_cycle_date is a real
     # DATE column (unlike the fact tables' 'YYYY-MM' _period text), so this
     # compares dates directly, no month-truncation needed.
     if from_date and to_date:
-        query += " AND lr.planning_cycle_date >= :from_date AND lr.planning_cycle_date <= :to_date"
+        filters += " AND lr.planning_cycle_date >= :from_date AND lr.planning_cycle_date <= :to_date"
         params["from_date"] = from_date
         params["to_date"] = to_date
 
@@ -452,7 +471,9 @@ def get_recommendations(
     # list was what made the dashboard's pending count read 429 instead of
     # 250. `cycle=all` is the deliberate audit escape hatch.
     freshness = lp_freshness(db, principal, mode)
-    labels = label_context(db, params["inv_period"], params["abc_period"], principal)
+    # Period labels for the page. No stock period until a cycle is known:
+    # the rows are read at their cycle's opening count (set below).
+    labels = label_context(db, None, params["abc_period"], principal)
     if cycle == "current":
         current = current_cycle(db, principal, mode)
         if current is None:
@@ -462,13 +483,39 @@ def get_recommendations(
             return _with_data_mode(RecommendationsResponse(
                 items=[], count=0, planning_cycle_date=None,
                 superseded_count=0, freshness=freshness, lp_model=lp_model_info(),  # no cycle: defaults
+                stock_counts=[],
                 **labels,
             ), db, mode)
-        query += CURRENT_CYCLE_CLAUSE
-        params["current_cycle"] = current
-    query += " ORDER BY lr.planning_cycle_date DESC, lr.rop_i DESC"
+        cycles, cycle_clause = [current], CURRENT_CYCLE_CLAUSE
+    else:
+        # Each cycle against its own opening count, so the audit view runs
+        # the row query once per cycle, newest first.
+        lp, _ = lp_source(mode, "lp_recommendation")
+        listed = db.execute(text(
+            f"SELECT DISTINCT lr.planning_cycle_date AS d FROM {lp} lr "
+            f"JOIN product_dimension pd ON pd.product_key = lr.product_key WHERE 1=1{filters}"
+        ), params).mappings().all()
+        cycles = sorted((r["d"] for r in listed), reverse=True)
+        cycle_clause = " AND lr.planning_cycle_date = :listed_cycle"
 
-    rows = db.execute(text(query), params).mappings().all()
+    # The page's period labels follow the count the rows are read at: the
+    # newest listed cycle's opening count (below), not the latest count.
+    if cycles:
+        labels = label_context(db, opening_period(cycles[0]), params["abc_period"], principal)
+
+    rows: list = []
+    counts: list[dict] = []
+    for planning_cycle in cycles:
+        cycle_params = {**params, "inv_period": opening_period(planning_cycle),
+                        "current_cycle": planning_cycle, "listed_cycle": planning_cycle}
+        cycle_rows = db.execute(
+            text(select_sql + " WHERE 1=1" + filters + cycle_clause + " ORDER BY lr.rop_i DESC"), cycle_params,
+        ).mappings().all()
+        rows.extend(cycle_rows)
+        # Which count each principal on the list was checked against, and
+        # when it was counted, or why there is none.
+        principals = sorted({r["principal"] for r in cycle_rows})
+        counts.extend(stock_counts(db, opening_period(planning_cycle), principals, cycle=planning_cycle))
     items = [_to_item(r) for r in rows]
     return _with_data_mode(RecommendationsResponse(
         items=items,
@@ -478,6 +525,7 @@ def get_recommendations(
         freshness=freshness,
         # What the run behind the current cycle used (lp_run), else the defaults, labelled.
         lp_model=lp_model_info(stored_run(db, freshness["cycle_date"], principal, mode)),
+        stock_counts=counts,
         **labels,
     ), db, mode)
 
@@ -508,7 +556,8 @@ def update_recommendation(
             SET status = :status, decided_at = :decided_at, decided_by = :decided_by
             WHERE recommendation_key = :key
             RETURNING (SELECT COALESCE(pd.sku_code, pd.category_path) FROM product_dimension pd
-                        WHERE pd.product_key = lp_recommendation.product_key) AS sku
+                        WHERE pd.product_key = lp_recommendation.product_key) AS sku,
+                      planning_cycle_date
         """),
         {
             "status": decision.status,
@@ -530,11 +579,12 @@ def update_recommendation(
 
     # Single row pinned by recommendation_key; scope left unfiltered (None
     # = all), identical to today's behaviour — see sku.py's _one_row_params.
+    # Stock at the row's own cycle's opening count, as GET shows it.
     row = db.execute(
         text(_SELECT_ONE + " WHERE lr.recommendation_key = :key"),
         {
             "key": recommendation_key,
-            "inv_period": latest_inventory_period(db, None),
+            "inv_period": opening_period(decided["planning_cycle_date"]),
             "abc_period": latest_abc_period(db, None),
         },
     ).mappings().first()

@@ -127,6 +127,12 @@ class RecommendationsResponse(BaseModel):
     abc_period: str | None = None
     cover_sales_start: str | None = None
     cover_sales_end: str | None = None
+    # The stock count each principal's rows were checked against: the one
+    # that opens the cycle (backend/stock_units.stock_count_info) — {cycle,
+    # principal, period, role: 'opening', available, counted_on,
+    # counted_on_note, row_count, flag, reason}. available False with reason
+    # "no opening stock count for <month>" when the plan can't be made from it.
+    stock_counts: list[dict] = []
 
 
 class RecommendationDecision(BaseModel):

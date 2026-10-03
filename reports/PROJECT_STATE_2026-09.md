@@ -1007,7 +1007,7 @@ against `public` over the session pooler on 5432:
 - The State note above says `public.etl_quarantine` holds **0 rows**. That was true after batch 1; batches 2–4
   have since landed and it holds **7,805** (§17.2).
 
-## 18. DEC-31 data fills — BUILT on `feat/data-fills`, rehearsed in `ssm_fills`, NOT applied to `public` (2026-10-02)
+## 18. DEC-31 data fills — BUILT on `feat/data-fills`, rehearsed in `ssm_fills`, LIVE on `public` since 2026-10-02 (§18.4)
 
 Yuan's decision 2026-10-02 (overrides DEC-29's "never fill"): fill every missing dataset for both principals, permanently, as one step
 after every load; real data always replaces a fill. Rule and details: ARCHITECTURE.md DEC-31. Code: `scripts/fill_missing.py`, hooks in
@@ -1049,12 +1049,24 @@ synthetic / 2 missing; Del Monte product sales 17 synthetic / 53 missing; Unilev
   0.1%), the untracked v2 dropped the remainder. No producer script for either was in the repo; `fill_missing.py` replaces them.
 - Del Monte purchases 2025-09 is now synthetic next to its 18 real lines held in `etl_quarantine` (D12).
 
-### 18.4 Apply to `public` (after the pending merges) — not run
+### 18.4 Applied to `public` (2026-10-02 / 2026-10-03)
 
-Order: 0032 -> 0033 -> 0035 -> 0036 -> 0038 (`python -m scripts.run_canonical_load --schema public --target-public --schema-only`), then
-`--refresh-coverage`, then `python -m scripts.fill_missing --schema public --target-public --dry-run`, then without `--dry-run`. Expected on
-today's public: 0038 tags 89,304 existing demo rows `synthetic_v2`; the fill step adds the 18.1 counts if public is unchanged. Re-run
-`scripts/rehearse_fills.py` on a fresh scratch copy first if public changed.
+Order: 0032 -> 0033 -> 0036 -> 0037 -> 0038 (`python -m scripts.run_canonical_load --schema public --target-public --schema-only`), then
+`--refresh-coverage`, then `python -m scripts.fill_missing --schema public --target-public --dry-run`, then without `--dry-run`.
+
+| step | when (UTC) | result (source) |
+|---|---|---|
+| Backup | 2026-10-02 16:01 | `backups/full_backup_20261002T160122Z` (gitignored): `public` 24 tables / 255,748 rows + `ssm_fills`; every file re-opened 2026-10-03 and matches its manifest's row counts and checksums |
+| 0032, 0033, 0036, 0037, 0038 | 2026-10-02 16:06–16:08 | `public.schema_migrations`, applied_by kyuan; Audrey's `0035_user_two_factor.sql` was already there (13:10) |
+| `--refresh-coverage` | 2026-10-02 16:09 | `etl_coverage.refreshed_at` |
+| fill step | 2026-10-02 16:10 | run `fill-20261002T161030Z-5a18377c`: 153 cells, 32,901 rows = exactly the 18.1 counts (`etl_load_event`, `audit_log`); 0038 tagged 89,304 existing demo rows `synthetic_v2` |
+| fill dry rerun | 2026-10-03 | 0 added, 0 removed, 0 gap cells (idempotent) |
+| 2026-02 segmentation recompute | 2026-10-03 | Tier A as of 2026-02, method single: run `segment_unilever_2026-02_2d2dd97c` (132 traits, 660 segment rows; `length_v1` untouched). Exactly the 8 products with a negative month changed `cv` (19, 174, 345, 644, 666, 674, 832, 1037); 644 and 1037 also `trend_pvalue` (0.0098 -> 0.0119, 0.0092 -> 0.0112), still under alpha 0.05, so no bin moved. Pre-write rows: `backups/segmentation_2026-02_pre_recompute_20261003T063026Z/` |
+| scratch | 2026-10-03 | `ssm_fills` and `ssm_seg_negkept` dropped; no `ssm_*` schema left; database 252 MB -> 137 MB (`pg_database_size`) |
+
+**Rule breach on record:** the 2026-10-02 session applied 0037 and 0038 from uncommitted files (0037 = `0035_lp_run.sql` renumbered, because
+public already held `0035_user_two_factor.sql`). They were committed afterwards in ef08b70; the committed files hash to the checksums
+`schema_migrations` recorded. Next free migration number: **0039** (reserved by the stock-timing fix), then 0040.
 
 ### 18.5 Del Monte preview pipeline (ABC SKU level, forecast router, LP) — NOT built; what is left
 

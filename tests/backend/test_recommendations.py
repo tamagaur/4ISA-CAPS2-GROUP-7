@@ -18,7 +18,7 @@ import datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import auth_utils
+from backend import auth_utils, data_notes
 from backend.deps import get_current_user, get_db
 from backend.main import app
 
@@ -77,8 +77,14 @@ class FakeSession:
         self.lp_generated_at = lp_generated_at
         self.forecast_generated_at = forecast_generated_at
         self.lp_run = None  # the lp_run row stored_run finds; None = table not applied
-        # The live shape: Unilever's '2026-03' count was taken on 6 Apr 2026.
-        self.count_date_by_period = {"2026-03": datetime.date(2026, 4, 6), "2025-12": datetime.date(2025, 12, 1)}
+        # The live shape: Unilever's '2026-02' count (taken 2 Mar 2026) opens
+        # the 2026-03 cycle; its '2026-03' count was taken on 6 Apr 2026.
+        self.count_date_by_period = {"2026-02": datetime.date(2026, 3, 2), "2026-03": datetime.date(2026, 4, 6),
+                                     "2025-12": datetime.date(2025, 12, 1)}
+        # backend/stock_units.STOCK_COUNTS_SQL: {(principal, period): (row_count,
+        # first_date, last_date)}. Unilever's count of 2026-02, counted
+        # 2026-03-02, opens the sample rows' cycle 2026-03.
+        self.stock_counts = {("unilever", "2026-02"): (812, datetime.date(2026, 3, 2), datetime.date(2026, 3, 2))}
         self.calls: list[tuple[str, dict]] = []
 
     def execute(self, stmt, params=None):
@@ -86,7 +92,7 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
         scope = params.get("principal")
-        # backend/lp_cycle.stored_run (migration 0035). Before every
+        # backend/lp_cycle.stored_run (migration 0037). Before every
         # lp_recommendation matcher: its subquery reads that table too.
         if "to_regclass('lp_run')" in sql:
             return FakeResult([{"present": self.lp_run is not None}])
@@ -113,6 +119,17 @@ class FakeSession:
             return FakeResult([{"count_date": count_date, "sales_start": "2025-12", "sales_end": "2026-02"}])
         if "lr.planning_cycle_date < :cycle" in sql:
             return FakeResult([self.superseded_pending])
+        if "GROUP BY inv.principal, inv._period" in sql:
+            period = params["count_period"]
+            return FakeResult([
+                {"principal": who, "period": p, "row_count": n, "first_date": first, "last_date": last}
+                for (who, p), (n, first, last) in self.stock_counts.items() if p == period
+            ])
+        # cycle=all lists its cycles first, then reads each one's rows.
+        if "SELECT DISTINCT lr.planning_cycle_date AS d" in sql:
+            cycles = {datetime.date.fromisoformat(r["planning_cycle_date"])
+                      for r in self.rows if scope is None or r["principal"] == scope}
+            return FakeResult([{"d": d} for d in sorted(cycles)])
         if "FROM lp_recommendation lr" in sql:
             matched = [r for r in self.rows if scope is None or r["principal"] == scope]
             out = []
@@ -144,7 +161,7 @@ def sample_rows():
 def session(sample_rows):
     return FakeSession(
         sample_rows,
-        stock_by_period={(1, "2026-03"): 120.0},
+        stock_by_period={(1, "2026-02"): 120.0, (1, "2026-03"): 7.0},  # opening count, then the later one
         inventory_period_by_scope={None: "2026-03", "unilever": "2026-03", "delmonte": "2025-12"},
         abc_period_by_scope={None: "2026-02", "unilever": "2026-02", "delmonte": None},
     )
@@ -418,7 +435,7 @@ def test_lp_inputs_the_api_states_are_the_ones_run_lp_uses():
 
 
 def test_lp_model_states_defaults_when_no_run_is_recorded(client):
-    """Item 8: without lp_run (migration 0035 unapplied) the model is the
+    """Item 8: without lp_run (migration 0037 unapplied) the model is the
     defaults, and says so."""
     body = client.get("/recommendations?principal=unilever").json()
     assert body["lp_model"]["inputs_source"] == "defaults"
@@ -511,7 +528,7 @@ def test_response_carries_forecast_and_short(sample_rows):
     sample_rows[0].update(forecast_units=40.0)  # need = 40 + 30 - 120 < 0 -> 0
     session = FakeSession(
         sample_rows,
-        stock_by_period={(1, "2026-03"): 120.0},
+        stock_by_period={(1, "2026-02"): 120.0, (1, "2026-03"): 7.0},  # opening count, then the later one
         inventory_period_by_scope={None: "2026-03", "unilever": "2026-03", "delmonte": "2025-12"},
         abc_period_by_scope={None: "2026-02", "unilever": "2026-02", "delmonte": None},
     )
@@ -526,16 +543,18 @@ def test_response_carries_forecast_and_short(sample_rows):
 
 def test_response_states_the_periods_its_figures_were_read_at(client, session):
     """The page labels every number with its period (2026-10-02): the stock
-    count's own date (Unilever's '2026-03' is the count of 6 Apr 2026), the
-    ABC month revenue share is from, and the sales months cover averages."""
+    count's own date, the ABC month revenue share is from, and the sales
+    months cover averages. Since the stock-timing fix (2026-10-03) the stock
+    is the count that OPENS the cycle: for 2026-03, the '2026-02' count of
+    2 Mar 2026, not the later '2026-03' count of 6 Apr 2026."""
     body = client.get("/recommendations?principal=unilever").json()
-    assert body["stock_period"] == "2026-03"
-    assert body["stock_count_date"] == "2026-04-06"
+    assert body["stock_period"] == "2026-02"
+    assert body["stock_count_date"] == "2026-03-02"
     assert body["abc_period"] == "2026-02"
     assert (body["cover_sales_start"], body["cover_sales_end"]) == ("2025-12", "2026-02")
     # The count date is read in the same principal scope as the stock itself.
     sql, params = next((s, p) for s, p in session.calls if "MAX(snapshot_date)" in s)
-    assert params["inv_period"] == "2026-03" and params["principal"] == "unilever"
+    assert params["inv_period"] == "2026-02" and params["principal"] == "unilever"
     assert "principal = :principal" in sql
 
 
@@ -544,3 +563,93 @@ def test_period_labels_are_none_without_a_stock_period(session, client):
     body = client.get("/recommendations?principal=delmonte").json()
     assert body["stock_count_date"] is None and body["stock_period"] is None
     assert not any("MAX(snapshot_date)" in s for s, _ in session.calls)
+# ---- stock timing (2026-10-03) ----------------------------------------------
+# The rows are checked against the count that OPENS their cycle, the one
+# scripts/run_lp.py now plans from, never the latest (counted after the
+# month's sales). The response says which count and when it was taken.
+
+
+def _get(session, url):
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
+    with TestClient(app) as c:
+        return c.get(url, headers={"Authorization": f"Bearer {user_token()}"}).json()
+
+
+def _row_queries(session):
+    return [(s, p) for s, p in session.calls if "FROM lp_recommendation lr" in s and "abc_classification" in s.lower()]
+
+
+def test_rows_are_checked_against_the_cycles_opening_count(session):
+    body = _get(session, "/recommendations?principal=unilever")
+    assert [p["inv_period"] for _, p in _row_queries(session)] == ["2026-02"]
+    assert body["items"][0]["current_stock"] == 120.0  # the 2026-02 count, not the later 7.0
+    assert body["stock_counts"] == [{
+        "cycle": "2026-03-01", "principal": "unilever", "period": "2026-02", "role": "opening", "available": True,
+        "counted_on": "2026-03-02", "counted_on_note": None, "row_count": 812,
+        "flag": data_notes.OPENING_COUNT_RULINGS[("unilever", "2026-02")][1], "reason": None,
+    }]
+
+
+def test_a_missing_opening_count_is_reported_not_replaced(sample_rows):
+    """No 2026-02 count: the later 2026-03 one must not stand in. Each row
+    and the response carry the reason the app shows."""
+    sample_rows[0].update(in_stock_count=None)
+    session = FakeSession(
+        sample_rows, stock_by_period={(1, "2026-03"): 7.0},
+        inventory_period_by_scope={"unilever": "2026-03"}, abc_period_by_scope={"unilever": "2026-02"},
+    )
+    session.stock_counts = {("unilever", "2026-03"): (785, datetime.date(2026, 4, 6), datetime.date(2026, 4, 6))}
+    body = _get(session, "/recommendations?principal=unilever")
+    reason = "no opening stock count for March 2026: unilever has no stock count for February 2026"
+    assert body["stock_counts"][0]["available"] is False and body["stock_counts"][0]["reason"] == reason
+    item = body["items"][0]
+    assert item["current_stock"] is None and item["urgency"] == "NO DATA"
+    assert item["stock_blocked_reason"] == reason
+
+
+def test_cycle_all_reads_each_cycle_at_its_own_opening_count(sample_rows):
+    sample_rows.append({**sample_rows[0], "recommendation_key": 2, "planning_cycle_date": "2026-01-01"})
+    session = FakeSession(
+        sample_rows, stock_by_period={}, inventory_period_by_scope={"unilever": "2026-03"},
+        abc_period_by_scope={"unilever": "2026-02"},
+    )
+    body = _get(session, "/recommendations?principal=unilever&cycle=all")
+    # Newest cycle first, each against the month before it.
+    assert [p["inv_period"] for _, p in _row_queries(session)] == ["2026-02", "2025-12"]
+    assert [(c["cycle"], c["period"]) for c in body["stock_counts"]] == [("2026-03-01", "2026-02"), ("2026-01-01", "2025-12")]
+
+
+def test_a_decision_returns_the_row_against_its_cycles_opening_count():
+    """PATCH re-reads the decided row; its stock is its own cycle's opening
+    count, as GET showed it, not the latest."""
+    from backend.routers.recommendations import update_recommendation
+    from backend.schemas.recommendations import RecommendationDecision
+
+    class _PatchSession:
+        def __init__(self):
+            self.calls: list[tuple[str, dict]] = []
+
+        def execute(self, stmt, params=None):
+            sql = str(stmt)
+            self.calls.append((sql, dict(params or {})))
+            if "UPDATE lp_recommendation" in sql:
+                return FakeResult([{"sku": "U-1", "planning_cycle_date": datetime.date(2026, 3, 1)}])
+            if "MAX(classification_period) AS p FROM ABC_Classification" in sql:
+                return FakeResult([{"p": "2026-02"}])
+            if "FROM lp_recommendation lr" in sql:
+                return FakeResult([_item_row(current_stock=120.0, rop_i=30.0, q_i=50.0)])
+            return FakeResult([])  # the audit-log insert
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+    db = _PatchSession()
+    item = update_recommendation(1, RecommendationDecision(status="accepted"), db=db,
+                                 current_user=auth_utils.decode_access_token(user_token()))
+    assert item.current_stock == 120.0
+    row_params = next(p for s, p in db.calls if "FROM lp_recommendation lr" in s)
+    assert row_params["inv_period"] == "2026-02"

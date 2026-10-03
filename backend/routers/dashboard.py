@@ -285,6 +285,9 @@ zero):
     total_order_qty are computed over the FULL pending set (not just the
     5 previewed rows) — a portfolio-wide summary next to a 5-row preview,
     same relationship ABC's tier_summary has to its own items list.
+    Stock is the count that opens the LP's cycle (since 2026-10-03, DEC-32),
+    named with its date in reorder_preview.stock_counts; the stock card
+    keeps the latest count (kpis.stock_counts).
   reorder_preview.lp_weights
     — {cost, service_level, storage} fractions, always present (never
     null): a straight mirror of analytics/optimization/lp.py's W1/W2/W3
@@ -385,7 +388,7 @@ from backend.routers.recommendations import select_one as _recommendation_select
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 from backend.routers.recommendations import whole_units
 from backend.stock_status import CRITICAL, NO_DATA, URGENCY_RANK, URGENT
-from backend.stock_units import STOCK_AT_PERIOD_SQL
+from backend.stock_units import STOCK_AT_PERIOD_SQL, opening_period, stock_counts
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -1249,6 +1252,13 @@ def get_dashboard(
         else stock_count_dates.get(inventory_period) if cover_scope == scope
         else _stock_count_dates(db, [inventory_period], cover_scope).get(inventory_period)
     )
+    # The count the stock card, weeks of cover and the safety-stock card are
+    # read at, and when it was counted: "stock now" keeps the latest count
+    # (2026-10-03), while the order plan reads the count that opens its cycle
+    # (reorder_preview below, GET /recommendations).
+    latest_stock_counts = stock_counts(
+        db, inventory_period, stock_coverage or ([] if scope == "all" else [scope]),
+    )
     if inventory_period is None:
         soh_value_blocked_reason = f"Inventory_Fact_Real has no rows for {_scope_label(scope)} at all."
     elif not UNILEVER_SOH_UNIT_CONFIRMED:
@@ -1400,6 +1410,10 @@ def get_dashboard(
             "below_items": [],
             "blocked_reason": safety_stock_rate_blocked_reason,
         }
+    # Stock now: the latest count, never the LP cycle's opening one, so the
+    # card says which count and when.
+    safety_stock_exposure["stock_period"] = inventory_period
+    safety_stock_exposure["stock_counts"] = latest_stock_counts
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring
@@ -1844,20 +1858,27 @@ def get_dashboard(
     rp_select, rp_select_params = _recommendation_select_one(mode)
     rp_query = rp_select + f" WHERE lr.status = 'pending' {principal_filter} {lp_cycle_filter}"
     # Both anchors are bound, not inlined, so reorder_preview resolves them
-    # under the SAME scope as the rows it shows. `inventory_period` is the
-    # already-scoped value from :763. The ABC anchor is the scoped LATEST,
-    # deliberately not the page's `abc_period` — that one is rewound to the
-    # picker's applied end month, and reorder_preview answers "order now".
+    # under the SAME scope as the rows it shows. The stock anchor is the
+    # count that opens the LP's cycle (2026-10-03), the one the plan was made
+    # from and GET /recommendations shows, not the stock card's latest. The
+    # ABC anchor is the scoped LATEST, deliberately not the page's
+    # `abc_period` — that one is rewound to the picker's applied end month,
+    # and reorder_preview answers "order now".
+    rp_stock_period = opening_period(lp_cycle) if lp_cycle is not None else None
     rp_rows = db.execute(
         text(rp_query),
         {
-            "inv_period": inventory_period,
+            "inv_period": rp_stock_period,
             "abc_period": latest_abc_period(db, scope),
             "current_cycle": lp_cycle,
             **rp_select_params,
         },
     ).mappings().all()
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
+    rp_stock_counts = (
+        stock_counts(db, rp_stock_period, sorted({r["principal"] for r in rp_rows}), cycle=lp_cycle)
+        if lp_cycle is not None else []
+    )
     # Within an urgency, highest priority first — the Reorder page's own
     # ranking (revenue share x units below the reorder point). Urgency alone
     # left the order to the query, so the card showed an arbitrary five of
@@ -1892,6 +1913,10 @@ def get_dashboard(
             "storage": LP_WEIGHT_STORAGE,
         }),
         "lp_weights_source": "run" if lp_run else "defaults",
+        # The count these rows' stock comes from — the one that opens the
+        # cycle — and when it was counted, or why there is none
+        # (backend/stock_units.stock_count_info).
+        "stock_counts": rp_stock_counts,
     }
 
     # ---- policy_comparison (band 4: LP target stock vs SSM's 3-week policy) --
@@ -2016,6 +2041,10 @@ def get_dashboard(
             # 2026-04-06 count. The card says "counted 6 Apr 2026" from this,
             # since a bare month read as a month-end figure. Null when unknown.
             "soh_count_date": soh_count_date,
+            # [{principal, period, role: 'latest', counted_on, counted_on_note,
+            #   flag, ...}] for soh_period: when the stock this card, weeks of
+            # cover and safety_stock_exposure read was counted.
+            "stock_counts": latest_stock_counts,
             "soh_coverage": stock_coverage,
             "safety_stock_rate": safety_stock_rate,
             "safety_stock_rate_blocked_reason": safety_stock_rate_blocked_reason,

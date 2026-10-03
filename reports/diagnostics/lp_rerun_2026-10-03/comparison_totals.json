@@ -1,0 +1,83 @@
+{
+  "30 Sep 105% (latest count)": {
+    "products_planned": 73,
+    "short_products": 40,
+    "short_pieces": 38931.0,
+    "order_pieces": 1216540.0,
+    "order_pesos_at_cost": 14007128.03,
+    "need_pieces": 1255471.0,
+    "stock_on_hand_pieces": 759258.0,
+    "products_ordering_0": 6,
+    "tier_a_below_ss_latest_count": [
+      35,
+      70
+    ],
+    "tier_a_below_ss_opening_count": [
+      6,
+      72
+    ]
+  },
+  "3 Oct 103% (opening count)": {
+    "products_planned": 73,
+    "short_products": 0,
+    "short_pieces": 0.0,
+    "order_pieces": 325468.0,
+    "order_pesos_at_cost": 6964217.49,
+    "need_pieces": 325468.0,
+    "stock_on_hand_pieces": 2093786.0,
+    "products_ordering_0": 31,
+    "tier_a_below_ss_latest_count": [
+      35,
+      70
+    ],
+    "tier_a_below_ss_opening_count": [
+      6,
+      72
+    ]
+  },
+  "context": {
+    "abc_period": "2026-02",
+    "tier_a_count": 132,
+    "forecast_result_max_generated_at": "2026-09-21 10:08:03.839825+00:00",
+    "accepted_row_before": [
+      {
+        "product_name": "MASTER CLEANSER ANT-ACNE/PIMPLE 144X70ML",
+        "sku_code": 20292811,
+        "q_i": 1331.24,
+        "decided_at": "2026-08-24 05:49:00.800371+00:00"
+      }
+    ],
+    "accepted_row_after": [
+      {
+        "product_key": "6",
+        "q_i": "1331.24",
+        "status": "accepted",
+        "lp_run_key": "nan",
+        "generated_at": "2026-08-23 08:43:53.010479+00:00"
+      }
+    ],
+    "pending_rows_after": 73,
+    "pending_rows_linked_to_run": [
+      1
+    ],
+    "lp_run_rows": [
+      {
+        "run_key": "1",
+        "planning_cycle_date": "2026-03-01",
+        "principal_scope": "both",
+        "inputs": "{'notes': ['unilever stock count 2026-02 (counted 2026-03-02): accepted for planning, pending SSM confirmation (decided 2026-10-03)', 'unilever: stock counts are from the Ilocos Sur warehouse workbook; per-product sales are La Union only - territory match unverified.'], 'lead_days': 3.0, 'cover_rule': 'aggregate', 'review_days': 5.0, 'stock_counts': {'unilever': {'flag': 'accepted for planning, pending SSM confirmation (decided 2026-10-03)', 'period': '2026-02', 'row_count': 812, 'counted_on': '2026-03-02', 'counted_on_note': None}}, 'target_weeks': 3.0, 'allocation_pct': 103.0, 'warehouse_capacity': 3800000.0, 'storage_cost_per_unit': 0.5, 'default_procurement_cost_per_unit': 25.0}",
+        "model": "{'weights': {'cost': 0.45, 'storage': 0.2, 'service_level': 0.35}, 'z_score': 1.28, 'mase_gate': 1.0, 'allocation': {'pct': 103.0, 'unit': 'pieces', 'basis_year': 2025, 'monthly_ceiling': {'unilever': 1193368.21}}, 'service_level_pct': 90, 'safety_stock_assumption': \"Safety stock = 1.28 \u00d7 \u03c3_monthly \u00f7 \u221a(business days in a month) \u00d7 \u221a(review + lead days). Scaling a monthly \u03c3 down to days assumes demand is independent from one day to the next. Monthly data can't test that (reports/LP_READINESS.md \u00a73.5: the demand is intermittent, 66% of months are zero), and for a window shorter than a month it offers no clean alternative. An assumption, pending the adviser's safety-stock ruling.\", 'safety_stock_window_days': 8.0}",
+        "code_version": "e6991b556a26b0b5f25a7564765e67bdf8716b92",
+        "created_at": "2026-10-03 08:08:41.509691+00:00"
+      }
+    ],
+    "nan_check": {
+      "q_old_105": 0,
+      "q_new_103": 0,
+      "forecast_value": 0,
+      "cost_per_piece": 0,
+      "ss_old": 0,
+      "ss_new": 0
+    }
+  }
+}

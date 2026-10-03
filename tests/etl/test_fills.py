@@ -127,7 +127,7 @@ def test_0038_keeps_the_real_views_and_tags_every_fill():
     assert "CHECK (status IN ('real', 'derived', 'synthetic', 'partial', 'missing'))" in sql
     for t in ("derived_receipt_fact", "sku_demand_fill"):
         assert f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY" in sql
-    assert "0032 -> 0033 -> 0035 -> 0036 -> 0038" in MIGRATION
+    assert "0032 -> 0033 -> 0036 -> 0037 -> 0038" in MIGRATION
 
 
 def test_the_loader_runs_the_fill_step_after_a_load_unless_told_not_to():

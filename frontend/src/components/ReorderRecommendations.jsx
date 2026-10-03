@@ -17,6 +17,7 @@ import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
 import { getRecommendations, decideRecommendation } from '../api/recommendations';
 import { formatDate, formatDateTime, formatMonth } from '../utils/formatDate';
+import { labelForPrincipal } from '../principals';
 import { formatUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
@@ -46,7 +47,7 @@ const formatSKU = (sku) => {
 // The top ACT_NOW_COUNT are "Act now"; everything else is collapsed under
 // "Review later". Rows the backend could not rank (no revenue share, or no
 // stock figure in pieces) sort to the bottom and are marked unranked — never
-// ranked as if their score were zero. A SKU missing from the latest stock
+// ranked as if their score were zero. A SKU missing from the opening stock
 // count is NOT one of them since 2026-10-01: the LP plans it as 0 on hand,
 // so the API does too (stock_not_in_count) and it is ranked like the rest.
 const ACT_NOW_COUNT = 20;
@@ -96,7 +97,7 @@ const piecesTitle = (pieces, packSize) => {
 };
 
 // Said wherever a 0 on hand was inferred rather than counted.
-const NOT_IN_COUNT_NOTE = 'Not in the latest stock count — treated as 0, as the plan does (the stock file lists no '
+const NOT_IN_COUNT_NOTE = 'Not in the opening stock count — treated as 0, as the plan does (the stock file lists no '
   + 'zero-stock rows, so a missing SKU is most likely out of stock).';
 
 // The LP's arithmetic for one row, in its Suggested qty tooltip: forecast +
@@ -107,7 +108,13 @@ const lpQtyTitle = (item) => {
   const n = (v) => Math.round(v).toLocaleString();
   if (item.forecast == null || item.stock == null) return piecesTitle(item.orderQty, item.packSize);
   const need = Math.max(0, item.forecast + item.rop - item.stock);
-  const onHand = item.stockNotInCount ? '0 on hand (not in the latest stock count)' : `${n(item.stock)} on hand`;
+  // A Del Monte count has no loaded date: name its month, never the 1st-of-month placeholder.
+  const counted = item.stockCountedOn
+    ? `stock counted ${formatDate(item.stockCountedOn)}`
+    : item.stockCountMonth ? `count month: ${formatMonth(item.stockCountMonth)} (exact date not recorded)` : null;
+  const onHand = item.stockNotInCount
+    ? `0 on hand (not in the opening stock count${counted ? `, ${counted}` : ''})`
+    : `${n(item.stock)} on hand${counted ? ` (${counted})` : ''}`;
   const working = `${n(item.forecast)} forecast + ${n(item.rop)} target − ${onHand} = ${n(need)} pieces needed`;
   if (item.shortUnits > 0) {
     return `${working}; ${n(item.shortUnits)} cut to fit the supplier allocation, so ${n(item.orderQty)} ordered `
@@ -171,7 +178,12 @@ const ReorderRecommendations = () => {
     getRecommendations({ status: 'pending', principal })
       .then((res) => {
         if (cancelled) return;
-        setRawItems(res.items || []);
+        // The stock count each row was checked against — the one that opens
+        // its cycle — attached here so the row can say when it was counted.
+        const counts = new Map((res.stock_counts || []).map((c) => [`${c.cycle}|${c.principal}`, c]));
+        setRawItems((res.items || []).map((it) => ({
+          ...it, stock_count: counts.get(`${it.planning_cycle_date}|${it.principal}`) || null,
+        })));
         setMeta({
           cycleDate: res.planning_cycle_date || null,
           supersededCount: res.superseded_count || 0,
@@ -179,6 +191,9 @@ const ReorderRecommendations = () => {
           // The solver's own weights and service level (backend/lp_cycle.py),
           // for the detail modal to state instead of repeating constants.
           lpModel: res.lp_model || null,
+          // The opening stock counts the rows were checked against, with
+          // their dates and any flag (backend/stock_units.stock_count_info).
+          stockCounts: res.stock_counts || [],
           // Preview with the what-if LP (backend/data_mode.py): these rows
           // were never saved, so there is nothing to accept or dismiss.
           whatIf: Boolean(res.data_mode?.outputs),
@@ -220,9 +235,13 @@ const ReorderRecommendations = () => {
         product: item.product_name || 'Unknown Product',
         rop: item.rop_i,
         // Pieces. 0 with stockNotInCount when the SKU is missing from the
-        // latest stock count (the LP's reading); null only when there is no
+        // opening stock count (the LP's reading); null only when there is no
         // figure in pieces at all — stockBlockedReason says why.
         stock: item.current_stock,
+        // When that count was taken; null where the file's date isn't loaded
+        // (Del Monte), which names the count's month instead.
+        stockCountedOn: item.stock_count?.counted_on || null,
+        stockCountMonth: item.stock_count?.available ? item.stock_count.period : null,
         stockNotInCount: Boolean(item.stock_not_in_count),
         stockBlockedReason: item.stock_blocked_reason,
         packSize: item.pack_size, // pieces per case; null = show pieces only
@@ -326,7 +345,7 @@ const ReorderRecommendations = () => {
   // Rows the backend could not rank (no stock figure or no revenue share)
   // have an UNKNOWN risk, not a lower one, so the card counts them apart.
   const reviewLaterUnranked = reviewLaterRows.filter((r) => r.priorityScore == null).length;
-  // Missing from the latest stock count, so planned (and shown) as 0 on
+  // Missing from the opening stock count, so planned (and shown) as 0 on
   // hand — 3 of the 73 rows in the 2026-03 cycle, all cut by the LP. Kept
   // apart from rows with no stock figure at all (NO DATA: a stock row the
   // API can't put in pieces), which stay unranked.
@@ -344,6 +363,20 @@ const ReorderRecommendations = () => {
   // The LP's own settings (backend/lp_cycle.lp_model_info), so the page's
   // account of how it cuts follows the run rather than a retyped copy.
   const lpInputs = meta?.lpModel?.inputs || {};
+  // "Opening stock: Unilever count of Feb 2026, counted Mar 2, 2026 (accepted
+  // for planning, pending SSM confirmation …)" for the cycle on screen, or the
+  // reason there is none ("no opening stock count for …").
+  const openingCountNote = (meta?.stockCounts || [])
+    .filter((c) => !selectedCycle || c.cycle === selectedCycle)
+    .map((c) => {
+      const who = labelForPrincipal(c.principal);
+      if (!c.available) return `${who}: ${c.reason}.`;
+      const when = c.counted_on
+        ? `counted ${formatDate(c.counted_on)}`
+        : 'exact date not recorded';
+      return `Opening stock: ${who} count of ${formatMonth(c.period)}, ${when}${c.flag ? ` (${c.flag})` : ''}.`;
+    })
+    .join(' ');
   const allocationPct = lpInputs.allocation_pct ?? null;
 
   // Every figure on this page says which period it belongs to (Sir
@@ -724,14 +757,14 @@ const ReorderRecommendations = () => {
       <div className="reorder-table-toolbar">
         <p className="reorder-table-note">
           All quantities are in pieces, for the {planLabel}; under each order is its rough size in cases (pieces ÷
-          pieces per case). Current stock is the latest stock count
-          {meta?.stockCountDate ? `, taken ${formatDate(meta.stockCountDate)}` : ''}.
-          Suggested qty = the month&apos;s forecast + target stock − current stock. A row marked &ldquo;short&rdquo; was cut to
-          fit the supplier allocation and ends the month that far below its target. A SKU missing from the latest
-          stock count shows 0, &ldquo;not in count&rdquo;: the plan treats it as out of stock. Ranked by revenue share ×
-          pieces below the target stock. Cover is in days on a peso basis (stock at cost ÷ daily sales value
+          pieces per case). Suggested qty = the month&apos;s forecast + target stock − stock at the start of the month
+          (the stock count that opens it). A row marked &ldquo;short&rdquo; was cut to fit the supplier allocation and
+          ends the month that far below its target. A SKU missing from that stock count shows 0, &ldquo;not in
+          count&rdquo;: the plan treats it as out of stock. Ranked by revenue share × pieces below the target stock.
+          Cover is in days on a peso basis (stock at cost ÷ daily sales value
           {coverSalesLabel ? ` over ${coverSalesLabel}` : ''}).
         </p>
+        {openingCountNote && <p className="reorder-table-note">{openingCountNote}</p>}
         {meta?.whatIf && (
           <p className="chart-placeholder-note">
             Preview: these recommendations are a what-if run of the LP on the five-year history, 2021–22 placeholder
@@ -784,7 +817,7 @@ const ReorderRecommendations = () => {
                 <span className="reorder-th-period">{planLabel}</span>
               </th>
               <th className="table-num col-fit">
-                Current stock (pieces)
+                Opening stock (pieces)
                 <span className="reorder-th-period">{countLabel}</span>
               </th>
               <th className="table-num col-fit">
@@ -801,7 +834,7 @@ const ReorderRecommendations = () => {
                 Suggested qty (pieces)
                 <InfoTip label="About suggested quantity">
                   What to order, in pieces, worked out by the optimizer (an LP, or linear-programming model): forecast +
-                  target stock − current stock, less any cut made to fit the supplier allocation. The line under it is
+                  target stock − opening stock, less any cut made to fit the supplier allocation. The line under it is
                   the rough case count; the LP doesn&apos;t round to whole cases.
                 </InfoTip>
                 <span className="reorder-th-period">{planLabel}</span>

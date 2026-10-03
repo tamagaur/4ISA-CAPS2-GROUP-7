@@ -21,8 +21,8 @@
 -- (SELECT * is expanded when a view is created), so the new fill_source column
 -- never reaches them and every fill row stays excluded by is_demo = false.
 --
--- Apply order on public: 0032 -> 0033 -> 0035 -> 0036 -> 0038. This file needs
--- 0033 (etl_coverage, etl_load_event); it does not touch what 0035/0036 create.
+-- Apply order on public: 0032 -> 0033 -> 0036 -> 0037 -> 0038. This file needs
+-- 0033 (etl_coverage, etl_load_event); it does not touch what 0036/0037 create.
 
 BEGIN;
 

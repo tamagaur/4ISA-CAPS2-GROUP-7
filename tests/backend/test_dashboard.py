@@ -132,7 +132,11 @@ class FakeSession:
         # {period: date} for one count day, or {period: (first, last)} for a
         # period whose rows in scope were counted on two different days.
         count_dates: dict | None = None,
+        # backend/stock_units.STOCK_COUNTS_SQL: {(principal, period): (row_count,
+        # first_date, last_date)}. Empty = no principal counted at any period.
+        stock_counts: dict | None = None,
     ):
+        self.stock_counts = stock_counts or {}
         self.recommendation_count = recommendation_count
         self.forecast_total = forecast_total
         self.forecast_unreliable = forecast_unreliable
@@ -188,7 +192,7 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
 
-        # backend/lp_cycle.stored_run (migration 0035). Before every
+        # backend/lp_cycle.stored_run (migration 0037). Before every
         # lp_recommendation matcher: its subquery reads that table too.
         if "to_regclass('lp_run')" in sql:
             return FakeResult([{"present": self.lp_run is not None}])
@@ -199,6 +203,14 @@ class FakeSession:
         # they read the same table with the same status predicate.
         if "MAX(lr.planning_cycle_date) AS d" in sql:
             return FakeResult([{"d": self.lp_cycle_date}])
+
+        # backend/stock_units.stock_counts: which count, and when it was taken.
+        if "GROUP BY inv.principal, inv._period" in sql:
+            period = params["count_period"]
+            return FakeResult([
+                {"principal": who, "period": p, "row_count": n, "first_date": first, "last_date": last}
+                for (who, p), (n, first, last) in self.stock_counts.items() if p == period
+            ])
 
         if "MAX(lr.generated_at) AS t" in sql:
             stale = self.lp_stale_rows
@@ -1017,7 +1029,44 @@ def test_reorder_preview_empty_when_no_pending_recommendations():
         "rows": [], "critical_count": 0, "low_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
         "lp_weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
         "lp_weights_source": "defaults",
+        "stock_counts": [],  # no LP cycle, so no opening count to name
     }
+
+
+def test_stock_cards_keep_the_latest_count_and_say_when_it_was_counted():
+    """'Stock now' (the stock card, weeks of cover, safety-stock exposure)
+    stays on the latest count — 2026-03, counted 2026-04-06 — and now names
+    its date (2026-10-03)."""
+    session = FakeSession(
+        latest_inventory_period="2026-03", soh={"2026-03": 22_700_825.83},
+        stock_counts={("unilever", "2026-03"): (785, datetime.date(2026, 4, 6), datetime.date(2026, 4, 6)),
+                      ("unilever", "2026-02"): (812, datetime.date(2026, 3, 2), datetime.date(2026, 3, 2))},
+    )
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    count = body["kpis"]["stock_counts"]
+    assert [(x["principal"], x["period"], x["role"], x["counted_on"]) for x in count] == [
+        ("unilever", "2026-03", "latest", "2026-04-06")]
+    assert body["safety_stock_exposure"]["stock_period"] == "2026-03"
+    assert body["safety_stock_exposure"]["stock_counts"] == count
+
+
+def test_reorder_preview_reads_the_count_that_opens_the_cycle():
+    """The preview is the Reorder page's first rows, so it checks them
+    against the count the plan was made from (2026-02 for cycle 2026-03),
+    while the stock card above stays on the latest (2026-03)."""
+    session = FakeSession(
+        latest_inventory_period="2026-03", lp_cycle_date=datetime.date(2026, 3, 1),
+        reco_preview_rows=[_reco_row(1, urgency_stock=10, rop_i=100)],
+        stock_counts={("unilever", "2026-02"): (812, datetime.date(2026, 3, 2), datetime.date(2026, 3, 2))},
+    )
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    preview_params = next(p for s, p in session.calls if "AS in_stock_count" in s)
+    assert preview_params["inv_period"] == "2026-02"
+    counts = body["reorder_preview"]["stock_counts"]
+    assert [(x["cycle"], x["period"], x["role"], x["counted_on"]) for x in counts] == [
+        ("2026-03-01", "2026-02", "opening", "2026-03-02")]
 
 
 def test_reorder_preview_lp_weights_always_present_and_matches_solver_constants():

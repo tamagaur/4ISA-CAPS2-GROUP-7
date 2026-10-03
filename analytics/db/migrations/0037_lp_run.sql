@@ -1,9 +1,10 @@
 -- analytics/db/migrations/0037_lp_run.sql
 --
--- NOT APPLIED. Written 2026-09-30 on feat/params-consolidation (item 8 of the
--- parameter consolidation). Applying it to public is Yuan's cutover call.
--- Numbered 0035: 0034 is reserved for Audrey's permissions migration, 0036
--- for security, 0037+ for format resilience.
+-- Written 2026-09-30 on feat/params-consolidation (item 8 of the parameter
+-- consolidation) as 0035_lp_run.sql. Renumbered 0037 on 2026-10-03 (Yuan),
+-- before its public apply: public's ledger already held 0035_user_two_factor.sql
+-- (applied 2026-10-02, table user_mfa), and two files sharing a number make
+-- the runner refuse every migration (_assert_no_new_number_collision).
 --
 -- What each LP run actually used. LP_Recommendation keeps only q_i / rop_i /
 -- ss_i per product, so every screen describing the LP showed the current

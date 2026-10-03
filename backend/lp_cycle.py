@@ -67,7 +67,7 @@ CURRENT_CYCLE_CLAUSE = " AND lr.planning_cycle_date = :current_cycle"
 
 def stored_run(db: Session, cycle: datetime.date | None, principal: str | None = None,
                mode: str = REAL) -> dict | None:
-    """The lp_run row (migration 0035) behind `cycle`'s pending rows in the
+    """The lp_run row (migration 0037) behind `cycle`'s pending rows in the
     selected scope: what that LP run actually used. None when there is
     nothing to look up — preview mode, no cycle, the table not applied yet
     (checked with to_regclass first, so a missing table never aborts the
@@ -115,6 +115,8 @@ def lp_model_info(run: dict | None = None) -> dict:
             "inputs_are_placeholders": True,
             "inputs_source": "defaults",
             "run": None,
+            # No run, so no stock count to name.
+            "stock_counts": None,
             "safety_stock_assumption": SAFETY_STOCK_ASSUMPTION,
         }
     model, inputs = run["model"], run["inputs"]
@@ -127,6 +129,11 @@ def lp_model_info(run: dict | None = None) -> dict:
         "inputs_source": "run",
         "inputs_differing_from_defaults": sorted(k for k, v in PLACEHOLDERS.items() if inputs.get(k) != v),
         "allocation": model.get("allocation"),
+        # {principal: {period, counted_on, counted_on_note, row_count, flag}}:
+        # the opening stock counts the run planned from (scripts/run_lp.py
+        # run_record). None for a run recorded before 2026-10-03, which
+        # didn't record its count (it used each principal's latest).
+        "stock_counts": inputs.get("stock_counts"),
         "run": {
             "run_key": run["run_key"],
             "planning_cycle_date": run["planning_cycle_date"],
