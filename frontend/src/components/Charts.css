@@ -1299,6 +1299,12 @@
   cursor: pointer;
 }
 
+/* The arrow stays on the sentence's last line instead of dropping below it. */
+.abc-tier-card-atrisk svg {
+  display: inline;
+  vertical-align: -2px;
+}
+
 .abc-tier-card-atrisk + .abc-tier-card-link {
   margin-top: 0.4rem;
 }

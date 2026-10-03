@@ -141,9 +141,18 @@ const safetyStockMetricType = (rate) => {
 // `realOnly` (preview mode only) tags a predictive or prescriptive widget
 // that preview deliberately leaves on real data (backend/data_mode.py), so
 // the page says which cards the placeholder months reach and which not.
-const Slot = ({ kind, realOnly = false, children }) => (
+//
+// `question` is the plain question the card answers, and it leads (Technical
+// Adviser, 2 Oct 2026: every card starts from "this answers: which products
+// matter most?", and jargon is not a label). Read down the page the
+// questions are the storyline: what happened -> which products matter ->
+// what happens next -> what to do. `hint` is a few quiet words naming what
+// the card shows; the analytics type stays as the small tag after them.
+const Slot = ({ kind, question, hint, realOnly = false, children }) => (
   <div className="dash-slot" data-kind={kind}>
     <span className="dash-kind-row">
+      {question && <span className="dash-question">{question}</span>}
+      {hint && <span className="dash-question-hint">{hint}</span>}
       <span className="dash-kind">{kind}</span>
       {realOnly && (
         <span className="dash-real-only" title="Preview adds placeholder months to the descriptive views only. This card reads real data.">
@@ -702,11 +711,11 @@ const Dashboard = () => {
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
           <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} /></Slot>
+            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} /></Slot>
           </div>
 
           <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
-            <Slot kind="Descriptive">
+            <Slot kind="Descriptive" question="Which products matter most?">
               <ABCDonutWidget
                 data={abcMix}
                 revenue={data.abc_revenue}
@@ -719,7 +728,7 @@ const Dashboard = () => {
                   : null}
               />
             </Slot>
-            <Slot kind="Descriptive">
+            <Slot kind="Descriptive" question="Is any of our stock dead?">
               <CategoryStockBarWidget
                 data={tierStock}
                 note={placeholderNote(data.abc_revenue?.period)}
@@ -733,7 +742,7 @@ const Dashboard = () => {
 
           {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
           <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-forecast">
-            <Slot kind="Predictive" realOnly={portfolioRealOnly}>
+            <Slot kind="Predictive" question="What will happen next?" hint="Demand forecast" realOnly={portfolioRealOnly}>
               <PortfolioForecastWidget
                 series={portfolioSeries}
                 gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
@@ -753,7 +762,7 @@ const Dashboard = () => {
               />
             </Slot>
             {!lpHidden && (
-              <Slot kind="Prescriptive" realOnly={preview && realOnly.has('reorder_preview')}>
+              <Slot kind="Prescriptive" question="What should we do?" hint="What to order, and how much" realOnly={preview && realOnly.has('reorder_preview')}>
                 <ReorderRecommendationWidget
                   rows={reorderRows}
                   criticalCount={reorderPreview.critical_count ?? 0}
@@ -771,11 +780,11 @@ const Dashboard = () => {
               beside SSM's own allocation rule applied to the sales data */}
           <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-policy">
             {!lpHidden && (
-              <Slot kind="Prescriptive" realOnly={preview && realOnly.has('policy_comparison')}>
+              <Slot kind="Prescriptive" question="Is the 3-week rule working?" realOnly={preview && realOnly.has('policy_comparison')}>
                 <PolicyComparisonWidget comparison={data.policy_comparison} />
               </Slot>
             )}
-            <Slot kind="Descriptive">
+            <Slot kind="Descriptive" question="Are sales keeping pace with the allocation?">
               <AllocationWidget allocation={data.allocation} />
             </Slot>
           </div>
