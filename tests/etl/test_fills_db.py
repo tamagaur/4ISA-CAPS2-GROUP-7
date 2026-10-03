@@ -49,14 +49,27 @@ def _n(conn, sql, **p):
 def test_a_second_run_changes_nothing(conn):
     events = _n(conn, "SELECT count(*) FROM etl_load_event")
     out = _fill(conn)
-    assert out["cells_changed"] == 0 and out["swept"] == 0 and out["4_gaps"] == {}
+    assert out["cells_changed"] == 0 and out["swept"] == 0 and out["4_gaps"] == {} and out["4b_branch_gaps"] == {}
     assert out["ledger"] == {"events": 0, "coverage_rows_written": 0}
     for k in ("1_derived_receipts", "2_unilever_returns", "3_delmonte_split"):
         assert (out[k]["added"], out[k]["removed"]) == (0, 0)
     assert _n(conn, "SELECT count(*) FROM etl_load_event") == events
 
 
-def test_real_rows_replace_the_fill_and_the_cell_is_never_refilled(conn):
+def _copy_month(conn, table, m, site="pangasinan"):
+    from scripts import fill_missing as fm
+    return fm.adjacent_month(fm._branch_months(conn, "delmonte", table, site)[0], m)
+
+
+def _real_rows(conn, table, m, site="pangasinan"):
+    return _n(conn, f"SELECT count(*) FROM {table} WHERE principal = 'delmonte' AND _period = :m AND region = :s AND NOT is_demo",
+              m=m, s=site)
+
+
+def test_real_rows_replace_the_fill_and_the_missing_branch_gets_its_adjacent_month(conn):
+    """H2 (Yuan, 2026-10-03): real Ilocos rows arrive for a gap month. The loader removes the month's fill; the fill
+    step then copies Pangasinan's adjacent real month in (carried forward) - never anything for Ilocos."""
+    from scripts import fill_missing as fm
     from scripts import load_slices as ls
     fam = next(f for f in ls.FAMILIES if f.key == "sales_return")
     m = "2024-05"
@@ -73,9 +86,20 @@ def test_real_rows_replace_the_fill_and_the_cell_is_never_refilled(conn):
                          VALUES ('T-BILL', 'unilever', NULL, 1, false, 'test.xlsx', 'S', :m)"""), {"m": m})
     assert ls.remove_derived(conn, "unilever", "purchase_fact", m) == derived
     out = _fill(conn)
-    assert _n(conn, "SELECT count(*) FROM salesreturn_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo", m=m) == 0
+    t = _copy_month(conn, "salesreturn_fact", m)
+    want = _real_rows(conn, "salesreturn_fact", t)
+    assert t < m and want > 0
+    assert _n(conn, "SELECT count(*) FROM salesreturn_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo "
+                    "AND region = 'ilocos'", m=m) == 0
+    assert _n(conn, "SELECT count(*) FROM salesreturn_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo "
+                    "AND fill_source = :tag AND region = 'pangasinan' AND _src_file = :src", m=m, tag=fm.BRANCH,
+              src=f"{fm.TAG}branch_adjacent_salesreturn_fact_{m}_from_{t}_pangasinan") == want
+    assert _n(conn, "SELECT count(*) FROM salesreturn_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo", m=m) == want
+    assert _n(conn, "SELECT sum(net_amount) FROM salesreturn_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo", m=m) == \
+        _n(conn, "SELECT sum(net_amount) FROM salesreturn_fact WHERE principal = 'delmonte' AND _period = :t AND region = 'pangasinan' "
+                 "AND NOT is_demo", t=t)
     assert _n(conn, "SELECT count(*) FROM derived_receipt_fact WHERE _period = :m", m=m) == 0
-    assert ("delmonte", "salesreturn_fact", m) not in out and out["4_gaps"] == {}
+    assert out["4_gaps"] == {} and out["4b_branch_gaps"] == {f"delmonte.salesreturn_fact.{m}.pangasinan": {"from": t, "rows": want}}
     assert _n(conn, "SELECT status FROM etl_coverage WHERE principal = 'delmonte' AND table_name = 'salesreturn_fact' "
                     "AND month = :m", m=m) == "partial"            # one real branch of two
     assert _n(conn, "SELECT status FROM etl_coverage WHERE principal = 'unilever' AND table_name = 'purchase_fact' "
@@ -83,19 +107,21 @@ def test_real_rows_replace_the_fill_and_the_cell_is_never_refilled(conn):
 
 
 def test_the_sweep_removes_fills_the_loader_missed(conn):
-    """A real row arriving outside the loader's per-workbook-month delete (e.g. a sales row with another invoice month)."""
+    """A real row arriving outside the loader's per-workbook-month delete (e.g. a sales row with another invoice month):
+    every existing fill of the month goes; then the branch with no real rows gets its adjacent copy (H2)."""
     m = "2024-07"
     filled = _n(conn, "SELECT count(*) FROM salesreturn_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo", m=m)
     assert filled > 0
     conn.execute(text("""INSERT INTO salesreturn_fact (return_slip_num, invoice_num, principal, region, net_amount, is_demo,
                          _src_file, _src_sheet, _period) VALUES ('T-RS', 'T-INV', 'delmonte', 'ilocos', 1, false, 'test.xlsx', 'S', :m)"""), {"m": m})
     out = _fill(conn)
-    assert out["swept"] == filled
-    assert _n(conn, "SELECT count(*) FROM salesreturn_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo", m=m) == 0
+    want = _real_rows(conn, "salesreturn_fact", _copy_month(conn, "salesreturn_fact", m))
+    assert out["swept"] == filled and want > 0
+    assert _n(conn, "SELECT count(*) FROM salesreturn_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo", m=m) == want
     ev = conn.execute(text("SELECT synthetic_rows_removed, fill_rows_added FROM etl_load_event WHERE source = 'fill_missing' "
                            "AND principal = 'delmonte' AND table_name = 'salesreturn_fact' AND month = :m "
                            "ORDER BY load_event_key DESC LIMIT 1"), {"m": m}).one()
-    assert tuple(ev) == (filled, 0)
+    assert tuple(ev) == (filled, want)
 
 
 def test_a_cell_that_once_held_real_rows_stays_empty(conn):
@@ -186,3 +212,130 @@ def test_a_reviewed_category_map_switches_the_split_to_category_level(conn):
         WHERE (t.a, t.q) IS DISTINCT FROM (s.a, s.q)"""), {"rp": list(rollup), "rg": list(rollup.values())}).scalar()
     assert off == 0
     assert all(sku_map[s] == c for s, c in conn.execute(text("SELECT sku_code, category_path FROM sku_demand_fill")).all())
+
+
+# ---- H2 / H3 (Yuan, 2026-10-03; reports/diagnostics/coverage_check_2026-10-03.md) ----------------------------------
+H2_MONTH = "2023-02"                     # Del Monte stock: SSM's workbook holds Ilocos only
+
+
+def _branch_fill(conn, m=H2_MONTH):
+    return _n(conn, "SELECT count(*) FROM inventory_fact WHERE principal = 'delmonte' AND _period = :m AND region = 'pangasinan' "
+                    "AND is_demo AND fill_source = 'synthetic_branch_adjacent'", m=m)
+
+
+def test_a_missing_branch_beside_a_real_branch_copies_its_previous_month(conn):
+    from scripts import fill_missing as fm
+    _fill(conn)
+    real = dict(conn.execute(text("SELECT region, count(*) FROM inventory_fact_real WHERE principal = 'delmonte' AND _period = :m "
+                                  "GROUP BY 1"), {"m": H2_MONTH}).all())
+    assert set(real) == {"ilocos"}
+    t = _copy_month(conn, "inventory_fact", H2_MONTH)
+    assert t == "2023-01"                                              # the previous month, carried forward
+    want = _real_rows(conn, "inventory_fact", t)
+    assert _branch_fill(conn) == want > 0
+    src = f"{fm.TAG}branch_adjacent_inventory_fact_{H2_MONTH}_from_{t}_pangasinan"
+    assert _n(conn, "SELECT count(*) FROM inventory_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo AND "
+                    "(region <> 'pangasinan' OR _src_file <> :src)", m=H2_MONTH, src=src) == 0
+    same = conn.execute(text("""
+        SELECT (SELECT (sum(valuation), sum(quantity_on_hand), count(DISTINCT sku_code), max(snapshot_date))::text FROM inventory_fact
+                WHERE principal = 'delmonte' AND _period = :m AND is_demo),
+               (SELECT (sum(valuation), sum(quantity_on_hand), count(DISTINCT sku_code), max((snapshot_date + interval '1 month')::date))::text
+                FROM inventory_fact WHERE principal = 'delmonte' AND _period = :t AND region = 'pangasinan' AND NOT is_demo)"""),
+                        {"m": H2_MONTH, "t": t}).one()
+    assert same[0] == same[1]                                          # the same count, dated a month later
+    cov = conn.execute(text("SELECT status, real_rows, synthetic_rows FROM etl_coverage WHERE principal = 'delmonte' "
+                            "AND table_name = 'inventory_fact' AND month = :m"), {"m": H2_MONTH}).one()
+    assert tuple(cov) == ("partial", real["ilocos"], want)            # still partial: the branch's real count is missing
+
+
+def test_a_branch_copy_follows_its_adjacent_month(conn):
+    """No previous real month any more: the next one is copied instead, replacing the old copy."""
+    _fill(conn)
+    old = _branch_fill(conn)
+    conn.execute(text("DELETE FROM inventory_fact WHERE principal = 'delmonte' AND region = 'pangasinan' AND _period < :m"),
+                 {"m": H2_MONTH})
+    out = _fill(conn)
+    t = _copy_month(conn, "inventory_fact", H2_MONTH)
+    assert t == "2023-03" and _branch_fill(conn) == _real_rows(conn, "inventory_fact", t)
+    assert out["4b_branch_gaps"][f"delmonte.inventory_fact.{H2_MONTH}.pangasinan"] == {"from": t, "rows": _branch_fill(conn)}
+    ev = conn.execute(text("SELECT fill_rows_removed FROM etl_load_event WHERE source = 'fill_missing' AND principal = 'delmonte' "
+                           "AND table_name = 'inventory_fact' AND month = :m ORDER BY load_event_key DESC LIMIT 1"), {"m": H2_MONTH}).scalar()
+    assert ev == old
+
+
+def test_real_rows_for_the_missing_branch_replace_its_fill(conn):
+    _fill(conn)
+    assert _branch_fill(conn) > 0
+    conn.execute(text("""INSERT INTO inventory_fact (product_key, sku_code, snapshot_date, _period, principal, region, quantity_on_hand,
+                             is_demo, _src_file, _src_sheet)
+                         SELECT product_key, sku_code, DATE '2023-02-28', :m, 'delmonte', 'pangasinan', quantity_on_hand, false,
+                                'test.xlsx', 'S'
+                         FROM inventory_fact_real WHERE principal = 'delmonte' AND region = 'pangasinan' AND _period = '2023-03'
+                         ORDER BY inventory_key LIMIT 1"""), {"m": H2_MONTH})
+    out = _fill(conn)
+    assert _branch_fill(conn) == 0 and out["4b_branch_gaps"] == {}
+    assert _n(conn, "SELECT status FROM etl_coverage WHERE principal = 'delmonte' AND table_name = 'inventory_fact' AND month = :m",
+              m=H2_MONTH) == "real"
+
+
+def test_a_branch_that_once_held_real_rows_is_not_refilled(conn):
+    _fill(conn)
+    conn.execute(text("DELETE FROM inventory_fact WHERE principal = 'delmonte' AND _period = :m AND is_demo"), {"m": H2_MONTH})
+    conn.execute(text("""INSERT INTO etl_load_event (run_id, slice, principal, table_name, month, site, source, status, real_rows_after,
+                         run_by, started_at) VALUES ('t', :slice, 'delmonte', 'inventory_fact', :m, 'pangasinan',
+                         'inventory_sign_off', 'loaded', 5, 'pytest', now())"""),
+                 {"m": H2_MONTH, "slice": f"delmonte:inventory_fact:{H2_MONTH}:pangasinan:inventory_sign_off"})
+    out = _fill(conn)
+    assert _branch_fill(conn) == 0 and out["4b_branch_gaps"] == {}
+
+
+PREV = "to_char(to_date(d._period || '-01', 'YYYY-MM-DD') - interval '1 month', 'YYYY-MM')"
+
+
+def _in_count(month_sql, negate=False):
+    return (f"{'NOT ' if negate else ''}EXISTS (SELECT 1 FROM inventory_fact_real i WHERE i.principal = 'unilever' "
+            f"AND i.sku_code = d.sku_code AND i._period = {month_sql})")
+
+
+def _count_taken(month_sql):
+    return f"EXISTS (SELECT 1 FROM inventory_fact_real i WHERE i.principal = 'unilever' AND i._period = {month_sql})"
+
+
+def test_a_product_missing_from_the_previous_count_gets_receipts_from_opening_0(conn):
+    from scripts import fill_missing as fm
+    _fill(conn)
+    assert _n(conn, "SELECT count(*) FROM derived_receipt_fact WHERE opening_flag = :f", f=fm.OPENING_ASSUMED_ZERO) > 0
+    assert _n(conn, f"""SELECT count(*) FROM derived_receipt_fact d WHERE d.opening_flag IS NOT NULL AND (d.opening_pieces <> 0
+                OR {_in_count(PREV)} OR NOT {_count_taken(PREV)} OR {_in_count('d._period', negate=True)})""") == 0
+    # every other row's opening is the product's own previous count
+    assert _n(conn, f"""SELECT count(*) FROM derived_receipt_fact d WHERE d.opening_flag IS NULL AND {_in_count(PREV, negate=True)}""") == 0
+    assert _n(conn, "SELECT count(*) FROM derived_receipt_fact WHERE _period = '2023-01'") == 0     # no count before the first
+
+
+def test_a_product_missing_from_this_months_count_gets_receipts_from_closing_0(conn):
+    """The reverse case (Yuan, 2026-10-03): in the previous count, not in this month's - closing stock 0."""
+    from scripts import fill_missing as fm
+    _fill(conn)
+    assert _n(conn, "SELECT count(*) FROM derived_receipt_fact WHERE closing_flag = :f", f=fm.CLOSING_ASSUMED_ZERO) > 0
+    assert _n(conn, f"""SELECT count(*) FROM derived_receipt_fact d WHERE d.closing_flag IS NOT NULL AND (d.closing_pieces <> 0
+                OR d.opening_flag IS NOT NULL OR {_in_count('d._period')} OR NOT {_count_taken('d._period')}
+                OR {_in_count(PREV, negate=True)} OR d.balance_pieces <> d.sold_pieces - d.opening_pieces)""") == 0
+    # every unflagged row's closing is the product's own count this month
+    assert _n(conn, f"""SELECT count(*) FROM derived_receipt_fact d WHERE d.closing_flag IS NULL AND {_in_count('d._period', negate=True)}""") == 0
+
+
+def test_every_assumed_zero_keeps_the_negative_balance_rule(conn):
+    _fill(conn)
+    assert _n(conn, """SELECT count(*) FROM derived_receipt_fact WHERE (opening_flag IS NOT NULL OR closing_flag IS NOT NULL) AND
+                (balance_pieces <> closing_pieces - opening_pieces + sold_pieces OR receipt_pieces <> GREATEST(balance_pieces, 0)
+                 OR (balance_pieces < 0) <> (flag IS NOT DISTINCT FROM 'negative_balance'))""") == 0
+
+
+def test_an_assumed_zero_opening_from_a_possibly_partial_count_is_flagged(conn):
+    from scripts import fill_missing as fm
+    _fill(conn)
+    after = ["2025-06"]                                                # the month after each POSSIBLY_PARTIAL_COUNTS month
+    assert fm.POSSIBLY_PARTIAL_COUNTS == ("2025-05",)
+    assert _n(conn, "SELECT count(*) FROM derived_receipt_fact WHERE count_flag = :f", f=fm.AFTER_PARTIAL) > 0
+    assert _n(conn, """SELECT count(*) FROM derived_receipt_fact WHERE (count_flag IS NOT NULL) <>
+                (opening_flag IS NOT NULL AND _period = ANY(CAST(:a AS text[])))""", a=after) == 0
