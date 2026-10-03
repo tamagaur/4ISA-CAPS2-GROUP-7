@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ComposedChart, BarChart, Bar, Cell, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Area, ReferenceLine, ReferenceArea
+  Area, ReferenceLine
 } from 'recharts';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
@@ -332,41 +332,6 @@ const PREV_YEAR_OPACITY = 0.7;
 // still, so four shades on one plot don't turn to mud.
 const FILL_TOP_OPACITY = { cur: 0.26, prev: 0.1 };
 const FILL_BOTTOM_OPACITY = 0.02;
-
-// Past / Present / Future, by TODAY's date, on the latest year's calendar:
-// the present is the current month, the past every month before it (so the
-// past always ends at least one month before the current month), the future
-// every month after it. A latest year that is already over is all past.
-// Nothing is drawn for a section the data doesn't reach — the dashboard
-// holds no sales forecast in pesos, so the future is a labelled space, not
-// an invented line. Month slots are numbered 1–12; a boundary between two
-// sections falls halfway between their months, and the outer edges stop at
-// Jan and Dec, so the plot runs the full width of the card with no empty
-// half-slot either side. On a phone the one-month
-// present is too narrow for its name, so it reads "Now" there.
-const SECTION_STYLE = {
-  past: { label: 'Past', fill: 'var(--color-slate-500, #64748b)', fillOpacity: 0.06 },
-  present: { label: 'Present', narrowLabel: 'Now', fill: 'var(--color-brand-primary, #c53030)', fillOpacity: 0.09 },
-  future: { label: 'Future', fill: 'var(--color-slate-500, #64748b)', fillOpacity: 0 },
-};
-const timeSections = (year, today) => {
-  if (year == null) return [];
-  const span = (key, first, last) => ({
-    key, first, last, x1: Math.max(1, first - 0.5), x2: Math.min(12, last + 0.5), ...SECTION_STYLE[key],
-  });
-  const thisYear = today.getFullYear();
-  if (year < thisYear) return [span('past', 1, 12)];
-  if (year > thisYear) return [span('future', 1, 12)];
-  const month = today.getMonth() + 1;
-  return [
-    month > 1 ? span('past', 1, month - 1) : null,
-    span('present', month, month),
-    month < 12 ? span('future', month + 1, 12) : null,
-  ].filter(Boolean);
-};
-const sectionMonths = (sec, year) => (sec.first === sec.last
-  ? `${CALENDAR_MONTHS[sec.first - 1]} ${year}`
-  : `${CALENDAR_MONTHS[sec.first - 1]}–${CALENDAR_MONTHS[sec.last - 1]} ${year}`);
 // The plot's floor: 90% of the lowest visible value, rounded down to ₱5M,
 // never below zero. With every value between ₱10M and ₱40M a zero floor
 // spent half the card on empty space and flattened a ₱10M swing to a few
@@ -387,6 +352,7 @@ const pesoTicks = (values) => {
   if (ticks[ticks.length - 1] < hi) ticks.push(ticks[ticks.length - 1] + step);
   return ticks;
 };
+
 // Month ticks shrink on a narrow card so twelve of them still fit.
 const YOY_WIDE_PX = 700;
 const useElementWidth = (ref) => {
@@ -523,10 +489,8 @@ const INVENTORY_LABEL = 'Inventory value (at cost)';
 // inventory only; the axis follows what is visible.
 //
 // The lines are smooth, with no dot per month and a light shade of their
-// own colour beneath them, and the plot is divided into Past / Present /
-// Future by today's date (timeSections) — labelled at the top, with a thin
-// rule at each boundary. The lines run on through the sections wherever
-// there is data; nothing is invented where there is none.
+// own colour beneath them. The Past / Present / Future sections tried on
+// 2026-10-03 were taken out again the same day (commit 3b687b3 has them).
 //
 // `insight` is GET /dashboard's sales_vs_stock_insight: the one-sentence
 // takeaway under the title and the peak/low sales months this chart
@@ -637,13 +601,6 @@ export const SalesVsStockWidget = ({
     () => pesoTicks(rows.flatMap((r) => visible.map((sr) => r[sr.key]))),
     [rows, visible],
   );
-  // Room above the highest tick for the section labels, so "Past / Present
-  // / Future" never sit on a peak.
-  const yDomain = yTicks
-    ? [yTicks[0], yTicks[yTicks.length - 1] + (yTicks.length > 1 ? (yTicks[1] - yTicks[0]) * 0.6 : 0)]
-    : [0, 'auto'];
-  // Past / Present / Future on the latest year's calendar, by today's date.
-  const sections = useMemo(() => timeSections(slotYears.cur, new Date()), [slotYears.cur]);
   // Which years the lines are, said outright — the legend shows it, but a
   // range holding one year only, or three, needs the words.
   const yearsLine = slotYears.cur == null
@@ -652,16 +609,6 @@ export const SalesVsStockWidget = ({
       ? `One calendar year per line: only ${slotYears.cur} is in the selected range — widen it to overlay ${slotYears.cur - 1}.`
       : `${slotYears.cur} is the solid line, ${slotYears.prev} the dashed one; the colour tells the metric.`
         + (undrawnYears.length ? ` Earlier years in the range (${undrawnYears.join(', ')}) aren't drawn.` : '');
-  // What the sections mean, in words: which months each one is, and that
-  // the future holds no line of its own (there is no sales forecast in
-  // pesos to draw).
-  const sectionsLine = !sections.length
-    ? null
-    : sections.length === 1
-      ? `Every month of ${slotYears.cur} is in the ${sections[0].label.toLowerCase()} as of today.`
-      : `${sections.map((sec) => `${sec.label}: ${sectionMonths(sec, slotYears.cur)}`).join(' · ')}, by today's date. `
-        + `There is no sales forecast in pesos, so no ${slotYears.cur} line is drawn ahead of today`
-        + (slotYears.prev != null ? ` — the dashed ${slotYears.prev} line shows the same months last year.` : '.');
 
   // Direct labels: the current year's latest sales and inventory values at
   // their line ends, plus the backend's peak/low sales months on whichever
@@ -749,7 +696,6 @@ export const SalesVsStockWidget = ({
               chart plots (sales_vs_stock_insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
           {hasData && yearsLine && view === 'chart' && <p className="chart-insight">{yearsLine}</p>}
-          {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
         </div>
         {hasData && (
           <div className="chart-header-controls">
@@ -821,8 +767,8 @@ export const SalesVsStockWidget = ({
                 {/* Horizontal gridlines only (GRID_PROPS): a value is read
                     across, a month is read down from its label. */}
                 <CartesianGrid {...GRID_PROPS} />
-                {/* Twelve fixed slots, numbered 1–12 so a section can end
-                    between two months; every one labelled by its name. */}
+                {/* Twelve fixed slots, Jan at the left edge and Dec at the
+                    right, every one labelled by its name. */}
                 <XAxis
                   dataKey="m"
                   type="number"
@@ -843,34 +789,9 @@ export const SalesVsStockWidget = ({
                   tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                   tickFormatter={(v) => formatCompactPesos(v)}
                   label={yAxisTitle('Pesos (₱)')}
-                  domain={yDomain}
+                  domain={yTicks ? [yTicks[0], yTicks[yTicks.length - 1]] : [0, 'auto']}
                   ticks={yTicks ?? undefined}
                 />
-                {/* Past / Present / Future: a tint behind the lines, the
-                    name at the top, a thin rule where one ends and the next
-                    begins. Drawn first, so the lines run over them. */}
-                {sections.map((sec) => (
-                  <ReferenceArea
-                    key={sec.key}
-                    x1={sec.x1}
-                    x2={sec.x2}
-                    fill={sec.fill}
-                    fillOpacity={sec.fillOpacity}
-                    stroke="none"
-                    ifOverflow="visible"
-                    label={{
-                      value: (wide ? sec.label : sec.narrowLabel ?? sec.label).toUpperCase(),
-                      position: 'insideTop',
-                      fontSize: wide ? 10 : 8,
-                      fontWeight: 700,
-                      letterSpacing: wide ? 1 : 0,
-                      fill: CHART_COLORS.axisLabel,
-                    }}
-                  />
-                ))}
-                {sections.slice(1).map((sec) => (
-                  <ReferenceLine key={`edge-${sec.key}`} x={sec.x1} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
-                ))}
                 <Tooltip content={<SalesStockTooltip years={slotYears} />} />
                 {/* Smooth (monotone: the curve passes through every month's
                     value and never overshoots it), no dot per month, a
