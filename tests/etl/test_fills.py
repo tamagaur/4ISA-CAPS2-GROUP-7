@@ -15,6 +15,7 @@ from scripts import load_slices as ls
 from scripts.run_canonical_load import MIGRATIONS_DIR
 
 MIGRATION = (MIGRATIONS_DIR / "0038_data_fills.sql").read_text(encoding="utf-8")
+OPENING_MIGRATION = MIGRATIONS_DIR / "0040_derived_receipt_opening_flag.sql"
 
 # Del Monte months with a real return rate (real sales AND real returns), public 2026-10-02 (read-only).
 DM_RATE_MONTHS = ["2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-08", "2023-09", "2023-11", "2023-12",
@@ -104,6 +105,97 @@ def test_the_template_month_writers_shift_unilever_snapshots_by_whole_months():
     insert = next(s for s in cur.sql if s.lstrip().startswith("INSERT"))
     assert "make_interval(months => %(shift)s)" in insert
     assert gen.template_month("2026-09", ["2023-09", "2025-08", "2025-09"]) == "2025-09"
+
+
+def _cov(table, month, real, sites, principal="delmonte", expected=ls.SITES):
+    return {"principal": principal, "table_name": table, "month": month, "real_rows": real, "real_sites": list(sites),
+            "expected_sites": list(expected)}
+
+
+def test_a_missing_branch_beside_a_real_branch_is_a_fill_target():
+    rows = [
+        _cov("inventory_fact", "2023-02", 200, ["ilocos"]),                     # H2: Pangasinan missing
+        _cov("inventory_fact", "2023-03", 292, ["ilocos", "pangasinan"]),       # complete
+        _cov("sales_fact", "2024-05", 0, []),                                   # no real rows: the whole-cell rule's job
+        _cov("purchase_fact", "2025-09", 3, []),                                # real rows of no known branch: never guessed
+        _cov("salesreturn_fact", "2025-06", 5, ["pangasinan"]),                 # Ilocos once held real rows
+        _cov("sellout_fact", "2026-10", 5, ["ilocos"]),                         # after the window
+        _cov("inventory_fact", "2023-02", 700, [], principal="unilever", expected=()),
+    ]
+    once = {("delmonte", "salesreturn_fact", "2025-06", "ilocos")}
+    assert fm.branch_targets(rows, once, "2021-01", "2026-09") == [("delmonte", "inventory_fact", "2023-02", "pangasinan")]
+
+
+def test_a_missing_branch_copies_its_previous_real_month_else_the_next():
+    """H2 (Yuan, 2026-10-03): the branch's own count carried forward; the next one only when it has none before."""
+    assert fm.adjacent_month(["2023-01", "2023-03", "2024-02"], "2023-02") == "2023-01"
+    assert fm.adjacent_month(["2023-03", "2024-02"], "2023-02") == "2023-03"
+    assert fm.adjacent_month(["2022-11", "2023-03"], "2023-02") == "2022-11"     # carried forward, not the nearer next
+    assert fm.adjacent_month(["2023-02"], "2023-02") is None                       # never the month itself
+    assert fm.adjacent_month([], "2023-02") is None
+
+
+COLS = {"inventory_fact": [("inventory_key", "bigint"), ("product_key", "bigint"), ("sku_code", "text"), ("snapshot_date", "date"),
+                           ("principal", "text"), ("region", "text"), ("quantity_on_hand", "numeric"), ("_src_file", "text"),
+                           ("_src_sheet", "text"), ("is_demo", "boolean"), ("_period", "text"), ("valuation", "numeric"),
+                           ("fill_source", "text")],
+        "salesreturn_fact": [("return_key", "bigint"), ("return_slip_num", "text"), ("invoice_num", "text"),
+                             ("return_date", "date"), ("principal", "text"), ("region", "text"), ("net_amount", "numeric"),
+                             ("_src_file", "text"), ("_src_sheet", "text"), ("_period", "text"), ("is_demo", "boolean"),
+                             ("invoice_date", "date"), ("fill_source", "text")],
+        "sales_fact": [("sales_key", "bigint"), ("invoice_num", "text"), ("invoice_date", "date"), ("principal", "text"),
+                       ("region", "text"), ("net_amount", "numeric"), ("_src_file", "text"), ("_src_sheet", "text"),
+                       ("_period", "text"), ("is_demo", "boolean"), ("fill_source", "text")]}
+
+
+def _select_list(sql):
+    return " ".join(sql.split())
+
+
+def test_a_branch_copy_moves_the_month_and_its_dates_and_keeps_the_counts():
+    sql = _select_list(fm.branch_copy_sql("inventory_fact", COLS["inventory_fact"]))
+    assert "inventory_key" not in sql.split("SELECT", 1)[0]                     # the identity key is never copied
+    for expr in (":m", "true", ":tag", ":src", "'GENERATED'", "(r.snapshot_date + make_interval(months => :shift))::date",
+                 "r.quantity_on_hand", "r.valuation", "r.sku_code"):
+        assert expr in sql, expr
+    assert "FROM inventory_fact r WHERE NOT r.is_demo AND r.principal = :p AND r._period = :t AND r.region = :site" in sql
+
+
+def test_a_branch_copy_renumbers_the_documents_its_unique_key_is_built_on():
+    sql = _select_list(fm.branch_copy_sql("salesreturn_fact", COLS["salesreturn_fact"]))
+    for expr in ("'GEN-BR-RS/' || :m || '/' || :mark || lpad(row_number() OVER (ORDER BY r.return_key)::text, 4, '0')",
+                 "'GEN-BR-INV/' || :m || '/' || :mark || lpad(row_number() OVER (ORDER BY r.return_key)::text, 4, '0')",
+                 "(r.return_date + make_interval(months => :shift))::date", "(r.invoice_date + make_interval(months => :shift))::date"):
+        assert expr in sql, expr
+    sales = _select_list(fm.branch_copy_sql("sales_fact", COLS["sales_fact"]))
+    assert "r.region = :site" not in sales                                       # a sales row's branch is its workbook's
+    assert "(r._src_file, r._src_sheet) IN (SELECT * FROM unnest(CAST(:files AS text[]), CAST(:sheets AS text[])))" in sales
+
+
+def test_the_possibly_partial_counts_are_the_months_on_record():
+    assert fm.POSSIBLY_PARTIAL_COUNTS == ("2025-05",)
+
+
+def test_0040_flags_assumed_zero_counts_and_allows_the_branch_tag():
+    """H3 + the reverse case + H2 (Yuan, 2026-10-03). Unilever files omit zero rows, so a product missing from a count
+    that was taken has 0 on hand; each assumption is a flag only its own zero can carry. The negative-balance rule
+    and its constraint are untouched; the _Real views are not touched."""
+    sql = "\n".join(l for l in OPENING_MIGRATION.read_text(encoding="utf-8").splitlines() if not l.strip().startswith("--"))
+    for col in ("opening_flag", "closing_flag", "count_flag"):
+        assert f"ALTER TABLE derived_receipt_fact ADD COLUMN IF NOT EXISTS {col} TEXT" in sql
+    assert f"CHECK (opening_flag IS NULL OR (opening_flag = '{fm.OPENING_ASSUMED_ZERO}' AND opening_pieces = 0))" in sql
+    assert f"CHECK (closing_flag IS NULL OR (closing_flag = '{fm.CLOSING_ASSUMED_ZERO}' AND closing_pieces = 0))" in sql
+    assert f"CHECK (count_flag IS NULL OR (count_flag = '{fm.AFTER_PARTIAL}' AND opening_flag IS NOT NULL))" in sql
+    assert (fm.OPENING_ASSUMED_ZERO, fm.CLOSING_ASSUMED_ZERO, fm.AFTER_PARTIAL) == (
+        "opening_assumed_0_not_in_count", "closing_assumed_0_not_in_count", "after_possibly_partial_count")
+    for col in ("opening_flag", "closing_flag", "count_flag"):
+        assert col in fm.DERIVED_COLS
+    for t in ("sales_fact", "purchase_fact", "salesreturn_fact", "sellout_fact", "inventory_fact"):
+        assert f"ALTER TABLE {t} DROP CONSTRAINT IF EXISTS {t}_fill_source_check" in sql
+        assert re.search(rf"ALTER TABLE {t} ADD CONSTRAINT {t}_fill_source_check CHECK \(\s*fill_source IS NULL OR \(is_demo AND "
+                         rf"fill_source IN \([^)]*'{fm.BRANCH}'\)\)\)", sql), t
+    assert "unilever_sku_demand_fact" not in sql
+    assert "flag_matches_balance" not in sql and not re.search(r"\bVIEW\b", sql, re.I)
 
 
 def test_coverage_knows_derived_and_the_new_pairs():
