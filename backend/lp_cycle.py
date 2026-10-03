@@ -67,7 +67,7 @@ CURRENT_CYCLE_CLAUSE = " AND lr.planning_cycle_date = :current_cycle"
 
 def stored_run(db: Session, cycle: datetime.date | None, principal: str | None = None,
                mode: str = REAL) -> dict | None:
-    """The lp_run row (migration 0035) behind `cycle`'s pending rows in the
+    """The lp_run row (migration 0037) behind `cycle`'s pending rows in the
     selected scope: what that LP run actually used. None when there is
     nothing to look up — preview mode, no cycle, the table not applied yet
     (checked with to_regclass first, so a missing table never aborts the

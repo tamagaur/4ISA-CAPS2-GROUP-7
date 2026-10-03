@@ -84,7 +84,7 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
         scope = params.get("principal")
-        # backend/lp_cycle.stored_run (migration 0035). Before every
+        # backend/lp_cycle.stored_run (migration 0037). Before every
         # lp_recommendation matcher: its subquery reads that table too.
         if "to_regclass('lp_run')" in sql:
             return FakeResult([{"present": self.lp_run is not None}])
@@ -412,7 +412,7 @@ def test_lp_inputs_the_api_states_are_the_ones_run_lp_uses():
 
 
 def test_lp_model_states_defaults_when_no_run_is_recorded(client):
-    """Item 8: without lp_run (migration 0035 unapplied) the model is the
+    """Item 8: without lp_run (migration 0037 unapplied) the model is the
     defaults, and says so."""
     body = client.get("/recommendations?principal=unilever").json()
     assert body["lp_model"]["inputs_source"] == "defaults"

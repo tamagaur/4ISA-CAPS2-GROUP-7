@@ -183,7 +183,7 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
 
-        # backend/lp_cycle.stored_run (migration 0035). Before every
+        # backend/lp_cycle.stored_run (migration 0037). Before every
         # lp_recommendation matcher: its subquery reads that table too.
         if "to_regclass('lp_run')" in sql:
             return FakeResult([{"present": self.lp_run is not None}])

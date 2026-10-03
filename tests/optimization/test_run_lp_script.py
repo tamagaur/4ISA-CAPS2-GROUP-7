@@ -318,7 +318,7 @@ def test_retire_stale_pending_is_opt_in():
     assert _args("--retire-stale-pending").retire_stale_pending is True
 
 
-# ---- item 8: every real run records what it used (lp_run, migration 0035) ----
+# ---- item 8: every real run records what it used (lp_run, migration 0037) ----
 
 
 def test_run_record_holds_every_flag_and_the_fixed_model():

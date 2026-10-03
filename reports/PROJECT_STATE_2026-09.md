@@ -1051,7 +1051,7 @@ synthetic / 2 missing; Del Monte product sales 17 synthetic / 53 missing; Unilev
 
 ### 18.4 Apply to `public` (after the pending merges) — not run
 
-Order: 0032 -> 0033 -> 0035 -> 0036 -> 0038 (`python -m scripts.run_canonical_load --schema public --target-public --schema-only`), then
+Order: 0032 -> 0033 -> 0036 -> 0037 -> 0038 (`python -m scripts.run_canonical_load --schema public --target-public --schema-only`), then
 `--refresh-coverage`, then `python -m scripts.fill_missing --schema public --target-public --dry-run`, then without `--dry-run`. Expected on
 today's public: 0038 tags 89,304 existing demo rows `synthetic_v2`; the fill step adds the 18.1 counts if public is unchanged. Re-run
 `scripts/rehearse_fills.py` on a fresh scratch copy first if public changed.

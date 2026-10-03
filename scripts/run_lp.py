@@ -11,7 +11,7 @@ product:
   q_i         the month's order, in pieces (the app splits it into weekly POs)
   rop_i       the target stock T_i
   ss_i        the safety stock
-  lp_run_key  the lp_run row (migration 0035) holding every input the run
+  lp_run_key  the lp_run row (migration 0037) holding every input the run
               used, which is what the app shows (backend/lp_cycle.stored_run)
 
 Mirrors scripts/run_baseline_forecast.py's structure (argparse ->
@@ -169,7 +169,7 @@ RETIRE_QUERY = """
 
 RETIRED_DIR = Path(__file__).resolve().parent.parent / "reports" / "lp_runs"
 
-# What one planning cycle's run used (migration 0035). RETURNING the key the
+# What one planning cycle's run used (migration 0037). RETURNING the key the
 # cycle's rows then carry.
 LP_RUN_INSERT_QUERY = """
     INSERT INTO lp_run (planning_cycle_date, principal_scope, inputs, model, code_version)
@@ -724,16 +724,16 @@ def main():
     if args.dry_run:
         cur.execute("SET TRANSACTION READ ONLY")
 
-    # Every real run records what it used (lp_run, migration 0035): without
+    # Every real run records what it used (lp_run, migration 0037): without
     # the table the app could only state defaults, so a real run refuses.
     cur.execute(LP_RUN_PRESENT_QUERY)
     if not cur.fetchone()[0]:
         if not args.dry_run:
-            logger.error("lp_run is missing: apply analytics/db/migrations/0035_lp_run.sql before a real "
+            logger.error("lp_run is missing: apply analytics/db/migrations/0037_lp_run.sql before a real "
                          "run, so the app can show what this run used. Nothing was written.")
             conn.close()
             return
-        logger.warning("lp_run is missing (migration 0035): a real run would refuse until it is applied.")
+        logger.warning("lp_run is missing (migration 0037): a real run would refuse until it is applied.")
 
     def save_result(product_key, planning_cycle_date, q_i, rop_i, ss_i, run_key) -> bool:
         """Upsert one row. False when it hit a decided row and changed nothing."""
