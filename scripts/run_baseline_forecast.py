@@ -59,7 +59,7 @@ from analytics.forecasting.baseline import (
     sba_forecast,
 )
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rmse, wape
-from analytics.forecasting.global_model import GlobalForecaster, with_placeholder
+from analytics.forecasting.global_model import GlobalForecaster, missing_months, with_missing, with_placeholder
 from analytics.forecasting.router import LIVE_MODEL, assert_real_rows, ma3_value, rolling_one_step, route
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -175,19 +175,45 @@ def fetch_tier_a(cur, abc_period: str) -> pd.DataFrame:
 
 def fetch_demand(cur) -> pd.DataFrame:
     """is_demo is carried through (DEC-27) so assert_real_rows / build_series can
-    see a placeholder row if one ever reaches here; the _Real view excludes them."""
+    see a placeholder row if one ever reaches here; the _Real view excludes them.
+
+    A blank (NULL) quantity_sold stays blank: quantity is NaN and quantity_blank
+    is True, never 0 (DEC-31, "unknown is not zero"). net_amount is carried so
+    the flag can say whether a sale is on record in pesos. build_series turns a
+    blank row into a missing month (global_model.with_missing)."""
     cur.execute(
         """
         SELECT product_key, sku_code, calendar_month, SUM(quantity_sold) AS quantity,
-               bool_or(is_demo) AS is_demo
+               bool_or(is_demo) AS is_demo, bool_or(quantity_sold IS NULL) AS quantity_blank,
+               SUM(net_amount) AS net_amount
         FROM Unilever_SKU_Demand_Fact_Real
         GROUP BY product_key, sku_code, calendar_month
         ORDER BY product_key, calendar_month
         """
     )
-    df = pd.DataFrame(cur.fetchall(), columns=["product_key", "sku_code", "calendar_month", "quantity", "is_demo"])
-    df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0.0)
+    df = pd.DataFrame(cur.fetchall(), columns=["product_key", "sku_code", "calendar_month", "quantity", "is_demo",
+                                               "quantity_blank", "net_amount"])
+    df["quantity_blank"] = df["quantity_blank"].eq(True)
+    df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").where(~df["quantity_blank"])
+    df["net_amount"] = pd.to_numeric(df["net_amount"], errors="coerce")
     return df
+
+
+def _missing_in_last_months(missing, end_month: str, n: int = DEAD_SKU_MONTHS) -> bool:
+    """True if a missing (blank-quantity) month falls in the n calendar months
+    ending at end_month ('YYYY-MM') - the dead-SKU window."""
+    end = pd.Period(end_month, freq="M")
+    return any(end - n < pd.Period(m, freq="M") <= end for m in missing)
+
+
+def blank_quantity_rows(demand: pd.DataFrame) -> pd.DataFrame:
+    """The flagged rows: one per product-month with a blank quantity, and whether
+    a peso amount (a sale) is on record for it."""
+    if "quantity_blank" not in demand.columns:
+        return demand.iloc[:0][["product_key", "sku_code", "calendar_month"]].assign(has_peso_amount=False)
+    b = demand[demand["quantity_blank"]]
+    return b[["product_key", "sku_code", "calendar_month"]].assign(
+        has_peso_amount=b["net_amount"].fillna(0).ne(0).to_numpy())
 
 
 # --------------------------------------------------------------------------- #
@@ -197,18 +223,25 @@ def build_series(sku_df: pd.DataFrame) -> pd.Series:
     """Zero-filled monthly series. Zeros are real demand and SBA's gap
     structure depends on them - the zero-fill stays in the modeling series;
     only the eligibility gate looks at real observations instead (fix #1).
+    Only a month with NO row is zero-filled. A month whose row has a blank
+    (NULL) quantity is MISSING - NaN, marked on the series (with_missing),
+    never 0 - and every model and score skips it.
     Months whose rows are is_demo=true are marked on the series (DEC-27), so
     the router / global model's assert_real_history refuses it."""
     idx = pd.to_datetime(sku_df["calendar_month"] + "-01")
     s = pd.Series(sku_df["quantity"].to_numpy(dtype=float), index=idx).sort_index()
-    s = s.resample("MS").asfreq().fillna(0.0)
+    blank = s.index[s.isna()]
+    s = s.resample("MS").asfreq()
+    s[~s.index.isin(idx)] = 0.0                                   # no row = a zero-sale month
     demo = sku_df["is_demo"].eq(True) if "is_demo" in sku_df.columns else None
-    return with_placeholder(s, idx[demo]) if demo is not None and demo.any() else s
+    s = with_placeholder(s, idx[demo]) if demo is not None and demo.any() else s
+    return with_missing(s, blank) if len(blank) else s
 
 
 def one_step(method: str, series: pd.Series) -> float:
     """Deployable one-step-ahead point forecast on the FULL series (used only
-    by the --write path)."""
+    by the --write path), over observed months (a missing month is skipped)."""
+    series = series.dropna()
     if method == "naive":
         return float(naive_forecast(series, 1)[0])
     if method == "ma3":
@@ -239,13 +272,23 @@ def pick_oracle(per_method: dict) -> str:
 
 
 def evaluate_sku(series: pd.Series, gap_months=None) -> dict:
-    """Run all 3 methods + both selection methods for one status='ok' SKU."""
+    """Run all 3 methods + both selection methods for one status='ok' SKU.
+
+    The 80/20 split is on calendar months; a missing (blank-quantity) month is
+    then dropped from both halves - never fitted on, never scored (0 would
+    invent a sale of nothing). A holdout with no observed month scores
+    nothing: every metric None, never a fabricated 0 or a 'failed' gate."""
     train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
+    train, holdout = train.dropna(), holdout.dropna()
     horizon = len(holdout)
-    forecasters = build_forecasters(horizon, SBA_ALPHA)
+    forecasters = build_forecasters(max(horizon, 1), SBA_ALPHA)
 
     per_method = {}
     for m in METHODS:
+        if horizon == 0:
+            per_method[m] = {"mae": None, "mape": None, "rmse": None, "mase": None, "mase_gate_passed": None,
+                             "mase_denominator_zero": False, "holdout_all_missing": True}
+            continue
         fc = forecasters[m](train)
         metrics = evaluate_baseline(fc, holdout, train)
         if m == "sba":
@@ -269,8 +312,8 @@ def evaluate_sku(series: pd.Series, gap_months=None) -> dict:
         "flat_training_window": bool(per_method[METHODS[0]]["mase_denominator_zero"]),
         "train_start": train.index.min().strftime("%Y-%m"),
         "train_end": train.index.max().strftime("%Y-%m"),
-        "holdout_start": holdout.index.min().strftime("%Y-%m"),
-        "holdout_end": holdout.index.max().strftime("%Y-%m"),
+        "holdout_start": holdout.index.min().strftime("%Y-%m") if horizon else None,
+        "holdout_end": holdout.index.max().strftime("%Y-%m") if horizon else None,
     }
 
 
@@ -326,6 +369,11 @@ def main():
     demand_by_key = {k: g for k, g in demand.groupby("product_key")}
     sku_code_by_key = demand.groupby("product_key")["sku_code"].first().to_dict()
 
+    blanks = blank_quantity_rows(demand)
+    print(f"\nBLANK QUANTITY: {len(blanks)} real product-month(s) with a blank quantity "
+          f"({int(blanks['has_peso_amount'].sum())} with a peso amount) - read as MISSING, never 0; "
+          f"{int(blanks['product_key'].isin(tier_a['product_key']).sum())} in this Tier A set.")
+    missing_by_key: dict = {}
     records = []
     for _, ta in tier_a.iterrows():
         p_key = ta["product_key"]
@@ -340,8 +388,11 @@ def main():
 
         series = build_series(sku_df)
         months_span = int(len(series))
-        months_with_sales = int((series > 0).sum())
-        full_class = demand_class(series, gap_months)
+        months_with_sales = int((series > 0).sum())          # a missing month is not counted (NaN > 0 is False)
+        missing = missing_months(series)
+        missing_by_key[p_key] = missing
+        # a missing month is unobserved, like a file gap: ADI drops it instead of counting a zero
+        full_class = demand_class(series, gap_months + missing)
 
         # first/last month with a real positive sale, from the UNtrimmed rows
         sold_months = sorted(
@@ -365,8 +416,11 @@ def main():
         # Anchored on latest_demand_month, not on the series' own end:
         # build_series stops at the SKU's last row (session 6's fix), and a
         # series that stops early must not have its old tail read as recent.
+        # A missing (blank-quantity) month in the window is unknown, not "no
+        # sale", so it can never make a product dead.
         if months_span >= DEAD_SKU_MONTHS and no_sale_in_last_months(
-                series.index.strftime("%Y-%m"), series.to_numpy(), latest_demand_month):
+                series.index.strftime("%Y-%m"), series.to_numpy(), latest_demand_month) \
+                and not _missing_in_last_months(missing, latest_demand_month):
             records.append(_with_window(_row_shell(p_key, sku_code, abc_period, months_span,
                                                    months_with_sales, full_class, "dead_sku")))
             continue
@@ -399,6 +453,8 @@ def main():
         records.append(rec)
 
     df = pd.DataFrame(records)
+    df["missing_quantity_months"] = df["product_key"].map(
+        lambda k: ";".join(m.strftime("%Y-%m") for m in missing_by_key.get(k, [])))
 
     # LP-handoff policy fields for non-forecastable rows (spec only this pass)
     non_ok = df["status"].isin(["insufficient_data", "dead_sku"])
@@ -886,10 +942,10 @@ def served_forecasts(df, demand_by_key, planning_month) -> dict:
         routed = route(series, planning_month, forecaster)
         train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
         scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=routed["bin"])
-        a, p = scored["actual"].to_numpy(), scored["value"].to_numpy()
+        a, p = scored["actual"].to_numpy(), scored["value"].to_numpy()     # missing months are not scored
         out[p_key] = {
             **routed,
-            "holdout_mape": mape(a, p), "holdout_mase": mase(a, p, naive_scale(train.to_numpy(dtype=float))),
+            "holdout_mape": mape(a, p), "holdout_mase": mase(a, p, naive_scale(train.dropna().to_numpy(dtype=float))),
             "holdout_wape": wape(a, p), "holdout_rmse": rmse(a, p),
             "holdout_ma3_wape": wape(a, scored["ma3"].to_numpy()),
             "holdout_backups": int(scored["backup_fired"].sum()), "holdout_months": int(len(scored)),
@@ -1009,6 +1065,8 @@ def _write_forecast_result(cur, df):
                 "months_with_sales": int(r["months_with_sales"]),
                 "demand_class_full": r["demand_class_full"],
                 "ma3_value": round(max(0.0, ma3_value(series)), 3),   # benchmark / fallback, every SKU
+                # blank-quantity months: missing, never 0 - skipped by every model and score
+                "missing_quantity_months": [m.strftime("%Y-%m") for m in missing_months(series)],
             }
 
             if status == "ok":
