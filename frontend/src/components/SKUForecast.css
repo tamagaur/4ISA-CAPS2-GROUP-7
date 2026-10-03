@@ -427,30 +427,17 @@
   color: var(--color-warning);
 }
 
-.result-code-group {
-  display: flex;
-  flex-direction: column;
-  min-width: 90px;
-}
-
-.result-sku-code {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--color-slate-800);
+/* Name first, SKU code under it (ProductName), taking the row's spare
+   width; the brand sits to its right, ahead of the class badge. */
+.result-product {
+  flex: 1;
+  font-size: 0.82rem;
 }
 
 .result-brand {
   font-size: 0.68rem;
   color: var(--color-slate-500);
-}
-
-.result-product-name {
-  flex: 1;
-  font-size: 0.82rem;
-  color: var(--color-slate-700);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .no-results-msg {
@@ -531,18 +518,20 @@
   letter-spacing: 0.05em;
 }
 
-.sku-code-value {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text);
+/* The selected product's name is the card's headline (it used to be the
+   SKU code); ProductName puts the code under it in small muted text. */
+.sku-selected-name {
+  font-size: 1.1rem;
   line-height: 1.2;
-  margin-bottom: 0.1rem;
 }
 
-.sku-product-name {
-  font-size: 0.85rem;
-  color: var(--color-text-body);
-  font-weight: 500;
+.sku-selected-name .product-name-title {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.sku-selected-name .product-name-code {
+  font-size: 0.72rem;
 }
 
 /* Brand sits inline after the product name rather than on its own line —

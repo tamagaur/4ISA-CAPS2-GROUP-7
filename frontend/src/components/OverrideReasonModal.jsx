@@ -4,6 +4,7 @@ import Modal from './Modal';
 import SaveResult from './SaveResult';
 import { useSaveResult } from '../utils/useSaveResult';
 import { formatUnits } from '../utils/formatNumber';
+import { formatMonth } from '../utils/formatDate';
 import './OverrideReasonModal.css';
 
 // Story #82/#93: capturing a reason whenever a user dismisses the LP
@@ -56,7 +57,7 @@ const OverrideReasonModal = ({ isOpen, item, onCancel, onConfirm }) => {
           ok={result.ok}
           title={result.ok ? 'Recommendation dismissed' : "Couldn't save the decision"}
           message={result.ok
-            ? <>Your reason for <strong>{item.sku}</strong> is in the decision log.</>
+            ? <>Your reason for <strong>{item.product}</strong> ({item.sku}) is in the decision log.</>
             : result.message}
         />
       ) : (
@@ -67,7 +68,8 @@ const OverrideReasonModal = ({ isOpen, item, onCancel, onConfirm }) => {
             </div>
             <div>
               <h3 className="override-modal-title">Dismiss recommendation</h3>
-              <p className="override-modal-subtitle">{item.sku} — {item.product}</p>
+              {/* Name first, then the code (Sir Catubag, 2 Oct 2026). */}
+              <p className="override-modal-subtitle">{item.product} · {item.sku}</p>
             </div>
             <button className="override-modal-close" onClick={onCancel} disabled={saving} aria-label="Close modal">
               <X size={18} />
@@ -76,7 +78,8 @@ const OverrideReasonModal = ({ isOpen, item, onCancel, onConfirm }) => {
 
           <div className="override-modal-body">
             <p className="override-modal-copy">
-              You're dismissing the LP-optimized order of <strong>{formatUnits(item.orderQty)} units</strong>.
+              You're dismissing the LP-optimized order of <strong>{formatUnits(item.orderQty)} pieces</strong>
+              {item.planningCycleDate ? ` for the ${formatMonth(item.planningCycleDate)} plan` : ''}.
               This deviation is recorded in the decision log against your account so the reasoning is available for review.
             </p>
 

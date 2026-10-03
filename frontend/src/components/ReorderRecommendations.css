@@ -483,3 +483,17 @@
   color: var(--color-text-muted);
   white-space: nowrap;
 }
+
+/* The period under a column's label ("Mar 2026 plan", "counted Apr 6,
+   2026"): four periods meet in one row, so each header names its own.
+   Sentence case and lighter than the uppercase label, so the label still
+   reads first and the period reads as its qualifier. */
+.data-table thead th .reorder-th-period {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text-muted);
+}

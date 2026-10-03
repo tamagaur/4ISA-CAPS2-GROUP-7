@@ -49,6 +49,8 @@ const DIRECTION = {
 };
 const signed = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`);
 const titleCase = (name) => (name || '').toLowerCase().replace(/(^|[\s/&-])\S/g, (c) => c.toUpperCase());
+// 'Mar 2025 – Feb 2026'; null when either end is missing.
+const monthSpan = (start, end) => (start && end ? `${formatMonth(start)} – ${formatMonth(end)}` : null);
 const axisMonth = (period) => {
   const [m, y] = (formatMonth(period) || '').split(' ');
   return y ? `${m} · ${y}` : period;
@@ -126,6 +128,14 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
   const lastActualPeriod = category.available && (category.history || []).length
     ? category.history[category.history.length - 1].period
     : null;
+  // The months the trend line is fitted over (the last `fitted.length` of
+  // the history) and the months it is projected into, named for the legend.
+  const history = category.history || [];
+  const fittedCount = (category.fitted || []).length;
+  const fitWindow = category.available && fittedCount && history.length >= fittedCount
+    ? monthSpan(history[history.length - fittedCount].period, history[history.length - 1].period)
+    : null;
+  const projectionWindow = monthSpan(category.projection_periods?.[0], category.projection_periods?.[category.projection_periods.length - 1]);
 
   // Selective direct labels: the last actual month's revenue, and the
   // projected level at the end of the trend line.
@@ -149,15 +159,15 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
       </div>
       {view === 'table' ? (
         <ChartTable
-          caption={`Monthly revenue and trend projection`}
+          caption="Monthly revenue and trend projection, in pesos"
           columns={[
             { key: 'period', label: 'Month', format: (v) => axisMonth(v), align: 'left' },
-            { key: 'actual', label: 'Revenue', format: (v) => formatRevenue(v) },
-            { key: 'fitted', label: 'Trend line', format: (v) => formatCompactPesos(v) },
-            { key: 'projection', label: 'Projected trend', format: (v) => formatCompactPesos(v) },
+            { key: 'actual', label: 'Revenue (₱)', format: (v) => formatRevenue(v) },
+            { key: 'fitted', label: 'Trend line (₱)', format: (v) => formatCompactPesos(v) },
+            { key: 'projection', label: 'Projected trend (₱)', format: (v) => formatCompactPesos(v) },
             ...(hasRange ? [
-              { key: 'bandLow', label: 'Range low', format: (v) => formatCompactPesos(v) },
-              { key: 'bandHigh', label: 'Range high', format: (v) => formatCompactPesos(v) },
+              { key: 'bandLow', label: 'Range low (₱)', format: (v) => formatCompactPesos(v) },
+              { key: 'bandHigh', label: 'Range high (₱)', format: (v) => formatCompactPesos(v) },
             ] : []),
           ]}
           rows={data}
@@ -168,8 +178,24 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
             <ComposedChart data={data} margin={{ top: 10, right: 16, left: 4, bottom: 8 }}>
               <CartesianGrid {...GRID_PROPS} />
               {renderPlaceholderBand(bandSpan)}
-              <XAxis dataKey="period" tickFormatter={axisMonth} minTickGap={24} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} />
-              <YAxis tickFormatter={formatRevenue} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} width={56} />
+              {/* Axis titles say what each axis counts (Sir Catubag, 2 Oct
+                  2026). The X axis is 40px tall so "Month" sits under the
+                  ticks; the Y axis is 64px wide to fit "Revenue (₱)" left of
+                  ticks like ₱1.2M. */}
+              <XAxis
+                dataKey="period"
+                tickFormatter={axisMonth}
+                minTickGap={24}
+                tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                height={40}
+                label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 10, fill: CHART_COLORS.axisLabel }}
+              />
+              <YAxis
+                tickFormatter={formatRevenue}
+                tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                width={64}
+                label={{ value: 'Revenue (₱)', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+              />
               <Tooltip content={<TrendTooltip placeholder={placeholder} />} />
               {/* The projection's likely range: an invisible base up to the
                   low bound, then the visible band on top of it (the same
@@ -198,10 +224,14 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
           <div className="ct-legend">
             <span><i className="ct-swatch ct-swatch-actual" />Monthly revenue</span>
             {category.available && (
-              <span><i className="ct-swatch ct-swatch-fitted" />Trend line (last {category.points} months)</span>
+              <span>
+                <i className="ct-swatch ct-swatch-fitted" />Trend line, {fitWindow ?? `last ${category.points} months`}
+              </span>
             )}
             {category.available && method && (
-              <span><i className="ct-swatch ct-swatch-projection" />Trend, next {method.projection_months} months</span>
+              <span>
+                <i className="ct-swatch ct-swatch-projection" />Projected trend, {projectionWindow ?? `next ${method.projection_months} months`}
+              </span>
             )}
             {hasRange && method && (
               <span>
@@ -223,6 +253,18 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
   const current = categories.find((c) => c.category === selected) ?? categories[0];
   const observed = section.observed_months || [];
   const anyProjection = categories.some((c) => c.available);
+  // The table's windows, from the payload: revenue sums the last
+  // trailing_months OBSERVED months; every projected category shares the
+  // same projection months (they continue from the last observed month).
+  const trailing = method?.trailing_months ? observed.slice(-method.trailing_months) : [];
+  const trailingWindow = trailing.length ? monthSpan(trailing[0], trailing[trailing.length - 1]) : null;
+  const spanMonths = trailing.length
+    ? (Number(trailing[trailing.length - 1].slice(0, 4)) * 12 + Number(trailing[trailing.length - 1].slice(5, 7)))
+      - (Number(trailing[0].slice(0, 4)) * 12 + Number(trailing[0].slice(5, 7))) + 1
+    : 0;
+  const trailingGapNote = spanMonths > trailing.length ? ` (${trailing.length} months with data)` : '';
+  const sharedProjection = categories.find((c) => c.projection_periods?.length)?.projection_periods || [];
+  const projectionWindow = monthSpan(sharedProjection[0], sharedProjection[sharedProjection.length - 1]);
 
   return (
     <section className="ct-card">
@@ -250,13 +292,30 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
             <thead>
               <tr>
                 <th>Category</th>
-                <th className="table-num">Revenue, last {method?.trailing_months} months</th>
+                {/* Each header names its months (Sir Catubag, 2 Oct
+                    2026). The revenue window is the last trailing_months
+                    months WITH data (category_trends.py sums observed
+                    months), so for a principal with missing files it can
+                    span more calendar months than its count. */}
+                <th className="table-num">
+                  Revenue (₱)
+                  {trailingWindow
+                    ? <span className="ct-th-period">{trailingWindow}{trailingGapNote}</span>
+                    : <span className="ct-th-period">last {method?.trailing_months} months</span>}
+                </th>
                 <th>Trend</th>
                 <th className="table-num">
-                  Next {method?.projection_months} months vs last {method?.trailing_months}
+                  Projected change (%)
                   <InfoTip label="About this projection">
-                    The next {method?.projection_months} months on the trend line against the last {method?.trailing_months} on the same line.
+                    The trend line&apos;s total over the next {method?.projection_months} months
+                    {projectionWindow ? ` (${projectionWindow})` : ''} against its total over the last {method?.trailing_months}
+                    {trailingWindow ? ` (${trailingWindow})` : ''}. In brackets, the same with the slope&apos;s confidence bounds.
                   </InfoTip>
+                  <span className="ct-th-period">
+                    {projectionWindow && trailingWindow
+                      ? `${projectionWindow} vs ${trailingWindow}`
+                      : `next ${method?.projection_months} months vs last ${method?.trailing_months}`}
+                  </span>
                 </th>
                 <th className="table-num">
                   Trend confidence
@@ -324,7 +383,7 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
             {titleCase(current.category)}
             {current.available && (
               <span className="ct-detail-sub">
-                {' '}— trend {current.slope_per_month >= 0 ? 'rising' : 'falling'} {formatCompactPesos(Math.abs(current.slope_per_month))} a month
+                {' '}— revenue trend {current.slope_per_month >= 0 ? 'rising' : 'falling'} {formatCompactPesos(Math.abs(current.slope_per_month))} a month
                 {current.direction === 'flat' ? ', but not significantly' : ''}
               </span>
             )}

@@ -122,9 +122,14 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
         <Activity size={15} aria-hidden="true" />
         Demand pattern
       </h4>
+      {/* The months the volatility, trend and history tiles measure:
+          traits.py reads the monthly pieces from the SKU's first sale up to
+          the cohort month (the ABC run the cohort was drawn from). */}
       {state.data?.traits?.cohort_period && (
-        <span className="sku-pattern-cohort" title="The ABC classification period this SKU's demand pattern was measured for">
-          Cohort {formatMonth(state.data.traits.cohort_period)}
+        <span className="sku-pattern-cohort" title={`Monthly pieces sold, measured from the first sale to the ${formatMonth(state.data.traits.cohort_period)} cohort (the ABC run this pattern was measured for)`}>
+          {state.data.traits.first_sale_period
+            ? `Monthly pieces, ${formatMonth(state.data.traits.first_sale_period)} – ${formatMonth(state.data.traits.cohort_period)}`
+            : `Cohort ${formatMonth(state.data.traits.cohort_period)}`}
         </span>
       )}
     </div>
@@ -229,7 +234,7 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
             <span className="sku-pattern-tile-desc" title={`stability_group: ${t.stability_group}`}>
               {STABILITY_GLOSS[t.stability_group] || t.stability_group}
               {t.first_sale_period ? ` · first sale ${formatMonth(t.first_sale_period)}` : ''}
-              {` · longest run ${t.longest_run}`}
+              {` · longest selling run ${t.longest_run} month${t.longest_run === 1 ? '' : 's'}`}
               {t.restart_flag ? ' · restarted after a 3+ month gap' : ''}
             </span>
           </div>
@@ -248,7 +253,7 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
                   ? 'Decomposing…'
                   : !stl.available
                     ? stl.reason
-                    : `${stl.seasonal_strength >= 0.3 ? `peaks in ${stl.peak_month}, lowest in ${stl.trough_month} · ` : 'no reliable yearly pattern · '}STL seasonal strength ${stl.seasonal_strength.toFixed(2)}, trend ${stl.trend_strength.toFixed(2)}`}
+                    : `${stl.seasonal_strength >= 0.3 ? `peaks in ${stl.peak_month}, lowest in ${stl.trough_month} · ` : 'no reliable yearly pattern · '}STL seasonal strength ${stl.seasonal_strength.toFixed(2)}, trend ${stl.trend_strength.toFixed(2)} (0–1)${stl.periods?.length ? ` · ${formatMonth(stl.periods[0])} – ${formatMonth(stl.periods[stl.periods.length - 1])}` : ''}`}
               </span>
             </div>
           )}

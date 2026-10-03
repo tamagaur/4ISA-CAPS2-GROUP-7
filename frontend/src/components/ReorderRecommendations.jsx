@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import InfoTip from './InfoTip';
+import ProductName from './ProductName';
 import OverrideReasonModal from './OverrideReasonModal';
 import Modal from './Modal';
 import SaveResult from './SaveResult';
@@ -15,7 +16,7 @@ import { getCurrentUser } from '../auth';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
 import { getRecommendations, decideRecommendation } from '../api/recommendations';
-import { formatDateTime, formatMonth } from '../utils/formatDate';
+import { formatDate, formatDateTime, formatMonth } from '../utils/formatDate';
 import { formatUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
@@ -181,6 +182,13 @@ const ReorderRecommendations = () => {
           // Preview with the what-if LP (backend/data_mode.py): these rows
           // were never saved, so there is nothing to accept or dismiss.
           whatIf: Boolean(res.data_mode?.outputs),
+          // The periods the figures were read at (GET /recommendations'
+          // label_context), for the period on every header and card.
+          stockPeriod: res.stock_period || null,
+          stockCountDate: res.stock_count_date || null,
+          abcPeriod: res.abc_period || null,
+          coverSalesStart: res.cover_sales_start || null,
+          coverSalesEnd: res.cover_sales_end || null,
         });
       })
       .catch((err) => {
@@ -338,6 +346,27 @@ const ReorderRecommendations = () => {
   const lpInputs = meta?.lpModel?.inputs || {};
   const allocationPct = lpInputs.allocation_pct ?? null;
 
+  // Every figure on this page says which period it belongs to (Sir
+  // Catubag, 2 Oct 2026: a number without its period and unit can't be
+  // checked). Four different periods meet in one row, which is why each
+  // header carries its own rather than one date for the page:
+  //   plan       — the LP cycle: forecast, target, safety stock, order
+  //   count      — the stock count the stock column is from. Unilever's
+  //                "2026-03" count was taken on 6 Apr 2026, so the day is
+  //                named; calling it "Mar 2026 stock" hid how late it is
+  //   abc        — the single month revenue share is measured over
+  //   coverSales — the sales months cover's daily rate averages
+  const cycleMonth = selectedCycle ? formatMonth(selectedCycle) : null;
+  const planLabel = cycleMonth ? `${cycleMonth} plan` : 'this plan';
+  const countLabel = meta?.stockCountDate
+    ? `counted ${formatDate(meta.stockCountDate)}`
+    : meta?.stockPeriod ? `${formatMonth(meta.stockPeriod)} count` : 'latest count';
+  const abcLabel = meta?.abcPeriod ? formatMonth(meta.abcPeriod) : null;
+  const coverSalesLabel = meta?.coverSalesStart && meta?.coverSalesEnd
+    ? `${formatMonth(meta.coverSalesStart)} – ${formatMonth(meta.coverSalesEnd)}`
+    : null;
+  const coverNote = `${COVER_BASIS_NOTE} Stock ${countLabel}${coverSalesLabel ? `; sales ${coverSalesLabel}` : ''}.`;
+
   const handleOpenDetails = (item) => {
     setSelectedItem(item);
     setIsModalOpen(true);
@@ -352,6 +381,7 @@ const ReorderRecommendations = () => {
         id: `${item.id}-${Date.now()}`,
         sku: item.sku,
         product: item.product,
+        cycle: item.planningCycleDate,
         action,
         reason,
         decidedBy: user?.email || 'unknown user',
@@ -544,7 +574,7 @@ const ReorderRecommendations = () => {
         <button
           className="table-btn table-btn-primary"
           onClick={() => handleAction(item, 'ACCEPTED')}
-          aria-label={`Accept reorder for SKU ${item.sku}`}
+          aria-label={`Accept reorder for ${item.product} (${item.sku})`}
           disabled={bulkRunning}
         >
           Accept
@@ -552,7 +582,7 @@ const ReorderRecommendations = () => {
         <button
           className="table-btn"
           onClick={() => handleAction(item, 'DISMISSED')}
-          aria-label={`Dismiss reorder for SKU ${item.sku}`}
+          aria-label={`Dismiss reorder for ${item.product} (${item.sku})`}
           disabled={bulkRunning}
         >
           Dismiss
@@ -575,26 +605,18 @@ const ReorderRecommendations = () => {
             </span>
           )}
         </td>
-        <td className="cell-code">
-          <span
-            className="cell-code-link"
-            role="button"
-            tabIndex={0}
-            onClick={() => handleOpenDetails(item)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handleOpenDetails(item);
-              }
-            }}
-            title="View recommendation details"
-          >
-            {formatSKU(item.sku)}
-          </span>
+        {/* Name first, code under it (Sir Catubag, 2 Oct 2026); the name
+            is now the click target the dotted code link used to be. */}
+        <td className="cell-product">
+          <ProductName
+            name={item.product}
+            code={formatSKU(item.sku)}
+            onOpen={() => handleOpenDetails(item)}
+            openLabel="View recommendation details"
+          />
         </td>
         <td className={brand ? 'cell-muted' : 'cell-empty'}>{brand || '—'}</td>
-        <td className="cell-product">{item.product}</td>
-        <td className="table-num" title="Share of period revenue at this SKU's latest ABC classification">
+        <td className="table-num" title={`Share of ${abcLabel ?? 'the latest ABC month'} revenue, from the latest ABC classification`}>
           {item.revenueShare != null ? `${(item.revenueShare * 100).toFixed(2)}%` : <span className="cell-empty">—</span>}
         </td>
         {/* Target stock (rop_i since the 2026-09-30 LP run: demand over
@@ -624,10 +646,10 @@ const ReorderRecommendations = () => {
               </>
             : <span className="cell-empty" title={item.stockBlockedReason || 'No stock figure in pieces for this SKU'}>—</span>}
         </td>
-        <td className="table-num" title={item.daysOfCover != null ? COVER_BASIS_NOTE : (item.coverReason || COVER_BASIS_NOTE)}>
+        <td className="table-num" title={item.daysOfCover != null ? coverNote : (item.coverReason || coverNote)}>
           {item.daysOfCover != null ? item.daysOfCover.toFixed(1) : <span className="cell-empty">—</span>}
         </td>
-        <td className="table-num" title={item.forecast != null ? exactPieces(item.forecast) : 'No forecast for this planning month'}>
+        <td className="table-num" title={item.forecast != null ? exactPieces(item.forecast) : `No forecast for ${cycleMonth ?? 'this planning month'}`}>
           {item.forecast != null ? formatUnits(item.forecast) : <span className="cell-empty">—</span>}
         </td>
         <td className="table-num cell-strong" title={lpQtyTitle(item)}>
@@ -647,7 +669,7 @@ const ReorderRecommendations = () => {
     );
   };
 
-  const COLUMN_COUNT = 13;
+  const COLUMN_COUNT = 12;
 
   const renderRecommendationsTab = () => (
     <>
@@ -656,17 +678,17 @@ const ReorderRecommendations = () => {
       <div className="reorder-summary-grid">
         <div className="reorder-summary-card card-act">
           <div className="card-content">
-            <span className="reorder-card-label">ACT NOW</span>
+            <span className="reorder-card-label">ACT NOW (SKUS)</span>
             <span className="reorder-card-value">{actNowPending}</span>
-            <span className="reorder-card-desc">top {ACT_NOW_COUNT} by revenue at risk, still pending</span>
+            <span className="reorder-card-desc">{planLabel} · top {ACT_NOW_COUNT} by revenue at risk, still pending</span>
           </div>
         </div>
         <div className="reorder-summary-card card-watch">
           <div className="card-content">
-            <span className="reorder-card-label">REVIEW LATER</span>
+            <span className="reorder-card-label">REVIEW LATER (SKUS)</span>
             <span className="reorder-card-value">{reviewLaterRows.length}</span>
             <span className="reorder-card-desc">
-              {reviewLaterRows.length - reviewLaterUnranked} lower revenue at risk
+              {planLabel} · {reviewLaterRows.length - reviewLaterUnranked} lower revenue at risk
               {reviewLaterUnranked > 0 && <> · {reviewLaterUnranked} not ranked (no stock figure or revenue share)</>}
             </span>
           </div>
@@ -677,10 +699,10 @@ const ReorderRecommendations = () => {
             inferred 0 is never mistaken for a counted one. */}
         <div className="reorder-summary-card card-nodata">
           <div className="card-content">
-            <span className="reorder-card-label">NOT IN STOCK COUNT</span>
+            <span className="reorder-card-label">NOT IN STOCK COUNT (SKUS)</span>
             <span className="reorder-card-value">{notInCountCount}</span>
             <span className="reorder-card-desc">
-              treated as 0 on hand, as the plan does
+              {countLabel} · treated as 0 on hand, as the plan does
               {noStockFigureCount > 0 && <> · {noStockFigureCount} with no stock figure in pieces (NO DATA)</>}
             </span>
           </div>
@@ -690,9 +712,10 @@ const ReorderRecommendations = () => {
             <span className="reorder-card-label">TOTAL ORDER (PIECES)</span>
             <span className="reorder-card-value">{totalOrderQty.toLocaleString()}</span>
             <span className="reorder-card-desc">
+              {planLabel} ·{' '}
               {cutCount > 0
                 ? `${cutCount} of ${pendingRows.length} SKUs cut to fit the ${allocationPct != null ? `${allocationPct}% ` : ''}supplier allocation`
-                : 'Pieces suggested by the optimizer'}
+                : 'suggested by the optimizer'}
             </span>
           </div>
         </div>
@@ -700,11 +723,14 @@ const ReorderRecommendations = () => {
 
       <div className="reorder-table-toolbar">
         <p className="reorder-table-note">
-          All quantities are in pieces; under each order is its rough size in cases (pieces ÷ pieces per case).
+          All quantities are in pieces, for the {planLabel}; under each order is its rough size in cases (pieces ÷
+          pieces per case). Current stock is the latest stock count
+          {meta?.stockCountDate ? `, taken ${formatDate(meta.stockCountDate)}` : ''}.
           Suggested qty = the month&apos;s forecast + target stock − current stock. A row marked &ldquo;short&rdquo; was cut to
           fit the supplier allocation and ends the month that far below its target. A SKU missing from the latest
           stock count shows 0, &ldquo;not in count&rdquo;: the plan treats it as out of stock. Ranked by revenue share ×
-          pieces below the target stock. Cover is in days on a peso basis (stock at cost ÷ daily sales value).
+          pieces below the target stock. Cover is in days on a peso basis (stock at cost ÷ daily sales value
+          {coverSalesLabel ? ` over ${coverSalesLabel}` : ''}).
         </p>
         {meta?.whatIf && (
           <p className="chart-placeholder-note">
@@ -738,32 +764,47 @@ const ReorderRecommendations = () => {
         <table className="data-table reorder-table">
           <thead>
             <tr>
+              {/* Unit in the label, period on a quiet second line
+                  (.reorder-th-period) — four periods meet in one row (see
+                  planLabel above), so each column names its own. */}
               <th className="table-num col-fit">#</th>
-              <th className="col-fit">SKU</th>
-              <th className="col-fit">Brand</th>
               <th className="col-text col-product">Product</th>
-              <th className="table-num col-fit">Rev share</th>
-              <th className="table-num col-fit">Safety stock</th>
+              <th className="col-fit">Brand</th>
               <th className="table-num col-fit">
-                Target stock
-                <InfoTip label="About target stock">The stock level each order tops up to: the demand expected before the next delivery, plus safety stock.</InfoTip>
+                Revenue share (%)
+                {abcLabel && <span className="reorder-th-period">{abcLabel}</span>}
               </th>
-              <th className="table-num col-fit">Current stock</th>
+              <th className="table-num col-fit">
+                Safety stock (pieces)
+                <span className="reorder-th-period">{planLabel}</span>
+              </th>
+              <th className="table-num col-fit">
+                Target stock (pieces)
+                <InfoTip label="About target stock">The stock level each order tops up to: the demand expected before the next delivery, plus safety stock.</InfoTip>
+                <span className="reorder-th-period">{planLabel}</span>
+              </th>
+              <th className="table-num col-fit">
+                Current stock (pieces)
+                <span className="reorder-th-period">{countLabel}</span>
+              </th>
               <th className="table-num col-fit">
                 Cover (days)
-                <InfoTip label="About cover">{COVER_BASIS_NOTE}</InfoTip>
+                <InfoTip label="About cover">{coverNote}</InfoTip>
+                <span className="reorder-th-period">{coverSalesLabel ? `sales ${coverSalesLabel}` : countLabel}</span>
               </th>
               <th className="table-num col-fit">
-                Forecast
-                <InfoTip label="About forecast">This SKU&apos;s forecast sales for the planning month: what the order has to cover before it can build stock up to target.</InfoTip>
+                Forecast (pieces)
+                <InfoTip label="About forecast">This SKU&apos;s forecast sales for the planning month{cycleMonth ? ` (${cycleMonth})` : ''}: what the order has to cover before it can build stock up to target.</InfoTip>
+                {cycleMonth && <span className="reorder-th-period">{cycleMonth}</span>}
               </th>
               <th className="table-num col-fit">
-                Suggested qty
+                Suggested qty (pieces)
                 <InfoTip label="About suggested quantity">
                   What to order, in pieces, worked out by the optimizer (an LP, or linear-programming model): forecast +
                   target stock − current stock, less any cut made to fit the supplier allocation. The line under it is
                   the rough case count; the LP doesn&apos;t round to whole cases.
                 </InfoTip>
+                <span className="reorder-th-period">{planLabel}</span>
               </th>
               <th className="col-fit">Urgency</th>
               <th className="table-center col-fit"><span className="visually-hidden">Action</span></th>
@@ -773,7 +814,7 @@ const ReorderRecommendations = () => {
             {actNowRows.length > 0 && (
               <tr className="reorder-group-row reorder-group-act">
                 <td colSpan={COLUMN_COUNT}>
-                  Act now — top {Math.min(ACT_NOW_COUNT, actNowRows.length)} by revenue at risk
+                  Act now — top {Math.min(ACT_NOW_COUNT, actNowRows.length)} SKUs by revenue at risk
                 </td>
               </tr>
             )}
@@ -788,7 +829,7 @@ const ReorderRecommendations = () => {
                     aria-expanded={showReviewLater}
                   >
                     {showReviewLater ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    Review later — {reviewLaterRows.length} more
+                    Review later — {reviewLaterRows.length} more SKUs
                     {showReviewLater ? '' : ' (collapsed)'}
                   </button>
                 </td>
@@ -817,9 +858,10 @@ const ReorderRecommendations = () => {
       <table className="data-table reorder-table reorder-log-table">
         <thead>
           <tr>
-            <th className="col-fit">When</th>
-            <th className="col-fit">SKU</th>
+            {/* formatDateTime renders in the browser's own time zone. */}
+            <th className="col-fit">When (local time)</th>
             <th className="col-text col-product">Product</th>
+            <th className="col-fit">Plan</th>
             <th className="col-fit">Decision</th>
             <th className="col-text col-reason">Reason</th>
             <th className="col-fit">Decided by</th>
@@ -836,8 +878,8 @@ const ReorderRecommendations = () => {
             decisionLog.map((entry) => (
               <tr key={entry.id}>
                 <td className="cell-muted">{entry.timestamp}</td>
-                <td className="cell-code">{formatSKU(entry.sku)}</td>
-                <td className="cell-product">{entry.product}</td>
+                <td className="cell-product"><ProductName name={entry.product} code={formatSKU(entry.sku)} /></td>
+                <td className="cell-muted">{entry.cycle ? `${formatMonth(entry.cycle)} plan` : '—'}</td>
                 <td>
                   <span className={getLogActionBadge(entry.action)}>
                     {entry.action}
@@ -972,7 +1014,7 @@ const ReorderRecommendations = () => {
                   <SkeletonLine width="58%" height="0.8rem" />
                 </div>
                 <div className="data-table-card">
-                  <SkeletonTable rows={8} columns={13} />
+                  <SkeletonTable rows={8} columns={12} />
                 </div>
               </>
             ) : (
@@ -995,6 +1037,7 @@ const ReorderRecommendations = () => {
         data={selectedItem ? (rankedRows.find((r) => r.id === selectedItem.id) || selectedItem) : null}
         principal={principal}
         lpModel={meta?.lpModel}
+        periods={meta || {}}
       />
 
       <OverrideReasonModal
@@ -1019,7 +1062,7 @@ const ReorderRecommendations = () => {
               ok={acceptSave.result.ok}
               title={acceptSave.result.ok ? 'Reorder accepted' : "Couldn't accept the reorder"}
               message={acceptSave.result.ok
-                ? <><strong>{formatUnits(pendingAccept.orderQty)}</strong> pieces of <strong>{formatSKU(pendingAccept.sku)}</strong> are in the decision log.</>
+                ? <><strong>{formatUnits(pendingAccept.orderQty)}</strong> pieces of <strong>{pendingAccept.product}</strong> ({formatSKU(pendingAccept.sku)}) are in the decision log.</>
                 : acceptSave.result.message}
             />
           ) : (
@@ -1031,8 +1074,9 @@ const ReorderRecommendations = () => {
               <p className="reorder-accept-body">
                 Order <strong>{formatUnits(pendingAccept.orderQty)}</strong> pieces
                 {pendingAccept.cases?.order ? ` (${pendingAccept.cases.order})` : ''} of{' '}
-                <strong>{formatSKU(pendingAccept.sku)}</strong>
-                {pendingAccept.product ? ` — ${pendingAccept.product}` : ''}, as recommended by the LP optimizer.
+                <strong>{pendingAccept.product}</strong> ({formatSKU(pendingAccept.sku)}) for the{' '}
+                {pendingAccept.planningCycleDate ? `${formatMonth(pendingAccept.planningCycleDate)} plan` : 'current plan'},
+                as recommended by the LP optimizer.
               </p>
               {acceptError && <p className="reorder-accept-error" role="alert">{acceptError}</p>}
               <div className="reorder-accept-actions">

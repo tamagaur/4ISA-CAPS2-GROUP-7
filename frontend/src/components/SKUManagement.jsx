@@ -9,8 +9,10 @@ import { getSKUs, createSKU, updateSKU } from '../api/sku';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
-import { formatMonth } from '../utils/formatDate';
+import { formatDate, formatMonth } from '../utils/formatDate';
+import { labelForPrincipal } from '../principals';
 import Pagination from './Pagination';
+import ProductName from './ProductName';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 import './SKUManagement.css';
 
@@ -29,6 +31,12 @@ const NO_BRAND = '__NO_BRAND__';
 // ranked: no sales in any classified month). Same underscore convention.
 const NOT_CLASSIFIED = '__NOT_CLASSIFIED__';
 
+// The code shown under a product's name. A Del Monte sell-out category has
+// no SKU code (its sku_id is the category path, DEC-03), so its name — the
+// category — stands alone. Recently-viewed rows saved before `grain` was
+// mapped have none and keep their code.
+const codeOf = (sku) => (sku.grain === 'category' ? null : sku.code);
+
 const SKUManagement = () => {
   // Shared principal scope (Topbar's segmented control) — the SKU list
   // reloads whenever it changes, via loadSKUs' effect dep below.
@@ -38,6 +46,12 @@ const SKUManagement = () => {
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission(P.SKU_EDIT);
   const [rawItems, setRawItems] = useState([]);
+  // When each principal's stock was counted and which LP plan the target
+  // stock comes from (GET /sku, 2026-10-03). The Technical Adviser asked
+  // every stock figure to state its count date: the file filed as "Mar
+  // 2026" was counted on 6 Apr 2026. planCycle is null without lp.view.
+  const [stockCountDates, setStockCountDates] = useState({});
+  const [planCycle, setPlanCycle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -47,6 +61,8 @@ const SKUManagement = () => {
     return getSKUs({ principal })
       .then((res) => {
         setRawItems(res.items || []);
+        setStockCountDates(res.stock_count_dates || {});
+        setPlanCycle(res.planning_cycle_date ?? null);
       })
       .catch((err) => {
         setError(err.message || 'Failed to load SKUs');
@@ -81,7 +97,9 @@ const SKUManagement = () => {
         // Coverage is per principal, not uniform: every Unilever SKU has a
         // brand, while Del Monte has almost none (see the no-brand card).
         brand: (item.brand || '').trim() || null,
-        product: item.product_name || 'Unknown Product',
+        // A Del Monte category's name is its path when it has no other; a
+        // product with no name shows its code alone (ProductName's fallback).
+        product: item.product_name || (item.grain === 'category' ? item.sku_id : ''),
         cat: item.tier,
         // The period `cat` was computed in. A tier is the SKU's LAST KNOWN
         // classification, so this is what says whether it is current.
@@ -92,10 +110,14 @@ const SKUManagement = () => {
         status: item.status,
         currentStock: item.current_stock,
         currentStockCases: item.current_stock_cases,
+        // The day this product's principal's latest stock was counted.
+        stockCountDate: item.stock_count_date ?? null,
+        // The LP cycle the target stock comes from (same for every row).
+        planCycle,
         unitPrice: item.unit_price,
         notes: item.notes,
       })),
-    [rawItems]
+    [rawItems, planCycle]
   );
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -242,6 +264,23 @@ const SKUManagement = () => {
   // an invented category is worse than an honest gap.
   const notClassifiedSKUs = skus.filter(s => !s.cat).length;
 
+  // The stock column's period line: "counted Apr 6, 2026", or each
+  // principal's own day when the list spans both (Unilever's latest count
+  // is 6 Apr 2026, Del Monte's 1 Dec 2025).
+  const countEntries = Object.entries(stockCountDates);
+  const stockCountText = countEntries.length === 1
+    ? `counted ${formatDate(countEntries[0][1])}`
+    : countEntries.length > 1
+      ? `counted ${countEntries.map(([p, d]) => `${labelForPrincipal(p)} ${formatDate(d)}`).join(', ')}`
+      : null;
+  // Each principal's ABC run month, for the Class A card ("Feb 2026").
+  const runMonthsText = Object.entries(latestCatPeriodByPrincipal)
+    .map(([p, period]) => (Object.keys(latestCatPeriodByPrincipal).length > 1
+      ? `${labelForPrincipal(p)} ${formatMonth(period)}`
+      : formatMonth(period)))
+    .join(' · ');
+  const countUnit = categoryRows > 0 ? 'products' : 'SKUs';
+
   // The Audit Log entries for adding and editing a SKU are written by the
   // server as part of POST/PATCH /sku, not from here.
   const handleAddSKU = async (formData) => {
@@ -357,6 +396,19 @@ const SKUManagement = () => {
       : `Class ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
   };
 
+  // Hover text for a stock cell: the figure with both units and its count.
+  const stockTitle = (sku) => {
+    const when = sku.stockCountDate ? `, counted ${formatDate(sku.stockCountDate)}` : '';
+    if (sku.currentStock != null) {
+      const cases = sku.currentStockCases != null ? ` (${sku.currentStockCases.toLocaleString()} cases)` : '';
+      return `${sku.currentStock.toLocaleString()} pieces${cases}${when}`;
+    }
+    if (sku.currentStockCases != null) {
+      return `${sku.currentStockCases.toLocaleString()} cases${when}; no usable pack size to convert to pieces`;
+    }
+    return 'No stock record in the latest count';
+  };
+
   return (
     <div className="sku-management">
       <div className="sku-content">
@@ -385,25 +437,26 @@ const SKUManagement = () => {
           {loading ? <SkeletonStatCards count={4} cardClassName="sku-summary-card" /> : (<>
           <div className="sku-summary-card summary-total">
             <span className="summary-label">{categoryRows > 0 ? 'TOTAL PRODUCTS' : 'TOTAL SKUS'}</span>
-            <span className="summary-value">{totalSKUs.toLocaleString()}</span>
-            {categoryRows > 0 && (
-              <span className="summary-desc">
-                {(totalSKUs - categoryRows).toLocaleString()} item codes · {categoryRows.toLocaleString()} Del Monte categories
-              </span>
-            )}
+            <span className="summary-value">{totalSKUs.toLocaleString()} <span className="summary-unit">{countUnit}</span></span>
+            {/* A master-list count has no month: its period is "now". Said
+                outright so it isn't the one figure here with no period. */}
+            <span className="summary-desc">
+              {categoryRows > 0
+                ? `${(totalSKUs - categoryRows).toLocaleString()} item codes · ${categoryRows.toLocaleString()} Del Monte categories · current product master`
+                : 'in the current product master'}
+            </span>
           </div>
           <div className="sku-summary-card summary-cat-a">
             <span className="summary-label">CLASS A</span>
-            <span className="summary-value">{categoryASKUs.toLocaleString()}</span>
+            <span className="summary-value">{categoryASKUs.toLocaleString()} <span className="summary-unit">{countUnit}</span></span>
             <span className="summary-desc">
-              {categoryACarried > 0
-                ? `most recent ABC run per SKU · ${categoryACarried.toLocaleString()} carried forward`
-                : 'most recent ABC run per SKU'}
+              most recent ABC run per SKU{runMonthsText && ` (latest ${runMonthsText})`}
+              {categoryACarried > 0 && ` · ${categoryACarried.toLocaleString()} carried forward from earlier runs`}
             </span>
           </div>
           <div className="sku-summary-card summary-not-classified">
             <span className="summary-label">NOT CLASSIFIED</span>
-            <span className="summary-value">{notClassifiedSKUs.toLocaleString()}</span>
+            <span className="summary-value">{notClassifiedSKUs.toLocaleString()} <span className="summary-unit">{countUnit}</span></span>
             <span className="summary-desc">
               {unrankedDelMonteItems === 0
                 ? 'no sales in any ABC run, so never ranked'
@@ -414,7 +467,7 @@ const SKUManagement = () => {
           </div>
           <div className="sku-summary-card summary-no-brand">
             <span className="summary-label">NO BRAND RECORDED</span>
-            <span className="summary-value">{noBrandSKUs.toLocaleString()}</span>
+            <span className="summary-value">{noBrandSKUs.toLocaleString()} <span className="summary-unit">{countUnit}</span></span>
             <span className="summary-desc">
               brand missing in the product master
               {categoryRows > 0 && ` · includes ${categoryRows.toLocaleString()} categories, which carry no brand`}
@@ -446,7 +499,7 @@ const SKUManagement = () => {
                   <Search className="search-icon" size={16} />
                   <input
                     type="text"
-                    placeholder="Search by code, name, or brand..."
+                    placeholder="Search by name, SKU code, or brand..."
                     value={searchQuery}
                     onFocus={() => setIsComboboxOpen(true)}
                     onChange={(e) => {
@@ -482,12 +535,11 @@ const SKUManagement = () => {
                               className="sku-suggestion-row"
                               onClick={() => handleSelectSuggestion(sku)}
                             >
-                              <div className="sku-row-left">
-                                <span className="sku-row-code">{sku.code}</span>
-                                <span className="sku-row-brand">{sku.brand || '—'}</span>
-                              </div>
                               <div className="sku-row-middle">
-                                <span className="sku-row-product">{sku.product}</span>
+                                <ProductName name={sku.product} code={codeOf(sku)} className="sku-row-product" />
+                              </div>
+                              <div className="sku-row-left">
+                                <span className="sku-row-brand">{sku.brand || '—'}</span>
                               </div>
                               <div className="sku-row-right">
                                 <span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span>
@@ -513,12 +565,11 @@ const SKUManagement = () => {
                                 className="sku-suggestion-row"
                                 onClick={() => handleSelectSuggestion(sku)}
                               >
-                                <div className="sku-row-left">
-                                  <span className="sku-row-code">{sku.code}</span>
-                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
-                                </div>
                                 <div className="sku-row-middle">
-                                  <span className="sku-row-product">{sku.product}</span>
+                                  <ProductName name={sku.product} code={codeOf(sku)} className="sku-row-product" />
+                                </div>
+                                <div className="sku-row-left">
+                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
                                 </div>
                                 <div className="sku-row-right">
                                   <span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span>
@@ -537,12 +588,11 @@ const SKUManagement = () => {
                                 className="sku-suggestion-row"
                                 onClick={() => handleSelectSuggestion(sku)}
                               >
-                                <div className="sku-row-left">
-                                  <span className="sku-row-code">{sku.code}</span>
-                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
-                                </div>
                                 <div className="sku-row-middle">
-                                  <span className="sku-row-product">{sku.product}</span>
+                                  <ProductName name={sku.product} code={codeOf(sku)} className="sku-row-product" />
+                                </div>
+                                <div className="sku-row-left">
+                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
                                 </div>
                                 <div className="sku-row-right">
                                   <span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span>
@@ -638,11 +688,24 @@ const SKUManagement = () => {
                 <thead>
                   <tr>
                     <th className="table-num col-fit">#</th>
-                    <th className="col-fit">SKU code</th>
-                    <th className="col-fit">Brand</th>
                     <th className="col-text col-product">Product</th>
-                    <th className="table-center col-fit">Class</th>
-                    <th className="table-num col-fit" title="The stock level the LP orders up to: demand expected before the next delivery, plus safety stock">Target stock</th>
+                    <th className="col-fit">Brand</th>
+                    <th className="table-center col-fit" title="The SKU's class in the most recent ABC run that ranked it">
+                      Class
+                      <span className="sku-th-sub">latest ABC run</span>
+                    </th>
+                    {/* Stock beside the target it is measured against, each
+                        with its unit and period (Technical Adviser,
+                        2026-10-03): the count's own date, not the month the
+                        file is filed under, and the plan the target is from. */}
+                    <th className="table-num col-fit" title="Stock on hand at the latest count, in pieces (cases x pack size + loose pieces)">
+                      Stock (pieces)
+                      {stockCountText && <span className="sku-th-sub">{stockCountText}</span>}
+                    </th>
+                    <th className="table-num col-fit" title="The stock level the LP orders up to: demand expected before the next delivery, plus safety stock">
+                      Target stock (pieces)
+                      {planCycle && <span className="sku-th-sub">{formatMonth(planCycle)} plan</span>}
+                    </th>
                     <th className="table-center col-fit"><span className="visually-hidden">Actions</span></th>
                   </tr>
                 </thead>
@@ -656,25 +719,15 @@ const SKUManagement = () => {
                       {/* Row number is position in the FULL filtered set, not
                           within the page, so it stays stable across paging. */}
                       <td className="cell-rownum table-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
-                      <td className="cell-code">
-                        <span
-                          className="cell-code-link"
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => handleOpenViewModal(sku)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              handleOpenViewModal(sku);
-                            }
-                          }}
-                          title="View full SKU details"
-                        >
-                          {sku.code}
-                        </span>
+                      <td className="cell-product">
+                        <ProductName
+                          name={sku.product}
+                          code={codeOf(sku)}
+                          onOpen={() => handleOpenViewModal(sku)}
+                          openLabel="View details"
+                        />
                       </td>
                       <td className={sku.brand ? 'cell-muted' : 'cell-empty'}>{sku.brand || '—'}</td>
-                      <td className="cell-product">{sku.product}</td>
                       <td className="table-center" title={catTitle(sku)}>
                         {sku.cat
                           ? (
@@ -688,6 +741,19 @@ const SKUManagement = () => {
                           )
                           : <span className="cell-empty">—</span>}
                       </td>
+                      {/* Pieces when the pack size converts the warehouse's
+                          case count; the cases alone, labelled, when it can't
+                          (GET /sku sends no pieces then). */}
+                      <td
+                        className={`table-num ${sku.currentStock != null ? '' : 'cell-empty'}`}
+                        title={stockTitle(sku)}
+                      >
+                        {sku.currentStock != null
+                          ? formatUnits(sku.currentStock)
+                          : sku.currentStockCases != null
+                            ? `${sku.currentStockCases.toLocaleString()} cases`
+                            : '—'}
+                      </td>
                       <td
                         className={`table-num ${sku.reorderPt != null ? 'cell-strong' : 'cell-empty'}`}
                         title={exactUnits(sku.reorderPt)}
@@ -698,7 +764,7 @@ const SKUManagement = () => {
                         <button
                           className="table-btn"
                           onClick={() => handleOpenViewModal(sku)}
-                          aria-label={`View SKU ${sku.code}`}
+                          aria-label={`View details: ${sku.product || sku.code}`}
                         >
                           View
                         </button>

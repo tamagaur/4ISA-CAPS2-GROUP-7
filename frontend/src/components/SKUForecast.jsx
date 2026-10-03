@@ -28,6 +28,7 @@ import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import InfoTip from './InfoTip';
+import ProductName from './ProductName';
 import './SKUForecast.css';
 
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
@@ -139,7 +140,7 @@ const formatAxisQty = (value) => {
   return `${Math.round(value)}`;
 };
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active, payload, label, bandLabel = 'Likely range' }) => {
   if (active && payload && payload.length) {
     // Each line is drawn twice — the Line, plus the Area shading under it —
     // so the raw payload carries every value twice over. The fills declare
@@ -164,7 +165,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             return (
               <p key={index} className="tooltip-item">
                 <span className="tooltip-dot" style={{ backgroundColor: COLORS.forecastBg, border: `1px solid ${COLORS.forecast}` }}></span>
-                Confidence interval: {qty(entry.value[0])} – {qty(entry.value[1])}
+                {bandLabel}: {qty(entry.value[0])} – {qty(entry.value[1])} pieces
               </p>
             );
           }
@@ -661,6 +662,23 @@ const SKUForecast = () => {
   const storedParams = storedForecast?.model_params || {};
   const holdoutMonths = storedParams.holdout_metrics_served?.months ?? storedParams.holdout_months ?? null;
 
+  // The months behind the accuracy figures and the MA3 benchmark, so each
+  // states its period (Sir Catubag, 2 Oct 2026). The runner builds every
+  // SKU's series from its own first to its own last month on record
+  // (scripts/run_baseline_forecast.py build_series), so both windows end at
+  // this SKU's last actual month (skuCoverage.end, from the same table):
+  //   test window — the last model_params.holdout_months of that series (the
+  //                 20% holdout train_holdout_split takes), each forecast one
+  //                 month ahead from the months before it
+  //   MA3 months  — the series' last 3 months (router.ma3_value)
+  const holdoutSplitMonths = storedParams.holdout_months ?? holdoutMonths;
+  const holdoutWindow = skuCoverage && holdoutSplitMonths
+    ? `${formatPeriod(periodMinusMonths(skuCoverage.end, holdoutSplitMonths))} – ${formatPeriod(skuCoverage.end)}`
+    : null;
+  const ma3Window = skuCoverage
+    ? `${formatPeriod(periodMinusMonths(skuCoverage.end, MA_WINDOW))} – ${formatPeriod(skuCoverage.end)}`
+    : null;
+
   const derivedForecast = useMemo(() => {
     if (!forecastResult || !storedForecast || !servedModel) return null;
     const actuals = [...(forecastResult.actuals || [])].sort((a, b) => a.period.localeCompare(b.period));
@@ -853,7 +871,7 @@ const SKUForecast = () => {
     const needed = params.min_months_threshold ?? MIN_SALES_MONTHS;
     const basis = months != null ? `${months} month${months === 1 ? '' : 's'} of sales` : 'its sales so far';
     const value = Math.round(storedForecast?.forecast_value ?? 0).toLocaleString();
-    return `Trailing average of ${basis}: ${value} pieces. A forecast needs at least ${needed} months of sales.`;
+    return `Trailing average of ${basis}: ${value} pieces a month. A forecast needs at least ${needed} months of sales.`;
   };
 
   return (
@@ -977,7 +995,7 @@ const SKUForecast = () => {
                 <Search className="search-icon" size={18} />
                 <input
                   type="text"
-                  placeholder="Search by SKU code, name, or brand..."
+                  placeholder="Search by product name, SKU code or brand…"
                   value={searchQuery}
                   onFocus={() => setIsDropdownOpen(true)}
                   onChange={(e) => {
@@ -1013,17 +1031,14 @@ const SKUForecast = () => {
                               className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                               onClick={(e) => togglePinSKU(sku.code, e)}
                               title={pinnedSKUs.includes(sku.code) ? "Unpin SKU" : "Pin SKU to top"}
-                              aria-label={`${pinnedSKUs.includes(sku.code) ? 'Unpin' : 'Pin'} SKU ${sku.code}`}
+                              aria-label={`${pinnedSKUs.includes(sku.code) ? 'Unpin' : 'Pin'} ${sku.name} (${sku.code})`}
                               aria-pressed={pinnedSKUs.includes(sku.code)}
                             >
                               <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                             </button>
-                            <div className="result-code-group">
-                              <span className="result-sku-code">{sku.code}</span>
-                              <span className="result-brand">{sku.brand}</span>
-                            </div>
-                            <span className="result-product-name">{sku.name}</span>
-                            <span className={`forecast-cat-badge cat-${sku.cat}`}>Cat {sku.cat}</span>
+                            <ProductName name={sku.name} code={sku.code} className="result-product" />
+                            {sku.brand && <span className="result-brand">{sku.brand}</span>}
+                            <span className={`forecast-cat-badge cat-${sku.cat}`}>Class {sku.cat}</span>
                           </div>
                         ))
                       ) : (
@@ -1050,17 +1065,14 @@ const SKUForecast = () => {
                                 className="star-pin-btn pinned"
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Unpin SKU"
-                                aria-label={`Unpin SKU ${sku.code}`}
+                                aria-label={`Unpin ${sku.name} (${sku.code})`}
                                 aria-pressed={true}
                               >
                                 <Star size={15} fill={PIN_COLOR} />
                               </button>
-                              <div className="result-code-group">
-                                <span className="result-sku-code">{sku.code}</span>
-                                <span className="result-brand">{sku.brand}</span>
-                              </div>
-                              <span className="result-product-name">{sku.name}</span>
-                              <span className={`forecast-cat-badge cat-${sku.cat}`}>Cat {sku.cat}</span>
+                              <ProductName name={sku.name} code={sku.code} className="result-product" />
+                              {sku.brand && <span className="result-brand">{sku.brand}</span>}
+                              <span className={`forecast-cat-badge cat-${sku.cat}`}>Class {sku.cat}</span>
                             </div>
                           ))}
                         </div>
@@ -1083,17 +1095,14 @@ const SKUForecast = () => {
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Pin SKU"
-                                aria-label={`Pin SKU ${sku.code}`}
+                                aria-label={`Pin ${sku.name} (${sku.code})`}
                                 aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
                                 <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
-                              <div className="result-code-group">
-                                <span className="result-sku-code">{sku.code}</span>
-                                <span className="result-brand">{sku.brand}</span>
-                              </div>
-                              <span className="result-product-name">{sku.name}</span>
-                              <span className={`forecast-cat-badge cat-${sku.cat}`}>Cat {sku.cat}</span>
+                              <ProductName name={sku.name} code={sku.code} className="result-product" />
+                              {sku.brand && <span className="result-brand">{sku.brand}</span>}
+                              <span className={`forecast-cat-badge cat-${sku.cat}`}>Class {sku.cat}</span>
                             </div>
                           ))}
                         </div>
@@ -1115,17 +1124,14 @@ const SKUForecast = () => {
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
                                 title="Pin SKU"
-                                aria-label={`Pin SKU ${sku.code}`}
+                                aria-label={`Pin ${sku.name} (${sku.code})`}
                                 aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
                                 <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
-                              <div className="result-code-group">
-                                <span className="result-sku-code">{sku.code}</span>
-                                <span className="result-brand">{sku.brand}</span>
-                              </div>
-                              <span className="result-product-name">{sku.name}</span>
-                              <span className={`forecast-cat-badge cat-${sku.cat}`}>Cat {sku.cat}</span>
+                              <ProductName name={sku.name} code={sku.code} className="result-product" />
+                              {sku.brand && <span className="result-brand">{sku.brand}</span>}
+                              <span className={`forecast-cat-badge cat-${sku.cat}`}>Class {sku.cat}</span>
                             </div>
                           ))}
                         </div>
@@ -1169,7 +1175,7 @@ const SKUForecast = () => {
             <p className="forecast-empty-body">
               {sourceSKUs.length === 0
                 ? 'GET /abc returned no rows for the selected principal, so there is nothing to forecast yet.'
-                : 'Search by SKU code, product name, or brand above — or pick one from your pinned and recently viewed SKUs.'}
+                : 'Search by product name, SKU code or brand above — or pick one from your pinned and recently viewed SKUs.'}
             </p>
           </div>
         )}
@@ -1180,21 +1186,21 @@ const SKUForecast = () => {
             <div className="selected-sku-card">
               <div className="sku-info-left">
                 <div className="sku-code-header-row">
-                  <span className="sku-code-label">SELECTED SKU CODE</span>
+                  <span className="sku-code-label">SELECTED PRODUCT</span>
                   <button
                     className={`card-star-btn ${isSelectedPinned ? 'pinned' : ''}`}
                     onClick={(e) => togglePinSKU(selectedSKU.code, e)}
                     title={isSelectedPinned ? "Unpin SKU" : "Pin SKU to top of search"}
-                    aria-label={`${isSelectedPinned ? 'Unpin' : 'Pin'} SKU ${selectedSKU.code}`}
+                    aria-label={`${isSelectedPinned ? 'Unpin' : 'Pin'} ${selectedSKU.name} (${selectedSKU.code})`}
                     aria-pressed={isSelectedPinned}
                   >
                     <Star size={15} fill={isSelectedPinned ? PIN_COLOR : 'none'} color={isSelectedPinned ? PIN_COLOR : PIN_IDLE_COLOR} />
                     <span className="pin-text">{isSelectedPinned ? 'Pinned' : 'Pin SKU'}</span>
                   </button>
                 </div>
-                <span className="sku-code-value">{selectedSKU.code}</span>
+                {/* Name first, SKU code under it (Sir Catubag, 2 Oct 2026). */}
                 <div className="sku-meta-row">
-                  <span className="sku-product-name">{selectedSKU.name}</span>
+                  <ProductName name={selectedSKU.name} code={selectedSKU.code} className="sku-selected-name" />
                   {selectedSKU.brand && <span className="sku-brand-name">{selectedSKU.brand}</span>}
                 </div>
               </div>
@@ -1259,7 +1265,7 @@ const SKUForecast = () => {
                   <SkeletonChart variant="line" height={420} />
                 </>
               )}
-              {isForecastRefreshing && <RefreshingNote>Updating {selectedSKU.code}…</RefreshingNote>}
+              {isForecastRefreshing && <RefreshingNote>Updating {selectedSKU.name}…</RefreshingNote>}
               {forecastError && <p className="forecast-subtitle">Error: {forecastError}</p>}
 
               {/* A null result (GET /forecast 404 -> getForecast null) gets a
@@ -1281,8 +1287,8 @@ const SKUForecast = () => {
               {!isForecastColdLoad && !forecastError && forecastResult && forecastResult.forecast.length === 0 && (
                 <p className="forecast-subtitle">
                   {selectedSKU.cat === 'A'
-                    ? `No forecast has been generated for ${selectedSKU.code} yet.`
-                    : `Forecasts are only produced for Class A SKUs.${selectedSKU.cat ? ` ${selectedSKU.code} is Class ${selectedSKU.cat}.` : ''}`}
+                    ? `No forecast has been generated for ${selectedSKU.name} (${selectedSKU.code}) yet.`
+                    : `Forecasts are only produced for Class A SKUs.${selectedSKU.cat ? ` ${selectedSKU.name} (${selectedSKU.code}) is Class ${selectedSKU.cat}.` : ''}`}
                 </p>
               )}
 
@@ -1356,7 +1362,7 @@ const SKUForecast = () => {
               {!isForecastColdLoad && !forecastError && forecastResult && rangeStatus === 'none' && (
                 <div className="forecast-range-error">
                   <span className="forecast-range-error-title">
-                    No data for {selectedSKU.code} in the selected range
+                    No data for {selectedSKU.name} in the selected range
                   </span>
                   <p className="forecast-range-error-body">
                     You selected <strong>{formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}</strong>,
@@ -1407,7 +1413,8 @@ const SKUForecast = () => {
                         (utils/forecastModel.js). */}
                     <div className="forecast-stat-block">
                       <span className="forecast-stat-label">
-                        {derivedForecast && !derivedForecast.plotted ? 'Stored forecast' : 'Next period forecast'}
+                        {derivedForecast && !derivedForecast.plotted ? 'Stored forecast' : 'Forecast'}
+                        {derivedForecast ? ` for ${formatPeriod(derivedForecast.period)}` : ''}
                       </span>
                       <span className="forecast-stat-value forecast-stat-value-forecast">
                         {derivedForecast ? (
@@ -1424,7 +1431,7 @@ const SKUForecast = () => {
                       </span>
                       <span className="forecast-stat-desc">
                         {derivedForecast
-                          ? [`for ${formatPeriod(derivedForecast.period)}`, servedModel?.label].filter(Boolean).join(' · ')
+                          ? (servedModel?.label ?? '')
                           : storedForecast
                             ? 'no sales in the selected range'
                             : selectedSKU.cat === 'A' ? 'no forecast yet' : 'Class A SKUs only'}
@@ -1434,7 +1441,9 @@ const SKUForecast = () => {
                     <div className="forecast-stat-divider" />
 
                     <div className="forecast-stat-block">
-                      <span className="forecast-stat-label">Vs. last actual</span>
+                      <span className="forecast-stat-label">
+                        Vs. {latestActualPoint ? formatPeriod(latestActualPoint.period) : 'last'} actual (%)
+                      </span>
                       {forecastTrendPct === null ? (
                         <span className="forecast-stat-value forecast-stat-value-neutral">—</span>
                       ) : (
@@ -1468,7 +1477,7 @@ const SKUForecast = () => {
                         <>
                           <div className="forecast-stat-divider" />
                           <div className="forecast-stat-block">
-                            <span className="forecast-stat-label">Likely range</span>
+                            <span className="forecast-stat-label">{bandLabel} (pieces)</span>
                             <span className="forecast-stat-value forecast-stat-value-range">
                               <span className="forecast-stat-swatch forecast-stat-swatch-band" aria-hidden="true" />
                               <span className="range-low">
@@ -1480,7 +1489,7 @@ const SKUForecast = () => {
                               </span>
                             </span>
                             <span className="forecast-stat-desc">
-                              {bandLevel != null ? `${bandLabel}, from past forecast errors · pieces` : 'pieces'}
+                              for {formatPeriod(derivedForecast.period)}{bandLevel != null ? ', from past forecast errors' : ''}
                             </span>
                           </div>
                         </>
@@ -1507,8 +1516,10 @@ const SKUForecast = () => {
                             {(storedParams.wape * 100).toFixed(1)}%
                           </span>
                           <span className="forecast-stat-desc">
-                            WAPE, rolling one-month-ahead
-                            {holdoutMonths != null ? `, ${holdoutMonths} month${holdoutMonths === 1 ? '' : 's'}` : ''}
+                            WAPE{holdoutWindow ? `, tested on ${holdoutWindow}` : ''}, one month ahead
+                            {holdoutMonths != null && holdoutSplitMonths != null && holdoutMonths < holdoutSplitMonths
+                              ? ` (${holdoutMonths} of ${holdoutSplitMonths} months scored)`
+                              : ''}
                           </span>
                         </div>
                       </>
@@ -1547,8 +1558,8 @@ const SKUForecast = () => {
                         )}
                         {storedParams.ma3_value != null && (
                           <div className="forecast-howmade-item">
-                            <dt>3-month average (MA3)</dt>
-                            <dd>{Math.round(storedParams.ma3_value).toLocaleString()} pieces</dd>
+                            <dt>3-month average (MA3){ma3Window ? `, ${ma3Window}` : ''}</dt>
+                            <dd>{Math.round(storedParams.ma3_value).toLocaleString()} pieces a month</dd>
                           </div>
                         )}
                         {/* Reliability on the same basis as the dashboard's
@@ -1570,6 +1581,7 @@ const SKUForecast = () => {
                                   forecast" (the verdict uses the stored value). */}
                               MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)} ·{' '}
                               {storedForecast.mase < 1 ? 'beats a naive forecast' : 'no better than a naive forecast'}
+                              {holdoutWindow ? ` · tested on ${holdoutWindow}` : ''}
                             </dd>
                           </div>
                         )}
@@ -1580,7 +1592,7 @@ const SKUForecast = () => {
                               XGBoost {storedParams.components.xgb != null ? Math.round(storedParams.components.xgb).toLocaleString() : '—'}
                               {' + '}
                               MA3 {storedParams.components.ma3 != null ? Math.round(storedParams.components.ma3).toLocaleString() : '—'}
-                              , averaged
+                              {' '}pieces, averaged
                             </dd>
                           </div>
                         )}
@@ -1605,7 +1617,7 @@ const SKUForecast = () => {
                     <div className="forecast-range-warning">
                       <div className="forecast-range-warning-text">
                         <strong>Showing {formatPeriod(chartData[0]?.label)} – {formatPeriod(lastPlottedActualPeriod)}.</strong>{' '}
-                        {selectedSKU.code} only has recorded sales from {formatPeriod(skuCoverage.start)} to{' '}
+                        This product only has recorded sales from {formatPeriod(skuCoverage.start)} to{' '}
                         {formatPeriod(skuCoverage.end)}
                         {rangeStartPeriod < skuCoverage.start && rangeEndPeriod > skuCoverage.end
                           ? ', so both ends of your selected range fall outside it.'
@@ -1671,8 +1683,8 @@ const SKUForecast = () => {
                         },
                         { key: 'actualV', label: 'Actual (pieces)', format: (v) => Math.round(v).toLocaleString() },
                         { key: 'forecastV', label: 'Forecast (pieces)', format: (v) => Math.round(v).toLocaleString() },
-                        { key: 'ciLow', label: 'Range low', format: (v) => Math.round(v).toLocaleString() },
-                        { key: 'ciHigh', label: 'Range high', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'ciLow', label: `${bandLabel} low (pieces)`, format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'ciHigh', label: `${bandLabel} high (pieces)`, format: (v) => Math.round(v).toLocaleString() },
                       ]}
                       rows={chartData.map((pt) => ({
                         period: pt.label,
@@ -1730,11 +1742,12 @@ const SKUForecast = () => {
                     )}
                   </div>
                   <div className={`chart-wrapper${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
-                    {/* height 420 + bottom margin 32: the X tick row sits
-                        INSIDE the SVG, so with bottom:0 the month labels were
-                        being clipped off the bottom edge on load. */}
+                    {/* The X axis is 44px tall so its "Month" title sits
+                        under the tick row instead of on it; the bottom
+                        margin keeps the title off the SVG's edge (with
+                        bottom:0 the month labels were once clipped). */}
                     <ResponsiveContainer width="100%" height={420}>
-                      <ComposedChart data={zoom.view} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 8, bottom: 32 }}>
+                      <ComposedChart data={zoom.view} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 8, bottom: 12 }}>
                         <CartesianGrid {...GRID_PROPS} />
                         {renderPlaceholderBand(placeholderSpan(zoom.view.map((pt) => ({ period: pt.label })), placeholder))}
                         <XAxis
@@ -1745,6 +1758,8 @@ const SKUForecast = () => {
                           tickFormatter={formatAxisPeriod}
                           tickMargin={10}
                           minTickGap={12}
+                          height={44}
+                          label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 10, fill: CHART_COLORS.axisLabel }}
                           // Recharts' default tick-skip anchors from the END
                           // of the axis (interval="preserveEnd") — harmless
                           // at the old fixed ~12-point series, but with a
@@ -1770,10 +1785,11 @@ const SKUForecast = () => {
                           tickLine={true}
                           tick={{ fill: '#556070', fontSize: 11 }}
                           tickFormatter={formatAxisQty}
-                          width={56}
+                          width={60}
                           tickMargin={8}
+                          label={{ value: 'Pieces', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
                         />
-                        <Tooltip content={<CustomTooltip />} />
+                        <Tooltip content={<CustomTooltip bandLabel={bandLabel} />} />
 
                         {/* Where actuals hand over to the forecast — the
                             divider the dashed style is read against. Only
@@ -1800,7 +1816,7 @@ const SKUForecast = () => {
                           strokeWidth={1}
                           fill={COLORS.forecast}
                           fillOpacity={0.16}
-                          name="Confidence interval"
+                          name={bandLabel}
                           {...zoom.zoomAnim(0)}
                           connectNulls={false}
                         />

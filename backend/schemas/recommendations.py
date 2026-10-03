@@ -114,6 +114,19 @@ class RecommendationsResponse(BaseModel):
     # the solver's own settings (backend/lp_cycle.lp_model_info), so the
     # detail view states what the LP does rather than a copy of it.
     lp_model: dict | None = None
+    # The periods the row figures were read at, so the page can say which
+    # month or day every number belongs to (backend/routers/recommendations.
+    # label_context). Read-only labels; none of them changes a row.
+    #   stock_period      'YYYY-MM' Inventory_Fact_Real._period the stock is from
+    #   stock_count_date  the day that count was taken (MAX(snapshot_date) in
+    #                     stock_period): Unilever's '2026-03' is 6 Apr 2026
+    #   abc_period        the single-month ABC run revenue_share/tier come from
+    #   cover_sales_start/end  the sales months days_of_cover averages over
+    stock_period: str | None = None
+    stock_count_date: datetime.date | None = None
+    abc_period: str | None = None
+    cover_sales_start: str | None = None
+    cover_sales_end: str | None = None
 
 
 class RecommendationDecision(BaseModel):

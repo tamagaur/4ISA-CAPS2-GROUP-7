@@ -41,14 +41,23 @@ const TIER_COLOR = { A: CHART_COLORS.abcRamp[0], B: CHART_COLORS.abcRamp[1], C: 
 const PARETO_BAR_COLOR = { A: TIER_COLOR.A, B: '#8E99A9', C: '#ACB5C3' };
 const titleCase = (name) => (name || '').toLowerCase().replace(/(^|[\s/&-])\S/g, (c) => c.toUpperCase());
 
-const ParetoTooltip = ({ active, payload }) => {
+// The Pareto's period as the Technical Adviser reads periods: one month
+// ("Feb 2026") or a range ("Mar 2025 – Feb 2026"), from GET /pareto's own
+// window, never the months the toggle asked for (a window is cut at the
+// principal's latest data month).
+const paretoPeriod = (section, months) =>
+  months === 1 || !section?.window_start || section.window_start === section.period
+    ? formatMonth(section?.period)
+    : `${formatMonth(section.window_start)} \u2013 ${formatMonth(section.period)}`;
+
+const ParetoTooltip = ({ active, payload, periodText, unit }) => {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
   return (
     <div className="abcb-tooltip">
       <p className="abcb-tooltip-title">{titleCase(row.name)} · Class {row.tier}</p>
-      <p>{formatCompactPesos(row.revenue)} revenue · {(row.revenue_share * 100).toFixed(1)}% of the total</p>
-      <p>Cumulative {(row.cumulative_share * 100).toFixed(1)}% · {row.products} product{row.products === 1 ? '' : 's'}</p>
+      <p>{formatCompactPesos(row.revenue)} revenue in {periodText} · {(row.revenue_share * 100).toFixed(1)}% of the total</p>
+      <p>Cumulative {(row.cumulative_share * 100).toFixed(1)}% · {row.products.toLocaleString()} {unit(row.products)}</p>
     </div>
   );
 };
@@ -93,6 +102,13 @@ export const ParetoCard = ({ principal, period }) => {
   // Where the cumulative curve first clears the A cutoff — the visual
   // anchor for the headline's "N of M make up 80%".
   const crossing = aCutPct != null ? rows.find((r) => r.cumPct >= aCutPct) : null;
+  const periodText = section?.period ? paretoPeriod(section, months) : null;
+  const grainLabel = grain === 'brand' ? 'Brand' : 'Category';
+  // What `products` counts: Unilever's revenue is per SKU; Del Monte's is
+  // per sell-out category (DEC-03), one product row each.
+  const productUnit = (n) => (section?.principal === 'delmonte'
+    ? (n === 1 ? 'category' : 'categories')
+    : (n === 1 ? 'SKU' : 'SKUs'));
 
   return (
     <section className="abcb-card abcb-pareto">
@@ -146,20 +162,20 @@ export const ParetoCard = ({ principal, period }) => {
             <p className="abcb-headline">
               <strong>{tierCounts.A || 0} of {rows.length}</strong> {grain === 'brand' ? 'brands' : 'categories'} make up{' '}
               <strong>{(aShare * 100).toFixed(0)}%</strong> of {labelForPrincipal(section.principal)} revenue
-              {months === 1 ? ` in ${formatMonth(section.period)}` : ` from ${formatMonth(section.window_start)} to ${formatMonth(section.period)}`}.
+              {' '}in {periodText}.
             </p>
             <ChartViewToggle view={view} onChange={setView} label="Pareto: chart or table" />
           </div>
           {view === 'table' ? (
             <ChartTable
-              caption={`Revenue Pareto by ${grain}`}
+              caption={`Revenue Pareto by ${grain}, ${periodText}`}
               columns={[
-                { key: 'name', label: grain === 'brand' ? 'Brand' : 'Category', format: (v) => titleCase(v), align: 'left' },
+                { key: 'name', label: grainLabel, format: (v) => titleCase(v), align: 'left' },
                 { key: 'tier', label: 'Class', align: 'left' },
-                { key: 'revenue', label: 'Revenue', format: (v) => formatCompactPesos(v) },
-                { key: 'sharePct', label: 'Share', format: (v) => `${v.toFixed(1)}%` },
-                { key: 'cumPct', label: 'Cumulative', format: (v) => `${v.toFixed(1)}%` },
-                { key: 'products', label: 'Products' },
+                { key: 'revenue', label: 'Revenue (₱)', format: (v) => formatCompactPesos(v) },
+                { key: 'sharePct', label: 'Share of revenue (%)', format: (v) => `${v.toFixed(1)}%` },
+                { key: 'cumPct', label: 'Cumulative share (%)', format: (v) => `${v.toFixed(1)}%` },
+                { key: 'products', label: section.principal === 'delmonte' ? 'Categories' : 'SKUs' },
               ]}
               rows={rows.map((r) => ({ ...r, key: r.name }))}
             />
@@ -169,11 +185,11 @@ export const ParetoCard = ({ principal, period }) => {
                 {['A', 'B', 'C'].map((t) => (
                   <span key={t}><i style={{ backgroundColor: PARETO_BAR_COLOR[t] }} />Class {t}: {tierCounts[t] || 0}</span>
                 ))}
-                <span><i className="abcb-legend-line" />Cumulative share</span>
+                <span><i className="abcb-legend-line" />Cumulative share (%)</span>
               </div>
               <div className="abcb-chart">
                 <ResponsiveContainer width="100%" height={260}>
-                  <ComposedChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 48 }}>
+                  <ComposedChart data={rows} margin={{ top: 8, right: 12, left: 8, bottom: 48 }}>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis
                       dataKey="name"
@@ -184,8 +200,19 @@ export const ParetoCard = ({ principal, period }) => {
                       height={56}
                       tick={{ fill: CHART_COLORS.axisLabel, fontSize: 10 }}
                     />
-                    <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }} width={40} />
-                    <Tooltip content={<ParetoTooltip />} cursor={{ fill: '#f7fafc' }} />
+                    <YAxis
+                      domain={[0, 100]}
+                      tickFormatter={(v) => `${v}%`}
+                      tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                      width={54}
+                      label={{
+                        value: '% of revenue',
+                        angle: -90,
+                        position: 'insideLeft',
+                        style: { textAnchor: 'middle', fill: CHART_COLORS.axisLabel, fontSize: 11 },
+                      }}
+                    />
+                    <Tooltip content={<ParetoTooltip periodText={periodText} unit={productUnit} />} cursor={{ fill: '#f7fafc' }} />
                     {/* The run's own cutoffs (GET /pareto payload) — drawn
                         only when the API sent them, never a retyped 80/95. */}
                     {aCutPct != null && (
@@ -214,6 +241,10 @@ export const ParetoCard = ({ principal, period }) => {
                     )}
                   </ComposedChart>
                 </ResponsiveContainer>
+                {/* The X axis title, as text under the chart: the angled
+                    tick labels (long category paths) run to different
+                    depths, so an in-chart label would sit on top of them. */}
+                <p className="abcb-axis-title">{grainLabel}, ranked by {periodText} revenue</p>
               </div>
             </>
           )}
@@ -234,7 +265,9 @@ const FSN_META = {
 // non-moving Class A item in the matrix was one that had simply stopped
 // selling (16 of 16, 2026-09-29) — the note below then pointed at stale
 // tiers. `carriedCount` says how many were left out.
-export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded, carriedCount = 0 }) => {
+export const AbcFsnMatrix = ({
+  rows, fsnOf, rules, loaded, carriedCount = 0, windowText = null, periodLabel = null, unit = 'SKUs',
+}) => {
   const matrix = useMemo(() => {
     const m = { A: { F: 0, S: 0, N: 0 }, B: { F: 0, S: 0, N: 0 }, C: { F: 0, S: 0, N: 0 } };
     if (!loaded) return m;
@@ -261,9 +294,13 @@ export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded, carriedCount = 0 }) =
         <div>
           <h3 className="abcb-card-title">Movement × value (ABC × FSN)</h3>
           <p className="abcb-card-subtitle">
-            How often each class actually sells, over the last {rules?.window_months ?? 12} months with data.
-            {' '}Items ranked in this run
-            {carriedCount > 0 && <> — {carriedCount.toLocaleString()} carried-forward items (no sales since) are left out</>}.
+            How often each class actually sells, over{' '}
+            {windowText
+              ? <strong>{windowText}</strong>
+              : <>the last {rules?.window_months ?? 12} months with data</>}
+.
+            {' '}Counts are {unit} ranked in {periodLabel ?? 'this run'}
+            {carriedCount > 0 && <> — {carriedCount.toLocaleString()} carried forward (no sales since) are left out</>}.
           </p>
         </div>
       </div>
@@ -277,7 +314,7 @@ export const AbcFsnMatrix = ({ rows, fsnOf, rules, loaded, carriedCount = 0 }) =
           <table className="abcb-matrix-table">
             <thead>
               <tr>
-                <th />
+                <th className="abcb-matrix-unit">{unit}</th>
                 {['F', 'S', 'N'].map((f) => <th key={f} className={`fsn-col-${f}`}>{FSN_META[f].label}</th>)}
               </tr>
             </thead>

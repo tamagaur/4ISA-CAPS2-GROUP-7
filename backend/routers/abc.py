@@ -137,6 +137,10 @@ from backend.principals import (
 )
 from backend.stock_status import CRITICAL, NO_DATA, stock_status
 from backend.stock_units import STOCK_AT_LATEST_SQL
+# The stock count's own date (routers/sku.py, 2026-10-03): GET /sku and GET
+# /abc state the same count, so they share the one query rather than each
+# keeping a copy that could name a different day.
+from backend.routers.sku import STOCK_COUNT_DATE_SQL, stock_count_dates
 from analytics.classification.abc import abc_rules, pareto_check
 from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
 
@@ -491,10 +495,12 @@ def _get_abc_period(
             inv.stock_pieces AS current_stock,
             inv.product_key IS NOT NULL AS has_stock_row,
             rop.rop_i AS reorder_point,
-            rop.ss_i AS safety_stock{_PLAN_POOL_COLUMNS}
+            rop.ss_i AS safety_stock,
+            stock_count.count_date AS stock_count_date{_PLAN_POOL_COLUMNS}
         FROM {abc_source} ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
+        LEFT JOIN ({STOCK_COUNT_DATE_SQL}) stock_count ON stock_count.principal = ac.principal
         LEFT JOIN (
             SELECT product_key, rop_i, ss_i
             FROM {lp_src}
@@ -528,6 +534,8 @@ def _get_abc_period(
         tier_summary=tier_summary,
         rules=ABCRules(**abc_rules()),
         pareto_check=check,
+        stock_count_dates=stock_count_dates(rows),
+        planning_cycle_date=cycle if lp_visible else None,
     )
 
 
@@ -607,10 +615,12 @@ def _get_abc_last_known(
             inv.stock_pieces AS current_stock,
             inv.product_key IS NOT NULL AS has_stock_row,
             rop.rop_i AS reorder_point,
-            rop.ss_i AS safety_stock{_PLAN_POOL_COLUMNS}
+            rop.ss_i AS safety_stock,
+            stock_count.count_date AS stock_count_date{_PLAN_POOL_COLUMNS}
         FROM latest ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
+        LEFT JOIN ({STOCK_COUNT_DATE_SQL}) stock_count ON stock_count.principal = ac.principal
         LEFT JOIN (
             SELECT product_key, rop_i, ss_i
             FROM {lp_src}
@@ -644,4 +654,6 @@ def _get_abc_last_known(
         unclassified_count=unclassified_count,
         rules=ABCRules(**abc_rules()),
         pareto_check=check,
+        stock_count_dates=stock_count_dates(rows),
+        planning_cycle_date=cycle if lp_visible else None,
     )

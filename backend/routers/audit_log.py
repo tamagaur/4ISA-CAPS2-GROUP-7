@@ -46,6 +46,7 @@ USER_SUMMARY_SQL = """
                (ARRAY_AGG(started_at ORDER BY COALESCE(ended_at, last_seen_at) - started_at DESC NULLS LAST))[1]
                    AS longest_session_started_at,
                MAX(started_at) AS last_login_at,
+               MIN(started_at) AS first_login_at,
                (ARRAY_AGG(user_name ORDER BY started_at DESC))[1] AS user_name,
                (ARRAY_AGG(role ORDER BY started_at DESC))[1] AS role
         FROM user_session
@@ -59,7 +60,8 @@ USER_SUMMARY_SQL = """
            s.longest_session_seconds,
            CASE WHEN s.longest_session_seconds IS NOT NULL THEN s.longest_session_started_at END
                AS longest_session_started_at,
-           s.last_login_at
+           s.last_login_at,
+           s.first_login_at
     FROM users u
     FULL OUTER JOIN s ON s.user_email = u.email
     ORDER BY s.longest_session_seconds DESC NULLS LAST, COALESCE(s.login_count, 0) DESC,
@@ -81,7 +83,16 @@ def get_audit_user_summary(
             detail="Session history is not available — migration 0023 (user_session) has not been applied.",
         ) from exc
     items = [AuditUserSummary(**dict(r)) for r in rows]
-    return AuditUserSummaryResponse(items=items, count=len(items))
+    # The span the sign-in counts cover (2026-10-03): a count with no period
+    # read as "ever", while it only goes back to the first recorded sign-in.
+    firsts = [i.first_login_at for i in items if i.first_login_at is not None]
+    lasts = [i.last_login_at for i in items if i.last_login_at is not None]
+    return AuditUserSummaryResponse(
+        items=items,
+        count=len(items),
+        first_login_at=min(firsts) if firsts else None,
+        last_login_at=max(lasts) if lasts else None,
+    )
 
 
 @router.get("", response_model=AuditLogListResponse)

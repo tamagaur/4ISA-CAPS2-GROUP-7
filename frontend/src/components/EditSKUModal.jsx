@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowLeft, XCircle } from 'lucide-react';
 import Modal from './Modal';
+import ProductName from './ProductName';
 import SaveResult from './SaveResult';
 import { useSaveResult } from '../utils/useSaveResult';
 import './EditSKUModal.css';
@@ -157,7 +158,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      label={`Edit SKU ${sku.code}`}
+      label={`Edit ${sku.product || 'SKU'} (${sku.code})`}
       overlayClassName="edit-sku-modal-overlay"
       containerClassName="edit-sku-modal-card"
       closeOnOverlayClick={!saving}
@@ -168,7 +169,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
             ok={result.ok}
             title={result.ok ? 'Changes saved' : "Couldn't save the changes"}
             message={result.ok
-              ? <>Product details for <strong>{formatSKU(sku.code)}</strong> were updated.</>
+              ? <>Product details for <strong>{sku.product || formatSKU(sku.code)}</strong> ({formatSKU(sku.code)}) were updated.</>
               : result.message}
           />
         ) : step === 'FORM' ? (
@@ -176,7 +177,9 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
           <>
             <div className="edit-sku-modal-header">
               <div>
-                <h3 className="edit-sku-modal-title">Edit SKU — {formatSKU(sku.code)}</h3>
+                <h3 className="edit-sku-modal-title">Edit SKU</h3>
+                {/* Name first, code under it, as the product lists show it. */}
+                <ProductName name={sku.product} code={formatSKU(sku.code)} className="edit-sku-modal-product" />
                 <p className="edit-sku-modal-subtitle">
                   Update the product name or brand. Changes will be reflected immediately.
                 </p>
@@ -344,7 +347,8 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
           /* STEP 2: CONFIRM CHANGES VIEW */
           <>
             <div className="edit-sku-modal-header centered-header">
-              <h3 className="edit-sku-modal-title">Confirm Changes — {formatSKU(sku.code)}</h3>
+              <h3 className="edit-sku-modal-title">Confirm Changes</h3>
+              <ProductName name={sku.product} code={formatSKU(sku.code)} className="edit-sku-modal-product" />
             </div>
 
             <div className="confirm-changes-body">

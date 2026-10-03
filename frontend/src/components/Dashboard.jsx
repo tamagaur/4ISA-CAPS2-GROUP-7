@@ -11,6 +11,7 @@ import { getDashboardData, peekDashboardData } from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
 import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL } from '../principals';
 import { staleCoverageNotice } from '../dataCoverage';
+import { formatDate } from '../utils/formatDate';
 import { usePermissions } from '../permissions/context';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
@@ -59,6 +60,14 @@ const periodLabel = (period) => {
   return `${NUM_TO_MONTH[Number(num) - 1] || num} ${year}`;
 };
 
+// 'YYYY-MM-DD' -> 'Apr 6, 2026': the day a stock count was taken (GET
+// /dashboard's kpis.soh_count_date, Inventory_Fact_Real.snapshot_date). The
+// stock filed under "Mar 2026" is Unilever's count of Apr 6, 2026; the
+// Technical Adviser read the bare month as a month-end figure, so stock
+// figures name the count day whenever the backend knows it. Written with
+// the app's shared formatDate so every page writes a day the same way.
+const dayLabel = (day) => (day ? formatDate(day) : null);
+
 // Names the principals a figure actually covers, but only when that is
 // NARROWER than what the user asked for — saying "Unilever only" while the
 // Unilever filter is already on would be noise. Under All principals it is
@@ -79,7 +88,9 @@ const coverageNote = (coverage, pagePrincipal) => {
 // as a shaded pill coloured by direction (Audrey's call, 2026-09-26):
 // green when the figure rose, red when it fell, gray when flat — with the
 // arrow repeating the direction so it never relies on colour alone.
-const trendExtras = (trend, color) => {
+// `noun` follows the comparison month ("vs Jan 2026 count") where the month
+// alone would not say what was compared — the stock card's months are counts.
+const trendExtras = (trend, color, noun = '') => {
   if (!trend) return {};
   const extras = {};
   if ((trend.points?.length ?? 0) >= 2) {
@@ -96,7 +107,7 @@ const trendExtras = (trend, color) => {
     const gap = (trend.skipped || []).length === 0 && trend.months_apart > 1
       ? ` (${trend.months_apart} months earlier)`
       : '';
-    extras.deltaLine = `${Math.abs(trend.delta_pct).toFixed(1)}% vs ${periodLabel(trend.prev_period)}${gap}`;
+    extras.deltaLine = `${Math.abs(trend.delta_pct).toFixed(1)}% vs ${periodLabel(trend.prev_period)}${noun ? ` ${noun}` : ''}${gap}`;
     extras.trendDirection = trend.delta_pct > 0 ? 'up' : trend.delta_pct < 0 ? 'down' : undefined;
     extras.deltaTone = trend.delta_pct > 0 ? 'positive' : trend.delta_pct < 0 ? 'negative' : 'neutral';
   }
@@ -183,7 +194,7 @@ const DashboardSkeleton = () => (
 // of that story the section tells.
 const DASH_SECTIONS = [
   { id: 'dash-summary', label: 'Summary', hint: 'The four headline numbers' },
-  { id: 'dash-sales', label: 'Sales & stock', hint: 'What happened: monthly sales against stock on hand' },
+  { id: 'dash-sales', label: 'Sales & inventory', hint: 'What happened: monthly sales against inventory value (₱, at cost)' },
   { id: 'dash-abc', label: 'ABC classes', hint: 'What happened: which products earn the most, and their stock status' },
   { id: 'dash-forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast and the reorder list" },
   { id: 'dash-policy', label: 'Client policy', hint: "What to do: the LP safety stock against SSM's 3-week policy, and sales against the supplier allocation" },
@@ -413,9 +424,18 @@ const Dashboard = () => {
   // pesos mix Unilever's VAT-inclusive amounts with Del Monte's
   // VAT-exclusive ones, and the card must say so rather than imply one basis.
   const vatNote = data.vat_note || null;
+  // The tax basis of a single principal's pesos (sales_vs_stock_basis.sales),
+  // so the figure states its unit in full: "₱27.9M · Feb 2026 · incl. VAT".
+  // A Del Monte range can bring "(except Aug 2023, recorded with tax)"; that
+  // aside matters on the card only when the card's own month is the one
+  // recorded with tax — and then that month IS tax-inclusive.
+  const salesBasisRaw = data.sales_vs_stock_basis?.sales || null;
+  const salesBasis = !salesBasisRaw ? null
+    : salesMonth && salesBasisRaw.includes(salesMonth) ? 'incl. VAT (recorded with tax)'
+      : salesBasisRaw.split(' (')[0];
   const sales = kpiDisplay(
     kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
-    [salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales', vatNote]
+    [salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales', salesBasis, vatNote]
       .filter(Boolean).join(' · '),
   );
   // The stock card also answers SSM's own rule (client meeting, Sep 2026:
@@ -426,11 +446,13 @@ const Dashboard = () => {
   // move with the range.
   const cover = kpis.weeks_of_cover || {};
   const policyWeeks = data.inventory?.policy_weeks ?? 3;
-  const coverLine = cover.value != null
-    ? `≈ ${Number(cover.value).toFixed(1)} weeks of sales in stock · SSM policy: keep ${policyWeeks} weeks`
-    : null;
   const coverWindow = cover.sales_window
     ? `${periodLabel(cover.sales_window.start)} – ${periodLabel(cover.sales_window.end)}`
+    : null;
+  // The weeks figure names the sales it is measured in, so "3.0 weeks"
+  // never reads as weeks of the range on screen (it ignores the picker).
+  const coverLine = cover.value != null
+    ? `≈ ${Number(cover.value).toFixed(1)} weeks of ${coverWindow ? `${coverWindow} ` : ''}sales · SSM policy: ${policyWeeks} weeks`
     : null;
   // Del Monte's year has sales in only some months (6 of 12 in 2025); the
   // average is over those, and the tooltip says so rather than imply a year.
@@ -442,10 +464,15 @@ const Dashboard = () => {
       + `the stock count — it does not change with the date range.${coverMonthsNote} SSM's policy is `
       + `to keep ${policyWeeks} weeks of sales in stock.`
     : undefined;
+  // Stock is valued at cost (Inventory_Fact.valuation, the SOH file's own
+  // extended cost) and dated by the day it was counted, not by the month it
+  // is filed under: "At cost · counted 6 Apr 2026". The month stays as the
+  // fallback when the backend has no single count day (kpis.soh_count_date).
+  const countDay = dayLabel(kpis.soh_count_date);
+  const countLabel = countDay ? `counted ${countDay}` : sohMonth ? `${sohMonth} count` : null;
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
-    [sohMonth ? `Stock-on-hand valuation · ${sohMonth}` : 'Stock-on-hand valuation', sohCoverage, coverLine]
-      .filter(Boolean).join(' · '),
+    ['At cost', countLabel, sohCoverage, coverLine].filter(Boolean).join(' · '),
   );
 
   // stock_on_hand_flags: counts the team reviewed and judged unusual — the
@@ -455,6 +482,7 @@ const Dashboard = () => {
     period: pt.period,
     sales: pt.sales,
     stockOnHand: pt.stock_on_hand,
+    stockCountDay: dayLabel(pt.stock_count_date),
     received: pt.received,
     stockUnusual: stockFlags.get(pt.period) || null,
   }));
@@ -517,6 +545,10 @@ const Dashboard = () => {
   // cards say why they're empty, and the reorder and policy widgets are
   // not drawn at all rather than drawn with zeros.
   const lpHidden = data.lp_hidden === true;
+  // The LP cycle every LP figure on the page belongs to ("Mar 2026"),
+  // written "Mar 2026 plan" beside each one.
+  const lp = data.lp || {};
+  const lpCycleLabel = periodLabel(lp.cycle_date ? String(lp.cycle_date).slice(0, 7) : null);
   const exposure = data.safety_stock_exposure || {};
   const exposureReason = lpHidden
     ? LP_HIDDEN_NOTE
@@ -527,7 +559,13 @@ const Dashboard = () => {
   const belowSs = kpiDisplay(
     exposure.below_count ?? null, exposure.below_count == null ? exposureReason : null,
     (v) => `${v.toLocaleString()} of ${(exposure.comparable_count ?? 0).toLocaleString()}`,
-    ['Measurable Class A SKUs below their safety stock', abcCoverage].filter(Boolean).join(' · ')
+    // Two dates meet in this figure — the LP plan's safety stock and the
+    // stock count it is checked against — so both are named.
+    [
+      'Measurable Class A SKUs below safety stock',
+      lpCycleLabel && countLabel ? `${lpCycleLabel} plan vs ${countDay ? `${countDay} count` : countLabel}` : null,
+      abcCoverage,
+    ].filter(Boolean).join(' · ')
   );
 
   // Pending action count — the "what to do" figure in the hero strip. Now
@@ -535,13 +573,11 @@ const Dashboard = () => {
   // so 179 leftovers from runs going back to 2023-05 were being presented
   // as work awaiting a decision today (429 against the real 250).
   const pendingCount = data.recommendations?.product_count ?? 0;
-  const lp = data.lp || {};
   // Non-null only when the live data has moved past the hardcoded ceiling.
   const coverageStale = staleCoverageNotice(data.latest_data_period);
-  const lpCycleLabel = periodLabel(lp.cycle_date ? String(lp.cycle_date).slice(0, 7) : null);
   const pendingContext = [
     'Reorder suggestions awaiting a decision',
-    lpCycleLabel ? `${lpCycleLabel} cycle` : null,
+    lpCycleLabel ? `${lpCycleLabel} plan` : null,
   ].filter(Boolean).join(' · ');
 
   return (
@@ -622,12 +658,12 @@ const Dashboard = () => {
               {...(sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {})}
             />
             <KPICard
-              title="Stock on hand value"
+              title="Inventory value"
               value={sohValue.value}
               contextLine={sohValue.contextLine}
               tooltip={coverTooltip}
               icon={<Package size={20} />}
-              {...(sohValue.value !== '—' ? trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries) : {})}
+              {...(sohValue.value !== '—' ? trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries, 'count') : {})}
             />
             <KPICard
               title="Below safety stock"
@@ -669,6 +705,8 @@ const Dashboard = () => {
                 data={tierStock}
                 note={placeholderNote(data.abc_revenue?.period)}
                 period={data.tier_stock_period}
+                countDay={dayLabel(data.tier_stock_count_date)}
+                cycleLabel={lpCycleLabel}
                 coverage={abcCoverage}
               />
             </Slot>
@@ -703,6 +741,8 @@ const Dashboard = () => {
                   urgentCount={reorderPreview.urgent_count ?? 0}
                   totalOrderQty={reorderPreview.total_order_qty ?? 0}
                   weights={reorderPreview.lp_weights}
+                  cycleLabel={lpCycleLabel}
+                  countLabel={countLabel}
                 />
               </Slot>
             )}

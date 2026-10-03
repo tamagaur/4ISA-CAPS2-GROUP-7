@@ -77,6 +77,8 @@ class FakeSession:
         self.lp_generated_at = lp_generated_at
         self.forecast_generated_at = forecast_generated_at
         self.lp_run = None  # the lp_run row stored_run finds; None = table not applied
+        # The live shape: Unilever's '2026-03' count was taken on 6 Apr 2026.
+        self.count_date_by_period = {"2026-03": datetime.date(2026, 4, 6), "2025-12": datetime.date(2025, 12, 1)}
         self.calls: list[tuple[str, dict]] = []
 
     def execute(self, stmt, params=None):
@@ -105,6 +107,10 @@ class FakeSession:
             return FakeResult([{"t": self.lp_generated_at, "row_count": 1, "stale_count": stale}])
         if "MAX(generated_at) AS t FROM forecast_result" in sql:
             return FakeResult([self.forecast_generated_at])
+        # label_context: one row of dates, for the page's period labels.
+        if "MAX(snapshot_date) FROM inventory_fact_real" in sql:
+            count_date = self.count_date_by_period.get(params.get("inv_period"))
+            return FakeResult([{"count_date": count_date, "sales_start": "2025-12", "sales_end": "2026-02"}])
         if "lr.planning_cycle_date < :cycle" in sql:
             return FakeResult([self.superseded_pending])
         if "FROM lp_recommendation lr" in sql:
@@ -516,3 +522,25 @@ def test_response_carries_forecast_and_short(sample_rows):
                      headers={"Authorization": f"Bearer {user_token()}"}).json()["items"][0]
     assert item["forecast_units"] == 40.0
     assert item["short_units"] == 0.0
+
+
+def test_response_states_the_periods_its_figures_were_read_at(client, session):
+    """The page labels every number with its period (2026-10-02): the stock
+    count's own date (Unilever's '2026-03' is the count of 6 Apr 2026), the
+    ABC month revenue share is from, and the sales months cover averages."""
+    body = client.get("/recommendations?principal=unilever").json()
+    assert body["stock_period"] == "2026-03"
+    assert body["stock_count_date"] == "2026-04-06"
+    assert body["abc_period"] == "2026-02"
+    assert (body["cover_sales_start"], body["cover_sales_end"]) == ("2025-12", "2026-02")
+    # The count date is read in the same principal scope as the stock itself.
+    sql, params = next((s, p) for s, p in session.calls if "MAX(snapshot_date)" in s)
+    assert params["inv_period"] == "2026-03" and params["principal"] == "unilever"
+    assert "principal = :principal" in sql
+
+
+def test_period_labels_are_none_without_a_stock_period(session, client):
+    session.inventory_period_by_scope["delmonte"] = None
+    body = client.get("/recommendations?principal=delmonte").json()
+    assert body["stock_count_date"] is None and body["stock_period"] is None
+    assert not any("MAX(snapshot_date)" in s for s, _ in session.calls)

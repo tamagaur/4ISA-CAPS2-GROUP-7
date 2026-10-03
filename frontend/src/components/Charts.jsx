@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ComposedChart, BarChart, Bar, Cell, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -17,6 +17,7 @@ import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
 import InfoTip from './InfoTip';
+import ProductName from './ProductName';
 import './Charts.css';
 
 // Legend entry for the placeholder band (utils/placeholderBand.jsx).
@@ -38,6 +39,19 @@ const formatAxisPeriod = (period) => {
   const [year, num] = String(period).split('-');
   return `${AXIS_MONTHS[Number(num) - 1] || num} · ${year}`;
 };
+
+// Axis titles. The Technical Adviser's rule (2 Oct 2026): every number states
+// its unit and its period, and a tick reading "₱25M" or "1.2M" does neither
+// on its own — so every Dashboard chart names what each axis counts. One
+// helper, so the titles share a size, colour and placement. The Y title is
+// centred on the axis (textAnchor middle, which Recharts 3 lets a label
+// override) rather than starting at its middle and running off the top.
+const AXIS_TITLE = { fontSize: 10, fontWeight: 600, fill: CHART_COLORS.axisLabel };
+const yAxisTitle = (value) => ({ value, angle: -90, position: 'insideLeft', textAnchor: 'middle', ...AXIS_TITLE });
+const xAxisTitle = (value) => ({ value, position: 'insideBottom', offset: 0, ...AXIS_TITLE });
+// The X axis grows from Recharts' default 30px to fit its title under the
+// month ticks (which sit 10px low, dy={10}).
+const X_AXIS_TITLED_HEIGHT = 44;
 
 // Custom tooltip: "Wk 7 — 5.2 weeks (2.2 above policy)". wk is the point's
 // 1-based position among the plotted (last-12) periods, not a calendar
@@ -310,6 +324,9 @@ const SalesStockTooltip = ({ active, payload, label, placeholder }) => {
         <p key={p.dataKey} className="chart-tooltip-row">
           <span className="chart-tooltip-swatch" style={{ backgroundColor: p.color }} aria-hidden="true" />
           {p.name}: <strong>{formatCompactPesos(p.value)}</strong>
+          {/* The month on this point is the one the count is filed under;
+              the day it was actually counted can be a week later. */}
+          {p.dataKey === 'stockOnHand' && p.payload?.stockCountDay && ` · counted ${p.payload.stockCountDay}`}
         </p>
       ))}
       {/* A stock count the team reviewed and judged unusual (GET
@@ -365,7 +382,13 @@ const stockDot = (color) => {
 // the label lives.
 const RECEIVED_LABEL = 'Purchases received';
 
-// Sales vs. Stock on Hand — the dashboard's hero chart. `data` is
+// The stock line is the PESO value of the stock count at cost (Inventory_
+// Fact.valuation, the SOH file's own extended cost), not a quantity on hand.
+// It was labelled "Stock on hand", which a reader takes for pieces or cases;
+// renamed 2026-10-02 so the legend, tooltip and table say what is plotted.
+const INVENTORY_LABEL = 'Inventory value (at cost)';
+
+// Sales vs Inventory Value — the dashboard's hero chart. `data` is
 // [{ period, sales, stockOnHand, received }], all three in pesos (GET
 // /dashboard sums stock_on_hand and received as peso figures specifically
 // so all three plot on one axis — see backend/routers/dashboard.py's
@@ -456,7 +479,7 @@ export const SalesVsStockWidget = ({
     const stockEntries = lastStock && !collide
       ? [{
           period: lastStock.period,
-          text: `Stock ${formatCompactPesos(lastStock.stockOnHand)}${lastStock.stockUnusual ? ' (unusual)' : ''}`,
+          text: `Inventory ${formatCompactPesos(lastStock.stockOnHand)}${lastStock.stockUnusual ? ' (unusual)' : ''}`,
           below: !(lastSales && lastSales.sales < (lastStock.stockOnHand ?? -Infinity)),
         }]
       : [];
@@ -466,11 +489,17 @@ export const SalesVsStockWidget = ({
     };
   }, [zoom.view, hasReceived, insight]);
 
+  // Every column names its unit (₱), and the stock column's count day
+  // rides with its value.
+  const hasCountDays = data.some((pt) => pt.stockCountDay);
   const tableColumns = [
     { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
-    { key: 'sales', label: salesLabel, format: (v) => formatCompactPesos(v) },
-    { key: 'stockOnHand', label: 'Stock on hand', format: (v) => formatCompactPesos(v) },
-    ...(hasReceived ? [{ key: 'received', label: receivedLabel, format: (v) => formatCompactPesos(v) }] : []),
+    { key: 'sales', label: `${salesLabel} (₱)`, format: (v) => formatCompactPesos(v) },
+    { key: 'stockOnHand', label: `${INVENTORY_LABEL} (₱)`, format: (v) => formatCompactPesos(v) },
+    ...(hasCountDays
+      ? [{ key: 'stockCountDay', label: 'Stock counted on', format: (v) => v, align: 'left' }]
+      : []),
+    ...(hasReceived ? [{ key: 'received', label: `${receivedLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
     ...(hasUnusual
       ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Unusual count: ${v}`, align: 'left' }]
       : []),
@@ -480,7 +509,7 @@ export const SalesVsStockWidget = ({
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Sales vs Stock on Hand <span className="chart-unit">₱</span></h4>
+          <h4>Sales vs Inventory Value (₱)</h4>
           {/* GET /dashboard's vat_note — only under All principals, where the
               combined pesos mix Unilever's VAT-inclusive amounts with Del
               Monte's VAT-exclusive ones. */}
@@ -489,7 +518,7 @@ export const SalesVsStockWidget = ({
               chart plots (sales_vs_stock_insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
         </div>
-        {hasData && <ChartViewToggle view={view} onChange={setView} label="Sales vs stock: chart or table" />}
+        {hasData && <ChartViewToggle view={view} onChange={setView} label="Sales vs inventory value: chart or table" />}
       </div>
 
       {!hasData ? (
@@ -498,7 +527,7 @@ export const SalesVsStockWidget = ({
         <ChartTable
           columns={tableColumns}
           rows={data}
-          caption="Sales versus stock on hand by month, in pesos"
+          caption="Sales versus inventory value at cost by month, in pesos (₱)"
         />
       ) : (
         <>
@@ -515,7 +544,7 @@ export const SalesVsStockWidget = ({
               {...focusHandlers('stockOnHand')}
             >
               <span className="legend-line" style={{ borderTopColor: CHART_COLORS.stockSeries }} />
-              Stock on hand
+              {INVENTORY_LABEL}
             </li>
             {hasReceived && (
               <li className="legend-item" {...focusHandlers('received')}>
@@ -546,12 +575,13 @@ export const SalesVsStockWidget = ({
                 {/* Interval comes from the zoom window, not Recharts' own
                     crowding heuristic: 0 draws every month once the window is
                     narrow enough to fit them, and steps up only as it widens. */}
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} height={X_AXIS_TITLED_HEIGHT} label={xAxisTitle('Month')} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                   tickFormatter={(v) => formatCompactPesos(v)}
+                  label={yAxisTitle('Pesos (₱)')}
                 />
                 <Tooltip content={<SalesStockTooltip placeholder={placeholder} />} />
                 {/* The wash is declared ahead of the Lines so both lines
@@ -589,7 +619,7 @@ export const SalesVsStockWidget = ({
                 <Line
                   type="linear"
                   dataKey="stockOnHand"
-                  name="Stock on hand"
+                  name={INVENTORY_LABEL}
                   stroke={CHART_COLORS.stockSeries}
                   strokeWidth={2}
                   strokeLinecap="round"
@@ -724,7 +754,8 @@ const AbcTierCard = ({ facts }) => {
           <p className={`abc-tier-card-revenue${facts.amount == null ? ' is-unavailable' : ''}`}>
             {facts.amount != null ? `${formatCompactPesos(facts.amount)} revenue` : 'Revenue not available'}
           </p>
-          {y != null && <p className="abc-tier-card-note">{y}% of total revenue</p>}
+          {/* The month the class's pesos were earned in (abc_revenue.period). */}
+          {y != null && <p className="abc-tier-card-note">{y}% of {facts.month ? `${facts.month} ` : 'total '}revenue</p>}
         </div>
         {revenueKnown && (
           <p className="abc-tier-card-insight">
@@ -798,7 +829,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 
   const revenueLine = facts.revenuePct == null
     ? 'Revenue not available'
-    : [facts.amount != null ? formatCompactPesos(facts.amount) : null, `${facts.revenuePct.toFixed(0)}% of revenue`]
+    : [facts.amount != null ? formatCompactPesos(facts.amount) : null, `${facts.revenuePct.toFixed(0)}% of ${facts.month ? `${facts.month} ` : ''}revenue`]
       .filter(Boolean).join(' · ');
 
   return createPortal(
@@ -860,13 +891,15 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
   // then sized by counts and the revenue bar is left out, not drawn from
   // null.
   const sharePairs = [
-    ...(sharesAddUp ? [{ key: 'sharePct', label: 'Share of revenue', value: (d) => d.sharePct }] : []),
-    { key: 'skuPct', label: `Share of ${units}`, value: skuSharePct },
+    ...(sharesAddUp ? [{ key: 'sharePct', label: 'Share of revenue (%)', value: (d) => d.sharePct }] : []),
+    { key: 'skuPct', label: `Share of ${units} (%)`, value: skuSharePct },
   ];
+  const rankedMonth = revenue?.period ? formatMonth(revenue.period) : null;
   const factsFor = (d) => ({
     tier: d.tier,
     count: d.count,
     units,
+    month: rankedMonth,
     skuPct: skuSharePct(d),
     revenuePct: sharesAddUp ? d.sharePct : null,
     amount: !sharesAddUp ? null
@@ -880,7 +913,6 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
   const segments = abcSegments(sharesAddUp ? data : data.map((d) => ({ ...d, sharePct: skuSharePct(d) })));
   const unitsTitle = units.charAt(0).toUpperCase() + units.slice(1);
   const selectedFacts = selected ? factsFor(selected) : null;
-  const rankedMonth = revenue?.period ? formatMonth(revenue.period) : null;
   const centre = ABC_DONUT_SIZE / 2;
 
   const selectOnKey = (tier) => (e) => {
@@ -1004,7 +1036,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                       <span
                         key={d.tier}
                         style={{ width: `${v}%`, backgroundColor: abcTierColor(d.tier) }}
-                        title={`Class ${d.tier}: ${v.toFixed(0)}% ${pair.key === 'skuPct' ? `of ${units} (${d.count})` : 'of revenue'}`}
+                        title={`Class ${d.tier}: ${v.toFixed(0)}% ${pair.key === 'skuPct' ? `of ${units} (${d.count} ${units})` : `of ${rankedMonth ? `${rankedMonth} ` : ''}revenue`}`}
                       />
                     );
                   })}
@@ -1038,7 +1070,8 @@ const WAREHOUSE_STATUS_COLORS = {
 const tierStockDetail = (row) => {
   const pending = row.pendingReorderCount ?? null;
   const noData = row.noData || 0;
-  return `Class ${row.tier} — active: ${(row.inStock || 0).toLocaleString()}, `
+  // "products": the unit every count here is in.
+  return `Class ${row.tier} products — active: ${(row.inStock || 0).toLocaleString()}, `
     + `dead stock (Inactive): ${(row.deadStock || 0).toLocaleString()}`
     + (pending != null ? `, pending reorder: ${pending.toLocaleString()}` : '')
     + (noData ? `, no inventory record: ${noData.toLocaleString()}` : '');
@@ -1068,7 +1101,14 @@ const tierStockDetail = (row) => {
 // they measure. Legend entries appear only for segments that actually have
 // a non-zero count somewhere in the data — live, no ABC-classified product
 // is flagged Inactive, so a "Dead stock" swatch was pointing at nothing.
-export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = null, coverage = null }) => {
+// `countDay` ('6 Apr 2026') is the day that snapshot was counted (GET
+// /dashboard's tier_stock_count_date); `period` the month it is filed under,
+// the fallback. `cycleLabel` ('Mar 2026') names the LP plan the pending
+// counts belong to.
+export const CategoryStockBarWidget = ({
+  data = [], emptyReason, note, period = null, countDay = null, cycleLabel = null, coverage = null,
+}) => {
+  const countPhrase = countDay ? `the ${countDay} stock count` : period ? `the ${formatMonth(period)} stock count` : 'the latest stock count';
   const hasData = data.length > 0;
   const hasDead = data.some((row) => (row.deadStock || 0) > 0);
   const hasNoData = data.some((row) => (row.noData || 0) > 0);
@@ -1090,10 +1130,10 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
     <div className={`chart-widget tier-stock-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Active / dead stock by ABC class (warehouse status)</h4>
+          <h4>Active / dead stock by ABC class (warehouse status) <span className="chart-unit">products</span></h4>
           <p>
-            Counts each class&apos;s products by the warehouse&apos;s own Active/Inactive flag on the latest
-            stock snapshot — not by whether stock covers the LP&apos;s target stock (that is the ABC page&apos;s
+            Counts each class&apos;s products by the warehouse&apos;s own Active/Inactive flag on {countPhrase} —
+            not by whether stock covers the LP&apos;s target stock (that is the ABC page&apos;s
             &ldquo;Cover vs target stock&rdquo;).
           </p>
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
@@ -1113,11 +1153,14 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
             <p className="tier-stock-note">
               <CheckCircle2 size={15} aria-hidden="true" />
               <span>
-                No dead stock flagged{period ? ` in ${formatMonth(period)}` : ''} — every one of the{' '}
+                No dead stock flagged in {countPhrase} — every one of the{' '}
                 {flaggedTotal.toLocaleString()} classified products with a stock record is marked Active.
               </span>
             </p>
           )}
+          {/* The bars' scale, in place of an axis title: each one is a whole
+              class, so lengths are shares of that class, not counts. */}
+          <p className="bar-scale-note">Each bar = 100% of the class&apos;s products</p>
           <div
             className={`tier-stock-bars${activeRow ? ' has-active' : ''}`}
             onMouseLeave={() => setActiveTier(null)}
@@ -1208,7 +1251,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
               cycle, grouped by each SKU's tier in the latest ABC run. */}
           {hasPending && (
             <p className="chart-placeholder-note">
-              Pending reorder recommendations in the LP&apos;s current cycle:{' '}
+              Pending reorder recommendations in the {cycleLabel ? `${cycleLabel} plan` : 'LP\'s current plan'}, in SKUs:{' '}
               {data.map((row) => `${row.tier} ${(row.pendingReorderCount || 0).toLocaleString()}`).join(' · ')}.
               {' '}The LP plans Class A
               {/* Only true while an older run's rows linger in the cycle —
@@ -1360,7 +1403,7 @@ export const PortfolioForecastWidget = ({
   const forecastLabels = useMemo(() => {
     const last = [...zoom.view].reverse().find((pt) => pt.forecast != null);
     return pointLabels(zoom.view, last && last.actual == null
-      ? [{ period: last.period, text: `Forecast ${formatCompactQty(last.forecast)}` }]
+      ? [{ period: last.period, text: `Forecast ${formatCompactQty(last.forecast)} pcs` }]
       : []);
   }, [zoom.view]);
 
@@ -1368,9 +1411,14 @@ export const PortfolioForecastWidget = ({
     { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
     { key: 'actual', label: 'Actual (pieces)', format: (v) => Math.round(v).toLocaleString() },
     { key: 'forecast', label: 'Forecast (pieces)', format: (v) => Math.round(v).toLocaleString() },
-    { key: 'confidenceLower', label: 'Approx. 90% range, low', format: (v) => Math.round(v).toLocaleString() },
-    { key: 'confidenceUpper', label: 'Approx. 90% range, high', format: (v) => Math.round(v).toLocaleString() },
+    { key: 'confidenceLower', label: 'Approx. 90% range, low (pieces)', format: (v) => Math.round(v).toLocaleString() },
+    { key: 'confidenceUpper', label: 'Approx. 90% range, high (pieces)', format: (v) => Math.round(v).toLocaleString() },
   ];
+  // The months the card spans, for the subtitle: the picker's range plus
+  // the forecast month after it.
+  const seriesSpan = series.length
+    ? `${formatMonth(series[0].period)} – ${formatMonth(series[series.length - 1].period)}`
+    : null;
 
   return (
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
@@ -1380,11 +1428,12 @@ export const PortfolioForecastWidget = ({
               y-axis reads "120k" in both, so it is named in the heading. */}
           <h4>Portfolio-level aggregate forecast <span className="chart-unit">pieces</span></h4>
           <p>
+            {seriesSpan ? `Pieces per month, ${seriesSpan}: ` : 'Pieces per month: '}
             {gatedSkuCount != null && tierACount
-              ? `Summed demand across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} `
+              ? `summed demand across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} `
                 + 'Class A SKUs (those whose forecasts beat a naive baseline — MASE < 1, '
                 + 'the same gate the reorder plan uses) vs. forecast'
-              : 'Summed demand across gated Class A SKUs vs. forecast'}
+              : 'summed demand across gated Class A SKUs vs. forecast'}
           </p>
           {/* The card's takeaway, composed by the backend from this same
               series (portfolio_forecast.insight). */}
@@ -1450,13 +1499,14 @@ export const PortfolioForecastWidget = ({
                         forward from index 0, which keeps the first label by
                         construction, and drops to 0 (every month labelled) as
                         soon as the window is narrow enough to fit them. */}
-                    <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} />
+                    <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} height={X_AXIS_TITLED_HEIGHT} label={xAxisTitle('Month')} />
                     <YAxis
                       axisLine={false}
                       tickLine={false}
                       domain={['auto', 'auto']}
                       tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                       tickFormatter={(v) => formatCompactQty(v, 2)}
+                      label={yAxisTitle('Pieces')}
                     />
                     <Tooltip content={<PortfolioForecastTooltip />} />
                     {/* The uncertainty cone is this chart's ONE fill — the
@@ -1586,8 +1636,15 @@ export const ReorderRecommendationWidget = ({
   totalOrderQty = 0,
   weights,
   emptyReason,
+  // 'Mar 2026' — the LP plan these rows belong to (GET /dashboard's
+  // lp.cycle_date) — and 'counted 6 Apr 2026', the stock count the
+  // urgencies were judged against. Either may be null; the text then falls
+  // back to "current plan" / leaves the count out.
+  cycleLabel = null,
+  countLabel = null,
 }) => {
   const hasData = rows.length > 0;
+  const navigate = useNavigate();
 
   // The solver's real weights as whole percents. Read-only: GET /dashboard's
   // reorder_preview.lp_weights docstring is explicit that this is "a
@@ -1622,7 +1679,11 @@ export const ReorderRecommendationWidget = ({
           {/* GET /dashboard's reorder_preview has been scoped to the LP's
               current cycle since 2026-09-23 (backend/lp_cycle.py), the same
               rows Reorder Recs lists by default. */}
-          <p>LP-optimized purchase quantities for the SKUs the LP planned as Class A · current planning cycle</p>
+          <p>
+            LP-optimized order quantities, in pieces, for the SKUs the LP planned as Class A ·{' '}
+            {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
+            {countLabel ? ` · urgency against the stock ${countLabel}` : ''}
+          </p>
         </div>
       </div>
 
@@ -1639,11 +1700,11 @@ export const ReorderRecommendationWidget = ({
                 would imply a good/bad judgment that doesn't exist. */}
             <div className="reorder-mini-chip">
               <span className="reorder-mini-value" style={{ color: SEMANTIC.act }}>{criticalCount}</span>
-              <span className="reorder-mini-label">Critical</span>
+              <span className="reorder-mini-label">Critical SKUs</span>
             </div>
             <div className="reorder-mini-chip">
               <span className="reorder-mini-value" style={{ color: SEMANTIC.watch }}>{urgentCount}</span>
-              <span className="reorder-mini-label">Urgent</span>
+              <span className="reorder-mini-label">Urgent SKUs</span>
             </div>
             <div className="reorder-mini-chip">
               <span className="reorder-mini-value">{totalOrderQty.toLocaleString()}</span>
@@ -1688,27 +1749,28 @@ export const ReorderRecommendationWidget = ({
             <table className="reorder-mini-table">
               <thead>
                 <tr>
-                  <th>SKU</th>
                   <th>Product</th>
                   <th>Urgency</th>
-                  <th>Pieces</th>
+                  <th>Order (pieces)</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedRows.map((r) => (
                   <tr key={r.sku}>
-                    <td>
-                      {/* Was a plain <span> styled to look like a link (blue,
-                          same color as every other clickable SKU in the app)
-                          but had no click handler — a dead affordance. Now a
-                          real link to that SKU's own recommendation, which the
-                          Reorder Recs page opens in its detail modal on load
-                          (see the ?sku= handling in ReorderRecommendations.jsx). */}
-                      <Link to={`/reorder?sku=${encodeURIComponent(r.sku)}`} className="reorder-mini-sku">
-                        {r.sku}
-                      </Link>
+                    {/* Name first, SKU code under it (Sir Catubag, 2 Oct
+                        2026) — the table used to lead with the code. The name
+                        opens that SKU's own recommendation, which the Reorder
+                        Recs page shows in its detail modal on load (the ?sku=
+                        handling in ReorderRecommendations.jsx), as the code
+                        link did. */}
+                    <td className="reorder-mini-product" title={r.product || r.sku}>
+                      <ProductName
+                        name={r.product}
+                        code={r.sku}
+                        onOpen={() => navigate(`/reorder?sku=${encodeURIComponent(r.sku)}`)}
+                        openLabel="Open the recommendation for"
+                      />
                     </td>
-                    <td className="reorder-mini-product" title={r.product}>{r.product}</td>
                     <td>
                       <span
                         className="urgency-badge-mini"
@@ -1916,13 +1978,20 @@ export const AllocationWidget = ({ allocation }) => {
     ? a.ytd_sales / a.ytd_months
     : null;
   const latestYear = a.latest_month ? a.latest_month.slice(0, 4) : null;
+  // The months this year's sales average covers ("Jan – Feb 2026"), so the
+  // bar's figure states its period, not just a year.
+  const ytdSpan = latestYear && a.latest_month
+    ? (a.latest_month.slice(5, 7) === '01'
+      ? formatMonth(a.latest_month)
+      : `${formatMonth(`${latestYear}-01`).split(' ')[0]} – ${formatMonth(a.latest_month)}`)
+    : latestYear;
   const rows = hasData
     ? [
         ...(avgMonthlySales != null
-          ? [{ key: 'sales', label: `${latestYear} sales (avg/month)`, value: avgMonthlySales, color: CHART_COLORS.salesSeries }]
+          ? [{ key: 'sales', label: `Sales, ${ytdSpan} (avg/month)`, value: avgMonthlySales, color: CHART_COLORS.salesSeries }]
           : []),
         ...a.levels.map((l) => ({
-          key: `alloc-${l.pct}`, label: `Allocation ${l.pct}% (/month)`, value: l.monthly, color: SEMANTIC.noData,
+          key: `alloc-${l.pct}`, label: `${latestYear} allocation ×${l.pct}% (avg/month)`, value: l.monthly, color: SEMANTIC.noData,
         })),
       ]
     : [];
@@ -1969,6 +2038,8 @@ export const AllocationWidget = ({ allocation }) => {
               </span>
             </p>
           )}
+          {/* The bars' unit, in place of an axis title. */}
+          <p className="bar-scale-note">Pesos per month (₱){a.vat_basis ? ` · ${a.vat_basis}` : ''}</p>
           <div className="policy-bars">
             {rows.map((r) => (
               <div className="policy-bar-row" key={r.key}>
@@ -1982,7 +2053,7 @@ export const AllocationWidget = ({ allocation }) => {
                   {/* A month's sales can net negative (returns); no negative bar width. */}
                   <span style={{ width: `${(Math.max(0, r.value) / max) * 100}%`, backgroundColor: r.color }} />
                 </div>
-                <span className="policy-bar-value">{formatCompactPesos(r.value)}</span>
+                <span className="policy-bar-value">{formatCompactPesos(r.value)}/mo</span>
               </div>
             ))}
           </div>

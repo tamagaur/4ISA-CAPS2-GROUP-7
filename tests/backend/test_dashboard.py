@@ -128,6 +128,10 @@ class FakeSession:
         # DEC-31 derived Unilever receipts: None = no derived_receipt_fact table
         # (public before migration 0038); a dict = the table, {period: (value, negative_skus, skus)}.
         derived: dict | None = None,
+        # Inventory_Fact_Real.snapshot_date per _period (_stock_count_dates):
+        # {period: date} for one count day, or {period: (first, last)} for a
+        # period whose rows in scope were counted on two different days.
+        count_dates: dict | None = None,
     ):
         self.recommendation_count = recommendation_count
         self.forecast_total = forecast_total
@@ -173,6 +177,7 @@ class FakeSession:
         self.abc_product_revenue = abc_product_revenue or {}
         self.received_tax = received_tax or {}
         self.derived = derived
+        self.count_dates = count_dates or {}
         # Every (sql, params) issued, so a test can assert on the query text
         # itself — the only way to check scope/unit handling that lives in
         # SQL rather than in Python (see this module's docstring).
@@ -218,6 +223,15 @@ class FakeSession:
         # Which principals carry a stock valuation at the resolved period —
         # what keeps weeks_of_cover's numerator and denominator on the same
         # principals (_stock_valuation_coverage).
+        # _stock_count_dates: the day each stock snapshot was counted.
+        if "AS first_count_date" in sql:
+            rows = []
+            for p, d in self.count_dates.items():
+                if p in params["periods"]:
+                    first, last = d if isinstance(d, tuple) else (d, d)
+                    rows.append({"period": p, "first_count_date": first, "count_date": last})
+            return FakeResult(rows)
+
         if "HAVING SUM(COALESCE(valuation" in sql:
             return FakeResult([{"principal": p} for p in self.stock_coverage])
 
@@ -569,7 +583,8 @@ def test_sales_vs_stock_has_12_points_with_nulls_for_missing_periods():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     series = resp.json()["sales_vs_stock"]
     assert len(series) == 12
-    assert series[-1] == {"period": current, "sales": 100.0, "stock_on_hand": None, "received": None,
+    assert series[-1] == {"period": current, "sales": 100.0, "stock_on_hand": None, "stock_count_date": None,
+                          "received": None,
                           "received_estimated": None, "received_estimated_negative_skus": None,
                           "provenance": {"sales": "real", "stock_on_hand": None, "received": None, "received_estimated": None}}
     assert all(pt["sales"] is None for pt in series[:-1])
@@ -1389,7 +1404,7 @@ def test_portfolio_forecast_insight_compares_forecast_with_last_actual():
         pf = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["portfolio_forecast"]
     assert pf["mase_gate"] == 1.0
     # 150 forecast vs 120 actual = +25%
-    assert pf["insight"]["text"] == "The Mar 2024 forecast is 150 pieces — 25.0% above the 120 sold in Feb 2024."
+    assert pf["insight"]["text"] == "The Mar 2024 forecast is 150 pieces — 25.0% above the 120 pieces sold in Feb 2024."
     assert pf["insight"]["forecast_period"] == "2024-03"
 
 
@@ -1790,3 +1805,73 @@ def test_abc_mix_keeps_the_stored_shares_when_a_ranked_products_revenue_is_missi
     assert mix["A"]["revenue_share_pct"] == pytest.approx(80.0)
     assert mix["A"]["revenue"] is None
     assert body["abc_revenue"]["ranked_total"] is None
+
+
+# ---- stock count dates (2026-10-02) -------------------------------------------
+# The Technical Adviser's rule: every number states its period. A stock
+# snapshot's _period is not the day it was counted — Unilever's "2026-03" is
+# the 2026-04-06 count — so GET /dashboard exposes the count day, read-only.
+
+def test_stock_card_and_chart_carry_the_count_day():
+    periods = _periods()
+    session = FakeSession(
+        latest_inventory_period=periods[-1],
+        soh={periods[-2]: 40_000_000.0, periods[-1]: 22_700_825.83},
+        count_dates={periods[-2]: datetime.date(2024, 2, 1), periods[-1]: datetime.date(2024, 3, 6)},
+        tier_stock_rows=[{"product_key": 1, "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": False}],
+        latest_abc_period="2024-02",
+    )
+    with make_client(session) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["kpis"]["soh_period"] == periods[-1]
+    assert body["kpis"]["soh_count_date"] == "2024-03-06"
+    assert body["tier_stock_count_date"] == "2024-03-06"
+    svs = {pt["period"]: pt for pt in body["sales_vs_stock"]}
+    assert svs[periods[-1]]["stock_count_date"] == "2024-03-06"
+    assert svs[periods[-2]]["stock_count_date"] == "2024-02-01"
+    # A month without a stock figure gets no count day.
+    assert svs[periods[-3]]["stock_count_date"] is None
+    # Display only: the stock figure itself is untouched.
+    assert body["kpis"]["soh_value"] == pytest.approx(22_700_825.83)
+    # The count query is read-only and scoped like the stock sums.
+    count_sql = [sql for sql, _ in session.calls if "AS first_count_date" in sql]
+    assert count_sql and all("principal = 'unilever'" in sql for sql in count_sql)
+    assert not any(word in sql.upper() for sql in count_sql for word in ("INSERT", "UPDATE", "DELETE"))
+
+
+def test_count_day_is_left_out_when_a_period_has_two_count_days():
+    """Under 'all' a period holds two principals' counts, taken on different
+    days (Unilever's 2025-12 on 2026-01-01, Del Monte's on 2025-12-01);
+    naming either would misdate the other's stock."""
+    from backend.routers.dashboard import _stock_count_dates
+
+    session = FakeSession(count_dates={
+        "2025-12": (datetime.date(2025, 12, 1), datetime.date(2026, 1, 1)),
+        "2026-03": datetime.date(2026, 4, 6),
+    })
+    out = _stock_count_dates(session, ["2025-12", "2026-03"], "all")
+    assert out == {"2026-03": "2026-04-06"}
+    assert _stock_count_dates(session, [], "all") == {}
+
+
+def test_insight_sentence_names_inventory_at_cost_and_its_count_day():
+    from backend.chart_insights import sales_vs_stock_insight
+
+    series = [
+        {"period": "2026-01", "sales": 30_000_000.0, "stock_on_hand": 24_339_386.24, "stock_count_date": "2026-02-03"},
+        {"period": "2026-02", "sales": 27_900_000.0, "stock_on_hand": None, "stock_count_date": None},
+    ]
+    text = sales_vs_stock_insight(series)["text"]
+    assert "inventory at cost stood at ₱24.3M in Jan 2026 (counted Feb 3, 2026)" in text
+    # Without a count day the month alone is stated, never a raw string.
+    series[0]["stock_count_date"] = None
+    text = sales_vs_stock_insight(series)["text"]
+    assert "stood at ₱24.3M in Jan 2026." in text and "counted" not in text
+
+
+def test_day_label():
+    from backend.chart_insights import day_label
+
+    assert day_label("2026-04-06") == "Apr 6, 2026"
+    assert day_label(None) is None
+    assert day_label("not a date") is None

@@ -209,3 +209,25 @@ def test_audit_log_read_error_is_a_503_not_an_empty_list():
     assert resp.status_code == 503
     assert "couldn't be read" in resp.json()["detail"]
     assert session.rolled_back
+
+
+def test_summary_states_the_span_the_counts_cover():
+    """A sign-in count with no period read as "ever" (2026-10-03): the
+    response carries the first and latest recorded sign-in across users."""
+    t_first = datetime.datetime(2026, 8, 23, 9, 28, tzinfo=datetime.timezone.utc)
+    rows = [
+        {**SUMMARY_ROWS[0], "first_login_at": t_first},
+        {**SUMMARY_ROWS[1], "first_login_at": T0},
+        {**SUMMARY_ROWS[2], "first_login_at": None},
+    ]
+    body = _get(FakeSession(rows), {"Authorization": f"Bearer {admin_token()}"}).json()
+    assert body["first_login_at"].startswith("2026-08-23T09:28")
+    assert body["last_login_at"].startswith("2026-09-21T01:00")
+    assert body["items"][0]["first_login_at"].startswith("2026-08-23")
+
+
+def test_summary_query_reads_each_users_first_sign_in():
+    session = FakeSession(SUMMARY_ROWS)
+    _get(session, {"Authorization": f"Bearer {admin_token()}"})
+    sql = next(s for s, _ in session.calls if "FROM user_session" in s)
+    assert "MIN(started_at) AS first_login_at" in sql and "s.first_login_at" in sql

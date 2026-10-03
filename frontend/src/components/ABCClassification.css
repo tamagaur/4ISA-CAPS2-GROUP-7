@@ -92,6 +92,13 @@
   line-height: 1.1;
 }
 
+/* What the card's count counts ("SKUs"), beside the number. */
+.abc-card-unit {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-subtle);
+}
+
 .abc-card-desc {
   font-size: 0.78rem;
   color: var(--color-text-subtle);
@@ -592,17 +599,13 @@
   background-color: var(--color-surface-raised);
 }
 
+/* Brand and revenue share, after the name (name first, 2026-10-03). */
 .abc-row-left {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   min-width: 95px;
-}
-
-.abc-row-sku {
-  font-size: 0.8rem;
-  font-weight: 700;
-  font-family: monospace;
-  color: var(--color-info-alt);
+  text-align: right;
 }
 
 .abc-row-brand {
@@ -617,10 +620,16 @@
   overflow: hidden;
 }
 
+/* A ProductName (name, SKU code under it). One line per part, cut with an
+   ellipsis, so a long name never pushes the class badge off the row. */
 .abc-row-product {
   font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-slate-800);
+  max-width: 100%;
+}
+
+.abc-row-product .product-name-title,
+.abc-row-product .product-name-code {
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -904,6 +913,27 @@
   gap: 0.25rem;
   min-width: 0;
   flex: 1 1 22rem;
+}
+
+/* The period line (stock count date, plan cycle) above a chart's or
+   drill-down's explanation: a fact to read first, so in body ink. */
+.abc-pareto-period {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+  line-height: 1.45;
+}
+
+/* Period or unit under a table header label ("of Feb 2026 revenue"). The
+   header row is uppercase and spaced; this line reads as plain text. */
+.abc-th-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .abc-pareto-subtitle {

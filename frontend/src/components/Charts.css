@@ -46,7 +46,8 @@
    to "120k" / "22M", which reads the same whether the quantity is pesos or
    pieces — and this dashboard plots both, one above the other. Sits in the
    heading rather than as an axis label so it survives the chart being
-   zoomed, panned or narrowed to a phone width. */
+   zoomed, panned or narrowed to a phone width. Since 2026-10-02 the axes
+   carry titles as well (Charts.jsx's yAxisTitle / xAxisTitle). */
 .chart-unit {
   margin-left: 0.4rem;
   padding: 0.05rem 0.35rem;
@@ -57,6 +58,16 @@
   color: var(--color-text-muted);
   vertical-align: middle;
   white-space: nowrap;
+}
+
+/* A bar chart's unit or scale, where a Recharts chart would have an axis
+   title: the custom CSS bars (tier stock, allocation) have no axis to carry
+   one. Same muted size as the axis titles. */
+.bar-scale-note {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-text-subtle);
 }
 
 /* Range Controls on Chart Card */
@@ -860,16 +871,25 @@
   }
 }
 
-.reorder-mini-sku {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-info);
-  text-decoration: none;
+/* The product cell: ProductName (name, SKU code under it). The cell gives up
+   width to the other columns (max-width: 0 above), so a long name is cut
+   with an ellipsis on one line instead of wrapping the row tall; the cell's
+   title attribute carries the full name. */
+.reorder-mini-product .product-name {
+  display: flex;
+  max-width: 100%;
+}
+
+.reorder-mini-product .product-name-title {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.reorder-mini-sku:hover {
-  text-decoration: underline;
+.reorder-mini-product .product-name-code {
+  font-size: 0.68rem;
 }
 
 .reorder-mini-view-all {

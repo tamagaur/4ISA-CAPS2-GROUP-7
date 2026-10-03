@@ -251,3 +251,20 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* The Pareto's X axis title, under the chart (see AbcBreakdowns.jsx for
+   why it isn't an in-chart label). */
+.abcb-axis-title {
+  margin: -0.25rem 0 0;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--color-text-subtle);
+}
+
+/* The matrix's corner cell names what its counts count ("SKUs"). */
+.abcb-matrix-table thead th.abcb-matrix-unit {
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}

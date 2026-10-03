@@ -354,6 +354,48 @@ def _to_item(r) -> RecommendationItem:
     )
 
 
+# The dates behind the row figures, so the page can label every number with
+# its period (the technical adviser's rule, 2026-10-02). Read-only and beside
+# the rows, never inside them: nothing here changes what the rows say.
+#   count_date  — the day the stock count was taken. The Unilever _period
+#                 '2026-03' is the count of 6 Apr 2026 (snapshot_date), so
+#                 "Mar 2026 stock" undersold how late it is. MAX because a
+#                 period could in principle hold more than one count day.
+#   sales_start/end — the sales months cover's daily rate averages over: the
+#                 same SKU_COVER_HISTORY_MONTHS window the row query's sales
+#                 join reads (latest months at or before the stock period).
+_LABEL_CONTEXT_SQL = f"""
+    SELECT
+        (SELECT MAX(snapshot_date) FROM inventory_fact_real
+         WHERE _period = :inv_period{{scope}}) AS count_date,
+        (SELECT MIN(m) FROM (
+            SELECT DISTINCT calendar_month AS m FROM unilever_sku_demand_fact_real
+            WHERE calendar_month <= :inv_period
+            ORDER BY m DESC LIMIT {SKU_COVER_HISTORY_MONTHS}
+        ) cover_months) AS sales_start,
+        (SELECT MAX(calendar_month) FROM unilever_sku_demand_fact_real
+         WHERE calendar_month <= :inv_period) AS sales_end
+"""
+
+
+def label_context(db: Session, inv_period: str | None, abc_period: str | None, principal: str | None) -> dict:
+    """{stock_period, stock_count_date, abc_period, cover_sales_start,
+    cover_sales_end} for RecommendationsResponse — the periods the rows were
+    read at. All None when there is no stock period to anchor on."""
+    out = {"stock_period": inv_period, "stock_count_date": None, "abc_period": abc_period,
+           "cover_sales_start": None, "cover_sales_end": None}
+    if inv_period is None:
+        return out
+    scope_sql, scope_params = principal_clause(principal, "principal")
+    row = db.execute(
+        text(_LABEL_CONTEXT_SQL.format(scope=scope_sql)), {"inv_period": inv_period, **scope_params}
+    ).mappings().first()
+    if row:
+        out.update(stock_count_date=row["count_date"], cover_sales_start=row["sales_start"],
+                   cover_sales_end=row["sales_end"])
+    return out
+
+
 @router.get("", response_model=RecommendationsResponse)
 def get_recommendations(
     status: str | None = Query(None, description="Filter to 'pending' | 'accepted' | 'dismissed'. Omit for all."),
@@ -410,6 +452,7 @@ def get_recommendations(
     # list was what made the dashboard's pending count read 429 instead of
     # 250. `cycle=all` is the deliberate audit escape hatch.
     freshness = lp_freshness(db, principal, mode)
+    labels = label_context(db, params["inv_period"], params["abc_period"], principal)
     if cycle == "current":
         current = current_cycle(db, principal, mode)
         if current is None:
@@ -419,6 +462,7 @@ def get_recommendations(
             return _with_data_mode(RecommendationsResponse(
                 items=[], count=0, planning_cycle_date=None,
                 superseded_count=0, freshness=freshness, lp_model=lp_model_info(),  # no cycle: defaults
+                **labels,
             ), db, mode)
         query += CURRENT_CYCLE_CLAUSE
         params["current_cycle"] = current
@@ -434,6 +478,7 @@ def get_recommendations(
         freshness=freshness,
         # What the run behind the current cycle used (lp_run), else the defaults, labelled.
         lp_model=lp_model_info(stored_run(db, freshness["cycle_date"], principal, mode)),
+        **labels,
     ), db, mode)
 
 

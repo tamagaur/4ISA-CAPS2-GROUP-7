@@ -171,7 +171,15 @@
 .view-sku-badge-wrapper {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   height: 22px;
+}
+
+/* The period a figure belongs to ("as of the count on Apr 6, 2026",
+   "Mar 2026 plan", "Feb 2026 run"), under or beside the value. */
+.view-sku-asof {
+  font-size: 0.72rem;
+  color: var(--color-text-subtle);
 }
 
 /* Notes Section */

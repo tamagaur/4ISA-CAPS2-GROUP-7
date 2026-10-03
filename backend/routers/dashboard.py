@@ -180,6 +180,13 @@ zero):
     matching each of the 12 calendar months. If
     UNILEVER_SOH_UNIT_CONFIRMED is ever flipped to False, every point in
     this series is null, per the note on kpis.soh_value above.
+  sales_vs_stock[].stock_count_date / kpis.soh_count_date /
+  tier_stock_count_date
+    — display only: the day the snapshot behind each stock figure was
+    counted (MAX(Inventory_Fact_Real.snapshot_date) for that `_period`,
+    when the scope's rows share one count day — _stock_count_dates). A
+    `_period` is not a count date: "2026-03" is Unilever's 2026-04-06
+    count. No figure is computed from these.
   sales_vs_stock[].received
     — SUPPLIER-ALLOCATION PROXY, not a fabricated fixed_allocation
     constant: no supplier allocation schedule exists anywhere in the
@@ -807,6 +814,48 @@ def _stock_valuation_coverage(db: Session, period: str | None, principal: str = 
     return covered if principal == "all" else [p for p in covered if p == principal]
 
 
+def _stock_count_dates(db: Session, periods: list[str], principal: str = "unilever") -> dict[str, str]:
+    """The day each stock snapshot was physically counted
+    (Inventory_Fact_Real.snapshot_date), keyed by the `_period` the rest of
+    this endpoint files it under. Read-only, display only — no figure is
+    computed from it.
+
+    Exists because a snapshot's `_period` is not the day it was counted:
+    Unilever's "2026-03" stock is the count taken on 2026-04-06, Del Monte's
+    "2025-12" the one on 2025-12-01. The Technical Adviser's rule (every
+    number states its period) needs the count date on the stock card, not a
+    month that reads like a month-end figure.
+
+    A period gets a date only when its rows in scope share ONE count day.
+    Under 'all' a period holding both principals' counts has two different
+    days, and naming either would misdate the other's stock, so it is left
+    out and the page falls back to the month. `principal` is interpolated
+    for the same reason _soh_value_by_period's is: it is allowlisted by
+    normalize_principal() before it reaches here."""
+    wanted = [p for p in periods if p]
+    if not wanted:
+        return {}
+    scope = "" if principal == "all" else f" AND principal = '{principal}'"
+    rows = db.execute(
+        text(f"""
+            SELECT _period AS period,
+                   MIN(snapshot_date) AS first_count_date,
+                   MAX(snapshot_date) AS count_date
+            FROM Inventory_Fact_Real
+            WHERE _period = ANY(:periods){scope}
+            GROUP BY _period
+        """),
+        {"periods": wanted},
+    ).mappings().all()
+    out: dict[str, str] = {}
+    for r in rows:
+        first, last = r["first_count_date"], r["count_date"]
+        if r["period"] is None or last is None or first != last:
+            continue
+        out[r["period"]] = last.isoformat() if hasattr(last, "isoformat") else str(last)[:10]
+    return out
+
+
 def _latest_abc_period(db: Session, principal: str = "unilever") -> str | None:
     """Latest ABC_Classification.classification_period within the selected
     scope. ABC_Classification carries both principals, so an unfiltered MAX
@@ -1187,6 +1236,15 @@ def get_dashboard(
         soh_by_period if cover_scope == scope else _soh_value_by_period(db, soh_periods, cover_scope)
     )
     soh_value = soh_card_by_period.get(inventory_period) if inventory_period is not None else None
+    # The day each snapshot was counted (_stock_count_dates): the chart's
+    # points on the chart's scope, the card's on the card's principals —
+    # under 'all' at 2026-03 that is Unilever's 2026-04-06 count.
+    stock_count_dates = _stock_count_dates(db, soh_periods, scope)
+    soh_count_date = (
+        None if inventory_period is None
+        else stock_count_dates.get(inventory_period) if cover_scope == scope
+        else _stock_count_dates(db, [inventory_period], cover_scope).get(inventory_period)
+    )
     if inventory_period is None:
         soh_value_blocked_reason = f"Inventory_Fact_Real has no rows for {_scope_label(scope)} at all."
     elif not UNILEVER_SOH_UNIT_CONFIRMED:
@@ -1383,6 +1441,10 @@ def get_dashboard(
             "period": p,
             "sales": sales_by_period[p],
             "stock_on_hand": soh_by_period.get(p),
+            # The day this point's stock was counted ('YYYY-MM-DD'), or None
+            # when there is no count or (under 'all') two principals counted
+            # on different days — _stock_count_dates.
+            "stock_count_date": stock_count_dates.get(p) if soh_by_period.get(p) is not None else None,
             "received": received_by_period.get(p),
             "received_estimated": estimated_received[p]["value"],
             "received_estimated_negative_skus": estimated_received[p]["negative_skus"],
@@ -1918,6 +1980,11 @@ def get_dashboard(
             "soh_value": _to_float(soh_value),
             "soh_value_blocked_reason": soh_value_blocked_reason,
             "soh_period": inventory_period,
+            # The day soh_period's stock was physically counted ('YYYY-MM-DD',
+            # Inventory_Fact_Real.snapshot_date): Unilever's "2026-03" is the
+            # 2026-04-06 count. The card says "counted 6 Apr 2026" from this,
+            # since a bare month read as a month-end figure. Null when unknown.
+            "soh_count_date": soh_count_date,
             "soh_coverage": stock_coverage,
             "safety_stock_rate": safety_stock_rate,
             "safety_stock_rate_blocked_reason": safety_stock_rate_blocked_reason,
@@ -1980,6 +2047,11 @@ def get_dashboard(
         # read at — the card's "no dead stock flagged in <month>" line
         # names this, never a month typed in the frontend.
         "tier_stock_period": inventory_period if tier_stock else None,
+        # The day that snapshot was counted ('YYYY-MM-DD'), so the card can
+        # say "counted 6 Apr 2026" rather than a month (_stock_count_dates).
+        "tier_stock_count_date": (
+            stock_count_dates.get(inventory_period) if tier_stock and inventory_period else None
+        ),
         "portfolio_forecast": portfolio_forecast,
         "reorder_preview": reorder_preview,
     }
