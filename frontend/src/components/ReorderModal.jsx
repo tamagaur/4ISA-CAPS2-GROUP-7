@@ -77,7 +77,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
 
         {/* Data Grid — fields not already visible in the table row, plus
             the two ranking inputs so the "why is this #3" question is
-            answerable here, and the target and current stock with their
+            answerable here, and the target and opening stock with their
             case counts (the table shows those only on hover). */}
         <div className="reorder-modal-grid">
           <div className="reorder-grid-item">
@@ -111,12 +111,12 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
             {data.cases?.target && <span className="reorder-grid-sub">{data.cases.target}</span>}
           </div>
           <div className="reorder-grid-item">
-            <span className="reorder-grid-label">CURRENT STOCK</span>
+            <span className="reorder-grid-label">OPENING STOCK</span>
             <span className="reorder-grid-value">
               {data.stock != null ? `${formatUnits(data.stock)} pieces` : '—'}
             </span>
             {data.stockNotInCount
-              ? <span className="reorder-grid-sub">Not in the latest stock count — treated as 0, as the plan does</span>
+              ? <span className="reorder-grid-sub">Not in the opening stock count — treated as 0, as the plan does</span>
               : data.stock == null
                 ? data.stockBlockedReason && <span className="reorder-grid-sub">{data.stockBlockedReason}</span>
                 : data.cases?.stock && <span className="reorder-grid-sub">{data.cases.stock}</span>}

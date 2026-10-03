@@ -114,6 +114,12 @@ class RecommendationsResponse(BaseModel):
     # the solver's own settings (backend/lp_cycle.lp_model_info), so the
     # detail view states what the LP does rather than a copy of it.
     lp_model: dict | None = None
+    # The stock count each principal's rows were checked against: the one
+    # that opens the cycle (backend/stock_units.stock_count_info) — {cycle,
+    # principal, period, role: 'opening', available, counted_on,
+    # counted_on_note, row_count, flag, reason}. available False with reason
+    # "no opening stock count for <month>" when the plan can't be made from it.
+    stock_counts: list[dict] = []
 
 
 class RecommendationDecision(BaseModel):

@@ -115,6 +115,8 @@ def lp_model_info(run: dict | None = None) -> dict:
             "inputs_are_placeholders": True,
             "inputs_source": "defaults",
             "run": None,
+            # No run, so no stock count to name.
+            "stock_counts": None,
             "safety_stock_assumption": SAFETY_STOCK_ASSUMPTION,
         }
     model, inputs = run["model"], run["inputs"]
@@ -127,6 +129,11 @@ def lp_model_info(run: dict | None = None) -> dict:
         "inputs_source": "run",
         "inputs_differing_from_defaults": sorted(k for k, v in PLACEHOLDERS.items() if inputs.get(k) != v),
         "allocation": model.get("allocation"),
+        # {principal: {period, counted_on, counted_on_note, row_count, flag}}:
+        # the opening stock counts the run planned from (scripts/run_lp.py
+        # run_record). None for a run recorded before 2026-10-03, which
+        # didn't record its count (it used each principal's latest).
+        "stock_counts": inputs.get("stock_counts"),
         "run": {
             "run_key": run["run_key"],
             "planning_cycle_date": run["planning_cycle_date"],
