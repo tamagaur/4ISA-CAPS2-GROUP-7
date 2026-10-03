@@ -177,28 +177,14 @@
 
 /* The hero chart's year-over-year layout (2026-10-03). Its card is far
    wider than tall, and a flex-sized plot came out about 200px high — too
-   flat to show a ₱10M swing — so the plot has a fixed height, with the
-   change-vs-last-year bars in their own box under it. */
+   flat to show a ₱10M swing — so the plot has a fixed height. */
 .chart-container-yoy {
   flex: none;
-  height: 320px;
-}
-
-.chart-yoy-title {
-  margin: 10px 0 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.chart-yoy-strip {
-  height: 136px;
-  min-width: 0;
+  height: 340px;
 }
 
 @media (max-width: 600px) {
-  .chart-container-yoy { height: 250px; }
-  .chart-yoy-strip { height: 110px; }
+  .chart-container-yoy { height: 260px; }
 }
 
 .custom-legend {
