@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ComposedChart, BarChart, Bar, Cell, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Area, ReferenceLine
+  Area, ReferenceLine, ReferenceArea
 } from 'recharts';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
@@ -1459,7 +1459,7 @@ const PortfolioForecastTooltip = ({ active, payload, label }) => {
   const row = payload[0].payload;
   return (
     <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(label)}</p>
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(row.period ?? label)}</p>
       {row.actual != null && (
         <p className="chart-tooltip-row">
           <span className="chart-tooltip-swatch" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />
@@ -1501,6 +1501,47 @@ const formatCompactQty = (value, millionDigits = 1) => {
   return `${Math.round(value)}`;
 };
 
+// Past / Present / Future on the forecast chart (Audrey, 2026-10-03). The
+// sections follow the DATA's clock, not the calendar: the present is the
+// latest month with actual demand, the past every month before it, the
+// future the forecast months after it. (By today's date the whole chart
+// would be "past" whenever the data lags, and the forecast — the reason
+// for the card — would sit under the wrong name.) A boundary falls halfway
+// between two months.
+const FORECAST_SECTION_STYLE = {
+  past: { label: 'Past', fill: 'var(--color-slate-500, #64748b)', fillOpacity: 0.06 },
+  present: { label: 'Present', narrowLabel: 'Now', fill: 'var(--color-brand-primary, #c53030)', fillOpacity: 0.09 },
+  future: { label: 'Future', fill: COLORS.forecast, fillOpacity: 0.05 },
+};
+// Below this width per month, "PRESENT" no longer fits its one-month band:
+// it reads "NOW", set against the band's right edge, so it and "FUTURE"
+// (set against its left edge) sit either side of the rule between them
+// instead of on top of each other.
+const SECTION_LABEL_MIN_SLOT_PX = 62;
+
+// The month axis: "Jan" … "Dec" with the year on a second line beneath —
+// under the first label and wherever the year changes from the label
+// before it, so each year is named once, where it starts on the axis.
+const MonthYearTick = ({ x, y, payload, rows, step }) => {
+  const row = rows[payload.value];
+  if (!row) return null;
+  const year = yearOf(row.period);
+  const before = rows[payload.value - step];
+  const showYear = !before || yearOf(before.period) !== year;
+  return (
+    <g>
+      <text x={x} y={y + 14} textAnchor="middle" fontSize={10} fill={CHART_COLORS.axisLabel}>
+        {AXIS_MONTHS[monthOf(row.period) - 1]}
+      </text>
+      {showYear && (
+        <text x={x} y={y + 27} textAnchor="middle" fontSize={10} fontWeight={700} fill={CHART_COLORS.axisLabel}>
+          {year}
+        </text>
+      )}
+    </g>
+  );
+};
+
 // Portfolio-level aggregate forecast — sums forecast_value across every
 // gated (MASE < 1, the LP's own gate) Class A SKU per period and plots it
 // as one line against actual aggregate demand, with an approximate 90%
@@ -1517,6 +1558,10 @@ const formatCompactQty = (value, millionDigits = 1) => {
 // actual is only present for historical periods, forecast/confidence only
 // for projected ones — they're expected to share one point where the
 // two meet so the lines read as continuous.
+//
+// Drawn like the hero chart (2026-10-03): a smooth line with no dot per
+// month and a light shade of its own colour beneath, divided into Past /
+// Present / Future, with months on the axis and the year beneath them.
 export const PortfolioForecastWidget = ({
   series = [],
   scopeLabel,
@@ -1579,12 +1624,46 @@ export const PortfolioForecastWidget = ({
   // range instead of being recalculated for whatever window is showing.
   const zoom = useChartZoom(chartData);
 
-  // "Forecast starts" divider: the bridge month, where the last actual
-  // hands over to the projection — drawn only while it is in the window.
-  const forecastStart = useMemo(() => {
-    const bridge = chartData.filter((pt) => pt.actual != null && pt.forecast != null).pop();
-    return bridge && zoom.view.some((pt) => pt.period === bridge.period) ? bridge.period : null;
-  }, [chartData, zoom.view]);
+  // The x axis is the month's position in the window (0, 1, 2 …), so a
+  // section can end halfway between two months.
+  const plotRows = useMemo(() => zoom.view.map((pt, i) => ({ ...pt, idx: i })), [zoom.view]);
+  const tickStep = zoom.labelInterval + 1;
+  const widgetRef = useRef(null);
+  const cardWidth = useElementWidth(widgetRef);
+
+  // Past / Present / Future (FORECAST_SECTION_STYLE): the present is the
+  // latest month with actual demand in the whole series; panned away from
+  // it, everything in the window is past. The future gets half a month of
+  // room past its last point so a single forecast month is a visible band.
+  const { sections, xMax } = useMemo(() => {
+    const last = plotRows.length - 1;
+    if (last < 0) return { sections: [], xMax: 0 };
+    const latestActual = [...chartData].reverse().find((pt) => pt.actual != null);
+    const present = latestActual ? plotRows.findIndex((pt) => pt.period === latestActual.period) : -1;
+    const span = (key, first, lastIdx, x1, x2) => ({
+      key, x1, x2, from: plotRows[first].period, to: plotRows[lastIdx].period, ...FORECAST_SECTION_STYLE[key],
+    });
+    if (present === -1) return { sections: [span('past', 0, last, 0, last)], xMax: last };
+    const hasFuture = present < last;
+    const max = hasFuture ? last + 0.5 : last;
+    return {
+      xMax: max,
+      sections: [
+        present > 0 ? span('past', 0, present - 1, 0, present - 0.5) : null,
+        span('present', present, present, Math.max(0, present - 0.5), Math.min(max, present + 0.5)),
+        hasFuture ? span('future', present + 1, last, present + 0.5, max) : null,
+      ].filter(Boolean),
+    };
+  }, [plotRows, chartData]);
+  const slotPx = cardWidth && plotRows.length > 1 ? (cardWidth - 130) / plotRows.length : Infinity;
+  const narrowSlots = slotPx < SECTION_LABEL_MIN_SLOT_PX;
+  // The sections in words, so the reader knows which months each one is.
+  const sectionNote = { present: ' (latest month with sales)', future: ' (forecast)' };
+  const sectionsLine = sections.length > 1
+    ? sections.map((sec) => `${sec.label}: ${sec.from === sec.to
+      ? formatMonth(sec.from)
+      : `${formatMonth(sec.from)} – ${formatMonth(sec.to)}`}${sectionNote[sec.key] ?? ''}`).join(' · ')
+    : null;
 
   // The projection's value, labelled at the end of its line.
   const forecastLabels = useMemo(() => {
@@ -1608,7 +1687,7 @@ export const PortfolioForecastWidget = ({
     : null;
 
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`} ref={widgetRef}>
       <div className="chart-header">
         <div className="chart-title-area">
           {/* The unit is PIECES here and pesos on the chart above it; the
@@ -1625,6 +1704,7 @@ export const PortfolioForecastWidget = ({
           {/* The card's takeaway, composed by the backend from this same
               series (portfolio_forecast.insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
+          {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
         </div>
         {/* The card follows the Topbar's principal filter like the rest of
             the page (2026-09-30). Its own All / Del Monte / Unilever + Reset
@@ -1663,11 +1743,11 @@ export const PortfolioForecastWidget = ({
               <ul className="custom-legend custom-legend-top">
                 <li className="legend-item">
                   <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
-                  Actual demand
+                  Actual demand (past and present)
                 </li>
                 <li className="legend-item">
                   <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
-                  Forecast
+                  Forecast (future)
                 </li>
                 <li className="legend-item">
                   <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
@@ -1676,17 +1756,30 @@ export const PortfolioForecastWidget = ({
               </ul>
               <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
                 <ResponsiveContainer width="99%" height="100%">
-                  <ComposedChart data={zoom.view} margin={{ top: 10, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
+                  <ComposedChart data={plotRows} margin={{ top: 10, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
+                    <defs>
+                      <linearGradient id="pf-fill-actual" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={CHART_COLORS.salesSeries} stopOpacity={0.26} />
+                        <stop offset="100%" stopColor={CHART_COLORS.salesSeries} stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid {...GRID_PROPS} />
-                    {/* A numeric interval from the zoom window, replacing the
-                        earlier equidistantPreserveStart. That was here because
-                        Recharts' default preserveEnd skips labels counting
-                        backward from the END and so silently dropped the first
-                        point's label on a wide range; a numeric interval counts
-                        forward from index 0, which keeps the first label by
-                        construction, and drops to 0 (every month labelled) as
-                        soon as the window is narrow enough to fit them. */}
-                    <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} height={X_AXIS_TITLED_HEIGHT} label={xAxisTitle('Month')} />
+                    {/* Months by name, the year beneath (MonthYearTick). The
+                        zoom window's label interval still decides how many
+                        months are labelled; counting forward from the first
+                        month keeps its label by construction. */}
+                    <XAxis
+                      dataKey="idx"
+                      type="number"
+                      domain={[0, xMax]}
+                      ticks={plotRows.filter((pt) => pt.idx % tickStep === 0).map((pt) => pt.idx)}
+                      axisLine={false}
+                      tickLine={false}
+                      interval={0}
+                      tick={<MonthYearTick rows={plotRows} step={tickStep} />}
+                      height={X_AXIS_TITLED_HEIGHT + 12}
+                      label={xAxisTitle('Month')}
+                    />
                     <YAxis
                       axisLine={false}
                       tickLine={false}
@@ -1695,44 +1788,63 @@ export const PortfolioForecastWidget = ({
                       tickFormatter={(v) => formatCompactQty(v, 2)}
                       label={yAxisTitle('Pieces')}
                     />
-                    <Tooltip content={<PortfolioForecastTooltip />} />
-                    {/* The uncertainty cone is this chart's ONE fill — the
-                        series washes that used to sit under both lines
-                        muddied it, and the cone is the fill that carries
-                        real information. */}
-                    <Area type="linear" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" {...zoom.zoomAnim(0)} />
-                    <Area type="linear" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} {...zoom.zoomAnim(0)} />
-                    {/* Where history hands over to projection — the divider
-                        the dashed line style is then read against. */}
-                    {forecastStart && (
-                      <ReferenceLine
-                        x={forecastStart}
-                        stroke={CHART_COLORS.axisLabel}
-                        strokeDasharray="4 4"
-                        label={{ value: 'Forecast starts', position: 'insideTopRight', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                    {/* Past / Present / Future: a tint behind the lines, the
+                        name at the top, a thin rule at each boundary. The
+                        present-to-future rule is where history hands over to
+                        the projection (it replaces "Forecast starts"). */}
+                    {sections.map((sec) => (
+                      <ReferenceArea
+                        key={sec.key}
+                        x1={sec.x1}
+                        x2={sec.x2}
+                        fill={sec.fill}
+                        fillOpacity={sec.fillOpacity}
+                        stroke="none"
+                        label={{
+                          value: (narrowSlots ? sec.narrowLabel ?? sec.label : sec.label).toUpperCase(),
+                          position: sec.key === 'future'
+                            ? 'insideTopLeft'
+                            : sec.key === 'present' && narrowSlots ? 'insideTopRight' : 'insideTop',
+                          fontSize: narrowSlots ? 9 : 10,
+                          fontWeight: 700,
+                          letterSpacing: narrowSlots ? 0.3 : 1,
+                          fill: CHART_COLORS.axisLabel,
+                        }}
                       />
-                    )}
-                    <Line
-                      type="linear"
+                    ))}
+                    {sections.slice(1).map((sec) => (
+                      <ReferenceLine key={`edge-${sec.key}`} x={sec.x1} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
+                    ))}
+                    <Tooltip content={<PortfolioForecastTooltip />} />
+                    {/* The forecast's uncertainty cone. */}
+                    <Area type="linear" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" activeDot={false} {...zoom.zoomAnim(0)} />
+                    <Area type="linear" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} activeDot={false} {...zoom.zoomAnim(0)} />
+                    {/* Actual demand: smooth (monotone — through every
+                        month's value, never past it), no dot per month, a
+                        light shade of its own colour beneath. The hovered
+                        month gets a dot. */}
+                    <Area
+                      type="monotone"
                       dataKey="actual"
                       name="Actual demand"
                       stroke={CHART_COLORS.salesSeries}
-                      strokeWidth={2}
+                      strokeWidth={2.5}
                       strokeLinecap="round"
-                      dot={seriesDot({ color: CHART_COLORS.salesSeries })}
-                      activeDot={{ r: 6 }}
+                      fill="url(#pf-fill-actual)"
+                      dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                       connectNulls={false}
                       {...zoom.zoomAnim(1)}
                     />
                     <Line
-                      type="linear"
+                      type="monotone"
                       dataKey="forecast"
                       name="Forecast"
                       stroke={COLORS.forecast}
                       strokeDasharray="5 3"
-                      strokeWidth={2}
-                      dot={seriesDot({ color: COLORS.forecast, skip: (p) => p?.actual != null })}
-                      activeDot={{ r: 6 }}
+                      strokeWidth={2.5}
+                      dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                       connectNulls={false}
                       label={forecastLabels}
                       {...zoom.zoomAnim(2)}
