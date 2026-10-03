@@ -4,14 +4,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ComposedChart, BarChart, Bar, Cell, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Area, ReferenceLine
+  Area, ReferenceLine, LabelList
 } from 'recharts';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
-import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
+import { useChartZoom, ChartZoomSlider, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
@@ -319,6 +319,106 @@ const yearOf = (period) => Number(String(period).slice(0, 4));
 const monthOf = (period) => Number(String(period).slice(5, 7));
 const slotOf = (dataKey) => String(dataKey).split('_')[1];
 
+// The previous year is the reference, not the subject: thinner, half
+// opacity, no dots (only the unusual-count flag). The current year keeps
+// full weight, so the eye reads "this year against a faint last year".
+const PREV_YEAR_WIDTH = 1.5;
+const PREV_YEAR_OPACITY = 0.5;
+const CUR_YEAR_DOT_R = 3;
+// The plot's floor: 90% of the lowest value, rounded down to ₱5M, never
+// below zero. With every value between ₱10M and ₱40M a zero floor spent
+// half the card on empty space and flattened a ₱10M swing to a few pixels.
+// The tick labels name the floor, so nothing is hidden.
+const yoyFloor = (min) => Math.max(0, Math.floor((min * 0.9) / 5e6) * 5e6);
+
+// Explicit ticks, because Recharts' own "nice" ticks round the floor back
+// down to zero: with a ₱10M step, a ₱5M floor becomes ₱0 again. Steps of
+// ₱5M, or ₱10M once that would be more than eight ticks.
+const pesoTicks = (values) => {
+  const present = values.filter((v) => v != null);
+  if (!present.length) return null;
+  const lo = yoyFloor(Math.min(...present));
+  const hi = Math.ceil(Math.max(...present) / 5e6) * 5e6;
+  const step = (hi - lo) / 5e6 > 8 ? 1e7 : 5e6;
+  const ticks = [];
+  for (let v = lo; v <= hi + 1; v += step) ticks.push(v);
+  if (ticks[ticks.length - 1] < hi) ticks.push(ticks[ticks.length - 1] + step);
+  return ticks;
+};
+// The bar axis stops at ±100%: one month's +240% (Jun 2025 inventory,
+// ₱29.9M against ₱8.9M) otherwise squashes every other bar to a sliver.
+// A bar past the cap runs off the top and keeps its true number.
+const YOY_BAR_CAP = 100;
+const YOY_BAR_TOP_MARGIN = 14;
+// Bar numbers and month ticks only have room on a wide card; below this
+// the tooltip carries them.
+const YOY_WIDE_PX = 700;
+const useElementWidth = (ref) => {
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const measure = () => setWidth(el.getBoundingClientRect().width);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return width;
+};
+
+const pctChange = (cur, prev) => (cur != null && prev != null && prev !== 0 ? ((cur / prev) - 1) * 100 : null);
+const fmtPct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${Math.round(v)}%`);
+
+// A bar's own number, above it for a rise and under it for a fall, so the
+// label never sits on the zero line. `lift` raises a series' labels by one
+// line so the two bars of a month never print on top of each other. A bar
+// past the axis cap has no room above it: its number goes just inside its
+// top, in white. Recharts hands a falling bar a negative height, hence
+// the min/max.
+const yoyBarLabelAt = (lift) => (props) => {
+  const { x, y, width, height, value } = props;
+  if (value == null || x == null || y == null) return null;
+  // A bar past the cap is handed a top above the plot (allowDataOverflow
+  // clips the drawing, not the geometry), so it is clamped to the plot's
+  // top edge — the BarChart's own top margin.
+  const top = Math.max(Math.min(y, y + height), YOY_BAR_TOP_MARGIN);
+  const bottom = Math.max(y, y + height);
+  const up = value >= 0;
+  let ty = up ? top - 4 - lift : bottom + 10 + lift;
+  let fill = 'var(--color-text-muted, #556070)';
+  if (up && ty < YOY_BAR_TOP_MARGIN + 2) {
+    ty = top + 11 + lift;
+    fill = 'var(--color-surface, #fff)';
+  }
+  return (
+    <text x={x + width / 2} y={ty} textAnchor="middle" fontSize={9} fontWeight={600} fill={fill}>
+      {fmtPct(value)}
+    </text>
+  );
+};
+const salesBarLabel = yoyBarLabelAt(0);
+const stockBarLabel = yoyBarLabelAt(11);
+
+const YoyTooltip = ({ active, payload, label, years }) => {
+  if (!active || !payload || !payload.length) return null;
+  const row = payload[0].payload || {};
+  const line = (name, cur, prev, pct) => (
+    cur == null || prev == null ? null : (
+      <p key={name} className="chart-tooltip-row">
+        {name}: <strong>{fmtPct(pct)}</strong> · {formatCompactPesos(cur)} in {years.cur} vs {formatCompactPesos(prev)} in {years.prev}
+      </p>
+    )
+  );
+  return (
+    <div className="chart-tooltip">
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label} · change vs {years.prev}</p>
+      {line('Sales', row.sales_cur, row.sales_prev, row.sales_yoy)}
+      {line('Inventory value', row.stock_cur, row.stock_prev, row.stock_yoy)}
+    </div>
+  );
+};
+
 const SalesStockTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   // The current year's inventory is drawn twice — the Line, plus the wash
@@ -366,8 +466,8 @@ const SalesStockTooltip = ({ active, payload, label }) => {
 // density, so the point stays on its line — it was counted — and reads
 // apart from the ordinary months without competing with the trend lines.
 // The tooltip gives the reason.
-const stockDot = (color, slot) => {
-  const base = seriesDot({ color });
+const stockDot = (color, slot, { r = 4, quiet = false } = {}) => {
+  const base = quiet ? () => null : seriesDot({ color, r });
   const StockDot = (props) => {
     const { cx, cy, payload } = props;
     if (payload?.[`meta_${slot}`]?.stockUnusual && cx != null && cy != null) {
@@ -458,6 +558,8 @@ export const SalesVsStockWidget = ({
   // for every Unilever period: the line and its legend entry appear
   // together, only when at least one real point exists.
   const hasReceived = data.some((pt) => pt.received != null);
+  const widgetRef = useRef(null);
+  const wide = useElementWidth(widgetRef) >= YOY_WIDE_PX;
 
   // The calendar rows: one per month, each year's values in that year's
   // slot. A month the range doesn't reach (Mar–Dec of a year that ends in
@@ -483,6 +585,9 @@ export const SalesVsStockWidget = ({
             }
           : null;
       }
+      // Each month's change against the same month last year, for the bars.
+      row.sales_yoy = pctChange(row.sales_cur, row.sales_prev);
+      row.stock_yoy = pctChange(row.stock_cur, row.stock_prev);
       return row;
     });
     return {
@@ -493,6 +598,18 @@ export const SalesVsStockWidget = ({
     };
   }, [data, placeholder]);
   const hasUnusual = rows.some((r) => slots.some((s) => r[`meta_${s}`]?.stockUnusual && r[`stock_${s}`] != null));
+  const yTicks = useMemo(
+    () => pesoTicks(rows.flatMap((r) => slots.flatMap((s) => [r[`sales_${s}`], r[`stock_${s}`], hasReceived ? r[`received_${s}`] : null]))),
+    [rows, slots, hasReceived],
+  );
+  const barsOverCap = rows.some((r) => Math.abs(r.sales_yoy ?? 0) > YOY_BAR_CAP || Math.abs(r.stock_yoy ?? 0) > YOY_BAR_CAP);
+  const hasComparison = rows.some((r) => r.sales_yoy != null || r.stock_yoy != null);
+  // The months each drawn year covers, for the note when they never meet
+  // (the default Mar–Feb range: 2026 has Jan–Feb, 2025 has Mar–Dec).
+  const monthsOf = (slot) => {
+    const names = rows.filter((r) => r[`sales_${slot}`] != null || r[`stock_${slot}`] != null).map((r) => r.month);
+    return names.length ? (names.length === 1 ? names[0] : `${names[0]}–${names[names.length - 1]}`) : 'nothing';
+  };
   const hasPlaceholder = rows.some((r) => slots.some((s) => r[`meta_${s}`]?.placeholder));
   const yearName = (label, slot) => `${label} · ${slotYears[slot]}`;
   // Which years the lines are, said outright — the legend shows it, but a
@@ -501,7 +618,8 @@ export const SalesVsStockWidget = ({
     ? null
     : slotYears.prev == null
       ? `One calendar year per line: only ${slotYears.cur} is in the selected range — widen it to overlay ${slotYears.cur - 1}.`
-      : `One calendar year per line: ${slotYears.cur} solid, ${slotYears.prev} dashed, on the same Jan–Dec axis.`
+      : `${slotYears.cur} is the solid line, ${slotYears.prev} the lighter dashed one, on the same Jan–Dec axis;`
+        + ` the bars underneath are each month's change against ${slotYears.prev}.`
         + (undrawnYears.length ? ` Earlier years in the range (${undrawnYears.join(', ')}) aren't drawn.` : '');
 
   // Direct labels: the current year's latest sales and inventory values at
@@ -581,7 +699,7 @@ export const SalesVsStockWidget = ({
   ];
 
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`} ref={widgetRef}>
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>Sales vs Inventory Value (₱)</h4>
@@ -625,43 +743,23 @@ export const SalesVsStockWidget = ({
             )}
             {hasPlaceholder && <PlaceholderLegendItem />}
           </ul>
-          <div className="chart-container">
+          <div className="chart-container chart-container-yoy">
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={rows} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
-                <defs>
-                  {/* ONE wash, under the current year's inventory only — two
-                      overlapping gradients turned muddy where the lines
-                      crossed, and the wash's job (tie the band to its line)
-                      needs only the series that reads as a level rather
-                      than a flow. */}
-                  <SeriesFill id="fill-stock" color={CHART_COLORS.inventorySeries} />
-                </defs>
                 <CartesianGrid {...GRID_PROPS} />
                 {/* Twelve fixed slots, every one labelled: a calendar axis
                     never has more months than fit. */}
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={0} height={X_AXIS_TITLED_HEIGHT} label={xAxisTitle('Month')} />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: wide ? 10 : 8.5, fill: CHART_COLORS.axisLabel }} dy={10} interval={0} height={X_AXIS_TITLED_HEIGHT} label={xAxisTitle('Month')} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                   tickFormatter={(v) => formatCompactPesos(v)}
                   label={yAxisTitle('Pesos (₱)')}
+                  domain={yTicks ? [yTicks[0], yTicks[yTicks.length - 1]] : [0, 'auto']}
+                  ticks={yTicks ?? undefined}
                 />
                 <Tooltip content={<SalesStockTooltip />} />
-                {/* The wash is declared ahead of the Lines so every line
-                    paints on top of it. baseValue="dataMin" anchors it to the
-                    axis floor rather than to zero, which keeps the Y domain
-                    exactly as it was. */}
-                <Area
-                  type="linear"
-                  dataKey="stock_cur"
-                  stroke="none"
-                  fill="url(#fill-stock)"
-                  baseValue="dataMin"
-                  legendType="none"
-                  tooltipType="none"
-                  opacity={dimmable('stock_cur')}
-                />
                 {/* Straight segments (linear), not smoothed curves: these
                     are monthly totals, and a curve suggests values between
                     the months that don't exist. A null month breaks the
@@ -674,11 +772,13 @@ export const SalesVsStockWidget = ({
                     dataKey={sr.key}
                     name={sr.name}
                     stroke={sr.color}
-                    strokeWidth={2}
+                    strokeWidth={sr.slot === 'prev' ? PREV_YEAR_WIDTH : 2}
                     strokeLinecap="round"
                     strokeDasharray={sr.slot === 'prev' ? PREV_YEAR_DASH : undefined}
-                    strokeOpacity={dimmable(sr.key)}
-                    dot={sr.key.startsWith('stock_') ? stockDot(sr.color, sr.slot) : seriesDot({ color: sr.color })}
+                    strokeOpacity={dimmable(sr.key) * (sr.slot === 'prev' ? PREV_YEAR_OPACITY : 1)}
+                    dot={sr.key.startsWith('stock_')
+                      ? stockDot(sr.color, sr.slot, { r: CUR_YEAR_DOT_R, quiet: sr.slot === 'prev' })
+                      : sr.slot === 'prev' ? false : seriesDot({ color: sr.color, r: CUR_YEAR_DOT_R })}
                     activeDot={{ r: 6 }}
                     label={labels[sr.key] ?? false}
                     connectNulls={false}
@@ -688,6 +788,53 @@ export const SalesVsStockWidget = ({
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          {/* The comparison as numbers: each month's change against the
+              same month last year, as bars from a zero line — the question
+              the overlay is there to answer, without reading it off two
+              crossing lines. Same margins and axis width as the plot above,
+              so the bars sit under their months. Sales bars carry their
+              own number; inventory's is in the tooltip. */}
+          {slots.length === 2 && !hasComparison && (
+            <p className="chart-yoy-title">
+              No same-month comparison in this range: {slotYears.cur} has {monthsOf('cur')} and {slotYears.prev} has{' '}
+              {monthsOf('prev')}. Pick a range that holds the same months of both years, e.g. Jan {slotYears.prev} to Dec {slotYears.prev}{' '}
+              plus Jan–Feb {slotYears.cur}, to see each month&apos;s change.
+            </p>
+          )}
+          {slots.length === 2 && hasComparison && (
+            <>
+              <p className="chart-yoy-title">
+                Change vs {slotYears.prev}, same month (%) · teal sales, navy inventory value
+                {barsOverCap && ` · the scale stops at ±${YOY_BAR_CAP}%; a taller bar keeps its true number`}
+                {!wide && ' · hover or tap a bar for its numbers'}
+              </p>
+              <div className="chart-yoy-strip">
+                <ResponsiveContainer width="99%" height="100%">
+                  <BarChart data={rows} margin={{ top: YOY_BAR_TOP_MARGIN, right: EDGE_LABEL_MARGIN, left: 0, bottom: 14 }} barCategoryGap="28%" barGap={2}>
+                    <XAxis dataKey="month" hide />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                      tickFormatter={fmtPct}
+                      width={60}
+                      domain={barsOverCap ? [-YOY_BAR_CAP, YOY_BAR_CAP] : ['auto', 'auto']}
+                      allowDataOverflow={barsOverCap}
+                      ticks={barsOverCap ? [-YOY_BAR_CAP, -50, 0, 50, YOY_BAR_CAP] : undefined}
+                    />
+                    <ReferenceLine y={0} stroke={CHART_COLORS.axisLabel} strokeWidth={1} />
+                    <Tooltip content={<YoyTooltip years={slotYears} />} cursor={{ fill: 'rgba(100, 116, 139, 0.08)' }} />
+                    <Bar dataKey="sales_yoy" name="Sales" fill={CHART_COLORS.salesSeries} radius={[2, 2, 0, 0]} isAnimationActive={false}>
+                      {wide && <LabelList dataKey="sales_yoy" content={salesBarLabel} />}
+                    </Bar>
+                    <Bar dataKey="stock_yoy" name="Inventory value" fill={CHART_COLORS.inventorySeries} fillOpacity={0.6} radius={[2, 2, 0, 0]} isAnimationActive={false}>
+                      {wide && <LabelList dataKey="stock_yoy" content={stockBarLabel} />}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
