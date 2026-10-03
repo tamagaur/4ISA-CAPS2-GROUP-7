@@ -319,11 +319,12 @@ const yearOf = (period) => Number(String(period).slice(0, 4));
 const monthOf = (period) => Number(String(period).slice(5, 7));
 const slotOf = (dataKey) => String(dataKey).split('_')[1];
 
-// The previous year is the reference, not the subject: thinner, half
-// opacity, no dots (only the unusual-count flag). The current year keeps
-// full weight, so the eye reads "this year against a faint last year".
+// The previous year is the reference, not the subject: its own, lighter
+// colours (CHART_COLORS.*PrevSeries), thinner, dashed, no dots (only the
+// unusual-count flag). The current year keeps each metric's main hue at
+// full weight. Audrey, 2026-10-03: the same hue faded to half opacity
+// wasn't distinct enough, so the year is carried by colour as well as dash.
 const PREV_YEAR_WIDTH = 1.5;
-const PREV_YEAR_OPACITY = 0.5;
 const CUR_YEAR_DOT_R = 3;
 // The plot's floor: 90% of the lowest value, rounded down to ₱5M, never
 // below zero. With every value between ₱10M and ₱40M a zero floor spent
@@ -456,10 +457,12 @@ const INVENTORY_LABEL = 'Inventory value (at cost)';
 // figures specifically so they plot on one axis — see backend/routers/
 // dashboard.py's kpis.soh_value and sales_vs_stock[].received docstrings).
 //
-// The x axis is a fixed Jan–Dec calendar. Each metric keeps one hue (sales
-// teal, inventory navy, purchases received violet) and each YEAR one line
-// style: the latest year in the fetched range solid, the year before it
-// dashed. So "how does this month compare with the same month last year"
+// The x axis is a fixed Jan–Dec calendar. The latest year in the fetched
+// range is the subject: solid, in each metric's main hue (sales teal,
+// inventory navy, purchases received violet). The year before it is the
+// reference: dashed, thinner, in its own lighter colours (sales ochre
+// gold, inventory cornflower blue; received stays violet). So "how does
+// this month compare with the same month last year"
 // is read straight off the chart — the Technical Adviser's "story in the
 // changes" — instead of walked along a timeline. Only those two years are
 // drawn; the subtitle names any earlier year the range holds.
@@ -549,7 +552,7 @@ export const SalesVsStockWidget = ({
     ? null
     : slotYears.prev == null
       ? `One calendar year per line: only ${slotYears.cur} is in the selected range — widen it to overlay ${slotYears.cur - 1}.`
-      : `${slotYears.cur} is the solid line, ${slotYears.prev} the lighter dashed one, on the same Jan–Dec axis.`
+      : `${slotYears.cur} is the solid line — teal for sales, navy for inventory; ${slotYears.prev} the dashed one in gold and light blue, on the same Jan–Dec axis.`
         + (undrawnYears.length ? ` Earlier years in the range (${undrawnYears.join(', ')}) aren't drawn.` : '');
 
   // Direct labels: the current year's latest sales and inventory values at
@@ -621,8 +624,14 @@ export const SalesVsStockWidget = ({
   // Legend and lines share one description per series, so the pairing the
   // legend promises (hue = metric, dash = year) is the one that is drawn.
   const series = [
-    ...slots.map((slot) => ({ key: `sales_${slot}`, slot, name: yearName(salesLabel, slot), color: CHART_COLORS.salesSeries })),
-    ...slots.map((slot) => ({ key: `stock_${slot}`, slot, name: yearName(INVENTORY_LABEL, slot), color: CHART_COLORS.inventorySeries })),
+    ...slots.map((slot) => ({
+      key: `sales_${slot}`, slot, name: yearName(salesLabel, slot),
+      color: slot === 'prev' ? CHART_COLORS.salesPrevSeries : CHART_COLORS.salesSeries,
+    })),
+    ...slots.map((slot) => ({
+      key: `stock_${slot}`, slot, name: yearName(INVENTORY_LABEL, slot),
+      color: slot === 'prev' ? CHART_COLORS.inventoryPrevSeries : CHART_COLORS.inventorySeries,
+    })),
     ...(hasReceived
       ? slots.map((slot) => ({ key: `received_${slot}`, slot, name: yearName(receivedLabel, slot), color: COLORS.forecast }))
       : []),
@@ -705,7 +714,7 @@ export const SalesVsStockWidget = ({
                     strokeWidth={sr.slot === 'prev' ? PREV_YEAR_WIDTH : 2}
                     strokeLinecap="round"
                     strokeDasharray={sr.slot === 'prev' ? PREV_YEAR_DASH : undefined}
-                    strokeOpacity={dimmable(sr.key) * (sr.slot === 'prev' ? PREV_YEAR_OPACITY : 1)}
+                    strokeOpacity={dimmable(sr.key)}
                     dot={sr.key.startsWith('stock_')
                       ? stockDot(sr.color, sr.slot, { r: CUR_YEAR_DOT_R, quiet: sr.slot === 'prev' })
                       : sr.slot === 'prev' ? false : seriesDot({ color: sr.color, r: CUR_YEAR_DOT_R })}
