@@ -497,3 +497,10 @@
   text-transform: none;
   color: var(--color-text-muted);
 }
+
+/* The plan's own facts (run, date, allocation, service level, stock count):
+   the line the rest of the page's numbers rest on, so it reads first. */
+.reorder-plan-facts {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}

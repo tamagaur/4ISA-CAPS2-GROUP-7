@@ -1221,8 +1221,8 @@ def get_dashboard(
                 # The tax basis the pesos above are on (see vat_note's sources),
                 # naming any Del Monte month in the basis or YTD recorded with tax.
                 "vat_basis": (
-                    "incl. VAT" if scope == "unilever"
-                    else "ex-VAT" + _dm_tax_exception(basis_periods + ytd_periods)
+                    "selling price, VAT-inclusive" if scope == "unilever"
+                    else "selling price, ex-VAT" + _dm_tax_exception(basis_periods + ytd_periods)
                 ),
             })
 
@@ -1504,8 +1504,8 @@ def get_dashboard(
     # (_received_by_period), so one word per line is true. Under 'all' the
     # combined pesos mix both bases and vat_note says so instead.
     sales_vs_stock_basis = (
-        {"sales": "incl. VAT", "received": "incl. VAT"} if scope == "unilever"
-        else {"sales": "ex-VAT" + _dm_tax_exception(periods), "received": "ex-VAT"} if scope == "delmonte"
+        {"sales": "selling price, VAT-inclusive", "received": "incl. VAT"} if scope == "unilever"
+        else {"sales": "selling price, ex-VAT" + _dm_tax_exception(periods), "received": "ex-VAT"} if scope == "delmonte"
         else {"sales": None, "received": None}
     )
 

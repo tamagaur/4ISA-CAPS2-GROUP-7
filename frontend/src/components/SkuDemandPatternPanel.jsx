@@ -77,8 +77,13 @@ const BIN_LABELS = {
 // a convention over the measured number, which always stays beside it, the
 // same rule as the volatility band. The peak and trough months are only
 // named when there is a pattern worth naming.
+// "Strong seasonality" is not shown for now (3 Oct 2026 analysis): most of
+// the products STL strength labels strong fail the proper yearly-repeat
+// test. Until the backend serves that test's own label ("Repeats yearly"),
+// a high strength reads "Under review" and names no peak or trough month.
+const SEASONALITY_UNDER_REVIEW = 0.6;
 const seasonalityBand = (strength) => {
-  if (strength >= 0.6) return 'Strong seasonality';
+  if (strength >= SEASONALITY_UNDER_REVIEW) return 'Under review';
   if (strength >= 0.3) return 'Moderate seasonality';
   return 'Weak seasonality';
 };
@@ -253,7 +258,9 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
                   ? 'Decomposing…'
                   : !stl.available
                     ? stl.reason
-                    : `${stl.seasonal_strength >= 0.3 ? `peaks in ${stl.peak_month}, lowest in ${stl.trough_month} · ` : 'no reliable yearly pattern · '}STL seasonal strength ${stl.seasonal_strength.toFixed(2)}, trend ${stl.trend_strength.toFixed(2)} (0–1)${stl.periods?.length ? ` · ${formatMonth(stl.periods[0])} – ${formatMonth(stl.periods[stl.periods.length - 1])}` : ''}`}
+                    : `${stl.seasonal_strength >= SEASONALITY_UNDER_REVIEW
+                      ? 'the yearly-repeat test is being redone, so no seasonality label yet · '
+                      : stl.seasonal_strength >= 0.3 ? `peaks in ${stl.peak_month}, lowest in ${stl.trough_month} · ` : 'no reliable yearly pattern · '}STL seasonal strength ${stl.seasonal_strength.toFixed(2)}, trend ${stl.trend_strength.toFixed(2)} (0–1)${stl.periods?.length ? ` · ${formatMonth(stl.periods[0])} – ${formatMonth(stl.periods[stl.periods.length - 1])}` : ''}`}
               </span>
             </div>
           )}

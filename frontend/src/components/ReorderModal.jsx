@@ -42,7 +42,7 @@ const objectiveWeights = (lpModel) => {
 // Stock is valued at purchase cost and sales at selling price, so cover
 // reads a little short (backend/routers/recommendations.py days_of_cover).
 const COVER_BASIS_NOTE =
-  'Stock at cost (₱) ÷ average daily sales value (₱/day over the last 3 sales months; a month with no sales counts as 0). Cost against selling price, so cover reads slightly short.';
+  'Stock at last purchase price (₱) ÷ average daily sales value (₱/day over the last 3 sales months; a month with no sales counts as 0). Cost against selling price, so cover reads slightly short.';
 
 // `periods` — the dates the page read its figures at (GET /recommendations'
 // label_context, passed through by ReorderRecommendations), so each figure
@@ -215,7 +215,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {} 
               ? <>
                   {' '}SSM&apos;s {inputs.target_weeks ?? 3}-week rule asks that the stock left at month end of the SKUs
                   in this plan — not the whole warehouse — be worth at least {inputs.target_weeks ?? 3} weeks of their
-                  sales, at cost; the LP keeps it where the allocation allows.
+                  sales, at last purchase price; the LP keeps it where the allocation allows.
                 </>
               : <> SSM&apos;s {inputs.target_weeks ?? 3}-week rule is built into each SKU&apos;s target stock as a floor.</>}
             {lpModel?.inputs_are_placeholders && ' These inputs are placeholders until SSM confirms them.'}

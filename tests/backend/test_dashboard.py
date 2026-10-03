@@ -1600,7 +1600,7 @@ def test_allocation_applies_ssm_rule_to_prior_year_sales():
         (105, pytest.approx(1260.0), pytest.approx(105.0)),
         (108, pytest.approx(1296.0), pytest.approx(108.0)),
     ]
-    assert a["vat_basis"] == "incl. VAT"
+    assert a["vat_basis"] == "selling price, VAT-inclusive"
     assert a["blocked_reason"] is None
     # Single-principal pesos sit on one tax basis, so there is nothing to flag.
     assert body["vat_note"] is None
@@ -1819,7 +1819,7 @@ def test_del_monte_purchases_are_plotted_ex_vat_like_its_sales():
     body = _get(session, "principal=delmonte&period=2025-12&start_period=2025-01")
     dec = next(pt for pt in body["sales_vs_stock"] if pt["period"] == "2025-12")
     assert dec["received"] == pytest.approx(20_541_542.46)
-    assert body["sales_vs_stock_basis"] == {"sales": "ex-VAT", "received": "ex-VAT"}
+    assert body["sales_vs_stock_basis"] == {"sales": "selling price, ex-VAT", "received": "ex-VAT"}
     sql = next(s for s, _ in session.calls if "principal = 'delmonte'" in s and "Purchase_Fact_Real" in s)
     assert "net_amount - COALESCE(tax_amount, 0)" in sql
 
@@ -1829,7 +1829,7 @@ def test_unilever_purchases_stay_on_its_vat_inclusive_sales_basis():
     session = FakeSession(received={current: 700.0}, received_tax={current: 75.0})
     body = _get(session, "principal=unilever")
     assert body["sales_vs_stock"][-1]["received"] == 700.0
-    assert body["sales_vs_stock_basis"] == {"sales": "incl. VAT", "received": "incl. VAT"}
+    assert body["sales_vs_stock_basis"] == {"sales": "selling price, VAT-inclusive", "received": "incl. VAT"}
     # Under 'all' the pesos mix the two bases; vat_note says so instead.
     assert _get(FakeSession(), "principal=all")["sales_vs_stock_basis"] == {"sales": None, "received": None}
 
@@ -1940,7 +1940,7 @@ def test_insight_sentence_names_inventory_at_cost_and_its_count_day():
         {"period": "2026-02", "sales": 27_900_000.0, "stock_on_hand": None, "stock_count_date": None},
     ]
     text = sales_vs_stock_insight(series)["text"]
-    assert "inventory at cost stood at ₱24.3M in Jan 2026 (counted Feb 3, 2026)" in text
+    assert "inventory at last purchase price stood at ₱24.3M in Jan 2026 (counted Feb 3, 2026)" in text
     # Without a count day the month alone is stated, never a raw string.
     series[0]["stock_count_date"] = None
     text = sales_vs_stock_insight(series)["text"]

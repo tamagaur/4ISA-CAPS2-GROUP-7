@@ -34,6 +34,10 @@ import './SKUForecast.css';
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
 // presentation attributes can't take a CSS var()). It used to be the
 // amber data colour, which means "watch" everywhere else in the app.
+// Forecast accuracy percentages (WAPE) are held back while they are
+// recomputed on the fairer test — see the stat block that reads this.
+const SHOW_ACCURACY_PCT = false;
+
 const PIN_COLOR = '#C74E3D';
 const PIN_IDLE_COLOR = '#667085';
 
@@ -1500,7 +1504,12 @@ const SKUForecast = () => {
                         model_params.wape). Only for the stored number — a
                         browser preview has no holdout behind it. Never
                         labelled an 80/20 score: that split was retired. */}
-                    {derivedForecast?.source === 'stored' && storedParams.wape != null && (
+                    {/* Not shown for now (3 Oct 2026 analysis): the accuracy
+                        percentages are being recomputed on a fairer test
+                        (products that were top sellers at the time), so no
+                        accuracy % is on screen until then. Flip
+                        SHOW_ACCURACY_PCT to bring this block back. */}
+                    {SHOW_ACCURACY_PCT && derivedForecast?.source === 'stored' && storedParams.wape != null && (
                       <>
                         <div className="forecast-stat-divider" />
                         <div className="forecast-stat-block">

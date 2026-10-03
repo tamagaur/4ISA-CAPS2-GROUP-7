@@ -464,11 +464,14 @@ const unusualStockDot = (slot) => {
 // the label lives.
 const RECEIVED_LABEL = 'Purchases received';
 
+// "At last purchase price", not "at cost" (3 Oct 2026 analysis): the SOH
+// file's extended cost prices each product at what it was last bought for,
+// which is above SSM's true cost, so "at cost" claimed more than it knows.
 // The stock line is the PESO value of the stock count at cost (Inventory_
 // Fact.valuation, the SOH file's own extended cost), not a quantity on hand.
 // It was labelled "Stock on hand", which a reader takes for pieces or cases;
 // renamed 2026-10-02 so the legend, tooltip and table say what is plotted.
-const INVENTORY_LABEL = 'Inventory value (at cost)';
+const INVENTORY_LABEL = 'Inventory value (at last purchase price)';
 
 // Sales vs Inventory Value — the dashboard's hero chart, as a year-over-year
 // overlay (2026-10-03). `data` is [{ period, sales, stockOnHand, received }],
@@ -725,7 +728,7 @@ export const SalesVsStockWidget = ({
         <ChartTable
           columns={tableColumns}
           rows={data}
-          caption="Sales versus inventory value at cost by month, in pesos (₱)"
+          caption="Sales versus inventory value at last purchase price by month, in pesos (₱)"
         />
       ) : (
         <>
@@ -1120,10 +1123,16 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
           {/* The cutoffs are GET /dashboard's abc_rules (the ABC run's own
               constants), never restated here. */}
           <p>
-            Which products earn the most. {unitsTitle} are ranked by revenue{rankedMonth ? ` in ${rankedMonth}` : ''}
+            {/* The definition of an "important" product, on screen, and the
+                basis of the ranking named as what it is: one month, until
+                the 12-month basis lands (3 Oct 2026 analysis). */}
             {rules
-              ? `: Class A makes up the first ${Math.round(rules.tier_a_cutoff * 100)}%, `
-                + `B the next ${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, `
+              ? `Important products (Class A) are the top sellers that together make ${Math.round(rules.tier_a_cutoff * 100)}% of revenue`
+                + `${rankedMonth ? ` in ${rankedMonth}` : ''}. `
+              : 'Which products earn the most. '}
+            {rankedMonth ? `Ranked on ${rankedMonth} sales (single month)` : `${unitsTitle} are ranked by revenue`}
+            {rules
+              ? `: B is the next ${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, `
                 + `C the last ${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`
               : '.'}
             {/* With only a handful of categories a tier can't land on its

@@ -61,7 +61,7 @@ const BULK_CONCURRENCY = 5;
 const ACCEPT_REASON = 'Accepted the LP-recommended order quantity as-is.';
 
 const COVER_BASIS_NOTE =
-  'Stock at cost (₱) ÷ average daily sales value (₱/day, last 3 sales months) — the same peso basis the Dashboard’s '
+  'Stock at last purchase price (₱) ÷ average daily sales value (₱/day, last 3 sales months) — the same peso basis the Dashboard’s '
   + 'weeks of cover uses. Understates cover by the margin, since stock is valued at last purchase cost while sales '
   + 'are at selling price.';
 
@@ -378,6 +378,31 @@ const ReorderRecommendations = () => {
     })
     .join(' ');
   const allocationPct = lpInputs.allocation_pct ?? null;
+  // The opening count's reviewed note for the cycle on screen ("accepted for
+  // planning, pending SSM confirmation …"), for the stock column's header.
+  const openingCountFlag = (meta?.stockCounts || [])
+    .filter((c) => (!selectedCycle || c.cycle === selectedCycle) && c.available && c.flag)
+    .map((c) => c.flag)[0] || null;
+  // The plan's own facts, from the stored run (lp_model): which run, when it
+  // was made, the allocation and service level it used, and the stock count
+  // it opened from — so the page states what its numbers rest on.
+  const lpRun = meta?.lpModel?.run || null;
+  const runCounts = Object.values(meta?.lpModel?.stock_counts || {});
+  const planFacts = lpRun && (!selectedCycle || lpRun.planning_cycle_date === selectedCycle)
+    ? [
+        `Plan run ${lpRun.run_key}`,
+        lpRun.created_at ? `made ${formatDate(lpRun.created_at)}` : null,
+        allocationPct != null ? `allocation ${allocationPct}%` : null,
+        meta.lpModel.service_level_pct != null ? `service level ${meta.lpModel.service_level_pct}%` : null,
+        ...runCounts.map((c) => (c.counted_on ? `stock counted ${formatDate(c.counted_on)}` : null)),
+      ].filter(Boolean).join(' · ')
+    : null;
+  // Caveats the run recorded about its data (lp_model.inputs.notes), less
+  // the opening-count note, which the line under the table already gives.
+  const planNotes = lpRun
+    ? (lpInputs.notes || []).filter((note) => !/stock count \d{4}-\d{2} \(counted/.test(note))
+      .map((note) => note.charAt(0).toUpperCase() + note.slice(1))
+    : [];
 
   // Every figure on this page says which period it belongs to (Sir
   // Catubag, 2 Oct 2026: a number without its period and unit can't be
@@ -755,16 +780,18 @@ const ReorderRecommendations = () => {
       </div>
 
       <div className="reorder-table-toolbar">
+        {planFacts && <p className="reorder-table-note reorder-plan-facts">{planFacts}</p>}
         <p className="reorder-table-note">
           All quantities are in pieces, for the {planLabel}; under each order is its rough size in cases (pieces ÷
           pieces per case). Suggested qty = the month&apos;s forecast + target stock − stock at the start of the month
           (the stock count that opens it). A row marked &ldquo;short&rdquo; was cut to fit the supplier allocation and
           ends the month that far below its target. A SKU missing from that stock count shows 0, &ldquo;not in
           count&rdquo;: the plan treats it as out of stock. Ranked by revenue share × pieces below the target stock.
-          Cover is in days on a peso basis (stock at cost ÷ daily sales value
+          Cover is in days on a peso basis (stock at last purchase price ÷ daily sales value
           {coverSalesLabel ? ` over ${coverSalesLabel}` : ''}).
         </p>
         {openingCountNote && <p className="reorder-table-note">{openingCountNote}</p>}
+        {planNotes.map((note) => <p className="reorder-table-note" key={note}>Data note: {note}</p>)}
         {meta?.whatIf && (
           <p className="chart-placeholder-note">
             Preview: these recommendations are a what-if run of the LP on the five-year history, 2021–22 placeholder
@@ -819,6 +846,7 @@ const ReorderRecommendations = () => {
               <th className="table-num col-fit">
                 Opening stock (pieces)
                 <span className="reorder-th-period">{countLabel}</span>
+                {openingCountFlag && <span className="reorder-th-period">{openingCountFlag.split(' (decided')[0]}</span>}
               </th>
               <th className="table-num col-fit">
                 Cover (days)

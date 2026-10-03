@@ -162,6 +162,15 @@ const safetyStockMetricType = (rate) => {
 // questions are the storyline: what happened -> which products matter ->
 // what happens next -> what to do. `hint` is a few quiet words naming what
 // the card shows; the analytics type stays as the small tag after them.
+// The Client policy card is hidden (3 Oct 2026 analysis): its headline
+// compares the plan with SSM's 3-week rule on one basis only, and the answer
+// flips with the basis — more stock than the rule at peak (order-up-to)
+// stock, less at average stock — pending SSM's answer on whether 3 weeks is
+// a minimum or an average. GET /dashboard's policy_comparison serves neither
+// of those two figures yet, so they can't be shown side by side from data.
+// The widget and its props are untouched; set this to true to bring it back.
+const SHOW_POLICY_CARD = false;
+
 const Slot = ({ kind, question, hint, realOnly = false, children }) => (
   <div className="dash-slot" data-kind={kind}>
     <span className="dash-kind-row">
@@ -218,7 +227,7 @@ const DashboardSkeleton = () => (
 // of that story the section tells.
 const DASH_SECTIONS = [
   { id: 'dash-summary', label: 'Summary', hint: 'The four headline numbers' },
-  { id: 'dash-sales', label: 'Sales & inventory', hint: 'What happened: monthly sales against inventory value (₱, at cost)' },
+  { id: 'dash-sales', label: 'Sales & inventory', hint: 'What happened: monthly sales against inventory value (₱, at last purchase price)' },
   { id: 'dash-abc', label: 'ABC classes', hint: 'What happened: which products earn the most, and their stock status' },
   { id: 'dash-forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast and the reorder list" },
   { id: 'dash-policy', label: 'Client policy', hint: "What to do: the LP safety stock against SSM's 3-week policy, and sales against the supplier allocation" },
@@ -458,7 +467,7 @@ const Dashboard = () => {
   // recorded with tax — and then that month IS tax-inclusive.
   const salesBasisRaw = data.sales_vs_stock_basis?.sales || null;
   const salesBasis = !salesBasisRaw ? null
-    : salesMonth && salesBasisRaw.includes(salesMonth) ? 'incl. VAT (recorded with tax)'
+    : salesMonth && salesBasisRaw.includes(salesMonth) ? 'selling price, VAT-inclusive (recorded with tax)'
       : salesBasisRaw.split(' (')[0];
   const sales = kpiDisplay(
     kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
@@ -478,28 +487,47 @@ const Dashboard = () => {
     : null;
   // The weeks figure names the sales it is measured in, so "3.0 weeks"
   // never reads as weeks of the range on screen (it ignores the picker).
+  // Not a final figure for Unilever yet (3 Oct 2026 analysis): its stock
+  // counts are the Ilocos Sur warehouse's and its product sales La Union's,
+  // a match SSM has not confirmed, so the weeks could be overstated. The
+  // card says "provisional" and the tooltip says why.
+  const coverProvisional = (cover.coverage || []).includes('unilever');
   const coverLine = cover.value != null
-    ? `≈ ${Number(cover.value).toFixed(1)} weeks of ${coverWindow ? `${coverWindow} ` : ''}sales · SSM policy: ${policyWeeks} weeks`
+    ? `≈ ${Number(cover.value).toFixed(1)} weeks of ${coverWindow ? `${coverWindow} ` : ''}sales`
+      + `${coverProvisional ? ' (provisional)' : ''} · SSM policy: ${policyWeeks} weeks`
     : null;
   // Del Monte's year has sales in only some months (6 of 12 in 2025); the
   // average is over those, and the tooltip says so rather than imply a year.
   const coverMonthsNote = cover.months_used != null && cover.months_used < 12
     ? ` Only ${cover.months_used} of those months have sales on record; the average is over those.`
     : '';
+  const priceBasisNote = 'Stock is valued at each product\'s last purchase price, which is not SSM\'s true cost.';
   const coverTooltip = cover.value != null && coverWindow
-    ? `Weeks of cover = this stock ÷ average weekly sales over ${coverWindow}, the 12 months up to `
+    ? `${priceBasisNote} Weeks of cover = this stock ÷ average weekly sales over ${coverWindow}, the 12 months up to `
       + `the stock count — it does not change with the date range.${coverMonthsNote} SSM's policy is `
       + `to keep ${policyWeeks} weeks of sales in stock.`
-    : undefined;
-  // Stock is valued at cost (Inventory_Fact.valuation, the SOH file's own
-  // extended cost) and dated by the day it was counted, not by the month it
-  // is filed under: "At cost · counted 6 Apr 2026". The month stays as the
-  // fallback when the backend has no single count day (kpis.soh_count_date).
-  const countDay = dayLabel(kpis.soh_count_date);
-  const countLabel = countDay ? `counted ${countDay}` : sohMonth ? `${sohMonth} count` : null;
+      + (coverProvisional
+        ? ' Provisional: the stock counts are from the Ilocos Sur warehouse and product sales are La Union only; '
+          + 'the match is unverified with SSM, so the weeks may be overstated.'
+        : '')
+    : priceBasisNote;
+  // Stock is valued at the SOH file's own extended cost — each product's
+  // last purchase price (Inventory_Fact.valuation) — and dated by the day it
+  // was counted, not by the month it is filed under: "At last purchase
+  // price · stock counted Apr 6, 2026". A count with no recorded day (Del
+  // Monte: its stored date is a 1st-of-month placeholder) names its month
+  // instead — kpis.stock_counts, the same line the safety-stock card uses.
+  const latestCounts = (kpis.stock_counts || []).filter((c) => c.available);
+  const countDayKnown = latestCounts.length === 0 || latestCounts.every((c) => c.counted_on);
+  const countDay = countDayKnown ? dayLabel(kpis.soh_count_date) : null;
+  const countLabel = stockCountedLine(kpis.stock_counts)
+    || (countDay ? `counted ${countDay}` : sohMonth ? `${sohMonth} count` : null);
+  // Del Monte's stock files carry no pack size, so its stock can't be
+  // turned into pieces: the card says why it is in pesos only.
+  const pesosOnlyNote = pagePrincipal === 'delmonte' ? 'pesos only, since Del Monte files have no pack size' : null;
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
-    ['At cost', countLabel, sohCoverage, coverLine].filter(Boolean).join(' · '),
+    ['At last purchase price', countLabel, pesosOnlyNote, sohCoverage, coverLine].filter(Boolean).join(' · '),
   );
 
   // stock_on_hand_flags: counts the team reviewed and judged unusual — the
@@ -509,7 +537,8 @@ const Dashboard = () => {
     period: pt.period,
     sales: pt.sales,
     stockOnHand: pt.stock_on_hand,
-    stockCountDay: dayLabel(pt.stock_count_date),
+    // No count day for a principal whose counts don't record one.
+    stockCountDay: countDayKnown ? dayLabel(pt.stock_count_date) : null,
     received: pt.received,
     stockUnusual: stockFlags.get(pt.period) || null,
   }));
@@ -749,7 +778,7 @@ const Dashboard = () => {
                 data={tierStock}
                 note={placeholderNote(data.abc_revenue?.period)}
                 period={data.tier_stock_period}
-                countDay={dayLabel(data.tier_stock_count_date)}
+                countDay={countDayKnown ? dayLabel(data.tier_stock_count_date) : null}
                 cycleLabel={lpCycleLabel}
                 coverage={abcCoverage}
               />
@@ -794,8 +823,8 @@ const Dashboard = () => {
 
           {/* PRESCRIPTIVE — the policy question this project exists to answer,
               beside SSM's own allocation rule applied to the sales data */}
-          <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-policy">
-            {!lpHidden && (
+          <div className={`dash-row ${lpHidden || !SHOW_POLICY_CARD ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-policy">
+            {SHOW_POLICY_CARD && !lpHidden && (
               <Slot kind="Prescriptive" question="Is the 3-week rule working?" realOnly={preview && realOnly.has('policy_comparison')}>
                 <PolicyComparisonWidget comparison={data.policy_comparison} />
               </Slot>

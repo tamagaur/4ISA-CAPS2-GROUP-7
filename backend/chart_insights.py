@@ -183,7 +183,7 @@ def sales_vs_stock_insight(series: list[dict], unusual_stock: dict[str, str] | N
         # taken on 6 Apr 2026, and a bare month read as a month-end figure.
         counted = day_label(s.get("stock_count_date"))
         stock_part = (
-            f"; inventory at cost stood at {compact_pesos(s['stock_on_hand'])} in {month_label(s['period'])}"
+            f"; inventory at last purchase price stood at {compact_pesos(s['stock_on_hand'])} in {month_label(s['period'])}"
             f"{f' (counted {counted})' if counted else ''}{aside}."
         )
     else:
