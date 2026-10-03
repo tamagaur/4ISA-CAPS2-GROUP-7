@@ -34,7 +34,8 @@ from analytics.forecasting.diagnostic_metrics import (
 
 REPORTS = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), os.pardir, "reports")
 OUT = os.path.join(REPORTS, "model_bakeoff_unilever_tierA.xlsx")
-MAPE_GATE, MASE_GATE = 0.20, 1.00
+from analytics.params import MASE_GATE  # noqa: E402
+MAPE_GATE = 0.20  # this workbook's red-cell threshold only; no pipeline gate uses MAPE since 2026-09-21
 TEST_H = 6
 
 # sheet order: naive, SBA, MA3 first, then the rest

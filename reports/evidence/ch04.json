@@ -1,0 +1,49 @@
+{
+ "chart": 4,
+ "slug": "blend",
+ "title": "XGBoost+MA3 blend weight",
+ "files": {
+  "lines": "reports/evidence/ch04_lines.csv",
+  "verdicts": "reports/evidence/ch04_verdicts.csv"
+ },
+ "caption": "Blend weight on XGBoost in the XGBoost+MA3 average (w = 0 is MA3, w = 0.5 is served, w = 1 is XGBoost alone), long bin, 67 Unilever Tier A SKUs (ABC 2026-02, single), stored rolling one-step forecasts, real data only. The long bin exists only from 2025-01, so 2 of the 5 half-year blocks are testable. Median WAPE over 2025-01..2026-02 (64 SKUs): w=0.0 0.270, w=0.1 0.261, w=0.2 0.258, w=0.3 0.253, w=0.4 0.251, w=0.5 0.247, w=0.6 0.243, w=0.7 0.246, w=0.8 0.243, w=0.9 0.239, w=1.0 0.241; lowest at w=0.9. Against w=0.5 by block (two-condition WAPE test, seed 20260921): w=0.0 ---TT, w=0.1 ---TT, w=0.2 ---TT, w=0.3 ---TT, w=0.4 ---TT, w=0.6 ---TT, w=0.7 ---LT, w=0.8 ---LT, w=0.9 ---LT, w=1.0 ---LT. No weight beats w=0.5 in a majority of testable blocks.",
+ "verdict": "CONFIRMS",
+ "verdict_detail": "weights beating w=0.5 in a majority of testable long-bin blocks: none (2 of 5 blocks testable)",
+ "criterion": "Some blend weight w != 0.5 scores W vs w = 0.5 in a majority of testable long-bin blocks",
+ "otherwise": "CONFIRMS",
+ "mase_gate_used": "none (WAPE only)",
+ "rerun_after_5f": "n",
+ "checks": [
+  {
+   "id": "G2",
+   "pass": true,
+   "detail": "max |w0.5 - ens_xgb_ma3@A| = 0, max |w0.0 - ma3| = 0, NaN mismatches 0 (on 759 long-bin SKU-months)"
+  }
+ ],
+ "script": "scripts/evidence/ch04_blend.py",
+ "code_commit": "a72b2a3",
+ "computed_at": "2026-09-30T17:58:46",
+ "data_notes": [
+  "Note for session 5f: the served XGBoost model fits with nthread=1 (analytics/forecasting/global_model.py:38); the stored bake-off XGBoost forecasts shown here were fitted with nthread=8 (reports/experiment_artifacts/scripts/final_models.py:81)."
+ ],
+ "weights": [
+  0.0,
+  0.1,
+  0.2,
+  0.3,
+  0.4,
+  0.5,
+  0.6,
+  0.7,
+  0.8,
+  0.9,
+  1.0
+ ],
+ "blocks": [
+  "2023-10..2024-02",
+  "2024-03..2024-08",
+  "2024-09..2025-02",
+  "2025-03..2025-08",
+  "2025-09..2026-02"
+ ]
+}

@@ -28,7 +28,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from jose import JWTError, jwt
+import jwt  # PyJWT (replaced python-jose on kelvin-etl, 2026-09-30)
+from backend.auth_utils import JWTError
 
 from backend import auth_utils, mfa
 from backend.deps import get_db

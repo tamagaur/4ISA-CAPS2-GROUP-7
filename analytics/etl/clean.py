@@ -74,7 +74,7 @@ def flag_iqr_outliers(df: pd.DataFrame, column: str, k: float = 1.5) -> pd.DataF
 
 @dataclass
 class QuantityIssueReport:
-    """DEC-13: zero, negative, and IQR-outlier quantities are FLAGGED for
+    """DEC-15: zero, negative, and IQR-outlier quantities are FLAGGED for
     a human to review, never dropped or clamped - this project already
     documents negatives as real (returns/adjustments) across several facts
     (e.g. SellOut_Fact.quantity, SalesReturnFact.bo_units); the gap this

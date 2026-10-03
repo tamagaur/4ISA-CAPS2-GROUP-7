@@ -1,0 +1,12 @@
+{
+ "script": "scripts/evidence/ch06_rescue.py",
+ "code_commit": "3963ddd",
+ "source": "dsd-transforms-experiment @ fce007e: unfit_subset.csv (phase 1 and phase 2), harness B_common_window",
+ "rescued_means": "MASE below 1.1 (the fit-review gate) on the common test window 2025-09..2026-02",
+ "products": 25,
+ "check": {
+  "id": "R",
+  "pass": true,
+  "detail": "25 products (expected 25); served model below 1.1 on 0 (expected 0); MA3 below 1.1 on 0 (expected 0)"
+ }
+}

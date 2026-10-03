@@ -27,12 +27,11 @@ import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from jose import jwt
-from starlette.routing import Match
 
 from backend import auth_utils, permissions
 from backend.api_errors import ApiError, api_error_handler
@@ -291,13 +290,42 @@ def _dependency_calls(dependant) -> list:
     return calls
 
 
-def _routes():
+def _api_routes():
+    """Every API route the app serves, as served (prefix and include-level
+    dependencies applied). fastapi 0.141 keeps an included router as one
+    nested entry in app.routes instead of copying its routes up, so a flat
+    walk finds none of them; the nested entry lists them through
+    effective_route_contexts(), which also recurses into routers it includes."""
     for route in app.routes:
         if isinstance(route, APIRoute):
-            calls = _dependency_calls(route.dependant)
-            keys = [call.permission_keys for call in calls if hasattr(call, "permission_keys")]
-            for method in route.methods:
-                yield method, route.path, keys, calls
+            yield route
+        elif hasattr(route, "effective_route_contexts"):
+            for context in route.effective_route_contexts():
+                if isinstance(context.original_route, APIRoute):
+                    yield context
+
+
+def _routes():
+    for route in _api_routes():
+        calls = _dependency_calls(route.dependant)
+        keys = [call.permission_keys for call in calls if hasattr(call, "permission_keys")]
+        for method in route.methods:
+            yield method, route.path, keys, calls
+
+
+# Method/path pairs the app serves: 37 = what a flat app.routes walk found under
+# fastapi 0.115.5 at the UIFixes_Audrey merge (2026-10-02), plus the 9 two-step
+# sign-in routes (/auth/login/verify, /auth/login/setup[/confirm], /auth/mfa*,
+# /users/{user_id}/mfa/reset) merged in 2026-10-03. Change it when a route is
+# added or removed.
+ROUTE_COUNT = 46
+
+
+def test_the_walk_finds_every_route():
+    """Guards the walk itself: one that finds nothing passes
+    test_every_route_is_guarded on an empty list, which the flat walk did
+    after the fastapi 0.141 upgrade."""
+    assert len(set((method, path) for method, path, _, _ in _routes())) == ROUTE_COUNT
 
 
 def test_every_route_is_guarded():
@@ -791,9 +819,8 @@ ACTIONS = {
 
 def _route_path(method: str, url: str) -> str:
     path = url.split("?")[0]
-    scope = {"type": "http", "path": path, "root_path": "", "method": method}
-    for route in app.routes:
-        if isinstance(route, APIRoute) and route.matches(scope)[0] == Match.FULL:
+    for route in _api_routes():
+        if method in route.methods and route.path_regex.match(path):
             return route.path
     raise AssertionError(f"no route for {method} {url}")
 

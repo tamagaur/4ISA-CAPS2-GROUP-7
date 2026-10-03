@@ -71,3 +71,13 @@ quantity_pieces:
 # DEFAULT false handles real rows at Load time.
 is_demo:
   - "is_demo"
+
+# --- layout signature (analytics/etl/extract/layout.py) ------------------------------------
+# Reserved keys, not columns. 2026-09-30 corpus: all 50 loaded sheets (26 data,
+# 12 gs, 12 bo) carry the required 3. RMR GS/BO sheets have no Invoice Num, so
+# they never carry this layout.
+sheet_names: 'sale[s]?\s*return|\b(gs|bo)\b'
+required:
+  - [invoice_num, return_slip_num, net_amount]
+ignored: ["Invoice Date", "REFNBR", "Customer Name", "Salesman", "Untaxed Amount", "Discount Rate", "Discount Amount",
+          "Tax", "Balance", "Posted", "Town Display", "Branch Code"]

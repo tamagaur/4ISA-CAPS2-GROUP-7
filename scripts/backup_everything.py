@@ -513,6 +513,13 @@ def _structure_sql(conn, schema: str, header: str) -> tuple[str, dict, list[str]
     return "\n".join(out) + "\n", counts, problems
 
 
+def _not_backed_up(live_tables: list[str], manifest: dict) -> list[str]:
+    """Live tables with neither a file nor a recorded reason for leaving them
+    out (manifest "excluded": the credential tables, see backup_live_db)."""
+    left_out = manifest.get("excluded", {}).get("tables", {})
+    return sorted(set(live_tables) - set(manifest["tables"]) - set(left_out))
+
+
 def _check_data(engine, root: Path, schemas: list[str]) -> tuple[list[str], list[str]]:
     """Re-opens every file written and compares it with its manifest and with
     the live table. Returns (problems, tables that changed since the backup)."""
@@ -520,9 +527,10 @@ def _check_data(engine, root: Path, schemas: list[str]) -> tuple[list[str], list
     with engine.connect() as conn:
         for schema in schemas:
             folder = root / "data" / schema
-            tables = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))["tables"]
+            manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+            tables = manifest["tables"]
             ddl = json.loads((folder / "ddl_snapshot.json").read_text(encoding="utf-8"))
-            missing = sorted(set(_list_base_tables(conn, schema)) - set(tables))
+            missing = _not_backed_up(_list_base_tables(conn, schema), manifest)
             if missing:
                 problems.append(f"{schema}: tables not in the backup: {', '.join(missing)}")
             for t, info in sorted(tables.items()):
@@ -598,11 +606,19 @@ def _readme(ts: str, version: str, summary: list[str], supabase: list[str]) -> s
         "  Supabase's own schemas (auth, storage, realtime, vault, ...). Supabase recreates",
         "  them, and the dashboard keeps no data there. At backup time:",
         *(f"    {line}" for line in supabase),
+        "  Credentials: users.password_hash and the auth_token table (one-time link hashes).",
+        "  Each manifest.json lists them under \"excluded\". After a rebuild no account has a",
+        "  password, and the live server has no email set up, so no link is emailed and",
+        "  \"Forgot password?\" cannot help. To get everyone back in:",
+        "    1. Create one admin under a NEW email: python -m backend.scripts.seed_admin",
+        "       (it refuses an email that already exists).",
+        "    2. Signed in as that admin, open User Management and generate a reset link for",
+        "       each person. The page shows the link; send it to them by hand.",
         "",
         "KEEP THIS FOLDER PRIVATE",
-        "  It holds SSM client data and the users table (password hashes). git ignores",
-        "  backups/, so it is never committed. Keep a second copy somewhere safe that is",
-        "  not this laptop, e.g. an encrypted USB drive.",
+        "  It holds SSM client data and the dashboard users' names and emails (no password",
+        "  hashes). git ignores backups/, so it is never committed. Keep a second copy",
+        "  somewhere safe that is not this laptop, e.g. an encrypted USB drive.",
         "",
         "REBUILDING FROM THIS BACKUP (into an empty database, e.g. a new Supabase project)",
         "  1. In the Supabase SQL Editor run structure/_database.sql, then structure/public.sql,",

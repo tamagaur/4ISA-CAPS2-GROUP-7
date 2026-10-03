@@ -27,7 +27,7 @@ from __future__ import annotations
 import pytest
 
 from backend import deps, mailer, mfa, permissions
-from backend.login_limiter import login_limiter, reset_limiter
+from backend.login_limiter import failure_log_budget, login_limiter, reset_limiter
 
 
 def pytest_configure(config):
@@ -81,6 +81,8 @@ def _fresh_limiters():
     # otherwise carry from one test into the next.
     login_limiter.reset()
     reset_limiter.reset()
+    failure_log_budget.reset()
     yield
     login_limiter.reset()
     reset_limiter.reset()
+    failure_log_budget.reset()

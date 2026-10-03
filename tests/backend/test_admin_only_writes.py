@@ -84,8 +84,12 @@ def test_staff_can_still_read(client):
     (SKU Management, ABC, Reorder, SKU Forecast), all in the staff preset,
     so staff keep reading it (2026-10-02; it was sign-in only before).
     Checked on the route table rather than by calling it, which would need
-    the SKU query faked."""
-    for route in app.routes:
+    the SKU query faked. Walks the SKU router itself: fastapi 0.141 keeps an
+    included router as one nested entry in app.routes instead of copying its
+    routes up, and main.py adds no dependencies when it includes a router."""
+    from backend.routers import sku
+
+    for route in sku.router.routes:
         if getattr(route, "path", None) == "/sku" and "GET" in route.methods:
             calls = [d.call for d in route.dependant.dependencies]
             keys = next(set(call.permission_keys) for call in calls if hasattr(call, "permission_keys"))

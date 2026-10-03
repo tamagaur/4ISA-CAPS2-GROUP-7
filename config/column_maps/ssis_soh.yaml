@@ -148,3 +148,13 @@ batch:
 # 6A41). EXCLUSION RULE: not extracted because no table has a column for it
 # and nothing downstream reads it; what the code means is UNVERIFIED (SSM has
 # not said). Loading it needs that answer plus a migration, not a map entry.
+
+# --- layout signature (analytics/etl/extract/layout.py) ------------------------------------
+# Reserved keys, not columns. 2026-09-30 corpus: all 102 SOH sheets carry the
+# required 10. Last Purchase Price is absent before 2023 (R7), Batch / Blocked
+# Stock on some sheets - not required. Storage Location is dropped (R6).
+sheet_names: '\bsoh\b'
+required:
+  - [sku_code, article_description, pack_size, stock_quantity_raw, stock_value, po_qty_raw, open_so_quantity_raw,
+     balance_quantity_raw, status, category_desc]
+ignored: ["Storage Location", "MOVING AVERAGE PRICE(CS)", "Sales Route", "Hierarchy Node", "Sales Route Description"]

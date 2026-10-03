@@ -182,6 +182,15 @@ def test_on_request_abc_reproduces_every_stored_unilever_run(live_db):
 
 
 @LIVE
+# Read-only check, 2026-10-02: exactly the 8 stored products with a negative
+# month differ, on cv only (19, 174, 345, 644, 666, 674, 832, 1037); with
+# negatives clipped to 0 (the old rule) all 132 match. Strict: once the
+# recompute lands this XPASSes and fails, so the marker has to come off.
+@pytest.mark.xfail(
+    strict=True,
+    reason="stored 2026-02 segmentation predates 6c6f741 (negatives kept, DEC-15); "
+           "recompute scheduled in the DB-apply session",
+)
 def test_on_request_traits_reproduce_the_stored_segmentation_run(live_db):
     from sqlalchemy import text
     stored = live_db.execute(text("""
@@ -269,7 +278,7 @@ def test_preview_files_become_typed_relations_with_every_column(tmp_path, monkey
 def test_outputs_stale_compares_the_build_fingerprint_with_the_live_placeholder():
     """The what-if files were built 2026-09-23 on the v1 placeholder; the
     2026-09-28 cutover replaced it and nothing said so."""
-    from analytics.optimization.lp_inputs import PLACEHOLDERS
+    from analytics.params import PLACEHOLDERS
     from backend.data_mode import _outputs_stale
 
     current_lp = {"inputs": dict(PLACEHOLDERS)}
@@ -287,7 +296,7 @@ def test_outputs_stale_when_the_lp_was_built_under_other_settings():
     stock) still read as current, because only the placeholder data was
     compared (2026-10-02). A build with no LP model recorded predates the
     net-of-stock model; one with other inputs was solved differently."""
-    from analytics.optimization.lp_inputs import PLACEHOLDERS
+    from analytics.params import PLACEHOLDERS
     from backend.data_mode import _outputs_stale
 
     live = {"rows": 1954, "quantity_total": 1000.0}

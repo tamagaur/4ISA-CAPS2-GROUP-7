@@ -60,7 +60,11 @@ from urllib.parse import quote, urlencode
 
 from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
-from jose import JWTError, jwt
+import jwt
+# PyJWT replaced python-jose (kelvin-etl, 2026-09-30: CVE-2024-33663 and
+# others). InvalidTokenError is PyJWT's base for a bad signature, a malformed
+# token and an expired one, as jose's JWTError was (backend/auth_utils.py).
+from jwt import InvalidTokenError as JWTError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 

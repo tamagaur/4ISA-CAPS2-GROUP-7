@@ -1,0 +1,38 @@
+{
+ "chart": 6,
+ "slug": "unfit",
+ "title": "Unfit SKUs",
+ "files": {
+  "skus": "reports/evidence/ch06_skus.csv",
+  "months": "reports/evidence/ch06_months.csv"
+ },
+ "caption": "Unfit SKUs, Tier A as of 2026-02 (single): 28 of 132 carry the fit review's 'not fit' verdict (MASE >= 1.1, the fit-review gate; the pipeline gate is 1): 25 scored on the common window and 3 on the stored 20% split. By bin: long 11, medium 9, short 8. Measured cause (the fit review's first matching rule): level shift 9, spiky 9, high volatility 5, tiny scale 3, none of the above 2. MA3 also fails on the common holdout for 25 of the 25 with a common-window MA3 score (3 have none). Each panel shows the real monthly series, the served model's rolling one-step holdout with its band (forecast +/- 1.645 x holdout RMSE), and the measured cause months: spikes (more than 3 x MAD from the SKU's median; 59 months across the 28 SKUs) and, where the level-shift rule applies, the prior-12 and last-6 windows its ratio is measured on. Holdout months outside the band: 9 of 132. The recomputed holdout matches the stored MASE on 119 of 119 scored SKUs. The month record reproduces the fit review's spike counts on 132 of 132 SKUs and its level ratios on 86 of 86.",
+ "verdict": "DESCRIPTIVE",
+ "verdict_detail": "list reproduces from the 1.1 gate; month record agrees with the fit review",
+ "criterion": "The list does not reproduce (25 common-window SKUs with MASE >= 1.1 plus 3 fallback-source SKUs = 28), or the month record disagrees with the fit review (spikes 132/132, level ratio 86/86)",
+ "otherwise": "DESCRIPTIVE",
+ "mase_gate_used": "1.1 (fit-review gate; reports/diagnostics/UNFIT_SKU_LIST.md)",
+ "rerun_after_5f": "y",
+ "checks": [
+  {
+   "id": "G5",
+   "pass": true,
+   "detail": "not fit = 28 (25 common + 3 fallback; expected 25 + 3 = 28); rebuilt from the 1.1 gate: same set (28); month record: spikes 132/132 (expected 132/132), level ratio 86/86 (expected 86/86)"
+  }
+ ],
+ "script": "scripts/evidence/ch06_unfit.py",
+ "code_commit": "2b6cdac",
+ "computed_at": "2026-09-30T18:43:22",
+ "data_notes": [
+  "Data note: product_key 150 / SKU 64861486, 2025-12 has a NULL quantity in Unilever_SKU_Demand_Fact_Real (net PHP 2.89, La Union source); it is counted as 0, the same treatment as the bake-off."
+ ],
+ "read_via": "SUPABASE_DIRECT_URL",
+ "band_agree": {
+  "n": 119,
+  "mase": 119,
+  "wape": 119,
+  "rmse": 119,
+  "months": 119
+ },
+ "fit_file": "reports/diagnostics/fit_review_common_2026-09-23.csv"
+}

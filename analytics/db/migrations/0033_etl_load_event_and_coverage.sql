@@ -12,6 +12,11 @@
 --    files holds file NAMES only (no directories, no connection strings):
 --    the fact tables' _src_file carries the repo-relative path, which is
 --    not repeated here.
+--    A file the loader cannot place in a slice (layout guard, 2026-09-30:
+--    unrecognised content, or no month in its name or its invoice dates) is
+--    refused with a FILE event: slice = 'file:<name>', and principal /
+--    table_name / month are NULL where the file does not say them. Every
+--    other event names its slice in full (CHECK below).
 --
 -- 2. etl_coverage - one row per principal x table x month from 2021-01
 --    through the current month: real / synthetic / partial / missing.
@@ -37,16 +42,19 @@ CREATE TABLE IF NOT EXISTS etl_load_event (
     load_event_key          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     run_id                  TEXT NOT NULL,
     slice                   TEXT NOT NULL,
-    principal               TEXT NOT NULL CHECK (principal IN ('delmonte', 'unilever')),
-    table_name              TEXT NOT NULL,
-    month                   TEXT NOT NULL CHECK (month ~ '^[0-9]{4}-[0-9]{2}$'),
+    principal               TEXT CHECK (principal IN ('delmonte', 'unilever')),
+    table_name              TEXT,
+    month                   TEXT CHECK (month ~ '^[0-9]{4}-[0-9]{2}$'),
     site                    TEXT,
     source                  TEXT NOT NULL,
     status                  TEXT NOT NULL CHECK (status IN ('loaded', 'refused', 'partial', 'warning')),
     reason                  TEXT CHECK (reason IN (
                                 'shrink_guard', 'shrink_allowed', 'missing_file', 'layout_changed',
                                 'partial_month', 'fingerprint_unsigned', 'key_conflict_other_slice',
-                                'row_balance', 'period_not_allowed', 'error')),
+                                'row_balance', 'period_not_allowed', 'error',
+                                -- layout guard (2026-09-30)
+                                'unknown_layout', 'month_unknown', 'validation_failed',
+                                'validation_warning', 'unmapped_column')),
     detail                  TEXT,
     files                   TEXT[] NOT NULL DEFAULT '{}',
     real_rows_before        INTEGER NOT NULL DEFAULT 0,
@@ -60,7 +68,9 @@ CREATE TABLE IF NOT EXISTS etl_load_event (
     dry_run                 BOOLEAN NOT NULL DEFAULT false,
     run_by                  TEXT NOT NULL,
     started_at              TIMESTAMPTZ NOT NULL,
-    finished_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+    finished_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT etl_load_event_slice_named CHECK (
+        slice LIKE 'file:%' OR (principal IS NOT NULL AND table_name IS NOT NULL AND month IS NOT NULL))
 );
 
 CREATE INDEX IF NOT EXISTS ix_etl_load_event_slice

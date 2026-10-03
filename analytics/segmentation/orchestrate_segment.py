@@ -89,7 +89,9 @@ def _fetch_demand_matrix(
     """One zero-filled monthly quantity array per product_key, ascending,
     over [start, end] inclusive. No row this period = a genuine zero-sale
     month (same "no row = fact, not gap" precedent as
-    orchestrate_abc._fetch_unilever_sku_revenue)."""
+    orchestrate_abc._fetch_unilever_sku_revenue). A negative month (returns
+    exceeding sales) is kept as it is (DEC-15: flagged, never clamped); the
+    traits that count sales months only count qty > 0 anyway."""
     source = DEMAND_SOURCE_BY_PRINCIPAL.get(principal)
     if source is None:
         raise NotImplementedError(
@@ -119,7 +121,7 @@ def _fetch_demand_matrix(
         if idx is None:
             continue
         qty = row.qty if not pd.isna(row.qty) else 0.0
-        matrices[row.product_key][idx] = max(qty, 0.0)  # negative rows clipped to 0, noted not investigated (see report Open items)
+        matrices[row.product_key][idx] = qty  # negatives kept (DEC-15); clipped to 0 until 2026-09-30
     return matrices, periods
 
 
@@ -166,12 +168,28 @@ def _fetch_sku_codes(engine: Engine, principal: str, product_keys: list[int]) ->
     return {pk: code for pk, code in rows}
 
 
+def _fetch_observed_periods(engine: Engine, principal: str, start: str, end: str) -> set[str]:
+    """Months in [start, end] the principal has ANY demand row for. A month
+    outside this set is a data gap, not a zero-sale month, and ADI drops it
+    (traits.average_demand_interval)."""
+    metadata = MetaData()
+    demand = Table(DEMAND_SOURCE_BY_PRINCIPAL[principal], metadata, autoload_with=engine)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(demand.c.calendar_month).distinct()
+            .where(and_(demand.c.calendar_month >= start, demand.c.calendar_month <= end))
+        ).fetchall()
+    return {r[0] for r in rows}
+
+
 def build_traits(
     engine: Engine, principal: str, cohort_period: str, abc_method: str,
     demand_start: str, demand_end: str, run_id: str,
 ) -> tuple[pd.DataFrame, SegmentRunReport]:
     product_keys = _fetch_cohort(engine, principal, cohort_period, abc_method)
     matrices, periods = _fetch_demand_matrix(engine, principal, product_keys, demand_start, demand_end)
+    observed_periods = _fetch_observed_periods(engine, principal, demand_start, demand_end)
+    observed = np.array([p in observed_periods for p in periods], dtype=bool)
     a_periods, revenue = _fetch_stability_and_revenue(engine, principal, product_keys, cohort_period, abc_method)
 
     records = []
@@ -192,7 +210,7 @@ def build_traits(
             trend_pvalue=trend_pvalue,
             trend_slope=trend_slope,
             cv=coefficient_of_variation(qty),
-            adi=average_demand_interval(qty),
+            adi=average_demand_interval(qty, observed),
             tier_a_periods=a_periods.get(pk, 0),
             restart_flag=has_restart(qty),
             stability_group=stability_group(a_periods.get(pk, 0), TOTAL_PERIODS),

@@ -1,0 +1,36 @@
+{
+ "chart": 3,
+ "slug": "ma_window",
+ "title": "MA3 window",
+ "files": {
+  "lines": "reports/evidence/ch03_lines.csv",
+  "verdicts": "reports/evidence/ch03_verdicts.csv"
+ },
+ "caption": "Moving-average window, median WAPE per half-year block, 119 Unilever Tier A SKUs (ABC 2026-02, single), stored rolling one-step forecasts, real data only. Over 2023-10..2026-02 on the 114 SKUs all four windows can score: MA2 0.299, MA3 0.280, MA6 0.291, MA12 0.284. Against MA3 (two-condition WAPE test, seed 20260921), full window then blocks: MA2 T [-0.005, +0.029], 34 better / 80 worse, blocks TTTTL; MA6 T [-0.010, +0.020], 58 better / 56 worse, blocks LTTTT; MA12 T [-0.015, +0.023], 64 better / 50 worse, blocks TTTTT. No window beats MA3 on the full window and in a majority of blocks.",
+ "verdict": "CONFIRMS",
+ "verdict_detail": "MA2 beats MA3: no (full window T, W in 0 of 5 testable); MA6 beats MA3: no (full window T, W in 0 of 5 testable); MA12 beats MA3: no (full window T, W in 0 of 5 testable)",
+ "criterion": "MA2, MA6 or MA12 scores W vs MA3 on the full window AND in a majority of testable blocks (ALL cohort)",
+ "otherwise": "CONFIRMS",
+ "mase_gate_used": "none (WAPE only)",
+ "rerun_after_5f": "n",
+ "checks": [],
+ "script": "scripts/evidence/ch03_ma_window.py",
+ "code_commit": "a72b2a3",
+ "computed_at": "2026-09-30T17:58:43",
+ "data_notes": [
+  "Data note: product_key 150 / SKU 64861486, 2025-12 has a NULL quantity in Unilever_SKU_Demand_Fact_Real (net PHP 2.89, La Union source); it is counted as 0, the same treatment as the bake-off."
+ ],
+ "models": {
+  "ma2": "MA2",
+  "ma3": "MA3",
+  "ma6": "MA6",
+  "ma12": "MA12"
+ },
+ "blocks": [
+  "2023-10..2024-02",
+  "2024-03..2024-08",
+  "2024-09..2025-02",
+  "2025-03..2025-08",
+  "2025-09..2026-02"
+ ]
+}

@@ -85,3 +85,12 @@ gsv:
 net_amount_inc_tax:
   - "Total Sales Amt\r\n  Inc. Tax"
   # Same comma-separated text-as-number issue as gsv above.
+
+# --- layout signature (analytics/etl/extract/layout.py) ------------------------------------
+# Reserved keys, not columns. The one file of this family; its MHTML export has
+# no sheet name (sheet_names: null = any). All 8 mapped columns are loaded
+# (fact + product_dimension), so all 8 are required.
+sheet_names: null
+required:
+  - [calendar_month, sku_code, product_name, pack_size, sale_quantity_cases, sale_quantity_pieces, gsv, net_amount_inc_tax]
+ignored: []

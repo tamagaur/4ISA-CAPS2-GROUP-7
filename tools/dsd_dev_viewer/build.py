@@ -19,6 +19,15 @@ scripts/preview_router_synth.py: router_preview_synth.csv, series_synth.csv and
 preview_summary.csv, copied into data/ at build time. The build stops if any is
 missing. Placeholder months are never demand; the page labels them everywhere.
 
+SIMULATION (Forecasts tab: summary strip, REAL vs SIMULATION box and chart, SIM
+table columns) and the fit-diagnosis badges read three files from the
+exp/fit-and-simulation commit with `git show` (--sim-ref / DSD_SIM_REF), never a
+working tree: reports/simulation/synthetic_2026-10/unilever_per_sku.csv and
+series.csv, and reports/diagnostics/fit_diagnosis_2026-10/per_sku.csv. Every
+simulation element is labelled "SIMULATION - not served, not in the LP, not
+evidence". The build stops if the REAL run's 2026-03 forecast differs from the
+stored served value, or if MASE re-derived from series.csv differs from the file.
+
 TWO THINGS ARE COMPUTED HERE RATHER THAN READ (both labelled as such on the
 page, both checked against what the pipeline stored):
   - MA3's MASE on the served model's holdout months (ma3_same_holdout).
@@ -29,12 +38,17 @@ page, both checked against what the pipeline stored):
     month. Costs ~10s (one XGBoost booster per distinct holdout month, cached
     across SKUs); there is no cheaper way, because the numbers do not exist.
 
+The Evidence tab (evidence.py / evidence.js / evidence.css) reads reports/evidence/
+only - one chart per modelling decision, each written by scripts/evidence/*.py with
+its pre-registered criterion, verdict and caption. Nothing there is queried or
+recomputed; exports re-render each chart as SVG/PNG in a light print palette.
+
 ETL and dashboard-API numbers on the Pipeline tab are NOT computed or queried:
 every one is copied from a file under reports/ and carries its citation (see
 ETL_NODES). Where no report states a number, the page prints "not on record".
 
 Usage (from the repo root, .env holding SUPABASE_DIRECT_URL or SUPABASE_DB_URL):
-    python tools/dsd_dev_viewer/build.py [--preview-src <folder>]
+    python tools/dsd_dev_viewer/build.py [--preview-src <folder>] [--sim-ref <git ref>]
     python tools/dsd_dev_viewer/build.py --offline   # rebuild from data/db_snapshot.json
 """
 from __future__ import annotations
@@ -51,6 +65,8 @@ from dotenv import load_dotenv
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, REPO)
+
+from analytics.params import FIT_REVIEW_HIGH_VOL_CV, FIT_REVIEW_NOT_FIT_MASE  # noqa: E402
 
 PRINCIPAL, ABC_PERIOD, ABC_METHOD = "unilever", "2026-02", "single"
 REAL_START = "2023-01"
@@ -437,7 +453,7 @@ def ma3_same_holdout(monthly: list, periods: list[str]) -> tuple[float | None, i
     """MA3's MASE on the same rolling one-step holdout the served model was
     scored on. Reuses the pipeline's own pieces, no reimplementation:
       series  first row -> last row, gaps zero-filled (run_baseline_forecast.build_series)
-      split   analytics.forecasting.sarima.train_holdout_split (last 20%)
+      split   analytics.forecasting.split.train_holdout_split (last 20%)
       MA3     analytics.forecasting.router.rolling_one_step, column "ma3"
               (router.ma3_value from the first sale, floored at zero)
       metric  diagnostic_metrics.mase with naive_scale(train)
@@ -445,7 +461,8 @@ def ma3_same_holdout(monthly: list, periods: list[str]) -> tuple[float | None, i
     import numpy as np
     from analytics.forecasting.diagnostic_metrics import mase, naive_scale
     from analytics.forecasting.router import rolling_one_step
-    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+    from analytics.forecasting.split import train_holdout_split
+    from analytics.params import HOLDOUT_FRACTION
     series = model_series(monthly, periods)
     if series is None:
         return None, 0
@@ -599,7 +616,8 @@ def add_band_evidence(payload: dict) -> dict:
     from analytics.forecasting.diagnostic_metrics import mase, naive_scale, rmse as rmse_metric, wape
     from analytics.forecasting.global_model import GlobalForecaster
     from analytics.forecasting.router import rolling_one_step
-    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+    from analytics.forecasting.split import train_holdout_split
+    from analytics.params import HOLDOUT_FRACTION
 
     periods = payload["periods"]
     pool = {}
@@ -727,7 +745,7 @@ CAUSE_FLAGS = {"cause_is_level_shift": "level shift", "cause_is_spiky": "spiky",
 CAUSE_THRESHOLDS = [
     ("level shift", "mean(last 6) / mean(prior 12) outside 0.7-1.3; needs >=18 months"),
     ("spiky", ">=1 month more than 3 x MAD from the SKU's median (MAD raw/unscaled)"),
-    ("high volatility", "CV(last 12) > cohort p75 = 0.4365 (measured over the 119 scored SKUs)"),
+    ("high volatility", f"CV(last 12) > {FIT_REVIEW_HIGH_VOL_CV} (team-set, source script lost; analytics/params.py)"),
     ("intermittent", "zero-or-missing share >= 0.30 or longest zero run >= 3 months"),
     ("tiny scale", "median monthly units <= cohort lower quartile = 812.5 units (measured)"),
     ("trend reversal", "sign(Theil-Sen slope, last 12) != sign(Theil-Sen slope, full history)"),
@@ -801,7 +819,7 @@ def load_fit_review(payload: dict) -> dict:
             verdict_source=r["verdict_source"],
             mase_common=num(r["mase_common"]), mase_pipeline=num(r["mase_pipeline"]),
             ma3_mase_common=num(r["ma3_mase_common"]),
-            ma3_fails=r["ma3_also_fails_common"] == "1",
+            ma3_fails=num(r["ma3_also_fails_common"]) == 1,   # stored as "1.0" / "0.0" / blank - compare as a number
             rlr_fit=num(r["recent_level_ratio"]),
             bw_csv=num(r["band_width_over_forecast_stored"]),
             flags=[k[5:].replace("_", " ") for k in
@@ -868,10 +886,13 @@ def load_fit_review(payload: dict) -> dict:
         "agree": agree, "counts": counts, "spike_check": spike_check, "level_check": level_check,
         "verdict_order": VERDICT_ORDER, "cause_order": CAUSE_ORDER, "no_better_model": NO_BETTER_MODEL,
         "thresholds": CAUSE_THRESHOLDS,
-        # The two gates are the README's measured figures, quoted, never recomputed.
+        # gate_cv is team-set (its source script is lost: analytics/params.py
+        # FIT_REVIEW_HIGH_VOL_CV); gate_units is the README's measured figure.
         # The two medians ARE computed here, over the CSV rows that carry the column,
         # and the sentence that uses one says so.
-        "gate_cv": 0.4365, "gate_units": 812.5,
+        "gate_cv": FIT_REVIEW_HIGH_VOL_CV, "gate_units": 812.5,
+        # The not-fit flag (MASE on the common window): a review flag, not the LP gate.
+        "not_fit_mase": FIT_REVIEW_NOT_FIT_MASE,
         "median_cv": _median([num(r["cause_cv_last12"]) for r in rows.values()]),
         "median_cv_n": sum(1 for r in rows.values() if num(r["cause_cv_last12"]) is not None),
         "median_units": _median([num(r["cause_median_units"]) for r in rows.values()]),
@@ -946,7 +967,8 @@ def assemble_preview(skus: list[dict]) -> dict:
     series, zero-filled first -> last row as the preview script does."""
     import numpy as np
     import pandas as pd
-    from analytics.forecasting.sarima import HOLDOUT_FRACTION, train_holdout_split
+    from analytics.forecasting.split import train_holdout_split
+    from analytics.params import HOLDOUT_FRACTION
 
     rp = pd.read_csv(os.path.join(DATA_DIR, "router_preview_synth.csv"))
     need = {"ma3_holdout_mase", "ma3_holdout_wape", "holdout_mase", "holdout_wape"}
@@ -1041,11 +1063,180 @@ def assemble_preview(skus: list[dict]) -> dict:
     }
 
 
+# --------------------------------------------------------------------------- #
+# SIMULATION (REAL vs real + 2021-22 placeholder) and the fit diagnosis
+# --------------------------------------------------------------------------- #
+# Both live on exp/fit-and-simulation and are read from that commit with
+# `git show` (never a working tree, never merged here), so the page names the
+# exact commit its numbers came from. Nothing is recomputed: the build only
+# re-derives what it checks (MASE from the month rows, the summary counts).
+SIM_REF = os.environ.get("DSD_SIM_REF", "exp/fit-and-simulation")
+SIM_FILES = {
+    "per_sku": "reports/simulation/synthetic_2026-10/unilever_per_sku.csv",
+    "series": "reports/simulation/synthetic_2026-10/series.csv",
+    "fit": "reports/diagnostics/fit_diagnosis_2026-10/per_sku.csv",
+}
+SIM_LABEL = "SIMULATION — not served, not in the LP, not evidence"
+SIM_LEGEND = "Simulation (real + 2021–22 placeholder) — not served"
+# reports/diagnostics/fit_diagnosis_2026-10/README.md "Rules" (d869004), quoted for the badge tooltips
+FIT_RULES = {
+    "overfit": "MA3 as the control: overfit only if the served model's ratio (holdout MASE ÷ in-sample MASE) "
+               "exceeds BOTH {p95} (95th percentile of MA3's own ratio over the {n95} products where it is defined) "
+               "AND that same product's own MA3 ratio. MA3-served products are not assessable (control).",
+    "underfit": "in-sample MASE ≥ 1 and holdout MASE ≥ 1",
+    "bias": "mean signed error (forecast − actual) over the 6 holdout months; flagged only when |t| ≥ 2.571 "
+            "(two-sided 95%, 5 degrees of freedom). The 12 20%-split SKUs are not bias-tested.",
+}
+
+
+def read_sim_files(ref: str):
+    """{name: DataFrame} for SIM_FILES at `ref`, plus the commit it resolved to."""
+    import io
+    import subprocess
+    import pandas as pd
+
+    def git(*a):
+        return subprocess.run(["git", "-C", REPO, *a], capture_output=True)
+    r = git("rev-parse", "--verify", ref + "^{commit}")
+    if r.returncode:
+        sys.exit(f"BUILD FAILED: simulation ref {ref!r} not found (set DSD_SIM_REF or pass --sim-ref)")
+    sha = r.stdout.decode().strip()
+    out = {}
+    for name, path in SIM_FILES.items():
+        r = git("show", f"{sha}:{path}")
+        if r.returncode:
+            sys.exit(f"BUILD FAILED: {path} is not in {ref} @ {sha[:7]}")
+        out[name] = pd.read_csv(io.BytesIO(r.stdout), dtype={"month": str, "sku_code": str})
+    return out, sha
+
+
+def assemble_simulation(skus: list[dict], ref: str) -> dict:
+    """Per-SKU REAL vs SIMULATION records, month rows and fit-diagnosis badges.
+    The build stops on any disagreement between the files, or with the page's own
+    REAL served forecast."""
+    import numpy as np
+    f, sha = read_sim_files(ref)
+    u, ser, fit = f["per_sku"], f["series"], f["fit"]
+    real = {s["pk"]: s for s in skus}
+    if set(u["product_key"]) != set(real):
+        sys.exit("BUILD FAILED: unilever_per_sku.csv product keys differ from the live Tier A cohort")
+
+    def num(v, nd=4):
+        return None if v is None or (isinstance(v, float) and not np.isfinite(v)) or v != v else round(float(v), nd)
+
+    def truthy(v):
+        return str(v).lower() == "true"
+
+    checks = {"served": 0, "mase_real": 0, "mase_sim": 0, "fit_mase": 0, "fit_rows": int(len(fit)),
+              "scored": int(u["mase_real"].notna().sum()), "n": int(len(u))}
+    bad = []
+    by_pk = {k: g for k, g in ser.groupby("product_key")}
+    fit_by = fit.set_index("product_key")
+    out, fit_out = {}, {}
+    for r in u.itertuples(index=False):
+        pk = int(r.product_key)
+        g = by_pk[pk]
+        fc = g[g["kind"] == "forecast_2026_03"].set_index("run")["forecast"]
+        # the page's REAL served value is the stored forecast_result row; the file's REAL run must reproduce it
+        if real[pk]["served"] is not None and abs(float(fc["REAL"]) - real[pk]["served"]) <= 0.0051:
+            checks["served"] += 1
+        else:
+            bad.append((pk, "REAL 2026-03 forecast vs stored served", float(fc["REAL"]), real[pk]["served"]))
+        h = g[g["kind"] == "holdout"]
+        hr, hs = h[h["run"] == "REAL"].set_index("month"), h[h["run"] == "SIMULATION"].set_index("month")
+        for run, hh, col in (("REAL", hr, "mase_real"), ("SIMULATION", hs, "mase_sim")):
+            stored = getattr(r, col)
+            if stored == stored and len(hh):
+                m = float(np.mean(np.abs(hh["actual"] - hh["forecast"])) / hh["mase_scale"].iloc[0])
+                if abs(round(m, 4) - stored) <= 0.00005:
+                    checks[col] += 1
+                else:
+                    bad.append((pk, f"{run} MASE from series.csv", round(m, 4), stored))
+        # the page moves "MASE (common window)" off the default columns because REAL MASE is the same number
+        mc = real[pk].get("mase_common")
+        if mc is not None:
+            checks["mase_common_n"] = checks.get("mase_common_n", 0) + 1
+            if r.mase_real == r.mase_real and abs(mc - r.mase_real) <= 0.00051:
+                checks["mase_common"] = checks.get("mase_common", 0) + 1
+            else:
+                bad.append((pk, "fit review mase_common vs simulation mase_real", mc, r.mase_real))
+        hist = g[(g["kind"] == "history") & (g["run"] == "REAL")]
+        ph = g[(g["kind"] == "history") & (g["run"] == "SIMULATION")]
+        mase_moved = r.mase_direction in ("better", "worse")
+        fc_moved = r.forecast_2026_03_real != r.forecast_2026_03_sim
+        changed = bool(truthy(r.bin_changed) or truthy(r.model_changed) or truthy(r.verdict_changed))
+        out[str(pk)] = {
+            "status": [r.status_real, r.status_sim], "bin": [r.bin_real, r.bin_sim],
+            "model": [PREVIEW_METHOD.get(r.model_real, r.model_real), PREVIEW_METHOD.get(r.model_sim, r.model_sim)],
+            "mase": [num(r.mase_real), num(r.mase_sim)],
+            "verdict": [None if r.verdict_real != r.verdict_real else r.verdict_real,
+                        None if r.verdict_sim != r.verdict_sim else r.verdict_sim],
+            "fc": [num(r.forecast_2026_03_real, 2), num(r.forecast_2026_03_sim, 2)],
+            "fc_pct": num(r.forecast_change_pct, 1),
+            "changed": changed, "moved": bool(mase_moved or fc_moved), "dir": None if r.mase_direction != r.mase_direction else r.mase_direction,
+            "what": [k for k, c in (("bin", r.bin_changed), ("served model", r.model_changed), ("fit verdict", r.verdict_changed)) if truthy(c)],
+            "ph_months": int(r.placeholder_months_2021_22), "src": None if r.score_source != r.score_source else r.score_source,
+            "hold": [[m, num(hr.loc[m, "actual"], 3), num(hr.loc[m, "forecast"], 3),
+                      num(hs.loc[m, "forecast"], 3) if m in hs.index else None] for m in hr.index],
+            "hist": [[m, num(v, 3)] for m, v in zip(hist["month"], hist["actual"])],
+            "ph": [[m, num(v, 3)] for m, v in zip(ph["month"], ph["actual"])],
+        }
+        if pk in fit_by.index:
+            x = fit_by.loc[pk]
+            if abs(round(float(x["holdout_mase"]), 4) - r.mase_real) <= 0.00005:
+                checks["fit_mase"] += 1
+            else:
+                bad.append((pk, "fit holdout_mase vs simulation mase_real", float(x["holdout_mase"]), r.mase_real))
+            fit_out[str(pk)] = {
+                "overfit": x["overfit_status"], "ratio": num(x["ratio"], 3), "ma3_ratio": num(x["ma3_ratio"], 3),
+                "ins": num(x["insample_mase"], 3), "hold": num(x["holdout_mase"], 3),
+                "ma3_ins": num(x["ma3_insample_mase"], 3), "ma3_hold": num(x["ma3_holdout_mase"], 3),
+                "ins_m": int(x["insample_months"]), "hold_m": int(x["holdout_months"]),
+                "underfit": truthy(x["underfit"]), "bias_tested": truthy(x["bias_tested"]),
+                "biased": truthy(x["biased"]), "bias_dir": None if x["bias_direction"] != x["bias_direction"] else x["bias_direction"],
+                "t": num(x["t_stat"], 2), "me": num(x["mean_error"], 1), "src": x["verdict_source"],
+            }
+    if set(fit["product_key"]) - set(u["product_key"]):
+        bad.append(("fit", "product keys outside the cohort", sorted(set(fit["product_key"]) - set(u["product_key"]))[:5], None))
+    if bad:
+        for b in bad[:20]:
+            print("   SIM MISMATCH", b)
+        sys.exit(f"BUILD FAILED: {len(bad)} simulation / fit-diagnosis rows disagree (see above)")
+
+    sc = u[u["mase_real"].notna() & u["mase_sim"].notna()]
+    p95 = fit["ma3_p95_ratio"].dropna().unique()
+    if len(p95) != 1:
+        sys.exit(f"BUILD FAILED: per_sku.csv carries {len(p95)} distinct ma3_p95_ratio values")
+    summary = {
+        "n": int(len(u)), "scored": int(len(sc)),
+        "model_changed": int(u["model_changed"].map(truthy).sum()), "bin_changed": int(u["bin_changed"].map(truthy).sum()),
+        "verdict_changed": int(sc["verdict_changed"].map(truthy).sum()),
+        "better": int((sc["mase_direction"] == "better").sum()), "worse": int((sc["mase_direction"] == "worse").sum()),
+        "same": int((sc["mase_direction"] == "same").sum()),
+        "changed": sum(1 for v in out.values() if v["changed"]), "moved_only": sum(1 for v in out.values() if v["moved"] and not v["changed"]),
+        "median_real": num(sc["mase_real"].median(), 3), "median_sim": num(sc["mase_sim"].median(), 3),
+        "ph_skus": int((u["placeholder_months_2021_22"] > 0).sum()),
+        "overfit": {str(k): int(v) for k, v in fit["overfit_status"].value_counts().items()},
+        "underfit": int(fit["underfit"].map(truthy).sum()), "biased": int(fit["biased"].map(truthy).sum()),
+        "bias_tested": int(fit["bias_tested"].map(truthy).sum()),
+    }
+    n95 = int(fit["ma3_ratio"].notna().sum())
+    rules = {k: v.format(p95=f"{float(p95[0]):.3f}", n95=n95) for k, v in FIT_RULES.items()}
+    fc_month = ser.loc[ser["kind"] == "forecast_2026_03", "month"].unique()
+    if len(fc_month) != 1:
+        sys.exit(f"BUILD FAILED: series.csv carries {len(fc_month)} distinct forecast months")
+    return {"label": SIM_LABEL, "legend": SIM_LEGEND, "ref": ref, "sha": sha, "files": SIM_FILES, "fc_month": fc_month[0],
+            "skus": out, "fit": fit_out, "summary": summary, "checks": checks, "rules": rules,
+            "p95": round(float(p95[0]), 3), "n95": n95}
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--preview-src", default=DEFAULT_PREVIEW_SRC,
                     help="folder holding the preview CSVs (default: $DSD_PREVIEW_SRC or the preview session's scratchpad)")
+    ap.add_argument("--sim-ref", default=SIM_REF,
+                    help="git ref holding the simulation + fit-diagnosis files (default: $DSD_SIM_REF or exp/fit-and-simulation)")
     ap.add_argument("--offline", action="store_true",
                     help=f"rebuild from the last live read ({SNAPSHOT}) instead of querying the database")
     args = ap.parse_args()
@@ -1072,9 +1263,20 @@ def main():
     payload["fit"] = load_fit_review(payload)
     payload["etl"] = ETL_NODES
     payload["preview"] = assemble_preview(payload["skus"])
+    payload["sim"] = assemble_simulation(payload["skus"], args.sim_ref)
     payload["backup_options"] = load_backup_options()
+    # Evidence tab: reports/evidence/ only (evidence.py); its JS/CSS live beside this file
+    # and are inlined so the page stays one self-contained file.
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import evidence
+    payload["evidence"] = evidence.load(REPO)
+    with open(os.path.join(HERE, "evidence.css"), encoding="utf-8") as fh:
+        ev_css = fh.read()
+    with open(os.path.join(HERE, "evidence.js"), encoding="utf-8") as fh:
+        ev_js = fh.read()
     data = json.dumps(payload, separators=(",", ":"), allow_nan=False, default=str).replace("</", "<\\/")
-    html = TEMPLATE.replace("__DATA__", data)
+    html = TEMPLATE.replace("/*__EVIDENCE_CSS__*/", ev_css).replace("//__EVIDENCE_JS__", ev_js).replace("__DATA__", data)
     out = os.path.join(HERE, "dsd_dev_viewer.html")
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(html)
@@ -1131,6 +1333,16 @@ def main():
           f"file check, MA3-served SKUs with served MASE == ma3_holdout_mase: {pv['checks']['ma3_equal']} of {pv['checks']['ma3_total']} "
           f"backup_options={payload['backup_options']['file']} "
           f"({', '.join(b + ' ' + str(len(payload['backup_options']['bins'][b]['backups'])) for b in ROUTER_ORDER)} backups)")
+    sm, sk = payload["sim"]["summary"], payload["sim"]["checks"]
+    print(f"simulation: {args.sim_ref} @ {payload['sim']['sha'][:7]} | REAL 2026-03 forecast == stored served "
+          f"{sk['served']}/{sk['n']}; MASE from series.csv == file: REAL {sk['mase_real']}/{sk['scored']}, "
+          f"SIM {sk['mase_sim']}/{sk['scored']}; fit holdout_mase == REAL MASE {sk['fit_mase']}/{sk['fit_rows']}; "
+          f"fit-review mase_common == REAL MASE {sk.get('mase_common', 0)}/{sk.get('mase_common_n', 0)}")
+    print(f"  Simulation: {sm['model_changed']} of {sm['n']} change model, {sm['bin_changed']} change bin, "
+          f"{sm['verdict_changed']} of {sm['scored']} change verdict; MASE better on {sm['better']}, worse on "
+          f"{sm['worse']}, same on {sm['same']} | changed (bin/model/verdict) {sm['changed']}, MASE or 2026-03 "
+          f"forecast moved only {sm['moved_only']} | fit: overfit_status {sm['overfit']}, underfit {sm['underfit']}, "
+          f"biased {sm['biased']} of {sm['bias_tested']} tested")
     print(f"problems={m['problems'] or 'none'}")
     print(f"source={dsn}  query seconds={timing}  db total={t_db:.2f}s  band evidence={t_band:.2f}s  "
           f"build total={time.perf_counter() - t0:.2f}s  html={os.path.getsize(out) / 1024:.0f} KB")
@@ -1392,6 +1604,42 @@ details.legendbox>summary{color:var(--ink-3);font-size:11.5px;font-weight:600;pa
 .mini td.l,.mini th.l{text-align:left}
 .pvgrid{display:grid;grid-template-columns:auto auto 1fr;gap:18px;align-items:start}
 @media (max-width:1200px){.pvgrid{grid-template-columns:1fr}}
+/* SIMULATION (exp/fit-and-simulation): one magenta, hatched, labelled on every element */
+:root{--sim:#dc62ae;--sim-ink:#f6c6e4;--sim-bg:rgba(220,98,174,.14)}
+.simtag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+  color:var(--sim-ink);border:1px solid rgba(220,98,174,.5);white-space:nowrap;
+  background:repeating-linear-gradient(135deg,rgba(220,98,174,.24) 0 6px,rgba(220,98,174,.08) 6px 12px)}
+.simstrip{display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-radius:var(--r);margin-bottom:14px;
+  background:var(--surface-1);border:1px solid rgba(220,98,174,.3);border-left:4px solid var(--sim)}
+.simstrip .line{font-size:13.5px}
+.simstrip .line b{font-variant-numeric:tabular-nums}
+.simstrip .src{flex-basis:100%;font-size:11.5px;color:var(--ink-3)}
+.simstrip .src b{color:var(--ink-2);font-weight:600}
+.simbox{border:1px dashed rgba(220,98,174,.55);border-radius:var(--r);padding:10px 12px 8px;margin:10px 0;background:rgba(220,98,174,.035)}
+.simhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:12.5px}
+.simgrid{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1200px){.simgrid{grid-template-columns:1fr}}
+.simcmp{width:100%;margin:0}
+.simcmp th,.simcmp td{text-align:left}
+.simcmp td{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.simcmp td.diff{background:var(--sim-bg);color:var(--sim-ink);font-weight:600}
+.simcmp td.moved{color:var(--sim-ink)}
+.simchart svg{display:block;width:100%;height:auto;overflow:visible}
+.badge{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;
+  border:1px solid var(--line-2);color:var(--ink-2);cursor:help}
+.badge.chg{background:var(--sim-bg);border-color:var(--sim);color:var(--sim-ink)}
+.badge.same,.badge.quiet{color:var(--ink-3)}
+.badge.flagged{background:var(--flag-bg);border-color:rgba(224,165,38,.45);color:var(--flag-ink)}
+.fdiag{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
+.fdiag .k{color:var(--ink-3);font-size:11px}
+th.simth{background:repeating-linear-gradient(135deg,rgba(220,98,174,.20) 0 6px,var(--surface-2) 6px 12px);color:var(--sim-ink)}
+td.simtd{background:rgba(220,98,174,.05)}
+td.simtd.diff{background:var(--sim-bg);color:var(--sim-ink);font-weight:600}
+.tcap{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--ink-3);margin-bottom:8px}
+#simChgBtn[aria-pressed="true"]{background:var(--sim-bg);border-color:var(--sim);color:var(--sim-ink)}
+.sw-sim{width:16px;height:0;border-top:2px dashed var(--sim);display:inline-block}
+.sw-dia{width:7px;height:7px;transform:rotate(45deg);border:2px solid var(--sim);display:inline-block}
+/*__EVIDENCE_CSS__*/
 </style>
 </head>
 <body>
@@ -1400,6 +1648,7 @@ details.legendbox>summary{color:var(--ink-3);font-size:11.5px;font-weight:600;pa
   <nav role="tablist">
     <button role="tab" data-tab="forecasts" aria-selected="true">Forecasts</button>
     <button role="tab" data-tab="pipeline" aria-selected="false">Pipeline</button>
+    <button role="tab" data-tab="evidence" aria-selected="false">Evidence</button>
   </nav>
   <div class="seg modeSeg" id="modeSeg" role="group" aria-label="Data mode"></div>
   <div class="meta" id="meta"></div>
@@ -1411,6 +1660,7 @@ details.legendbox>summary{color:var(--ink-3);font-size:11.5px;font-weight:600;pa
   <div class="kpis" id="kpis"></div>
 
   <section id="tab-forecasts">
+    <div class="simstrip" id="simStrip" role="status"></div>
     <div class="banddef" id="bandCard" style="margin-bottom:14px"></div>
     <div class="toolbar">
       <div class="ac" id="acF"></div>
@@ -1419,11 +1669,13 @@ details.legendbox>summary{color:var(--ink-3);font-size:11.5px;font-weight:600;pa
       <div class="seg" id="verdictSeg" title="Fit verdict, from the fit review CSV"></div>
       <div class="seg" id="causeSeg" title="Cause group, built only from signals already on record"></div>
       <div class="seg" id="viewSeg"></div>
+      <button class="btn" id="simChgBtn" aria-pressed="false"></button>
       <button class="btn" id="colsBtn"></button>
       <span class="count" id="gcount"></span>
     </div>
     <div class="card" id="focus" style="margin-bottom:14px"></div>
     <div class="card" id="fTableCard">
+      <div class="tcap" id="fTableCap"></div>
       <div class="tw" style="max-height:640px"><table id="ftbl"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="grid" id="grid" hidden></div>
@@ -1451,8 +1703,11 @@ details.legendbox>summary{color:var(--ink-3);font-size:11.5px;font-weight:600;pa
       <aside class="card sticky" id="pDock" hidden></aside>
     </div>
   </section>
+
+  <section id="tab-evidence" hidden><div id="evidence"></div></section>
 </div>
 <div id="tip"></div>
+<div id="etip"></div>
 
 <script id="data" type="application/json">__DATA__</script>
 <script>
@@ -1537,7 +1792,7 @@ function seriesSentences(s){
 
   out.push(s.cause_cv == null
     ? sent(`cause_cv_last12 (${CSVSRC})`, 'No CV on record: fewer than 12 months.')
-    : sent(`cause_cv_last12 (${CSVSRC}); the p75 gate ${F.gate_cv} is the README\u2019s measured figure; the cohort median is computed over the ${F.median_cv_n} rows that carry a CV`,
+    : sent(`cause_cv_last12 (${CSVSRC}); the high-volatility cut ${F.gate_cv} is team-set, its source script lost (analytics/params.py); the cohort median is computed over the ${F.median_cv_n} rows that carry a CV`,
       `CV over the last 12 months is <b>${fmt(s.cause_cv)}</b>, against a cohort median of <b>${fmt(F.median_cv)}</b>; it <b>${s.cause_cv > F.gate_cv ? 'clears' : 'does not clear'}</b> the high-volatility gate of ${F.gate_cv}.`));
 
   out.push(sent(`cause_median_units (${CSVSRC}); the ${F.gate_units}-unit gate is the README\u2019s measured lower quartile; the cohort median is computed over ${F.median_units_n} rows`,
@@ -1574,7 +1829,7 @@ function honestySentences(s){
       `<b>Not fit to use on this SKU.</b> Cause group: <b>${esc(s.cause)}</b>`
       + (s.cause === 'none of the above' ? ' (no cause rule fires on this SKU)' : '')
       + (s.causes_all && s.causes_all.length > 1 ? `, first match; also fired: ${esc(s.causes_all.filter(c => c !== s.cause).join(', '))}` : '') + '.')];
-    bits.push(sent(`mase_common, flag_* columns (${CSVSRC}); the not-fit gate is MASE >= 1.1, reports/diagnostics/README.md`,
+    bits.push(sent(`mase_common, flag_* columns (${CSVSRC}); the not-fit review flag is MASE >= ${F.not_fit_mase} (analytics/params.py), reports/diagnostics/README.md`,
       `MASE is <b>${fmt(s.mase_common)}</b> on the common window`
       + (s.flags && s.flags.length ? `, flags: ${esc(s.flags.join(', '))}` : '') + '.'));
     if (s.ma3_fails) bits.push(sent(`ma3_also_fails_common, ma3_mase_common (${CSVSRC})`,
@@ -1631,13 +1886,13 @@ function verdictBlock(s){
   return `<div class="verdictline ${cls}" title="verdict, cause_group (${esc(CSVSRC)}); recent_level_ratio; spike months and level windows re-derived on this series">${txt}</div>`;
 }
 // The four that answer "what is the number and can I use it". MASE on the
-// common window is the one the verdict is made on, so it carries the 1.1 gate.
+// common window is the one the verdict is made on, so it carries the not-fit flag (F.not_fit_mase).
 function topTiles(s){
   const p = PROV(s);
   return `<div class="stats four">` + [
     [fmt(s.served), `Served forecast${s.provisional ? ' (provisional)' : ''}`, false],
     [fmt(s.ma3), 'MA3 forecast', false],
-    [p ? NT : fmt(s.mase_common), 'MASE (common window)', !p && s.mase_common != null && s.mase_common >= 1.1],
+    [p ? NT : fmt(s.mase_common), 'MASE (common window)', !p && s.mase_common != null && s.mase_common >= F.not_fit_mase],
     [fmt(s.rlr_fit != null ? s.rlr_fit : s.rlr), 'Recent level ratio (3 / 12 mo)', false],
   ].map(([v, l, f]) => `<div class="stat${f ? ' flag' : ''}" title="${esc(v)}"><div class="v">${esc(v)}</div><div class="l">${l}</div></div>`).join('') + `</div>`;
 }
@@ -1763,7 +2018,7 @@ function setMode(mode){
     : `Every number is read from what the pipeline stored (forecast_result, sku_segment, sku_traits, unilever_sku_demand_fact_real). Nothing is refitted. <b>Cohort result:</b> TSB and the XGBoost + MA3 average tie MA3 on real Tier A data (half-year block tests). They are served because they are trained models that use the full history, not because they are more accurate. MA3 is the benchmark and the fallback. Per-SKU pages show that SKU's own MASE and WAPE only.`;
   filter = null;
   buildPN();
-  drawKpis(); initSegs(); drawBandCard();
+  drawKpis(); initSegs(); drawBandCard(); drawSimStrip();
   showTab(tab);
 }
 function drawKpis(){
@@ -1837,7 +2092,7 @@ function chart(s, W, H, mode){
   const id = mode + s.pk + V.mode;
   GEOM[id] = {L, R, W, n};
   const isPh = i => s.ph && i >= s.ph[0] && i <= s.ph[1];
-  let g = `<svg viewBox="0 0 ${W} ${H}" width="${spark ? W : ''}" height="${spark ? H : ''}" data-pk="${s.pk}" data-g="${id}" data-ph="${s.ph_count || 0}" role="img" aria-label="${esc(s.code)} monthly demand and forecast">`;
+  let g = `<svg viewBox="0 0 ${W} ${H}"${spark ? ` width="${W}" height="${H}"` : ''} data-pk="${s.pk}" data-g="${id}" data-ph="${s.ph_count || 0}" role="img" aria-label="${esc(s.code)} monthly demand and forecast">`;
   if (s.ph) g += `<rect class="phband" x="${X(s.ph[0] - .5)}" y="${T}" width="${X(s.ph[1] + .5) - X(s.ph[0] - .5)}" height="${H - T - B}" fill="url(#phpat)"/>`
     + (big ? `<text x="${X(s.ph[0] - .5) + 4}" y="${T + 11}" fill="var(--ph)" font-size="10">placeholder (not SSM data)</text>` : '');
   if (!spark){
@@ -2027,7 +2282,7 @@ function sortRows(rows, key, dir){
   });
 }
 function renderTable(el, cols, rows, st, onRow, selected){
-  const head = '<tr>' + cols.map(c => `<th data-k="${c.k}"${c.num ? ' class="num"' : ''}${c.tip ? ` title="${esc(c.tip)}"` : ''}>${c.l}${st.k === c.k ? (st.d > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr>';
+  const head = '<tr>' + cols.map(c => `<th data-k="${c.k}"${c.num || c.hc ? ` class="${[c.num ? 'num' : '', c.hc || ''].join(' ').trim()}"` : ''}${c.tip ? ` title="${esc(c.tip)}"` : ''}>${c.l}${st.k === c.k ? (st.d > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr>';
   const col = cols.find(c => c.k === st.k);
   const sorted = col && col.sort !== false ? sortRows(rows, col.v || col.k, st.d) : rows;
   el.querySelector('thead').innerHTML = head;
@@ -2076,15 +2331,245 @@ const C = {
     r: s => `<td class="${s.assessable ? '' : 'muted'}">${s.assessable == null ? '\u2014' : s.assessable ? 'yes' : 'no'}</td>`},
 };
 
+// ================= SIMULATION (exp/fit-and-simulation) =================
+// REAL = the served run (it reproduces forecast_result); SIMULATION = the same
+// router on real + 2021-22 placeholder rows. Every number is read from the files
+// at D.sim.sha (build.py assemble_simulation). The page formats them and takes
+// the difference of two stored values; it computes nothing else. Nothing here is
+// served, used by the LP, or evidence.
+const SIM = D.sim, SIMS = SIM.summary, SIMSHA = SIM.sha.slice(0, 7), SIMSRC = `${SIM.ref} @ ${SIMSHA}`;
+const simOf = s => SIM.skus[s.pk] || null;
+const fitOf = s => SIM.fit[s.pk] || null;
+const simTag = () => `<span class="simtag" title="${esc(SIM.label)} · read from ${esc(SIMSRC)}">${esc(SIM.label)}</span>`;
+const SIM_RULE = '“changed” = the bin, the served model or the fit verdict differs between REAL and SIMULATION. '
+  + 'MASE and the forecast are compared side by side; where only they move, the SKU reads “unchanged” and the move is printed beside it.';
+let gSimChanged = false;
+const mAdd = (m, k) => { const [y, mo] = m.split('-').map(Number), t = y * 12 + mo - 1 + k; return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, '0')}`; };
+const mRange = (a, b) => { const out = []; for (let m = a; m <= b; m = mAdd(m, 1)) out.push(m); return out; };
+const sgn = (v, d=3) => v == null ? '—' : (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toFixed(d);
+const SIMV = ['fit', 'borderline', 'not fit'];
+const simV = v => v == null ? '<span class="muted">—</span>' : `<span class="${({'fit':'v-clean', 'borderline':'v-borderline', 'not fit':'v-notfit'})[v] || ''}">${esc(v)}</span>`;
+function simWindow(m){
+  if (!m || !m.hold.length) return 'not scored (fewer than 3 months of sales)';
+  const a = m.hold[0][0], b = m.hold[m.hold.length - 1][0], k = m.hold.length;
+  return `${m.src === 'common' ? 'common window' : 'stored 20% split'} ${a}${k > 1 ? '–' + b : ''}, ${k} month${k === 1 ? '' : 's'}`;
+}
+const simBadge = m => !m ? '' : m.changed ? `<span class="badge chg" title="${esc(SIM_RULE)}">changed</span>`
+  : `<span class="badge same" title="${esc(SIM_RULE)}">unchanged</span>`;
+// what differs, in the files' own numbers (the % is unilever_per_sku.csv forecast_change_pct)
+function simMoves(m){
+  const bits = m.what.map(w => w === 'fit verdict' ? `verdict ${m.verdict[0]} → ${m.verdict[1]}`
+    : w === 'bin' ? `bin ${m.bin[0]} → ${m.bin[1]}` : `model ${mlabel(m.model[0])} → ${mlabel(m.model[1])}`);
+  if (m.mase[0] != null && m.mase[1] != null && m.dir !== 'same') bits.push(`MASE ${sgn(m.mase[1] - m.mase[0], 4)}`);
+  if (m.fc[0] !== m.fc[1]) bits.push(`${SIM.fc_month} forecast ${m.fc_pct ? (m.fc_pct > 0 ? '+' : '−') + Math.abs(m.fc_pct) + '%' : '±<0.1%'}`);
+  return bits.join(' · ');
+}
+function drawSimStrip(){
+  const of = SIMS.overfit;
+  $('#simStrip').innerHTML = simTag()
+    + `<span class="line" id="simLine">Simulation: <b>${SIMS.model_changed}</b> of ${SIMS.n} change model, <b>${SIMS.bin_changed}</b> change bin, `
+    + `<b>${SIMS.verdict_changed}</b> of ${SIMS.scored} change verdict; MASE better on <b>${SIMS.better}</b>, worse on <b>${SIMS.worse}</b>, same on <b>${SIMS.same}</b></span>`
+    + `<div class="src">Counted from <b>${esc(SIM.files.per_sku)}</b> at <b>${esc(SIMSRC)}</b>; month rows from ${esc(SIM.files.series)}. `
+    + `REAL is the served run: its ${esc(SIM.fc_month)} forecast equals this page’s stored forecast_result value on ${SIM.checks.served} of ${SIM.checks.n}. `
+    + `SIMULATION re-runs the same router on real + 2021–22 placeholder rows (${SIMS.ph_skus} SKUs have them). Both are scored on the same months and scale; `
+    + `median MASE ${fmt(SIMS.median_real)} REAL / ${fmt(SIMS.median_sim)} SIMULATION — not an accuracy claim. ${esc(SIM_RULE)}</div>`
+    + `<div class="src"><b>Fit diagnosis (real data, not simulation)</b> — ${esc(SIM.files.fit)}: `
+    + Object.entries(of).map(([k, v]) => `${esc(k)} ${v}`).join(' · ')
+    + ` · underfit ${SIMS.underfit} · biased ${SIMS.biased} of ${SIMS.bias_tested} tested.</div>`;
+}
+// Fit-diagnosis badges, real data. Overfit uses overfit_status as the CSV gives it;
+// bias shows only when significant, underfit only when it fires.
+function fitBadges(s, compact){
+  const f = fitOf(s), head = compact ? '' : '<span class="k">Fit diagnosis (real data):</span>';
+  if (!f) return `<span class="fdiag">${head}<span class="badge quiet" title="${esc(`Not scored: fewer than 3 months of sales, so ${SIM.files.fit} has no row for this SKU.`)}">not scored</span></span>`;
+  const ms = k => `${k} month${k === 1 ? '' : 's'}`;
+  const io = `in-sample MASE ${fmt(f.ins)} (${ms(f.ins_m)}) vs holdout MASE ${fmt(f.hold)} (${ms(f.hold_m)}, ${f.src === 'common' ? 'common window' : '20% split'})`;
+  const src = `\nSource: ${SIM.files.fit} @ ${SIMSHA} (real data only).`;
+  let label = f.overfit, cls = 'quiet', tip;
+  if (f.overfit === 'not assessable (control)'){
+    label = 'overfit: not assessable (control)';
+    tip = `MA3 serves this SKU. MA3 is the control (no fitted parameters, so it cannot memorise); it is not judged against itself.\n${io}; MA3's ratio ${fmt(f.ratio)}.`;
+  } else if (f.ratio == null || f.ma3_ratio == null){
+    label = 'overfit: not testable';
+    tip = `No in-sample months, so the ratio is undefined.\n${io}.`;
+  } else {
+    const rel = f.ratio / f.ma3_ratio;
+    if (f.overfit === 'overfit'){ cls = 'flagged'; label = `overfit · ${rel.toFixed(2)}× own MA3`; }
+    tip = `Ratio = holdout MASE ÷ in-sample MASE = ${fmt(f.hold)} ÷ ${fmt(f.ins)} = ${fmt(f.ratio)}.\n`
+      + `Its own MA3 ratio = ${fmt(f.ma3_hold)} ÷ ${fmt(f.ma3_ins)} = ${fmt(f.ma3_ratio)}, so this ratio is ${rel.toFixed(2)}× its own MA3 ratio.\n`
+      + `MA3 control p95 = ${fmt(SIM.p95)}: the ratio is ${f.ratio > SIM.p95 ? 'above' : 'not above'} it.\n${io}.`;
+  }
+  let out = `<span class="badge ${cls}" title="${esc(tip + '\nRule: ' + SIM.rules.overfit + src)}">${esc(label)}</span>`;
+  if (f.underfit) out += `<span class="badge flagged" title="${esc(io + '.\nRule: underfit = ' + SIM.rules.underfit + src)}">underfit</span>`;
+  if (f.biased) out += `<span class="badge flagged" title="${esc(`Mean error ${sgn(f.me, 1)} units/month (forecast − actual), t = ${fmt(f.t, 2)} over ${ms(f.hold_m)}.\n${io}.\nRule: ${SIM.rules.bias}${src}`)}">biased: ${esc(f.bias_dir)}</span>`;
+  return `<span class="fdiag">${head}${out}</span>`;
+}
+const fitRank = s => { const f = fitOf(s); return f ? (f.overfit === 'overfit' ? 4 : 0) + (f.underfit ? 2 : 0) + (f.biased ? 1 : 0) : null; };
+const simNT = `<td class="num muted">${NT}</td>`;
+const SIMTIP = `${SIM.label}. Read from ${SIM.files.per_sku} at ${SIMSRC}.`;
+Object.assign(C, {
+  sim_mr: {k:'sim_mr', l:'REAL MASE', num:1, v: s => (simOf(s) || {mase:[]}).mase[0],
+    tip:`The served run’s MASE on the verdict window: the common window 2025-09–2026-02, or the stored 20% split for the short SKUs it cannot score. Same months and scale as SIM MASE. ${SIM.files.per_sku} at ${SIMSRC}.`,
+    r: s => { const m = simOf(s); return m && m.mase[0] != null ? `<td class="num">${fmt(m.mase[0])}</td>` : simNT; }},
+  sim_ms: {k:'sim_ms', l:'SIM MASE', num:1, hc:'simth', v: s => (simOf(s) || {mase:[]}).mase[1], tip:SIMTIP + ' Same months and scale as REAL MASE.',
+    r: s => { const m = simOf(s); return m && m.mase[1] != null ? `<td class="num simtd">${fmt(m.mase[1])}</td>` : simNT; }},
+  sim_vr: {k:'sim_vr', l:'REAL verdict', v: s => { const m = simOf(s); return m && m.verdict[0] ? SIMV.indexOf(m.verdict[0]) : null; },
+    tip:`From REAL MASE: fit < 0.9 ≤ borderline < 1.1 ≤ not fit (reports/diagnostics/README.md). It differs from the Fit verdict column `
+      + `(${D.fit.file}, carried as given) on ${D.skus.filter(s => { const m = simOf(s); return m && m.verdict[0] && s.verdict && (s.verdict === 'clean' ? 'fit' : s.verdict) !== m.verdict[0]; }).length} SKUs.`,
+    r: s => { const m = simOf(s); return `<td>${simV(m && m.verdict[0])}</td>`; }},
+  sim_vs: {k:'sim_vs', l:'SIM verdict', hc:'simth', v: s => { const m = simOf(s); return m && m.verdict[1] ? SIMV.indexOf(m.verdict[1]) : null; },
+    tip:SIMTIP + ' Same thresholds as REAL verdict.',
+    r: s => { const m = simOf(s); return `<td class="simtd${m && m.verdict[0] !== m.verdict[1] ? ' diff' : ''}">${simV(m && m.verdict[1])}</td>`; }},
+  sim_chg: {k:'sim_chg', l:'Change (SIM)', hc:'simth', tip:SIMTIP + ' ' + SIM_RULE,
+    v: s => { const m = simOf(s); return !m ? null : (m.changed ? 10 : 0) + (m.mase[0] != null && m.mase[1] != null ? Math.abs(m.mase[1] - m.mase[0]) : 0); },
+    r: s => { const m = simOf(s); return m ? `<td class="simtd">${simBadge(m)} <span class="muted">${esc(simMoves(m))}</span></td>` : '<td></td>'; }},
+  fitdiag: {k:'fitdiag', l:'Fit diagnosis (real)', v: fitRank,
+    tip:`${SIM.files.fit} at ${SIMSRC} — real data only. Hover a badge for its numbers and rule. Sorts overfit, underfit, biased first.`,
+    r: s => `<td>${fitBadges(s, true)}</td>`},
+});
+function simHeader(s){
+  const m = simOf(s);
+  if (!m) return '';
+  const row = (label, a, b, kind, tip) => `<tr${tip ? ` title="${esc(tip)}"` : ''}><th class="l">${label}</th><td>${a}</td><td class="${kind}">${b}</td></tr>`;
+  const cat = (a, b) => a === b ? '' : 'diff', num = (a, b) => a === b ? '' : 'moved';
+  const mm = v => v == null ? '<span class="muted">not scored</span>' : fmt(v, 4);
+  const why = m.ph_months
+    ? `${m.ph_months} placeholder months (2021–22) were added for this SKU${V.pv ? ' — hatched on the chart.' : '; switch to Preview to see them on the chart.'}`
+    : `No placeholder rows of its own${m.moved && m.model[0] === 'xgb_ma3_avg' ? '; it moves only because the shared XGBoost model trains on the bigger pool (summary.md).' : '.'}`;
+  return `<div class="simbox" data-sim="${s.pk}">`
+    + `<div class="simhead">${simTag()}<b>REAL vs SIMULATION</b>${simBadge(m)}<span class="muted">${esc(simMoves(m) || 'no difference')}</span></div>`
+    + `<div class="simgrid"><div><table class="mini simcmp">`
+    + `<tr><th class="l"></th><th class="l">REAL (served)</th><th class="l simth" title="${esc(SIMTIP)}">SIMULATION</th></tr>`
+    + row('Bin', esc(m.bin[0]), esc(m.bin[1]), cat(m.bin[0], m.bin[1]))
+    + row('Served model', esc(mlabel(m.model[0])), esc(mlabel(m.model[1])), cat(m.model[0], m.model[1]))
+    + row('MASE', mm(m.mase[0]), mm(m.mase[1]), num(m.mase[0], m.mase[1]), simWindow(m))
+    + row('Fit verdict', simV(m.verdict[0]), simV(m.verdict[1]), cat(m.verdict[0], m.verdict[1]))
+    + row(`Forecast ${esc(SIM.fc_month)}`, fmt(m.fc[0], 2), fmt(m.fc[1], 2), num(m.fc[0], m.fc[1]))
+    + `</table><div class="muted" style="font-size:11.5px;margin-top:6px">MASE on the ${esc(simWindow(m))}, the same months and scale in both runs. ${esc(why)}</div></div>`
+    + `<div><div class="simchart">${simChart(s, m, 1000, 270)}</div>${simLegend(m)}</div></div></div>`;
+}
+function simLegend(m){
+  const c = COLOR[m.model[0]] || 'var(--ink-2)';
+  return `<div class="legend"><span><i class="sw-line" style="background:var(--actual)"></i>Actual (real)</span>`
+    + `<span><i class="sw-dot" style="background:${c}"></i>REAL served · ${esc(mlabel(m.model[0]))}, one step ahead</span>`
+    + `<span><i class="sw-dia"></i><i class="sw-sim"></i>${esc(SIM.legend)}</span>`
+    + (m.hold.length ? `<span><i class="sw-hold"></i>Scored months (same in both runs)</span>` : '')
+    + (V.pv && m.ph.length ? `<span><i class="sw-ph"></i><i class="sw-phbg"></i>2021–22 placeholder (not SSM data)</span>` : '')
+    + `</div>`;
+}
+// The axis runs from 12 months before the scored months to the forecast month; in
+// Preview it starts at the SKU's first 2021-22 placeholder month instead.
+const SGEOM = {};
+function simChart(s, m, W, H){
+  if (!m.hist.length) return '<div class="empty">No month rows for this SKU in series.csv.</div>';
+  const pv = V.pv && m.ph.length > 0, last = mAdd(SIM.fc_month, -1), first = m.hist[0][0];
+  const lead = m.hold.length ? mAdd(m.hold[0][0], -12) : first;
+  const start = pv ? m.ph[0][0] : (lead > first ? lead : first);
+  const P = mRange(start, last).concat([SIM.fc_month]), n = P.length, idx = new Map(P.map((p, i) => [p, i]));
+  const act = new Map(m.hist), ph = new Map(pv ? m.ph : []), hold = new Map(m.hold.map(h => [h[0], h]));
+  const vis = [...P.slice(0, -1).map(p => act.get(p)), ...P.map(p => ph.get(p)), ...m.hold.flatMap(h => [h[1], h[2], h[3]]), m.fc[0], m.fc[1]]
+    .filter(v => v != null);
+  const ymax = Math.max(1, ...vis) * 1.08, ymin = Math.min(0, ...vis);
+  const L = 56, R = 48, T = 22, B = 24;
+  const X = i => L + i * (W - L - R) / Math.max(1, n - 1), Y = v => T + (H - T - B) * (1 - (v - ymin) / (ymax - ymin));
+  const id = 'sim' + s.pk + V.mode, c = COLOR[m.model[0]] || 'var(--ink-2)';
+  SGEOM[id] = {L, R, W, n, P, pk: s.pk, act, ph, hold};
+  const band = (a, b, fill, op) => `<rect x="${X(a - .5)}" y="${T}" width="${X(b + .5) - X(a - .5)}" height="${H - T - B}" fill="${fill}"${op ? ` opacity="${op}"` : ''}/>`;
+  let g = `<svg viewBox="0 0 ${W} ${H}" data-pk="${s.pk}" data-sg="${id}" role="img" aria-label="${esc(SIM.label)}: ${esc(s.code)}, REAL served vs simulation forecasts, one step ahead, with actual sales">`;
+  g += `<text x="${L}" y="${T - 9}" fill="var(--ink-2)" font-size="10" font-weight="700" letter-spacing=".04em">${esc(SIM.label)}</text>`;
+  if (pv){
+    const a = idx.get(m.ph[0][0]), b = idx.get(m.ph[m.ph.length - 1][0]);
+    g += band(a, b, 'url(#phpat)') + `<text x="${X(a - .5) + 4}" y="${T + 11}" fill="var(--ph)" font-size="10">2021–22 placeholder (not SSM data)</text>`;
+  }
+  if (m.hold.length){
+    const a = idx.get(m.hold[0][0]), b = idx.get(m.hold[m.hold.length - 1][0]);
+    g += band(a, b, 'var(--accent)', '.10') + `<text x="${X(a - .5) + 4}" y="${T + 11}" fill="var(--accent)" font-size="10">scored months</text>`;
+  }
+  g += `<rect x="${X(n - 1.5)}" y="${T}" width="${X(n - 1) - X(n - 1.5) + R}" height="${H - T - B}" fill="var(--surface-3)" opacity=".45"/>`;
+  [0, 1, 2, 3, 4].map(t => ymin + (ymax - ymin) * t / 4).forEach(v => {
+    g += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/>`
+      + `<text x="${L - 6}" y="${Y(v) + 3}" text-anchor="end" fill="var(--ink-3)" font-size="10">${fmt(v, 0)}</text>`;
+  });
+  if (ymin < 0) g += `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--line-2)"/>`;
+  P.forEach((p, i) => { if (i === n - 1 || (i % 6 === 0 && i < n - 3))
+    g += `<text x="${X(i)}" y="${H - 8}" text-anchor="middle" fill="var(--ink-3)" font-size="10">${p}</text>`; });
+  // a line joins two consecutive months only; a lone month gets a dot
+  const line = (pts, attrs, dot) => {
+    let d = '', prev = null, extra = '';
+    pts.forEach(([i, v], k) => {
+      if (v == null){ prev = null; return; }
+      const joined = prev === i - 1, next = pts[k + 1];
+      d += (joined ? 'L' : 'M') + X(i).toFixed(1) + ',' + Y(v).toFixed(1);
+      if (dot && !joined && !(next && next[0] === i + 1 && next[1] != null)) extra += dot(X(i), Y(v));
+      prev = i;
+    });
+    return (d ? `<path d="${d}" fill="none" ${attrs}/>` : '') + extra;
+  };
+  if (pv) g += line(P.map((p, i) => [i, ph.get(p)]), 'stroke="var(--ph)" stroke-width="1.8" stroke-dasharray="5 4" stroke-linejoin="round"',
+    (x, y) => `<circle cx="${x}" cy="${y}" r="2.5" fill="none" stroke="var(--ph)"/>`);
+  g += line(P.slice(0, -1).map((p, i) => [i, act.get(p)]), 'stroke="var(--actual)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"',
+    (x, y) => `<circle cx="${x}" cy="${y}" r="2.5" fill="var(--actual)"/>`);
+  const hp = m.hold.map(h => [idx.get(h[0]), h]);
+  const dia = (x, y, r) => `<path d="M${x.toFixed(1)},${(y - r).toFixed(1)} l${r},${r} l${-r},${r} l${-r},${-r} Z" fill="none" stroke="var(--sim)" stroke-width="2"/>`;
+  g += line(hp.map(([i, h]) => [i, h[2]]), `stroke="${c}" stroke-width="2" stroke-linejoin="round"`);
+  hp.forEach(([i, h]) => { if (h[2] != null) g += `<circle cx="${X(i)}" cy="${Y(h[2])}" r="4" fill="${c}" stroke="var(--surface-1)" stroke-width="2"/>`; });
+  g += line(hp.map(([i, h]) => [i, h[3]]), 'stroke="var(--sim)" stroke-width="2" stroke-dasharray="6 4" stroke-linejoin="round"');
+  hp.forEach(([i, h]) => { if (h[3] != null) g += dia(X(i), Y(h[3]), 6); });
+  const fx = X(n - 1);
+  if (m.fc[0] != null) g += `<circle cx="${fx}" cy="${Y(m.fc[0])}" r="5" fill="${c}" stroke="var(--surface-1)" stroke-width="2"/>`;
+  if (m.fc[1] != null) g += dia(fx, Y(m.fc[1]), 7);
+  if (m.fc[0] != null && m.fc[1] != null){
+    // direct labels at the forecast month, pushed apart when they would touch
+    let yr = Y(m.fc[0]), ys = Y(m.fc[1]);
+    if (Math.abs(yr - ys) < 13){ const mid = (yr + ys) / 2, up = m.fc[0] >= m.fc[1]; yr = mid + (up ? -7 : 7); ys = mid + (up ? 7 : -7); }
+    g += `<text x="${fx + 11}" y="${yr + 3.5}" fill="var(--ink-2)" font-size="10.5">REAL</text>`
+      + `<text x="${fx + 11}" y="${ys + 3.5}" fill="var(--ink-2)" font-size="10.5">SIM</text>`;
+  }
+  g += `<line class="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/><rect x="${L}" y="0" width="${W - L}" height="${H}" fill="transparent"/>`;
+  return g + '</svg>';
+}
+document.addEventListener('mousemove', ev => {
+  const svg = ev.target.closest && ev.target.closest('.simchart svg');
+  $$('.simchart .xh[visibility="visible"]').forEach(l => { if (!svg || !svg.contains(l)) l.setAttribute('visibility', 'hidden'); });
+  if (!svg || !SGEOM[svg.dataset.sg]) return;
+  const gm = SGEOM[svg.dataset.sg], s = V.byPk.get(gm.pk), m = simOf(s);
+  const box = svg.getBoundingClientRect(), vx = (ev.clientX - box.left) * gm.W / box.width;
+  const step = (gm.W - gm.L - gm.R) / Math.max(1, gm.n - 1), i = Math.max(0, Math.min(gm.n - 1, Math.round((vx - gm.L) / step)));
+  const xh = svg.querySelector('.xh'); xh.setAttribute('x1', gm.L + i * step); xh.setAttribute('x2', gm.L + i * step); xh.setAttribute('visibility', 'visible');
+  const p = gm.P[i], rows = [];
+  if (i === gm.n - 1){
+    rows.push([`REAL served · ${mlabel(m.model[0])}`, fmt(m.fc[0], 2)], ['SIMULATION (not served)', fmt(m.fc[1], 2)],
+              ['SIM − REAL', m.fc[0] == null || m.fc[1] == null ? '—' : sgn(m.fc[1] - m.fc[0], 2)]);
+  } else {
+    const a = gm.act.get(p), q = gm.ph.get(p), h = gm.hold.get(p);
+    if (q != null) rows.push(['Placeholder', fmt(q, 1)], ['', 'not SSM data']);
+    else rows.push(['Actual', a == null ? 'no row' : fmt(a, 1)]);
+    if (h){
+      rows.push([`REAL one-step · ${mlabel(m.model[0])}`, fmt(h[2])], ['SIMULATION one-step', fmt(h[3])],
+                ['SIM − REAL', h[2] == null || h[3] == null ? '—' : sgn(h[3] - h[2], 1)], ['', 'scored month, same in both runs']);
+    }
+  }
+  tip.innerHTML = `<div class="h">${esc(s.code)} · ${esc(p)}${i === gm.n - 1 ? ' (forecast)' : ''} · SIMULATION, not served</div>`
+    + rows.map(([k, v]) => `<div class="r"><span>${esc(k)}</span><b>${v}</b></div>`).join('');
+  tip.style.display = 'block';
+  tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 8, ev.clientX + 14) + 'px';
+  tip.style.top = Math.max(8, ev.clientY - tip.offsetHeight - 12) + 'px';
+});
+
 // ---------------- tabs ----------------
 let tab = 'forecasts';
 function showTab(t){
   tab = t;
   $$('nav button').forEach(x => x.setAttribute('aria-selected', x.dataset.tab === t));
-  ['forecasts', 'pipeline'].forEach(k => $('#tab-' + k).hidden = k !== t);
-  $('.kpis').hidden = t === 'pipeline';
+  ['forecasts', 'pipeline', 'evidence'].forEach(k => $('#tab-' + k).hidden = k !== t);
+  $('.kpis').hidden = t !== 'forecasts';
+  // The Forecasts/Pipeline note, the Real/Preview switch and its banner do not apply to the Evidence tab.
+  $('.note').hidden = t === 'evidence';
+  $('#modeSeg').hidden = t === 'evidence';
+  $('#pvbanner').hidden = t === 'evidence' || !V.pv;
   if (t === 'forecasts') drawForecasts();
   if (t === 'pipeline') drawPipeline();
+  if (t === 'evidence') drawEvidence();
 }
 $$('nav button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
@@ -2223,9 +2708,11 @@ const acF = autocomplete($('#acF'), 'Find a SKU by code or product…', pk => { 
 // Nine columns answer the usual question; the other fourteen are one click
 // away and every one of them stays sortable when shown.
 let colsOpen = false;
-const F_DEFAULT = () => [C.code, C.name, C.method, C.spark, C.served, C.ma3,
-  ...(V.pv ? [C.change] : [C.mase_common, C.verdict]), C.rlr];
-const F_MORE = () => [C.gap, ...(V.pv ? [C.ph] : [C.cause, C.assessable]), C.mase,
+// MASE (common window) moves to the extra columns: REAL MASE carries the same number (build check) and
+// also scores the 12 short SKUs the window cannot. The fit review's verdict stays: it is its own record.
+const F_DEFAULT = () => [C.code, C.name, C.method, C.spark, C.served, C.ma3, ...(V.pv ? [C.change] : [C.verdict]),
+  C.sim_mr, C.sim_ms, C.sim_vr, C.sim_vs, C.sim_chg, C.fitdiag, C.rlr];
+const F_MORE = () => [...(V.pv ? [] : [C.mase_common]), C.gap, ...(V.pv ? [C.ph] : [C.cause, C.assessable]), C.mase,
   ...(V.pv ? [] : [C.mase_pipeline]), C.ma3_mase, C.wape,
   ...(V.pv ? [] : [C.cov, C.bw, C.ma3_cov, C.ma3_bw])];
 const F_COLS = () => colsOpen ? [...F_DEFAULT(), ...F_MORE()] : F_DEFAULT();
@@ -2236,6 +2723,8 @@ function drawFocus(){
     + `<div class="tags" style="align-self:flex-start;margin-left:12px">${modelPill(s.method)}<span class="pill">router: ${esc(s.router_bin)}</span>${V.pv ? `<span class="pill">real bin: ${esc(s.real_bin)}</span>` : ''}<span class="pill">combined_v1: ${esc(s.combined)}</span><span class="pill">${esc(s.status)}</span></div>`
     + `<div class="focusnav"><span class="muted">${i >= 0 ? `${i + 1} of ${fOrder.length} in filter` : 'outside the current filter'}</span>`
     + `<button class="btn" id="fPrev" ${i <= 0 ? 'disabled' : ''}>← Prev</button><button class="btn" id="fNext" ${i < 0 || i >= fOrder.length - 1 ? 'disabled' : ''}>Next →</button></div></div>`
+    + `<div style="margin:0 0 4px">${fitBadges(s)}</div>`
+    + simHeader(s)
     + skuNotes(s)
     + verdictBlock(s)
     + topTiles(s)
@@ -2251,8 +2740,16 @@ function drawFocus(){
 function drawForecasts(){
   if (fSel == null) fSel = (sortRows(V.skus.filter(s => s.gap != null), absGap, -1)[0] || V.skus[0]).pk;
   const rows = V.skus.filter(s => (gBin === 'all' || s.router_bin === gBin) && (gModel === 'all' || s.method === gModel)
-    && (gVerdict === 'all' || s.verdict === gVerdict) && (gCause === 'all' || s.cause === gCause));
+    && (gVerdict === 'all' || s.verdict === gVerdict) && (gCause === 'all' || s.cause === gCause)
+    && (!gSimChanged || (simOf(s) && simOf(s).changed)));
   $('#gcount').textContent = `${rows.length} of ${V.skus.length} SKUs`;
+  const sb = $('#simChgBtn');
+  sb.setAttribute('aria-pressed', gSimChanged);
+  sb.textContent = `${gSimChanged ? '✓ ' : ''}Show changed only (SIMULATION) · ${SIMS.changed}`;
+  sb.title = `${SIM.label}. ${SIM_RULE}`;
+  sb.onclick = () => { gSimChanged = !gSimChanged; drawForecasts(); };
+  $('#fTableCap').innerHTML = simTag() + `<span>Hatched headers (SIM MASE, SIM verdict, Change) come from the simulation at ${esc(SIMSRC)}. `
+    + `REAL MASE and REAL verdict are the served run on the same months. Fit diagnosis is real data only.</span>`;
   const cb = $('#colsBtn');
   cb.textContent = colsOpen ? `Columns: all ${F_DEFAULT().length + F_MORE().length}` : `Columns: ${F_DEFAULT().length} of ${F_DEFAULT().length + F_MORE().length}`;
   cb.title = colsOpen ? 'Hide the extra columns' : 'Show every column \u2014 ' + F_MORE().map(c => c.l).join(', ');
@@ -2606,6 +3103,7 @@ const acP = autocomplete($('#acP'), 'Find a SKU to trace its path…', pk => sel
 function selectPipelineSku(pk){ pSku = pk; drawPipeline(); }
 $('#pclr').onclick = () => { pSku = null; acP.clear(); drawPipeline(); };
 
+//__EVIDENCE_JS__
 setMode('real');
 </script>
 </body>

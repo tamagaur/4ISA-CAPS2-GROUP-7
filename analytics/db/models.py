@@ -369,8 +369,8 @@ class ABCClassification(Base):
 
 
 class ForecastResult(Base):
-    """Category A only (MAPE < 20% gate) — Unilever SKU grain, since
-    SARIMA per DEC-03 only runs where real per-SKU demand exists."""
+    """Tier A, Unilever SKU grain (DEC-03). The LP gates on mase <
+    analytics.params.MASE_GATE (scripts/run_lp.py), never on mape."""
     __tablename__ = "forecast_result"
     __table_args__ = (
         UniqueConstraint("product_key", "forecast_date", name="uq_forecast_result_natural_key"),
@@ -383,7 +383,7 @@ class ForecastResult(Base):
     forecast_value: Mapped[decimal.Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     confidence_lower: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
     confidence_upper: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
-    mape: Mapped[decimal.Decimal | None] = mapped_column(Numeric(6, 3))  # must be < 20.0 to gate into LP_Recommendation
+    mape: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 3))  # schema.sql and live: NUMERIC(10,3); percent; reported, never a gate (the LP gates on mase)
     model_params: Mapped[dict | None] = mapped_column(JSONB)             # SARIMA order etc., stored as given
     generated_at: Mapped[datetime.datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
@@ -393,8 +393,9 @@ class ForecastResult(Base):
 
 
 class LPRecommendation(Base):
-    """SS_i = Z x sigma_di (Z=1.28, 90% service level);
-    ROP_i = Y_hat_(t+1,i) + SS_i; Q_i from LP (w1=.45, w2=.35, w3=.20).
+    """SS_i = Z x sigma (Z=1.28, 90% service level); rop_i holds the
+    order-up-to TARGET stock T_i (scripts/run_lp.py), not a reorder point;
+    Q_i from the LP (weights analytics.params.LP_WEIGHTS).
     status supports the dashboard's Accept/Dismiss write-back (Phase 7)."""
     __tablename__ = "lp_recommendation"
     __table_args__ = (

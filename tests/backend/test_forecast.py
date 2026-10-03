@@ -165,9 +165,11 @@ def test_interval_level_is_the_runners_band():
 
     from backend.routers.forecast import FORECAST_INTERVAL
 
+    from analytics.params import FORECAST_INTERVAL_Z
+
     source = (Path(__file__).resolve().parents[2] / "scripts/run_baseline_forecast.py").read_text(encoding="utf-8")
-    z = re.search(r"^CONFIDENCE_Z = ([0-9.]+)", source, re.M)
-    assert z and FORECAST_INTERVAL["z"] == float(z.group(1))
+    assert re.search(r"^CONFIDENCE_Z = FORECAST_INTERVAL_Z\b", source, re.M)
+    assert FORECAST_INTERVAL["z"] is FORECAST_INTERVAL_Z
     assert round((2 * NormalDist().cdf(FORECAST_INTERVAL["z"]) - 1) * 100) == FORECAST_INTERVAL["level_pct"]
     with make_client(FakeSession(PRODUCTS, FORECASTS, ACTUALS)) as c:
         body = get(c, "/forecast/21051980?principal=unilever").json()

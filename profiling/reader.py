@@ -121,13 +121,14 @@ import time as _time
 READ_TIME_BUDGET_SECONDS = 20
 
 
-def _stream_bounded_rows(ws, max_col: int, full_read: bool = False) -> tuple[list[list], bool]:
+def _stream_bounded_rows(ws, max_col: int, full_read: bool = False,
+                         max_rows: int | None = None) -> tuple[list[list], bool]:
     rows: list[list] = []
     seen_data = False
     blank_streak = 0
     start = _time.monotonic()
     truncated = False
-    for i, row in enumerate(ws.iter_rows(min_col=1, max_col=max_col, values_only=True)):
+    for i, row in enumerate(ws.iter_rows(min_col=1, max_col=max_col, max_row=max_rows, values_only=True)):
         rows.append(list(row))
         if all(is_blank_cell(v) for v in row):
             if seen_data:
@@ -151,7 +152,7 @@ def is_blank_cell(v) -> bool:
     return v is None or (isinstance(v, str) and v.strip() == "")
 
 
-def _read_xlsx(path: Path, full_read: bool = False) -> WorkbookRead:
+def _read_xlsx(path: Path, full_read: bool = False, max_rows: int | None = None) -> WorkbookRead:
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
         sheets = []
@@ -159,7 +160,7 @@ def _read_xlsx(path: Path, full_read: bool = False) -> WorkbookRead:
             ws = wb[sheet_name]
             last_col, probed = _find_real_extent(ws)
             last_col = max(last_col, 1)
-            rows, truncated = _stream_bounded_rows(ws, last_col, full_read=full_read)
+            rows, truncated = _stream_bounded_rows(ws, last_col, full_read=full_read, max_rows=max_rows)
             sheets.append(SheetGrid(name=sheet_name, rows=rows, truncated=truncated))
         return WorkbookRead(real_format="xlsx", sheets=sheets)
     finally:
@@ -258,7 +259,7 @@ def _read_csv(path: Path) -> WorkbookRead:
     return WorkbookRead(real_format="csv", error=f"could not decode as CSV: {last_err}")
 
 
-def read_workbook(path: Path, full_read: bool = False) -> WorkbookRead:
+def read_workbook(path: Path, full_read: bool = False, max_rows: int | None = None) -> WorkbookRead:
     """Read a raw file into sheet grids, dispatching on sniffed magic bytes.
 
     full_read=True disables the xlsx read-time budget (see
@@ -267,11 +268,23 @@ def read_workbook(path: Path, full_read: bool = False) -> WorkbookRead:
     output — is unchanged; the Extract stage passes full_read=True since it
     needs complete data for its totals-row checksum and accountability QC.
     xls-biff, mhtml, and csv readers already read every row regardless.
+
+    max_rows (2026-09-30, layout identification) keeps only each sheet's
+    first max_rows rows - a header read, not a data read. xlsx stops
+    streaming there; the other formats are parsed whole and then cut.
     """
+    wb = _read_workbook(path, full_read, max_rows)
+    if max_rows is not None:
+        for sheet in wb.sheets:
+            sheet.rows = sheet.rows[:max_rows]
+    return wb
+
+
+def _read_workbook(path: Path, full_read: bool, max_rows: int | None = None) -> WorkbookRead:
     real_format = sniff_format(path)
     try:
         if real_format == "xlsx":
-            return _read_xlsx(path, full_read=full_read)
+            return _read_xlsx(path, full_read=full_read, max_rows=max_rows)
         if real_format == "xls-biff":
             return _read_xls_biff(path)
         if real_format == "mhtml":

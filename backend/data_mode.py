@@ -59,7 +59,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from analytics.classification.abc import classify_abc
-from analytics.optimization.lp_inputs import PLACEHOLDERS
+from analytics.params import PLACEHOLDERS
 from analytics.classification.orchestrate_abc import _split_negative_revenue, _split_zero_revenue
 from analytics.segmentation.traits import (
     average_demand_interval,
@@ -425,8 +425,8 @@ def demand_matrix(
 ) -> tuple[dict[int, np.ndarray], list[str]]:
     """orchestrate_segment._fetch_demand_matrix, from `mode`'s demand source:
     one zero-filled monthly quantity array per product over [start, end]. No
-    row is a zero-sale month, a NULL quantity is 0, a negative is clipped to
-    0 — all three exactly as the segmentation run builds it."""
+    row is a zero-sale month, a NULL quantity is 0, a negative is kept
+    (DEC-15) — all three exactly as the segmentation run builds it."""
     periods = [str(p) for p in pd.period_range(start, end, freq="M")]
     index = {p: i for i, p in enumerate(periods)}
     matrices = {int(pk): np.zeros(len(periods)) for pk in product_keys}
@@ -445,14 +445,26 @@ def demand_matrix(
         if i is None:
             continue
         qty = 0.0 if r["qty"] is None else float(r["qty"])
-        matrices[int(r["product_key"])][i] = max(qty, 0.0)
+        matrices[int(r["product_key"])][i] = qty
     return matrices, periods
 
 
-def series_traits(qty: np.ndarray, periods: list[str]) -> dict:
+def observed_periods(db: Session, start: str, end: str, mode: str) -> set[str]:
+    """orchestrate_segment._fetch_observed_periods, from `mode`'s demand
+    source: the months in [start, end] with any demand row at all."""
+    rows = db.execute(
+        text(f"SELECT DISTINCT calendar_month FROM {unilever_demand(mode)} "
+             "WHERE calendar_month >= :start AND calendar_month <= :end"),
+        {"start": start, "end": end},
+    ).all()
+    return {r[0] for r in rows}
+
+
+def series_traits(qty: np.ndarray, periods: list[str], observed: set[str] | None = None) -> dict:
     """The demand-series columns of orchestrate_segment.build_traits for one
     SKU. stability_group and revenue_share_2026_02 are not here: they come
-    from ABC runs, not the demand series, and stay the stored values."""
+    from ABC runs, not the demand series, and stay the stored values.
+    `observed` is observed_periods(); None = every period observed."""
     fs = first_sale_index(qty)
     trend, trend_pvalue, trend_slope = trend_stats(qty)
     return {
@@ -463,6 +475,7 @@ def series_traits(qty: np.ndarray, periods: list[str]) -> dict:
         "trend_pvalue": trend_pvalue,
         "trend_slope": trend_slope,
         "cv": coefficient_of_variation(qty),
-        "adi": average_demand_interval(qty),
+        "adi": average_demand_interval(
+            qty, None if observed is None else np.array([p in observed for p in periods], dtype=bool)),
         "restart_flag": has_restart(qty),
     }

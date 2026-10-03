@@ -1,0 +1,163 @@
+set,candidate,base,part
+original 50,adida,,
+original 50,comb_inv_err,,
+original 50,comb_m4,,
+original 50,comb_simple,,
+original 50,croston,,
+original 50,drift,,
+original 50,ens_4global@A,,
+original 50,ens_4global@ABC,,
+original 50,ens_xgb_ma3@A,,
+original 50,ens_xgb_ma3@ABC,,
+original 50,ets_auto,,
+original 50,holt,,
+original 50,holt_damped,,
+original 50,hw_add12,,
+original 50,imapa,,
+original 50,knn_analog,,
+original 50,lgbm@A,,
+original 50,lgbm_q50@A,,
+original 50,lgbm_tweedie@A,,
+original 50,ma12,,
+original 50,ma2,,
+original 50,ma4,,
+original 50,ma6,,
+original 50,ma_trained,,
+original 50,mean,,
+original 50,med_3,,
+original 50,median3,,
+original 50,mlp@A,,
+original 50,mlp@ABC,,
+original 50,naive,,
+original 50,otm,,
+original 50,rf@A,,
+original 50,rf@ABC,,
+original 50,ridge@A,,
+original 50,ridge@ABC,,
+original 50,sarima_plain,,
+original 50,sba,,
+original 50,sba_a3,,
+original 50,ses,,
+original 50,shrink_cat,,
+original 50,snaive12,,
+original 50,theta,,
+original 50,topdown_cat,,
+original 50,tsb,,
+original 50,xgb_abs@A,,
+original 50,xgb_abs@ABC,,
+original 50,xgb_raw@A,,
+original 50,xgb_raw@ABC,,
+original 50,xgb_sq@A,,
+original 50,xgb_sq@ABC,,
+phase 1 (35),ma3|sqrt,ma3,sqrt
+phase 1 (35),ma3|log1p,ma3,log1p
+phase 1 (35),ma3|boxcox,ma3,boxcox
+phase 1 (35),ma3|yeojohnson,ma3,yeojohnson
+phase 1 (35),ma3|cbrt,ma3,cbrt
+phase 1 (35),ma3|asinh,ma3,asinh
+phase 1 (35),ma3|anscombe,ma3,anscombe
+phase 1 (35),ma3|diff1,ma3,diff1
+phase 1 (35),ma3|stl12,ma3,stl12
+phase 1 (35),ma3|winsor,ma3,winsor
+phase 1 (35),tsb|sqrt,tsb,sqrt
+phase 1 (35),tsb|log1p,tsb,log1p
+phase 1 (35),tsb|cbrt,tsb,cbrt
+phase 1 (35),tsb|asinh,tsb,asinh
+phase 1 (35),tsb|winsor,tsb,winsor
+phase 1 (35),comb_simple|sqrt,comb_simple,sqrt
+phase 1 (35),comb_simple|log1p,comb_simple,log1p
+phase 1 (35),comb_simple|boxcox,comb_simple,boxcox
+phase 1 (35),comb_simple|yeojohnson,comb_simple,yeojohnson
+phase 1 (35),comb_simple|cbrt,comb_simple,cbrt
+phase 1 (35),comb_simple|asinh,comb_simple,asinh
+phase 1 (35),comb_simple|anscombe,comb_simple,anscombe
+phase 1 (35),comb_simple|diff1,comb_simple,diff1
+phase 1 (35),comb_simple|stl12,comb_simple,stl12
+phase 1 (35),comb_simple|winsor,comb_simple,winsor
+phase 1 (35),xgb_ma3_avg|sqrt,xgb_ma3_avg,sqrt
+phase 1 (35),xgb_ma3_avg|log1p,xgb_ma3_avg,log1p
+phase 1 (35),xgb_ma3_avg|boxcox,xgb_ma3_avg,boxcox
+phase 1 (35),xgb_ma3_avg|yeojohnson,xgb_ma3_avg,yeojohnson
+phase 1 (35),xgb_ma3_avg|cbrt,xgb_ma3_avg,cbrt
+phase 1 (35),xgb_ma3_avg|asinh,xgb_ma3_avg,asinh
+phase 1 (35),xgb_ma3_avg|anscombe,xgb_ma3_avg,anscombe
+phase 1 (35),xgb_ma3_avg|diff1,xgb_ma3_avg,diff1
+phase 1 (35),xgb_ma3_avg|stl12,xgb_ma3_avg,stl12
+phase 1 (35),xgb_ma3_avg|winsor,xgb_ma3_avg,winsor
+phase 2 (77),ma3|D2,ma3,A:D2
+phase 2 (77),ma3|D3,ma3,A:D3
+phase 2 (77),ma3|S12,ma3,A:S12
+phase 2 (77),ma3|S12D1,ma3,A:S12D1
+phase 2 (77),ma3|sqrt+D1,ma3,B:sqrt+D1
+phase 2 (77),ma3|sqrt+S12,ma3,B:sqrt+S12
+phase 2 (77),ma3|log1p+D1,ma3,B:log1p+D1
+phase 2 (77),ma3|log1p+S12,ma3,B:log1p+S12
+phase 2 (77),ma3|boxcox+D1,ma3,B:boxcox+D1
+phase 2 (77),ma3|boxcox+S12,ma3,B:boxcox+S12
+phase 2 (77),ma3|yeojohnson+D1,ma3,B:yeojohnson+D1
+phase 2 (77),ma3|yeojohnson+S12,ma3,B:yeojohnson+S12
+phase 2 (77),ma3|cbrt+D1,ma3,B:cbrt+D1
+phase 2 (77),ma3|cbrt+S12,ma3,B:cbrt+S12
+phase 2 (77),ma3|asinh+D1,ma3,B:asinh+D1
+phase 2 (77),ma3|asinh+S12,ma3,B:asinh+S12
+phase 2 (77),ma3|anscombe+D1,ma3,B:anscombe+D1
+phase 2 (77),ma3|anscombe+S12,ma3,B:anscombe+S12
+phase 2 (77),ma3|winsor+D1,ma3,B:winsor+D1
+phase 2 (77),ma3|winsor+S12,ma3,B:winsor+S12
+phase 2 (77),ma3|AUTOd,ma3,D:AUTOd
+phase 2 (77),comb_simple|D2,comb_simple,A:D2
+phase 2 (77),comb_simple|D3,comb_simple,A:D3
+phase 2 (77),comb_simple|S12,comb_simple,A:S12
+phase 2 (77),comb_simple|S12D1,comb_simple,A:S12D1
+phase 2 (77),comb_simple|sqrt+D1,comb_simple,B:sqrt+D1
+phase 2 (77),comb_simple|sqrt+S12,comb_simple,B:sqrt+S12
+phase 2 (77),comb_simple|log1p+D1,comb_simple,B:log1p+D1
+phase 2 (77),comb_simple|log1p+S12,comb_simple,B:log1p+S12
+phase 2 (77),comb_simple|boxcox+D1,comb_simple,B:boxcox+D1
+phase 2 (77),comb_simple|boxcox+S12,comb_simple,B:boxcox+S12
+phase 2 (77),comb_simple|yeojohnson+D1,comb_simple,B:yeojohnson+D1
+phase 2 (77),comb_simple|yeojohnson+S12,comb_simple,B:yeojohnson+S12
+phase 2 (77),comb_simple|cbrt+D1,comb_simple,B:cbrt+D1
+phase 2 (77),comb_simple|cbrt+S12,comb_simple,B:cbrt+S12
+phase 2 (77),comb_simple|asinh+D1,comb_simple,B:asinh+D1
+phase 2 (77),comb_simple|asinh+S12,comb_simple,B:asinh+S12
+phase 2 (77),comb_simple|anscombe+D1,comb_simple,B:anscombe+D1
+phase 2 (77),comb_simple|anscombe+S12,comb_simple,B:anscombe+S12
+phase 2 (77),comb_simple|winsor+D1,comb_simple,B:winsor+D1
+phase 2 (77),comb_simple|winsor+S12,comb_simple,B:winsor+S12
+phase 2 (77),comb_simple|AUTOd,comb_simple,D:AUTOd
+phase 2 (77),ma3|sqrtx2,ma3,C:sqrtx2
+phase 2 (77),ma3|sqrtx3,ma3,C:sqrtx3
+phase 2 (77),ma3|cbrtx2,ma3,C:cbrtx2
+phase 2 (77),ma3|cbrtx3,ma3,C:cbrtx3
+phase 2 (77),ma3|asinhx2,ma3,C:asinhx2
+phase 2 (77),ma3|asinhx3,ma3,C:asinhx3
+phase 2 (77),ma3|log1px2,ma3,C:log1px2
+phase 2 (77),ma3|log1px3,ma3,C:log1px3
+phase 2 (77),comb_simple|sqrtx2,comb_simple,C:sqrtx2
+phase 2 (77),comb_simple|sqrtx3,comb_simple,C:sqrtx3
+phase 2 (77),comb_simple|cbrtx2,comb_simple,C:cbrtx2
+phase 2 (77),comb_simple|cbrtx3,comb_simple,C:cbrtx3
+phase 2 (77),comb_simple|asinhx2,comb_simple,C:asinhx2
+phase 2 (77),comb_simple|asinhx3,comb_simple,C:asinhx3
+phase 2 (77),comb_simple|log1px2,comb_simple,C:log1px2
+phase 2 (77),comb_simple|log1px3,comb_simple,C:log1px3
+phase 2 (77),xgb_ma3_avg|sqrtx2,xgb_ma3_avg,C:sqrtx2
+phase 2 (77),xgb_ma3_avg|sqrtx3,xgb_ma3_avg,C:sqrtx3
+phase 2 (77),xgb_ma3_avg|cbrtx2,xgb_ma3_avg,C:cbrtx2
+phase 2 (77),xgb_ma3_avg|cbrtx3,xgb_ma3_avg,C:cbrtx3
+phase 2 (77),xgb_ma3_avg|asinhx2,xgb_ma3_avg,C:asinhx2
+phase 2 (77),xgb_ma3_avg|asinhx3,xgb_ma3_avg,C:asinhx3
+phase 2 (77),xgb_ma3_avg|log1px2,xgb_ma3_avg,C:log1px2
+phase 2 (77),xgb_ma3_avg|log1px3,xgb_ma3_avg,C:log1px3
+phase 2 (77),tsb|sqrtx2,tsb,C:sqrtx2
+phase 2 (77),tsb|sqrtx3,tsb,C:sqrtx3
+phase 2 (77),tsb|cbrtx2,tsb,C:cbrtx2
+phase 2 (77),tsb|cbrtx3,tsb,C:cbrtx3
+phase 2 (77),tsb|asinhx2,tsb,C:asinhx2
+phase 2 (77),tsb|asinhx3,tsb,C:asinhx3
+phase 2 (77),tsb|log1px2,tsb,C:log1px2
+phase 2 (77),tsb|log1px3,tsb,C:log1px3
+phase 2 (77),E1,arima,"E:auto (AICc, d<=2, D<=1)"
+phase 2 (77),E2,arima,E:auto on log1p + smearing
+phase 2 (77),E3,sarima,"E:fixed (1,1,1)(0,1,1,12)"

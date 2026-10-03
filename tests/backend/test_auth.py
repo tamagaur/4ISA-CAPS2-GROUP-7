@@ -20,17 +20,18 @@ and emails captured by tests/backend/conftest.py.
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from jose import jwt
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from backend import auth_utils, mailer
 from backend.deps import get_db, get_token_payload
-from backend.login_limiter import MAX_FAILURES_PER_EMAIL
+from backend.login_limiter import MAX_FAILURES_PER_EMAIL, MAX_FAILURES_PER_IP, FailureLogBudget
 from backend.main import app
 from backend.routers import auth as auth_router
 
@@ -199,13 +200,43 @@ def test_decode_expired_token_raises(monkeypatch):
         auth_utils.decode_access_token(token)
 
 
+def _unverified_claims(token):
+    return jwt.decode(token, options={"verify_signature": False})
+
+
+# Minted 2026-09-30 by python-jose 3.3.0 (the library before PyJWT) with this
+# module's test secret: sub "7", exp 2099-01-01, sid "jose-fixture-session".
+JOSE_MINTED_TOKEN = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+    "eyJzdWIiOiI3IiwiZW1haWwiOiJ4QHNzbWNhcHN0b25lLmNvbSIsInJvbGUiOiJzdGFmZiIsImZ1bGxfbmFtZSI6IlggVXNlciIs"
+    "ImV4cCI6NDA3MDkwODgwMCwic2lkIjoiam9zZS1maXh0dXJlLXNlc3Npb24ifQ."
+    "LrMHU21DOdkUljGZPKIloixhCqpv-n3TrMrkhT6z-2o"
+)
+
+
+def test_tokens_issued_before_pyjwt_still_decode():
+    """Tokens already in browsers when the backend switched libraries must
+    keep working, so the switch signs nobody out."""
+    payload = auth_utils.decode_access_token(JOSE_MINTED_TOKEN)
+    assert (payload.user_id, payload.email, payload.role, payload.full_name, payload.session_id) == (
+        7, "x@ssmcapstone.com", "staff", "X User", "jose-fixture-session"
+    )
+
+
+def test_unsigned_token_is_rejected():
+    """alg=none must never pass, whatever the library."""
+    unsigned = jwt.encode({"sub": "1", "email": "x@ssmcapstone.com", "role": "admin", "full_name": "X"}, None, algorithm="none")
+    with pytest.raises(auth_utils.JWTError):
+        auth_utils.decode_access_token(unsigned)
+
+
 def test_token_exp_defaults_to_eight_hours(monkeypatch):
     monkeypatch.delenv("JWT_EXPIRY_HOURS", raising=False)
     before = datetime.now(timezone.utc)
     token = auth_utils.create_access_token(
         user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
     )
-    exp = datetime.fromtimestamp(jwt.get_unverified_claims(token)["exp"], tz=timezone.utc)
+    exp = datetime.fromtimestamp(_unverified_claims(token)["exp"], tz=timezone.utc)
     assert timedelta(hours=7, minutes=59) < (exp - before) < timedelta(hours=8, minutes=1)
 
 
@@ -215,7 +246,7 @@ def test_token_exp_honors_custom_hours(monkeypatch):
     token = auth_utils.create_access_token(
         user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
     )
-    exp = datetime.fromtimestamp(jwt.get_unverified_claims(token)["exp"], tz=timezone.utc)
+    exp = datetime.fromtimestamp(_unverified_claims(token)["exp"], tz=timezone.utc)
     assert timedelta(hours=1, minutes=59) < (exp - before) < timedelta(hours=2, minutes=1)
 
 
@@ -223,7 +254,7 @@ def test_decode_tampered_signature_raises(monkeypatch):
     token = auth_utils.create_access_token(
         user_id=1, email="x@ssmcapstone.com", role="staff", full_name="X User"
     )
-    monkeypatch.setenv("JWT_SECRET_KEY", "a-different-secret")
+    monkeypatch.setenv("JWT_SECRET_KEY", "a-different-secret-at-least-32-bytes-long")
     with pytest.raises(auth_utils.JWTError):
         auth_utils.decode_access_token(token)
 
@@ -506,10 +537,62 @@ def test_fifth_wrong_password_locks_the_email(client, fake_session):
     assert locked.status_code == 429
     assert locked.json()["detail"] == "Too many failed sign-in attempts. Try again in 15 minutes."
     assert locked.headers["Retry-After"] == "900"
-    # The lock is on the record for admins, under the email that was tried.
+    # Each failure is on the record under the email's digest, then the lock
+    # under the email that was tried.
+    digest = "sha256:" + hashlib.sha256(b"admin@ssmcapstone.com").hexdigest()
     assert [(a["action"], a["user_email"]) for a in fake_session.audit] == [
-        ("Sign-in Locked", "admin@ssmcapstone.com")
+        ("Sign-in Failed", digest)
+    ] * MAX_FAILURES_PER_EMAIL + [("Sign-in Locked", "admin@ssmcapstone.com")]
+
+
+# --- failed sign-ins in the audit log (2026-09-30) ---------------------------
+
+def test_failed_sign_in_is_logged_as_an_email_digest_and_ip(client, fake_session):
+    assert client.post("/auth/login", json={"email": "Admin@SSMcapstone.com", "password": "wrong-password"}).status_code == 401
+    assert client.post("/auth/login", json=BAD).status_code == 401
+    rows = [a for a in fake_session.audit if a["action"] == "Sign-in Failed"]
+    assert len(rows) == 2
+    digest = "sha256:" + hashlib.sha256(b"admin@ssmcapstone.com").hexdigest()
+    assert {r["user_email"] for r in rows} == {digest}  # case and spaces don't split the count
+    assert rows[-1]["details"] == "Wrong email or password from testclient"
+    assert (rows[-1]["user_name"], rows[-1]["role"]) == (None, None)
+    for row in rows:
+        values = " ".join(str(v) for v in row.values())
+        assert "wrong-password" not in values
+        assert "admin@ssmcapstone.com" not in values.lower()
+
+
+def test_unknown_email_is_logged_the_same_way(client, fake_session):
+    """Same entry whether or not the account exists, so the log can't be used
+    to tell them apart either."""
+    client.post("/auth/login", json={"email": "nobody@ssmcapstone.com", "password": "whatever123"})
+    [row] = fake_session.audit
+    assert row["action"] == "Sign-in Failed"
+    assert row["user_email"] == "sha256:" + hashlib.sha256(b"nobody@ssmcapstone.com").hexdigest()
+    assert row["details"] == "Wrong email or password from testclient"
+
+
+def test_successful_sign_in_logs_no_failure(client, fake_session):
+    assert client.post("/auth/login", json=GOOD).status_code == 200
+    assert [a for a in fake_session.audit if a["action"].startswith("Sign-in")] == []
+
+
+def test_failed_sign_in_logging_is_capped(client, fake_session, monkeypatch):
+    """A flood from many addresses must not fill the table: past the cap one
+    'paused' entry is written, then nothing until the window ends. The
+    limiter still counts every failure."""
+    monkeypatch.setattr(auth_router, "failure_log_budget", FailureLogBudget(limit=2))
+    for n in range(4):
+        assert client.post("/auth/login", json={"email": f"g{n}@ssmcapstone.com", "password": "x" * 8}).status_code == 401
+    assert [a["action"] for a in fake_session.audit] == [
+        "Sign-in Failed", "Sign-in Failed", "Sign-in Failure Logging Paused",
     ]
+    paused = fake_session.audit[-1]
+    assert paused["user_email"] == "system"
+    assert paused["details"] == (
+        "2 failed sign-ins logged in this 15-minute window; "
+        "later ones still count toward locks but are not logged until it ends"
+    )
 
 
 def test_correct_password_is_refused_while_locked(client, fake_session):
@@ -552,3 +635,40 @@ def test_lock_on_one_email_does_not_block_another(client, fake_users):
         client.post("/auth/login", json=BAD)
     resp = client.post("/auth/login", json={"email": "staff@ssmcapstone.com", "password": "staff-password-1"})
     assert resp.status_code == 200
+
+
+def _lock_rows(fake_session):
+    return [a for a in fake_session.audit if a["action"] == "Sign-in Locked"]
+
+
+def test_lock_entry_names_the_per_email_limit(client, fake_session):
+    for _ in range(MAX_FAILURES_PER_EMAIL):
+        client.post("/auth/login", json=BAD)
+    [row] = _lock_rows(fake_session)
+    assert row["details"] == (
+        "admin@ssmcapstone.com locked for 15 minutes: per-email limit "
+        "(5 failed sign-ins within 15 minutes). Last attempt: admin@ssmcapstone.com from testclient"
+    )
+
+
+def test_lock_entry_names_the_per_ip_limit(client, fake_session):
+    """Four guesses on each of five emails never trips the per-email limit;
+    the 20th failure from the one address trips the per-IP limit, and the
+    entry must say so instead of blaming the last email."""
+    for n in range(MAX_FAILURES_PER_IP // (MAX_FAILURES_PER_EMAIL - 1)):
+        for _ in range(MAX_FAILURES_PER_EMAIL - 1):
+            client.post("/auth/login", json={"email": f"guess{n}@ssmcapstone.com", "password": "wrong-password"})
+    [row] = _lock_rows(fake_session)
+    assert row["details"] == (
+        "testclient locked for 15 minutes: per-IP limit "
+        "(20 failed sign-ins within 15 minutes). Last attempt: guess4@ssmcapstone.com from testclient"
+    )
+
+
+def test_lock_entry_names_both_limits_when_one_failure_trips_both():
+    lock = auth_router.Lock(900, ("email", "ip"))
+    assert auth_router._lockout_details("a@x.com", "203.0.113.9", lock) == (
+        "a@x.com and 203.0.113.9 locked for 15 minutes: per-email limit (5 failed sign-ins within "
+        "15 minutes) and per-IP limit (20 failed sign-ins within 15 minutes). "
+        "Last attempt: a@x.com from 203.0.113.9"
+    )

@@ -31,6 +31,9 @@ ALLOWLIST = {
         "either method blocks the delete, so it must not filter",
     "scripts/smoke_api.py":
         "HTTP-only route driver, issues no SQL — names the table in its docstring only",
+    "scripts/rehearse_fills.py":
+        "whole-table md5 fingerprint, scratch vs public, proving the fill step left the table untouched — "
+        "rows of either method must be compared, so it must not filter",
 }
 
 # The real query sites, with the predicate each must carry. Keeps the test from

@@ -568,9 +568,10 @@ CREATE TABLE IF NOT EXISTS sku_segment (
 CREATE INDEX IF NOT EXISTS ix_sku_segment_scheme_bin ON sku_segment (scheme, bin);
 CREATE INDEX IF NOT EXISTS ix_sku_traits_cohort ON sku_traits (cohort_period, principal);
 
--- Category A only (MAPE < 20% gate, per README pipeline diagram) -
--- Unilever SKU grain, since SARIMA per DEC-03 only runs where real
--- per-SKU demand exists.
+-- Tier A, Unilever SKU grain (DEC-03: real per-SKU demand exists only
+-- there). The LP's candidate gate is mase < analytics.params.MASE_GATE
+-- (scripts/run_lp.py CANDIDATE_QUERY), not mape; the MAPE < 20% gate and
+-- SARIMA are both retired (DEC-25, DEC-26).
 CREATE TABLE IF NOT EXISTS Forecast_Result (
     forecast_key      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     product_key         BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
@@ -580,8 +581,8 @@ CREATE TABLE IF NOT EXISTS Forecast_Result (
     confidence_upper          NUMERIC(14,2),
     mape                        NUMERIC(10,3),       -- PERCENT, not a 0-1 fraction (e.g. 20.0 means 20%,
                                                        -- matching scripts/run_sarima.py's *100 conversion
-                                                       -- before insert) - must be < 20.0 to gate into
-                                                       -- LP_Recommendation. A `>= 0.20` comparison anywhere
+                                                       -- before insert). Reported, never a gate (the LP gates
+                                                       -- on mase). A `>= 0.20` comparison anywhere
                                                        -- against this column is wrong by a factor of 100.
                                                        -- (Live precision confirmed NUMERIC(10,3), not the
                                                        -- (6,3) this comment said until 2026-08 remediation.)
@@ -601,15 +602,18 @@ CREATE TABLE IF NOT EXISTS Forecast_Result (
 
 CREATE INDEX IF NOT EXISTS ix_forecast_result_product ON Forecast_Result (product_key);
 
--- SS_i = Z x sigma_di (Z=1.28, 90% service level); ROP_i = Y_hat_(t+1,i) + SS_i;
--- Q_i from LP minimizing Z = w1*TC - w2*SL + w3*SC (w1=.45, w2=.35, w3=.20).
+-- SS_i = Z x sigma (Z=1.28, 90% service level) over review + lead days;
+-- rop_i holds the order-up-to TARGET stock T_i = weekly forecast x (review +
+-- lead days) / 5 + SS_i (scripts/run_lp.py, since 2026-09-29), not a reorder
+-- point; the column keeps its old name. Q_i from the LP (analytics/
+-- optimization/lp.py; weights analytics.params.LP_WEIGHTS).
 -- status supports the dashboard's Accept/Dismiss write-back (README Phase 7).
 CREATE TABLE IF NOT EXISTS LP_Recommendation (
     recommendation_key      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     product_key                BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
     planning_cycle_date          DATE NOT NULL,
     q_i                             NUMERIC(14,2) NOT NULL,   -- recommended order quantity
-    rop_i                             NUMERIC(14,2) NOT NULL, -- reorder point
+    rop_i                             NUMERIC(14,2) NOT NULL, -- target stock T_i (order-up-to), not a reorder point
     ss_i                                NUMERIC(14,2) NOT NULL, -- safety stock
     status                                TEXT NOT NULL DEFAULT 'pending'
                                               CHECK (status IN ('pending', 'accepted', 'dismissed')),

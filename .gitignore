@@ -120,3 +120,7 @@ reports/gap_audit_raw.txt
 
 # Dev viewer build inputs, copied from reports/preview/ at build time; the HTML embeds the data
 tools/dsd_dev_viewer/data/
+
+# Layout-guard drills (2026-09-30): reformatted COPIES of real client files,
+# loaded only into a scratch schema - same never-committed class as data/raw/.
+drills/

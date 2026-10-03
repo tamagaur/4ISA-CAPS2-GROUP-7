@@ -55,6 +55,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from analytics.params import XYZ_CV_HIGH, XYZ_CV_LOW
 from analytics.segmentation.orchestrate_segment import SCHEME_BUILDERS
 from backend.data_mode import (
     PREVIEW,
@@ -62,6 +63,7 @@ from backend.data_mode import (
     get_data_mode,
     placeholder_window,
     preview_block,
+    observed_periods,
     series_traits,
 )
 from backend.deps import TokenPayload, get_db
@@ -78,8 +80,10 @@ from backend.schemas.segment import (
 
 router = APIRouter(prefix="/segment", tags=["segment"])
 
-CV_BAND_MEDIUM = 0.5  # cv below this -> 'low'
-CV_BAND_HIGH = 1.0  # cv at or above this -> 'high'
+# sku_traits.cv's bands: the same XYZ cut-offs as the volatility_v1 bins
+# (analytics/segmentation/bins.py), from analytics.params.
+CV_BAND_MEDIUM = XYZ_CV_LOW  # cv below this -> 'low'
+CV_BAND_HIGH = XYZ_CV_HIGH  # cv at or above this -> 'high'
 
 
 def cv_band(cv: float | None) -> str | None:
@@ -162,7 +166,8 @@ def get_segment(
     if window:
         cohort_period = traits_row["cohort_period"]
         matrices, periods = demand_matrix(db, [product_key], window["start"], cohort_period, PREVIEW)
-        traits_row = {**traits_row, **series_traits(matrices[product_key], periods)}
+        observed = observed_periods(db, window["start"], cohort_period, PREVIEW)
+        traits_row = {**traits_row, **series_traits(matrices[product_key], periods, observed)}
         recomputed = SimpleNamespace(stability_group=traits_row["stability_group"], tier_a_periods=None, **{
             k: traits_row[k] for k in ("history_months", "trend", "trend_pvalue", "trend_slope", "cv")
         })

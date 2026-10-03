@@ -50,11 +50,13 @@ from analytics.etl.extract._shared import (
     select_source_files,
     write_staging_table,
 )
+from analytics.etl import slice_validation as sv
+from analytics.etl.extract import layout as lay
 from analytics.etl.extract.sales_return import KNOWN_DUPLICATES
 from analytics.etl.load import check_signoff_gate, load_to_supabase
 from analytics.etl.transform import DEFAULT_CONFIG_DIR, FAKE_BOOKING_SHEET, apply_column_map
 from analytics.etl.transform_signoff import compute_manifest_fingerprint
-from profiling.profile_files import infer_doc_type, infer_period
+from profiling.profile_files import infer_period
 from scripts import run_canonical_load as rcl
 
 RAW_DIR = REPO_ROOT / "data" / "raw"
@@ -101,7 +103,8 @@ FAMILY_ORDER = {f.key: i for i, f in enumerate(FAMILIES)}
 ITEMS = {(i.fact, i.principal): i for i in rcl.FACT_PLAN}
 
 # principal x table -> the branches a complete month has (coverage 'partial' when one is missing).
-# Unilever has no sales/sell-out/purchase/return source (DEC-29 "not applicable - never fill").
+# Unilever purchases/returns and Del Monte product sales have no SSM source; their months are filled by the
+# DEC-31 fill step (scripts/fill_missing.py) and tracked here as derived / synthetic / missing.
 COVERAGE = {
     ("delmonte", "sales_fact"): SITES,
     ("delmonte", "purchase_fact"): SITES,
@@ -110,7 +113,14 @@ COVERAGE = {
     ("delmonte", "inventory_fact"): SITES,
     ("unilever", "unilever_sku_demand_fact"): ("la_union",),
     ("unilever", "inventory_fact"): (),
+    ("unilever", "purchase_fact"): (),
+    ("unilever", "salesreturn_fact"): (),
+    ("delmonte", "sku_demand_fill"): (),
 }
+# A (principal, fact table) whose months the fill step estimates in a table of its own: when real rows for the
+# month load, the estimate goes in the same transaction (DEC-31: real data wins).
+DERIVED_FOR = {("unilever", "purchase_fact"): "derived_receipt_fact"}
+NO_SITE_TABLES = {"sku_demand_fill"}  # no region column: a fill-only table, never real rows
 
 
 @dataclass(frozen=True)
@@ -179,10 +189,23 @@ def parse_spec(spec: str) -> Slice:
 
 
 @lru_cache(maxsize=None)
-def lineage(src_file: str, src_sheet: str) -> tuple[str, str]:
-    """(workbook month, branch) of a stored row, by the extract's own inference."""
+def _path_lineage(src_file: str, src_sheet: str) -> tuple[str, str]:
     path = REPO_ROOT / (src_file or "")
     return infer_sheet_period(path, src_sheet or ""), infer_sheet_region(path, src_sheet or "")
+
+
+# repo-relative path -> month, for a file whose path names no month and whose
+# invoice dates gave one (layout guard; filled by layout_of()).
+CONTENT_MONTHS: dict[str, str] = {}
+
+
+def lineage(src_file: str, src_sheet: str) -> tuple[str, str]:
+    """(workbook month, branch) of a stored row, by the extract's own
+    inference; a file whose path names no month takes its invoice dates' month."""
+    month, site = _path_lineage(src_file, src_sheet)
+    if month == "unknown":
+        month = CONTENT_MONTHS.get(src_file or "", month)
+    return month, site
 
 
 def _matches(month: str, site: str | None, sl: Slice) -> bool:
@@ -201,48 +224,127 @@ def rmr_roles() -> list[str]:
 
 # --- discovery + extract ----------------------------------------------------------------------------------------
 
+# Layout guard (2026-09-30): what a file is comes from its content
+# (analytics/etl/extract/layout.py - sheet names + the required headers of
+# config/column_maps/*.yaml); the file name is a hint only. A file that cannot
+# be identified, or has no month, is refused with an event - never skipped,
+# never matched to every slice, never replaced by another file.
+LAYOUT_CACHE = SLICE_STAGING / "_layout_cache.json"
+_layout_cache: dict | None = None
+SOH_FILE_FAMILY = "ssis_summary"   # the SSIS workbook family the ssis_soh slices read
+
+
+@dataclass(frozen=True)
+class Problem:
+    """Why a file cannot load: an etl_load_event reason code and its detail."""
+    file: str
+    reason: str
+    detail: str
+
+
+def layout_of(path: Path) -> lay.FileLayout:
+    """layout.identify() through a cache (staging_slices/_layout_cache.json)
+    keyed by the file's size and mtime and by the signature config's
+    fingerprint - a cold run reads every file's header rows (~1 minute)."""
+    global _layout_cache
+    if _layout_cache is None:
+        fp = lay.config_fingerprint()
+        try:
+            _layout_cache = json.loads(LAYOUT_CACHE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _layout_cache = {}
+        if _layout_cache.get("config") != fp:
+            _layout_cache = {"config": fp, "files": {}}
+    rel = path.resolve().relative_to(REPO_ROOT).as_posix()
+    st = path.stat()
+    key = f"{rel}|{st.st_size}|{st.st_mtime_ns}"
+    hit = _layout_cache["files"].get(key)
+    fl = lay.from_json(path, hit) if hit else lay.identify(path)
+    if not hit:
+        _layout_cache["files"][key] = lay.to_json(fl)
+        LAYOUT_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        LAYOUT_CACHE.write_text(json.dumps(_layout_cache), encoding="utf-8")
+    if fl.month_source == "invoice_dates":
+        CONTENT_MONTHS[rel] = fl.month
+    return fl
+
+
+def discover() -> dict[Path, lay.FileLayout]:
+    """Every real raw file (never data/raw/Synthetic Data), identified by content."""
+    return {f: layout_of(f) for f in select_source_files(RAW_DIR) if SYNTHETIC_DIR not in f.parents}
+
+
 def family_files(fam: Family) -> list[Path]:
-    """Real raw files of a family (Synthetic Data never; the byte-identical
+    """Real raw files whose content is this family (the byte-identical
     April-2023 sales-return copy never - its rows are recorded by
     run_canonical_load.known_duplicate_file_records instead)."""
-    files = [f for f in select_source_files(RAW_DIR) if SYNTHETIC_DIR not in f.parents and infer_doc_type(f) == fam.key]
+    files = [f for f, fl in discover().items() if fl.ok and fl.family == fam.key]
     if fam.key == "sales_return":
         files = [f for f in files if f.name not in KNOWN_DUPLICATES]
     return files
 
 
 def file_month(path: Path) -> str | None:
-    return infer_period(path)
+    """The path's month, else the invoice dates' (layout.identify). None for a
+    file whose rows carry their own month (unilever_sku) or that has none."""
+    return layout_of(path).month
 
 
-def extract_files(files: list[Path], doc_type: str, staging: Path, done: set[Path]) -> list[str]:
+def slice_files(pool: list[Path], fam: Family, month: str) -> list[Path]:
+    """The pool's files for one month. A file with no month is never matched to
+    a slice, except a family whose rows carry their own month."""
+    per_row = fam.key in lay.PER_ROW_MONTH_FAMILIES
+    return [f for f in pool if file_month(f) == month or (per_row and layout_of(f).month_source == "rows")]
+
+
+def _file_family(fl: lay.FileLayout) -> str:
+    fam = fl.family or fl.hint
+    return "ssis_soh" if fam == SOH_FILE_FAMILY else fam
+
+
+def bad_files_for(fam: Family, month: str) -> list[tuple[Path, lay.FileLayout]]:
+    """Discovered files of this family (by content, or by name when content
+    could not say) and month that could not be identified cleanly."""
+    return [(f, fl) for f, fl in discover().items()
+            if not fl.ok and _file_family(fl) == fam.key and (fl.month or infer_period(f)) == month]
+
+
+def extract_files(files: list[Path], doc_type: str, staging: Path, done: set[Path]) -> list[Problem]:
     """Stage each file once (process_file + write_staging_table, the same two
-    calls the full extract driver makes). Returns layout problems."""
+    calls the full extract driver makes), header rows from the file's verified
+    layout. Returns problems: layout (a sheet could not be read as this family)
+    and totals (a sheet's own totals row disagrees with the sum of its rows and
+    the file is not on config/checksum_allowlist.yaml)."""
     problems = []
     for f in files:
         if f in done:
             continue
         done.add(f)
-        res = process_file(f, doc_type)
+        res = process_file(f, doc_type, layout=layout_of(f))
         if res.file_reject is not None:
-            problems.append(f"{f.name}: {res.file_reject.reason}")
+            problems.append(Problem(f.name, "layout_changed", res.file_reject.reason))
             continue
         if not res.dfs:
-            problems.append(f"{f.name}: no sheet could be staged")
+            problems.append(Problem(f.name, "layout_changed", "no sheet could be staged"))
             continue
+        for o in res.outcomes:
+            if o.checksum_status == "mismatch" and sv.checksum_allowed(f, o.src_sheet) is None:
+                problems.append(Problem(f.name, "validation_failed", (
+                    f"sheet {o.src_sheet!r}: its totals row says {o.checksum_column} = {o.checksum_expected:,.2f}, "
+                    f"its rows sum to {o.checksum_got:,.2f} (not on config/checksum_allowlist.yaml)")))
         for df, outcome in res.dfs:
             write_staging_table(df, outcome.doc_type, outcome.src_file, outcome.src_sheet, staging)
     return problems
 
 
-def extract_soh(staging: Path, months: set[str] | None) -> list[str]:
+def extract_soh(staging: Path, months: set[str] | None) -> list[Problem]:
     """SOH is extracted across every SSIS workbook at once (rule R2 keeps the
     first file per snapshot date, ssis_soh.py), then filtered: per month under
     _soh_<month>/ssis_soh, and every snapshot under _soh_all/ssis_soh for the
     dimension rules. months=None (full rebuild) stages everything under
     ssis_soh directly."""
     from analytics.etl.extract.ssis_soh import parse_ssis_soh
-    result = parse_ssis_soh()
+    result = parse_ssis_soh(files=[f for f, fl in discover().items() if (fl.family or fl.hint) == SOH_FILE_FAMILY])
     for df, rel, sheet_name, _snapshot in result.dfs:
         if months is None:
             write_staging_table(df, "ssis_soh", rel, sheet_name, staging)
@@ -251,7 +353,7 @@ def extract_soh(staging: Path, months: set[str] | None) -> list[str]:
         period = str(df["_period"].iloc[0]) if len(df) else None
         if period in months:
             write_staging_table(df, "ssis_soh", rel, sheet_name, staging / f"_soh_{period}")
-    return [f"{Path(r.src_file).name}: {r.reason}" for r in result.file_rejects]
+    return [Problem(Path(r.src_file).name, "layout_changed", r.reason) for r in result.file_rejects]
 
 
 def read_staged(staging: Path, doc_type: str) -> pd.DataFrame:
@@ -273,7 +375,7 @@ def stage_sales_reference(staging: Path, input_files: list[Path]) -> frozenset:
     if len(april) != 1:
         raise RuntimeError(f"expected one {KEPT_COPY_MONTH} sales workbook for the '{FAKE_BOOKING_SHEET}' reference, found {len(april)}")
     pairs = set()
-    for df, outcome in process_file(april[0], "sales_register").dfs:
+    for df, outcome in process_file(april[0], "sales_register", layout=layout_of(april[0])).dfs:
         if outcome.src_sheet == FAKE_BOOKING_SHEET:
             write_staging_table(df, outcome.doc_type, outcome.src_file, outcome.src_sheet, staging)
             pairs.add((outcome.src_file, outcome.src_sheet))
@@ -287,7 +389,7 @@ def stage_price_list(staging: Path) -> Path:
     inv = next(f for f in FAMILIES if f.key == "inventory_sign_off")
     for f in family_files(inv):
         if (file_month(f) or "").startswith("2025"):
-            for df, outcome in process_file(f, "inventory_sign_off").dfs:
+            for df, outcome in process_file(f, "inventory_sign_off", layout=layout_of(f)).dfs:
                 if outcome.src_sheet == rcl.DM_PRICE_LIST_SHEET:
                     write_staging_table(df, outcome.doc_type, outcome.src_file, outcome.src_sheet, out)
     return out
@@ -300,7 +402,8 @@ def frame_hash(df: pd.DataFrame) -> str:
     return hashlib.sha256(pd.util.hash_pandas_object(df, index=False).values.tobytes()).hexdigest()
 
 
-def build_manifest(run_key: str, staging: Path, slices: list[str], references: frozenset, problems: list[str]) -> dict:
+def build_manifest(run_key: str, staging: Path, slices: list[str], references: frozenset,
+                   problems: list[Problem]) -> dict:
     """Every staged sheet the run read, with row count and content hash, in
     the {"staged": [...], "reject": [...]} shape transform_signoff reads."""
     staged = []
@@ -314,9 +417,21 @@ def build_manifest(run_key: str, staging: Path, slices: list[str], references: f
             "region": first.get("_region") if len(df) else None, "row_count": int(len(df)),
             "content_sha256": frame_hash(df), "checksum_status": "promoted",
             "reason": "reference only - read, not loaded" if pair in references else None,
+            "header_row": int(first.get("_header_row")) if len(df) else None,
+            "totals_check": _totals_check(first) if len(df) else None,
         })
-    reject = [{"src_file": p.split(":")[0], "src_sheet": None, "checksum_status": "blocked", "reason": p} for p in problems]
+    reject = [{"src_file": p.file, "src_sheet": None, "checksum_status": "blocked", "reason": f"{p.reason}: {p.detail}"}
+              for p in problems]
     return {"run_key": run_key, "slices": sorted(slices), "staged": staged, "reject": reject, "quantity_issues": {}}
+
+
+def _totals_check(first) -> str | None:
+    """The extract's totals-row verdict for the reviewer: pass / mismatch /
+    unverified, or allowlisted (a recorded source problem)."""
+    status = first.get("_checksum_status")
+    if status == "mismatch" and sv.checksum_allowed(REPO_ROOT / first["_src_file"], first["_src_sheet"]):
+        return "allowlisted"
+    return status
 
 
 def unsigned_reason(transform_dir: Path) -> str | None:
@@ -513,6 +628,15 @@ def synthetic_where(fam: Family) -> str:
     return f"is_demo AND principal = '{fam.principal}' AND _period = :m"
 
 
+def remove_derived(conn: Connection, principal: str, table: str, month: str) -> int:
+    """DEC-31: real rows for a month replace that month's estimate (derived_receipt_fact for Unilever purchases).
+    No-op for a table with no estimate, or a schema without migration 0038."""
+    dt = DERIVED_FOR.get((principal, table))
+    if dt is None or conn.execute(text("SELECT to_regclass(:t)"), {"t": dt}).scalar() is None:
+        return 0
+    return conn.execute(text(f"DELETE FROM {dt} WHERE principal = :p AND _period = :m"), {"p": principal, "m": month}).rowcount
+
+
 def _quarantine_where(table: str, ordinals: list[int] | None) -> str:
     w = "table_name = :qt AND _src_file || chr(31) || _src_sheet = ANY(CAST(:qpairs AS text[]))"
     return w + (" AND _row_ordinal = ANY(CAST(:qords AS bigint[]))" if ordinals is not None else "")
@@ -601,9 +725,11 @@ def would_shrink(before: int, after: int) -> bool:
     return before > 0 and after < SHRINK_FLOOR * before
 
 
-def coverage_status(real: int, synthetic: int, real_sites: set, expected: tuple) -> str:
+def coverage_status(real: int, synthetic: int, real_sites: set, expected: tuple, derived: int = 0) -> str:
     if real:
         return "partial" if expected and not set(expected) <= set(real_sites) else "real"
+    if derived:
+        return "derived"
     return "synthetic" if synthetic else "missing"
 
 
@@ -623,8 +749,15 @@ def coverage_rows(conn: Connection, principal: str, table: str, months: set[str]
     counts: dict[str, list[int]] = {}
     for m, demo, n in conn.execute(text(f"SELECT {mcol}, is_demo, count(*) FROM {table} WHERE {pcond}{mfilter} GROUP BY 1, 2"), params):
         counts.setdefault(m, [0, 0])[1 if demo else 0] += n
+    derived: dict[str, int] = {}
+    if (principal, table) in DERIVED_FOR:
+        dt = DERIVED_FOR[(principal, table)]
+        derived = dict(conn.execute(text(f"SELECT _period, count(*) FROM {dt} WHERE principal = :p{mfilter.replace(mcol, '_period')} "
+                                         f"GROUP BY 1"), params).all())
     sites: dict[str, set] = {}
-    if table == "sales_fact":
+    if table in NO_SITE_TABLES:
+        pass
+    elif table == "sales_fact":
         q = f"SELECT {mcol}, _src_file, _src_sheet FROM sales_fact WHERE NOT is_demo AND {pcond}{mfilter} GROUP BY 1, 2, 3"
         for m, f, s in conn.execute(text(q), params):
             sites.setdefault(m, set()).add(lineage(f, s)[1])
@@ -640,36 +773,44 @@ def coverage_rows(conn: Connection, principal: str, table: str, months: set[str]
             continue
         real, demo = counts.get(m, [0, 0])
         real_sites = sorted(sites.get(m, set()))
-        status = coverage_status(real, demo, set(real_sites), expected)
+        status = coverage_status(real, demo, set(real_sites), expected, derived.get(m, 0))
         out.append({"principal": principal, "table_name": table, "month": m, "status": status, "real_rows": real,
-                    "synthetic_rows": demo, "real_sites": real_sites, "expected_sites": list(expected)})
+                    "synthetic_rows": demo, "derived_rows": derived.get(m, 0), "real_sites": real_sites,
+                    "expected_sites": list(expected)})
     return out
 
 
-def upsert_coverage(conn: Connection, rows: list[dict], event_key: int | None) -> None:
+def upsert_coverage(conn: Connection, rows: list[dict], event_key: int | None, only_changed: bool = False) -> int:
     """One statement for any number of months (a row-by-row executemany costs one
-    pooler round trip per month)."""
+    pooler round trip per month). only_changed: leave a row whose counts and
+    status are already the same untouched (the fill step's no-op run writes nothing).
+    Returns the number of rows written."""
     if not rows:
-        return
+        return 0
     col = lambda k: [r[k] for r in rows]  # noqa: E731
-    conn.execute(text("""
-        INSERT INTO etl_coverage (principal, table_name, month, status, real_rows, synthetic_rows, real_sites,
+    changed_only = ("WHERE (etl_coverage.status, etl_coverage.real_rows, etl_coverage.synthetic_rows, etl_coverage.derived_rows, "
+                    "etl_coverage.real_sites, etl_coverage.expected_sites) IS DISTINCT FROM (EXCLUDED.status, EXCLUDED.real_rows, "
+                    "EXCLUDED.synthetic_rows, EXCLUDED.derived_rows, EXCLUDED.real_sites, EXCLUDED.expected_sites)") if only_changed else ""
+    return conn.execute(text(f"""
+        INSERT INTO etl_coverage (principal, table_name, month, status, real_rows, synthetic_rows, derived_rows, real_sites,
                                   expected_sites, last_load_event_key, refreshed_at)
-        SELECT v.principal, v.table_name, v.month, v.status, v.real_rows, v.synthetic_rows,
+        SELECT v.principal, v.table_name, v.month, v.status, v.real_rows, v.synthetic_rows, v.derived_rows,
                string_to_array(v.real_sites, chr(31)), string_to_array(v.expected_sites, chr(31)), CAST(:event_key AS bigint), now()
         FROM unnest(CAST(:principal AS text[]), CAST(:table_name AS text[]), CAST(:month AS text[]), CAST(:status AS text[]),
-                    CAST(:real_rows AS int[]), CAST(:synthetic_rows AS int[]), CAST(:real_sites AS text[]),
+                    CAST(:real_rows AS int[]), CAST(:synthetic_rows AS int[]), CAST(:derived_rows AS int[]), CAST(:real_sites AS text[]),
                     CAST(:expected_sites AS text[]))
-             AS v(principal, table_name, month, status, real_rows, synthetic_rows, real_sites, expected_sites)
+             AS v(principal, table_name, month, status, real_rows, synthetic_rows, derived_rows, real_sites, expected_sites)
         ON CONFLICT (principal, table_name, month) DO UPDATE SET
             status = EXCLUDED.status, real_rows = EXCLUDED.real_rows, synthetic_rows = EXCLUDED.synthetic_rows,
-            real_sites = EXCLUDED.real_sites, expected_sites = EXCLUDED.expected_sites,
+            derived_rows = EXCLUDED.derived_rows, real_sites = EXCLUDED.real_sites, expected_sites = EXCLUDED.expected_sites,
             last_load_event_key = COALESCE(EXCLUDED.last_load_event_key, etl_coverage.last_load_event_key),
             refreshed_at = now()
+        {changed_only}
     """), {"principal": col("principal"), "table_name": col("table_name"), "month": col("month"), "status": col("status"),
            "real_rows": col("real_rows"), "synthetic_rows": col("synthetic_rows"),
+           "derived_rows": [r.get("derived_rows", 0) for r in rows],
            "real_sites": [SEP.join(r["real_sites"]) for r in rows], "expected_sites": [SEP.join(r["expected_sites"]) for r in rows],
-           "event_key": event_key})
+           "event_key": event_key}).rowcount
 
 
 def refresh_all_coverage(conn: Connection) -> dict[str, int]:
@@ -734,6 +875,50 @@ def record_standalone(ctx: RunContext, ev: dict) -> None:
         ctx.events.append(ev)
 
 
+def record_file_event(ctx: RunContext, path: Path, fl: lay.FileLayout) -> dict:
+    """A file the loader cannot place in a slice - unrecognised content, a
+    layout the family's signature refuses, or no month - refused on its own
+    (slice 'file:<name>'; principal / table / month only where the file says
+    them). Never a silent skip."""
+    fam = next((f for f in FAMILIES if f.key == _file_family(fl)), None)
+    month = fl.month or infer_period(path)
+    ev = {
+        "run_id": ctx.run_id, "slice": f"file:{path.name}", "principal": fam.principal if fam else None,
+        "table_name": fam.table if fam else None, "month": month if fam else None, "site": None,
+        "source": fl.family or fl.hint, "status": "refused", "reason": fl.reason, "detail": (fl.problem or "")[:500],
+        "files": [path.name], "real_rows_before": 0, "real_rows_removed": 0, "real_rows_added": 0,
+        "real_rows_after": 0, "synthetic_rows_removed": 0, "quarantine_rows_removed": 0, "quarantine_rows_added": 0,
+        "allow_shrink": ctx.allow_shrink, "dry_run": ctx.dry_run, "run_by": ctx.run_by,
+        "started_at": datetime.now(timezone.utc),
+    }
+    print(f"\n--- file {path.name}: refused ({fl.reason}) {fl.problem}")
+    record_standalone(ctx, ev)
+    return ev
+
+
+def _apply_warnings(ev: dict, warns: list[tuple[str, str]]) -> None:
+    """Warnings never block a load; they make it visible. A slice already
+    partial / shrink_allowed keeps that reason and gains the text."""
+    if not warns:
+        return
+    said = "; ".join(d for _, d in warns)
+    if ev["status"] == "loaded":
+        ev.update(status="warning", reason=warns[0][0])
+    ev["detail"] = (((ev["detail"] + " | ") if ev["detail"] else "") + said)[:500]
+
+
+def validate(conn: Connection, sl: Slice, rows: pd.DataFrame) -> list[sv.Finding]:
+    """The pre-delete checks (analytics/etl/slice_validation.py, bands from
+    config/validation_bands.yaml), history read inside the slice's own
+    transaction."""
+    fam = sl.family
+    if rows.empty or fam.key not in sv.MEASURES:
+        return []
+    hist = sv.history(conn, fam.key, lineage=lineage)
+    return sv.validate_rows(fam.key, rows, row_slices(fam, rows), hist,
+                            sku_lookup=lambda m: sv.earlier_skus(conn, fam.key, m))
+
+
 def _bind(sql: str, params: dict) -> dict:
     """Only the parameters a statement names (text() gets exactly its own binds)."""
     return {k: v for k, v in params.items() if re.search(":" + re.escape(k) + r"(?![A-Za-z0-9_])", sql)}
@@ -749,10 +934,15 @@ def _count(conn: Connection, table: str, where: str, params: dict) -> int:
 
 def write_slice(ctx: RunContext, sl: Slice, prep_rows: pd.DataFrame, records: list[dict], prep: Prepared,
                 files: list[str], input_pairs: set, ordinals: list[int] | None,
-                dims: Callable[[Connection], None] | None, refusal: Refused | None = None) -> dict:
-    """One slice, one transaction. Returns its etl_load_event row."""
+                dims: Callable[[Connection], None] | None, refusal: Refused | None = None,
+                warnings: list[tuple[str, str]] | None = None) -> dict:
+    """One slice, one transaction. Returns its etl_load_event row. Everything
+    that can refuse the slice runs before its first DELETE: the shrink guard,
+    then the validation bands. `warnings` ((reason, detail), e.g. a header the
+    column map does not know) make the event a warning, never a refusal."""
     fam, started = sl.family, datetime.now(timezone.utc)
     ev = new_event(ctx, sl, files, started)
+    warns = list(warnings or [])
     if refusal is not None:
         ev.update(status="refused", reason=refusal.reason, detail=refusal.detail[:500])
         record_standalone(ctx, ev)
@@ -778,6 +968,11 @@ def write_slice(ctx: RunContext, sl: Slice, prep_rows: pd.DataFrame, records: li
                     raise Refused("shrink_guard", f"real rows would drop from {before} to {len(rows)} "
                                                   f"(more than {100 - SHRINK_FLOOR * 100:.0f}%); pass --allow-shrink to load anyway")
                 shrink_used = True
+            findings = validate(conn, sl, rows)
+            refuse = [x for x in findings if x.severity == "refuse"]
+            if refuse:
+                raise Refused("validation_failed", "; ".join(f"{x.check}: {x.detail}" for x in refuse))
+            warns += [("validation_warning", f"{x.check}: {x.detail}") for x in findings]
             if ctx.dry_run:
                 ev.update(real_rows_removed=before, real_rows_added=len(rows), real_rows_after=len(rows),
                           synthetic_rows_removed=_count(conn, fam.table, synthetic_where(fam), params) if len(rows) else 0,
@@ -785,6 +980,7 @@ def write_slice(ctx: RunContext, sl: Slice, prep_rows: pd.DataFrame, records: li
                           quarantine_rows_added=len(records), detail="dry run: nothing written")
                 if shrink_used:
                     ev.update(status="warning", reason="shrink_allowed")
+                _apply_warnings(ev, warns)
                 record_standalone(ctx, ev)
                 return ev
 
@@ -796,6 +992,7 @@ def write_slice(ctx: RunContext, sl: Slice, prep_rows: pd.DataFrame, records: li
             ev["real_rows_removed"] = len(gone)
             if len(rows):
                 ev["synthetic_rows_removed"] = _run(conn, f"DELETE FROM {t} WHERE {synthetic_where(fam)}", params).rowcount
+                ev["synthetic_rows_removed"] += remove_derived(conn, fam.principal, fam.table, sl.month)
             q_deleted = _run(conn, f"DELETE FROM etl_quarantine WHERE {qw} RETURNING to_jsonb(etl_quarantine) {QUARANTINE_VOLATILE}",
                              qparams).scalars().all()
             ev["quarantine_rows_removed"] = len(q_deleted)
@@ -847,6 +1044,7 @@ def write_slice(ctx: RunContext, sl: Slice, prep_rows: pd.DataFrame, records: li
                 ev.update(status="partial", reason="partial_month", detail=f"no real rows for branch(es): {', '.join(missing)}")
             elif shrink_used:
                 ev.update(status="warning", reason="shrink_allowed", detail=f"--allow-shrink: real rows {before} -> {after}")
+            _apply_warnings(ev, warns)
             ev["load_event_key"] = insert_event(conn, ev)
             upsert_coverage(conn, cov, ev["load_event_key"])
             write_audit(conn, ev, shrink_used)
@@ -856,6 +1054,7 @@ def write_slice(ctx: RunContext, sl: Slice, prep_rows: pd.DataFrame, records: li
         ev.update(status="loaded", reason=None, detail="unchanged: the files' rows equal the slice's rows; nothing written",
                   real_rows_removed=0, real_rows_added=0, real_rows_after=ev["real_rows_before"],
                   synthetic_rows_removed=0, quarantine_rows_removed=0, quarantine_rows_added=0)
+        _apply_warnings(ev, warns)
     except Refused as r:
         ev.update(status="refused", reason=r.reason, detail=r.detail[:500], real_rows_removed=0, real_rows_added=0,
                   real_rows_after=ev["real_rows_before"], synthetic_rows_removed=0, quarantine_rows_removed=0,
@@ -931,13 +1130,13 @@ def _seed_date_dimension(ctx: RunContext) -> None:
 
 
 def _stage_and_sign(ctx: RunContext, slices: list[Slice], files_by_family: dict[str, list[Path]],
-                    soh_months: set[str] | None, all_slices: bool) -> tuple[str | None, list[str], frozenset]:
+                    soh_months: set[str] | None, all_slices: bool) -> tuple[str | None, list[Problem], frozenset]:
     """Extract every input file, add references, write the manifest. Returns
     (why unsigned or None, layout problems, reference pairs)."""
     shutil.rmtree(ctx.staging, ignore_errors=True)
     ctx.staging.mkdir(parents=True)
     done: set[Path] = set()
-    problems: list[str] = []
+    problems: list[Problem] = []
     for key, files in files_by_family.items():
         problems += extract_files(files, key, ctx.staging, done)
     references = frozenset()
@@ -993,9 +1192,14 @@ def run(engine: Engine, args) -> int:
     for f in overrides:
         if not f.is_file() or REPO_ROOT not in f.parents:
             raise SystemExit(f"--file {f.name}: must be an existing file under the repository")
-    if args.all_slices:
-        return run_full(ctx, overrides)
-    return run_incremental(ctx, [parse_spec(s) for s in args.slice], overrides)
+    code = run_full(ctx, overrides) if args.all_slices else run_incremental(ctx, [parse_spec(s) for s in args.slice], overrides)
+    # DEC-31: the fill step re-runs after every load - after a refused slice too (it fills only cells with no
+    # real rows, and removes fills from cells that have them). Never on a dry run.
+    if not ctx.dry_run and not getattr(args, "no_fill", False):
+        from scripts import fill_missing
+        fill_missing.run_step(engine, ctx.schema, run_by=ctx.run_by, trigger=f"load_slices run_id={run_id}",
+                              allow_public=ctx.target_public)
+    return code
 
 
 def run_incremental(ctx: RunContext, slices: list[Slice], overrides: list[Path]) -> int:
@@ -1004,28 +1208,51 @@ def run_incremental(ctx: RunContext, slices: list[Slice], overrides: list[Path])
     refusals: dict[Slice, Refused] = {}
     files_by_slice: dict[Slice, list[Path]] = {}
     files_by_family: dict[str, list[Path]] = {}
+    # --file: identified by content like any other file. One that cannot be
+    # identified refuses the whole run - loading the on-disk file in its place
+    # would load something other than what was asked for.
+    given = {f: layout_of(f) for f in overrides}
+    bad_given = [(f, fl) for f, fl in given.items() if not fl.ok]
+    attributed: set[Path] = set()
     for sl in slices:
         fam = sl.family
-        if fam.key == "ssis_soh":
-            files_by_slice[sl] = []
+        if bad_given:
+            f, fl = bad_given[0]
+            refusals[sl] = Refused(fl.reason, f"--file {f.name}: {fl.problem} - refusing rather than loading another "
+                                              f"file in its place")
             continue
         if fam.key == "rmr_gs_bo" and sl.month not in rmr_allowed_periods():
             refusals[sl] = Refused("period_not_allowed", f"RMR lines load only for {rmr_allowed_periods()} "
                                                          f"(config/source_of_truth.yaml sales_return.rmr_fallback)")
             continue
-        pool = [f for f in overrides if infer_doc_type(f) == fam.key] or family_files(fam)
-        chosen = [f for f in pool if file_month(f) in (sl.month, None)]
+        mine = [f for f, fl in given.items() if fl.family == fam.key]
+        bad = [] if mine else bad_files_for(fam, sl.month)
+        attributed |= {f for f, _ in bad}
+        if bad:
+            f, fl = bad[0]
+            refusals[sl] = Refused(fl.reason, "; ".join(f"{g.name}: {gl.problem}" for g, gl in bad)[:500])
+            continue
+        if fam.key == "ssis_soh":
+            # SOH is extracted across every SSIS workbook at once; these are the
+            # month's workbooks, for the event and for problem matching.
+            files_by_slice[sl] = [f for f, fl in discover().items()
+                                  if (fl.family or fl.hint) == SOH_FILE_FAMILY and (fl.month or infer_period(f)) == sl.month]
+            continue
+        chosen = slice_files(mine or family_files(fam), fam, sl.month)
         if not chosen:
-            refusals[sl] = Refused("missing_file", f"no {fam.key} file for {sl.month} under data/raw")
+            refusals[sl] = Refused("missing_file", f"no {fam.key} file for {sl.month}"
+                                                   + (" among the --file inputs" if mine else " under data/raw"))
             continue
         files_by_slice[sl] = chosen
         files_by_family.setdefault(fam.key, [])
         files_by_family[fam.key] += [f for f in chosen if f not in files_by_family[fam.key]]
+    for f, fl in list(given.items()) + [(f, fl) for f, fl in discover().items() if f not in given]:
+        if not fl.ok and f not in attributed:
+            record_file_event(ctx, f, fl)
 
     soh_months = {s.month for s in slices if s.family.key == "ssis_soh"}
     unsigned, problems, references = _stage_and_sign(ctx, slices, files_by_family, soh_months, False)
     _seed_date_dimension(ctx)
-    bad_files = {p.split(":")[0] for p in problems}
 
     for sl in slices:
         fam = sl.family
@@ -1033,8 +1260,13 @@ def run_incremental(ctx: RunContext, slices: list[Slice], overrides: list[Path])
         refusal = refusals.get(sl)
         if refusal is None and unsigned and not ctx.dry_run:
             refusal = Refused("fingerprint_unsigned", unsigned)
-        if refusal is None and any(f.name in bad_files for f in files):
-            refusal = Refused("layout_changed", "; ".join(p for p in problems if p.split(":")[0] in {f.name for f in files})[:500])
+        names = {f.name for f in files}
+        mine = sorted((p for p in problems if p.file in names), key=lambda p: p.reason != "layout_changed")
+        if refusal is None and mine:
+            refusal = Refused(mine[0].reason, "; ".join(f"{p.file}: {p.detail}" for p in mine)[:500])
+        # headers no alias or ignored-list knows: loaded, and said so
+        warns = [("unmapped_column", f"{f.name}: header(s) the column map does not know, not loaded: "
+                                     f"{', '.join(layout_of(f).unmapped)}") for f in files if layout_of(f).unmapped]
         print(f"\n--- slice {sl.key} ---")
         if refusal is not None:
             write_slice(ctx, sl, pd.DataFrame(), [], Prepared(pd.DataFrame(), [], []), [str(f) for f in files],
@@ -1091,7 +1323,7 @@ def run_incremental(ctx: RunContext, slices: list[Slice], overrides: list[Path])
                         refusal=Refused("error", f"{stray} prepared row(s) belong to another slice's month/branch"))
             continue
         write_slice(ctx, sl, prep.rows, prep.records, prep, [str(f) for f in files], input_pairs, ordinals,
-                    dims_for(ctx, fam, prep))
+                    dims_for(ctx, fam, prep), warnings=warns)
     return _summary(ctx)
 
 
@@ -1101,10 +1333,17 @@ def run_full(ctx: RunContext, overrides: list[Path]) -> int:
     once after its slices, in their own transaction."""
     ctx.staging = SLICE_STAGING / _run_key([], overrides, True)
     files_by_family = {}
+    given = {f: layout_of(f) for f in overrides}
+    unplaced = [(f, fl) for f, fl in list(given.items()) + list(discover().items()) if not fl.ok]
+    if unplaced:
+        for f, fl in unplaced:
+            record_file_event(ctx, f, fl)
+        print(f"\nrefusing the whole rebuild: {len(unplaced)} file(s) could not be identified - {[f.name for f, _ in unplaced]}")
+        return 1
     for fam in FAMILIES:
         if fam.key == "ssis_soh":
             continue
-        pool = [f for f in overrides if infer_doc_type(f) == fam.key] or family_files(fam)
+        pool = [f for f, fl in given.items() if fl.family == fam.key] or family_files(fam)
         if fam.key == "rmr_gs_bo":
             pool = [f for f in pool if file_month(f) in rmr_allowed_periods()]
         files_by_family[fam.key] = pool
@@ -1113,7 +1352,7 @@ def run_full(ctx: RunContext, overrides: list[Path]) -> int:
         print("\nrefusing the whole rebuild: fingerprint not signed (no slice events are written for an unsigned full rebuild)")
         return 1
     if problems:
-        print(f"\nrefusing the whole rebuild: layout problems {problems}")
+        print(f"\nrefusing the whole rebuild: file problems {[f'{p.file}: {p.reason}: {p.detail}' for p in problems]}")
         return 1
     _seed_date_dimension(ctx)
 

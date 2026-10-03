@@ -34,6 +34,7 @@ import yaml
 
 from analytics.etl._coerce import to_decimal
 from analytics.etl.extract._shared import MM_YYYY_RE
+from analytics.etl.extract.layout import RESERVED_KEYS
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_CONFIG_DIR = REPO_ROOT / "config"
@@ -109,6 +110,9 @@ def load_column_map(doc_type: str, config_dir: Path = DEFAULT_CONFIG_DIR) -> Col
             f"Add config/column_maps/{doc_type}.yaml before transforming this doc_type."
         )
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    # required / sheet_names / ignored are the file's layout signature
+    # (analytics/etl/extract/layout.py), not canonical columns.
+    raw = {k: v for k, v in raw.items() if k not in RESERVED_KEYS}
     return ColumnMap(doc_type=doc_type, canonical_to_raw=raw)
 
 

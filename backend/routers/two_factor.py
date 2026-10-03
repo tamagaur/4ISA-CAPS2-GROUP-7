@@ -60,10 +60,11 @@ def _check_code(db: Session, user: TokenPayload, code: str, client_ip: str) -> s
         raise ApiError(503, mfa.NOT_CONFIGURED, code="mfa_not_configured") from None
     if method is None:
         db.rollback()
-        locked_for = login_limiter.record_failure(user.email, client_ip)
-        if locked_for is not None:
-            _record_lockout(db, user.email, client_ip, locked_for)
-            raise _too_many_attempts(locked_for)
+        # A Lock (length + which limit tripped) since kelvin-etl's limiter change.
+        lock = login_limiter.record_failure(user.email, client_ip)
+        if lock is not None:
+            _record_lockout(db, user.email, client_ip, lock)
+            raise _too_many_attempts(lock.seconds)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=WRONG_CODE)
     return method
 

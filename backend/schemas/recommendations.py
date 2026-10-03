@@ -20,6 +20,9 @@ for the derivations and the unit caveats):
                     way and the file lists no zero-stock rows — flagged by
                     stock_not_in_count. 'NO DATA' remains for a stock row
                     with no usable pack size, or no count for the principal.
+                    2026-10-02: Unilever only. Del Monte's inventory files
+                    do list zero-stock items, so absence from one stays
+                    'NO DATA' (backend/stock_status.py).
   revenue_share   — the SKU's share of period revenue at its latest
                     single-period ABC run; None when never classified.
   stockout_gap    — max(0, rop_i - current_stock); None when stock unknown.
@@ -60,18 +63,22 @@ class RecommendationItem(BaseModel):
     current_stock: float | None = None
     current_stock_cases: float | None = None  # the raw snapshot figure, for display
     # True when the product has no row in its principal's latest stock count
-    # and current_stock is therefore 0 — the LP's own reading, since the
-    # stock file lists no zero-stock rows (2026-10-01). Inferred, not
+    # and current_stock is therefore 0 — the LP's own reading, for a
+    # principal whose stock file lists no zero-stock rows (Unilever; see
+    # backend/stock_status.py COUNT_OMITS_ZERO_STOCK). Inferred, not
     # counted, so the page says so beside the 0.
     stock_not_in_count: bool = False
     # Pieces per case (Product_Dimension.pack_size), None when the column is
     # not a usable positive number. Every quantity on this row is in pieces;
     # this is only for showing the approximate case count beside them.
     pack_size: float | None = None
-    urgency: str  # 'CRITICAL' | 'URGENT' | 'PLANNED' | 'NO DATA' — derived from current_stock vs rop_i
-    # Why urgency is 'NO DATA': a stock row with no usable pack size, or no
-    # stock count for the principal at all (no longer: a product merely
-    # absent from a count that happened — see stock_not_in_count).
+    # 'CRITICAL' | 'URGENT' | 'PLANNED' | 'NO DATA' — backend/stock_status.py's
+    # rule: CRITICAL below ss_i, URGENT below rop_i, PLANNED at or above it.
+    urgency: str
+    # Why urgency is 'NO DATA': a stock row with no usable pack size, no
+    # stock count for the principal at all, or absence from a count that
+    # lists zero-stock items (Del Monte) — not absence from Unilever's, see
+    # stock_not_in_count.
     stock_blocked_reason: str | None = None
     revenue_share: float | None = None
     # The product's tier in the latest ABC run (None when that run did not

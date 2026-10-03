@@ -63,7 +63,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from profiling.detect import detect_header, is_blank, trim_grid
+from profiling.detect import is_blank, trim_grid
 from profiling.profile_files import infer_doc_type, infer_period
 from profiling.reader import read_workbook
 
@@ -212,18 +212,29 @@ class SohExtractResult:
     in_scope_file_count: int = 0
 
 
+LAYOUT_CHANGED = "layout_changed"
+
+
 def _extract_soh_sheet(
     rel_path: str, abs_path: Path, sheet, period: str,
 ) -> tuple[pd.DataFrame | None, date | None, str | None, WarnRecord | None]:
     """Returns (df, final_snapshot_date, reject_reason, warn_record).
     df is None iff reject_reason is set."""
     trimmed = trim_grid(sheet.rows)
-    hd = detect_header(trimmed)
-    if hd.header_row_index < 0 or not trimmed:
-        return None, None, "no detectable header", None
+    # 2026-09-30 (layout guard): the header row is the one carrying every
+    # required SOH header (config/column_maps/ssis_soh.yaml `required:`). A sheet
+    # without one is refused as a layout change - raw_col() below would
+    # otherwise hand back a column of NULLs for a renamed header.
+    from analytics.etl.extract.layout import find_header, load_signature
+    sig = load_signature("ssis_soh")
+    found = find_header(trimmed, sig)
+    if found is None:
+        return None, None, (f"{LAYOUT_CHANGED}: no header row carries the required SOH headers "
+                            f"{list(sig.required[0])}"), None
+    header_index = found[0]
 
-    header_row = trimmed[hd.header_row_index]
-    data_rows = trimmed[hd.header_row_index + 1:]
+    header_row = trimmed[header_index]
+    data_rows = trimmed[header_index + 1:]
     if not data_rows:
         return None, None, "header detected but no data rows", None
 
@@ -337,7 +348,7 @@ def _extract_soh_sheet(
     # would for this shape of source:
     df["_src_file"] = rel_path
     df["_src_sheet"] = sheet.name
-    df["_header_row"] = hd.header_row_index
+    df["_header_row"] = header_index
     df["_row_ordinal"] = list(range(n))
     # infer_principal_from_path resolves "ambiguous" for data/raw/SSIS/**
     # (no "unilever"/"del monte" token in that path) even though this
@@ -368,11 +379,15 @@ def _extract_soh_sheet(
     return df, final_date, None, warn
 
 
-def parse_ssis_soh(raw_dir: Path | None = None, repo_root: Path = REPO_ROOT) -> SohExtractResult:
+def parse_ssis_soh(raw_dir: Path | None = None, repo_root: Path = REPO_ROOT,
+                   files: list[Path] | None = None) -> SohExtractResult:
+    """files (2026-09-30, layout guard): the SSIS workbooks to read, already
+    identified by content (scripts/load_slices.py); None keeps the file-name
+    selection below."""
     raw_dir = raw_dir or (repo_root / "data" / "raw")
     result = SohExtractResult()
 
-    candidate_files = [
+    candidate_files = sorted(files) if files is not None else [
         f for f in select_source_files(raw_dir)
         if infer_doc_type(f) == "ssis_summary"
     ]
@@ -416,7 +431,10 @@ def parse_ssis_soh(raw_dir: Path | None = None, repo_root: Path = REPO_ROOT) -> 
         if warn is not None:
             result.r4_warnings.append(warn)
         if reject_reason is not None:
-            result.r3_rejected.append(SkipRecord(rel, reject_reason))
+            if reject_reason.startswith(LAYOUT_CHANGED):
+                result.file_rejects.append(RejectRecord(rel, sheet.name, reject_reason, reject_reason))
+            else:
+                result.r3_rejected.append(SkipRecord(rel, reject_reason))
             continue
         assert df is not None and final_date is not None
 
