@@ -16,6 +16,7 @@ import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
+import { formatDate, formatMonth } from '../utils/formatDate';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
 import { Package, Wallet, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
 import './Dashboard.css';
@@ -29,6 +30,20 @@ import './Charts.css';
 function kpiDisplay(value, blockedReason, formatter, normalContext) {
   if (blockedReason) return { value: '—', contextLine: blockedReason };
   return { value: formatter(value), contextLine: normalContext };
+}
+
+// When the stock behind a card was counted (GET /dashboard's stock_counts,
+// the latest count): "stock counted Apr 6, 2026". A Del Monte count has no
+// loaded date (its stored one is a 1st-of-month placeholder, never shown),
+// so it names the month: "count month: Dec 2025 (exact date not recorded)".
+function stockCountedLine(counts) {
+  const usable = (counts || []).filter((c) => c.available);
+  return usable.map((c) => {
+    const who = usable.length > 1 ? `${PRINCIPAL_NAMES[c.principal] || c.principal} ` : '';
+    return c.counted_on
+      ? `${who}stock counted ${formatDate(c.counted_on)}`
+      : `${who}count month: ${formatMonth(c.period)} (exact date not recorded)`;
+  }).join(' · ') || null;
 }
 
 // GET /dashboard's sales/stock window covers the exact start-through-end
@@ -527,7 +542,8 @@ const Dashboard = () => {
   const belowSs = kpiDisplay(
     exposure.below_count ?? null, exposure.below_count == null ? exposureReason : null,
     (v) => `${v.toLocaleString()} of ${(exposure.comparable_count ?? 0).toLocaleString()}`,
-    ['Measurable Class A SKUs below their safety stock', abcCoverage].filter(Boolean).join(' · ')
+    ['Measurable Class A SKUs below their safety stock', stockCountedLine(exposure.stock_counts), abcCoverage]
+      .filter(Boolean).join(' · ')
   );
 
   // Pending action count — the "what to do" figure in the hero strip. Now

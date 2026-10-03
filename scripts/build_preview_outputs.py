@@ -26,7 +26,8 @@ MASE < MASE_GATE. The LP is run_lp.py's own plan_cycle with run_lp.py's default
 inputs (the placeholders in analytics/params.py). Only the
 forecasts and sigma_d come from the preview history; stock on hand, cost per
 piece and last year's sales (allocation, priority) are the real ones, as in a
-live run.
+live run. Stock is the count that opens the target month (DEC-32), or the LP
+is refused.
 
     python scripts/build_preview_outputs.py            # writes reports/preview/app_*.{csv,json}
 """
@@ -53,9 +54,10 @@ from analytics.params import MASE_GATE, PLACEHOLDERS  # noqa: E402
 from backend.data_mode import PREVIEW_UNILEVER_DEMAND  # noqa: E402
 from scripts.preview_router_synth import load_series, preview  # noqa: E402
 from scripts.run_baseline_forecast import _clean_metric, _confidence_band  # noqa: E402
+from backend.stock_units import opening_period  # noqa: E402
 from scripts.run_lp import (  # noqa: E402
-    _sigma_d_for_product, build_parser, fetch_demand_history, fetch_stock_and_cost, plan_cycle,
-    product_input,
+    _sigma_d_for_product, build_parser, fetch_demand_history, fetch_stock_and_cost, fetch_stock_counts,
+    opening_counts, plan_cycle, product_input, recorded_counts,
 )
 
 OUT_DIR = os.path.join(REPO, "reports", "preview")
@@ -167,7 +169,16 @@ def lp_rows(conn, forecasts: pd.DataFrame, abc_period: str) -> tuple[pd.DataFram
         ORDER BY pd.product_key, d.calendar_month""", conn, params={"keys": keys})
     demand["total_quantity"] = pd.to_numeric(demand["total_quantity"], errors="coerce").fillna(0)
     cur = conn.cursor()
-    stock_and_cost = fetch_stock_and_cost(cur, keys)
+    # Stock at the count that opens the target month, as run_lp.py plans it
+    # (DEC-32): no such count refuses the LP, never an older or later one.
+    cycle = cand["forecast_date"].iloc[0] if not cand.empty else None
+    stock_period = opening_period(cycle) if cycle is not None else None
+    counts: dict = {}
+    if cycle is not None:
+        counts, refused = opening_counts(cycle, set(cand["principal"]), fetch_stock_counts(cur, stock_period))
+        if refused:
+            raise SystemExit(f"LP refused ({'; '.join(refused.values())}); nothing written.")
+    stock_and_cost = fetch_stock_and_cost(cur, keys, stock_period) if cycle is not None else {}
     history = fetch_demand_history(cur, keys)  # real sales: last year's allocation and priority
     args = build_parser().parse_args([])  # run_lp.py's defaults, i.e. the placeholders
     products = []
@@ -177,18 +188,19 @@ def lp_rows(conn, forecasts: pd.DataFrame, abc_period: str) -> tuple[pd.DataFram
             logging.warning("LP: %s gated out — %s", r.sku_id, reason)
             continue
         product, reason = product_input(r.product_key, r.sku_id, r.principal, float(r.forecast_value), sigma_d,
-                                        stock_and_cost, history, prior_year=basis_year(r.forecast_date))
+                                        stock_and_cost, history, prior_year=basis_year(r.forecast_date),
+                                        stock_period=stock_period)
         if product is None:
             logging.warning("LP: %s gated out — %s", r.sku_id, reason)
             continue
         products.append(product)
-    model = {"cover_rule": args.cover_rule, "inputs": {k: getattr(args, k) for k in PLACEHOLDERS}}
+    model = {"cover_rule": args.cover_rule, "inputs": {k: getattr(args, k) for k in PLACEHOLDERS},
+             "stock_counts": recorded_counts(counts)}
     if not products:
         return pd.DataFrame(columns=["product_key", "planning_cycle_date", "q_i", "rop_i", "ss_i"]), model
-    plan = plan_cycle(products, args)
+    plan = plan_cycle(products, args, cycle)
     if plan.orders is None:
         raise SystemExit(f"LP infeasible ({'; '.join(plan.infeasible_reasons)}); nothing written.")
-    cycle = cand["forecast_date"].iloc[0]
     df = pd.DataFrame([{"product_key": p.product_key, "planning_cycle_date": cycle,
                         "q_i": round(plan.orders[s.sku_id], 2), "rop_i": round(s.target_stock, 2),
                         "ss_i": round(s.safety_stock, 2)} for p, s in zip(plan.products, plan.skus)])

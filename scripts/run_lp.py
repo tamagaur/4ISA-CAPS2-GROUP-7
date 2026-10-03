@@ -53,11 +53,24 @@ INPUTS, per product:
   sigma_d         demand variability per business day, from the sales
                   history (_sigma_d_for_product). The safety stock scales it
                   to the review period + lead time (safety_stock_for).
-  stock on hand   pieces, at the principal's latest stock snapshot
-                  (backend/stock_units.STOCK_AT_LATEST_SQL). A product with no
-                  row in that file counts as 0: the file lists no zero-stock
+  stock on hand   pieces, at the stock count that OPENS the planning month:
+                  the principal's count with _period = the month before
+                  (backend/stock_units.opening_period). A product with no
+                  row in that count counts as 0: the file lists no zero-stock
                   rows (0 of 785 Unilever rows in 2026-03), so no row means
                   nothing on hand. Flagged in the log and the CSV.
+
+STOCK TIMING (2026-10-03, reports/diagnostics/lp_logic_check_2026-10-03).
+Until this date the stock was each principal's LATEST count, whatever the
+cycle: cycle 2026-03 used the count of 2026-04-06, the stock left after
+March's sales, so need = forecast + target - stock counted March's demand
+twice. Now a cycle plans from the count of the month before it or not at all:
+a principal with no such count (or one backend/data_notes.OPENING_COUNT_RULINGS
+sets aside) is refused for that cycle, logged with the reason the app shows
+(backend/stock_units.missing_opening_count_reason), and nothing is written for
+it. No older or later count is substituted. plan_cycle() refuses a product
+carrying any other month's stock (check_stock_periods). The count used, its
+date and any flag on it are recorded in lp_run.inputs.stock_counts.
   cost per piece  the stock file's unit cost per case ÷ pack size, from the
                   product's latest row that has one. It prices the order and
                   values stock for the cover rule. Falls back to
@@ -117,7 +130,10 @@ from analytics.optimization.lp import (
 from analytics.params import (
     COVER_RULES, LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION, SERVICE_LEVEL_PCT, SERVICE_Z,
 )
-from backend.stock_units import PACK_SIZE_NUMERIC, STOCK_AT_LATEST_SQL
+from backend.data_notes import PLANNING_NOTES, opening_count_ruling
+from backend.stock_units import (
+    PACK_SIZE_NUMERIC, STOCK_AT_PERIOD_SQL, STOCK_COUNTS_SQL, opening_period, stock_count_info,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -226,10 +242,16 @@ DEMAND_QUERY = """
     ORDER BY pd.product_key, d.period ASC
 """
 
-# Stock on hand in pieces at the principal's latest snapshot (in_stock_file
-# is false when that file has no row for the product), and the cost per
-# piece from the product's latest row that carries a cost. pd_pack is the
-# alias backend/stock_units.PACK_SIZE_NUMERIC expects.
+# backend/stock_units binds SQLAlchemy-style (:name); psycopg2 takes %(name)s.
+_STOCK_AT_OPENING_SQL = STOCK_AT_PERIOD_SQL.replace(":inv_period", "%(stock_period)s")
+assert _STOCK_AT_OPENING_SQL.count("%(stock_period)s") == 1 and ":inv_period" not in _STOCK_AT_OPENING_SQL
+STOCK_COUNT_QUERY = STOCK_COUNTS_SQL.replace(":count_period", "%(count_period)s")
+assert STOCK_COUNT_QUERY.count("%(count_period)s") == 1 and ":count_period" not in STOCK_COUNT_QUERY
+
+# Stock on hand in pieces at the cycle's opening count, %(stock_period)s
+# (in_stock_file is false when that count has no row for the product), and
+# the cost per piece from the product's latest row that carries a cost.
+# pd_pack is the alias backend/stock_units.PACK_SIZE_NUMERIC expects.
 STOCK_AND_COST_QUERY = f"""
     SELECT pd_pack.product_key,
            s.product_key IS NOT NULL AS in_stock_file,
@@ -238,7 +260,7 @@ STOCK_AND_COST_QUERY = f"""
                 THEN c.cost_per_case / pd_pack.pack_size::numeric
            END AS cost_per_piece
     FROM Product_Dimension pd_pack
-    LEFT JOIN ({STOCK_AT_LATEST_SQL}) s ON s.product_key = pd_pack.product_key
+    LEFT JOIN ({_STOCK_AT_OPENING_SQL}) s ON s.product_key = pd_pack.product_key
     LEFT JOIN LATERAL (
         SELECT AVG(inv.unit_cost_per_case) AS cost_per_case
         FROM inventory_fact_real inv
@@ -247,7 +269,7 @@ STOCK_AND_COST_QUERY = f"""
         ORDER BY inv._period DESC
         LIMIT 1
     ) c ON true
-    WHERE pd_pack.product_key = ANY(%s)
+    WHERE pd_pack.product_key = ANY(%(product_keys)s)
 """
 
 
@@ -264,6 +286,7 @@ class ProductInput:
     cost_per_piece: float | None  # None: use --default-procurement-cost-per-unit
     prior_year_pieces: float
     prior_year_revenue: float
+    stock_period: str | None = None  # the _period of the count stock_on_hand came from
 
 
 @dataclass
@@ -400,13 +423,50 @@ def fetch_demand_history(cur, product_keys: list[int]) -> pd.DataFrame:
     return df
 
 
-def fetch_stock_and_cost(cur, product_keys: list[int]) -> dict[int, tuple[bool, float | None, float | None]]:
-    """product_key -> (in_stock_file, stock_pieces, cost_per_piece)."""
-    cur.execute(STOCK_AND_COST_QUERY, (product_keys,))
+def fetch_stock_and_cost(cur, product_keys: list[int], stock_period: str) -> dict[int, tuple[bool, float | None, float | None]]:
+    """product_key -> (in_stock_file, stock_pieces, cost_per_piece), stock
+    at the count of `stock_period` only."""
+    cur.execute(STOCK_AND_COST_QUERY, {"product_keys": product_keys, "stock_period": stock_period})
     return {
         int(k): (bool(in_file), None if pieces is None else float(pieces), None if cost is None else float(cost))
         for k, in_file, pieces, cost in cur.fetchall()
     }
+
+
+def fetch_stock_counts(cur, period: str) -> dict[str, dict]:
+    """principal -> its STOCK_COUNTS_SQL row at `period` (row_count,
+    first_date, last_date); a principal with no count there is absent."""
+    cur.execute(STOCK_COUNT_QUERY, {"count_period": period})
+    columns = [d[0] for d in cur.description]
+    return {r["principal"]: r for r in (dict(zip(columns, row)) for row in cur.fetchall())}
+
+
+def opening_counts(planning_cycle_date, principals, count_rows: dict[str, dict]) -> tuple[dict[str, dict], dict[str, str]]:
+    """({principal: stock_count_info} for the principals that can be planned,
+    {principal: reason} for those refused). A principal is refused when it
+    has no count for the month before the cycle, or that count is set aside
+    (backend/data_notes.OPENING_COUNT_RULINGS). No other month is tried."""
+    period = opening_period(planning_cycle_date)
+    usable: dict[str, dict] = {}
+    refused: dict[str, str] = {}
+    for principal in sorted(principals):
+        info = stock_count_info(principal, period, count_rows.get(principal), cycle=planning_cycle_date)
+        if info["available"]:
+            usable[principal] = info
+        else:
+            refused[principal] = info["reason"]
+    return usable, refused
+
+
+def check_stock_periods(products: list[ProductInput], planning_cycle_date) -> None:
+    """The look-ahead guard: a cycle plans only from the count that opens it.
+    Raises on any product whose stock came from another month's count,
+    a later one above all (the bug of 2026-10-03)."""
+    want = opening_period(planning_cycle_date)
+    wrong = sorted({(p.sku_id, str(p.stock_period)) for p in products if p.stock_period != want})
+    if wrong:
+        raise ValueError(f"cycle {planning_cycle_date} plans from the stock count of {want}, the month before it; "
+                         f"{len(wrong)} product(s) carry another month's stock: {wrong[:5]}")
 
 
 def rows_to_retire(rows: list[dict], planning_cycle_date, solved_keys: set[int]) -> list[dict]:
@@ -463,9 +523,10 @@ def cycle_transaction(cur, dry_run: bool):
 
 def product_input(
     product_key: int, sku_id: str, principal: str, forecast: float, sigma_d: float,
-    stock_and_cost: dict, history: pd.DataFrame, prior_year: int,
+    stock_and_cost: dict, history: pd.DataFrame, prior_year: int, stock_period: str | None = None,
 ) -> tuple[ProductInput | None, str | None]:
-    """(ProductInput, None), or (None, reason) when the stock can't be put in pieces."""
+    """(ProductInput, None), or (None, reason) when the stock can't be put in
+    pieces. stock_period is the count stock_and_cost was read at."""
     in_file, pieces, cost = stock_and_cost.get(int(product_key), (False, None, None))
     if in_file and pieces is None:
         return None, "its stock is in cases and it has no usable pack size, so it can't be put in pieces"
@@ -477,6 +538,7 @@ def product_input(
         stock_on_hand=pieces if in_file else 0.0, in_stock_file=in_file, cost_per_piece=cost,
         prior_year_pieces=float(year["total_quantity"].sum()),
         prior_year_revenue=float(year["total_amount"].sum()),
+        stock_period=stock_period,
     ), None
 
 
@@ -500,11 +562,15 @@ def _diagnose_infeasibility(skus: list[SKUInput], warehouse_capacity: float) -> 
     return ["no bound identified — unexpected; check build_lp_model's constraints directly"]
 
 
-def plan_cycle(products: list[ProductInput], args: argparse.Namespace) -> CyclePlan:
+def plan_cycle(products: list[ProductInput], args: argparse.Namespace, planning_cycle_date=None) -> CyclePlan:
     """One planning cycle, from fetched inputs to the solved orders. Uses
     args.allocation_pct, review_days, lead_days, target_weeks, cover_rule,
     warehouse_capacity, storage_cost_per_unit and
-    default_procurement_cost_per_unit. No database."""
+    default_procurement_cost_per_unit. No database. With planning_cycle_date
+    (main() always passes it), every product's stock must come from the
+    count that opens that month (check_stock_periods)."""
+    if planning_cycle_date is not None:
+        check_stock_periods(products, planning_cycle_date)
     window = args.review_days + args.lead_days
     floor_weeks = args.target_weeks if args.cover_rule == "per-sku" else None
     revenue_total = sum(max(p.prior_year_revenue, 0.0) for p in products)
@@ -539,15 +605,18 @@ def plan_cycle(products: list[ProductInput], args: argparse.Namespace) -> CycleP
     )
 
 
-def plan_rows(plan: CyclePlan, planning_cycle_date) -> list[dict]:
-    """The per-product plan, for the CSV (--csv)."""
+def plan_rows(plan: CyclePlan, planning_cycle_date, stock_counts: dict[str, dict] | None = None) -> list[dict]:
+    """The per-product plan, for the CSV (--csv). stock_counts is
+    opening_counts()' first result: each principal's count and its date."""
     rows = []
     for p, s in zip(plan.products, plan.skus):
         q = (plan.orders or {}).get(s.sku_id)
+        count = (stock_counts or {}).get(p.principal) or {}
         rows.append({
             "planning_cycle_date": planning_cycle_date, "product_key": p.product_key, "sku_id": s.sku_id,
             "principal": s.principal, "cover_rule": plan.cover_rule,
             "forecast": round(s.demand, 2), "weekly_demand": round(weekly_demand(s.demand), 2),
+            "stock_period": p.stock_period, "stock_counted_on": count.get("counted_on"),
             "stock_on_hand": round(s.stock_on_hand, 2), "in_stock_file": p.in_stock_file,
             "safety_stock": round(s.safety_stock, 2), "target_stock": round(s.target_stock, 2),
             "target_weeks_of_sales": round(s.target_stock / weekly_demand(s.demand), 2) if s.demand > 0 else None,
@@ -561,24 +630,64 @@ def plan_rows(plan: CyclePlan, planning_cycle_date) -> list[dict]:
 
 
 def _code_version() -> str | None:
-    """The git commit this run came from, or None when it can't be read."""
+    """The git commit this run came from, or None when it can't be read.
+    '+dirty' when a tracked file under the code the run executes (scripts/,
+    analytics/, backend/, config/) differs from that commit, so a run from
+    uncommitted code is never recorded as the commit alone."""
+    here = os.path.dirname(os.path.abspath(__file__))
     try:
-        out = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10,
-                             cwd=os.path.dirname(os.path.abspath(__file__)))
+        out = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10, cwd=here)
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no", "--",
+                                "scripts", "analytics", "backend", "config"],
+                               capture_output=True, text=True, timeout=10, cwd=os.path.dirname(here))
     except (OSError, subprocess.SubprocessError):
         return None
-    if out.returncode != 0:
+    commit = out.stdout.strip() if out.returncode == 0 else ""
+    if not commit:
         return None
-    return out.stdout.strip() or None
+    return f"{commit}+dirty" if dirty.returncode != 0 or dirty.stdout.strip() else commit
 
 
-def run_record(args: argparse.Namespace, plan: CyclePlan, planning_cycle_date) -> dict:
-    """The lp_run row for one solved cycle: every flag as run (inputs) and
-    what the code fixed (model). What the app shows about this run."""
+# What lp_run keeps of each stock count a plan started from (stock_count_info).
+_RECORDED_COUNT_KEYS = ("period", "counted_on", "counted_on_note", "row_count", "flag")
+
+
+def recorded_counts(stock_counts: dict[str, dict]) -> dict[str, dict]:
+    """opening_counts()' usable counts as a run records them, per principal."""
+    return {principal: {k: info[k] for k in _RECORDED_COUNT_KEYS} for principal, info in sorted(stock_counts.items())}
+
+
+def run_notes(stock_counts: dict[str, dict]) -> list[str]:
+    """What a plan must be read with, per principal planned: the team's
+    ruling on its opening count, if any (backend/data_notes.
+    OPENING_COUNT_RULINGS), and the principal's standing caveats
+    (PLANNING_NOTES)."""
+    notes = []
+    for principal, info in sorted(stock_counts.items()):
+        ruling = opening_count_ruling(principal, info["period"])
+        if ruling is not None and ruling[0] == "use":
+            counted = info["counted_on"] or "date not recorded"
+            notes.append(f"{principal} stock count {info['period']} (counted {counted}): {ruling[1]}")
+        if principal in PLANNING_NOTES:
+            notes.append(f"{principal}: {PLANNING_NOTES[principal]}")
+    return notes
+
+
+def run_record(args: argparse.Namespace, plan: CyclePlan, planning_cycle_date,
+               stock_counts: dict[str, dict], refused: dict[str, str] | None = None) -> dict:
+    """The lp_run row for one solved cycle: every flag as run and the stock
+    counts planned from (inputs), and what the code fixed (model). What the
+    app shows about this run. stock_counts and refused are opening_counts()'
+    two results; a refused principal is recorded with its reason."""
+    inputs = {key: getattr(args, key) for key in PLACEHOLDERS}
+    inputs["stock_counts"] = recorded_counts(stock_counts)
+    inputs["notes"] = run_notes(stock_counts)
+    if refused:
+        inputs["stock_refused"] = dict(sorted(refused.items()))
     return {
         "planning_cycle_date": planning_cycle_date,
         "principal_scope": args.principal,
-        "inputs": {key: getattr(args, key) for key in PLACEHOLDERS},
+        "inputs": inputs,
         "model": {
             "weights": dict(LP_WEIGHTS),
             "z_score": SERVICE_Z,
@@ -778,38 +887,66 @@ def main():
         conn.close()
         return
 
-    # ---- Step B: sales history, stock on hand, cost per piece -----------
+    # ---- Step B: sales history ------------------------------------------
     product_keys = [int(k) for k in candidates_df["product_key"].unique()]
     demand_df = fetch_demand_history(cur, product_keys)
-    stock_and_cost = fetch_stock_and_cost(cur, product_keys)
 
-    # ---- Step C: per-product inputs --------------------------------------
+    # ---- Step C: per cycle, the opening stock count, then per-product inputs
     gated_out: dict[str, int] = {}
     products_by_cycle: dict = {}  # planning_cycle_date -> list[ProductInput]
+    counts_by_cycle: dict = {}    # planning_cycle_date -> {principal: stock_count_info} planned from
+    refused_by_cycle: dict = {}   # planning_cycle_date -> {principal: reason}
+    refused_products = 0
 
     def gate_out(sku_id, principal, reason):
         gated_out[reason] = gated_out.get(reason, 0) + 1
         logger.warning(f"  {sku_id} ({principal}): gated out — {reason}.")
 
-    for row in candidates_df.itertuples():
-        product_demand = demand_df[demand_df["product_key"] == row.product_key]
-        if product_demand.empty:
-            gate_out(row.sku_id, row.principal, "no demand history at all")
+    for planning_cycle_date in sorted(candidates_df["forecast_date"].unique()):
+        cycle_df = candidates_df[candidates_df["forecast_date"] == planning_cycle_date]
+        stock_period = opening_period(planning_cycle_date)
+        usable, refused = opening_counts(planning_cycle_date, set(cycle_df["principal"]),
+                                         fetch_stock_counts(cur, stock_period))
+        counts_by_cycle[planning_cycle_date] = usable
+        refused_by_cycle[planning_cycle_date] = refused
+        for principal, reason in refused.items():
+            count = int((cycle_df["principal"] == principal).sum())
+            refused_products += count
+            logger.error(f"  REFUSED cycle {planning_cycle_date} for {principal} ({count} product(s)): {reason}. "
+                         "Nothing is planned for it, and no other month's count is used.")
+        for principal, info in usable.items():
+            counted = info["counted_on"] or f"date not recorded: {info['counted_on_note']}"
+            logger.info(f"  Cycle {planning_cycle_date} · {principal}: opening stock count {info['period']} "
+                        f"(counted {counted}; {info['row_count']} rows)")
+            if info["flag"]:
+                logger.warning(f"  Cycle {planning_cycle_date} · {principal}: that count is flagged: {info['flag']}")
+        for note in run_notes(usable):
+            logger.warning(f"  Cycle {planning_cycle_date} note: {note}")
+        cycle_df = cycle_df[cycle_df["principal"].isin(list(usable))]
+        if cycle_df.empty:
             continue
-        sigma_d, reason = _sigma_d_for_product(product_demand, row.principal)
-        if sigma_d is None:
-            gate_out(row.sku_id, row.principal, reason)
-            continue
-        product, reason = product_input(
-            row.product_key, row.sku_id, row.principal, float(row.forecast_value), sigma_d,
-            stock_and_cost, demand_df, prior_year=basis_year(row.forecast_date),
-        )
-        if product is None:
-            gate_out(row.sku_id, row.principal, reason)
-            continue
-        if not product.in_stock_file:
-            logger.warning(f"  {row.sku_id} ({row.principal}): not in the latest stock file — counted as 0 on hand.")
-        products_by_cycle.setdefault(row.forecast_date, []).append(product)
+        stock_and_cost = fetch_stock_and_cost(cur, [int(k) for k in cycle_df["product_key"].unique()], stock_period)
+
+        for row in cycle_df.itertuples():
+            product_demand = demand_df[demand_df["product_key"] == row.product_key]
+            if product_demand.empty:
+                gate_out(row.sku_id, row.principal, "no demand history at all")
+                continue
+            sigma_d, reason = _sigma_d_for_product(product_demand, row.principal)
+            if sigma_d is None:
+                gate_out(row.sku_id, row.principal, reason)
+                continue
+            product, reason = product_input(
+                row.product_key, row.sku_id, row.principal, float(row.forecast_value), sigma_d,
+                stock_and_cost, demand_df, prior_year=basis_year(row.forecast_date), stock_period=stock_period,
+            )
+            if product is None:
+                gate_out(row.sku_id, row.principal, reason)
+                continue
+            if not product.in_stock_file:
+                logger.warning(f"  {row.sku_id} ({row.principal}): not in the opening stock count ({stock_period}) "
+                               "— counted as 0 on hand.")
+            products_by_cycle.setdefault(planning_cycle_date, []).append(product)
 
     # ---- Step D: one LP per planning cycle -------------------------------
     rows_written = 0
@@ -823,8 +960,8 @@ def main():
     for planning_cycle_date, products in sorted(products_by_cycle.items()):
         logger.info(f"Solving LP for planning cycle {planning_cycle_date} ({len(products)} product(s), "
                     f"cover rule {args.cover_rule})...")
-        plan = plan_cycle(products, args)
-        csv_rows.extend(plan_rows(plan, planning_cycle_date))
+        plan = plan_cycle(products, args, planning_cycle_date)
+        csv_rows.extend(plan_rows(plan, planning_cycle_date, counts_by_cycle[planning_cycle_date]))
 
         if plan.orders is None:
             for reason in plan.infeasible_reasons:
@@ -849,7 +986,10 @@ def main():
         with cycle_transaction(cur, args.dry_run):
             # The run's record commits with the rows that point at it: a cycle
             # rolled back (e.g. a retire count mismatch) leaves no lp_run row.
-            run_key = None if args.dry_run else save_run(run_record(args, plan, planning_cycle_date))
+            run_key = None if args.dry_run else save_run(run_record(
+                args, plan, planning_cycle_date, counts_by_cycle[planning_cycle_date],
+                refused_by_cycle[planning_cycle_date],
+            ))
             for product, sku in zip(products, plan.skus):
                 q_i, ss_i = plan.orders[sku.sku_id], sku.safety_stock
                 decided = existing.get(product.product_key, "pending") != "pending"
@@ -865,9 +1005,16 @@ def main():
                     cycle_kept += 1
                 else:
                     cycle_written += 1
-            if args.retire_stale_pending:
+            # A refused principal's rows weren't replanned, so they aren't
+            # "outside the pool": with a refusal in the cycle, retire nothing.
+            if args.retire_stale_pending and not refused_by_cycle[planning_cycle_date]:
                 retired, retired_csv = retire_stale_pending(cur, planning_cycle_date, written_keys, args.dry_run)
                 retired_by_cycle[planning_cycle_date] = (len(retired), retired_csv)
+            elif args.retire_stale_pending:
+                logger.warning(f"  Cycle {planning_cycle_date}: --retire-stale-pending skipped — "
+                               f"{', '.join(refused_by_cycle[planning_cycle_date])} refused for want of an opening "
+                               "stock count, so no pending row in this cycle is retired.")
+                retired_by_cycle[planning_cycle_date] = (0, None)
         rows_written += cycle_written
         rows_kept_decided += cycle_kept
         verb = "would be upserted" if args.dry_run else "upserted into LP_Recommendation (status='pending')"
@@ -907,8 +1054,16 @@ def main():
     logger.info(f"  Products gated out:          {sum(gated_out.values())}")
     for reason, count in sorted(gated_out.items()):
         logger.info(f"    - {reason}: {count}")
-    logger.info(f"  Stock on hand:               {planned - missing_stock} from the latest stock file, "
+    logger.info(f"  Products refused (no usable opening stock count): {refused_products}")
+    for cycle_date, refused in sorted(refused_by_cycle.items()):
+        for principal, reason in refused.items():
+            logger.info(f"    - {cycle_date} {principal}: {reason}")
+    logger.info(f"  Stock on hand:               {planned - missing_stock} from the opening stock count, "
                 f"{missing_stock} not in it (counted as 0)")
+    for cycle_date, counts in sorted(counts_by_cycle.items()):
+        for principal, info in counts.items():
+            logger.info(f"    - {cycle_date} {principal}: count {info['period']}, counted "
+                        f"{info['counted_on'] or 'on an unrecorded date'}{' (FLAGGED)' if info['flag'] else ''}")
     logger.info(f"  Cost per piece:              {planned - cost_fallback} from the stock file, "
                 f"{cost_fallback} placeholder (--default-procurement-cost-per-unit)")
     logger.info(f"  Planning cycles attempted:   {len(products_by_cycle)}")

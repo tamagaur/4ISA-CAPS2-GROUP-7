@@ -39,10 +39,11 @@ from scripts.run_lp import (
 
 
 def _product(key, forecast=1200.0, prior_year_pieces=12_000.0, revenue=100_000.0, stock=0.0, cost=None,
-             sigma_d=50.0, principal="unilever"):
+             sigma_d=50.0, principal="unilever", stock_period=None):
     return ProductInput(product_key=key, sku_id=f"SKU{key}", principal=principal, forecast=forecast,
                         sigma_d=sigma_d, stock_on_hand=stock, in_stock_file=True, cost_per_piece=cost,
-                        prior_year_pieces=prior_year_pieces, prior_year_revenue=revenue)
+                        prior_year_pieces=prior_year_pieces, prior_year_revenue=revenue,
+                        stock_period=stock_period)
 
 
 def _args(*flags):
@@ -330,8 +331,9 @@ def test_run_record_holds_every_flag_and_the_fixed_model():
 
     args = _args("--allocation-pct", "108")
     plan = plan_cycle([_product(1)], args)
-    record = run_record(args, plan, datetime.date(2026, 3, 1))
-    assert record["inputs"] == {key: getattr(args, key) for key in PLACEHOLDERS}
+    record = run_record(args, plan, datetime.date(2026, 3, 1), {"unilever": _OPENING_COUNT})
+    flags = {k: v for k, v in record["inputs"].items() if k not in ("stock_counts", "notes")}
+    assert flags == {key: getattr(args, key) for key in PLACEHOLDERS}
     assert record["inputs"]["allocation_pct"] == 108.0
     assert record["principal_scope"] == "both"
     model = record["model"]
@@ -346,3 +348,215 @@ def test_each_refreshed_row_points_at_its_run():
     normalized = " ".join(UPSERT_QUERY.split())
     assert "(product_key, planning_cycle_date, q_i, rop_i, ss_i, status, lp_run_key)" in normalized
     assert "lp_run_key = EXCLUDED.lp_run_key" in normalized
+
+
+# ---- stock timing (2026-10-03, reports/diagnostics/lp_logic_check_2026-10-03) ----
+# Cycle M plans from the stock count of M - 1, the one that opens the month,
+# or not at all. Cycle 2026-03 used the count of 2026-04-06 (after March's
+# sales), so need = forecast + target - stock counted March twice.
+
+import logging
+import sys
+
+from analytics.params import SERVICE_LEVEL_PCT
+from backend.data_notes import OPENING_COUNT_RULINGS, PLANNING_NOTES
+from scripts.run_lp import STOCK_AND_COST_QUERY, check_stock_periods, opening_counts, run_notes, run_record
+
+_COUNTED_2026_03_02 = datetime.date(2026, 3, 2)
+_COUNTED_2026_04_06 = datetime.date(2026, 4, 6)
+_OPENING_COUNT = {"period": "2026-02", "counted_on": "2026-03-02", "counted_on_note": None,
+                  "row_count": 812, "flag": None, "available": True}
+
+
+def _count_row(row_count, counted_on):
+    return {"row_count": row_count, "first_date": counted_on, "last_date": counted_on}
+
+
+def test_a_cycle_plans_only_from_the_count_that_opens_it():
+    """The look-ahead guard: cycle 2026-03 takes the 2026-02 count. A later
+    count (the bug) and an older one are both refused, not planned from."""
+    args = _args()
+    assert plan_cycle([_product(1, stock_period="2026-02")], args, CYCLE).orders is not None
+    for wrong in ("2026-03", "2026-04", "2026-01", None):
+        with pytest.raises(ValueError, match="stock count of 2026-02"):
+            plan_cycle([_product(1, stock_period=wrong)], args, CYCLE)
+    with pytest.raises(ValueError):
+        check_stock_periods([_product(1, stock_period="2026-02"), _product(2, stock_period="2026-03")], CYCLE)
+
+
+def test_the_stock_query_is_bound_to_one_count_never_the_latest():
+    normalized = " ".join(STOCK_AND_COST_QUERY.split())
+    assert "WHERE inv._period = %(stock_period)s" in normalized
+    assert "MAX(_period)" not in normalized
+
+
+def test_a_principal_without_an_opening_count_is_refused_with_the_reason():
+    usable, refused = opening_counts(CYCLE, {"unilever", "delmonte"},
+                                     {"unilever": _count_row(812, _COUNTED_2026_03_02)})
+    assert list(usable) == ["unilever"]
+    assert (usable["unilever"]["period"], usable["unilever"]["counted_on"]) == ("2026-02", "2026-03-02")
+    assert refused == {"delmonte": "no opening stock count for March 2026: delmonte has no stock count for February 2026"}
+
+
+def test_january_opens_with_the_previous_decembers_count():
+    usable, refused = opening_counts(datetime.date(2026, 1, 1), {"unilever"},
+                                     {"unilever": _count_row(775, datetime.date(2026, 1, 1))})
+    assert usable["unilever"]["period"] == "2025-12" and refused == {}
+
+
+def test_run_record_names_the_stock_count_and_any_refusal():
+    args = _args("--allocation-pct", "103")
+    plan = plan_cycle([_product(1, stock_period="2026-02")], args, CYCLE)
+    record = run_record(args, plan, CYCLE, {"unilever": _OPENING_COUNT},
+                        {"delmonte": "no opening stock count for March 2026: delmonte has no stock count for February 2026"})
+    assert record["inputs"]["stock_counts"] == {"unilever": {
+        "period": "2026-02", "counted_on": "2026-03-02", "counted_on_note": None, "row_count": 812, "flag": None}}
+    assert record["inputs"]["stock_refused"]["delmonte"].startswith("no opening stock count for March 2026")
+    assert record["inputs"]["allocation_pct"] == 103.0
+    assert record["model"]["service_level_pct"] == SERVICE_LEVEL_PCT
+
+
+def test_run_notes_carry_the_ruling_and_the_principals_caveat():
+    """A count without a ruling adds no ruling line; Unilever's territory
+    caveat goes with every Unilever plan; Del Monte has no caveat on file."""
+    march = {**_OPENING_COUNT, "period": "2026-01", "counted_on": "2026-02-03"}
+    assert run_notes({"unilever": march}) == [f"unilever: {PLANNING_NOTES['unilever']}"]
+    assert run_notes({"delmonte": {**_OPENING_COUNT, "counted_on": None}}) == []
+    assert run_notes({"unilever": _OPENING_COUNT})[0].startswith(
+        "unilever stock count 2026-02 (counted 2026-03-02): accepted for planning, pending SSM confirmation")
+
+
+class _FakeDB:
+    """psycopg2 stand-in for main(): one connection and cursor that answer
+    run_lp's queries from memory and record every statement sent.
+    counts: {period: [(principal, row_count, counted_on)]};
+    stock: {period: {product_key: pieces}}."""
+
+    def __init__(self, counts, stock, candidates=((1, "SKU1", "unilever"),)):
+        self.counts, self.stock = counts, stock
+        self.candidates = [(k, sku, who, CYCLE, 1200.0, 0.5) for k, sku, who in candidates]
+        self.statements: list[tuple[str, object]] = []
+        self.description = None
+        self.rowcount = -1
+        self._rows: list = []
+
+    # connection
+    def set_session(self, **kwargs):
+        pass
+
+    def cursor(self):
+        return self
+
+    def close(self):
+        pass
+
+    # cursor
+    def execute(self, sql, params=None):
+        flat = " ".join(sql.split())
+        self.statements.append((flat, params))
+        self.description, self._rows, self.rowcount = None, [], -1
+        if "to_regclass('lp_run')" in flat:
+            self._rows = [(True,)]
+        elif "FROM Forecast_Result fr" in flat:
+            self._rows = list(self.candidates)
+        elif "FROM SellOut_Fact_Real" in flat:
+            months = [f"2025-{m:02d}" for m in range(1, 13)] + ["2026-01", "2026-02"]
+            self._rows = [(1, "SKU1", "unilever", p, 1000.0 + 10 * i, 50_000.0) for i, p in enumerate(months)]
+        elif "GROUP BY inv.principal, inv._period" in flat:
+            self.description = [(c,) for c in ("principal", "period", "row_count", "first_date", "last_date")]
+            period = params["count_period"]
+            self._rows = [(who, period, n, on, on) for who, n, on in self.counts.get(period, [])]
+        elif "AS in_stock_file" in flat:
+            pieces = self.stock.get(params["stock_period"], {})
+            self._rows = [(k, k in pieces, pieces.get(k), 10.0) for k in params["product_keys"]]
+        elif flat.startswith("INSERT INTO lp_run"):
+            self._rows = [(41,)]
+        elif flat.startswith("INSERT INTO LP_Recommendation"):
+            self.rowcount = 1
+
+    def fetchall(self):
+        return list(self._rows)
+
+    def fetchone(self):
+        return self._rows[0]
+
+
+def _run_main(monkeypatch, db, *flags):
+    import scripts.run_lp as run_lp
+
+    monkeypatch.setattr(run_lp.psycopg2, "connect", lambda url: db)
+    monkeypatch.setattr(run_lp, "load_dotenv", lambda **kwargs: None)
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://fake")
+    monkeypatch.setattr(sys, "argv", ["run_lp.py", *flags])
+    run_lp.main()
+
+
+def test_main_refuses_a_cycle_without_its_opening_count(monkeypatch, caplog):
+    """Only the later count (2026-03, counted 2026-04-06) exists: the cycle
+    is refused with the reason, nothing is written, and no stock is read
+    at all, so the later count can't stand in."""
+    db = _FakeDB(counts={"2026-03": [("unilever", 785, _COUNTED_2026_04_06)]}, stock={"2026-03": {1: 500.0}})
+    with caplog.at_level(logging.INFO, logger="scripts.run_lp"):
+        _run_main(monkeypatch, db)
+    sent = [s for s, _ in db.statements]
+    assert not any(s.startswith("INSERT") for s in sent)  # no lp_run row, no plan row
+    assert not any("AS in_stock_file" in s for s in sent)
+    assert [p["count_period"] for s, p in db.statements if "GROUP BY inv.principal" in s] == ["2026-02"]
+    assert "no opening stock count for March 2026: unilever has no stock count for February 2026" in caplog.text
+
+
+def test_a_refusal_in_the_cycle_retires_nothing(monkeypatch, caplog):
+    """Unilever has its opening count, Del Monte doesn't. Unilever is
+    planned; Del Monte's pending rows weren't replanned, so
+    --retire-stale-pending must not treat them as outside the pool."""
+    db = _FakeDB(counts={"2026-02": [("unilever", 812, _COUNTED_2026_03_02)]}, stock={"2026-02": {1: 2000.0}},
+                 candidates=((1, "SKU1", "unilever"), (2, "DM2", "delmonte")))
+    with caplog.at_level(logging.INFO, logger="scripts.run_lp"):
+        _run_main(monkeypatch, db, "--retire-stale-pending")
+    sent = [s for s, _ in db.statements]
+    assert any(s.startswith("INSERT INTO LP_Recommendation") for s in sent)  # Unilever planned
+    assert not any(s.startswith("SELECT * FROM LP_Recommendation") or s.startswith("DELETE") for s in sent)
+    assert "no opening stock count for March 2026: delmonte has no stock count for February 2026" in caplog.text
+    assert "--retire-stale-pending skipped" in caplog.text
+
+
+def test_main_plans_from_the_opening_count_and_links_its_rows_to_the_run(monkeypatch, tmp_path, caplog):
+    """Both counts exist and disagree (2,000 pieces opening March, 500 at
+    the end of it): the plan takes the opening one, writes its lp_run row
+    first and points every plan row at it, all in one transaction."""
+    db = _FakeDB(
+        counts={"2026-02": [("unilever", 812, _COUNTED_2026_03_02)],
+                "2026-03": [("unilever", 785, _COUNTED_2026_04_06)]},
+        stock={"2026-02": {1: 2000.0}, "2026-03": {1: 500.0}},
+    )
+    csv_path = tmp_path / "plan.csv"
+    with caplog.at_level(logging.INFO, logger="scripts.run_lp"):
+        _run_main(monkeypatch, db, "--allocation-pct", "103", "--csv", str(csv_path))
+    # The 2026-02 count is a reviewed outlier: planned from, and said so.
+    assert any(r.levelno == logging.WARNING and "that count is flagged" in r.getMessage() for r in caplog.records)
+
+    assert [p["stock_period"] for s, p in db.statements if "AS in_stock_file" in s] == ["2026-02"]
+    sent = [s for s, _ in db.statements]
+    run_at = next(i for i, s in enumerate(sent) if s.startswith("INSERT INTO lp_run"))
+    upserts = [(i, p) for i, (s, p) in enumerate(db.statements) if s.startswith("INSERT INTO LP_Recommendation")]
+    assert len(upserts) == 1 and upserts[0][1][-1] == 41  # the row carries the run's key
+    assert sent.index("BEGIN") < run_at < upserts[0][0] < sent.index("COMMIT")
+
+    cycle, scope, inputs, model, code_version = db.statements[run_at][1]
+    assert (cycle, scope) == (CYCLE, "both")
+    count = inputs.adapted["stock_counts"]["unilever"]
+    assert (count["period"], count["counted_on"], count["row_count"]) == ("2026-02", "2026-03-02", 812)
+    # The team's ruling on that count travels with the plan, with the
+    # territory caveat, in lp_run's notes.
+    assert count["flag"] == OPENING_COUNT_RULINGS[("unilever", "2026-02")][1]
+    assert inputs.adapted["notes"] == [
+        f"unilever stock count 2026-02 (counted 2026-03-02): {OPENING_COUNT_RULINGS[('unilever', '2026-02')][1]}",
+        f"unilever: {PLANNING_NOTES['unilever']}",
+    ]
+    assert inputs.adapted["allocation_pct"] == 103.0
+    assert model.adapted["service_level_pct"] == SERVICE_LEVEL_PCT
+    assert code_version is None or len(code_version) >= 40  # a full commit hash, '+dirty' when uncommitted
+
+    plan = pd.read_csv(csv_path)
+    assert plan.loc[0, "stock_on_hand"] == 2000.0
+    assert (plan.loc[0, "stock_period"], plan.loc[0, "stock_counted_on"]) == ("2026-02", "2026-03-02")

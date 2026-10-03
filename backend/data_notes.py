@@ -33,6 +33,38 @@ UNUSUAL_STOCK_SNAPSHOTS: dict[tuple[str, str], str] = {
     ),
 }
 
+# How the order plan treats a reviewed count when it is the count that OPENS a
+# planning month (backend/stock_units.stock_count_info, scripts/run_lp.py):
+#   ("use", label)      plan from it; the label goes with the plan (lp_run,
+#                       GET /recommendations) in place of the note above
+#   ("missing", note)   refuse the plan as if no count existed; never fall
+#                       back to another month's count
+# A flagged count with no ruling here is used, carrying its note above. Add a
+# ruling only on the team's decision, naming who made it and when.
+OPENING_COUNT_RULINGS: dict[tuple[str, str], tuple[str, str]] = {
+    # Decided 2026-10-03 (Yuan): plan March 2026 from the count of 2 March
+    # 2026. Receipts records that would confirm or rule out a February
+    # forward buy don't exist (reports/diagnostics/lp_logic_check_2026-10-03
+    # section 5), so the count stands until SSM confirms it.
+    ("unilever", "2026-02"): ("use", "accepted for planning, pending SSM confirmation (decided 2026-10-03)"),
+}
+
+# Caveats every plan for a principal carries (scripts/run_lp.py records them
+# in lp_run.inputs.notes). Recorded 2026-10-03 (Yuan).
+PLANNING_NOTES: dict[str, str] = {
+    "unilever": ("stock counts are from the Ilocos Sur warehouse workbook; per-product sales are "
+                 "La Union only - territory match unverified."),
+}
+
+
+def opening_count_ruling(principal: str, period: str) -> tuple[str, str] | None:
+    """OPENING_COUNT_RULINGS' entry for this count, or None."""
+    ruling = OPENING_COUNT_RULINGS.get((principal, period))
+    if ruling is not None and ruling[0] not in ("use", "missing"):
+        raise ValueError(f"OPENING_COUNT_RULINGS[{(principal, period)!r}] must be 'use' or 'missing', got {ruling[0]!r}")
+    return ruling
+
+
 _PRINCIPAL_NAMES = {"unilever": "Unilever", "delmonte": "Del Monte"}
 
 
