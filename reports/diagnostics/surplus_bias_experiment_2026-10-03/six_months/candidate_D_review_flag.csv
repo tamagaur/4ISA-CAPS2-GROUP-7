@@ -1,0 +1,8 @@
+month,products,flagged,flagged_by_run,flagged_by_collapse,flagged_over_forecast_pct,unflagged_over_forecast_pct,flagged_share_of_surplus_pesos_pct,flagged_share_of_shortage_pesos_pct,flagged_share_of_sales_pesos_pct,flagged_stock_limited
+2025-09,107,13,13,1,84.6154,48.9362,52.4935,1.8473,8.3880,5
+2025-10,107,16,16,4,56.2500,52.7473,9.8618,4.1503,13.5435,6
+2025-11,107,13,13,4,61.5385,56.3830,5.6432,11.6924,10.7483,6
+2025-12,107,26,24,4,76.9231,81.4815,17.2234,9.3631,12.3516,11
+2026-01,107,26,25,2,23.0769,34.5679,16.0507,20.7702,13.1087,10
+2026-02,107,12,12,4,41.6667,64.2105,13.7285,18.0632,8.0630,6
+all 6 months,107,106,103,19,55.6604,56.3433,18.4643,11.9641,11.0907,44
