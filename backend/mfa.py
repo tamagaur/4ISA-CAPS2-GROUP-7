@@ -99,7 +99,19 @@ _READY_RECHECK_SECONDS = 60
 _ready_cache = {"value": False, "checked_at": 0.0}
 
 
+# PAUSED (Audrey, 2026-10-03): two-step sign-in is switched off everywhere,
+# local and live, until the encryption key and recovery codes are sorted out
+# on her PC. All the code, the user_mfa table and everyone's stored setup are
+# kept; this only makes the app behave as it did before migration 0035:
+# sign-in is password-only and Account security says it isn't available.
+# To turn it back on, set this to False (and make sure MFA_ENCRYPTION_KEY is
+# the same in every .env and on Render).
+MFA_PAUSED = True
+
+
 def mfa_ready(db: Session) -> bool:
+    if MFA_PAUSED:
+        return False
     if _ready_cache["value"]:
         return True
     now = time.monotonic()

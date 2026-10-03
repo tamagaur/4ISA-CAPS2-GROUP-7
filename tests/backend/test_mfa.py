@@ -49,6 +49,9 @@ def mfa_env(monkeypatch):
     # Empty, not deleted: load_dotenv(override=False) would fill a missing one from .env.
     monkeypatch.setenv("MFA_REQUIRED_ROLES", "")
     monkeypatch.setitem(mfa._ready_cache, "value", True)
+    # The feature is paused in the app (mfa.MFA_PAUSED); these tests cover
+    # how it behaves when switched back on.
+    monkeypatch.setattr(mfa, "MFA_PAUSED", False)
 
 
 # ── The fake database ─────────────────────────────────────────────────────
@@ -489,3 +492,24 @@ def test_before_the_migration_nothing_changes(client, db, monkeypatch):
     assert status["available"] is False and status["enabled"] is False
     res = client.post("/auth/mfa/setup", headers=bearer(db.users[1]))
     assert res.status_code == 503 and res.json()["code"] == "mfa_not_ready"
+
+
+def test_paused_means_password_only_even_for_an_account_with_it_on(monkeypatch):
+    """mfa.MFA_PAUSED (2026-10-03): sign-in skips the code step for everyone,
+    including an account that has two-step on, and the database isn't even
+    asked, exactly like before migration 0035."""
+    monkeypatch.setattr(mfa, "MFA_PAUSED", True)
+
+    class NoQuery:
+        def execute(self, *args, **kwargs):
+            raise AssertionError("paused two-step sign-in must not query the database")
+
+    assert mfa.mfa_ready(NoQuery()) is False
+    assert mfa.sign_in_step(NoQuery(), 1, "admin") is None
+
+
+def test_the_shipped_app_has_two_step_sign_in_paused():
+    """Turning it back on is a deliberate one-line change in backend/mfa.py."""
+    import importlib
+    import backend.mfa as fresh
+    assert importlib.reload(fresh).MFA_PAUSED is True
