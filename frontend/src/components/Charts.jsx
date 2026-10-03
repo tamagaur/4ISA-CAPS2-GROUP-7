@@ -339,8 +339,10 @@ const FILL_BOTTOM_OPACITY = 0.02;
 // every month after it. A latest year that is already over is all past.
 // Nothing is drawn for a section the data doesn't reach — the dashboard
 // holds no sales forecast in pesos, so the future is a labelled space, not
-// an invented line. Month slots are numbered 1–12 and each section spans
-// its months' full slots (0.5 either side). On a phone the one-month
+// an invented line. Month slots are numbered 1–12; a boundary between two
+// sections falls halfway between their months, and the outer edges stop at
+// Jan and Dec, so the plot runs the full width of the card with no empty
+// half-slot either side. On a phone the one-month
 // present is too narrow for its name, so it reads "Now" there.
 const SECTION_STYLE = {
   past: { label: 'Past', fill: 'var(--color-slate-500, #64748b)', fillOpacity: 0.06 },
@@ -349,7 +351,9 @@ const SECTION_STYLE = {
 };
 const timeSections = (year, today) => {
   if (year == null) return [];
-  const span = (key, first, last) => ({ key, first, last, x1: first - 0.5, x2: last + 0.5, ...SECTION_STYLE[key] });
+  const span = (key, first, last) => ({
+    key, first, last, x1: Math.max(1, first - 0.5), x2: Math.min(12, last + 0.5), ...SECTION_STYLE[key],
+  });
   const thisYear = today.getFullYear();
   if (year < thisYear) return [span('past', 1, 12)];
   if (year > thisYear) return [span('future', 1, 12)];
@@ -805,7 +809,7 @@ export const SalesVsStockWidget = ({
           </ul>
           <div className="chart-container chart-container-yoy">
             <ResponsiveContainer width="99%" height="100%">
-              <ComposedChart data={rows} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
+              <ComposedChart data={rows} margin={{ top: 20, right: 16, left: 0, bottom: 10 }}>
                 <defs>
                   {visible.map((sr) => (
                     <linearGradient key={sr.key} id={`svs-fill-${sr.key}`} x1="0" y1="0" x2="0" y2="1">
@@ -822,10 +826,9 @@ export const SalesVsStockWidget = ({
                 <XAxis
                   dataKey="m"
                   type="number"
-                  domain={[0.5, 12.5]}
+                  domain={[1, 12]}
                   ticks={CALENDAR_MONTHS.map((_, i) => i + 1)}
                   tickFormatter={(v) => CALENDAR_MONTHS[v - 1] ?? ''}
-                  allowDecimals={false}
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: wide ? 10 : 8.5, fill: CHART_COLORS.axisLabel }}
