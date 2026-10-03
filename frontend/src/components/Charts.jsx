@@ -1000,8 +1000,10 @@ const AbcTierCard = ({ facts, atRisk = null }) => {
           safety stock — <span className="abc-tier-card-nowrap">see which <ArrowRight size={12} aria-hidden="true" /></span>
         </button>
       )}
-      <Link to="/abc" className="abc-tier-card-link">
-        See every SKU and its class <ArrowRight size={12} aria-hidden="true" />
+      {/* "Which ones?" — the products behind this class's count, one click
+          away: the ABC page opens on the class picked here (?class=). */}
+      <Link to={`/abc?class=${facts.tier}`} className="abc-tier-card-link">
+        See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
       </Link>
     </div>
   );

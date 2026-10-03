@@ -975,3 +975,9 @@
   font-weight: 400;
   color: var(--color-text-subtle);
 }
+
+/* Arriving from the Dashboard's class link scrolls here: leave room for the
+   sticky top bar so the filters stay in view above the table. */
+.abc-cat-toggle-group {
+  scroll-margin-top: 150px;
+}

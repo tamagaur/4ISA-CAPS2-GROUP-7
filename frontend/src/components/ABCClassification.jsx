@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info } from 'lucide-react';
 import {
   BarChart,
@@ -315,14 +315,21 @@ const ABCClassification = () => {
   // (refetch, keep it), which `loading` alone cannot: it is true for both.
   const [loadedKey, setLoadedKey] = useState(null);
 
+  // Arriving from the Dashboard's ABC card (/abc?class=B): the page opens
+  // on that class — the table filtered to it and narrowed to this run's
+  // ranking, so its row count is the count the dashboard card showed — and
+  // scrolls to the table.
+  const [searchParams] = useSearchParams();
+  const linkedClass = ['A', 'B', 'C'].includes(searchParams.get('class')) ? searchParams.get('class') : null;
+  const classTableRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState(linkedClass || 'ALL');
   const [brandFilter, setBrandFilter] = useState('ALL');
   const [fsnFilter, setFsnFilter] = useState('ALL');
   // Off by default: the table lists every SKU's most recent tier. On, it
   // narrows to the SKUs ranked in THIS run — what the page showed before
   // last-known tiers, and the only set whose Rev % values sum to 100%.
-  const [currentRunOnly, setCurrentRunOnly] = useState(false);
+  const [currentRunOnly, setCurrentRunOnly] = useState(Boolean(linkedClass));
 
   // Table pagination — the full SKU table can run 600+ rows, which is
   // slow to render and hard to scan in one scroll. PAGE_SIZE_OPTIONS
@@ -330,6 +337,12 @@ const ABCClassification = () => {
   // matches the old "show everything" feel most closely while still
   // capping the DOM node count per render.
   const PAGE_SIZE_OPTIONS = [25, 50, 100];
+  const scrolledToClass = useRef(false);
+  useEffect(() => {
+    if (!linkedClass || loading || scrolledToClass.current || !classTableRef.current) return;
+    scrolledToClass.current = true;
+    classTableRef.current.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }, [linkedClass, loading]);
   const [pageSize, setPageSize] = useState(25);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -338,7 +351,7 @@ const ABCClassification = () => {
   // of revenue) and the one a reviewer most wants to see on
   // first load, not the long-tail Class C. Still swappable via any
   // class's bar or the tab buttons.
-  const [selectedClass, setSelectedClass] = useState('A');
+  const [selectedClass, setSelectedClass] = useState(linkedClass || 'A');
   // Hatch the CRITICAL segments only when the reader asked for a
   // non-colour channel (high-contrast / forced-colors) — see ChartZoom.
   const wantsTexture = usePrefersTexture();
@@ -1422,7 +1435,7 @@ const ABCClassification = () => {
                 </select>
               </div>
 
-              <div className="abc-cat-toggle-group">
+              <div className="abc-cat-toggle-group" ref={classTableRef}>
                 {['ALL', 'A', 'B', 'C'].map(cat => (
                   <button
                     key={cat}
