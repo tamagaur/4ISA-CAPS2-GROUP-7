@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -1515,34 +1515,88 @@ const FORECAST_SECTION_STYLE = {
 };
 // Every month is labelled while a month name fits its slot; only below this
 // width per month (a phone) are labels thinned, to every 2nd or 3rd month.
-const MONTH_LABEL_MIN_PX = 18;
+const MONTH_LABEL_MIN_PX = 17.5;
 // Below this width per month, "PRESENT" no longer fits its one-month band:
 // it reads "NOW", set against the band's right edge, so it and "FUTURE"
 // (set against its left edge) sit either side of the rule between them
 // instead of on top of each other.
 const SECTION_LABEL_MIN_SLOT_PX = 62;
 
-// The month axis: "Jan" … "Dec" with the year on a second line beneath —
-// under the first label and wherever the year changes from the label
-// before it, so each year is named once, where it starts on the axis.
-const MonthYearTick = ({ x, y, payload, rows, step, fontSize = 10 }) => {
-  const row = rows[payload.value];
+// The month axis, in two rows (Audrey, 2026-10-03): the month names, and
+// under them one bracket per year — a rule spanning that year's months with
+// the year in the middle of it ("──── 2025 ────") — so a month is read off
+// the top row and its year straight below, and where one year ends and the
+// next begins is the gap between two brackets.
+//
+// `slot` is the width of one month in px. Each tick draws its own month;
+// the first labelled month of a year also draws that year's bracket, from
+// the year's first month to its last (labelled or not).
+const YEAR_LABEL_WIDTH = 38;
+const MonthYearTick = ({ x, y, payload, rows, step, slot }) => {
+  const i = payload.value;
+  const row = rows[i];
   if (!row) return null;
   const year = yearOf(row.period);
-  const before = rows[payload.value - step];
-  const showYear = !before || yearOf(before.period) !== year;
+  const before = rows[i - step];
+  const startsYear = !before || yearOf(before.period) !== year;
+  const month = (
+    <text x={x} y={y + 14} textAnchor="middle" fontSize={slot < 20 ? 8.5 : slot < 26 ? 9.5 : 10.5} fill={CHART_COLORS.axisLabel}>
+      {AXIS_MONTHS[monthOf(row.period) - 1]}
+    </text>
+  );
+  if (!startsYear) return month;
+  const yearText = (cx) => (
+    <text x={cx} y={y + 36} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="var(--color-text, #1a202c)">
+      {year}
+    </text>
+  );
+  // Before the plot is measured there is no slot width to span: the year
+  // sits under its first month.
+  if (!Number.isFinite(slot)) return <g>{month}{yearText(x)}</g>;
+  let first = i;
+  while (first > 0 && yearOf(rows[first - 1].period) === year) first -= 1;
+  let last = i;
+  while (last < rows.length - 1 && yearOf(rows[last + 1].period) === year) last += 1;
+  // Half a month either side of the year's months, less a gap so two
+  // brackets never touch; the axis's own ends stop just past the point.
+  const x1 = x + (first - i) * slot - (first === 0 ? 6 : slot / 2 - 4);
+  const x2 = x + (last - i) * slot + (last === rows.length - 1 ? 6 : slot / 2 - 4);
+  const cx = (x1 + x2) / 2;
+  const lineY = y + 32;
+  const hasRule = x2 - x1 > YEAR_LABEL_WIDTH + 16;
   return (
     <g>
-      <text x={x} y={y + 14} textAnchor="middle" fontSize={fontSize} fill={CHART_COLORS.axisLabel}>
-        {AXIS_MONTHS[monthOf(row.period) - 1]}
-      </text>
-      {showYear && (
-        <text x={x} y={y + 27} textAnchor="middle" fontSize={10} fontWeight={700} fill={CHART_COLORS.axisLabel}>
-          {year}
-        </text>
+      {month}
+      {hasRule && (
+        <>
+          <line x1={x1} x2={cx - YEAR_LABEL_WIDTH / 2} y1={lineY} y2={lineY} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
+          <line x1={cx + YEAR_LABEL_WIDTH / 2} x2={x2} y1={lineY} y2={lineY} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
+          <line x1={x1} x2={x1} y1={lineY - 4} y2={lineY} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
+          <line x1={x2} x2={x2} y1={lineY - 4} y2={lineY} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
+        </>
       )}
+      {yearText(cx)}
     </g>
   );
+};
+// The forecast plot's fixed frame, so one month's width can be worked out
+// from the container's: the y axis, and the chart's right margin.
+const PF_Y_AXIS_WIDTH = 60;
+// A measured width for an element that mounts late (the plot sits behind
+// the loading and table states, so a ref read once on mount would miss it).
+const useMeasuredWidth = () => {
+  const [width, setWidth] = useState(0);
+  const observer = useRef(null);
+  const ref = useCallback((node) => {
+    observer.current?.disconnect();
+    observer.current = null;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setWidth(node.getBoundingClientRect().width);
+    measure();
+    observer.current = new ResizeObserver(measure);
+    observer.current.observe(node);
+  }, []);
+  return [ref, width];
 };
 
 // Portfolio-level aggregate forecast — sums forecast_value across every
@@ -1631,12 +1685,7 @@ export const PortfolioForecastWidget = ({
   // The x axis is the month's position in the window (0, 1, 2 …), so a
   // section can end halfway between two months.
   const plotRows = useMemo(() => zoom.view.map((pt, i) => ({ ...pt, idx: i })), [zoom.view]);
-  const widgetRef = useRef(null);
-  const cardWidth = useElementWidth(widgetRef);
-  // Width of one month on the plot (the card less its axis and margins).
-  const slotPx = cardWidth && plotRows.length > 1 ? (cardWidth - 130) / plotRows.length : Infinity;
-  // Every month labelled, unless the names would run into each other.
-  const tickStep = Math.max(1, Math.ceil(MONTH_LABEL_MIN_PX / slotPx));
+  const [plotRef, plotWidth] = useMeasuredWidth();
 
   // Past / Present / Future (FORECAST_SECTION_STYLE): the present is the
   // latest month with actual demand in the whole series; panned away from
@@ -1662,6 +1711,14 @@ export const PortfolioForecastWidget = ({
       ].filter(Boolean),
     };
   }, [plotRows, chartData]);
+  // Width of one month on the plot: the container (ResponsiveContainer
+  // takes 99% of it) less the y axis and the right margin, over the axis's
+  // span. Infinity until the plot is measured.
+  const slotPx = plotWidth && xMax > 0
+    ? (plotWidth * 0.99 - PF_Y_AXIS_WIDTH - EDGE_LABEL_MARGIN) / xMax
+    : Infinity;
+  // Every month labelled, unless the names would run into each other.
+  const tickStep = Math.max(1, Math.ceil(MONTH_LABEL_MIN_PX / slotPx));
   const narrowSlots = slotPx < SECTION_LABEL_MIN_SLOT_PX;
   // The sections in words, so the reader knows which months each one is.
   const sectionNote = { present: ' (latest month with sales)', future: ' (forecast)' };
@@ -1693,7 +1750,7 @@ export const PortfolioForecastWidget = ({
     : null;
 
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`} ref={widgetRef}>
+    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           {/* The unit is PIECES here and pesos on the chart above it; the
@@ -1760,7 +1817,7 @@ export const PortfolioForecastWidget = ({
                   Approx. 90% range (if SKUs miss independently)
                 </li>
               </ul>
-              <div className="chart-container">
+              <div className="chart-container" ref={plotRef}>
                 <ResponsiveContainer width="99%" height="100%">
                   <ComposedChart data={plotRows} margin={{ top: 10, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
                     <defs>
@@ -1770,9 +1827,9 @@ export const PortfolioForecastWidget = ({
                       </linearGradient>
                     </defs>
                     <CartesianGrid {...GRID_PROPS} />
-                    {/* Months by name, the year beneath (MonthYearTick) —
-                        every month, thinned only when the card is too
-                        narrow for the names (tickStep). */}
+                    {/* Months by name, each year bracketed beneath them
+                        (MonthYearTick) — every month, thinned only when
+                        the card is too narrow for the names (tickStep). */}
                     <XAxis
                       dataKey="idx"
                       type="number"
@@ -1781,11 +1838,12 @@ export const PortfolioForecastWidget = ({
                       axisLine={false}
                       tickLine={false}
                       interval={0}
-                      tick={<MonthYearTick rows={plotRows} step={tickStep} fontSize={slotPx < 26 ? 8.5 : 10} />}
-                      height={X_AXIS_TITLED_HEIGHT + 12}
+                      tick={<MonthYearTick rows={plotRows} step={tickStep} slot={slotPx} />}
+                      height={X_AXIS_TITLED_HEIGHT + 22}
                       label={xAxisTitle('Month')}
                     />
                     <YAxis
+                      width={PF_Y_AXIS_WIDTH}
                       axisLine={false}
                       tickLine={false}
                       domain={['auto', 'auto']}
