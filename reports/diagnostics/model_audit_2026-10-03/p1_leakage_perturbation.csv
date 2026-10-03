@@ -1,0 +1,4 @@
+target_month,products,bin_changed,training_rows_base,training_rows_perturbed,max_abs_change_value,max_abs_change_ma3,max_abs_change_tsb,max_abs_change_xgb_component,max_abs_change_xgb_any_bin,n_value,n_ma3,n_tsb,n_xgb_component,n_xgb_any_bin
+2024-06,75,0,769,769,0.0000,0.0000,0.0000,,0.0000,72,75,49,0,75
+2025-03,89,0,1503,1503,0.0000,0.0000,0.0000,0.0000,0.0000,89,89,32,40,89
+2026-01,107,0,2483,2483,0.0000,0.0000,0.0000,0.0000,0.0000,107,107,24,65,107

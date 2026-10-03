@@ -1,0 +1,4 @@
+bin,product_months,products,wape_served,wape_ma3,bias_pct_served,bias_pct_ma3,mean_z_served,share_over_served,median_product_wape_served,median_product_wape_ma3
+long,759,67,0.3063,0.3142,5.7041,4.5161,0.0170,0.5204,0.2477,0.2689
+medium,1002,89,0.2570,0.2648,3.9086,2.8764,-0.0005,0.5060,0.2499,0.2598
+short,658,107,0.3069,0.3069,-0.5666,-0.5666,-0.0048,0.5274,0.2647,0.2647
