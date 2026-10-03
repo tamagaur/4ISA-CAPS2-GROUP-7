@@ -89,21 +89,14 @@ export const STATUS_TIERS = {
 export const CHART_COLORS = {
   salesSeries: COLORS.dispatched,
   stockSeries: '#2563EB',
-  // Navy for the inventory-value line on the hero chart (2026-10-03): it
-  // overlays two years per metric, told apart by solid vs dashed, so each
-  // METRIC needs one unmistakable hue — teal for sales, navy for inventory.
-  // Dark enough that a dashed line still reads; a blue no status uses;
-  // paired with teal, as the hue-pair rule above requires.
-  inventorySeries: '#1E3A8A',
-  // The previous year's lines on that chart (2026-10-03). Same hue faded
-  // to half opacity wasn't distinct enough from the current year, so last
-  // year gets its own colours: ochre gold for sales, cornflower blue for
-  // inventory. Chosen by measurement: every pair of the four series is
-  // ≥ 35 ΔE apart, both read at ≥ 3.4:1 on the white card, and both sit
-  // ≥ 30 ΔE from every status colour above (ochre is not amber) and from
-  // the ABC plums on the card below.
-  salesPrevSeries: '#A07A1A',
-  inventoryPrevSeries: '#4F8ED9',
+  // The Sales vs Inventory Value chart's own pair (spec of 2026-10-03):
+  // teal for sales, navy for inventory, the SAME colour in both years —
+  // the year is told by line style (solid = latest year, dashed = the year
+  // before). Scoped to that chart so the app-wide salesSeries teal on the
+  // forecast charts stays as it is. Both pass the hue-pair rule above
+  // (teal beside one blue) and read at ≥ 3.5:1 on the white card.
+  heroSales: '#159BA6',
+  heroInventory: '#3455A4',
   abcRamp: [COLORS.abcA, COLORS.abcB, COLORS.abcC], // Class A, B, C — sequential
   cumulativeCurve: '#475569',
   gridline: '#E2E8F0',
