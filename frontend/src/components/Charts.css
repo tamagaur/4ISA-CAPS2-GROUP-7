@@ -388,14 +388,15 @@
   line-height: 1.4;
 }
 
-/* Legend key for a stock count flagged as unusual — the same hollow slate
-   ring the chart draws at that point (Charts.jsx stockDot). */
+/* Legend key for a stock count flagged as unusual — the same muted slate
+   dot the chart draws at that point (Charts.jsx stockDot): filled, so it
+   stands apart from the lines without competing with them. */
 .legend-unusual {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid var(--color-text-muted);
-  background-color: var(--color-surface);
+  border: 1.5px solid var(--color-surface);
+  background-color: var(--color-text-muted);
   box-sizing: border-box;
   flex-shrink: 0;
 }

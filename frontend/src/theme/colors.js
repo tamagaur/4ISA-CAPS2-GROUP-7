@@ -89,6 +89,12 @@ export const STATUS_TIERS = {
 export const CHART_COLORS = {
   salesSeries: COLORS.dispatched,
   stockSeries: '#2563EB',
+  // Navy for the inventory-value line on the hero chart (2026-10-03): it
+  // overlays two years per metric, told apart by solid vs dashed, so each
+  // METRIC needs one unmistakable hue — teal for sales, navy for inventory.
+  // Dark enough that a dashed line still reads; a blue no status uses;
+  // paired with teal, as the hue-pair rule above requires.
+  inventorySeries: '#1E3A8A',
   abcRamp: [COLORS.abcA, COLORS.abcB, COLORS.abcC], // Class A, B, C — sequential
   cumulativeCurve: '#475569',
   gridline: '#E2E8F0',

@@ -14,7 +14,6 @@ import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGE
 import { useChartZoom, ChartZoomSlider, SeriesFill, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
-import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
 import InfoTip from './InfoTip';
 import ProductName from './ProductName';
@@ -307,58 +306,79 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
   );
 };
 
-const SalesStockTooltip = ({ active, payload, label, placeholder }) => {
+// The year-over-year axis: twelve calendar slots, so the same month of two
+// years sits on one x position. Every series key is `${metric}_${slot}`,
+// where the slot is the latest year in the range ('cur', solid) or the year
+// before it ('prev', dashed). A point's `meta_${slot}` carries the month it
+// came from, its stock count day, the unusual-count reason and the
+// placeholder flag, so the tooltip can say them per year.
+const CALENDAR_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const YEAR_SLOTS = ['cur', 'prev'];
+const PREV_YEAR_DASH = '6 4';
+const yearOf = (period) => Number(String(period).slice(0, 4));
+const monthOf = (period) => Number(String(period).slice(5, 7));
+const slotOf = (dataKey) => String(dataKey).split('_')[1];
+
+const SalesStockTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
-  // The stock series is drawn twice — the Line, plus the wash under it —
-  // so the raw payload can carry that value twice over. The fill declares
-  // tooltipType="none", which Recharts passes through as `type` on the
-  // entry; dropping those leaves exactly one row per real series.
-  const rows = payload.filter((p) => p.type !== 'none');
+  // The current year's inventory is drawn twice — the Line, plus the wash
+  // under it (tooltipType="none", passed through as `type`). A month one
+  // year has and the other hasn't shows only the year that has it.
+  const rows = payload.filter((p) => p.type !== 'none' && p.value != null);
   if (!rows.length) return null;
+  const row = rows[0].payload || {};
+  const metas = YEAR_SLOTS.map((slot) => row[`meta_${slot}`]).filter(Boolean);
   return (
     <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(label)}</p>
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{label}</p>
       {/* Swatch + ink text: the mark beside the words carries identity —
-          text never wears the series colour. */}
-      {rows.map((p) => (
-        <p key={p.dataKey} className="chart-tooltip-row">
-          <span className="chart-tooltip-swatch" style={{ backgroundColor: p.color }} aria-hidden="true" />
-          {p.name}: <strong>{formatCompactPesos(p.value)}</strong>
-          {/* The month on this point is the one the count is filed under;
-              the day it was actually counted can be a week later. */}
-          {p.dataKey === 'stockOnHand' && p.payload?.stockCountDay && ` · counted ${p.payload.stockCountDay}`}
+          text never wears the series colour. Each name ends in its year. */}
+      {rows.map((p) => {
+        const meta = row[`meta_${slotOf(p.dataKey)}`];
+        return (
+          <p key={p.dataKey} className="chart-tooltip-row">
+            <span className="chart-tooltip-swatch" style={{ backgroundColor: p.color }} aria-hidden="true" />
+            {p.name}: <strong>{formatCompactPesos(p.value)}</strong>
+            {/* The month on this point is the one the count is filed under;
+                the day it was actually counted can be a week later. */}
+            {String(p.dataKey).startsWith('stock_') && meta?.stockCountDay && ` · counted ${meta.stockCountDay}`}
+          </p>
+        );
+      })}
+      {/* A stock count the team reviewed and judged unusual (GET
+          /dashboard's stock_on_hand_flags) — the reason sits with the point,
+          named by its year since two years share the slot. */}
+      {metas.filter((m) => m.stockUnusual).map((m) => (
+        <p key={m.period} className="chart-tooltip-placeholder chart-tooltip-note">
+          Unusual count, {formatAxisPeriod(m.period)}: {m.stockUnusual}
         </p>
       ))}
-      {/* A stock count the team reviewed and judged unusual (GET
-          /dashboard's stock_on_hand_flags) — the reason sits with the point. */}
-      {rows[0]?.payload?.stockUnusual && (
-        <p className="chart-tooltip-placeholder chart-tooltip-note">Unusual count: {rows[0].payload.stockUnusual}</p>
-      )}
-      {isPlaceholderPeriod(label, placeholder) && (
+      {metas.some((m) => m.placeholder) && (
         <p className="chart-tooltip-placeholder">Placeholder month — not SSM&apos;s data</p>
       )}
     </div>
   );
 };
 
-// The stock line's dot, except at a count GET /dashboard flags as unusual
+// An inventory line's dot, except at a count GET /dashboard flags as unusual
 // (stock_on_hand_flags, from the team's reviewed list in backend/
-// data_notes.py): there a hollow slate ring, drawn at every density, so the
-// point stays on the line — it was counted — without reading as an ordinary
-// month. The tooltip gives the reason.
-const stockDot = (color) => {
+// data_notes.py): there a muted slate dot, filled and drawn at every
+// density, so the point stays on its line — it was counted — and reads
+// apart from the ordinary months without competing with the trend lines.
+// The tooltip gives the reason.
+const stockDot = (color, slot) => {
   const base = seriesDot({ color });
   const StockDot = (props) => {
     const { cx, cy, payload } = props;
-    if (payload?.stockUnusual && cx != null && cy != null) {
+    if (payload?.[`meta_${slot}`]?.stockUnusual && cx != null && cy != null) {
       return (
         <circle
           cx={cx}
           cy={cy}
-          r={5}
-          fill="var(--color-surface, #fff)"
-          stroke="var(--color-text-muted, #556070)"
-          strokeWidth={2}
+          r={4.5}
+          fill="var(--color-text-muted, #556070)"
+          stroke="var(--color-surface, #fff)"
+          strokeWidth={1.5}
         />
       );
     }
@@ -388,13 +408,19 @@ const RECEIVED_LABEL = 'Purchases received';
 // renamed 2026-10-02 so the legend, tooltip and table say what is plotted.
 const INVENTORY_LABEL = 'Inventory value (at cost)';
 
-// Sales vs Inventory Value — the dashboard's hero chart. `data` is
-// [{ period, sales, stockOnHand, received }], all three in pesos (GET
-// /dashboard sums stock_on_hand and received as peso figures specifically
-// so all three plot on one axis — see backend/routers/dashboard.py's
-// kpis.soh_value and sales_vs_stock[].received docstring sections). No
-// flat ReferenceLine for `received`: it varies per period like the other
-// two series, so it's a dashed Line, not a constant.
+// Sales vs Inventory Value — the dashboard's hero chart, as a year-over-year
+// overlay (2026-10-03). `data` is [{ period, sales, stockOnHand, received }],
+// all in pesos (GET /dashboard sums stock_on_hand and received as peso
+// figures specifically so they plot on one axis — see backend/routers/
+// dashboard.py's kpis.soh_value and sales_vs_stock[].received docstrings).
+//
+// The x axis is a fixed Jan–Dec calendar. Each metric keeps one hue (sales
+// teal, inventory navy, purchases received violet) and each YEAR one line
+// style: the latest year in the fetched range solid, the year before it
+// dashed. So "how does this month compare with the same month last year"
+// is read straight off the chart — the Technical Adviser's "story in the
+// changes" — instead of walked along a timeline. Only those two years are
+// drawn; the subtitle names any earlier year the range holds.
 //
 // `insight` is GET /dashboard's sales_vs_stock_insight: the one-sentence
 // takeaway under the title and the peak/low sales months this chart
@@ -417,14 +443,9 @@ export const SalesVsStockWidget = ({
   const withBasis = (label, key) => (basis?.[key] ? `${label} · ${basis[key]}` : label);
   const salesLabel = withBasis('Sales', 'sales');
   const receivedLabel = withBasis(RECEIVED_LABEL, 'received');
-  const hasUnusual = data.some((pt) => pt.stockUnusual && pt.stockOnHand != null);
-  // Windows over whatever range the page's date filter fetched. At a wide
-  // range that is 38 months, far more than the XAxis can label without
-  // skipping — narrowing the window is what puts every month back on screen.
-  const zoom = useChartZoom(data);
   const [view, setView] = useState('chart');
   // Hovering one legend entry or line pulls that series forward and drops
-  // the others back — with three peso lines on one axis, this is how a
+  // the others back — with up to six peso lines on one axis, this is how a
   // reader isolates the one they're tracing.
   const [focusKey, setFocusKey] = useState(null);
   const dimmable = (key) => (focusKey && focusKey !== key ? 0.25 : 1);
@@ -434,63 +455,107 @@ export const SalesVsStockWidget = ({
   });
   // A legend entry with no drawn series is a phantom. Live,
   // Purchase_Fact_Real holds Del Monte rows only, so `received` is null
-  // for every Unilever period: the "Fixed Allocation" line never drew a
-  // single point while its legend swatch still claimed a series existed.
-  // The Line and its legend entry now appear together, only when at least
-  // one real point exists — and the subtitle says which case it is.
+  // for every Unilever period: the line and its legend entry appear
+  // together, only when at least one real point exists.
   const hasReceived = data.some((pt) => pt.received != null);
-  // Preview only: the placeholder months inside the visible window, and
-  // whether the fetched range holds any at all (the legend entry).
-  const bandSpan = placeholderSpan(zoom.view, placeholder);
-  const hasPlaceholder = placeholderSpan(data, placeholder) != null;
 
-  // Direct labels: each line's latest value at its end, plus the backend's
-  // peak/low sales months. Selective by design — never a number on every
+  // The calendar rows: one per month, each year's values in that year's
+  // slot. A month the range doesn't reach (Mar–Dec of a year that ends in
+  // Feb) is null, so the line simply stops there.
+  const { rows, slotYears, slots, undrawnYears } = useMemo(() => {
+    const years = [...new Set(data.map((pt) => yearOf(pt.period)))].sort((a, b) => a - b);
+    const byYear = { cur: years[years.length - 1] ?? null, prev: years.length > 1 ? years[years.length - 2] : null };
+    const byPeriod = new Map(data.map((pt) => [pt.period, pt]));
+    const calendar = CALENDAR_MONTHS.map((month, i) => {
+      const row = { month };
+      for (const slot of YEAR_SLOTS) {
+        const year = byYear[slot];
+        const pt = year == null ? null : byPeriod.get(`${year}-${String(i + 1).padStart(2, '0')}`);
+        row[`sales_${slot}`] = pt?.sales ?? null;
+        row[`stock_${slot}`] = pt?.stockOnHand ?? null;
+        row[`received_${slot}`] = pt?.received ?? null;
+        row[`meta_${slot}`] = pt
+          ? {
+              period: pt.period,
+              stockCountDay: pt.stockCountDay ?? null,
+              stockUnusual: pt.stockUnusual ?? null,
+              placeholder: isPlaceholderPeriod(pt.period, placeholder),
+            }
+          : null;
+      }
+      return row;
+    });
+    return {
+      rows: calendar,
+      slotYears: byYear,
+      slots: YEAR_SLOTS.filter((slot) => byYear[slot] != null),
+      undrawnYears: years.slice(0, -2),
+    };
+  }, [data, placeholder]);
+  const hasUnusual = rows.some((r) => slots.some((s) => r[`meta_${s}`]?.stockUnusual && r[`stock_${s}`] != null));
+  const hasPlaceholder = rows.some((r) => slots.some((s) => r[`meta_${s}`]?.placeholder));
+  const yearName = (label, slot) => `${label} · ${slotYears[slot]}`;
+  // Which years the lines are, said outright — the legend shows it, but a
+  // range holding one year only, or three, needs the words.
+  const yearsLine = slotYears.cur == null
+    ? null
+    : slotYears.prev == null
+      ? `One calendar year per line: only ${slotYears.cur} is in the selected range — widen it to overlay ${slotYears.cur - 1}.`
+      : `One calendar year per line: ${slotYears.cur} solid, ${slotYears.prev} dashed, on the same Jan–Dec axis.`
+        + (undrawnYears.length ? ` Earlier years in the range (${undrawnYears.join(', ')}) aren't drawn.` : '');
+
+  // Direct labels: the current year's latest sales and inventory values at
+  // their line ends, plus the backend's peak/low sales months on whichever
+  // year's line holds them. Selective by design — never a number on every
   // point. End labels drop out (legend + tooltip take over) when the two
   // lines finish too close together to label without overlap, measured
-  // against the window's own value span.
+  // against the chart's own value span.
   const labels = useMemo(() => {
-    const rows = zoom.view;
-    const lastWith = (key) => [...rows].reverse().find((pt) => pt[key] != null) ?? null;
-    const lastSales = lastWith('sales');
-    const lastStock = lastWith('stockOnHand');
-    const values = rows.flatMap((pt) => [pt.sales, pt.stockOnHand, hasReceived ? pt.received : null])
+    const lastWith = (key) => [...rows].reverse().find((r) => r[key] != null) ?? null;
+    const lastSales = lastWith('sales_cur');
+    const lastStock = lastWith('stock_cur');
+    const values = rows
+      .flatMap((r) => slots.flatMap((s) => [r[`sales_${s}`], r[`stock_${s}`], hasReceived ? r[`received_${s}`] : null]))
       .filter((v) => v != null);
     const span = values.length ? Math.max(...values) - Math.min(...values) : 0;
-    const collide = lastSales && lastStock && lastSales.period === lastStock.period && span > 0
-      && Math.abs(lastSales.sales - lastStock.stockOnHand) / span < 0.09;
-    const salesEntries = [];
+    const collide = lastSales && lastStock && lastSales.month === lastStock.month && span > 0
+      && Math.abs(lastSales.sales_cur - lastStock.stock_cur) / span < 0.09;
+    const entries = { sales_cur: [], sales_prev: [], stock_cur: [] };
     if (lastSales && !collide) {
-      salesEntries.push({
-        period: lastSales.period,
-        text: `Sales ${formatCompactPesos(lastSales.sales)}`,
-        below: lastStock && lastSales.sales < (lastStock.stockOnHand ?? -Infinity),
+      entries.sales_cur.push({
+        period: lastSales.month,
+        text: `Sales ${formatCompactPesos(lastSales.sales_cur)}`,
+        below: lastStock && lastSales.sales_cur < (lastStock.stock_cur ?? -Infinity),
       });
     }
-    // The backend's peak/low sales months — skipped at the line's end,
-    // where the end label already carries that value.
     for (const mark of [insight?.peak, insight?.low]) {
-      if (mark && mark.period !== lastSales?.period) {
-        salesEntries.push({ period: mark.period, text: mark.label, below: mark === insight?.low });
-      }
+      if (!mark) continue;
+      const slot = YEAR_SLOTS.find((s) => slotYears[s] === yearOf(mark.period));
+      if (!slot) continue;
+      const month = CALENDAR_MONTHS[monthOf(mark.period) - 1];
+      // Skipped at the current line's end, where the end label has it.
+      if (slot === 'cur' && lastSales && month === lastSales.month) continue;
+      entries[`sales_${slot}`].push({ period: month, text: mark.label, below: mark === insight?.low });
     }
     // A flagged count keeps its end label, but says it is unusual — the
     // label is where the eye lands first.
-    const stockEntries = lastStock && !collide
-      ? [{
-          period: lastStock.period,
-          text: `Inventory ${formatCompactPesos(lastStock.stockOnHand)}${lastStock.stockUnusual ? ' (unusual)' : ''}`,
-          below: !(lastSales && lastSales.sales < (lastStock.stockOnHand ?? -Infinity)),
-        }]
-      : [];
+    if (lastStock && !collide) {
+      entries.stock_cur.push({
+        period: lastStock.month,
+        text: `Inventory ${formatCompactPesos(lastStock.stock_cur)}${lastStock.meta_cur?.stockUnusual ? ' (unusual)' : ''}`,
+        below: !(lastSales && lastSales.sales_cur < (lastStock.stock_cur ?? -Infinity)),
+      });
+    }
+    const byMonth = { key: 'month' };
     return {
-      sales: pointLabels(rows, salesEntries),
-      stock: pointLabels(rows, stockEntries),
+      sales_cur: pointLabels(rows, entries.sales_cur, byMonth),
+      sales_prev: pointLabels(rows, entries.sales_prev, byMonth),
+      stock_cur: pointLabels(rows, entries.stock_cur, byMonth),
     };
-  }, [zoom.view, hasReceived, insight]);
+  }, [rows, slots, slotYears, hasReceived, insight]);
 
-  // Every column names its unit (₱), and the stock column's count day
-  // rides with its value.
+  // The table keeps the months in order, one row each — every column names
+  // its unit (₱), and the stock column's count day rides with its value.
   const hasCountDays = data.some((pt) => pt.stockCountDay);
   const tableColumns = [
     { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
@@ -500,8 +565,18 @@ export const SalesVsStockWidget = ({
       ? [{ key: 'stockCountDay', label: 'Stock counted on', format: (v) => v, align: 'left' }]
       : []),
     ...(hasReceived ? [{ key: 'received', label: `${receivedLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
-    ...(hasUnusual
+    ...(data.some((pt) => pt.stockUnusual && pt.stockOnHand != null)
       ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Unusual count: ${v}`, align: 'left' }]
+      : []),
+  ];
+
+  // Legend and lines share one description per series, so the pairing the
+  // legend promises (hue = metric, dash = year) is the one that is drawn.
+  const series = [
+    ...slots.map((slot) => ({ key: `sales_${slot}`, slot, name: yearName(salesLabel, slot), color: CHART_COLORS.salesSeries })),
+    ...slots.map((slot) => ({ key: `stock_${slot}`, slot, name: yearName(INVENTORY_LABEL, slot), color: CHART_COLORS.inventorySeries })),
+    ...(hasReceived
+      ? slots.map((slot) => ({ key: `received_${slot}`, slot, name: yearName(receivedLabel, slot), color: COLORS.forecast }))
       : []),
   ];
 
@@ -517,6 +592,7 @@ export const SalesVsStockWidget = ({
           {/* The backend's takeaway sentence, from the same rows this
               chart plots (sales_vs_stock_insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
+          {hasData && yearsLine && view === 'chart' && <p className="chart-insight">{yearsLine}</p>}
         </div>
         {hasData && <ChartViewToggle view={view} onChange={setView} label="Sales vs inventory value: chart or table" />}
       </div>
@@ -532,26 +608,15 @@ export const SalesVsStockWidget = ({
       ) : (
         <>
           <ul className="custom-legend custom-legend-top">
-            <li
-              className="legend-item"
-              {...focusHandlers('sales')}
-            >
-              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
-              {salesLabel}
-            </li>
-            <li
-              className="legend-item"
-              {...focusHandlers('stockOnHand')}
-            >
-              <span className="legend-line" style={{ borderTopColor: CHART_COLORS.stockSeries }} />
-              {INVENTORY_LABEL}
-            </li>
-            {hasReceived && (
-              <li className="legend-item" {...focusHandlers('received')}>
-                <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
-                {receivedLabel}
+            {series.map((sr) => (
+              <li key={sr.key} className="legend-item" {...focusHandlers(sr.key)}>
+                <span
+                  className={`legend-line${sr.slot === 'prev' ? ' legend-line-dashed' : ''}`}
+                  style={{ borderTopColor: sr.color }}
+                />
+                {sr.name}
               </li>
-            )}
+            ))}
             {hasUnusual && (
               <li className="legend-item">
                 <span className="legend-unusual" aria-hidden="true" />
@@ -560,22 +625,21 @@ export const SalesVsStockWidget = ({
             )}
             {hasPlaceholder && <PlaceholderLegendItem />}
           </ul>
-          <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
+          <div className="chart-container">
             <ResponsiveContainer width="99%" height="100%">
-              <ComposedChart data={zoom.view} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
+              <ComposedChart data={rows} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
                 <defs>
-                  {/* ONE wash, under stock only — two overlapping gradients
-                      turned muddy where the lines crossed, and the wash's
-                      job (tie the band to its line) needs only the series
-                      that reads as a level rather than a flow. */}
-                  <SeriesFill id="fill-stock" color={CHART_COLORS.stockSeries} />
+                  {/* ONE wash, under the current year's inventory only — two
+                      overlapping gradients turned muddy where the lines
+                      crossed, and the wash's job (tie the band to its line)
+                      needs only the series that reads as a level rather
+                      than a flow. */}
+                  <SeriesFill id="fill-stock" color={CHART_COLORS.inventorySeries} />
                 </defs>
                 <CartesianGrid {...GRID_PROPS} />
-                {renderPlaceholderBand(bandSpan)}
-                {/* Interval comes from the zoom window, not Recharts' own
-                    crowding heuristic: 0 draws every month once the window is
-                    narrow enough to fit them, and steps up only as it widens. */}
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={zoom.labelInterval} tickFormatter={formatAxisPeriod} height={X_AXIS_TITLED_HEIGHT} label={xAxisTitle('Month')} />
+                {/* Twelve fixed slots, every one labelled: a calendar axis
+                    never has more months than fit. */}
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} interval={0} height={X_AXIS_TITLED_HEIGHT} label={xAxisTitle('Month')} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -583,72 +647,47 @@ export const SalesVsStockWidget = ({
                   tickFormatter={(v) => formatCompactPesos(v)}
                   label={yAxisTitle('Pesos (₱)')}
                 />
-                <Tooltip content={<SalesStockTooltip placeholder={placeholder} />} />
-                {/* The wash is declared ahead of the Lines so both lines
-                    paint on top of it. baseValue="dataMin" anchors it to the
+                <Tooltip content={<SalesStockTooltip />} />
+                {/* The wash is declared ahead of the Lines so every line
+                    paints on top of it. baseValue="dataMin" anchors it to the
                     axis floor rather than to zero, which keeps the Y domain
                     exactly as it was. */}
                 <Area
                   type="linear"
-                  dataKey="stockOnHand"
+                  dataKey="stock_cur"
                   stroke="none"
                   fill="url(#fill-stock)"
                   baseValue="dataMin"
                   legendType="none"
                   tooltipType="none"
-                  opacity={dimmable('stockOnHand')}
-                  {...zoom.zoomAnim(1)}
+                  opacity={dimmable('stock_cur')}
                 />
                 {/* Straight segments (linear), not smoothed curves: these
                     are monthly totals, and a curve suggests values between
-                    the months that don't exist. */}
-                <Line
-                  type="linear"
-                  dataKey="sales"
-                  name={salesLabel}
-                  stroke={CHART_COLORS.salesSeries}
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeOpacity={dimmable('sales')}
-                  dot={seriesDot({ color: CHART_COLORS.salesSeries })}
-                  activeDot={{ r: 6 }}
-                  label={labels.sales}
-                  {...focusHandlers('sales')}
-                  {...zoom.zoomAnim(0)}
-                />
-                <Line
-                  type="linear"
-                  dataKey="stockOnHand"
-                  name={INVENTORY_LABEL}
-                  stroke={CHART_COLORS.stockSeries}
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeOpacity={dimmable('stockOnHand')}
-                  dot={stockDot(CHART_COLORS.stockSeries)}
-                  activeDot={{ r: 6 }}
-                  label={labels.stock}
-                  {...focusHandlers('stockOnHand')}
-                  {...zoom.zoomAnim(1)}
-                />
-                {hasReceived && (
+                    the months that don't exist. A null month breaks the
+                    line rather than bridging it (connectNulls off), so a
+                    year that ends in Feb stops in Feb. */}
+                {series.map((sr) => (
                   <Line
+                    key={sr.key}
                     type="linear"
-                    dataKey="received"
-                    name={receivedLabel}
-                    stroke={COLORS.forecast}
-                    strokeDasharray="7 5"
+                    dataKey={sr.key}
+                    name={sr.name}
+                    stroke={sr.color}
                     strokeWidth={2}
-                    strokeOpacity={dimmable('received')}
-                    dot={seriesDot({ color: COLORS.forecast })}
+                    strokeLinecap="round"
+                    strokeDasharray={sr.slot === 'prev' ? PREV_YEAR_DASH : undefined}
+                    strokeOpacity={dimmable(sr.key)}
+                    dot={sr.key.startsWith('stock_') ? stockDot(sr.color, sr.slot) : seriesDot({ color: sr.color })}
                     activeDot={{ r: 6 }}
-                    {...focusHandlers('received')}
-                    {...zoom.zoomAnim(2)}
+                    label={labels[sr.key] ?? false}
+                    connectNulls={false}
+                    {...focusHandlers(sr.key)}
                   />
-                )}
+                ))}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <ChartZoomSlider zoom={zoom} zoomInRight />
         </>
       )}
     </div>
