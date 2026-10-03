@@ -11,7 +11,7 @@ import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
-import { useChartZoom, ChartZoomSlider, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
+import { useChartZoom, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
@@ -1513,6 +1513,9 @@ const FORECAST_SECTION_STYLE = {
   present: { label: 'Present', narrowLabel: 'Now', fill: 'var(--color-brand-primary, #c53030)', fillOpacity: 0.09 },
   future: { label: 'Future', fill: COLORS.forecast, fillOpacity: 0.05 },
 };
+// Every month is labelled while a month name fits its slot; only below this
+// width per month (a phone) are labels thinned, to every 2nd or 3rd month.
+const MONTH_LABEL_MIN_PX = 18;
 // Below this width per month, "PRESENT" no longer fits its one-month band:
 // it reads "NOW", set against the band's right edge, so it and "FUTURE"
 // (set against its left edge) sit either side of the rule between them
@@ -1522,7 +1525,7 @@ const SECTION_LABEL_MIN_SLOT_PX = 62;
 // The month axis: "Jan" … "Dec" with the year on a second line beneath —
 // under the first label and wherever the year changes from the label
 // before it, so each year is named once, where it starts on the axis.
-const MonthYearTick = ({ x, y, payload, rows, step }) => {
+const MonthYearTick = ({ x, y, payload, rows, step, fontSize = 10 }) => {
   const row = rows[payload.value];
   if (!row) return null;
   const year = yearOf(row.period);
@@ -1530,7 +1533,7 @@ const MonthYearTick = ({ x, y, payload, rows, step }) => {
   const showYear = !before || yearOf(before.period) !== year;
   return (
     <g>
-      <text x={x} y={y + 14} textAnchor="middle" fontSize={10} fill={CHART_COLORS.axisLabel}>
+      <text x={x} y={y + 14} textAnchor="middle" fontSize={fontSize} fill={CHART_COLORS.axisLabel}>
         {AXIS_MONTHS[monthOf(row.period) - 1]}
       </text>
       {showYear && (
@@ -1619,17 +1622,21 @@ export const PortfolioForecastWidget = ({
     return withBand;
   }, [series]);
 
-  // Zoom applies to the assembled chartData, not the raw series, so the
-  // actual/forecast bridge point above is computed once over the whole
-  // range instead of being recalculated for whatever window is showing.
+  // The whole selected range is always in view: the zoom slider and drag-
+  // to-pan this card had were removed (Audrey, 2026-10-03) — the date
+  // filter at the top of the page is the range control. useChartZoom stays
+  // for its entrance animation; with no slider its window never narrows.
   const zoom = useChartZoom(chartData);
 
   // The x axis is the month's position in the window (0, 1, 2 …), so a
   // section can end halfway between two months.
   const plotRows = useMemo(() => zoom.view.map((pt, i) => ({ ...pt, idx: i })), [zoom.view]);
-  const tickStep = zoom.labelInterval + 1;
   const widgetRef = useRef(null);
   const cardWidth = useElementWidth(widgetRef);
+  // Width of one month on the plot (the card less its axis and margins).
+  const slotPx = cardWidth && plotRows.length > 1 ? (cardWidth - 130) / plotRows.length : Infinity;
+  // Every month labelled, unless the names would run into each other.
+  const tickStep = Math.max(1, Math.ceil(MONTH_LABEL_MIN_PX / slotPx));
 
   // Past / Present / Future (FORECAST_SECTION_STYLE): the present is the
   // latest month with actual demand in the whole series; panned away from
@@ -1655,7 +1662,6 @@ export const PortfolioForecastWidget = ({
       ].filter(Boolean),
     };
   }, [plotRows, chartData]);
-  const slotPx = cardWidth && plotRows.length > 1 ? (cardWidth - 130) / plotRows.length : Infinity;
   const narrowSlots = slotPx < SECTION_LABEL_MIN_SLOT_PX;
   // The sections in words, so the reader knows which months each one is.
   const sectionNote = { present: ' (latest month with sales)', future: ' (forecast)' };
@@ -1754,7 +1760,7 @@ export const PortfolioForecastWidget = ({
                   Approx. 90% range (if SKUs miss independently)
                 </li>
               </ul>
-              <div className={`chart-container${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
+              <div className="chart-container">
                 <ResponsiveContainer width="99%" height="100%">
                   <ComposedChart data={plotRows} margin={{ top: 10, right: EDGE_LABEL_MARGIN, left: 0, bottom: 10 }}>
                     <defs>
@@ -1764,10 +1770,9 @@ export const PortfolioForecastWidget = ({
                       </linearGradient>
                     </defs>
                     <CartesianGrid {...GRID_PROPS} />
-                    {/* Months by name, the year beneath (MonthYearTick). The
-                        zoom window's label interval still decides how many
-                        months are labelled; counting forward from the first
-                        month keeps its label by construction. */}
+                    {/* Months by name, the year beneath (MonthYearTick) —
+                        every month, thinned only when the card is too
+                        narrow for the names (tickStep). */}
                     <XAxis
                       dataKey="idx"
                       type="number"
@@ -1776,7 +1781,7 @@ export const PortfolioForecastWidget = ({
                       axisLine={false}
                       tickLine={false}
                       interval={0}
-                      tick={<MonthYearTick rows={plotRows} step={tickStep} />}
+                      tick={<MonthYearTick rows={plotRows} step={tickStep} fontSize={slotPx < 26 ? 8.5 : 10} />}
                       height={X_AXIS_TITLED_HEIGHT + 12}
                       label={xAxisTitle('Month')}
                     />
@@ -1852,7 +1857,6 @@ export const PortfolioForecastWidget = ({
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
-              <ChartZoomSlider zoom={zoom} zoomInRight />
             </>
           )}
         </div>
