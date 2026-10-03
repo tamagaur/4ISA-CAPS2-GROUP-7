@@ -1300,6 +1300,10 @@
 }
 
 /* The arrow stays on the sentence's last line instead of dropping below it. */
+.abc-tier-card-nowrap {
+  white-space: nowrap;
+}
+
 .abc-tier-card-atrisk svg {
   display: inline;
   vertical-align: -2px;

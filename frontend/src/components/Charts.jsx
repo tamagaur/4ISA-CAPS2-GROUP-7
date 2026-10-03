@@ -953,7 +953,7 @@ const AbcTierCard = ({ facts, atRisk = null }) => {
       {facts.tier === 'A' && atRisk && (
         <button type="button" className="abc-tier-card-link abc-tier-card-atrisk" onClick={atRisk.onOpen}>
           {atRisk.below.toLocaleString()} of the {atRisk.measurable.toLocaleString()} with a stock count are below
-          safety stock — see which <ArrowRight size={12} aria-hidden="true" />
+          safety stock — <span className="abc-tier-card-nowrap">see which <ArrowRight size={12} aria-hidden="true" /></span>
         </button>
       )}
       <Link to="/abc" className="abc-tier-card-link">
