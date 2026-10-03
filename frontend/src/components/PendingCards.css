@@ -1,0 +1,231 @@
+/* Cards and markers waiting on backend fields (PendingCards.jsx). */
+.pending-card-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Forecast miss in pieces and pesos */
+.pending-error-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-surface-sunken);
+}
+
+.pending-error-line {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--color-text-heading);
+}
+
+.pending-error-direction {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* Accuracy colours */
+.pending-accuracy-levels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.pending-accuracy-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pending-accuracy-chip.is-good {
+  border-color: var(--color-success, #2e9e5b);
+  background-color: rgba(46, 158, 91, 0.12);
+  color: #1f6f40;
+}
+
+.pending-accuracy-chip.is-fair {
+  border-color: var(--color-warning, #f5a623);
+  background-color: rgba(245, 166, 35, 0.14);
+  color: #8a5a00;
+}
+
+.pending-accuracy-chip.is-poor {
+  border-color: var(--color-critical, #e5484d);
+  background-color: rgba(229, 72, 77, 0.1);
+  color: #a52a2e;
+}
+
+.pending-accuracy-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.pending-accuracy-dot {
+  width: 8px;
+  height: 8px;
+  margin-left: 4px;
+  border-radius: 50%;
+}
+
+.pending-accuracy-dot.is-good { background-color: var(--color-success, #2e9e5b); }
+.pending-accuracy-dot.is-fair { background-color: var(--color-warning, #f5a623); }
+.pending-accuracy-dot.is-poor { background-color: var(--color-critical, #e5484d); }
+
+/* "Review before ordering" */
+.pending-review-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-warning, #f5a623);
+  border-radius: 999px;
+  background-color: rgba(245, 166, 35, 0.14);
+  color: #8a5a00;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Possibly stock-limited months */
+.pending-stock-limited {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-body);
+}
+
+.pending-stock-limited svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-warning, #f5a623);
+}
+
+/* Entered / left Class A */
+.pending-change-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.pending-change-list ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pending-change-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8rem;
+}
+
+.pending-change-list li:last-child {
+  border-bottom: none;
+}
+
+.pending-change-empty {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.pending-change-delta {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pending-change-delta.is-up { color: #1f6f40; }
+.pending-change-delta.is-down { color: var(--color-danger-text, #a52a2e); }
+
+/* /preview */
+.pending-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  max-width: 980px;
+}
+
+.pending-preview-banner {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px dashed var(--color-warning, #f5a623);
+  border-radius: 10px;
+  background-color: rgba(245, 166, 35, 0.1);
+  font-size: 0.85rem;
+  color: var(--color-text-body);
+}
+
+.pending-preview section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background-color: var(--color-surface);
+}
+
+.pending-preview h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text-heading);
+}
+
+.pending-preview-where {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.pending-preview-table {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.pending-preview-table th,
+.pending-preview-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.pending-preview-table th {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* The section B block on the SKU Forecast page. */
+.forecast-pending-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}

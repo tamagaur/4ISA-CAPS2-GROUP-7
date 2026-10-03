@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import KPICard from './KPICard';
 import AtRiskProductsModal from './AtRiskProductsModal';
+import { ClassChanges } from './PendingCards';
 import DateFilter from './DateFilter';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
@@ -540,6 +541,10 @@ const Dashboard = () => {
     // No count day for a principal whose counts don't record one.
     stockCountDay: countDayKnown ? dayLabel(pt.stock_count_date) : null,
     received: pt.received,
+    // Purchases estimated from stock counts and sales (Unilever has no
+    // purchase records): the chart's Purchases view only, never a KPI.
+    receivedEstimated: pt.received_estimated ?? null,
+    receivedEstimatedNegativeSkus: pt.received_estimated_negative_skus ?? null,
     stockUnusual: stockFlags.get(pt.period) || null,
   }));
 
@@ -785,6 +790,16 @@ const Dashboard = () => {
             </Slot>
           </div>
 
+          {/* Entered / left Class A — shown once GET /dashboard serves
+              abc_changes (PendingCards.jsx names the fields). */}
+          {data.abc_changes && (
+            <div className="dash-row dash-row-trend">
+              <Slot kind="Descriptive" question="Which products entered or left the top sellers?">
+                <ClassChanges changes={data.abc_changes} onOpen={() => navigate('/abc')} />
+              </Slot>
+            </div>
+          )}
+
           {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
           <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-forecast">
             <Slot kind="Predictive" question="What will happen next?" hint="Demand forecast" realOnly={portfolioRealOnly}>
@@ -834,6 +849,14 @@ const Dashboard = () => {
             </Slot>
           </div>
 
+          {/* Where Unilever's two data sets come from (3 Oct 2026 analysis):
+              every figure that sets stock against sales rests on this match. */}
+          {coverProvisional && (
+            <p className="dash-footnote">
+              Data note: stock counts are from the Ilocos Sur warehouse; product sales are La Union only; the match is
+              unverified with SSM.
+            </p>
+          )}
           {!lpHidden && (
             <p className="dash-footnote">
               Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as

@@ -18,6 +18,7 @@ import { P } from '../permissions/keys';
 import { getRecommendations, decideRecommendation } from '../api/recommendations';
 import { formatDate, formatDateTime, formatMonth } from '../utils/formatDate';
 import { labelForPrincipal } from '../principals';
+import { ReviewBadge } from './PendingCards';
 import { formatUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
@@ -266,6 +267,11 @@ const ReorderRecommendations = () => {
         // (GET /recommendations): LP qty = forecast + target - stock - short.
         forecast: item.forecast_units,
         shortUnits: item.short_units,
+        // Section B fields (PendingCards.jsx), null until the backend
+        // serves them: why this row needs a look before ordering, and the
+        // pieces already ordered that have not arrived.
+        reviewFlag: item.review_flag || null,
+        onOrderQty: item.on_order_qty ?? null,
         actionStatus: item.status === 'pending' ? null : item.status.toUpperCase(),
         loadingAction: null,
       })),
@@ -315,7 +321,9 @@ const ReorderRecommendations = () => {
   const actNowRows = rankedRows.slice(0, ACT_NOW_COUNT);
   const reviewLaterRows = rankedRows.slice(ACT_NOW_COUNT);
   const visibleRows = showReviewLater ? rankedRows : actNowRows;
-  const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction);
+  // A row flagged "Review before ordering" is never accepted in bulk: it
+  // has to be opened and decided on its own.
+  const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction && !r.reviewFlag);
 
   // Deep link from the Dashboard's reorder widget (?sku=...): switch to the
   // most recent cycle holding that SKU, then open its detail modal — the
@@ -378,6 +386,9 @@ const ReorderRecommendations = () => {
     })
     .join(' ');
   const allocationPct = lpInputs.allocation_pct ?? null;
+  // "On order (not yet arrived)": its column exists only once a row carries
+  // the figure (purchase-order quantities are not loaded yet).
+  const hasOnOrder = cycleRows.some((r) => r.onOrderQty != null);
   // The opening count's reviewed note for the cycle on screen ("accepted for
   // planning, pending SSM confirmation …"), for the stock column's header.
   const openingCountFlag = (meta?.stockCounts || [])
@@ -704,6 +715,11 @@ const ReorderRecommendations = () => {
               </>
             : <span className="cell-empty" title={item.stockBlockedReason || 'No stock figure in pieces for this SKU'}>—</span>}
         </td>
+        {hasOnOrder && (
+          <td className="table-num" title="Pieces ordered from the supplier that have not arrived yet">
+            {item.onOrderQty != null ? formatUnits(item.onOrderQty) : <span className="cell-empty">—</span>}
+          </td>
+        )}
         <td className="table-num" title={item.daysOfCover != null ? coverNote : (item.coverReason || coverNote)}>
           {item.daysOfCover != null ? item.daysOfCover.toFixed(1) : <span className="cell-empty">—</span>}
         </td>
@@ -719,6 +735,7 @@ const ReorderRecommendations = () => {
           <span className={getUrgencyBadge(item.urgency)}>
             {item.urgency}
           </span>
+          <ReviewBadge reason={item.reviewFlag} />
         </td>
         <td className="table-center">
           {renderActionColumn(item)}
@@ -727,7 +744,7 @@ const ReorderRecommendations = () => {
     );
   };
 
-  const COLUMN_COUNT = 12;
+  const COLUMN_COUNT = 12 + (hasOnOrder ? 1 : 0);
 
   const renderRecommendationsTab = () => (
     <>
@@ -848,6 +865,12 @@ const ReorderRecommendations = () => {
                 <span className="reorder-th-period">{countLabel}</span>
                 {openingCountFlag && <span className="reorder-th-period">{openingCountFlag.split(' (decided')[0]}</span>}
               </th>
+              {hasOnOrder && (
+                <th className="table-num col-fit">
+                  On order (pieces)
+                  <span className="reorder-th-period">not yet arrived</span>
+                </th>
+              )}
               <th className="table-num col-fit">
                 Cover (days)
                 <InfoTip label="About cover">{coverNote}</InfoTip>

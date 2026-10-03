@@ -376,6 +376,18 @@ const formatExactPesos = (value) => `₱${Math.round(value).toLocaleString('en-P
 // Which metrics the chart shows. The table always holds both.
 const METRIC_VIEWS = [['both', 'Both'], ['sales', 'Sales'], ['inventory', 'Inventory']];
 const METRIC_PREFIX = { sales: 'sales', inventory: 'stock' };
+// Purchases get their own view (sales beside what was bought) once there is
+// a purchases figure to draw, recorded or estimated.
+const PURCHASES_VIEW = ['purchases', 'Purchases'];
+const PURCHASES_METRICS = ['sales', 'received', 'recest'];
+// An ESTIMATE is drawn apart from a recorded figure (3 Oct 2026 analysis):
+// dotted and lighter, with its own legend entry, in the chart only — never
+// in a KPI. GET /dashboard's received_estimated is purchases worked out from
+// stock counts and sales (closing − opening stock + sales), not a purchase
+// record. A negative estimate is shown as 0 and the tooltip flags it.
+const ESTIMATED_LABEL = 'Purchases (estimated from stock counts and sales)';
+const ESTIMATED_DASH = '2 5';
+const ESTIMATED_OPACITY = 0.75;
 
 const SalesStockTooltip = ({ active, payload, label, years }) => {
   if (!active || !payload || !payload.length) return null;
@@ -408,13 +420,17 @@ const SalesStockTooltip = ({ active, payload, label, years }) => {
             {/* The month on this point is the one the count is filed under;
                 the day it was actually counted can be a week later. */}
             {metricOf(p.dataKey) === 'stock' && meta?.stockCountDay && ` · counted ${meta.stockCountDay}`}
+            {metricOf(p.dataKey) === 'recest' && ' · estimated'}
+            {metricOf(p.dataKey) === 'recest' && meta?.estWasNegative && ' · negative estimate, shown as 0'}
+            {metricOf(p.dataKey) === 'recest' && meta?.estNegativeSkus > 0
+              && ` · ${meta.estNegativeSkus.toLocaleString()} products had a negative estimate`}
           </p>
         );
       })}
       {/* A stock count the team reviewed and judged unusual (GET
           /dashboard's stock_on_hand_flags) — the reason sits with the point,
           named by its year since two years share the slot. */}
-      {metas.filter((m) => m.stockUnusual).map((m) => (
+      {rows.some((p) => metricOf(p.dataKey) === 'stock') && metas.filter((m) => m.stockUnusual).map((m) => (
         <p key={m.period} className="chart-tooltip-placeholder chart-tooltip-note">
           Unusual count, {formatAxisPeriod(m.period)}: {m.stockUnusual}
         </p>
@@ -539,6 +555,9 @@ export const SalesVsStockWidget = ({
   // for every Unilever period: the line and its legend entry appear
   // together, only when at least one real point exists.
   const hasReceived = data.some((pt) => pt.received != null);
+  // Unilever has no purchase records, only this estimate (see ESTIMATED_LABEL).
+  const hasEstimated = data.some((pt) => pt.receivedEstimated != null);
+  const metricViews = hasReceived || hasEstimated ? [...METRIC_VIEWS, PURCHASES_VIEW] : METRIC_VIEWS;
   const widgetRef = useRef(null);
   const wide = useElementWidth(widgetRef) >= YOY_WIDE_PX;
 
@@ -557,12 +576,15 @@ export const SalesVsStockWidget = ({
         row[`sales_${slot}`] = pt?.sales ?? null;
         row[`stock_${slot}`] = pt?.stockOnHand ?? null;
         row[`received_${slot}`] = pt?.received ?? null;
+        row[`recest_${slot}`] = pt?.receivedEstimated != null ? Math.max(0, pt.receivedEstimated) : null;
         row[`meta_${slot}`] = pt
           ? {
               period: pt.period,
               stockCountDay: pt.stockCountDay ?? null,
               stockUnusual: pt.stockUnusual ?? null,
               placeholder: isPlaceholderPeriod(pt.period, placeholder),
+              estWasNegative: pt.receivedEstimated != null && pt.receivedEstimated < 0,
+              estNegativeSkus: pt.receivedEstimatedNegativeSkus ?? null,
             }
           : null;
       }
@@ -585,12 +607,21 @@ export const SalesVsStockWidget = ({
     ...(hasReceived
       ? slots.map((slot) => ({ key: `received_${slot}`, slot, metric: 'received', name: `${receivedLabel} · ${slotYears[slot]}`, color: COLORS.forecast }))
       : []),
-  ], [slots, slotYears, salesLabel, receivedLabel, hasReceived]);
+    ...(hasEstimated
+      ? slots.map((slot) => ({ key: `recest_${slot}`, slot, metric: 'recest', estimated: true, name: `${ESTIMATED_LABEL} · ${slotYears[slot]}`, color: COLORS.forecast }))
+      : []),
+  ], [slots, slotYears, salesLabel, receivedLabel, hasReceived, hasEstimated]);
   // Purchases received ride with "Both": they are neither metric the
   // control names, and a sales-only or inventory-only view is for a
   // single comparison.
   const { visible, visibleKeys } = useMemo(() => {
-    const shown = series.filter((sr) => metricView === 'both' || sr.metric === METRIC_PREFIX[metricView]);
+    // "Both" keeps to recorded figures; the estimate is drawn only in the
+    // Purchases view, beside sales.
+    const shown = series.filter((sr) => (
+      metricView === 'both' ? !sr.estimated
+        : metricView === 'purchases' ? PURCHASES_METRICS.includes(sr.metric)
+          : sr.metric === METRIC_PREFIX[metricView]
+    ));
     return { visible: shown, visibleKeys: new Set(shown.map((sr) => sr.key)) };
   }, [series, metricView]);
 
@@ -675,6 +706,13 @@ export const SalesVsStockWidget = ({
       ? [{ key: 'stockCountDay', label: 'Stock counted on', format: (v) => v, align: 'left' }]
       : []),
     ...(hasReceived ? [{ key: 'received', label: `${receivedLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasEstimated
+      ? [{
+          key: 'receivedEstimated',
+          label: `${ESTIMATED_LABEL} (₱)`,
+          format: (v) => (v < 0 ? '₱0 (negative estimate)' : formatCompactPesos(v)),
+        }]
+      : []),
     ...(data.some((pt) => pt.stockUnusual && pt.stockOnHand != null)
       ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Unusual count: ${v}`, align: 'left' }]
       : []),
@@ -684,6 +722,7 @@ export const SalesVsStockWidget = ({
     { metric: 'sales', label: salesLabel, color: CHART_COLORS.heroSales },
     { metric: 'stock', label: INVENTORY_LABEL, color: CHART_COLORS.heroInventory },
     ...(hasReceived ? [{ metric: 'received', label: receivedLabel, color: COLORS.forecast }] : []),
+    ...(hasEstimated ? [{ metric: 'recest', label: ESTIMATED_LABEL, color: COLORS.forecast, estimated: true }] : []),
   ].filter((entry) => visible.some((sr) => sr.metric === entry.metric));
 
   return (
@@ -704,7 +743,7 @@ export const SalesVsStockWidget = ({
           <div className="chart-header-controls">
             {view === 'chart' && (
               <div className="chart-view-toggle" role="group" aria-label="Metrics shown">
-                {METRIC_VIEWS.map(([key, text]) => (
+                {metricViews.map(([key, text]) => (
                   <button
                     key={key}
                     type="button"
@@ -737,7 +776,9 @@ export const SalesVsStockWidget = ({
           <ul className="custom-legend custom-legend-top">
             {metricEntries.map((entry) => (
               <li key={entry.metric} className="legend-item" {...focusHandlers('metric', entry.metric)}>
-                <span className="legend-color" style={{ backgroundColor: entry.color }} aria-hidden="true" />
+                {entry.estimated
+                  ? <span className="legend-line legend-line-dotted" style={{ borderTopColor: entry.color }} aria-hidden="true" />
+                  : <span className="legend-color" style={{ backgroundColor: entry.color }} aria-hidden="true" />}
                 {entry.label}
               </li>
             ))}
@@ -813,9 +854,9 @@ export const SalesVsStockWidget = ({
                       stroke={sr.color}
                       strokeWidth={prev ? PREV_YEAR_WIDTH : 2.5}
                       strokeLinecap="round"
-                      strokeDasharray={prev ? PREV_YEAR_DASH : undefined}
-                      strokeOpacity={dimmable(sr.key) * (prev ? PREV_YEAR_OPACITY : 1)}
-                      fill={`url(#svs-fill-${sr.key})`}
+                      strokeDasharray={sr.estimated ? ESTIMATED_DASH : prev ? PREV_YEAR_DASH : undefined}
+                      strokeOpacity={dimmable(sr.key) * (prev ? PREV_YEAR_OPACITY : 1) * (sr.estimated ? ESTIMATED_OPACITY : 1)}
+                      fill={sr.estimated ? 'none' : `url(#svs-fill-${sr.key})`}
                       fillOpacity={dimmable(sr.key)}
                       dot={sr.metric === 'stock' ? unusualStockDot(sr.slot) : false}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}

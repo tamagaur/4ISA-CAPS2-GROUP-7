@@ -1679,3 +1679,8 @@
     margin-left: 0;
   }
 }
+
+/* An estimated series' legend swatch: dotted, as its line is drawn. */
+.legend-line-dotted {
+  border-top-style: dotted;
+}

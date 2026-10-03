@@ -30,6 +30,7 @@ import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand
 import InfoTip from './InfoTip';
 import ProductName from './ProductName';
 import './SKUForecast.css';
+import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCards';
 
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
 // presentation attributes can't take a CSS var()). It used to be the
@@ -664,6 +665,9 @@ const SKUForecast = () => {
   // is the served model's own scoring window; holdout_months is the same
   // count on rows written before it existed.
   const storedParams = storedForecast?.model_params || {};
+  // Section B fields (PendingCards.jsx), absent until the backend serves
+  // them: the months where stock may have run out.
+  const stockLimitedPeriods = (forecastResult?.actuals || []).filter((a) => a.stock_limited).map((a) => a.period);
   const holdoutMonths = storedParams.holdout_metrics_served?.months ?? storedParams.holdout_months ?? null;
 
   // The months behind the accuracy figures and the MA3 benchmark, so each
@@ -1536,6 +1540,18 @@ const SKUForecast = () => {
                     </>
                     )}
                   </div>
+
+                  {/* The forecast's miss in pieces and pesos, its accuracy at
+                      three levels and any stock-limited months — each shown
+                      only once GET /forecast serves it (PendingCards.jsx). */}
+                  {(forecastResult?.error_summary || stockLimitedPeriods.length > 0
+                    || (SHOW_ACCURACY_PCT && forecastResult?.accuracy)) && (
+                    <div className="forecast-pending-cards">
+                      <ForecastErrorCard error={forecastResult.error_summary} />
+                      {SHOW_ACCURACY_PCT && <AccuracyLevels accuracy={forecastResult.accuracy} />}
+                      <StockLimitedNote periods={stockLimitedPeriods} />
+                    </div>
+                  )}
 
                   {/* How this forecast was made — the stored number's
                       provenance, straight from model_params: the served
