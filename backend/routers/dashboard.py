@@ -310,12 +310,16 @@ zero):
     both-sides-real rule), or when no ABC run exists.
   safety_stock_exposure
     — {tier_a_count, comparable_count, below_count, below_revenue_share,
-    blocked_reason}. Same rows and same "both figures or excluded" rule as
+    below_items, blocked_reason}. Same rows and same "both figures or excluded" rule as
     kpis.safety_stock_rate, plus each product's revenue_share, so "N of M
     measurable Category A SKUs are below safety stock, X% of revenue" is
     one query, not two that could disagree. below_revenue_share is the sum
     of revenue_share over the below-SS products (a share of the WHOLE
-    period's revenue, not of Tier A's).
+    period's revenue, not of Tier A's). below_items is those same below-SS
+    products, most revenue first — [{sku_id, product_name, current_stock,
+    ss_i, short_by, target_stock, order_qty, revenue_share}], pieces
+    throughout — the list behind the count, built from the rows the count
+    was taken from so the two can never disagree (2026-10-03).
   policy_comparison
     — {cycle_date, sku_count, lp_target_stock_units, lp_safety_stock_units,
     rule_stock_units, target_vs_rule_pct, lp_target_weeks, skus_above_rule,
@@ -1288,15 +1292,20 @@ def get_dashboard(
             text(f"""
                 SELECT
                     ac.product_key,
+                    pd.sku_code AS sku_id,
+                    pd.product_name AS product_name,
                     ac.revenue_share AS revenue_share,
                     inv.stock_pieces AS current_stock,
-                    rop.ss_i AS ss_i
+                    rop.ss_i AS ss_i,
+                    rop.rop_i AS rop_i,
+                    rop.q_i AS q_i
                 FROM ABC_Classification ac
+                LEFT JOIN product_dimension pd ON pd.product_key = ac.product_key
                 LEFT JOIN (
                     {STOCK_AT_PERIOD_SQL}
                 ) inv ON inv.product_key = ac.product_key
                 LEFT JOIN (
-                    SELECT DISTINCT ON (lr.product_key) lr.product_key, lr.ss_i
+                    SELECT DISTINCT ON (lr.product_key) lr.product_key, lr.ss_i, lr.rop_i, lr.q_i
                     FROM {lp_src} lr
                     WHERE lr.status = 'pending' {lp_cycle_filter}
                     ORDER BY lr.product_key, lr.planning_cycle_date DESC
@@ -1354,11 +1363,32 @@ def get_dashboard(
     if abc_period is not None and comparable:
         below = [r for r in comparable if float(r["current_stock"]) < float(r["ss_i"])]
         below_share = sum(float(r.get("revenue_share") or 0) for r in below)
+        # The products behind the count, most revenue first: the list a
+        # reader opens from "N below safety stock" (Technical Adviser,
+        # 2026-10-02: detail one click behind every aggregate). Built from
+        # `below` itself, so the list and the count are the same rows.
+        def _pieces(value):
+            return round(float(value), 2) if value is not None else None
+
+        below_items = [
+            {
+                "sku_id": r.get("sku_id"),
+                "product_name": r.get("product_name"),
+                "current_stock": _pieces(r["current_stock"]),
+                "ss_i": _pieces(r["ss_i"]),
+                "short_by": _pieces(float(r["ss_i"]) - float(r["current_stock"])),
+                "target_stock": _pieces(r.get("rop_i")),
+                "order_qty": _pieces(r.get("q_i")),
+                "revenue_share": float(r["revenue_share"]) if r.get("revenue_share") is not None else None,
+            }
+            for r in sorted(below, key=lambda row: -float(row.get("revenue_share") or 0))
+        ]
         safety_stock_exposure = {
             "tier_a_count": len(ss_rows),
             "comparable_count": len(comparable),
             "below_count": len(below),
             "below_revenue_share": round(below_share, 4),
+            "below_items": below_items,
             "blocked_reason": None,
         }
     else:
@@ -1367,6 +1397,7 @@ def get_dashboard(
             "comparable_count": 0,
             "below_count": None,
             "below_revenue_share": None,
+            "below_items": [],
             "blocked_reason": safety_stock_rate_blocked_reason,
         }
 

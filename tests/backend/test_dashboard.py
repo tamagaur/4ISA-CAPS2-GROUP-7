@@ -327,7 +327,9 @@ class FakeSession:
             rows = [r for r in self.abc_rows if r["period"] == period and r["tier"] == "A"]
             return FakeResult([
                 {"product_key": r["product_key"], "revenue_share": r.get("revenue_share"),
-                 "current_stock": r["current_stock"], "ss_i": r["ss_i"]}
+                 "current_stock": r["current_stock"], "ss_i": r["ss_i"],
+                 "sku_id": f"SKU-{r['product_key']}", "product_name": f"Product {r['product_key']}",
+                 "rop_i": r.get("rop_i"), "q_i": r.get("q_i")}
                 for r in rows
             ])
 
@@ -1085,7 +1087,34 @@ def test_safety_stock_exposure_blocked_when_nothing_measurable():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     exp = resp.json()["safety_stock_exposure"]
     assert exp["below_count"] is None
+    assert exp["below_items"] == []
     assert exp["blocked_reason"]
+
+
+def test_safety_stock_exposure_lists_the_products_behind_the_count():
+    """The list a reader opens from "N below safety stock" is the rows the
+    count was taken from: most revenue first, named, with the shortfall in
+    pieces — and never a product that is at or above its safety stock, or
+    one with no stock count (2026-10-03)."""
+    rows = [
+        _abc_row(1, "A", "2024-02", 0.10, current_stock=10, ss_i=50),    # below, smaller share
+        _abc_row(2, "A", "2024-02", 0.30, current_stock=0, ss_i=40.5),   # below, biggest share
+        _abc_row(3, "A", "2024-02", 0.20, current_stock=80, ss_i=50),    # at/above
+        _abc_row(4, "A", "2024-02", 0.25, current_stock=None, ss_i=50),  # not measurable
+    ]
+    rows[1].update(rop_i=120.0, q_i=300.0)
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    exp = resp.json()["safety_stock_exposure"]
+    items = exp["below_items"]
+    assert len(items) == exp["below_count"] == 2
+    assert [i["sku_id"] for i in items] == ["SKU-2", "SKU-1"]
+    assert items[0] == {
+        "sku_id": "SKU-2", "product_name": "Product 2", "current_stock": 0.0, "ss_i": 40.5,
+        "short_by": 40.5, "target_stock": 120.0, "order_qty": 300.0, "revenue_share": 0.30,
+    }
+    assert items[1]["short_by"] == 40.0 and items[1]["order_qty"] is None
 
 
 def test_policy_comparison_sums_lp_ss_against_three_week_rule():

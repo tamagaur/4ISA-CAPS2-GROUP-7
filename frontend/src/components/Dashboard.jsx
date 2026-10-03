@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useOutletContext, Link } from 'react-router-dom';
+import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import KPICard from './KPICard';
+import AtRiskProductsModal from './AtRiskProductsModal';
 import DateFilter from './DateFilter';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
@@ -307,6 +308,9 @@ const Dashboard = () => {
     return cached ? { key: requestKey, data: cached } : null;
   });
   const [error, setError] = useState(null); // { key, message }
+  // The list behind "N below safety stock" (AtRiskProductsModal).
+  const [showAtRisk, setShowAtRisk] = useState(false);
+  const navigate = useNavigate();
   const loadedKey = loaded?.key;
 
   // Every card, the portfolio forecast included, follows the Topbar's
@@ -579,6 +583,14 @@ const Dashboard = () => {
     'Reorder suggestions awaiting a decision',
     lpCycleLabel ? `${lpCycleLabel} plan` : null,
   ].filter(Boolean).join(' · ');
+  // The cards connected (Technical Adviser, 2 Oct 2026): which products
+  // matter (ABC card) -> which are at risk (the count below, and the list
+  // behind it) -> what to order (Reorder Recs). The list is GET
+  // /dashboard's safety_stock_exposure.below_items — the rows the count was
+  // taken from — so it opens only when there is a count and its rows.
+  const belowItems = exposure.below_items || [];
+  const canListAtRisk = !lpHidden && (exposure.below_count ?? 0) > 0 && belowItems.length > 0;
+  const openAtRisk = () => setShowAtRisk(true);
 
   return (
     <div className="dashboard">
@@ -671,6 +683,9 @@ const Dashboard = () => {
               unit={belowSs.value === '—' ? undefined : exposure.comparable_count === 1 ? 'SKU' : 'SKUs'}
               metricType={belowSs.value === '—' ? undefined : ssTier}
               contextLine={belowSs.contextLine}
+              action={canListAtRisk
+                ? { label: `See the ${exposure.below_count.toLocaleString()} products`, onClick: openAtRisk }
+                : undefined}
               icon={<AlertTriangle size={20} />}
             />
             <KPICard
@@ -679,6 +694,7 @@ const Dashboard = () => {
               unit={lpHidden ? undefined : pendingCount === 1 ? 'SKU' : 'SKUs'}
               metricType={lpHidden ? undefined : 'recommendation'}
               contextLine={lpHidden ? LP_HIDDEN_NOTE : pendingContext}
+              action={!lpHidden && pendingCount > 0 ? { label: 'Open the order plan', to: '/reorder' } : undefined}
               icon={<ClipboardList size={20} />}
             />
           </div>
@@ -698,6 +714,9 @@ const Dashboard = () => {
                 note={placeholderNote(data.abc_revenue?.period)}
                 coverage={abcCoverage}
                 units={abcUnits}
+                atRisk={canListAtRisk
+                  ? { below: exposure.below_count, measurable: exposure.comparable_count, onOpen: openAtRisk }
+                  : null}
               />
             </Slot>
             <Slot kind="Descriptive">
@@ -770,6 +789,24 @@ const Dashboard = () => {
           )}
         </div>
       </div>
+      <AtRiskProductsModal
+        isOpen={showAtRisk && canListAtRisk}
+        onClose={() => setShowAtRisk(false)}
+        items={belowItems}
+        chain={{
+          classACount: exposure.tier_a_count ?? null,
+          plannedCount: pendingCount || null,
+          measurableCount: exposure.comparable_count ?? null,
+          belowCount: exposure.below_count ?? null,
+          abcMonth: periodLabel(data.abc_revenue?.period),
+          planLabel: lpCycleLabel ? `${lpCycleLabel} plan` : null,
+          countDay,
+        }}
+        revenueShare={exposure.below_revenue_share ?? null}
+        revenueTotal={data.abc_revenue?.ranked_total ?? null}
+        onOpenProduct={(sku) => navigate(`/reorder?sku=${encodeURIComponent(sku)}`)}
+        onOpenPlan={() => navigate('/reorder')}
+      />
     </div>
   );
 };

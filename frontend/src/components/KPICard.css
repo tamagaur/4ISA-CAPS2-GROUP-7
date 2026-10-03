@@ -124,3 +124,33 @@
   color: var(--color-text-subtle);
   line-height: 1.4;
 }
+
+/* The card's way through to what is behind its figure (KPICard `action`):
+   a quiet text link in the footer, a button or a router link alike. */
+.kpi-action {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.kpi-action:hover,
+.kpi-action:focus-visible {
+  text-decoration: underline;
+}
+
+.kpi-action:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

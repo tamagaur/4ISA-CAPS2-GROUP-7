@@ -1,5 +1,6 @@
 import React from 'react';
-import { ArrowUp, ArrowDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
 import { STATUS_TIERS, SEMANTIC } from '../theme/colors';
 import InfoTip from './InfoTip';
 import './KPICard.css';
@@ -98,6 +99,9 @@ const Sparkline = ({ points, color }) => {
 // accent tier. Without it, deltaLine keeps the tier-coloured text line.
 // unit: a short muted word after the value ("SKUs"); callers leave it off
 // when the card is blocked and the value is "—".
+// action: { label, onClick } or { label, to } — the way from this figure to
+// what is behind it (a list, another page), as a quiet link in the footer.
+// The figure's detail sits one click away instead of on the card.
 const KPICard = ({
   title,
   value,
@@ -112,6 +116,7 @@ const KPICard = ({
   deltaTone,
   tooltip,
   trend,
+  action,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
   const accentColor = CARD_ACCENT_COLORS[tier]; // card chrome (border, icon)
@@ -154,6 +159,15 @@ const KPICard = ({
             {deltaLine}
           </div>
         )}
+        {action && (action.to ? (
+          <Link to={action.to} className="kpi-action">
+            {action.label} <ArrowRight size={12} aria-hidden="true" />
+          </Link>
+        ) : (
+          <button type="button" className="kpi-action" onClick={action.onClick}>
+            {action.label} <ArrowRight size={12} aria-hidden="true" />
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -876,7 +876,7 @@ const abcSegments = (data) => {
 // can't be trusted (no total, or shares that don't add up to ~100%) reads
 // "Revenue not available", and the sentence is left out rather than stated
 // on numbers that aren't real.
-const AbcTierCard = ({ facts }) => {
+const AbcTierCard = ({ facts, atRisk = null }) => {
   const x = facts.skuPct.toFixed(0);
   const y = facts.revenuePct != null ? facts.revenuePct.toFixed(0) : null;
   const revenueKnown = facts.amount != null && y != null;
@@ -918,6 +918,17 @@ const AbcTierCard = ({ facts }) => {
           </p>
         )}
       </div>
+      {/* The next step of the story, on the class it is about: of these
+          important products, how many are below safety stock — and the
+          list (Dashboard's AtRiskProductsModal). `atRisk` is the
+          dashboard's safety_stock_exposure; absent for an account without
+          the reorder plan, or when nothing is measurable. */}
+      {facts.tier === 'A' && atRisk && (
+        <button type="button" className="abc-tier-card-link abc-tier-card-atrisk" onClick={atRisk.onOpen}>
+          {atRisk.below.toLocaleString()} of the {atRisk.measurable.toLocaleString()} with a stock count are below
+          safety stock — see which <ArrowRight size={12} aria-hidden="true" />
+        </button>
+      )}
       <Link to="/abc" className="abc-tier-card-link">
         See every SKU and its class <ArrowRight size={12} aria-hidden="true" />
       </Link>
@@ -1015,7 +1026,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 // page's filter ("Unilever only", Dashboard.jsx's coverageNote). `units` is
 // what a row is: 'SKUs', or 'categories' for Del Monte, which is ranked by
 // product category.
-export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs' }) => {
+export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null }) => {
   const [selectedTier, setSelectedTier] = useState('A');
   const [hover, setHover] = useState(null);
   const ringRef = useRef(null);
@@ -1168,7 +1179,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                 ))}
               </ul>
             </div>
-            <AbcTierCard facts={factsFor(selected)} />
+            <AbcTierCard facts={factsFor(selected)} atRisk={atRisk} />
           </div>
           <div
             className="abc-share-pair"
