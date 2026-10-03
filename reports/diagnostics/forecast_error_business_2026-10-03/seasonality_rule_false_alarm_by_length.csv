@@ -1,0 +1,23 @@
+null,months,R0,R1,R2,R3
+white noise,24,,0.0000,0.0000,
+white noise,26,,0.0020,0.0020,
+white noise,27,,0.0020,0.0040,
+white noise,28,,0.0060,0.0040,
+white noise,29,,0.0060,0.0120,
+white noise,30,,0.0060,0.0080,
+white noise,31,,0.0080,0.0080,
+white noise,32,,0.0040,0.0080,
+white noise,34,,0.0040,0.0140,
+white noise,35,,0.0160,0.0160,
+white noise,38,0.1460,0.0120,0.0080,0.0020
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",24,,0.0000,0.0000,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",26,,0.0000,0.0000,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",27,,0.0020,0.0020,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",28,,0.0000,0.0020,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",29,,0.0040,0.0060,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",30,,0.0060,0.0060,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",31,,0.0120,0.0140,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",32,,0.0060,0.0060,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",34,,0.0100,0.0160,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",35,,0.0100,0.0180,
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",38,0.1580,0.0120,0.0160,0.0020

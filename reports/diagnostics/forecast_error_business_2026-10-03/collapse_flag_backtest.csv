@@ -1,0 +1,4 @@
+flag_before,product_months,products,pct_over_forecast,bias_pct,wape
+flagged,19,8,57.8947,9.3735,0.4422
+not assessable,112,21,57.1429,4.7352,0.3648
+not flagged,511,88,55.9687,9.4643,0.3631

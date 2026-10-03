@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 490" width="760" height="490" role="img" aria-label="Scatter of demand swing (coefficient of variation) against forecast error (WAPE) for 107 products">
+<style>svg{--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--grid:#e4e3df;--s1:#2a78d6;font-family:system-ui,sans-serif}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--ink:#ffffff;--ink2:#c3c2b7;--grid:#3a3a37;--s1:#3987e5}}.g{stroke:var(--grid);stroke-width:1}.t{fill:var(--ink2);font-size:12px}.h{fill:var(--ink);font-size:14px;font-weight:600}.d{fill:var(--s1);stroke:var(--surface);stroke-width:2}.f{stroke:var(--ink2);stroke-width:1.5;stroke-dasharray:5 4;fill:none}</style>
+<rect width="760" height="490" fill="var(--surface)"/>
+<text class="h" x="64" y="24">Demand swing vs forecast error, Unilever Tier A as of 2026-02 (107 products)</text>
+<text class="t" x="64" y="42">Test months 2025-09 to 2026-02. Pearson r = 0.61 (r² = 0.38), Spearman ρ = 0.64.</text>
+<text class="t" x="64" y="58">Swing measured before the test months only (known in advance): r = 0.13, ρ = 0.38.</text>
+<line class="g" x1="64" x2="736" y1="434.0" y2="434.0"/><text class="t" x="56" y="438.0" text-anchor="end">0%</text>
+<line class="g" x1="64" x2="736" y1="374.3" y2="374.3"/><text class="t" x="56" y="378.3" text-anchor="end">20%</text>
+<line class="g" x1="64" x2="736" y1="314.7" y2="314.7"/><text class="t" x="56" y="318.7" text-anchor="end">40%</text>
+<line class="g" x1="64" x2="736" y1="255.0" y2="255.0"/><text class="t" x="56" y="259.0" text-anchor="end">60%</text>
+<line class="g" x1="64" x2="736" y1="195.3" y2="195.3"/><text class="t" x="56" y="199.3" text-anchor="end">80%</text>
+<line class="g" x1="64" x2="736" y1="135.7" y2="135.7"/><text class="t" x="56" y="139.7" text-anchor="end">100%</text>
+<line class="g" x1="64" x2="736" y1="76.0" y2="76.0"/><text class="t" x="56" y="80.0" text-anchor="end">120%</text>
+<text class="t" x="64.0" y="452" text-anchor="middle">0.0</text>
+<text class="t" x="198.4" y="452" text-anchor="middle">0.2</text>
+<text class="t" x="332.8" y="452" text-anchor="middle">0.4</text>
+<text class="t" x="467.2" y="452" text-anchor="middle">0.6</text>
+<text class="t" x="601.6" y="452" text-anchor="middle">0.8</text>
+<text class="t" x="736.0" y="452" text-anchor="middle">1.0</text>
+<text class="t" x="400.0" y="478" text-anchor="middle">Demand swing: coefficient of variation of monthly pieces sold (std ÷ mean, first sale to 2026-02)</text>
+<text class="t" transform="translate(16 255.0) rotate(-90)" text-anchor="middle">Forecast error: WAPE, test months</text>
+<line class="f" x1="171.1" y1="383.7" x2="649.6" y2="222.8"/>
+<circle class="d" cx="346.9" cy="351.3" r="4.5"><title>SURF HS STD PWDR BLOSSOMFRESH 12X1100G (21051980): swing 0.42, error 28%</title></circle>
+<circle class="d" cx="503.4" cy="287.8" r="4.5"><title>CREAM SILK RO ULTREBORN STRT 288X13ML (62687204): swing 0.65, error 49%</title></circle>
+<circle class="d" cx="452.3" cy="368.5" r="4.5"><title>CREAM SILK ULT REBORN STRT 24(11+1)13ML (62687212): swing 0.58, error 22%</title></circle>
+<circle class="d" cx="417.8" cy="332.4" r="4.5"><title>CREAM SILK RO ULTREBORN HFALL 288X22ML (62718193): swing 0.53, error 34%</title></circle>
+<circle class="d" cx="420.5" cy="383.6" r="4.5"><title>CREAM SILK RO ULTREBORN STRT 288X22ML (62718199): swing 0.53, error 17%</title></circle>
+<circle class="d" cx="319.8" cy="276.7" r="4.5"><title>DOVE SH RESTORATIVEOIL NOURCARE 288X12ML (64315064): swing 0.38, error 53%</title></circle>
+<circle class="d" cx="412.1" cy="173.5" r="4.5"><title>KNORR CUBES CHICKEN DUO 48X6X20G (64784421): swing 0.52, error 87%</title></circle>
+<circle class="d" cx="304.1" cy="348.4" r="4.5"><title>REX WMN DLN POWDER DRY + BRGHT 360X3ML (64824382): swing 0.36, error 29%</title></circle>
+<circle class="d" cx="189.4" cy="378.5" r="4.5"><title>KNORR SOUP CRAB &amp; CORN 60X55G (64830409): swing 0.19, error 19%</title></circle>
+<circle class="d" cx="466.7" cy="327.7" r="4.5"><title>SURF FABCON MAGIC BLOOM STR SAC 360X25ML (64856586): swing 0.60, error 36%</title></circle>
+<circle class="d" cx="550.2" cy="130.9" r="4.5"><title>SURF POWDER KALAMANSI L 40(6+1)57G (64861486): swing 0.72, error 102%</title></circle>
+<circle class="d" cx="649.6" cy="136.2" r="4.5"><title>SURF POWDER TAWAS L 40(6+1)57G (64861490): swing 0.87, error 100%</title></circle>
+<circle class="d" cx="346.1" cy="354.7" r="4.5"><title>CREAM SILK TRI-KRTN SCD REP SHN 288X14ML (64900602): swing 0.42, error 27%</title></circle>
+<circle class="d" cx="341.7" cy="348.5" r="4.5"><title>LADY&#x27;S CHOICE REAL MAYO DOY 24X130ML (64961947): swing 0.41, error 29%</title></circle>
+<circle class="d" cx="467.1" cy="227.1" r="4.5"><title>KNORR SIN ORIG+SINORIG 48(6+1)X11G (64971078): swing 0.60, error 69%</title></circle>
+<circle class="d" cx="217.6" cy="368.0" r="4.5"><title>AXE DEO AP RLN DARKTEMP 24X25ML (65003211): swing 0.23, error 22%</title></circle>
+<circle class="d" cx="228.5" cy="374.8" r="4.5"><title>BESTFOODS RGLR MYNS MAYO MAGIC 72X80ML (65004477): swing 0.24, error 20%</title></circle>
+<circle class="d" cx="533.4" cy="266.8" r="4.5"><title>BESTFOODS RGLR MYNS MAYOMAGICDOY24X220ML (65004662): swing 0.70, error 56%</title></circle>
+<circle class="d" cx="287.5" cy="389.6" r="4.5"><title>BESTFOODS SNDWCH SPRDSLDMATEDOY24X220ML (65004685): swing 0.33, error 15%</title></circle>
+<circle class="d" cx="278.9" cy="337.8" r="4.5"><title>DOVE BS BAR REGLR FBX 48X135G (67311414): swing 0.32, error 32%</title></circle>
+<circle class="d" cx="215.9" cy="373.9" r="4.5"><title>REXONA MEN RO ICE COOL IN 24X25ML (67404149): swing 0.23, error 20%</title></circle>
+<circle class="d" cx="259.7" cy="361.6" r="4.5"><title>REXONA MEN DL ICE COOL IN 360X3ML (67404155): swing 0.29, error 24%</title></circle>
+<circle class="d" cx="230.3" cy="390.0" r="4.5"><title>REXONA DLN QUANTUM 360X3ML (67633586): swing 0.25, error 15%</title></circle>
+<circle class="d" cx="242.3" cy="374.4" r="4.5"><title>REXONA DLN PASSION 360X3ML (67633590): swing 0.27, error 20%</title></circle>
+<circle class="d" cx="256.4" cy="367.7" r="4.5"><title>REXONA DLN SHOWER CLEAN 360X3ML (67633600): swing 0.29, error 22%</title></circle>
+<circle class="d" cx="258.2" cy="362.0" r="4.5"><title>KNORR SINIGANG SAM ORIG 12X12X22G (67749041): swing 0.29, error 24%</title></circle>
+<circle class="d" cx="294.4" cy="319.6" r="4.5"><title>KNORR SINIGANG SAM ORIG 24X12X11G (67749043): swing 0.34, error 38%</title></circle>
+<circle class="d" cx="216.5" cy="339.6" r="4.5"><title>KNORR SINIGANG NA GABI 24X12X11G (67749045): swing 0.23, error 32%</title></circle>
+<circle class="d" cx="253.7" cy="320.5" r="4.5"><title>KNORR SINIGANG ISDA 24X12X11G (67749046): swing 0.28, error 38%</title></circle>
+<circle class="d" cx="214.4" cy="377.2" r="4.5"><title>KNORR SINIGANG NA GABI 12X12X22G (67749047): swing 0.22, error 19%</title></circle>
+<circle class="d" cx="276.0" cy="348.6" r="4.5"><title>SURF HS STD PWDR BLOSSOM FRESH 144X74G (67762749): swing 0.32, error 29%</title></circle>
+<circle class="d" cx="387.5" cy="323.2" r="4.5"><title>KNORR SOUP CHICKEN&amp;CORN 60X60G (67975949): swing 0.48, error 37%</title></circle>
+<circle class="d" cx="311.0" cy="326.8" r="4.5"><title>SURF POWDER TAWAS S 288X57G (68178533): swing 0.37, error 36%</title></circle>
+<circle class="d" cx="276.1" cy="378.4" r="4.5"><title>SURF POWDER KALAMANSI S 288X57G (68178534): swing 0.32, error 19%</title></circle>
+<circle class="d" cx="288.4" cy="346.0" r="4.5"><title>CLOSEUP RED HOT NEW 12(11+1)X(2X10G) (68200184): swing 0.33, error 29%</title></circle>
+<circle class="d" cx="171.1" cy="382.9" r="4.5"><title>KNORR LIQUID SEASONING ORIGINAL 24X130ML (68394707): swing 0.16, error 17%</title></circle>
+<circle class="d" cx="216.4" cy="389.8" r="4.5"><title>KNORR LIQUID SEASONING ORIGINAL 24X250ML (68394708): swing 0.23, error 15%</title></circle>
+<circle class="d" cx="212.5" cy="358.9" r="4.5"><title>KNORR BN CUBES BEEF SAVERS 36X120G (68438405): swing 0.22, error 25%</title></circle>
+<circle class="d" cx="220.5" cy="337.2" r="4.5"><title>KNORR BN CUBES SHRIMP SINGLES 48X12X10G (68438406): swing 0.23, error 32%</title></circle>
+<circle class="d" cx="269.7" cy="291.1" r="4.5"><title>KNORR BN CUBES CHICKEN SINGLES 48X12X10G (68438409): swing 0.31, error 48%</title></circle>
+<circle class="d" cx="219.5" cy="368.8" r="4.5"><title>KNORR BN CUBES CHICKEN SAVERS 36X120G (68438412): swing 0.23, error 22%</title></circle>
+<circle class="d" cx="250.4" cy="282.6" r="4.5"><title>KNORR BN CUBES PORK SINGLES 48X12X10G (68438413): swing 0.28, error 51%</title></circle>
+<circle class="d" cx="227.9" cy="376.4" r="4.5"><title>KNORR BN CUBES PORK PANTRY 72X60G (68438416): swing 0.24, error 19%</title></circle>
+<circle class="d" cx="272.8" cy="344.6" r="4.5"><title>KNORR BN CUBES PORK SAVERS 36X120G (68438417): swing 0.31, error 30%</title></circle>
+<circle class="d" cx="204.5" cy="368.8" r="4.5"><title>KNORR BN CUBES BEEF SINGLES 48X12X10G (68438418): swing 0.21, error 22%</title></circle>
+<circle class="d" cx="310.7" cy="344.8" r="4.5"><title>CREAM SILK HC ULTREBORN STRT 24X180ML (68565204): swing 0.37, error 30%</title></circle>
+<circle class="d" cx="282.5" cy="318.5" r="4.5"><title>CREAM SILK HC ULTREBORN HFALL 24X180ML (68565205): swing 0.33, error 39%</title></circle>
+<circle class="d" cx="357.3" cy="389.8" r="4.5"><title>SUNSILK SH SMTH&amp;MNGBLE (11+1)24X15ML (68690506): swing 0.44, error 15%</title></circle>
+<circle class="d" cx="297.8" cy="385.7" r="4.5"><title>SUNSILK SH STRONG&amp;LONG (11+1)24X15ML (68690509): swing 0.35, error 16%</title></circle>
+<circle class="d" cx="401.2" cy="279.8" r="4.5"><title>SUNSILK SH SMTH&amp;MNGBLE 288X15ML (68690510): swing 0.50, error 52%</title></circle>
+<circle class="d" cx="365.9" cy="322.3" r="4.5"><title>SUNSILK SH STRONG&amp;LONG 288X15ML (68690511): swing 0.45, error 37%</title></circle>
+<circle class="d" cx="290.6" cy="369.8" r="4.5"><title>AXE DEO RO RLN DARKTEMP 24X40ML (68736096): swing 0.34, error 22%</title></circle>
+<circle class="d" cx="201.3" cy="395.6" r="4.5"><title>LADY&#x27;S CHOICE SS CHICKEN JAR 24X220ML (68763996): swing 0.20, error 13%</title></circle>
+<circle class="d" cx="477.8" cy="245.7" r="4.5"><title>LADY&#x27;S CHOICE SS HAM DOY 24X220ML (68764004): swing 0.62, error 63%</title></circle>
+<circle class="d" cx="318.8" cy="346.5" r="4.5"><title>LADY&#x27;S CHOICE SS PLAIN DOY 24X220ML (68764017): swing 0.38, error 29%</title></circle>
+<circle class="d" cx="207.9" cy="369.9" r="4.5"><title>KNORR SOUP CRM OF MUSHROOM 60X62G (68830455): swing 0.21, error 21%</title></circle>
+<circle class="d" cx="283.6" cy="338.0" r="4.5"><title>DOVE BAR REGULAR 48X90G (68864117): swing 0.33, error 32%</title></circle>
+<circle class="d" cx="300.5" cy="340.6" r="4.5"><title>DOVE BAR PINK 48X90G (68864121): swing 0.35, error 31%</title></circle>
+<circle class="d" cx="286.6" cy="388.9" r="4.5"><title>REXONA MEN RO QUANTUM 72H 24X45ML (69642633): swing 0.33, error 15%</title></circle>
+<circle class="d" cx="288.5" cy="368.8" r="4.5"><title>SURF POWDER ANTIBAC L 288X60G (69668130): swing 0.33, error 22%</title></circle>
+<circle class="d" cx="438.5" cy="198.1" r="4.5"><title>SURF POWDER CHERRY BLOSSOM L 288X65G (69668140): swing 0.56, error 79%</title></circle>
+<circle class="d" cx="388.5" cy="376.3" r="4.5"><title>SURF POWDER CHERRY BLOSSOM L 6X2200G (69668143): swing 0.48, error 19%</title></circle>
+<circle class="d" cx="286.8" cy="362.9" r="4.5"><title>SURF POWDER PURPLE BLOOMS L 288X65G (69668145): swing 0.33, error 24%</title></circle>
+<circle class="d" cx="353.6" cy="321.1" r="4.5"><title>SURF POWDER ROSE FRESH L 288X65G (69668148): swing 0.43, error 38%</title></circle>
+<circle class="d" cx="264.4" cy="363.8" r="4.5"><title>SURF POWDER SUN FRESH L 12X1100G (69668150): swing 0.30, error 24%</title></circle>
+<circle class="d" cx="491.4" cy="216.3" r="4.5"><title>LADY&#x27;S CHOICE REAL MAYO 4X3.5L (69695564): swing 0.64, error 73%</title></circle>
+<circle class="d" cx="266.6" cy="347.7" r="4.5"><title>SURF BAR CHERRY BLOSSOM SXFL 96X120G (69725979): swing 0.30, error 29%</title></circle>
+<circle class="d" cx="215.5" cy="377.2" r="4.5"><title>SURF BAR BLOSSOM FRESH SXFL 96X120G (69725987): swing 0.23, error 19%</title></circle>
+<circle class="d" cx="247.2" cy="347.8" r="4.5"><title>SURF BAR SUN FRESH SXFL 96X120G (69726539): swing 0.27, error 29%</title></circle>
+<circle class="d" cx="290.3" cy="360.4" r="4.5"><title>SURF BAR BLOSSOM FRESH SXFL 36X360G (69731876): swing 0.34, error 25%</title></circle>
+<circle class="d" cx="244.9" cy="367.4" r="4.5"><title>SURF BAR CHERRY BLOSSOM SXFL 36X360G (69731878): swing 0.27, error 22%</title></circle>
+<circle class="d" cx="210.7" cy="380.4" r="4.5"><title>SURF BAR KALAMANSI SXFL 36X360G (69731884): swing 0.22, error 18%</title></circle>
+<circle class="d" cx="275.9" cy="385.0" r="4.5"><title>SURF BAR SUN FRESH SXFL 36X360G (69731886): swing 0.32, error 16%</title></circle>
+<circle class="d" cx="525.5" cy="353.8" r="4.5"><title>SURF POWDER CHERRY BLOSSM L 40(6+1)65G (69767334): swing 0.69, error 27%</title></circle>
+<circle class="d" cx="464.5" cy="363.6" r="4.5"><title>SURF POWDER ROSE FRSH L 40(6+1)65G (69767335): swing 0.60, error 24%</title></circle>
+<circle class="d" cx="608.0" cy="320.1" r="4.5"><title>SURF POWDER SUNFRESH L 40(6+1)65G (69767336): swing 0.81, error 38%</title></circle>
+<circle class="d" cx="366.5" cy="325.8" r="4.5"><title>SUNSILK SH AD HEALTHY&amp;STRONG 288X13.5ML (62681003): swing 0.45, error 36%</title></circle>
+<circle class="d" cx="496.3" cy="311.4" r="4.5"><title>CREAM SILK RO ULTREBORN HFALL 288X13ML (62687200): swing 0.64, error 41%</title></circle>
+<circle class="d" cx="358.8" cy="127.2" r="4.5"><title>DOVE SH KERATIN STRT&amp;SILKY 288X13.5ML (64314335): swing 0.44, error 103%</title></circle>
+<circle class="d" cx="352.9" cy="242.8" r="4.5"><title>DOVE SH CERAMIDE INTENSE REP 288X13.5ML (64314343): swing 0.43, error 64%</title></circle>
+<circle class="d" cx="285.6" cy="332.1" r="4.5"><title>BESTFOODS ALL PURPOSE DRSG 4X3.5L (64401259): swing 0.33, error 34%</title></circle>
+<circle class="d" cx="393.0" cy="247.4" r="4.5"><title>KNORR CUBES PORK DUO 48X6X20G (64784425): swing 0.49, error 63%</title></circle>
+<circle class="d" cx="635.1" cy="281.6" r="4.5"><title>CREAM SILK RO ULTREBORN HF 24(11+1)X22ML (64788596): swing 0.85, error 51%</title></circle>
+<circle class="d" cx="593.3" cy="286.6" r="4.5"><title>CREAM SILK RO ULTREBORN ST 24(11+1)X22ML (64788598): swing 0.79, error 49%</title></circle>
+<circle class="d" cx="433.2" cy="281.1" r="4.5"><title>CREAM SILK TMT DAMAGE REP 288X18ML (64900492): swing 0.55, error 51%</title></circle>
+<circle class="d" cx="355.6" cy="342.0" r="4.5"><title>CREAM SILK TRI-KRTN SCD STRT 288X14ML (64900598): swing 0.43, error 31%</title></circle>
+<circle class="d" cx="549.0" cy="258.0" r="4.5"><title>CREAMSILK TRI-KRTN SCD R&amp;S 24(11+1)X14ML (64900614): swing 0.72, error 59%</title></circle>
+<circle class="d" cx="321.9" cy="330.9" r="4.5"><title>VITAKERATIN TMT BRZLN STRAIGHT 288X22ML (64926066): swing 0.38, error 35%</title></circle>
+<circle class="d" cx="352.1" cy="278.1" r="4.5"><title>LADY&#x27;S CHOICE SS CHICKEN JAR 12X470ML (68763994): swing 0.43, error 52%</title></circle>
+<circle class="d" cx="274.5" cy="352.3" r="4.5"><title>LADY&#x27;S CHOICE SS CHICKEN 72X27ML (68763997): swing 0.31, error 27%</title></circle>
+<circle class="d" cx="292.9" cy="364.6" r="4.5"><title>SURF POWDER PURPLE BLOOMS L 12X1100G (69668144): swing 0.34, error 23%</title></circle>
+<circle class="d" cx="258.2" cy="350.4" r="4.5"><title>SURF POWDER SUN FRESH L 288X65G (69668149): swing 0.29, error 28%</title></circle>
+<circle class="d" cx="238.8" cy="384.4" r="4.5"><title>LADY&#x27;S CHOICE REAL MAYO 72X80ML (69695555): swing 0.26, error 17%</title></circle>
+<circle class="d" cx="451.5" cy="263.9" r="4.5"><title>LADY&#x27;S CHOICE REAL MAYO DOY 12X470ML (69695556): swing 0.58, error 57%</title></circle>
+<circle class="d" cx="394.2" cy="348.6" r="4.5"><title>LADY&#x27;S CHOICE RAL MAYO DOY 24X220ML (69695560): swing 0.49, error 29%</title></circle>
+<circle class="d" cx="256.6" cy="365.8" r="4.5"><title>LADY&#x27;S CHOICE REAL MAYO 72X27ML (69695566): swing 0.29, error 23%</title></circle>
+<circle class="d" cx="242.9" cy="346.9" r="4.5"><title>LADY&#x27;S CHOICE SS CHICKEN 72X80ML (68764000): swing 0.27, error 29%</title></circle>
+<circle class="d" cx="239.0" cy="363.9" r="4.5"><title>LADY&#x27;S CHOICE SS PLAIN JAR 24X220ML (68764014): swing 0.26, error 23%</title></circle>
+<circle class="d" cx="448.8" cy="127.9" r="4.5"><title>SURF PWDR PURPLE BLOOMS L 40(6+1)65G (64861488): swing 0.57, error 103%</title></circle>
+<circle class="d" cx="447.7" cy="284.3" r="4.5"><title>CREAM SILK TMT REBOND STRT 288X18ML (64900488): swing 0.57, error 50%</title></circle>
+<circle class="d" cx="469.5" cy="378.2" r="4.5"><title>CREAM SILK ULT REBORN HF 24(11+1)13ML (62687208): swing 0.60, error 19%</title></circle>
+<circle class="d" cx="391.9" cy="320.3" r="4.5"><title>SURF FABCON LUXE PERFUME STR 360X25ML (64856638): swing 0.49, error 38%</title></circle>
+<circle class="d" cx="378.9" cy="330.9" r="4.5"><title>SURF FABCON CHARCOAL FRESH STR 360X25ML (64860720): swing 0.47, error 35%</title></circle>
+<circle class="d" cx="317.0" cy="313.7" r="4.5"><title>REX W MRO PWDR DRY + BRGHTENING 24X25ML (64824378): swing 0.38, error 40%</title></circle>
+<circle class="d" cx="457.0" cy="333.5" r="4.5"><title>SURF FABCON BLOSSOM FRESH STR 360X28ML (64856620): swing 0.58, error 34%</title></circle>
+<circle class="d" cx="420.8" cy="269.0" r="4.5"><title>CREAMSILK TR-KRTN SCD STRT 24(11+1)X14ML (64900613): swing 0.53, error 55%</title></circle>
+<circle class="d" cx="459.0" cy="294.9" r="4.5"><title>LADY&#x27;S CHOICE SS BACON DOY 24X220ML (64967994): swing 0.59, error 47%</title></circle>
+<text class="t" x="348.8" y="115.2">4 products at 100–103% error (named in README §2)</text>
+</svg>
