@@ -1,0 +1,150 @@
+WARNING: ==============================================================================
+WARNING: PLACEHOLDER INPUTS: realistic values the team chose until SSM (Sir Abe) confirms them.
+WARNING: They are NOT SSM's figures. Defaults: analytics/params.PLACEHOLDERS.
+WARNING:   allocation_pct                       = 103.0
+WARNING:   review_days                          = 5.0
+WARNING:   lead_days                            = 3.0
+WARNING:   target_weeks                         = 3.0
+WARNING:   cover_rule                           = aggregate
+WARNING:   warehouse_capacity                   = 3800000.0
+WARNING:   default_procurement_cost_per_unit    = 25.0
+WARNING:   storage_cost_per_unit                = 0.5
+WARNING:   safety stock window = review + lead = 8 business days
+WARNING: ==============================================================================
+INFO: Fetching gated Category A candidate pool...
+INFO: 73 product(s) considered (Category A, status='ok', mase < 1.0, at the latest forecast_date).
+INFO:   Cycle 2026-03-01 · unilever: opening stock count 2026-02 (counted 2026-03-02; 812 rows)
+WARNING:   Cycle 2026-03-01 · unilever: that count is flagged: accepted for planning, pending SSM confirmation (decided 2026-10-03)
+WARNING:   Cycle 2026-03-01 note: unilever stock count 2026-02 (counted 2026-03-02): accepted for planning, pending SSM confirmation (decided 2026-10-03)
+WARNING:   Cycle 2026-03-01 note: unilever: stock counts are from the Ilocos Sur warehouse workbook; per-product sales are La Union only - territory match unverified.
+INFO:     sigma_d derived from monthly sigma 5559.669 / sqrt(21.7 avg business days) = 1193.098 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 5132.988 / sqrt(21.7 avg business days) = 1101.628 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 20871.305 / sqrt(21.7 avg business days) = 4479.344 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 39418.881 / sqrt(21.7 avg business days) = 8459.976 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 88257.073 / sqrt(21.7 avg business days) = 18937.913 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 25045.416 / sqrt(21.7 avg business days) = 5374.163 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 329.072 / sqrt(21.7 avg business days) = 70.625 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 46160.793 / sqrt(21.7 avg business days) = 9909.310 (no real daily Unilever series exists — see module docstring)
+WARNING:     Unilever continuity check flagged gaps for this product: ['2024-03']
+INFO:     sigma_d derived from monthly sigma 2240.434 / sqrt(21.8 avg business days) = 480.289 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 5325.217 / sqrt(21.7 avg business days) = 1142.526 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 7978.533 / sqrt(21.7 avg business days) = 1711.205 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 3905.955 / sqrt(21.7 avg business days) = 838.286 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 7191.009 / sqrt(21.8 avg business days) = 1541.914 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 7380.430 / sqrt(21.7 avg business days) = 1584.353 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 227.415 / sqrt(21.6 avg business days) = 48.932 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 354.657 / sqrt(21.6 avg business days) = 76.361 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 351.744 / sqrt(21.8 avg business days) = 75.422 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 2693.395 / sqrt(21.7 avg business days) = 578.190 (no real daily Unilever series exists — see module docstring)
+WARNING:   64971078 (unilever): not in the opening stock count (2026-02) — counted as 0 on hand.
+INFO:     sigma_d derived from monthly sigma 159.914 / sqrt(21.7 avg business days) = 34.320 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 4260.809 / sqrt(21.7 avg business days) = 914.444 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 328.846 / sqrt(21.7 avg business days) = 70.576 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 300.148 / sqrt(21.7 avg business days) = 64.417 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 209.472 / sqrt(21.7 avg business days) = 44.956 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 3516.846 / sqrt(21.7 avg business days) = 754.776 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 3917.112 / sqrt(21.7 avg business days) = 840.680 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 4378.007 / sqrt(21.7 avg business days) = 939.596 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 8444.639 / sqrt(21.7 avg business days) = 1812.366 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 11777.694 / sqrt(21.7 avg business days) = 2527.697 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 217.456 / sqrt(21.7 avg business days) = 46.670 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 226.337 / sqrt(21.7 avg business days) = 48.576 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 406.965 / sqrt(21.7 avg business days) = 87.342 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 184.098 / sqrt(21.7 avg business days) = 39.511 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 140.572 / sqrt(21.7 avg business days) = 30.169 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 4870.885 / sqrt(21.7 avg business days) = 1045.376 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 3787.712 / sqrt(21.7 avg business days) = 812.909 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 53187.357 / sqrt(21.7 avg business days) = 11414.929 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 212.757 / sqrt(21.7 avg business days) = 45.657 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 131.803 / sqrt(21.8 avg business days) = 28.261 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 734.484 / sqrt(21.7 avg business days) = 157.633 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 329.776 / sqrt(21.7 avg business days) = 70.776 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 233.720 / sqrt(21.7 avg business days) = 50.160 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 193.926 / sqrt(21.8 avg business days) = 41.568 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 7781.851 / sqrt(21.7 avg business days) = 1669.804 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 125.697 / sqrt(21.7 avg business days) = 26.972 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 23712.763 / sqrt(21.7 avg business days) = 5088.207 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 68811.888 / sqrt(21.7 avg business days) = 14765.429 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 177.546 / sqrt(21.7 avg business days) = 38.097 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 2222.560 / sqrt(21.8 avg business days) = 476.406 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 1846.799 / sqrt(21.8 avg business days) = 395.861 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 1089.602 / sqrt(21.8 avg business days) = 233.556 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 1161.528 / sqrt(21.8 avg business days) = 248.974 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 775.397 / sqrt(21.8 avg business days) = 166.206 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 386.986 / sqrt(21.8 avg business days) = 82.950 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 516.449 / sqrt(21.7 avg business days) = 110.829 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 11465.380 / sqrt(21.7 avg business days) = 2458.891 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 8631.043 / sqrt(21.7 avg business days) = 1851.033 (no real daily Unilever series exists — see module docstring)
+WARNING:     Unilever continuity check flagged gaps for this product: ['2023-09', '2023-10', '2023-11']...
+INFO:     sigma_d derived from monthly sigma 3894.898 / sqrt(21.7 avg business days) = 836.044 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 4742.543 / sqrt(21.7 avg business days) = 1017.513 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 48463.424 / sqrt(21.7 avg business days) = 10393.576 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 9786.810 / sqrt(21.7 avg business days) = 2102.544 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 2616.300 / sqrt(21.2 avg business days) = 567.555 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 170.789 / sqrt(21.7 avg business days) = 36.647 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 3685.264 / sqrt(21.7 avg business days) = 790.961 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 209.465 / sqrt(21.7 avg business days) = 45.000 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 10540.366 / sqrt(21.7 avg business days) = 2264.434 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 3563.464 / sqrt(21.6 avg business days) = 767.243 (no real daily Unilever series exists — see module docstring)
+WARNING:     Unilever continuity check flagged gaps for this product: ['2024-02', '2024-03']
+INFO:     sigma_d derived from monthly sigma 2231.720 / sqrt(21.8 avg business days) = 478.421 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 6219.574 / sqrt(21.8 avg business days) = 1333.617 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 23537.063 / sqrt(21.8 avg business days) = 5046.876 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 785.702 / sqrt(21.7 avg business days) = 168.796 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 270.443 / sqrt(21.7 avg business days) = 58.101 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 200.121 / sqrt(21.6 avg business days) = 43.059 (no real daily Unilever series exists — see module docstring)
+INFO:     sigma_d derived from monthly sigma 4713.320 / sqrt(21.2 avg business days) = 1022.463 (no real daily Unilever series exists — see module docstring)
+INFO: Solving LP for planning cycle 2026-03-01 (73 product(s), cover rule aggregate)...
+INFO:   allocation[unilever] = 1,193,368 pieces a month (2025 sales of the planned products × 103% ÷ 12); does not bind
+INFO:   need 325,468 · order 325,468 · short 0 pieces across 0 product(s) · 31 overstocked (order 0)
+INFO:   planned month-end stock at cost PHP 11,845,786 = 4.33 weeks of these products' sales (rule: 3 weeks, met)
+INFO:   warehouse: stock + orders = 2,419,254 of 3,800,000 pieces
+INFO:   Cycle 2026-03-01: 73 row(s) upserted into LP_Recommendation (status='pending').
+INFO: Per-product plan written to reports/diagnostics/lp_rerun_2026-10-03/plan_2026-03_103pct.csv
+INFO: ==============================================================================
+INFO: RUN SUMMARY
+INFO:   Products considered:        73
+INFO:   Products gated out:          0
+INFO:   Products refused (no usable opening stock count): 0
+INFO:   Stock on hand:               72 from the opening stock count, 1 not in it (counted as 0)
+INFO:     - 2026-03-01 unilever: count 2026-02, counted 2026-03-02 (FLAGGED)
+INFO:   Cost per piece:              73 from the stock file, 0 placeholder (--default-procurement-cost-per-unit)
+INFO:   Planning cycles attempted:   1
+INFO:   Infeasible cycles:           0
+INFO:   Rows written to LP_Recommendation: 73
+INFO:   Decided rows kept as they were (accepted/rejected): 0
+INFO:   Total SS_i in 2026-03-01: 485,541 pieces (review + lead = 8 business days)
+INFO:   Older cycle still pending: 2023-05-01 (3 row(s))
+INFO:   Older cycle still pending: 2023-06-01 (2 row(s))
+INFO:   Older cycle still pending: 2023-07-01 (2 row(s))
+INFO:   Older cycle still pending: 2023-08-01 (1 row(s))
+INFO:   Older cycle still pending: 2023-09-01 (3 row(s))
+INFO:   Older cycle still pending: 2023-10-01 (4 row(s))
+INFO:   Older cycle still pending: 2023-11-01 (1 row(s))
+INFO:   Older cycle still pending: 2023-12-01 (8 row(s))
+INFO:   Older cycle still pending: 2024-01-01 (8 row(s))
+INFO:   Older cycle still pending: 2024-02-01 (3 row(s))
+INFO:   Older cycle still pending: 2024-03-01 (4 row(s))
+INFO:   Older cycle still pending: 2024-05-01 (1 row(s))
+INFO:   Older cycle still pending: 2024-06-01 (4 row(s))
+INFO:   Older cycle still pending: 2024-07-01 (9 row(s))
+INFO:   Older cycle still pending: 2024-08-01 (15 row(s))
+INFO:   Older cycle still pending: 2024-09-01 (6 row(s))
+INFO:   Older cycle still pending: 2024-10-01 (7 row(s))
+INFO:   Older cycle still pending: 2024-11-01 (4 row(s))
+INFO:   Older cycle still pending: 2024-12-01 (2 row(s))
+INFO:   Older cycle still pending: 2025-01-01 (8 row(s))
+INFO:   Older cycle still pending: 2025-02-01 (7 row(s))
+INFO:   Older cycle still pending: 2025-03-01 (2 row(s))
+INFO:   Older cycle still pending: 2025-04-01 (4 row(s))
+INFO:   Older cycle still pending: 2025-05-01 (3 row(s))
+INFO:   Older cycle still pending: 2025-06-01 (8 row(s))
+INFO:   Older cycle still pending: 2025-07-01 (6 row(s))
+INFO:   Older cycle still pending: 2025-08-01 (6 row(s))
+INFO:   Older cycle still pending: 2025-09-01 (6 row(s))
+INFO:   Older cycle still pending: 2025-10-01 (5 row(s))
+INFO:   Older cycle still pending: 2025-11-01 (11 row(s))
+INFO:   Older cycle still pending: 2025-12-01 (4 row(s))
+INFO:   Older cycle still pending: 2026-01-01 (7 row(s))
+INFO:   Older cycle still pending: 2026-02-01 (15 row(s))
+INFO: ==============================================================================
