@@ -52,6 +52,17 @@
 
 BEGIN;
 
+-- 0041 (data marts) is reserved ahead of this one and must land first; this
+-- file reaching kelvin-etl before it must not let the runner apply it out of
+-- order.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE filename LIKE '0041\_%') THEN
+        RAISE EXCEPTION '0042 needs migration 0041 (data marts) applied first';
+    END IF;
+END
+$$;
+
 ALTER TABLE Inventory_Fact ADD COLUMN IF NOT EXISTS po_qty_cases NUMERIC;
 ALTER TABLE Inventory_Fact ADD COLUMN IF NOT EXISTS po_qty_pieces NUMERIC;
 COMMENT ON COLUMN Inventory_Fact.po_qty_cases IS
