@@ -1721,7 +1721,7 @@ def test_stock_card_compares_with_the_last_count_not_flagged_as_unusual():
     assert trend["delta_pct"] == pytest.approx(-6.7)
     assert trend["months_apart"] == 2
     assert [s["period"] for s in trend["skipped"]] == ["2026-02"]
-    assert "outlier" in trend["skipped"][0]["reason"]
+    assert "accepted for planning, pending SSM confirmation" in trend["skipped"][0]["reason"]
     assert "2026-02" in [pt["period"] for pt in trend["points"]], "the count is kept, only not compared against"
 
     flags = body["stock_on_hand_flags"]

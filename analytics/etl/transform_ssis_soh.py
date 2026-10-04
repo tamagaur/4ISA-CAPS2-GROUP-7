@@ -42,12 +42,19 @@ Column mapping to the existing Inventory_Fact schema (analytics/db/schema.sql):
                                                      _snapshot_date_from_period() synthetic-first-of-month
                                                      fabrication needed here, unlike Del Monte's inventory_sign_off)
   sku_code                                      -> sku_code
+  po_qty_raw ("PO Qty", CS/PC text)             -> po_qty_cases, po_qty_pieces (migration 0042, 2026-10-04):
+                                                     open purchase orders at the count, i.e. in transit.
+                                                     Parsed with the extract's own parse_cs_pc; a value
+                                                     that isn't "<cases>/<pieces>" raises. A BLANK cell is
+                                                     0 on order: of 11,811 non-blank values in the 39
+                                                     staged counts, none is "0/0" (checked 2026-10-04), so
+                                                     the file writes nothing instead of zero.
   (constant) principal='unilever', is_demo=False, region=None (Storage
   Location dropped at Extract per R6 — no real region concept for this
   source)
 
 Columns with confirmed NO home in Inventory_Fact (reported, not added):
-  Blocked Stock (CS/PC), PO Qty, Open SO Quantity, Balance Quantity,
+  Blocked Stock (CS/PC), Open SO Quantity, Balance Quantity,
   Batch, PACK SIZE
   Status -> stock_status (schema.sql R12) — fixed 2026-09-16, same class as
   unit_cost_per_case above. Blocked Stock (CS/PC) still has nowhere to
@@ -87,10 +94,10 @@ NO_HOME_COLUMNS_REPORT = {
         "module docstring."
     ),
     "po_qty_raw": (
-        "Not needed for Inventory_Fact itself (open purchase orders are a "
-        "procurement-pipeline signal, not an on-hand quantity) — likely "
-        "belongs on Purchase_Fact / LP replenishment inputs if ever used, "
-        "not this fact."
+        "CARRIED since 2026-10-04 as po_qty_cases/po_qty_pieces (migration "
+        "0042): the reorder page subtracts the stock already on order from "
+        "the order quantity. Kept apart from quantity_on_hand — it is not "
+        "on hand yet."
     ),
     "open_so_quantity_raw": (
         "Not needed for Inventory_Fact itself (open sales orders are a "
@@ -153,6 +160,23 @@ class SsisSohTransformResult:
     # The rejected source rows themselves (2026-09-21, migration 0024) - `rejections`
     # above only carries a count, and etl_quarantine needs the rows.
     rejected_rows: pd.DataFrame = field(default_factory=pd.DataFrame)
+    # PO Qty parse counts over the SKU rows: {rows, parsed, blank_as_zero}.
+    # parsed + blank_as_zero == rows always; an unparseable value raises.
+    po_qty_parse: dict = field(default_factory=dict)
+
+
+def parse_po_qty(raw: pd.Series) -> tuple[pd.Series, pd.Series, dict]:
+    """(cases, pieces, counts) for the "PO Qty" column. Blank = 0 on order
+    (see the module docstring for the evidence); anything that isn't
+    "<cases>/<pieces>" raises, through the extract's parse_cs_pc."""
+    from analytics.etl.extract.ssis_soh import parse_cs_pc
+    # A missing cell can come back from parquet as NaN, which is_blank
+    # doesn't treat as blank.
+    pairs = [parse_cs_pc(None if pd.isna(v) else v) for v in raw]
+    blank = sum(1 for c, p in pairs if c is None and p is None)
+    cases = pd.Series([0 if c is None else c for c, _ in pairs], index=raw.index, dtype="float64")
+    pieces = pd.Series([0 if p is None else p for _, p in pairs], index=raw.index, dtype="float64")
+    return cases, pieces, {"rows": len(pairs), "parsed": len(pairs) - blank, "blank_as_zero": blank}
 
 
 def _load_staged(staging_dir: Path) -> pd.DataFrame:
@@ -220,6 +244,7 @@ def transform_ssis_soh(
 
     latest_category = _most_recent_by_sku(df, "category_desc")
     latest_product_name = _most_recent_by_sku(df, "article_description")
+    po_cases, po_pieces, po_qty_parse = parse_po_qty(df["po_qty_raw"])
 
     # --- Inventory_Fact-shaped output ---
     out = pd.DataFrame({
@@ -244,6 +269,9 @@ def transform_ssis_soh(
         # NOT fixed here — confirmed genuinely empty at source (0/27,321
         # non-null in staging/ssis_soh), nothing to carry.
         "stock_status": df["status"],
+        # In transit (migration 0042): open POs at the count, blank = 0.
+        "po_qty_cases": po_cases,
+        "po_qty_pieces": po_pieces,
         "is_demo": False,
         "_src_file": df["_src_file"],
         "_src_sheet": df["_src_sheet"],
@@ -274,6 +302,7 @@ def transform_ssis_soh(
         product_dimension_candidates=product_dimension_candidates,
         input_rows=input_rows,
         distinct_snapshots_in=distinct_snapshots_in,
+        po_qty_parse=po_qty_parse,
     )
 
 

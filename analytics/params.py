@@ -97,6 +97,36 @@ FSN_MIN_FAST_SALES_MONTHS = 3
 XGB_NTHREAD = 1
 
 # --------------------------------------------------------------------------- #
+# Review flag (analytics/forecasting/review_flag.py) and the yearly-pattern
+# label (analytics/forecasting/decomposition.py)
+# --------------------------------------------------------------------------- #
+# TEAM: the collapse rule, last-3-month mean < 0.5 x last-12-month mean, with
+# at least 12 months since the first sale. 0.5 is Yuan's example (2026-10-03),
+# recorded in reports/diagnostics/forecast_error_business_2026-10-03/README.md
+# section 7 (kelvin/forecast-error-business b4f6b77).
+REVIEW_COLLAPSE_RATIO = 0.5
+REVIEW_COLLAPSE_RECENT_MONTHS = 3
+REVIEW_COLLAPSE_BASE_MONTHS = 12
+
+# TEAM: option D of the surplus-bias experiment (kelvin/surplus-bias-
+# experiment 3226cc4, README "Candidate fixes"; chosen 2026-10-03 because no
+# forecast change met the recorded 5% threshold): flag a product when it is in
+# a run of 3+ over-forecast months ending the month before the cycle. The
+# look-back is that experiment's PRIOR_MONTHS: how far back a run is counted,
+# so a stored run length of 6 reads "6 or more".
+REVIEW_OVER_RUN_MONTHS = 3
+REVIEW_LOOKBACK_MONTHS = 6
+
+# DEC-23 / LIT: the lag-12 autocorrelation test against the 95% white-noise
+# bound 1.96 / sqrt(n), on 24+ months from the first sale. Rule R1 of
+# b4f6b77 README section 10: its false-alarm rate on no-seasonality series at
+# our lengths is under 1%, against 15-18% for the STL-strength >= 0.6 band
+# ("Strong seasonality") it replaces. The label reads only the positive side
+# (decomposition.yearly_pattern says why).
+YEARLY_ACF_MIN_MONTHS = 24
+YEARLY_ACF_Z = 1.96
+
+# --------------------------------------------------------------------------- #
 # LP (analytics/optimization/lp.py, scripts/run_lp.py)
 # --------------------------------------------------------------------------- #
 # TEAM (asserted): "stakeholder consultation" per the manuscript; in no

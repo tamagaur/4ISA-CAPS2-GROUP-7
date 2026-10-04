@@ -113,6 +113,28 @@ none, the reason the plan can't be made from it ("no opening stock count for
 <month>"). cycle=all reads each cycle's own opening count. "Stock now"
 screens keep the latest count (GET /dashboard's kpis.stock_counts).
 
+REVIEW FLAG (2026-10-04). needs_review / review_reasons come from
+review_flag (migration 0042, scripts/compute_review_flags.py): the product's
+forecast for this cycle is likely to miss by a lot, because sales collapsed
+(last 3 months < half the last 12) or the served model over-forecast it 3+
+months running (option D, kelvin/surplus-bias-experiment 3226cc4). It says
+"check before ordering", not which way to adjust. A flagged row is never
+accepted without a person: PATCH refuses status 'accepted' on it unless the
+body says reviewed=true, which the page sends only from the single-row
+confirm dialog (its bulk accept skips flagged rows). needs_review None = not
+assessed for this cycle (no review_flag row, or the table isn't there yet).
+
+ON ORDER (2026-10-04). on_order is the stock already ordered and not yet
+received, in pieces: the "PO Qty" of the same opening count the row's stock
+comes from (backend/stock_units.ON_ORDER_AT_PERIOD_SQL). q_net_of_on_order =
+max(0, q_i - on_order) is the order left to place once it arrives. The LP
+itself does not net it yet (q_i is unchanged, and the LP was not re-run), so
+on a row the LP cut to fit the allocation (short_units > 0) this subtracts
+from the cut quantity, not from the full need. None with on_order_blocked_
+reason when the count's PO Qty isn't loaded yet, the principal's file has no
+PO column (Del Monte), the product is absent from the count, or it has no
+usable pack size.
+
 PACK SIZE (2026-10-01). Every quantity here is in PIECES, while SSM buys
 in cases: an order of 104,575 pieces is about 363 cases of 288. pack_size
 (Product_Dimension's pieces per case, None when unusable — the same rule
@@ -147,6 +169,9 @@ from analytics.params import DAYS_PER_MONTH, SKU_COVER_HISTORY_MONTHS
 from backend.stock_status import COUNT_OMITS_ZERO_STOCK, NO_DATA, URGENCY, stock_status
 from backend.stock_units import (
     NO_PACK_SIZE_REASON,
+    ON_ORDER_ABSENT_SQL,
+    ON_ORDER_AT_PERIOD_SQL,
+    ON_ORDER_PRINCIPALS,
     PACK_SIZE_NUMERIC,
     STOCK_AT_PERIOD_SQL,
     missing_opening_count_reason,
@@ -199,7 +224,14 @@ _SELECT_ONE = f"""
         abc.revenue_share AS revenue_share,
         abc.tier AS tier,
         sales.avg_monthly_sales_pesos AS avg_monthly_sales_pesos,
-        fr.forecast_value AS forecast_units
+        fr.forecast_value AS forecast_units,
+        oo.on_order_pieces AS on_order_pieces,
+        oo.on_order_cases AS on_order_cases,
+        oo.on_order_unparsed AS on_order_unparsed,
+        rf.needs_review AS needs_review,
+        rf.reasons AS review_reasons,
+        rf.over_run_months AS review_over_run_months,
+        rf.collapse_ratio AS review_collapse_ratio
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
     LEFT JOIN Forecast_Result fr
@@ -237,7 +269,45 @@ _SELECT_ONE = f"""
         ) sales_window
         GROUP BY recent.product_key
     ) sales ON sales.product_key = lr.product_key
+    LEFT JOIN (
+        {{_ON_ORDER}}
+    ) oo ON oo.product_key = lr.product_key
+    LEFT JOIN (
+        {{_REVIEW}}
+    ) rf ON rf.product_key = lr.product_key AND rf.planning_cycle_date = lr.planning_cycle_date
 """
+
+# review_flag (migration 0042) and the PO Qty columns may not exist yet on the
+# database this runs against: the row query then reads the same columns from
+# no rows, so every row says "not assessed" / "not loaded" instead of failing.
+_PRESENT_SQL = """
+    SELECT to_regclass('review_flag') IS NOT NULL AS review_flag,
+           EXISTS (
+               SELECT 1 FROM pg_attribute
+               WHERE attrelid = to_regclass('inventory_fact') AND attname = 'po_qty_cases' AND NOT attisdropped
+           ) AS on_order
+"""
+_REVIEW_SQL = """
+        SELECT product_key, planning_cycle_date, needs_review, reasons, over_run_months, collapse_ratio
+        FROM review_flag
+"""
+_REVIEW_ABSENT_SQL = """
+        SELECT NULL::bigint AS product_key, NULL::date AS planning_cycle_date, NULL::boolean AS needs_review,
+               NULL::text[] AS reasons, NULL::integer AS over_run_months, NULL::numeric AS collapse_ratio
+        WHERE false
+"""
+
+
+def _present(db: Session) -> dict:
+    """{review_flag, on_order}: whether migration 0042's table and columns
+    exist. A database (or test fake) that can't answer counts as neither."""
+    row = db.execute(text(_PRESENT_SQL)).mappings().first()
+    return {"review_flag": bool(row and row["review_flag"]), "on_order": bool(row and row["on_order"])}
+
+
+def _with_present(sql: str, present: dict) -> str:
+    return (sql.replace("{_ON_ORDER}", ON_ORDER_AT_PERIOD_SQL if present["on_order"] else ON_ORDER_ABSENT_SQL)
+               .replace("{_REVIEW}", _REVIEW_SQL if present["review_flag"] else _REVIEW_ABSENT_SQL))
 
 _LP_FROM = "FROM lp_recommendation lr"
 assert _SELECT_ONE.count(_LP_FROM) == 1
@@ -245,15 +315,17 @@ _FC_JOIN = "LEFT JOIN Forecast_Result fr"
 assert _SELECT_ONE.count(_FC_JOIN) == 1
 
 
-def select_one(mode: str = REAL) -> tuple[str, dict]:
+def select_one(mode: str = REAL, present: dict | None = None) -> tuple[str, dict]:
     """_SELECT_ONE and its extra params for `mode`: in preview with built
     outputs its LP read comes from backend/data_mode.lp_source() and its
     forecast read from forecast_source(), so a what-if row is explained by
     the what-if forecast it was solved against; every other join (stock,
-    ABC, recent sales) is the real one either way."""
+    ABC, recent sales, on order, review flag) is the real one either way.
+    `present` is _present(db); None reads 0042's table and columns."""
     lp, params = lp_source(mode, "lp_recommendation")
     fc, fc_params = forecast_source(mode, "Forecast_Result")
-    sql = _SELECT_ONE if lp == "lp_recommendation" else _SELECT_ONE.replace(_LP_FROM, f"FROM {lp} lr")
+    base = _with_present(_SELECT_ONE, present or {"review_flag": True, "on_order": True})
+    sql = base if lp == "lp_recommendation" else base.replace(_LP_FROM, f"FROM {lp} lr")
     if fc != "Forecast_Result":
         sql = sql.replace(_FC_JOIN, f"LEFT JOIN {fc} fr")
     return sql, {**params, **fc_params}
@@ -283,7 +355,7 @@ def _cover(stock_value: float | None, avg_monthly_sales: float | None) -> tuple[
     return round(stock_value / daily, 1), None
 
 
-def _to_item(r) -> RecommendationItem:
+def _to_item(r, present: dict | None = None) -> RecommendationItem:
     # current_stock is PIECES (backend/stock_units.py), the same unit as
     # rop_i. Until 2026-09-23 this read quantity_on_hand — CASES — straight
     # off the snapshot and compared it with a piece-scale ROP, which made
@@ -346,6 +418,10 @@ def _to_item(r) -> RecommendationItem:
         short = max(0.0, forecast + rop - stock) - float(r["q_i"])
         short_units = round(short, 2) if short >= 1.0 else 0.0
 
+    on_order, on_order_cases, on_order_reason = _on_order(r, in_count, stock_not_in_count, present)
+    q_net = None if on_order is None else max(0.0, float(r["q_i"]) - on_order)
+    reasons = r.get("review_reasons") if hasattr(r, "get") else None
+
     return RecommendationItem(
         recommendation_key=r["recommendation_key"],
         sku_id=r["sku_id"] or "",
@@ -370,7 +446,38 @@ def _to_item(r) -> RecommendationItem:
         forecast_units=forecast,
         short_units=short_units,
         cover_blocked_reason=cover_reason,
+        on_order=on_order,
+        on_order_cases=on_order_cases,
+        on_order_blocked_reason=on_order_reason,
+        q_net_of_on_order=q_net,
+        needs_review=r.get("needs_review") if hasattr(r, "get") else None,
+        review_reasons=list(reasons or []),
+        review_over_run_months=r.get("review_over_run_months") if hasattr(r, "get") else None,
+        review_collapse_ratio=_opt_float(r, "review_collapse_ratio"),
     )
+
+
+def _on_order(r, in_count, stock_not_in_count, present) -> tuple[float | None, float | None, str | None]:
+    """(pieces on order, cases on order, why unknown) for one row, from the
+    opening count's PO Qty. Unknown is None with a reason, never 0. `present`
+    is _present(db); None (a caller that didn't check) reads the row alone."""
+    principal = r["principal"]
+    if principal not in ON_ORDER_PRINCIPALS:
+        return None, None, "this principal's stock file has no purchase-order column"
+    if (present is not None and not present["on_order"]) or not (hasattr(r, "get") and "on_order_unparsed" in r):
+        return None, None, "stock on order is not loaded yet (migration 0042)"
+    if stock_not_in_count or in_count is False:
+        return None, None, "not in the cycle's opening stock count, which records stock on order only for listed products"
+    if r.get("on_order_unparsed") is None:
+        return None, None, "no row in the cycle's opening stock count to read stock on order from"
+    if r["on_order_unparsed"]:
+        return None, None, ("the cycle's opening stock count was loaded before its PO Qty column was read; "
+                            "reload that count to fill it")
+    cases = _opt_float(r, "on_order_cases")
+    pieces = _opt_float(r, "on_order_pieces")
+    if pieces is None:
+        return None, cases, "stock on order is recorded in cases and this product has no usable pack size"
+    return pieces, cases, None
 
 
 @router.get("", response_model=RecommendationsResponse)
@@ -398,7 +505,8 @@ def get_recommendations(
     # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte
     # honestly returns an empty list until the LP is run for Del Monte.
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
-    select_sql, lp_params = select_one(mode)
+    present = _present(db)
+    select_sql, lp_params = select_one(mode, present)
     filters = scope_sql
     # The ABC anchor resolves under the SAME scope as the rows. It replaces a
     # per-product "latest classification_period" walk, which quietly mixed
@@ -465,7 +573,7 @@ def get_recommendations(
         # when it was counted, or why there is none.
         principals = sorted({r["principal"] for r in cycle_rows})
         counts.extend(stock_counts(db, opening_period(planning_cycle), principals, cycle=planning_cycle))
-    items = [_to_item(r) for r in rows]
+    items = [_to_item(r, present) for r in rows]
     return _with_data_mode(RecommendationsResponse(
         items=items,
         count=len(items),
@@ -497,6 +605,13 @@ def update_recommendation(
 ) -> RecommendationItem:
     if decision.status not in ("accepted", "dismissed"):
         raise HTTPException(status_code=400, detail="status must be 'accepted' or 'dismissed'")
+    present = _present(db)
+    flagged = _review_reasons(db, recommendation_key) if present["review_flag"] else None
+    if decision.status == "accepted" and flagged is not None and not decision.reviewed:
+        raise HTTPException(status_code=409, detail=(
+            "This product is flagged for review before ordering (" + ", ".join(flagged) + "). "
+            "Accept it from its own row after checking it; it is never accepted in bulk."
+        ))
 
     decided = db.execute(
         text("""
@@ -520,7 +635,8 @@ def update_recommendation(
     audit.record(
         db,
         f"Reorder Recommendation {'Accepted' if decision.status == 'accepted' else 'Dismissed'}",
-        f"SKU {decided['sku']}" + (f": {decision.reason}" if decision.reason else ""),
+        f"SKU {decided['sku']}" + (f": {decision.reason}" if decision.reason else "")
+        + (f" [flagged for review: {', '.join(flagged)}; reviewed]" if flagged and decision.status == "accepted" else ""),
         actor=current_user,
     )
     db.commit()
@@ -529,11 +645,22 @@ def update_recommendation(
     # = all), identical to today's behaviour — see sku.py's _one_row_params.
     # Stock at the row's own cycle's opening count, as GET shows it.
     row = db.execute(
-        text(_SELECT_ONE + " WHERE lr.recommendation_key = :key"),
+        text(_with_present(_SELECT_ONE, present) + " WHERE lr.recommendation_key = :key"),
         {
             "key": recommendation_key,
             "inv_period": opening_period(decided["planning_cycle_date"]),
             "abc_period": latest_abc_period(db, None),
         },
     ).mappings().first()
-    return _to_item(row)
+    return _to_item(row, present)
+
+
+def _review_reasons(db: Session, recommendation_key: int) -> list[str] | None:
+    """The review_flag reasons when this row's product is flagged for its
+    cycle, else None (not flagged, or not assessed)."""
+    row = db.execute(text("""
+        SELECT rf.reasons FROM lp_recommendation lr
+        JOIN review_flag rf ON rf.product_key = lr.product_key AND rf.planning_cycle_date = lr.planning_cycle_date
+        WHERE lr.recommendation_key = :key AND rf.needs_review
+    """), {"key": recommendation_key}).mappings().first()
+    return list(row["reasons"]) if row else None
