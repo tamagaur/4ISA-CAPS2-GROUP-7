@@ -21,15 +21,25 @@ from __future__ import annotations
 
 import re
 
-from analytics.params import DEAD_SKU_MONTHS, POSSIBLY_PARTIAL_COUNTS
+from analytics.params import (
+    DEAD_SKU_MONTHS,
+    POSSIBLY_PARTIAL_COUNTS,
+    STOCK_LIMITED_AVG_MIN_MONTHS,
+    STOCK_LIMITED_AVG_MONTHS,
+    STOCK_LIMITED_WEEKS,
+)
 
 MART_SCHEMA = "mart"
 MART_TABLES = ("sales_mart", "flow_month", "inventory_mart", "idle_stock", "accuracy_mart")
+# mart.refresh()'s arguments since migration 0043 (the stock-limited rule's three numbers).
+REFRESH_SIGNATURE = "refresh(text,integer,text[],numeric,integer,integer)"
 
 
 def refresh_params(trigger: str) -> dict:
     """The arguments mart.refresh() takes, from analytics.params — one definition."""
-    return {"trigger": trigger, "idle_months": DEAD_SKU_MONTHS, "partial": list(POSSIBLY_PARTIAL_COUNTS)}
+    return {"trigger": trigger, "idle_months": DEAD_SKU_MONTHS, "partial": list(POSSIBLY_PARTIAL_COUNTS),
+            "low_weeks": STOCK_LIMITED_WEEKS, "avg_months": STOCK_LIMITED_AVG_MONTHS,
+            "avg_min_months": STOCK_LIMITED_AVG_MIN_MONTHS}
 
 
 def _mart(name: str) -> str:
@@ -50,13 +60,13 @@ def refresh_marts_cursor(cur, trigger: str, schema: str | None = "public", mart_
     mart = _mart(mart_schema)
     reason = _skip(schema)
     if reason is None:
-        cur.execute(f"SELECT to_regprocedure('{mart}.refresh(text,integer,text[])') IS NOT NULL")
+        cur.execute(f"SELECT to_regprocedure('{mart}.{REFRESH_SIGNATURE}') IS NOT NULL")
         if not cur.fetchone()[0]:
-            reason = "migration 0041 (mart schema) is not applied"
+            reason = "migrations 0041/0043 (mart schema, its refresh) are not applied"
     if reason is not None:
         print(f"[marts] refresh skipped: {reason}")
         return None
-    cur.execute(f"SELECT {mart}.refresh(%(trigger)s, %(idle_months)s, %(partial)s)", refresh_params(trigger))
+    cur.execute(f"SELECT {mart}.refresh(%(trigger)s, %(idle_months)s, %(partial)s, %(low_weeks)s, %(avg_months)s, %(avg_min_months)s)", refresh_params(trigger))
     counts = cur.fetchone()[0]
     print(f"[marts] refreshed ({trigger}): {counts}")
     return counts

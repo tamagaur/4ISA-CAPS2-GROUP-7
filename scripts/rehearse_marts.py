@@ -29,7 +29,8 @@ import psycopg2
 from analytics.marts import refresh_params
 
 REPO = Path(__file__).resolve().parents[1]
-MIGRATION = REPO / "analytics" / "db" / "migrations" / "0041_data_marts.sql"
+MIGRATIONS = [REPO / "analytics" / "db" / "migrations" / name
+              for name in ("0041_data_marts.sql", "0043_mart_stock_limited_rule.sql")]
 SCRATCH = "ssm_mart_rehearsal"
 SIZE_LIMIT_MB = 60  # the pre-approved ceiling for applying 0041 live (2026-10-04 prompt)
 
@@ -93,6 +94,17 @@ CHECKS = [
         WHERE r.kind = 'stored_run' AND r.source_generated_at = (SELECT MAX(generated_at) FROM public.forecast_result)"""),
 ]
 
+# kelvin/surplus-bias-experiment 3226cc4 README Part 0.2: on the 29-month backtest of the 107
+# products Tier A as of 2026-02 (2,419 product-months), 1,142 possibly stock-limited and
+# 1,277 not. Checked only when that run is in the history (copied, or live).
+SURVIVOR_RUN = "backtest 2023-10..2026-02, Tier A as of 2026-02 (107, survivor cohort)"
+RECORDED_IF_HISTORY = [
+    ("stock-limited (Part 0.1) on the fixed-107 backtest: true",
+     f"SELECT COUNT(*) FROM {{schema}}.accuracy_mart WHERE run_label = '{SURVIVOR_RUN}' AND possibly_stock_limited", 1142),
+    ("stock-limited (Part 0.1) on the fixed-107 backtest: false",
+     f"SELECT COUNT(*) FROM {{schema}}.accuracy_mart WHERE run_label = '{SURVIVOR_RUN}' AND NOT possibly_stock_limited", 1277),
+]
+
 # Figures already on record, recomputed from the marts.
 RECORDED = [
     # 108 / PHP 1,689,351.75: Unilever products in the 2026-03 count (counted 2026-04-06) with no piece sold
@@ -108,10 +120,9 @@ def _connect():
     return psycopg2.connect(get_settings().supabase_db_url)
 
 
-def build(cur, schema: str) -> None:
+def build(cur, schema: str, history_from: str | None = None) -> None:
     from scripts.run_canonical_load import _strip_sql_file
-    sql = _strip_sql_file(MIGRATION.read_text(encoding="utf-8"))
-    sql = re.sub(r"\bmart\b", schema, sql)
+    sqls = [re.sub(r"\bmart\b", schema, _strip_sql_file(m.read_text(encoding="utf-8"))) for m in MIGRATIONS]
     cur.execute("SHOW default_transaction_read_only")
     if cur.fetchone()[0] != "off":
         raise SystemExit("default_transaction_read_only is on for this connection; refusing to build")
@@ -119,10 +130,20 @@ def build(cur, schema: str) -> None:
     if cur.fetchone()[0] is not None:
         raise SystemExit(f"schema {schema} already exists; drop it first (or pass --check-only)")
     t0 = time.time()
-    cur.execute(sql)
+    cur.execute(sqls[0])
     print(f"[build] {schema}: migration 0041 applied in {time.time() - t0:.1f}s")
+    if history_from:
+        # The forecast history is source data (never rebuilt): copy it so the accuracy mart
+        # can be checked on the recreated backtests, not only on the stored run.
+        cur.execute(f"DELETE FROM {schema}.forecast_run")
+        cur.execute(f"INSERT INTO {schema}.forecast_run SELECT * FROM {history_from}.forecast_run")
+        cur.execute(f"INSERT INTO {schema}.forecast_run_value SELECT * FROM {history_from}.forecast_run_value")
+        print(f"[build] forecast history copied from {history_from}")
     t0 = time.time()
-    cur.execute(f"SELECT {schema}.refresh(%(trigger)s, %(idle_months)s, %(partial)s)", refresh_params("rehearsal"))
+    cur.execute(sqls[1])
+    print(f"[build] {schema}: migration 0043 applied in {time.time() - t0:.1f}s")
+    t0 = time.time()
+    cur.execute(f"SELECT {schema}.refresh(%(trigger)s, %(idle_months)s, %(partial)s, %(low_weeks)s, %(avg_months)s, %(avg_min_months)s)", refresh_params("rehearsal"))
     print(f"[build] second refresh with analytics.params values: {time.time() - t0:.1f}s, rows {cur.fetchone()[0]}")
 
 
@@ -137,7 +158,9 @@ def check(cur, schema: str) -> bool:
         diffs = cur.fetchone()[0]
         ok &= diffs == 0
         print(f"{name:<74} {n:>12,} {diffs:>6}{'' if diffs == 0 else '  FAIL'}")
-    for name, sql, expected in RECORDED:
+    cur.execute(f"SELECT COUNT(*) FROM {schema}.forecast_run WHERE label = %s", (SURVIVOR_RUN,))
+    recorded = RECORDED + (RECORDED_IF_HISTORY if cur.fetchone()[0] else [])
+    for name, sql, expected in recorded:
         cur.execute(sql.format(schema=schema))
         got = cur.fetchone()[0]
         good = got is not None and float(got) == float(expected)
@@ -182,6 +205,7 @@ def main() -> int:
     p.add_argument("--schema", default=SCRATCH, help=f"schema to build/check (default {SCRATCH})")
     p.add_argument("--keep", action="store_true", help="do not drop the scratch schema afterwards")
     p.add_argument("--check-only", action="store_true", help="only run the checks against an existing schema")
+    p.add_argument("--history-from", default=None, help="copy forecast_run/_value from this mart schema (e.g. mart)")
     args = p.parse_args()
     if not args.check_only and not args.schema.startswith("ssm_"):
         p.error("a build goes to a scratch schema named ssm_*; use --check-only to check live")
@@ -194,7 +218,7 @@ def main() -> int:
             total = sizes(cur, args.schema, "SIZE NOW")
             conn.rollback()
         else:
-            build(cur, args.schema)
+            build(cur, args.schema, args.history_from)
             conn.commit()
             ok = check(cur, args.schema)
             # Built, then refreshed once more: every derived mart holds one set of live and

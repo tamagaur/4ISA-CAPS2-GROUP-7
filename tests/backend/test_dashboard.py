@@ -586,24 +586,44 @@ def test_kpis_weeks_of_cover_null_when_no_inventory_data_at_all():
     assert wc["blocked_reason"] == "No stock count for unilever at all."
 
 
-def test_weeks_of_cover_does_not_follow_the_date_range():
-    """SSM's 3-week policy is judged by this figure, so it is always the
-    latest stock over the 12 months of sales up to it, whatever range the
-    picker shows. It used to average the picker's months, so the same
-    stock read 3.0-3.5 weeks live (2026-09-29)."""
+def test_weeks_of_cover_reads_the_stock_cards_count():
+    """Weeks of cover is the stock card's own count — the one at the range's end —
+    over the 12 months of sales up to it (DEC-36, 2026-10-04; supersedes the
+    2026-09-29 latest-count rule). Ranges of any width that end at the same count
+    give the same weeks: the denominator never follows the range's width (it used
+    to average the picker's months, reading 3.0-3.5 weeks for one count)."""
     periods = _periods()  # 2023-03 .. 2024-02
     sales = {p: 100.0 for p in periods}
     sales[periods[-1]] = 400.0  # one unusual month
     expected = round(1000.0 / ((sum(sales.values()) / 12) / AVG_WEEKS_PER_MONTH), 2)
-    for query in ("", "&start_period=2024-01&period=2024-02", "&start_period=2023-01&period=2023-07"):
-        session = FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0}, sales=dict(sales))
-        with make_client(session) as c:
-            wc = c.get(
-                f"/dashboard?principal=unilever{query}", headers={"Authorization": f"Bearer {user_token()}"}
-            ).json()["kpis"]["weeks_of_cover"]
+    for query in ("", "&start_period=2024-01&period=2024-02", "&start_period=2021-01&period=2024-02"):
+        session = FakeSession(latest_inventory_period="2024-02", soh={"2023-07": 300.0, "2024-02": 1000.0},
+                              sales=dict(sales))
+        wc = _get(session, f"principal=unilever{query}")["kpis"]["weeks_of_cover"]
         assert wc["value"] == pytest.approx(expected), query
-        assert wc["sales_window"] == {"start": periods[0], "end": periods[-1]}, query
+        assert wc["stock_period"] == "2024-02" and wc["sales_window"] == {"start": periods[0], "end": periods[-1]}
         assert wc["months_used"] == 12, query
+    # A range ending at the July 2023 count reads that count, over the sales up to it.
+    session = FakeSession(latest_inventory_period="2024-02", soh={"2023-07": 300.0, "2024-02": 1000.0},
+                          sales=dict(sales))
+    wc = _get(session, "principal=unilever&start_period=2023-01&period=2023-07")["kpis"]["weeks_of_cover"]
+    assert wc["stock_period"] == "2023-07"
+    assert wc["value"] == pytest.approx(round(300.0 / (100.0 / AVG_WEEKS_PER_MONTH), 2))
+    body = _get(FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0}, sales=dict(sales)),
+                "principal=unilever")["kpis"]
+    assert body["weeks_of_cover_range_end"] == body["weeks_of_cover"]
+
+
+def test_weeks_of_cover_carries_the_territory_caveat_for_unilever_only():
+    session = FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0},
+                          sales={p: 100.0 for p in _periods()})
+    caveat = _get(session, "principal=unilever")["kpis"]["weeks_of_cover"]["caveat"]
+    assert caveat == "stock = Ilocos Sur warehouse; sales = La Union only; territory match unverified"
+    dm = FakeSession(latest_sales_period=None, latest_inventory_period="2025-12", soh={"2025-12": 6_683_837.26},
+                     stock_coverage=["delmonte"])
+    dm.delmonte_latest_sales_period = "2025-12"
+    dm.delmonte_sales = {"2025-12": 22_134_295.57}
+    assert _get(dm, "principal=delmonte")["kpis"]["weeks_of_cover"]["caveat"] is None
 
 
 def test_weeks_of_cover_sales_year_ends_at_the_stock_count():
@@ -1075,9 +1095,17 @@ def test_stock_cards_read_the_count_at_the_ranges_end():
         ("unilever", "2026-02", "latest", "2026-03-02")]
     assert body["safety_stock_exposure"]["stock_period"] == "2026-02"
     assert body["safety_stock_exposure"]["stock_counts"] == count
-    assert kpis["weeks_of_cover"]["stock_period"] == "2026-03"
-    assert kpis["weeks_of_cover"]["stock_count_date"] == "2026-04-06"
-    assert kpis["weeks_of_cover_range_end"]["stock_period"] == "2026-02"
+    # Weeks of cover reads the same count (DEC-36, 2026-10-04).
+    assert kpis["weeks_of_cover"]["stock_period"] == "2026-02"
+    assert kpis["weeks_of_cover"]["stock_count_date"] == "2026-03-02"
+    assert kpis["weeks_of_cover_range_end"] == kpis["weeks_of_cover"]
+    # The count is the one the team flagged: the card keeps it and says so.
+    assert kpis["soh_count_note"] == (
+        "Counted 2 Mar 2026: unusually high (₱46.6M), accepted pending SSM confirmation")
+    assert kpis["soh_snapshot"]["note"] == kpis["soh_count_note"]
+    # A range ending at the next count has nothing to note.
+    later = _get(session, "principal=unilever&period=2026-03&start_period=2025-04")["kpis"]
+    assert later["soh_period"] == "2026-03" and later["soh_count_note"] is None
 
 
 def test_reorder_preview_reads_the_count_that_opens_the_cycle():
@@ -2053,3 +2081,12 @@ def test_idle_stock_is_unilever_only_and_says_so_for_del_monte():
 def test_payload_says_when_the_marts_were_refreshed():
     body = _get(FakeSession(), "principal=unilever")
     assert body["marts"]["present"] is False
+
+
+def test_a_flagged_count_without_a_ruling_gives_its_reviewed_reason():
+    from backend.data_notes import UNUSUAL_STOCK_SNAPSHOTS, flagged_count_note
+
+    note = flagged_count_note("delmonte", "2023-02", 2_500_000.0, [8_700_000.0], None)
+    assert note == ("Counted for Feb 2023 (exact date not recorded): "
+                    + UNUSUAL_STOCK_SNAPSHOTS[("delmonte", "2023-02")])
+    assert flagged_count_note("unilever", "2026-01", 24_339_386.24, [46_576_778.51], "2026-02-03") is None
