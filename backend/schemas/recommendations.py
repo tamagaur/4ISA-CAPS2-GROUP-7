@@ -96,16 +96,17 @@ class RecommendationItem(BaseModel):
     # the supplier allocation couldn't cover the whole need. 0 when filled;
     # None without a forecast or a stock figure to work it out from.
     short_units: float | None = None
-    # Stock ordered and not yet received (2026-10-04, migration 0042): the
-    # opening count's "PO Qty", in pieces (on_order_cases: as the file
-    # records it). None with on_order_blocked_reason when unknown — never 0
-    # for "not loaded". q_net_of_on_order = max(0, q_i - on_order): the order
-    # left once it arrives. The LP does not net it itself yet.
+    # The opening count's "PO Qty" (2026-10-04, migration 0042), in pieces
+    # (on_order_cases: as the file records it). INFORMATION ONLY: its meaning
+    # is unverified (pending SSM), so it is never subtracted from q_i or any
+    # order quantity (DEC-34); on_order_note says so. None with
+    # on_order_blocked_reason when unknown — never 0 for "not loaded".
     on_order: float | None = None
     on_order_cases: float | None = None
     on_order_blocked_reason: str | None = None
-    q_net_of_on_order: float | None = None
-    # Review before ordering (2026-10-04, review_flag): True = the forecast
+    on_order_note: str | None = None
+    # Review before ordering (2026-10-04, review_flag, DEC-33; the full
+    # contract is in backend/routers/recommendations.py): True = the forecast
     # for this cycle is likely to miss by a lot — review_reasons says why
     # ('collapse': last 3 months < half the last 12; 'over_forecast_run':
     # over-forecast 3+ months running, review_over_run_months of them, 6 =

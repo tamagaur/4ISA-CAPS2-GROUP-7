@@ -43,7 +43,10 @@ Column mapping to the existing Inventory_Fact schema (analytics/db/schema.sql):
                                                      fabrication needed here, unlike Del Monte's inventory_sign_off)
   sku_code                                      -> sku_code
   po_qty_raw ("PO Qty", CS/PC text)             -> po_qty_cases, po_qty_pieces (migration 0042, 2026-10-04):
-                                                     open purchase orders at the count, i.e. in transit.
+                                                     the column as the file has it. Its MEANING is
+                                                     unverified (pending SSM; DEC-34): it totals 1-3M
+                                                     pieces every month, which doesn't fit in-transit
+                                                     stock, so nothing treats it as such.
                                                      Parsed with the extract's own parse_cs_pc; a value
                                                      that isn't "<cases>/<pieces>" raises. A BLANK cell is
                                                      0 on order: of 11,811 non-blank values in the 39
@@ -95,9 +98,9 @@ NO_HOME_COLUMNS_REPORT = {
     ),
     "po_qty_raw": (
         "CARRIED since 2026-10-04 as po_qty_cases/po_qty_pieces (migration "
-        "0042): the reorder page subtracts the stock already on order from "
-        "the order quantity. Kept apart from quantity_on_hand — it is not "
-        "on hand yet."
+        "0042), information only: its meaning is unverified pending SSM "
+        "(DEC-34), so it is never subtracted from an order quantity. Kept "
+        "apart from quantity_on_hand."
     ),
     "open_so_quantity_raw": (
         "Not needed for Inventory_Fact itself (open sales orders are a "
@@ -269,7 +272,7 @@ def transform_ssis_soh(
         # NOT fixed here — confirmed genuinely empty at source (0/27,321
         # non-null in staging/ssis_soh), nothing to carry.
         "stock_status": df["status"],
-        # In transit (migration 0042): open POs at the count, blank = 0.
+        # PO Qty (migration 0042), blank = 0. Meaning unverified (DEC-34).
         "po_qty_cases": po_cases,
         "po_qty_pieces": po_pieces,
         "is_demo": False,
