@@ -1163,3 +1163,49 @@ split, H4), `/forecast-runs`. `GET /pareto` reads the mart too.
 | 4 | H1 in real mode | Del Monte's empty months are generated (synthetic_v2), not filled: still gaps outside preview, as designed (DEC-29) |
 | 5 | Under `all`, the range total covers only months both principals have | labelled (`months_with_data`, `missing_months`) |
 | 6 | Audrey's `Charts.jsx:1133` "Ranked on <month> sales (single month)" | frontend: use `abc_revenue.label` (done on kelvin-etl's own `Charts.jsx`) |
+
+---
+
+## 20. Final QA — 2026-10-04 (branch `kelvin/final-qa`, off kelvin-etl 668b78e)
+
+### 20.1 State of `public` and the app today
+
+| area | state (source) |
+|---|---|
+| Migrations | Live `public.schema_migrations` = 44 rows: committed files 0001–0043 (43 files, every checksum matches) **plus `0035_user_two_factor.sql`**, which is still **not on kelvin-etl**. The file exists only on `group7/UIFixes_Audrey` (5633063, with the MFA backend). Its checksum matches the live row (`4d2dd018…`). Next free number: **0044** |
+| Data marts (0041, 0043, DEC-36) | Schema `mart`. Live row counts by kind: sales_mart 25,658 real / 3,134 filled / 14,736 generated; inventory_mart 30,656 / 3,895 / 17,836; flow_month 30 / 127 / 86. Refreshed after every load, fill, forecast `--write`, LP run and backtest (§19) |
+| Review flag + in-transit (0042, DEC-33/34) | `review_flag` 2026-03-01: 15 flagged of 132 assessed; 7 of the flagged are in the current plan's 74 rows. PO Qty is shown and never subtracted |
+| Dashboard speed + cache (668b78e) | GET /dashboard: 4 statements cold, 1 cached (was 30 + pre-ping + BEGIN). Reads are batched (`backend/batch.py`), GETs use an autocommit pool, and the response cache is keyed on endpoint + params + permission set and cleared when the data version moves (`backend/response_cache.py`). Report: `reports/diagnostics/speed_cache_2026-10-04/README.md`. Render not re-timed |
+| Coverage | `etl_coverage` recomputed read-only: 700 rows, **0 differences** from stored. Gaps (2021-01..2026-09) are the ones §18.1 records: Unilever purchases 32 missing (37 derived), Unilever returns 2026-09, Unilever demand 2026-09 (D4), Del Monte product sales 52 missing. Del Monte stock 2023-02 `partial` (Pangasinan = the H2 adjacent copy, demo) |
+| Real vs filled | Six `_Real` views: 0 demo rows, every definition filters `is_demo = false`. 0 real rows carry a `fill_source`. KPI / Pareto / accuracy read `data_kind = 'real'` only (tests: `test_abc_ranking_reads_real_rows_only`, `test_chart_draws_filled_months_as_estimates_never_as_sales`, `test_real_kind_is_exactly_is_demo_false`, live `test_every_mart_total_equals_its_source`) |
+
+### 20.2 End-to-end spot checks (database → mart → endpoint, read only)
+
+| check | database | mart | endpoint |
+|---|---|---|---|
+| March plan | `lp_recommendation` 2026-03-01, lp_run 1: 73 pending, 325,467.96 pcs (+1 accepted, 1,331.24) | — | GET /recommendations: same 73 + 1, `lp_model.run.run_key` 1 |
+| Idle stock | 108 products in the 2026-03 count with no piece sold 2025-09..2026-02 | `idle_stock`: 108, ₱1,689,351.75, counted 2026-04-06, 101 never sold | GET /dashboard/idle-stock?period=2026-03: same. **Default period** (range end 2026-02) reads the 2026-02 count instead: 83 products, ₱1,417,263.94 |
+| Range Pareto, product 138 (REX WMN DLN POWDER DRY + BRGHT 360X3ML) | 2024 ₱467,464.84 / 3 months; 2025 ₱2,798,496.67 / 12 months | same | 2024: class B (rank 165, cumulative 0.805); 2025: class A (rank 31) |
+| Stock at range end | Unilever 2026-02: ₱46,576,778.51, 812 rows, counted 2026-03-02 | same | `kpis.soh_value` same, `soh_count_date` 2026-03-02, `soh_count_note` "Counted 2 Mar 2026: unusually high (₱46.6M), accepted pending SSM confirmation" |
+| needs_review | `review_flag` product 613 (69668140 SURF POWDER CHERRY BLOSSOM), 2026-03-01: collapse, ratio 0.1796 | — | the /recommendations row: `needs_review` true, `review_reasons` ['collapse'], 0.1796 |
+| Accuracy, at-the-time cohort (run 2, 2023-10..2026-02) | — | 337 products, 3,500 scored product-months (3 blank actuals) | `wape_pieces` 0.296344, `median_product_wape` 0.345610 (SQL recompute on the mart gives the same) |
+
+### 20.3 QA fixes (minimal, no feature change)
+
+| fix | files |
+|---|---|
+| GET /forecast for Del Monte (scope `delmonte`, or a code that resolves to a Del Monte product) is now 200 with `forecast: []` and `blocked_reason` "No product-level forecast for Del Monte: its sales files have no product detail." instead of 404. Unknown codes elsewhere are still 404. The SKU Forecast page shows `blocked_reason` when it is present | `backend/routers/forecast.py`, `backend/schemas/forecast.py`, `tests/backend/test_forecast.py`, `frontend/src/components/SKUForecast.jsx` |
+| `scripts/backup_live_db.py` **retired as a command**: its restore check fails on JSON columns because the command dumps them without `json_as_text`. It now prints a pointer to `python -m scripts.backup_everything` and exits 2. `create_backup()` stays (backup_everything calls it with `json_as_text=True`) | `scripts/backup_live_db.py` |
+
+Suite before the fixes: 1,324 passed, 26 skipped (raw files not in the worktree; `FILLS_SCRATCH_SCHEMA` unset). Touched tests after: 29/29. `npm run build` exit 0. `scripts/smoke_api.py` 13/13 PASS.
+
+### 20.4 Open items
+
+| item | owner / waiting on |
+|---|---|
+| Merge Audrey's `UIFixes_Audrey` (22 commits not on kelvin-etl, including the 0035 file and MFA backend) so the repo matches the live ledger | Audrey |
+| LP cost inputs (procurement cost, storage cost, warehouse capacity, supplier ceilings) | SSM |
+| 2026-02 count (₱46.6M) accepted pending SSM confirmation; PO Qty meaning; stock (Ilocos Sur) vs sales (La Union) territory match | SSM |
+| Forecast model sign-off (DEC-25/26) | Sir Catubag |
+| Render not re-timed after the cache; /recommendations still 7–11 statements cold; the preview dashboard is never cached | next speed pass |
+| Del Monte preview pipeline (§18.5) not built | Yuan |
