@@ -146,6 +146,9 @@ def test_decomposition_zero_fills_and_runs_stl():
     assert body["months"] == 40  # the missing month was zero-filled, not dropped
     assert body["observed"][5] == 0.0
     assert body["method"]["name"] == "STL"
+    # The label is the lag-12 test (2026-10-04), not an STL-strength band.
+    assert body["yearly_pattern"]["label"] == "Repeats yearly"
+    assert body["yearly_pattern"]["months"] == 40
 
 
 def test_decomposition_unknown_or_non_unilever_is_404():

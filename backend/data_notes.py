@@ -25,7 +25,7 @@ from __future__ import annotations
 UNUSUAL_STOCK_SNAPSHOTS: dict[tuple[str, str], str] = {
     ("unilever", "2026-02"): (
         "About twice the stock counted the month before and after (₱46.6M vs ₱24.3M and ₱22.7M); "
-        "treated as an outlier (team review, 2026-09-29)."
+        "accepted for planning, pending SSM confirmation (decided 2026-10-03)."
     ),
     ("delmonte", "2023-02"): (
         "Ilocos warehouse only — Pangasinan's count is missing (200 rows, ₱2.5M vs about ₱8.7M "

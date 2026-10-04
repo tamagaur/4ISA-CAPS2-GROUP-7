@@ -511,6 +511,9 @@ def prepare_soh(soh_dir: Path, engine: Engine) -> Prepared:
     if not list((soh_dir / "ssis_soh").glob("*.parquet")):
         return Prepared(pd.DataFrame(), [], ["sku_code", "snapshot_date", "region"])
     res = transform_ssis_soh(staging_dir=soh_dir, real_sku_codes=None)
+    po = res.po_qty_parse
+    print(f"  [inventory_fact/ssis_soh] PO Qty: {po['parsed']} of {po['rows']} SKU row(s) parsed as cases/pieces, "
+          f"{po['blank_as_zero']} blank = 0 on order, 0 errors (an unparseable value stops the run)")
     df = rcl._project_to_table_columns(res.inventory_fact_df, "inventory_fact", engine, [])
     before = df
     df, _ = rcl._drop_conflicting_group_rows(df, "inventory_fact", ["sku_code", "snapshot_date"])
