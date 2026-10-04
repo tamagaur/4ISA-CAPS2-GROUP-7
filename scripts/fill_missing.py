@@ -75,10 +75,8 @@ OPENING_ASSUMED_ZERO = "opening_assumed_0_not_in_count"
 CLOSING_ASSUMED_ZERO = "closing_assumed_0_not_in_count"
 AFTER_PARTIAL = "after_possibly_partial_count"
 # Unilever counts on record as possibly partial; an assumed-zero opening taken from one is flagged AFTER_PARTIAL.
-# 2025-05: 404 rows against 513-812 in every other real month (inventory_fact_real, checked 2026-10-03), and 36 of 96
-# selling Tier A products absent (Claude Code 8, branch kelvin/surplus-bias-experiment, part0_count_completeness.csv).
-# A list, not a threshold: none is on record. PENDING SSM CONFIRMATION that the 2025-05 count was partial (Yuan).
-POSSIBLY_PARTIAL_COUNTS = ("2025-05",)
+# The list and its evidence live in analytics.params (the data marts read the same list).
+from analytics.params import POSSIBLY_PARTIAL_COUNTS  # noqa: E402
 BRANCH = "synthetic_branch_adjacent"                      # H2: a missing branch copies its adjacent real month
 SITE_RE = r"_(ilocos|pangasinan)$"                        # a fill row's branch: the end of its source tag (H2)
 FACT_KEYS = {"sales_fact": "sales_key", "purchase_fact": "purchase_key", "salesreturn_fact": "return_key",
@@ -682,7 +680,13 @@ def main() -> int:
         p.error("--target-public and --schema public go together")
     from analytics.config import get_settings
     engine = create_engine(get_settings().supabase_db_url)
-    run_step(engine, args.schema, trigger="manual", end=args.end, dry_run=args.dry_run, allow_public=args.target_public)
+    out = run_step(engine, args.schema, trigger="manual", end=args.end, dry_run=args.dry_run,
+                   allow_public=args.target_public)
+    # Run on its own (not from the loader, which refreshes after its own fill): rebuild
+    # the dashboard's marts from the fills just written (migration 0041).
+    if not args.dry_run:
+        from analytics.marts import refresh_marts_engine
+        refresh_marts_engine(engine, f"fill_missing run_id={out['run_id']}", schema=args.schema)
     return 0
 
 

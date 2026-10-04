@@ -1202,6 +1202,11 @@ def run(engine: Engine, args) -> int:
         from scripts import fill_missing
         fill_missing.run_step(engine, ctx.schema, run_by=ctx.run_by, trigger=f"load_slices run_id={run_id}",
                               allow_public=ctx.target_public)
+    # Migration 0041: the dashboard's marts are rebuilt from what this run left in public
+    # (analytics/marts.py; a scratch schema is skipped there).
+    if not ctx.dry_run:
+        from analytics.marts import refresh_marts_engine
+        refresh_marts_engine(engine, f"load_slices run_id={run_id}", schema=ctx.schema)
     return code
 
 
