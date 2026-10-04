@@ -5,22 +5,25 @@
 -- (--schema public --target-public --schema-only), after it is committed, a
 -- backup is taken, and 0041 (data marts) is already in schema_migrations.
 --
--- 1. In-transit stock: Unilever's SOH file carries "PO Qty" (open purchase
---    orders, CS/PC text like "12/0") beside each count row. The extract has
---    always staged it (analytics/etl/extract/ssis_soh.py, po_qty_raw) but no
+-- 1. PO Qty: Unilever's SOH file carries "PO Qty" (CS/PC text like "12/0")
+--    beside each count row. Its MEANING IS UNVERIFIED (decision 2026-10-04,
+--    DEC-34): it totals 1-3M pieces every month (1,644,300 on the 2 March
+--    2026 count, against a 325,468-piece March plan and about 1.69M on
+--    hand), which doesn't fit stock in transit. Stored for information only;
+--    nothing subtracts it from an order quantity until SSM explains it.
+--    The extract has always staged it (analytics/etl/extract/ssis_soh.py, po_qty_raw) but no
 --    column held it. Checked in staging/ssis_soh, 2026-10-04: 39 counts,
 --    27,321 rows (one is each sheet's totals row); 11,811 non-blank values,
 --    all "<cases>/<pieces>", none "0/0", the pieces part 0 on every one; each
 --    count has 209-414 non-blank values. The file writes nothing rather than
 --    "0/0", so the loader stores a blank as 0 on order
 --    (analytics/etl/transform_ssis_soh.py).
---      po_qty_cases   open PO quantity, cases
---      po_qty_pieces  open PO quantity, loose pieces
+--      po_qty_cases   PO Qty, cases
+--      po_qty_pieces  PO Qty, loose pieces
 --    NULL on every row loaded before this migration: "not parsed yet", never
---    "nothing on order". They fill when the Unilever stock slices are
---    reloaded through scripts/run_canonical_load.py (one fingerprint
---    sign-off by a person). Del Monte's stock file has no PO column, so its
---    rows stay NULL.
+--    0. The live Unilever stock slices are NOT reloaded to fill them while
+--    the meaning is unverified (2026-10-04). Del Monte's stock file has no
+--    PO column, so its rows stay NULL.
 --
 -- 2. review_flag: "review before ordering", one row per product per planning
 --    cycle, written by scripts/compute_review_flags.py
@@ -44,8 +47,11 @@
 --                                  generated), unchanged
 --   po_qty_cases / po_qty_pieces   NULL on all 60,993
 --   Inventory_Fact_Real            gains the two columns at the end (no view
---                                  depends on it, checked 2026-10-04)
---   review_flag                    new, 0 rows
+--                                  depends on it; 0041's unilever_inventory_monthly
+--                                  reads Inventory_Fact, unaffected by new
+--                                  columns; checked 2026-10-04)
+--   review_flag                    new, 0 rows (then 132 for cycle 2026-03
+--                                  from scripts/compute_review_flags.py --write)
 --
 -- Names are unqualified on purpose (public via the runner, or its scratch
 -- schema), like every migration. Safe to run twice.
@@ -66,7 +72,7 @@ $$;
 ALTER TABLE Inventory_Fact ADD COLUMN IF NOT EXISTS po_qty_cases NUMERIC;
 ALTER TABLE Inventory_Fact ADD COLUMN IF NOT EXISTS po_qty_pieces NUMERIC;
 COMMENT ON COLUMN Inventory_Fact.po_qty_cases IS
-    'Unilever SOH "PO Qty", cases: open purchase orders at the count (in transit). A blank cell is stored as 0 (the file never writes 0/0). NULL = loaded before migration 0042, not parsed yet.';
+    'Unilever SOH "PO Qty", cases, as the file has it. Meaning unverified pending SSM (DEC-34): information only, never subtracted from an order quantity. A blank cell is stored as 0 (the file never writes 0/0). NULL = loaded before migration 0042, not parsed yet.';
 COMMENT ON COLUMN Inventory_Fact.po_qty_pieces IS
     'Unilever SOH "PO Qty", loose pieces part. Same NULL rule as po_qty_cases.';
 

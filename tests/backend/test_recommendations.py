@@ -632,8 +632,8 @@ def test_a_decision_returns_the_row_against_its_cycles_opening_count():
 
 
 # ---- on order and the review flag (2026-10-04, migration 0042) -------------
-# on_order is the opening count's PO Qty in pieces; unknown is None with a
-# reason, never 0. A product flagged for review is never accepted without a
+# on_order is the opening count's PO Qty in pieces, information only (its
+# meaning is unverified, DEC-34); unknown is None with a reason, never 0. A product flagged for review is never accepted without a
 # person confirming it (PATCH reviewed=true), so bulk accept can't take it.
 
 
@@ -642,19 +642,22 @@ def _counted(**overrides):
                         "on_order_pieces": 576.0, "on_order_cases": 2.0, "on_order_unparsed": 0, **overrides})
 
 
-def test_on_order_is_the_counts_po_qty_and_nets_the_order():
-    from backend.routers.recommendations import _to_item
+def test_on_order_is_the_counts_po_qty_shown_but_never_subtracted():
+    """DEC-34 (2026-10-04): PO Qty's meaning is unverified, so on_order is
+    information only — labelled, and no quantity on the row moves with it."""
+    from backend.routers.recommendations import ON_ORDER_NOTE, _to_item
+    from backend.schemas.recommendations import RecommendationItem
 
-    item = _to_item(_counted(q_i=1000.0), {"review_flag": True, "on_order": True})
+    row = _counted(q_i=1000.0, forecast_units=900.0)
+    item = _to_item(row, {"review_flag": True, "on_order": True})
     assert (item.on_order, item.on_order_cases, item.on_order_blocked_reason) == (576.0, 2.0, None)
-    assert item.q_net_of_on_order == 424.0
-    assert item.q_i == 1000.0  # the LP's quantity itself is not changed
-
-    # More on order than the LP asks for: nothing left to order, never negative.
-    assert _to_item(_counted(q_i=50.0)).q_net_of_on_order == 0.0
-    # The file had a blank PO Qty: 0 on order is a real figure.
-    zero = _to_item(_counted(on_order_pieces=0.0, on_order_cases=0.0))
-    assert zero.on_order == 0.0 and zero.q_net_of_on_order == 50.0
+    assert item.on_order_note == ON_ORDER_NOTE and "unverified" in ON_ORDER_NOTE and "never subtracted" in ON_ORDER_NOTE
+    without = _to_item({**row, "on_order_pieces": None, "on_order_cases": None, "on_order_unparsed": None})
+    for field in ("q_i", "rop_i", "ss_i", "short_units", "stockout_gap", "priority_score", "urgency"):
+        assert getattr(item, field) == getattr(without, field), field
+    assert not any("net" in f for f in RecommendationItem.model_fields if f.startswith(("q_", "on_order")))
+    # The file had a blank PO Qty: 0 is the figure as recorded.
+    assert _to_item(_counted(on_order_pieces=0.0, on_order_cases=0.0)).on_order == 0.0
 
 
 def test_on_order_unknown_is_none_with_a_reason_never_zero():
@@ -663,7 +666,7 @@ def test_on_order_unknown_is_none_with_a_reason_never_zero():
     cases = {
         "not loaded yet": (_counted(), {"review_flag": True, "on_order": False}, "migration 0042"),
         "loaded before 0042": (_counted(on_order_unparsed=3, on_order_pieces=None, on_order_cases=None), None,
-                               "reload that count"),
+                               "not reloaded while its meaning is unverified"),
         "no pack size": (_counted(on_order_pieces=None), None, "no usable pack size"),
         "Del Monte": (_counted(principal="delmonte"), None, "no purchase-order column"),
         "not in the count": (_counted(in_stock_count=False, current_stock=None, on_order_unparsed=None,
@@ -671,7 +674,7 @@ def test_on_order_unknown_is_none_with_a_reason_never_zero():
     }
     for name, (row, present, reason) in cases.items():
         item = _to_item(row, present)
-        assert item.on_order is None and item.q_net_of_on_order is None, name
+        assert item.on_order is None, name
         assert reason in item.on_order_blocked_reason, name
 
 
@@ -700,7 +703,8 @@ def test_review_flag_reaches_the_response(sample_rows):
     assert item["needs_review"] is True
     assert item["review_reasons"] == ["collapse", "over_forecast_run"]
     assert (item["review_over_run_months"], item["review_collapse_ratio"]) == (6, 0.1836)
-    assert (item["on_order"], item["q_net_of_on_order"]) == (288.0, 0.0)
+    assert item["on_order"] == 288.0 and "q_net_of_on_order" not in item
+    assert "unverified" in item["on_order_note"]
 
 
 def test_not_assessed_is_none_not_false(client):

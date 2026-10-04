@@ -113,27 +113,40 @@ none, the reason the plan can't be made from it ("no opening stock count for
 <month>"). cycle=all reads each cycle's own opening count. "Stock now"
 screens keep the latest count (GET /dashboard's kpis.stock_counts).
 
-REVIEW FLAG (2026-10-04). needs_review / review_reasons come from
-review_flag (migration 0042, scripts/compute_review_flags.py): the product's
-forecast for this cycle is likely to miss by a lot, because sales collapsed
-(last 3 months < half the last 12) or the served model over-forecast it 3+
-months running (option D, kelvin/surplus-bias-experiment 3226cc4). It says
-"check before ordering", not which way to adjust. A flagged row is never
-accepted without a person: PATCH refuses status 'accepted' on it unless the
-body says reviewed=true, which the page sends only from the single-row
-confirm dialog (its bulk accept skips flagged rows). needs_review None = not
-assessed for this cycle (no review_flag row, or the table isn't there yet).
+REVIEW FLAG (2026-10-04, DEC-33) — the contract the Reorder page's review
+badge reads:
+  needs_review    true  = review before ordering: the product's forecast for
+                          this cycle is likely to miss by a lot
+                  false = assessed, not flagged
+                  null  = not assessed for this cycle (no review_flag row,
+                          or the table isn't there yet)
+  review_reasons  [] or any of 'collapse' (last-3-month mean below half the
+                  last-12-month mean) and 'over_forecast_run' (the served
+                  model over-forecast it 3+ months running before the cycle)
+  review_over_run_months, review_collapse_ratio  the figures behind them
+                  (over-run counted back at most 6, so 6 = "6 or more")
+Source: review_flag (migration 0042), written by
+scripts/compute_review_flags.py (option D, kelvin/surplus-bias-experiment
+3226cc4). It says "check before ordering", not which way to adjust.
+THE 409 RULE: PATCH /recommendations/{id} with status 'accepted' on a row
+whose needs_review is true returns 409 unless the body carries
+"reviewed": true. Dismiss needs no confirmation, and unflagged rows accept
+as before. The page sends reviewed=true only from a single row's confirm
+dialog; "Accept all in view" leaves flagged rows out, so a flagged product
+is never accepted in bulk or without a person. The audit-log entry for such
+an accept ends "[flagged for review: <reasons>; reviewed]".
 
-ON ORDER (2026-10-04). on_order is the stock already ordered and not yet
-received, in pieces: the "PO Qty" of the same opening count the row's stock
-comes from (backend/stock_units.ON_ORDER_AT_PERIOD_SQL). q_net_of_on_order =
-max(0, q_i - on_order) is the order left to place once it arrives. The LP
-itself does not net it yet (q_i is unchanged, and the LP was not re-run), so
-on a row the LP cut to fit the allocation (short_units > 0) this subtracts
-from the cut quantity, not from the full need. None with on_order_blocked_
-reason when the count's PO Qty isn't loaded yet, the principal's file has no
-PO column (Del Monte), the product is absent from the count, or it has no
-usable pack size.
+ON ORDER (2026-10-04) — INFORMATION ONLY, MEANING UNVERIFIED. on_order is
+the "PO Qty" of the same opening count the row's stock comes from, in pieces
+(backend/stock_units.ON_ORDER_AT_PERIOD_SQL). It is NOT treated as stock in
+transit and is never subtracted from q_i or any other order quantity
+(decision 2026-10-04, Yuan, DEC-34): on the count of 2 March 2026 it totals
+1,644,300 pieces against an order plan of 325,468 and about 1.69M on hand,
+and it runs 1-3M pieces every month, which doesn't fit in-transit stock.
+on_order_note says so on every row until SSM explains the column. None with
+on_order_blocked_reason when the count's PO Qty isn't loaded (live rows stay
+unloaded until SSM answers), the principal's file has no PO column (Del
+Monte), the product is absent from the count, or it has no usable pack size.
 
 PACK SIZE (2026-10-01). Every quantity here is in PIECES, while SSM buys
 in cases: an order of 104,575 pieces is about 363 cases of 288. pack_size
@@ -419,7 +432,6 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
         short_units = round(short, 2) if short >= 1.0 else 0.0
 
     on_order, on_order_cases, on_order_reason = _on_order(r, in_count, stock_not_in_count, present)
-    q_net = None if on_order is None else max(0.0, float(r["q_i"]) - on_order)
     reasons = r.get("review_reasons") if hasattr(r, "get") else None
 
     return RecommendationItem(
@@ -449,12 +461,17 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
         on_order=on_order,
         on_order_cases=on_order_cases,
         on_order_blocked_reason=on_order_reason,
-        q_net_of_on_order=q_net,
+        on_order_note=ON_ORDER_NOTE,
         needs_review=r.get("needs_review") if hasattr(r, "get") else None,
         review_reasons=list(reasons or []),
         review_over_run_months=r.get("review_over_run_months") if hasattr(r, "get") else None,
         review_collapse_ratio=_opt_float(r, "review_collapse_ratio"),
     )
+
+
+# On every row: what on_order is and isn't (decision 2026-10-04, DEC-34).
+ON_ORDER_NOTE = ("PO Qty meaning unverified, pending SSM: shown for information only, "
+                 "never subtracted from any order quantity")
 
 
 def _on_order(r, in_count, stock_not_in_count, present) -> tuple[float | None, float | None, str | None]:
@@ -471,8 +488,8 @@ def _on_order(r, in_count, stock_not_in_count, present) -> tuple[float | None, f
     if r.get("on_order_unparsed") is None:
         return None, None, "no row in the cycle's opening stock count to read stock on order from"
     if r["on_order_unparsed"]:
-        return None, None, ("the cycle's opening stock count was loaded before its PO Qty column was read; "
-                            "reload that count to fill it")
+        return None, None, ("PO Qty is not loaded for the cycle's opening stock count: counts loaded before "
+                            "migration 0042 are not reloaded while its meaning is unverified (DEC-34)")
     cases = _opt_float(r, "on_order_cases")
     pieces = _opt_float(r, "on_order_pieces")
     if pieces is None:

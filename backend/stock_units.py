@@ -119,10 +119,11 @@ STOCK_AT_LATEST_SQL = f"""
     GROUP BY inv.product_key, pd_pack.pack_size
 """
 
-# Stock ON ORDER (in transit) at :inv_period, in pieces: the count's "PO Qty"
-# (migration 0042, Inventory_Fact.po_qty_cases/po_qty_pieces), converted with
-# the same pack size rule as stock on hand. It is not on hand, so it is kept
-# out of every figure above. on_order_unparsed counts the product's rows in
+# The count's "PO Qty" at :inv_period, in pieces (migration 0042,
+# Inventory_Fact.po_qty_cases/po_qty_pieces), converted with the same pack
+# size rule as stock on hand. Its meaning is UNVERIFIED (pending SSM; DEC-34):
+# information only, kept out of every figure above and never subtracted from
+# an order quantity. on_order_unparsed counts the product's rows in
 # that count whose PO Qty was never parsed (loaded before 0042): the figure is
 # unknown then, not 0. A separate fragment, so the stock figures every other
 # screen reads are untouched. Callers check that the columns exist first
