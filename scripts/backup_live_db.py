@@ -22,26 +22,29 @@ the same way. scripts/backup_everything.py uses it for every schema of ours
 and adds the full table structure (views, indexes, keys, permissions), which
 ddl_snapshot.json does not hold.
 
-Usage:
-    python -m scripts.backup_live_db            # create the backup
-    python -m scripts.backup_live_db --verify PATH   # restore-test an
-                                                        existing backup dir
-                                                        into a throwaway
-                                                        schema, then drop it
+RETIRED as a command (2026-10-04, final QA): its own restore check fails on
+JSON columns (etl_cutover_ledger; found applying 0042), because the command
+dumps them without json_as_text. Back up with
+
+    python -m scripts.backup_everything
+
+which calls create_backup(json_as_text=True) for every schema and checks each
+file against its manifest. create_backup() stays as the library both use;
+verify_restore() / restore_over_public() are kept for reference only and are
+not proven on JSON columns. `python -m scripts.backup_live_db` now only prints
+this and exits 2.
 """
 from __future__ import annotations
 
-import argparse
 import decimal
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import MetaData, Table, create_engine, inspect, text
+from sqlalchemy import MetaData, Table, inspect, text
 from sqlalchemy.dialects.postgresql import JSONB
 
-from analytics.config import get_settings
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKUP_ROOT = REPO_ROOT / "backups"
@@ -461,20 +464,10 @@ def restore_over_public(engine, backup_dir: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--verify", metavar="PATH", help="Verify-restore an existing backup dir instead of creating a new one")
-    args = parser.parse_args()
-
-    cfg = get_settings()
-    engine = create_engine(cfg.supabase_db_url)
-
-    if args.verify:
-        ok = verify_restore(engine, Path(args.verify))
-        return 0 if ok else 1
-
-    out_dir = create_backup(engine)
-    ok = verify_restore(engine, out_dir)
-    return 0 if ok else 1
+    """Retired (see the module docstring): never writes, never connects."""
+    print("scripts/backup_live_db.py is retired as a command: its restore check fails on JSON columns.\n"
+          "Back up with:  python -m scripts.backup_everything")
+    return 2
 
 
 if __name__ == "__main__":

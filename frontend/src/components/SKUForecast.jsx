@@ -1280,7 +1280,9 @@ const SKUForecast = () => {
                   an empty forecast[] is the design, not a gap — no "yet". */}
               {!isForecastColdLoad && !forecastError && forecastResult && forecastResult.forecast.length === 0 && (
                 <p className="forecast-subtitle">
-                  {selectedSKU.cat === 'A'
+                  {forecastResult.blocked_reason
+                    ? forecastResult.blocked_reason
+                    : selectedSKU.cat === 'A'
                     ? `No forecast has been generated for ${selectedSKU.code} yet.`
                     : `Forecasts are only produced for Class A SKUs.${selectedSKU.cat ? ` ${selectedSKU.code} is Class ${selectedSKU.cat}.` : ''}`}
                 </p>
