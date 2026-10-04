@@ -20,17 +20,24 @@ import pytest
 from dotenv import load_dotenv
 
 from analytics import marts
-from analytics.params import DEAD_SKU_MONTHS, POSSIBLY_PARTIAL_COUNTS
+from analytics.params import (
+    DEAD_SKU_MONTHS,
+    POSSIBLY_PARTIAL_COUNTS,
+    STOCK_LIMITED_AVG_MIN_MONTHS,
+    STOCK_LIMITED_AVG_MONTHS,
+    STOCK_LIMITED_WEEKS,
+)
 
 load_dotenv()
 REPO = Path(__file__).resolve().parents[1]
 MIGRATION = REPO / "analytics" / "db" / "migrations" / "0041_data_marts.sql"
+REFRESH_0043 = REPO / "analytics" / "db" / "migrations" / "0043_mart_stock_limited_rule.sql"
 SCHEMA = os.environ.get("MART_TEST_SCHEMA", "mart")
 
 
-def _sql() -> str:
+def _sql(path: Path = MIGRATION) -> str:
     from scripts.run_canonical_load import _strip_sql_file
-    return _strip_sql_file(MIGRATION.read_text(encoding="utf-8"))
+    return _strip_sql_file(path.read_text(encoding="utf-8"))
 
 
 # ---- static ------------------------------------------------------------------
@@ -47,11 +54,25 @@ def test_migration_creates_and_writes_only_inside_the_mart_schema():
 
 
 def test_refresh_defaults_are_the_params_values():
-    sql = _sql()
+    """0043's refresh() is the live one; its defaults and what analytics/marts.py passes
+    are analytics.params' values."""
+    sql = _sql(REFRESH_0043)
     assert f"p_idle_months integer DEFAULT {DEAD_SKU_MONTHS}" in sql
     assert "p_partial_counts text[] DEFAULT ARRAY[" + ", ".join(f"'{p}'" for p in POSSIBLY_PARTIAL_COUNTS) + "]" in sql
+    assert f"p_low_weeks numeric DEFAULT {STOCK_LIMITED_WEEKS}" in sql
+    assert f"p_avg_months integer DEFAULT {STOCK_LIMITED_AVG_MONTHS}" in sql
+    assert f"p_avg_min_months integer DEFAULT {STOCK_LIMITED_AVG_MIN_MONTHS}" in sql
+    assert "* 12 / 52" in sql, "one week = average x 12 / 52 (3226cc4 README Part 0.1)"
     assert marts.refresh_params("x") == {"trigger": "x", "idle_months": DEAD_SKU_MONTHS,
-                                         "partial": list(POSSIBLY_PARTIAL_COUNTS)}
+                                         "partial": list(POSSIBLY_PARTIAL_COUNTS), "low_weeks": STOCK_LIMITED_WEEKS,
+                                         "avg_months": STOCK_LIMITED_AVG_MONTHS,
+                                         "avg_min_months": STOCK_LIMITED_AVG_MIN_MONTHS}
+
+
+def test_0043_writes_only_inside_the_mart_schema():
+    sql = _sql(REFRESH_0043)
+    written = re.findall(r"(?:INSERT INTO|DELETE FROM|UPDATE|TRUNCATE|ALTER TABLE|DROP \w+)\s+([\w.]+)", sql)
+    assert written and all(t.startswith("mart.") for t in written), written
 
 
 def test_real_kind_is_exactly_is_demo_false():

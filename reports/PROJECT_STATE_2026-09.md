@@ -1153,13 +1153,13 @@ is reported, never raised (`python -m analytics.marts --refresh`).
 New routes (`dashboard.view`): `/dashboard/pareto`, `/yoy`, `/accuracy`, `/idle-stock`, `/product-sales` (serves the DM product
 split, H4), `/forecast-runs`. `GET /pareto` reads the mart too.
 
-### 19.4 Open — decisions and follow-ups
+### 19.4 Decisions (Yuan, 2026-10-04) and what is still open
 
-| # | item | needs |
+| # | item | outcome |
 |---|---|---|
-| 1 | The default range now puts the **unusual Feb 2026 count** (₱46.6M) on the stock card, and weeks of cover reads 6.21 at that count vs 3.03 at the latest | Yuan: keep range-end stock, or let the stock card fall back to the latest count when the range's end count is flagged |
-| 2 | `weeks_of_cover` (latest count, 2026-09-29 rule) and the range-end stock now name different counts on one card | Yuan: which count the cover line uses (`weeks_of_cover` vs `weeks_of_cover_range_end`) |
-| 3 | `possibly_stock_limited` had no rule on record; defined here as over-forecast AND 0 pieces at the opening or closing count (missing from a taken UL count = 0; from the possibly-partial 2025-05 count = unknown) | Yuan's review |
-| 4 | H1 in real mode: Del Monte's empty months are generated (synthetic_v2), not filled, so they stay gaps outside preview | as designed (DEC-29); preview shows them |
-| 5 | Under `all`, the range total covers only months both principals have (default: 6 of 12) | labelled (`months_with_data`, `missing_months`); frontend to say so |
-| 6 | Audrey's `Charts.jsx:1133` prints "Ranked on <month> sales (single month)"; the ring is now the range | frontend: use `abc_revenue.label` (done on kelvin-etl's own `Charts.jsx`) |
+| 1 | Range-end stock card on a flagged count | **Kept.** `kpis.soh_count_note` (and `soh_snapshot.note`): "Counted 2 Mar 2026: unusually high (₱46.6M), accepted pending SSM confirmation" for an accepted flagged count; a flagged count with no ruling gives its reviewed reason (`backend/data_notes.flagged_count_note`) |
+| 2 | Which count weeks of cover reads | **The card's own (range-end) count**; the 2026-09-29 latest-count rule is superseded (DEC-36). `kpis.weeks_of_cover` is that figure (`weeks_of_cover_range_end` the same object); `caveat` "stock = Ilocos Sur warehouse; sales = La Union only; territory match unverified" for Unilever |
+| 3 | `possibly_stock_limited` | **Replaced** by 3226cc4 README Part 0.1 (migration 0043): opening or closing count 0, or below 1 week of average sales (12 months before, from first sale, ≥ 3 months, week = mean × 12 ÷ 52), any direction; 2025-05 missing = 0 and flagged `count_possibly_partial`. Reproduces Part 0's **1,142 of 2,419** on the fixed-107 backtest (1,277 not) |
+| 4 | H1 in real mode | Del Monte's empty months are generated (synthetic_v2), not filled: still gaps outside preview, as designed (DEC-29) |
+| 5 | Under `all`, the range total covers only months both principals have | labelled (`months_with_data`, `missing_months`) |
+| 6 | Audrey's `Charts.jsx:1133` "Ranked on <month> sales (single month)" | frontend: use `abc_revenue.label` (done on kelvin-etl's own `Charts.jsx`) |

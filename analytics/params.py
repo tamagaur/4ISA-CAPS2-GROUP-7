@@ -73,8 +73,19 @@ DEAD_SKU_MONTHS = 6
 # branch kelvin/surplus-bias-experiment, part0_count_completeness.csv). A list,
 # not a threshold: none is on record. PENDING SSM CONFIRMATION that the 2025-05
 # count was partial (Yuan). A product missing from one of these is unknown,
-# not 0 on hand (scripts/fill_missing.py, mart.accuracy_mart).
+# not 0 on hand, in scripts/fill_missing.py; mart.accuracy_mart counts it as 0
+# (the stock-limited rule below) and flags the row count_possibly_partial.
 POSSIBLY_PARTIAL_COUNTS = ("2025-05",)
+
+# TEAM: "possibly stock-limited" (kelvin/surplus-bias-experiment 3226cc4,
+# README Part 0.1; adopted for mart.accuracy_mart by Yuan 2026-10-04,
+# migration 0043): the opening or closing stock count is 0, or below
+# STOCK_LIMITED_WEEKS weeks of the product's average sales — the mean monthly
+# pieces over the STOCK_LIMITED_AVG_MONTHS months before the month, from the
+# first sale, at least STOCK_LIMITED_AVG_MIN_MONTHS months; 1 week = mean x 12 / 52.
+STOCK_LIMITED_WEEKS = 1.0
+STOCK_LIMITED_AVG_MONTHS = 12
+STOCK_LIMITED_AVG_MIN_MONTHS = 3
 
 
 # LIT: Syntetos, Boylan & Croston (2005), "On the categorization of demand

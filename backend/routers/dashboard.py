@@ -168,10 +168,12 @@ zero):
     — {value, blocked_reason, coverage, months_used, stock_period,
     sales_window}. Formula: current stock on hand / average weekly demand.
     The figure SSM's 3-week stock policy is judged by (client meeting,
-    Sep 2026), so it does NOT follow the date picker (since 2026-09-29).
-      Stock on hand reuses kpis.soh_value's own figure verbatim — the
-        latest snapshot, never the picker's (UNILEVER_SOH_UNIT_CONFIRMED is
-        inherited automatically, not re-checked here).
+    Sep 2026). Since 2026-10-04 (DEC-36) it reads the stock card's own
+    count, the one at the range's end; from 2026-09-29 to then it read the
+    latest count whatever the range. caveat names where stock and sales
+    come from when they differ (Unilever: Ilocos Sur stock, La Union sales).
+      Stock on hand is that count's valuation (UNILEVER_SOH_UNIT_CONFIRMED
+        is inherited automatically, not re-checked here).
       Average weekly demand is the mean of whatever non-null months exist
         in the 12 months of sales ending at the stock count's month (or
         at the last month with sales before it) — sales_window names them
@@ -388,7 +390,7 @@ from analytics.params import (
 from analytics.params import POLICY_COVER_WEEKS as POLICY_WEEKS
 from analytics.params import WEEKS_PER_MONTH as AVG_WEEKS_PER_MONTH
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
-from backend.data_notes import unusual_stock_snapshots
+from backend.data_notes import COVER_CAVEATS, flagged_count_note, unusual_stock_snapshots
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle, stored_run
@@ -446,6 +448,7 @@ _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON = (
 )
 
 _URGENCY_RANK = URGENCY_RANK  # backend/stock_status.py: CRITICAL, URGENT, PLANNED
+_PRINCIPAL_LABELS = {"unilever": "Unilever", "delmonte": "Del Monte"}
 
 
 def _scope_label(principal: str) -> str:
@@ -889,7 +892,7 @@ def get_dashboard(
             "Anchors the sales/stock trend window kpis.sales / sales_vs_stock "
             "are computed over (a fixed trailing 12 months when start_period "
             "is omitted, or the end of the exact range when it's given; "
-            "kpis.weeks_of_cover never follows it), AND is used as an exact "
+            "kpis.weeks_of_cover reads the stock count at it), AND is used as an exact "
             "ABC_Classification.classification_period match for "
             "kpis.safety_stock_rate / abc_mix / tier_stock. Omit to anchor "
             "sales at the latest real sales period and ABC at the latest "
@@ -1161,12 +1164,10 @@ def get_dashboard(
     # is on or before the range's last month. It used to be the latest count
     # overall whatever the range (2026-10-03), which the picker can never reach
     # (its ceiling is the last sales month, the count after it is the next
-    # month's). Weeks of cover keeps the latest count (latest_inventory_period),
-    # its own rule since 2026-09-29.
+    # month's). Weeks of cover reads the same count (2026-10-04, DEC-36).
     range_end = periods[-1]
     inventory_period = _latest_inventory_period(db, scope, end=range_end)
-    latest_inventory_period = _latest_inventory_period(db, scope)
-    soh_periods = sorted(set(periods) | {p for p in (inventory_period, latest_inventory_period) if p})
+    soh_periods = sorted(set(periods) | ({inventory_period} if inventory_period else set()))
     # The chart's stock line. Under 'all' only months where both principals
     # have stock (_soh_value_by_period).
     soh_by_period = _soh_value_by_period(db, soh_periods, scope)
@@ -1219,6 +1220,23 @@ def get_dashboard(
                         else "pesos only: Del Monte's stock files have no pack size"),
         "blocked_reason": soh_value_blocked_reason,
     }
+    # The card keeps the range-end count even when the team flagged it (Yuan,
+    # 2026-10-04) and says so: "Counted 2 Mar 2026: unusually high (₱46.6M),
+    # accepted pending SSM confirmation" (backend/data_notes.flagged_count_note),
+    # one note per flagged principal on the card.
+    count_notes = []
+    if inventory_period is not None and soh_value is not None:
+        card_principals = stock_coverage or ([] if scope == "all" else [scope])
+        for who in card_principals:
+            own = marts.stock_by_period(db, [inventory_period], who).get(inventory_period)
+            note = flagged_count_note(
+                who, inventory_period, own, marts.neighbour_counts(db, inventory_period, who),
+                _stock_count_dates(db, [inventory_period], who).get(inventory_period),
+            )
+            if note:
+                count_notes.append(f"{_PRINCIPAL_LABELS[who]}: {note}" if len(card_principals) > 1 else note)
+    soh_count_note = " · ".join(count_notes) or None
+    soh_snapshot["note"] = soh_count_note
 
     # ---- kpis.safety_stock_rate ----------------------------------------
 
@@ -1359,12 +1377,11 @@ def get_dashboard(
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring
-    # section above for the full reasoning. It is the figure SSM's 3-week
-    # stock policy is judged by, so it does NOT follow the date picker: the
-    # stock side is the stock card's own latest snapshot (already carrying
-    # UNILEVER_SOH_UNIT_CONFIRMED), and the sales side is always the 12
-    # months of sales ending at that snapshot's month, or at the last month
-    # with sales before it. Until 2026-09-29 it averaged the picker's months,
+    # section above for the full reasoning. The stock side is the stock
+    # card's own count, the one at the range's end (DEC-36), and the sales
+    # side is always the 12 months of sales ending at that count's month, or
+    # at the last month with sales before it — never the picker's months.
+    # Until 2026-09-29 it averaged the picker's months,
     # so the same stock read 3.0-3.5 weeks depending on the range on screen,
     # and moving the end month back divided March 2026's stock by months-old
     # sales (2.9 weeks for Apr-Oct 2025). A year, not the latest month: Sir
@@ -1433,17 +1450,18 @@ def get_dashboard(
             # The 12 months the average weekly sales came from — fixed to the
             # stock count, never the picker's range.
             "sales_window": {"start": cover_periods[0], "end": cover_periods[-1]} if cover_periods else None,
+            # Where the stock and the sales come from different places (data_notes.COVER_CAVEATS).
+            "caveat": " · ".join(COVER_CAVEATS[p] for p in coverage if p in COVER_CAVEATS) or None,
         }
 
-    # The KPI keeps its rule (2026-09-29): the LATEST count, whatever the range.
-    weeks_of_cover = cover_at(latest_inventory_period)
-    # The same formula at the count at the range's end — the stock card's own
-    # count since 2026-10-04 — offered beside it, not in its place: the card's
-    # value and its cover line can then name one count. Which one the card
-    # shows is Yuan's call (the 2026-09-29 rule predates range-end stock).
-    weeks_of_cover_range_end = (
-        weeks_of_cover if inventory_period == latest_inventory_period else cover_at(inventory_period)
-    )
+    # The stock card's own count — the one at the range's end — over the 12
+    # months of sales ending at it (Yuan, 2026-10-04, DEC-36): the card's value
+    # and its cover line name one count. Supersedes the 2026-09-29 rule (the
+    # latest count, whatever the range); the denominator still never follows
+    # the range's width, so one count always gives the same weeks.
+    # weeks_of_cover_range_end is the same object, under the name it had first.
+    weeks_of_cover = cover_at(inventory_period)
+    weeks_of_cover_range_end = weeks_of_cover
 
     # ---- sales_vs_stock series -------------------------------------------
 
@@ -2027,6 +2045,9 @@ def get_dashboard(
             # Unilever's "2026-02" is the 2026-03-02 count. Null when unknown
             # (Del Monte's count day is not loaded). (Audrey's field.)
             "soh_count_date": soh_count_date,
+            # Non-null when that count is one the team flagged as unusual: the card
+            # keeps it and says so (data_notes.flagged_count_note).
+            "soh_count_note": soh_count_note,
             "soh_snapshot": soh_snapshot,
             # [{principal, period, role: 'latest', counted_on, counted_on_note,
             #   flag, ...}] for soh_period: when the stock this card and
@@ -2042,11 +2063,9 @@ def get_dashboard(
             "sales_trend": sales_trend,
             "soh_trend": soh_trend,
             # {value, blocked_reason, coverage, months_used, stock_period,
-            # stock_value, stock_count_date, sales_window} at the LATEST count,
-            # whatever the range (its 2026-09-29 rule) ...
+            # stock_value, stock_count_date, sales_window, caveat} at the stock
+            # card's own count, the range's end (DEC-36, 2026-10-04).
             "weeks_of_cover": weeks_of_cover,
-            # ... and the same formula at the stock card's own count (the
-            # range's end), so the card can name one count for both figures.
             "weeks_of_cover_range_end": weeks_of_cover_range_end,
         },
         # Non-null only under 'all': the combined pesos mix Unilever's
