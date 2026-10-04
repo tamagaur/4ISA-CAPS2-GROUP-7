@@ -22,6 +22,16 @@ schema or data. Every number below comes from a file in `results/`; rerun with
 - Sample SKU (Forecast page) = first item of `/abc?principal=<p>`: Unilever
   `69767334`, Del Monte `CULINARY` (see side finding F1).
 
+**Context: this is the pre-mart baseline.** While it was being measured,
+`kelvin-etl` gained migrations 0042 (`c2d9255`, 20:57 +08), 0041 data marts /
+range-based dashboard (`8d62ed0`, 21:54) and 0043 (`438d2ce`, 22:44). They
+changed `backend/routers/dashboard.py` and `recommendations.py`. Every number
+here is for the 1edf5cf code. The local runs (20:36–21:36 +08) overlap
+those sessions' live applies. The 1edf5cf code reads none of the new objects,
+but the DB stalls in §3c (~21:28–21:32) may be those applies (UNVERIFIED).
+To get the after numbers, rerun `serve` + `time` + `pages` on the new head and
+compare against `results/`.
+
 ## 1. What each page calls
 
 `appendPrincipal` adds `principal=` only when it isn't `all` (`principals.js:66`).
