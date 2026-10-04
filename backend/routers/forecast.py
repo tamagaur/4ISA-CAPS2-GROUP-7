@@ -42,6 +42,7 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
+from backend.response_cache import cached
 
 # The band the forecast runner stores: forecast +/- CONFIDENCE_Z x the served
 # model's holdout RMSE (scripts/run_baseline_forecast.py). Both read
@@ -55,6 +56,7 @@ router = APIRouter(prefix="/forecast", tags=["forecast"])
 
 
 @router.get("/{sku_id}", response_model=ForecastResponse)
+@cached("GET /forecast/{sku_id}")
 def get_forecast(
     sku_id: str,
     principal: str | None = PrincipalQuery,

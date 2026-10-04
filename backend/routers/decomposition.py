@@ -33,6 +33,7 @@ from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unile
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
+from backend.response_cache import cached
 
 router = APIRouter(prefix="/decomposition", tags=["decomposition"])
 
@@ -65,6 +66,7 @@ def _monthly_series(db: Session, demand: str, product_key) -> tuple[list[str], l
 
 
 @router.get("")
+@cached("GET /decomposition")
 def get_decomposition(
     sku: str = Query(..., description="Product_Dimension.sku_code"),
     principal: str | None = PrincipalQuery,

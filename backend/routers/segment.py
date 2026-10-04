@@ -77,6 +77,7 @@ from backend.schemas.segment import (
     SkuSegmentRow,
     SkuTraits,
 )
+from backend.response_cache import cached
 
 router = APIRouter(prefix="/segment", tags=["segment"])
 
@@ -116,6 +117,7 @@ def _preview_payload(response, db: Session, window: dict, cohort_period: str, **
 
 
 @router.get("", response_model=SegmentResponse)
+@cached("GET /segment")
 def get_segment(
     sku: str = Query(..., description="Product_Dimension.sku_code of the SKU whose demand pattern to read."),
     principal: str | None = PrincipalQuery,

@@ -28,6 +28,8 @@ from fastapi import HTTPException, Query, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend import batch
+
 # The only two principals in the corpus (schema.sql ck_*_principal
 # constraints use these exact lowercase spellings).
 VALID_PRINCIPALS = ("unilever", "delmonte")
@@ -111,6 +113,11 @@ def latest_abc_period(
     month routinely runs ahead of the latest ABC run; without it that
     common case dead-ends instead of falling back to the nearest real run.
     """
+    row = batch.first(db, *latest_abc_period_query(principal, at_or_before))
+    return row["p"] if row else None
+
+
+def latest_abc_period_query(principal: str | None, at_or_before: str | None = None) -> tuple[str, dict]:
     scope_sql, scope_params = principal_clause(principal, "principal")
     sql = (
         "SELECT MAX(classification_period) AS p FROM ABC_Classification "
@@ -121,5 +128,4 @@ def latest_abc_period(
         sql += " AND classification_period <= :at_or_before"
         params["at_or_before"] = at_or_before
     sql += scope_sql
-    row = db.execute(text(sql), params).mappings().first()
-    return row["p"] if row else None
+    return sql, params

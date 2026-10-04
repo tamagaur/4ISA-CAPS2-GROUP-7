@@ -34,6 +34,8 @@ from backend.principals import (
 )
 from backend.schemas.sku import SKUCreate, SKUItem, SKUListResponse, SKUUpdate
 from backend.stock_units import STOCK_AT_LATEST_SQL
+from backend import response_cache
+from backend.response_cache import cached
 
 router = APIRouter(prefix="/sku", tags=["sku"])
 
@@ -147,6 +149,7 @@ def _one_row_params(db: Session, product_key: int) -> dict:
 
 
 @router.get("", response_model=SKUListResponse)
+@cached("GET /sku")
 def get_skus(
     status: str | None = Query(None, description="Filter to 'ACTIVE' or 'DISABLED'. Omit for both."),
     principal: str | None = PrincipalQuery,
@@ -229,6 +232,7 @@ def create_sku(
     ).mappings().first()
     audit.record(db, "Add SKU", f"Added SKU {payload.sku_code} ({payload.product_name})", actor=current_user)
     db.commit()
+    response_cache.invalidate()
 
     result = db.execute(
         text(_SELECT_ONE + " WHERE pd.product_key = :key"),
@@ -293,6 +297,7 @@ def update_sku(
     if changes:
         audit.record(db, "Edit SKU", f"SKU {updated['sku_id']}: {changes}", actor=current_user)
     db.commit()
+    response_cache.invalidate()
 
     row = db.execute(
         text(_SELECT_ONE + " WHERE pd.product_key = :key"), _one_row_params(db, product_key)

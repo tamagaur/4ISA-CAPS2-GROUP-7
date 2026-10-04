@@ -56,8 +56,7 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import text
-
+from backend import batch
 from backend.data_notes import UNUSUAL_STOCK_SNAPSHOTS, opening_count_ruling
 
 # A positive integer or decimal, as TEXT. Product_Dimension.pack_size is a
@@ -278,5 +277,5 @@ def stock_counts(db, period: str | None, principals, cycle=None) -> list[dict]:
     Pass `cycle` for a plan's opening count (period = opening_period(cycle))."""
     rows = {}
     if period is not None:
-        rows = {r["principal"]: r for r in db.execute(text(STOCK_COUNTS_SQL), {"count_period": period}).mappings().all()}
+        rows = {r["principal"]: r for r in batch.rows(db, STOCK_COUNTS_SQL, {"count_period": period})}
     return [stock_count_info(p, period, rows.get(p), cycle) for p in principals]

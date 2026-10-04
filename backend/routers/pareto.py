@@ -37,6 +37,7 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
 from backend.routers.dashboard import _latest_sales_period
+from backend.response_cache import cached
 
 router = APIRouter(prefix="/pareto", tags=["pareto"])
 
@@ -121,6 +122,7 @@ def pareto_for(db: Session, principal: str, grain: str, period: str | None, mont
 
 
 @router.get("")
+@cached("GET /pareto")
 def get_pareto(
     grain: str = Query("brand", pattern="^(brand|category)$"),
     principal: str | None = PrincipalQuery,

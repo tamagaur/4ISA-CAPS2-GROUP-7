@@ -32,6 +32,7 @@ from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unile
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
+from backend.response_cache import cached
 
 router = APIRouter(prefix="/category-trends", tags=["category-trends"])
 
@@ -102,6 +103,7 @@ def trends_for(db: Session, principal: str, mode: str = REAL) -> dict:
 
 
 @router.get("")
+@cached("GET /category-trends")
 def get_category_trends(
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
