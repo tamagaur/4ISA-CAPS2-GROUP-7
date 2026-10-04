@@ -1,0 +1,37 @@
+label,principal,page,run,calls,waves,ms
+local,unilever,dashboard (12m default),1,1,1,4315.6
+local,unilever,dashboard (12m default),2,1,1,4484.3
+local,unilever,dashboard (12m default),3,1,1,4500.6
+local,unilever,sku-management,1,1,1,1361.6
+local,unilever,sku-management,2,1,1,1402.3
+local,unilever,sku-management,3,1,1,1274.0
+local,unilever,abc,1,4,2,2794.3
+local,unilever,abc,2,4,2,2722.9
+local,unilever,abc,3,4,2,2729.3
+local,unilever,forecast,1,5,2,2186.6
+local,unilever,forecast,2,5,2,2029.7
+local,unilever,forecast,3,5,2,2032.4
+local,unilever,reorder,1,2,1,1606.4
+local,unilever,reorder,2,2,1,1647.4
+local,unilever,reorder,3,2,1,1787.3
+local,unilever,category-trends,1,1,1,712.3
+local,unilever,category-trends,2,1,1,677.1
+local,unilever,category-trends,3,1,1,721.7
+local,delmonte,dashboard (12m default),1,1,1,4000.8
+local,delmonte,dashboard (12m default),2,1,1,3496.1
+local,delmonte,dashboard (12m default),3,1,1,3766.7
+local,delmonte,sku-management,1,1,1,1093.5
+local,delmonte,sku-management,2,1,1,1145.2
+local,delmonte,sku-management,3,1,1,1155.4
+local,delmonte,abc,1,4,2,1954.0
+local,delmonte,abc,2,4,2,1934.1
+local,delmonte,abc,3,4,2,1857.8
+local,delmonte,forecast,1,5,2,1828.5
+local,delmonte,forecast,2,5,2,1683.7
+local,delmonte,forecast,3,5,2,1835.7
+local,delmonte,reorder,1,2,1,1075.8
+local,delmonte,reorder,2,2,1,1160.9
+local,delmonte,reorder,3,2,1,1154.5
+local,delmonte,category-trends,1,1,1,496.6
+local,delmonte,category-trends,2,1,1,507.9
+local,delmonte,category-trends,3,1,1,529.0
