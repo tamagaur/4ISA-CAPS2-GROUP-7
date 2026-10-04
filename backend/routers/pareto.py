@@ -32,7 +32,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF, classify_abc
-from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
+from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
@@ -47,27 +47,33 @@ def _month_minus(period: str, months: int) -> str:
     return f"{total // 12:04d}-{total % 12 + 1:02d}"
 
 
-# {demand} is the Unilever demand relation for the request's data mode
-# (backend/data_mode.py) — the _Real view's own name in real mode.
+# Read from mart.sales_mart (migration 0041): one row per product (Del Monte:
+# category) and month, real rows only ({kind}; preview adds Unilever's
+# placeholder months, the rows the mart marks preview_placeholder). A
+# Unilever product-month is one demand-fact row (24,906 of 24,906, checked
+# 2026-10-04), so "pesos > 0" keeps the old row-level "net_amount > 0" rule.
 _QUERIES = {
     ("unilever", "brand"): """
-        SELECT COALESCE(pd.brand, 'NO BRAND') AS name, SUM(d.net_amount) AS revenue, COUNT(DISTINCT d.product_key) AS products
-        FROM {demand} d JOIN Product_Dimension pd ON pd.product_key = d.product_key
-        WHERE d.calendar_month > :start AND d.calendar_month <= :end AND d.net_amount > 0
+        SELECT COALESCE(pd.brand, 'NO BRAND') AS name, SUM(s.pesos) AS revenue, COUNT(DISTINCT s.product_key) AS products
+        FROM mart.sales_mart s JOIN Product_Dimension pd ON pd.product_key = s.product_key
+        WHERE s.principal = 'unilever' AND s.level = 'product' AND {kind}
+          AND s.period > :start AND s.period <= :end AND s.pesos > 0
         GROUP BY 1
     """,
     ("unilever", "category"): """
-        SELECT COALESCE(pd.category_path, 'UNCLASSIFIED') AS name, SUM(d.net_amount) AS revenue, COUNT(DISTINCT d.product_key) AS products
-        FROM {demand} d JOIN Product_Dimension pd ON pd.product_key = d.product_key
-        WHERE d.calendar_month > :start AND d.calendar_month <= :end AND d.net_amount > 0
+        SELECT COALESCE(pd.category_path, 'UNCLASSIFIED') AS name, SUM(s.pesos) AS revenue, COUNT(DISTINCT s.product_key) AS products
+        FROM mart.sales_mart s JOIN Product_Dimension pd ON pd.product_key = s.product_key
+        WHERE s.principal = 'unilever' AND s.level = 'product' AND {kind}
+          AND s.period > :start AND s.period <= :end AND s.pesos > 0
         GROUP BY 1
     """,
     ("delmonte", "category"): """
-        SELECT pd.category_path AS name, SUM(s.net_amount) AS revenue, COUNT(DISTINCT s.product_key) AS products
-        FROM SellOut_Fact_Real s JOIN Product_Dimension pd ON pd.product_key = s.product_key
-        WHERE s._period > :start AND s._period <= :end
+        SELECT pd.category_path AS name, SUM(s.pesos) AS revenue, COUNT(DISTINCT s.product_key) AS products
+        FROM mart.sales_mart s JOIN Product_Dimension pd ON pd.product_key = s.product_key
+        WHERE s.principal = 'delmonte' AND s.level = 'category' AND s.data_kind = 'real'
+          AND s.period > :start AND s.period <= :end
         GROUP BY 1
-        HAVING SUM(s.net_amount) > 0
+        HAVING SUM(s.pesos) > 0
     """,
 }
 
@@ -83,8 +89,9 @@ def pareto_for(db: Session, principal: str, grain: str, period: str | None, mont
     end = min(period, latest) if (period and latest) else (period or latest)
     if end is None:
         return {"principal": principal, "rows": [], "blocked_reason": f"No sales data for {principal}."}
+    kind = "(s.data_kind = 'real' OR s.preview_placeholder)" if mode == PREVIEW else "s.data_kind = 'real'"
     rows = db.execute(
-        text(query.format(demand=unilever_demand(mode))), {"start": _month_minus(end, months), "end": end}
+        text(query.format(kind=kind)), {"start": _month_minus(end, months), "end": end}
     ).mappings().all()
     df = pd.DataFrame(
         [{"sku_id": r["name"], "total_revenue": float(r["revenue"]), "products": int(r["products"])} for r in rows],

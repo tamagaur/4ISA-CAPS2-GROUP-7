@@ -10,7 +10,7 @@ Pipeline: ETL → ABC/Pareto classification → forecasting (deployed: MA3, 3-mo
 ## Repo
 https://github.com/4ISA-Capstone-Group-7/SSM-DSD — remote `group7`, base branch `kelvin-etl` (NOT master — master is behind, don't trust it as source of truth). Old repo KYG07/Capstone-Project is dead, never push there.
 Each session works in its own worktree on a branch named `kelvin/<name>`.
-Migrations: 0040 is the latest on public. Next numbers are reserved: **0041 = data marts, 0042 = in-transit stock**; anything else starts at 0043.
+Migrations: 0041 (data marts, schema `mart`, DEC-33) is the latest on public since 2026-10-04. Reserved: **0042 = in-transit stock**; anything else starts at 0043.
 
 ## Stack
 Python/pandas ETL, FastAPI backend, Next.js/Tailwind frontend, Supabase (Postgres), Vercel (frontend host), Render (backend host).

@@ -880,7 +880,9 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
   const segments = abcSegments(sharesAddUp ? data : data.map((d) => ({ ...d, sharePct: skuSharePct(d) })));
   const unitsTitle = units.charAt(0).toUpperCase() + units.slice(1);
   const selectedFacts = selected ? factsFor(selected) : null;
-  const rankedMonth = revenue?.period ? formatMonth(revenue.period) : null;
+  // The ring ranks the selected range since 2026-10-04 (abc_revenue.label,
+  // e.g. "Mar 2025 – Feb 2026"); a payload without it still names its month.
+  const rankedMonth = revenue?.label || (revenue?.period ? formatMonth(revenue.period) : null);
   const centre = ABC_DONUT_SIZE / 2;
 
   const selectOnKey = (tier) => (e) => {

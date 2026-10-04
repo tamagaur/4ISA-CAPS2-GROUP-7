@@ -113,7 +113,9 @@ def test_fsn_period_param_is_the_window_end():
 
 def test_brand_pareto_ranks_with_abc_cutoffs():
     session = FakeSession([
-        ("MAX(calendar_month) AS p", [{"p": "2026-02"}]),
+        # backend/marts.SNAPSHOT_SQL: Unilever's real sales end 2026-02.
+        ("'sales' AS src", [{"src": "sales", "principal": "unilever", "period": "2026-02", "data_kind": "real",
+                              "pesos": 1.0, "pieces": None, "recorded_with_tax": False, "placeholder": False}]),
         ("COALESCE(pd.brand, 'NO BRAND')", [
             {"name": "KNORR", "revenue": 700.0, "products": 10},
             {"name": "SURF", "revenue": 200.0, "products": 8},

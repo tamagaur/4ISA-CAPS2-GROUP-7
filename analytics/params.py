@@ -62,8 +62,24 @@ FORECAST_INTERVAL_LEVEL_PCT = 90
 MIN_MONTHS_WITH_SALES = 3
 
 # TEAM: no sale in the last 6 months = dead SKU (the runner's
-# Forecast_Result.status 'dead_sku') = FSN non-moving.
+# Forecast_Result.status 'dead_sku') = FSN non-moving. Also the data marts'
+# idle stock: a product in a stock count with no piece sold in the 6 sales
+# months up to it (mart.idle_stock, migration 0041).
 DEAD_SKU_MONTHS = 6
+
+# DATA: Unilever stock counts on record as possibly partial. 2025-05: 404 rows
+# against 513-812 in every other real month (inventory_fact_real, checked
+# 2026-10-03), and 36 of 96 selling Tier A products absent (Claude Code 8,
+# branch kelvin/surplus-bias-experiment, part0_count_completeness.csv). A list,
+# not a threshold: none is on record. PENDING SSM CONFIRMATION that the 2025-05
+# count was partial (Yuan). A product missing from one of these is unknown,
+# not 0 on hand (scripts/fill_missing.py, mart.accuracy_mart).
+POSSIBLY_PARTIAL_COUNTS = ("2025-05",)
+
+# TEAM: over-forecast this many months in a row = review before ordering
+# (kelvin/forecast-error-business b4f6b77, run_analysis.py SURPLUS_RUN; the
+# dashboard's forecast-error card flags these products).
+SURPLUS_RUN_MONTHS = 3
 
 # LIT: Syntetos, Boylan & Croston (2005), "On the categorization of demand
 # patterns", JORS 56(5). ADI (average inter-demand interval) >= 1.32 is
