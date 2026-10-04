@@ -191,6 +191,8 @@ from backend.stock_units import (
     opening_period,
     stock_counts,
 )
+from backend import response_cache
+from backend.response_cache import cached
 
 # Order quantities are counted in whole units rounded UP, the rule the Reorder
 # page applies to every row (frontend/src/utils/formatNumber.js wholeUnits),
@@ -498,6 +500,7 @@ def _on_order(r, in_count, stock_not_in_count, present) -> tuple[float | None, f
 
 
 @router.get("", response_model=RecommendationsResponse)
+@cached("GET /recommendations")
 def get_recommendations(
     status: str | None = Query(None, description="Filter to 'pending' | 'accepted' | 'dismissed'. Omit for all."),
     cycle: str = Query(
@@ -657,6 +660,7 @@ def update_recommendation(
         actor=current_user,
     )
     db.commit()
+    response_cache.invalidate()
 
     # Single row pinned by recommendation_key; scope left unfiltered (None
     # = all), identical to today's behaviour — see sku.py's _one_row_params.

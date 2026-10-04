@@ -23,6 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF
+from backend import batch
 from backend.data_mode import PREVIEW, REAL
 
 PRINCIPALS = ("unilever", "delmonte")
@@ -70,13 +71,34 @@ def month_add(period: str, months: int) -> str:
 # Freshness
 # ---------------------------------------------------------------------------
 
+REFRESH_PRESENT_SQL = "SELECT to_regclass('mart.refresh_log') IS NOT NULL AS present"
+REFRESH_STATUS_SQL = "SELECT * FROM mart.refresh_status"
+# Remembered once seen on the real database, like backend/lp_cycle.lp_run_present.
+_REFRESH_PRESENT = {"value": False}
+
+
+def present(db: Session) -> bool:
+    """Whether migration 0041's marts exist (to_regclass, which never errors)."""
+    if _REFRESH_PRESENT["value"]:
+        return True
+    row = batch.first(db, REFRESH_PRESENT_SQL)
+    found = bool(row and row["present"])
+    if found and isinstance(db, Session):
+        _REFRESH_PRESENT["value"] = True
+    return found
+
+
+def present_known() -> bool:
+    """True once present() has seen the marts (no lookup needed any more)."""
+    return _REFRESH_PRESENT["value"]
+
+
 def status(db: Session) -> dict:
     """When the marts were last rebuilt and whether a source changed since
     (mart.refresh_status). present=False on a database without migration 0041."""
-    present = db.execute(text("SELECT to_regclass('mart.refresh_log') IS NOT NULL AS present")).mappings().first()
-    if not present or not present["present"]:
+    if not present(db):
         return {"present": False, "refreshed_at": None, "trigger": None, "stale": None, "stale_reason": None}
-    row = db.execute(text("SELECT * FROM mart.refresh_status")).mappings().first() or {}
+    row = batch.first(db, REFRESH_STATUS_SQL) or {}
     changed = [
         name for name, key in (("a data load", "latest_load"), ("a fill run", "latest_fill"),
                                ("a forecast run", "latest_forecast"), ("an LP run", "latest_lp_run"))
@@ -136,7 +158,7 @@ def _snapshot(db: Session) -> _Snapshot:
     info = getattr(db, "info", None)
     if isinstance(info, dict) and "mart_snapshot" in info:
         return info["mart_snapshot"]
-    snap = _Snapshot(db.execute(text(SNAPSHOT_SQL)).mappings().all())
+    snap = _Snapshot(batch.rows(db, SNAPSHOT_SQL))
     if isinstance(info, dict):
         info["mart_snapshot"] = snap
     return snap
@@ -320,22 +342,30 @@ def stock_pieces_by_product(db: Session, period: str | None, product_keys: list[
     A product missing from the dict has no row in that count."""
     if period is None or not product_keys:
         return {}
-    rows = db.execute(text("""
+    rows = batch.rows(db, *stock_pieces_query(period, product_keys))
+    return {int(r["product_key"]): (float(r["pieces"]) if r["pieces"] is not None else None) for r in rows}
+
+
+def stock_pieces_query(period: str, product_keys: list[int]) -> tuple[str, dict]:
+    return """
         SELECT product_key, pieces FROM mart.inventory_mart_real
         WHERE period = :period AND product_key = ANY(:keys)
-    """), {"period": period, "keys": product_keys}).mappings().all()
-    return {int(r["product_key"]): (float(r["pieces"]) if r["pieces"] is not None else None) for r in rows}
+    """, {"period": period, "keys": product_keys}
 
 
 def stock_status_by_product(db: Session, period: str | None, product_keys: list[int]) -> dict[int, tuple[bool, bool]]:
     """{product_key: (any_active, any_inactive)} at one real count."""
     if period is None or not product_keys:
         return {}
-    rows = db.execute(text("""
+    rows = batch.rows(db, *stock_status_query(period, product_keys))
+    return {int(r["product_key"]): (bool(r["any_active"]), bool(r["any_inactive"])) for r in rows}
+
+
+def stock_status_query(period: str, product_keys: list[int]) -> tuple[str, dict]:
+    return """
         SELECT product_key, any_active, any_inactive FROM mart.inventory_mart_real
         WHERE period = :period AND product_key = ANY(:keys)
-    """), {"period": period, "keys": product_keys}).mappings().all()
-    return {int(r["product_key"]): (bool(r["any_active"]), bool(r["any_inactive"])) for r in rows}
+    """, {"period": period, "keys": product_keys}
 
 
 # ---------------------------------------------------------------------------
@@ -377,10 +407,7 @@ PARETO_SQL = """
 
 def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL) -> list[dict]:
     """Every product (Del Monte: category) ranked on its net sales over start..end."""
-    rows = db.execute(
-        text(PARETO_SQL.format(kind=_kind_filter(mode, "s"))),
-        {"principal": principal, "start": start, "end": end, "a": TIER_A_CUTOFF, "b": TIER_B_CUTOFF},
-    ).mappings().all()
+    rows = batch.rows(db, *pareto_query(start, end, principal, mode))
     return [
         {
             "rank": int(r["rank"]),
@@ -399,6 +426,11 @@ def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL) 
         }
         for r in rows
     ]
+
+
+def pareto_query(start: str, end: str, principal: str, mode: str = REAL) -> tuple[str, dict]:
+    return (PARETO_SQL.format(kind=_kind_filter(mode, "s")),
+            {"principal": principal, "start": start, "end": end, "a": TIER_A_CUTOFF, "b": TIER_B_CUTOFF})
 
 
 def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]:
@@ -479,27 +511,14 @@ def idle_stock(db: Session, count_period: str | None, limit: int | None = None) 
              "never_sold": 0, "items": [], "blocked_reason": None}
     if count_period is None:
         return {**empty, "blocked_reason": "No real Unilever stock count on or before the range's end."}
-    head = db.execute(text("""
-        SELECT MIN(count_date) AS count_date, MIN(window_start) AS window_start, MIN(window_end) AS window_end,
-               MIN(window_months) AS window_months, COUNT(*) AS products,
-               COUNT(*) FILTER (WHERE pesos > 0) AS products_with_value, SUM(pesos) AS pesos,
-               COUNT(*) FILTER (WHERE never_sold) AS never_sold
-        FROM mart.idle_stock WHERE count_period = :period
-    """), {"period": count_period}).mappings().first()
+    head = batch.first(db, *idle_head_query(count_period))
     if not head or not head["products"]:
         has_count = _real_stock(db, "unilever", count_period) is not None
         reason = (None if has_count else f"No real Unilever stock count for {month_label(count_period)}.")
         return {**empty, "blocked_reason": reason or (
             f"Either no product in the {month_label(count_period)} count went 6 sales months without a sale, or "
             "the 6 months before it are not all in the sales file.")}
-    items = db.execute(text(f"""
-        SELECT i.product_key, pd.sku_code, pd.product_name, pd.category_path, i.pesos, i.pieces, i.cases,
-               i.last_sale_period, i.never_sold
-        FROM mart.idle_stock i LEFT JOIN product_dimension pd ON pd.product_key = i.product_key
-        WHERE i.count_period = :period
-        ORDER BY i.pesos DESC NULLS LAST, i.product_key
-        {'LIMIT :limit' if limit else ''}
-    """), {"period": count_period, **({"limit": limit} if limit else {})}).mappings().all()
+    items = batch.rows(db, *idle_items_query(count_period, limit))
     day = head["count_date"]
     return {
         "count_period": count_period,
@@ -521,6 +540,27 @@ def idle_stock(db: Session, count_period: str | None, limit: int | None = None) 
         ],
         "blocked_reason": None,
     }
+
+
+def idle_head_query(count_period: str) -> tuple[str, dict]:
+    return """
+        SELECT MIN(count_date) AS count_date, MIN(window_start) AS window_start, MIN(window_end) AS window_end,
+               MIN(window_months) AS window_months, COUNT(*) AS products,
+               COUNT(*) FILTER (WHERE pesos > 0) AS products_with_value, SUM(pesos) AS pesos,
+               COUNT(*) FILTER (WHERE never_sold) AS never_sold
+        FROM mart.idle_stock WHERE count_period = :period
+    """, {"period": count_period}
+
+
+def idle_items_query(count_period: str, limit: int | None = None) -> tuple[str, dict]:
+    return f"""
+        SELECT i.product_key, pd.sku_code, pd.product_name, pd.category_path, i.pesos, i.pieces, i.cases,
+               i.last_sale_period, i.never_sold
+        FROM mart.idle_stock i LEFT JOIN product_dimension pd ON pd.product_key = i.product_key
+        WHERE i.count_period = :period
+        ORDER BY i.pesos DESC NULLS LAST, i.product_key
+        {'LIMIT :limit' if limit else ''}
+    """, {"period": count_period, **({"limit": limit} if limit else {})}
 
 
 # ---------------------------------------------------------------------------
@@ -551,6 +591,10 @@ def accuracy_rows(db: Session, start: str, end: str, run_id: int | None = None) 
     """Scored product-months (actual known) in start..end. With no run_id: each month from
     the default backtest when it covers the month, else from the newest stored run that
     forecast it — so the card never mixes two forecasts for one month."""
+    return [dict(r) for r in batch.rows(db, *accuracy_rows_query(start, end, run_id))]
+
+
+def accuracy_rows_query(start: str, end: str, run_id: int | None = None) -> tuple[str, dict]:
     if run_id is not None:
         where, params = "a.run_id = :run_id", {"run_id": run_id}
     else:
@@ -564,14 +608,13 @@ def accuracy_rows(db: Session, start: str, end: str, run_id: int | None = None) 
                                     AND s.actual_pieces IS NOT NULL)
                        END)"""
         params = {"default_label": DEFAULT_BACKTEST_LABEL}
-    rows = db.execute(text(f"""
+    return f"""
         SELECT a.*, pd.sku_code, pd.product_name
         FROM mart.accuracy_mart a LEFT JOIN product_dimension pd ON pd.product_key = a.product_key
         WHERE {where} AND a.month BETWEEN :start AND :end AND a.actual_pieces IS NOT NULL
               AND a.forecast_pieces IS NOT NULL
         ORDER BY a.product_key, a.month
-    """), {**params, "start": start, "end": end}).mappings().all()
-    return [dict(r) for r in rows]
+    """, {**params, "start": start, "end": end}
 
 
 def _wape(abs_miss: float, actual: float) -> float | None:

@@ -1,0 +1,37 @@
+label,principal,page,run,calls,waves,ms
+before_merge,unilever,dashboard (12m default),1,1,1,4403.0
+before_merge,unilever,dashboard (12m default),2,1,1,4049.0
+before_merge,unilever,dashboard (12m default),3,1,1,4266.1
+before_merge,unilever,sku-management,1,1,1,1258.8
+before_merge,unilever,sku-management,2,1,1,1212.5
+before_merge,unilever,sku-management,3,1,1,1250.2
+before_merge,unilever,abc,1,4,2,3517.5
+before_merge,unilever,abc,2,4,2,2455.0
+before_merge,unilever,abc,3,4,2,3119.1
+before_merge,unilever,forecast,1,5,2,2291.3
+before_merge,unilever,forecast,2,5,2,2002.2
+before_merge,unilever,forecast,3,5,2,2410.1
+before_merge,unilever,reorder,1,2,1,1684.7
+before_merge,unilever,reorder,2,2,1,1800.7
+before_merge,unilever,reorder,3,2,1,1697.7
+before_merge,unilever,category-trends,1,1,1,704.5
+before_merge,unilever,category-trends,2,1,1,656.5
+before_merge,unilever,category-trends,3,1,1,701.2
+before_merge,delmonte,dashboard (12m default),1,1,1,3009.1
+before_merge,delmonte,dashboard (12m default),2,1,1,2866.5
+before_merge,delmonte,dashboard (12m default),3,1,1,3011.0
+before_merge,delmonte,sku-management,1,1,1,1101.7
+before_merge,delmonte,sku-management,2,1,1,1134.9
+before_merge,delmonte,sku-management,3,1,1,1160.7
+before_merge,delmonte,abc,1,4,2,2137.3
+before_merge,delmonte,abc,2,4,2,2333.0
+before_merge,delmonte,abc,3,4,2,2020.6
+before_merge,delmonte,forecast,1,5,2,1916.3
+before_merge,delmonte,forecast,2,5,2,1906.3
+before_merge,delmonte,forecast,3,5,2,1893.5
+before_merge,delmonte,reorder,1,2,1,1098.7
+before_merge,delmonte,reorder,2,2,1,1145.8
+before_merge,delmonte,reorder,3,2,1,1163.8
+before_merge,delmonte,category-trends,1,1,1,539.5
+before_merge,delmonte,category-trends,2,1,1,538.3
+before_merge,delmonte,category-trends,3,1,1,508.3

@@ -360,10 +360,9 @@ from __future__ import annotations
 import datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend import marts
+from backend import batch, marts
 from backend.data_mode import (
     PREVIEW,
     REAL,
@@ -393,14 +392,19 @@ from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_
 from backend.data_notes import COVER_CAVEATS, flagged_count_note, unusual_stock_snapshots
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, LP_WEIGHTS, current_cycle, stored_run
+from backend.lp_cycle import (
+    CURRENT_CYCLE_CLAUSE, LP_RUN_PRESENT_SQL, LP_WEIGHTS, current_cycle, current_cycle_query,
+    forecast_generated_query, freshness_query, lp_run_present, lp_run_present_known, stored_run,
+    stored_run_query, superseded_count_query,
+)
 from backend.lp_cycle import freshness as lp_freshness
-from backend.principals import PrincipalQuery, latest_abc_period, normalize_principal
+from backend.principals import PrincipalQuery, latest_abc_period, latest_abc_period_query, normalize_principal
 from backend.routers.recommendations import select_one as _recommendation_select_one
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 from backend.routers.recommendations import whole_units
 from backend.stock_status import CRITICAL, NO_DATA, URGENCY_RANK, URGENT
-from backend.stock_units import opening_period, stock_counts
+from backend.stock_units import STOCK_COUNTS_SQL, opening_period, stock_counts
+from backend.response_cache import cached
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -815,13 +819,17 @@ def _latest_abc_period(db: Session, principal: str = "unilever") -> str | None:
     method='single' is REQUIRED (migration 0017): a 't3m' run is live
     alongside 'single', and an unpinned MAX can resolve to a period only
     t3m produced — which would then read back zero 'single' rows."""
+    row = batch.first(db, *_latest_abc_period_query(principal))
+    return row["p"] if row else None
+
+
+def _latest_abc_period_query(principal: str = "unilever") -> tuple[str, dict]:
     sql = "SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE method = 'single'"
     params: dict = {}
     if principal != "all":
         sql += " AND principal = :principal"
         params["principal"] = principal
-    row = db.execute(text(sql), params).mappings().first()
-    return row["p"] if row else None
+    return sql, params
 
 
 def _nearest_abc_period_at_or_before(
@@ -839,6 +847,11 @@ def _nearest_abc_period_at_or_before(
     replaced) keeps kpis.safety_stock_rate/abc_mix/tier_stock populated
     for that common case, while still going genuinely blocked if `period`
     predates every ABC run that exists."""
+    row = batch.first(db, *_nearest_abc_period_query(period, principal))
+    return row["p"] if row else None
+
+
+def _nearest_abc_period_query(period: str, principal: str = "unilever") -> tuple[str, dict]:
     sql = (
         "SELECT MAX(classification_period) AS p FROM ABC_Classification "
         "WHERE method = 'single' AND classification_period <= :period"
@@ -847,8 +860,7 @@ def _nearest_abc_period_at_or_before(
     if principal != "all":
         sql += " AND principal = :principal"
         params["principal"] = principal
-    row = db.execute(text(sql), params).mappings().first()
-    return row["p"] if row else None
+    return sql, params
 
 
 def _range_pareto(db: Session, start: str, end: str, scope: str, mode: str = REAL) -> dict[str, list[dict]]:
@@ -882,7 +894,249 @@ def _weeks_of_cover(
     return round(stock / weekly_demand, 2), None
 
 
+# ---------------------------------------------------------------------------
+# The route's own queries. Built here, not inline, so _prefetch can ask for exactly
+# the statements get_dashboard will read (backend/batch.py).
+# ---------------------------------------------------------------------------
+
+def _principal_filter(scope: str) -> str:
+    # `scope` is already allowlisted by normalize_principal (the literal 'unilever'
+    # or 'delmonte'), which is why it can be interpolated.
+    return "" if scope == "all" else f"AND pd.principal = '{scope}'"
+
+
+def _lp_cycle_filter(lp_cycle) -> str:
+    return CURRENT_CYCLE_CLAUSE if lp_cycle is not None else " AND 1=0"
+
+
+def _product_count_query(scope: str, mode: str, lp_cycle) -> tuple[str, dict]:
+    lp_src, lp_params = lp_source(mode)
+    return f"""
+            SELECT COUNT(*) AS product_count
+            FROM {lp_src} lr
+            JOIN Product_Dimension pd ON pd.product_key = lr.product_key
+            WHERE lr.status = 'pending' {_principal_filter(scope)} {_lp_cycle_filter(lp_cycle)}
+        """, {"current_cycle": lp_cycle, **lp_params}
+
+
+def _forecast_counts_query(scope: str, mode: str) -> tuple[str, dict]:
+    fc_src, fc_params = forecast_source(mode)
+    return f"""
+            WITH latest AS (
+                SELECT MAX(forecast_date) AS forecast_date FROM {fc_src}
+            )
+            SELECT
+                COUNT(*) AS total_count,
+                COUNT(fr.mase) AS evaluated_count,
+                COUNT(*) FILTER (WHERE fr.mase >= :mase_gate) AS unreliable_count
+            FROM {fc_src} fr
+            JOIN Product_Dimension pd ON pd.product_key = fr.product_key
+            JOIN latest ON fr.forecast_date = latest.forecast_date
+            WHERE 1=1 {_principal_filter(scope)}
+        """, {"mase_gate": MASE_GATE, **fc_params}
+
+
+def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_period: str) -> tuple[str, dict]:
+    lp_src, lp_params = lp_source(mode)
+    # Same scope against ABC_Classification's own alias. Paired with
+    # method='single' at every ABC read: migration 0017 put a live 't3m' run
+    # alongside 'single', so an unpinned query returns each SKU TWICE.
+    abc_scope = "" if scope == "all" else f"AND ac.principal = '{scope}'"
+    return f"""
+                SELECT
+                    ac.product_key,
+                    pd.sku_code AS sku_id,
+                    pd.product_name AS product_name,
+                    ac.revenue_share AS revenue_share,
+                    rop.ss_i AS ss_i,
+                    rop.rop_i AS rop_i,
+                    rop.q_i AS q_i
+                FROM ABC_Classification ac
+                LEFT JOIN product_dimension pd ON pd.product_key = ac.product_key
+                LEFT JOIN (
+                    SELECT DISTINCT ON (lr.product_key) lr.product_key, lr.ss_i, lr.rop_i, lr.q_i
+                    FROM {lp_src} lr
+                    WHERE lr.status = 'pending' {_lp_cycle_filter(lp_cycle)}
+                    ORDER BY lr.product_key, lr.planning_cycle_date DESC
+                ) rop ON rop.product_key = ac.product_key
+                WHERE ac.classification_period = :period AND ac.tier = 'A'
+                      AND ac.method = 'single' {abc_scope}
+            """, {"period": abc_period, "current_cycle": lp_cycle, **lp_params}
+
+
+def _pending_keys_query(mode: str, lp_cycle) -> tuple[str, dict]:
+    lp_src, lp_params = lp_source(mode)
+    return (f"SELECT DISTINCT lr.product_key FROM {lp_src} lr WHERE lr.status = 'pending' {_lp_cycle_filter(lp_cycle)}",
+            {"current_cycle": lp_cycle, **lp_params})
+
+
+def _latest_forecast_date_query(mode: str) -> tuple[str, dict]:
+    fc_src, fc_params = forecast_source(mode)
+    return f"SELECT MAX(forecast_date) AS d FROM {fc_src}", fc_params
+
+
+def _gated_rows_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
+    fc_src, fc_params = forecast_source(mode)
+    return f"""
+                SELECT fr.product_key, fr.forecast_date, fr.forecast_value,
+                       fr.confidence_lower, fr.confidence_upper, pd.principal
+                FROM {fc_src} fr
+                JOIN Product_Dimension pd ON pd.product_key = fr.product_key
+                WHERE fr.forecast_date = :forecast_date
+                  AND fr.status = 'ok'
+                  AND fr.mase < :mase_gate
+                  {_principal_filter(scope)}
+            """, {"forecast_date": forecast_date, "mase_gate": MASE_GATE, **fc_params}
+
+
+def _scoped_forecast_count_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
+    fc_src, fc_params = forecast_source(mode)
+    return f"""
+                SELECT COUNT(*) FROM {fc_src} fr
+                JOIN Product_Dimension pd ON pd.product_key = fr.product_key
+                WHERE fr.forecast_date = :forecast_date {_principal_filter(scope)}
+            """, {"forecast_date": forecast_date, **fc_params}
+
+
+def _portfolio_actuals_query(mode: str, keys: list) -> tuple[str, dict]:
+    # The history the forecasts were made from: five years in a preview
+    # built from it, the real months otherwise (mart.sales_mart_real,
+    # migration 0041 — the same rows, summed per product and month).
+    if predictive_preview(mode):
+        actual_sql = f"""
+                SELECT calendar_month AS period, SUM(quantity_sold) AS qty
+                FROM {unilever_demand(mode)}
+                WHERE product_key = ANY(:keys)
+                GROUP BY calendar_month
+            """
+    else:
+        actual_sql = """
+                SELECT period, SUM(pieces) AS qty
+                FROM mart.sales_mart_real
+                WHERE level = 'product' AND product_key = ANY(:keys)
+                GROUP BY period
+            """
+    return actual_sql, {"keys": keys}
+
+
+def _reorder_preview_query(scope: str, mode: str, lp_cycle, stock_period, abc_period) -> tuple[str, dict]:
+    rp_select, rp_select_params = _recommendation_select_one(mode)
+    return rp_select + f" WHERE lr.status = 'pending' {_principal_filter(scope)} {_lp_cycle_filter(lp_cycle)}", {
+        "inv_period": stock_period,
+        "abc_period": abc_period,
+        "current_cycle": lp_cycle,
+        **rp_select_params,
+    }
+
+
+def _policy_rows_query(scope: str, mode: str, lp_cycle) -> tuple[str, dict]:
+    lp_src, lp_params = lp_source(mode)
+    fc_src, fc_params = forecast_source(mode)
+    return f"""
+            SELECT lr.planning_cycle_date, lr.ss_i, lr.rop_i, fr.forecast_value
+            FROM {lp_src} lr
+            JOIN Product_Dimension pd ON pd.product_key = lr.product_key
+            JOIN {fc_src} fr
+              ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
+            WHERE lr.status = 'pending'
+              {_lp_cycle_filter(lp_cycle)}
+              {_principal_filter(scope)}
+        """, {"current_cycle": lp_cycle, **lp_params, **fc_params}
+
+
+def _range_periods(db: Session, period: str | None, start_period: str | None, scope: str) -> list[str]:
+    """The months the page covers: the picker's exact range when its start is given,
+    else the trailing 12 months ending at its end (or the latest sales month)."""
+    return (
+        _month_range(start_period, _resolve_sales_anchor(db, period, scope))
+        if start_period is not None
+        else _last_12_periods(db, period, scope)
+    )
+
+
+def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_period: str | None) -> None:
+    """Every statement get_dashboard reads, in three round trips instead of ~29
+    (backend/batch.py). Each wave holds the queries whose parameters the waves
+    before it settle: wave 1 needs only the request, wave 2 the LP cycle, the
+    range and the counts the month-level marts name, wave 3 the product keys wave
+    2 returns. A query missing here still runs, on its own, when the route asks."""
+    wave1 = [
+        (marts.SNAPSHOT_SQL, {}),
+        current_cycle_query(scope, mode),
+        forecast_generated_query(mode),
+        _forecast_counts_query(scope, mode),
+        _latest_forecast_date_query(mode),
+        _nearest_abc_period_query(period, scope) if period is not None else _latest_abc_period_query(scope),
+        latest_abc_period_query(scope),
+    ]
+    # Whether 0041's marts and 0037's lp_run exist is remembered after the first
+    # request; until then it is asked here, and the refresh status follows in wave 2.
+    wave1.append((marts.REFRESH_STATUS_SQL, {}) if marts.present_known() else (marts.REFRESH_PRESENT_SQL, {}))
+    if mode == REAL and not lp_run_present_known():
+        wave1.append((LP_RUN_PRESENT_SQL, {}))
+    batch.prefetch(db, wave1)
+
+    lp_cycle = current_cycle(db, scope, mode)
+    fc_at = batch.scalar(db, *forecast_generated_query(mode))
+    periods = _range_periods(db, period, start_period, scope)
+    range_start, range_end = periods[0], periods[-1]
+    inventory_period = _latest_inventory_period(db, scope, end=range_end)
+    abc_period = (
+        _nearest_abc_period_at_or_before(db, period, scope) if period is not None
+        else _latest_abc_period(db, scope)
+    )
+    latest_forecast = batch.first(db, *_latest_forecast_date_query(mode))
+    forecast_date = latest_forecast["d"] if latest_forecast else None
+    rp_stock_period = opening_period(lp_cycle) if lp_cycle is not None else None
+    idle_period = marts.stock_period_at_or_before(db, range_end, "unilever") if scope != "delmonte" else None
+
+    wave2 = [
+        freshness_query(lp_cycle, fc_at, scope, mode),
+        _product_count_query(scope, mode, lp_cycle),
+        _pending_keys_query(mode, lp_cycle),
+        _reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, latest_abc_period(db, scope)),
+        _policy_rows_query(scope, mode, lp_cycle),
+    ]
+    wave2 += [marts.pareto_query(range_start, range_end, who, mode)
+              for who in ("unilever", "delmonte") if scope in ("all", who)]
+    if lp_cycle is not None:
+        wave2.append(superseded_count_query(lp_cycle, scope, mode))
+        if mode == REAL and lp_run_present(db):
+            wave2.append(stored_run_query(lp_cycle, scope))
+    wave2 += [(STOCK_COUNTS_SQL, {"count_period": p}) for p in {inventory_period, rp_stock_period} if p]
+    if abc_period is not None:
+        wave2.append(_plan_rows_query(scope, mode, lp_cycle, abc_period))
+    if forecast_date is not None:
+        wave2 += [_gated_rows_query(scope, mode, forecast_date),
+                  _scoped_forecast_count_query(scope, mode, forecast_date)]
+    if scope != "delmonte":
+        wave2.append(marts.accuracy_rows_query(range_start, range_end))
+    if idle_period is not None:
+        wave2 += [marts.idle_head_query(idle_period), marts.idle_items_query(idle_period, 10)]
+    if marts.present(db):
+        wave2.append((marts.REFRESH_STATUS_SQL, {}))
+    batch.prefetch(db, wave2)
+
+    wave3 = []
+    if abc_period is not None and inventory_period is not None:
+        plan = batch.rows(db, *_plan_rows_query(scope, mode, lp_cycle, abc_period))
+        keys = [int(r["product_key"]) for r in plan]
+        if keys:
+            wave3.append(marts.stock_pieces_query(inventory_period, keys))
+    if inventory_period is not None:
+        ranked = _range_pareto(db, range_start, range_end, scope, mode)
+        class_of = {r["product_key"]: r["class"] for rows in ranked.values() for r in rows}
+        if class_of:
+            wave3.append(marts.stock_status_query(inventory_period, list(class_of)))
+    if forecast_date is not None:
+        gated = batch.rows(db, *_gated_rows_query(scope, mode, forecast_date))
+        if gated:
+            wave3.append(_portfolio_actuals_query(mode, sorted({r["product_key"] for r in gated})))
+    batch.prefetch(db, wave3)
+
+
 @router.get("")
+@cached("GET /dashboard")
 def get_dashboard(
     period: str | None = Query(
         None,
@@ -922,12 +1176,8 @@ def get_dashboard(
     # this file's helpers take the literal string 'all' rather than None,
     # so it is re-widened to 'all' here and passed down explicitly.
     scope = normalize_principal(principal) or "all"
-    principal_filter = "" if scope == "all" else f"AND pd.principal = '{scope}'"
-    # Same scope expressed against ABC_Classification's own alias. Paired
-    # with method='single' at every ABC read: migration 0017 put a live
-    # 't3m' run alongside 'single', so an unpinned query returns each SKU
-    # TWICE — doubling counts and summing revenue_share past 100%.
-    abc_scope = "" if scope == "all" else f"AND ac.principal = '{scope}'"
+    # Every statement below, fetched up front in three round trips.
+    _prefetch(db, scope, mode, period, start_period)
 
     # ---- ORIGINAL FIELDS (unchanged) ----------------------------------
 
@@ -940,40 +1190,15 @@ def get_dashboard(
     lp_freshness_info = lp_freshness(db, scope, mode)
     lp_cycle = current_cycle(db, scope, mode)
     lp_run = stored_run(db, lp_cycle, scope, mode)
-    lp_cycle_filter = CURRENT_CYCLE_CLAUSE if lp_cycle is not None else " AND 1=0"
     # The LP's rows and the forecasts: the stored tables, or in preview with
     # built outputs the five-year what-if's (backend/data_mode.py). Every
-    # predictive and prescriptive read below goes through these two.
-    lp_src, lp_params = lp_source(mode)
-    fc_src, fc_params = forecast_source(mode)
+    # predictive and prescriptive read below goes through lp_source() and
+    # forecast_source(), inside the _*_query builders above.
 
-    reco_row = db.execute(
-        text(f"""
-            SELECT COUNT(*) AS product_count
-            FROM {lp_src} lr
-            JOIN Product_Dimension pd ON pd.product_key = lr.product_key
-            WHERE lr.status = 'pending' {principal_filter} {lp_cycle_filter}
-        """),
-        {"current_cycle": lp_cycle, **lp_params},
-    ).mappings().first()
+    reco_row = batch.first(db, *_product_count_query(scope, mode, lp_cycle))
     product_count = int(reco_row["product_count"])
 
-    forecast_row = db.execute(
-        text(f"""
-            WITH latest AS (
-                SELECT MAX(forecast_date) AS forecast_date FROM {fc_src}
-            )
-            SELECT
-                COUNT(*) AS total_count,
-                COUNT(fr.mase) AS evaluated_count,
-                COUNT(*) FILTER (WHERE fr.mase >= :mase_gate) AS unreliable_count
-            FROM {fc_src} fr
-            JOIN Product_Dimension pd ON pd.product_key = fr.product_key
-            JOIN latest ON fr.forecast_date = latest.forecast_date
-            WHERE 1=1 {principal_filter}
-        """),
-        {"mase_gate": MASE_GATE, **fc_params},
-    ).mappings().first()
+    forecast_row = batch.first(db, *_forecast_counts_query(scope, mode))
     total_count = int(forecast_row["total_count"])
     evaluated_count = int(forecast_row["evaluated_count"])
     unreliable_count = int(forecast_row["unreliable_count"]) if total_count > 0 else None
@@ -987,11 +1212,7 @@ def get_dashboard(
 
     # ---- kpis.sales / sales_vs_stock.sales ----------------------------
 
-    periods = (
-        _month_range(start_period, _resolve_sales_anchor(db, period, scope))
-        if start_period is not None
-        else _last_12_periods(db, period, scope)
-    )
+    periods = _range_periods(db, period, start_period, scope)
     sales_by_period = _sales_by_period(db, periods, scope, mode)
     # Walk backward from the picker's applied end month to the nearest
     # period WITHIN the selected range that actually has a real sales row,
@@ -1262,29 +1483,7 @@ def get_dashboard(
         # size + loose rule as backend/stock_units.py), the unit of ss_i. ss_i,
         # rop_i and q_i are pinned to the LP's current cycle, so a
         # three-year-old pending row can't supply them.
-        plan_rows = db.execute(
-            text(f"""
-                SELECT
-                    ac.product_key,
-                    pd.sku_code AS sku_id,
-                    pd.product_name AS product_name,
-                    ac.revenue_share AS revenue_share,
-                    rop.ss_i AS ss_i,
-                    rop.rop_i AS rop_i,
-                    rop.q_i AS q_i
-                FROM ABC_Classification ac
-                LEFT JOIN product_dimension pd ON pd.product_key = ac.product_key
-                LEFT JOIN (
-                    SELECT DISTINCT ON (lr.product_key) lr.product_key, lr.ss_i, lr.rop_i, lr.q_i
-                    FROM {lp_src} lr
-                    WHERE lr.status = 'pending' {lp_cycle_filter}
-                    ORDER BY lr.product_key, lr.planning_cycle_date DESC
-                ) rop ON rop.product_key = ac.product_key
-                WHERE ac.classification_period = :period AND ac.tier = 'A'
-                      AND ac.method = 'single' {abc_scope}
-            """),
-            {"period": abc_period, "current_cycle": lp_cycle, **lp_params},
-        ).mappings().all()
+        plan_rows = batch.rows(db, *_plan_rows_query(scope, mode, lp_cycle, abc_period))
         stock_at_count = marts.stock_pieces_by_product(
             db, inventory_period, [int(r["product_key"]) for r in plan_rows]
         )
@@ -1641,12 +1840,7 @@ def get_dashboard(
     if ranked_rows:
         class_of = {r["product_key"]: r["class"] for r in ranked_rows}
         status_at_count = marts.stock_status_by_product(db, inventory_period, list(class_of))
-        pending_keys = {
-            int(r["product_key"]) for r in db.execute(
-                text(f"SELECT DISTINCT lr.product_key FROM {lp_src} lr WHERE lr.status = 'pending' {lp_cycle_filter}"),
-                {"current_cycle": lp_cycle, **lp_params},
-            ).mappings().all()
-        }
+        pending_keys = {int(r["product_key"]) for r in batch.rows(db, *_pending_keys_query(mode, lp_cycle))}
         buckets: dict[str, dict[str, int]] = {}
         for key, tier in class_of.items():
             b = buckets.setdefault(tier, {"in_stock": 0, "dead_stock": 0, "no_data": 0, "pending_reorder_count": 0})
@@ -1663,26 +1857,12 @@ def get_dashboard(
 
     # ---- portfolio_forecast --------------------------------------------
 
-    latest_forecast_date_row = db.execute(
-        text(f"SELECT MAX(forecast_date) AS d FROM {fc_src}"), fc_params
-    ).mappings().first()
+    latest_forecast_date_row = batch.first(db, *_latest_forecast_date_query(mode))
     latest_forecast_date = latest_forecast_date_row["d"] if latest_forecast_date_row else None
 
     gated_rows: list = []
     if latest_forecast_date is not None:
-        gated_rows = db.execute(
-            text(f"""
-                SELECT fr.product_key, fr.forecast_date, fr.forecast_value,
-                       fr.confidence_lower, fr.confidence_upper, pd.principal
-                FROM {fc_src} fr
-                JOIN Product_Dimension pd ON pd.product_key = fr.product_key
-                WHERE fr.forecast_date = :forecast_date
-                  AND fr.status = 'ok'
-                  AND fr.mase < :mase_gate
-                  {principal_filter}
-            """),
-            {"forecast_date": latest_forecast_date, "mase_gate": MASE_GATE, **fc_params},
-        ).mappings().all()
+        gated_rows = batch.rows(db, *_gated_rows_query(scope, mode, latest_forecast_date))
 
     gated_sku_count = len({r["product_key"] for r in gated_rows})
     # "No forecasts exist for this scope" and "forecasts exist but none pass
@@ -1693,14 +1873,9 @@ def get_dashboard(
     # would imply forecasts were made and judged unreliable.
     scoped_forecast_count = 0
     if latest_forecast_date is not None and not gated_rows:
-        scoped_forecast_count = db.execute(
-            text(f"""
-                SELECT COUNT(*) FROM {fc_src} fr
-                JOIN Product_Dimension pd ON pd.product_key = fr.product_key
-                WHERE fr.forecast_date = :forecast_date {principal_filter}
-            """),
-            {"forecast_date": latest_forecast_date, **fc_params},
-        ).scalar() or 0
+        scoped_forecast_count = batch.scalar(
+            db, *_scoped_forecast_count_query(scope, mode, latest_forecast_date)
+        ) or 0
     if gated_rows:
         # Says which principals the figure actually covers, from the rows
         # themselves. Under 'all' it used to read "Unilever only (...)" —
@@ -1736,24 +1911,7 @@ def get_dashboard(
         gated_product_keys = sorted({r["product_key"] for r in gated_rows})
 
         actual_totals: dict[str, float] = {}
-        # The history the forecasts were made from: five years in a preview
-        # built from it, the real months otherwise (mart.sales_mart_real,
-        # migration 0041 — the same rows, summed per product and month).
-        if predictive_preview(mode):
-            actual_sql = f"""
-                SELECT calendar_month AS period, SUM(quantity_sold) AS qty
-                FROM {unilever_demand(mode)}
-                WHERE product_key = ANY(:keys)
-                GROUP BY calendar_month
-            """
-        else:
-            actual_sql = """
-                SELECT period, SUM(pieces) AS qty
-                FROM mart.sales_mart_real
-                WHERE level = 'product' AND product_key = ANY(:keys)
-                GROUP BY period
-            """
-        rows = db.execute(text(actual_sql), {"keys": gated_product_keys}).mappings().all()
+        rows = batch.rows(db, *_portfolio_actuals_query(mode, gated_product_keys))
         for r in rows:
             actual_totals[r["period"]] = actual_totals.get(r["period"], 0.0) + float(r["qty"] or 0)
 
@@ -1820,8 +1978,6 @@ def get_dashboard(
     # Current cycle only, like every other LP read on this page — the
     # critical/urgent counts below are a portfolio summary and must not
     # include rows superseded by a later run.
-    rp_select, rp_select_params = _recommendation_select_one(mode)
-    rp_query = rp_select + f" WHERE lr.status = 'pending' {principal_filter} {lp_cycle_filter}"
     # Both anchors are bound, not inlined, so reorder_preview resolves them
     # under the SAME scope as the rows it shows. The stock anchor is the
     # count that opens the LP's cycle (2026-10-03), the one the plan was made
@@ -1830,15 +1986,9 @@ def get_dashboard(
     # `abc_period` — that one is rewound to the picker's applied end month,
     # and reorder_preview answers "order now".
     rp_stock_period = opening_period(lp_cycle) if lp_cycle is not None else None
-    rp_rows = db.execute(
-        text(rp_query),
-        {
-            "inv_period": rp_stock_period,
-            "abc_period": latest_abc_period(db, scope),
-            "current_cycle": lp_cycle,
-            **rp_select_params,
-        },
-    ).mappings().all()
+    rp_rows = batch.rows(
+        db, *_reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, latest_abc_period(db, scope))
+    )
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
     rp_stock_counts = (
         stock_counts(db, rp_stock_period, sorted({r["principal"] for r in rp_rows}), cycle=lp_cycle)
@@ -1890,19 +2040,7 @@ def get_dashboard(
     # lr.planning_cycle_date); products missing the forecast drop out of
     # both sums. Both sides are in the demand series' unit — see the
     # docstring section above for why this stays in units, not pesos.
-    policy_rows = db.execute(
-        text(f"""
-            SELECT lr.planning_cycle_date, lr.ss_i, lr.rop_i, fr.forecast_value
-            FROM {lp_src} lr
-            JOIN Product_Dimension pd ON pd.product_key = lr.product_key
-            JOIN {fc_src} fr
-              ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
-            WHERE lr.status = 'pending'
-              {lp_cycle_filter}
-              {principal_filter}
-        """),
-        {"current_cycle": lp_cycle, **lp_params, **fc_params},
-    ).mappings().all()
+    policy_rows = batch.rows(db, *_policy_rows_query(scope, mode, lp_cycle))
     policy_rows = [
         r for r in policy_rows
         if r["forecast_value"] is not None and r["ss_i"] is not None and r["rop_i"] is not None
