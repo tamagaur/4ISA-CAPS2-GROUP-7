@@ -1,0 +1,45 @@
+kind,name,range,local_ms,render_est_ms
+endpoint,/auth/me,-,402,363
+endpoint,/status,-,3,114
+endpoint,/sku?principal=unilever,-,1298,924
+endpoint,/abc?classification_period=2026-02&view=last_known&principal=unilever,-,1412,995
+endpoint,/fsn?principal=unilever&period=2026-02,-,1198,861
+endpoint,/pareto?grain=brand&months=1&principal=unilever&period=2026-02,1m,647,516
+endpoint,/pareto?grain=brand&months=12&principal=unilever&period=2026-02,12m,666,528
+endpoint,/abc?principal=unilever,-,1101,800
+endpoint,/forecast/69767334?principal=unilever,-,752,582
+endpoint,/segment?sku=69767334&principal=unilever,-,728,567
+endpoint,/decomposition?sku=69767334&principal=unilever,-,731,569
+endpoint,/recommendations?status=pending&principal=unilever,-,1584,1103
+endpoint,/category-trends?principal=unilever,-,693,545
+endpoint,/sku?principal=delmonte,-,1106,803
+endpoint,/abc?classification_period=2026-02&view=last_known&principal=delmonte,-,924,690
+endpoint,/fsn?principal=delmonte&period=2026-02,-,720,562
+endpoint,/pareto?grain=category&months=1&principal=delmonte&period=2026-02,1m,637,510
+endpoint,/pareto?grain=category&months=12&principal=delmonte&period=2026-02,12m,636,510
+endpoint,/abc?principal=delmonte,-,803,614
+endpoint,/forecast/CULINARY?principal=delmonte,-,619,499
+endpoint,/segment?sku=CULINARY&principal=delmonte,-,631,506
+endpoint,/decomposition?sku=CULINARY&principal=delmonte,-,601,488
+endpoint,/recommendations?status=pending&principal=delmonte,-,947,704
+endpoint,/category-trends?principal=delmonte,-,511,431
+endpoint,/audit-log/users,-,527,442
+endpoint,/audit-log?exclude_action=Login&exclude_action=Logout&limit=10,-,509,430
+endpoint,/users,-,523,439
+endpoint,/admin/permissions/catalog,-,410,368
+endpoint,/dashboard?period=2026-02&start_period=2026-02&principal=unilever,1m,4730,3070
+endpoint,/dashboard?period=2026-02&start_period=2025-03&principal=unilever,12m,4577,2974
+endpoint,/dashboard?period=2026-02&start_period=2026-02&principal=delmonte,1m,3712,2433
+endpoint,/dashboard?period=2026-02&start_period=2025-03&principal=delmonte,12m,3700,2426
+page,dashboard (12m default) (unilever),,4484,2916
+page,sku-management (unilever),,1362,963
+page,abc (unilever),,2729,1930
+page,forecast (unilever),,2032,1495
+page,reorder (unilever),,1647,1142
+page,category-trends (unilever),,712,557
+page,dashboard (12m default) (delmonte),,3767,2467
+page,sku-management (delmonte),,1145,828
+page,abc (delmonte),,1934,1433
+page,forecast (delmonte),,1828,1367
+page,reorder (delmonte),,1154,834
+page,category-trends (delmonte),,508,429

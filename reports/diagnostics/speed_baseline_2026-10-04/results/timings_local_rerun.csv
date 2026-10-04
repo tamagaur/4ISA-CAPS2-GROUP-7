@@ -1,0 +1,13 @@
+label,page,range,path,run,status,ms,bytes,at
+local,dashboard,1m,/dashboard?period=2026-02&start_period=2026-02&principal=unilever,1,200,4868.0,8065,21:36:14
+local,dashboard,1m,/dashboard?period=2026-02&start_period=2026-02&principal=unilever,2,200,4730.1,8065,21:36:19
+local,dashboard,1m,/dashboard?period=2026-02&start_period=2026-02&principal=unilever,3,200,4552.4,8065,21:36:23
+local,dashboard,12m,/dashboard?period=2026-02&start_period=2025-03&principal=unilever,1,200,4208.1,13845,21:36:27
+local,dashboard,12m,/dashboard?period=2026-02&start_period=2025-03&principal=unilever,2,200,4624.2,13845,21:36:32
+local,dashboard,12m,/dashboard?period=2026-02&start_period=2025-03&principal=unilever,3,200,4577.2,13845,21:36:37
+local,dashboard,1m,/dashboard?period=2026-02&start_period=2026-02&principal=delmonte,1,200,3767.6,4888,21:36:40
+local,dashboard,1m,/dashboard?period=2026-02&start_period=2026-02&principal=delmonte,2,200,3712.1,4888,21:36:44
+local,dashboard,1m,/dashboard?period=2026-02&start_period=2026-02&principal=delmonte,3,200,3493.7,4888,21:36:48
+local,dashboard,12m,/dashboard?period=2026-02&start_period=2025-03&principal=delmonte,1,200,3597.0,8762,21:36:51
+local,dashboard,12m,/dashboard?period=2026-02&start_period=2025-03&principal=delmonte,2,200,3700.1,8762,21:36:55
+local,dashboard,12m,/dashboard?period=2026-02&start_period=2025-03&principal=delmonte,3,200,3803.9,8762,21:36:59
