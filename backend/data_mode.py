@@ -67,6 +67,7 @@ from analytics.segmentation.traits import (
     has_restart,
     history_months,
     longest_positive_run,
+    missing_month_indices,
     trend_stats,
 )
 
@@ -401,8 +402,9 @@ def demand_matrix(
 ) -> tuple[dict[int, np.ndarray], list[str]]:
     """orchestrate_segment._fetch_demand_matrix, from `mode`'s demand source:
     one zero-filled monthly quantity array per product over [start, end]. No
-    row is a zero-sale month, a NULL quantity is 0, a negative is kept
-    (DEC-15) — all three exactly as the segmentation run builds it."""
+    row is a zero-sale month, a NULL quantity is NaN (missing, never 0 -
+    DEC-31; every trait skips it), a negative is kept (DEC-15) — all three
+    exactly as the segmentation run builds it."""
     periods = [str(p) for p in pd.period_range(start, end, freq="M")]
     index = {p: i for i, p in enumerate(periods)}
     matrices = {int(pk): np.zeros(len(periods)) for pk in product_keys}
@@ -420,7 +422,7 @@ def demand_matrix(
         i = index.get(r["period"])
         if i is None:
             continue
-        qty = 0.0 if r["qty"] is None else float(r["qty"])
+        qty = np.nan if r["qty"] is None else float(r["qty"])             # blank quantity: missing, never 0
         matrices[int(r["product_key"])][i] = qty
     return matrices, periods
 
@@ -454,4 +456,5 @@ def series_traits(qty: np.ndarray, periods: list[str], observed: set[str] | None
         "adi": average_demand_interval(
             qty, None if observed is None else np.array([p in observed for p in periods], dtype=bool)),
         "restart_flag": has_restart(qty),
+        "missing_quantity_periods": [periods[i] for i in missing_month_indices(qty)],   # the flag
     }

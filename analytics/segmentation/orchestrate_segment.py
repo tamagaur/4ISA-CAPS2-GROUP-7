@@ -31,7 +31,7 @@ from analytics.segmentation import bins as bin_schemes
 from analytics.segmentation.traits import (
     history_months, first_sale_index, longest_positive_run,
     trend_stats, coefficient_of_variation, average_demand_interval,
-    has_restart, stability_group,
+    has_restart, stability_group, missing_month_indices,
 )
 
 DEMAND_SOURCE_BY_PRINCIPAL = {
@@ -60,6 +60,8 @@ class SegmentRunReport:
     cohort_size: int
     traits_written: int = 0
     scheme_bin_counts: dict = field(default_factory=dict)  # scheme -> {bin: n}
+    # product_key -> ['YYYY-MM', ...] months whose quantity is blank: missing, skipped by every trait, never 0
+    missing_quantity: dict = field(default_factory=dict)
 
 
 def _period_grid(start: str, end: str) -> list[str]:
@@ -91,7 +93,9 @@ def _fetch_demand_matrix(
     month (same "no row = fact, not gap" precedent as
     orchestrate_abc._fetch_unilever_sku_revenue). A negative month (returns
     exceeding sales) is kept as it is (DEC-15: flagged, never clamped); the
-    traits that count sales months only count qty > 0 anyway."""
+    traits that count sales months only count qty > 0 anyway. A row with a
+    blank (NULL) quantity is MISSING - NaN, never 0 (DEC-31) - and every
+    trait skips it (analytics.segmentation.traits); build_traits flags it."""
     source = DEMAND_SOURCE_BY_PRINCIPAL.get(principal)
     if source is None:
         raise NotImplementedError(
@@ -110,19 +114,24 @@ def _fetch_demand_matrix(
                 demand.c.calendar_month <= end,
             ))
         ).fetchall()
+    periods = _period_grid(start, end)
+    return _matrix_from_rows(rows, product_keys, periods), periods
+
+
+def _matrix_from_rows(rows, product_keys: list[int], periods: list[str]) -> dict[int, np.ndarray]:
+    """(product_key, period, qty) rows -> one array per product over `periods`:
+    no row = 0, a NULL qty = NaN (missing, never 0), a negative kept (DEC-15)."""
     df = pd.DataFrame(rows, columns=["product_key", "period", "qty"])
     df["qty"] = df["qty"].astype(float)
-
-    periods = _period_grid(start, end)
     period_index = {p: i for i, p in enumerate(periods)}
     matrices: dict[int, np.ndarray] = {pk: np.zeros(len(periods)) for pk in product_keys}
     for row in df.itertuples():
         idx = period_index.get(row.period)
         if idx is None:
             continue
-        qty = row.qty if not pd.isna(row.qty) else 0.0
+        qty = row.qty if not pd.isna(row.qty) else np.nan                # blank quantity: missing, never 0
         matrices[row.product_key][idx] = qty  # negatives kept (DEC-15); clipped to 0 until 2026-09-30
-    return matrices, periods
+    return matrices
 
 
 def _fetch_stability_and_revenue(
@@ -215,11 +224,15 @@ def build_traits(
             restart_flag=has_restart(qty),
             stability_group=stability_group(a_periods.get(pk, 0), TOTAL_PERIODS),
             revenue_share_2026_02=revenue.get(pk),
+            # the flag; not a sku_traits column (the upsert selects TRAIT_TABLE_COLUMNS)
+            missing_quantity_periods=[periods[i] for i in missing_month_indices(qty)],
         ))
     traits_df = pd.DataFrame.from_records(records)
     report = SegmentRunReport(
         principal=principal, cohort_period=cohort_period, abc_method=abc_method,
         run_id=run_id, cohort_size=len(product_keys), traits_written=len(traits_df),
+        missing_quantity={r["product_key"]: r["missing_quantity_periods"] for r in records
+                          if r["missing_quantity_periods"]},
     )
     return traits_df, report
 

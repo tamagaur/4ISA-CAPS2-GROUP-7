@@ -8,6 +8,13 @@ period, no gaps) and returns one trait value — the caller (orchestrate_
 segment.py) is responsible for building that array from whichever
 principal's demand source is wired up, same "caller decides the grain"
 precedent as analytics.classification.abc.classify_abc().
+
+A month with NO row is 0 (a zero-sale month). A month whose row has a blank
+(NULL) quantity is NaN: missing, never 0 (DEC-31, "unknown is not zero"; the
+2026-10-03 model audit found 71 real Unilever product-months, 69 with a peso
+amount). Every trait reads the observed months only: a missing month is not a
+sales month, not a zero month, and neither extends nor breaks a run. An
+array without NaN gives exactly the values it always did.
 """
 from __future__ import annotations
 
@@ -20,22 +27,36 @@ MANN_KENDALL_ALPHA = 0.05
 RESTART_GAP_MONTHS = 3
 
 
+def known_months(qty: np.ndarray) -> np.ndarray:
+    """`qty` without its missing (NaN, blank-quantity) months."""
+    qty = np.asarray(qty, dtype=float)
+    return qty[~np.isnan(qty)]
+
+
+def missing_month_indices(qty: np.ndarray) -> list[int]:
+    """Positions of the missing (NaN, blank-quantity) months - the flag."""
+    return [int(i) for i in np.flatnonzero(np.isnan(np.asarray(qty, dtype=float)))]
+
+
 def history_months(qty: np.ndarray) -> int:
-    """Months with quantity_sold > 0 (not calendar span)."""
+    """Months with quantity_sold > 0 (not calendar span). A missing month is
+    not counted (NaN > 0 is False)."""
     return int(np.sum(qty > 0))
 
 
 def first_sale_index(qty: np.ndarray) -> int | None:
     """Index of the first month with quantity_sold > 0, or None if the
-    SKU never sold in the observed window."""
+    SKU never sold in the observed window. An index into the full array, so
+    a missing month never shifts the first-sale period."""
     nz = np.nonzero(qty > 0)[0]
     return int(nz[0]) if len(nz) else None
 
 
 def longest_positive_run(qty: np.ndarray) -> int:
-    """Longest unbroken run of consecutive quantity_sold > 0 months."""
+    """Longest unbroken run of consecutive quantity_sold > 0 months. A
+    missing month is skipped: it neither extends nor breaks a run."""
     longest = current = 0
-    for v in qty:
+    for v in known_months(qty):
         if v > 0:
             current += 1
             longest = max(longest, current)
@@ -76,6 +97,7 @@ def average_demand_interval(qty: np.ndarray, observed: np.ndarray | None = None)
     qty = np.asarray(qty, dtype=float)
     if observed is not None:
         qty = qty[np.asarray(observed, dtype=bool)]
+    qty = known_months(qty)          # a missing (blank-quantity) month is dropped like a file gap
     n_pos = history_months(qty)
     return active_months(qty) / n_pos if n_pos else None
 
@@ -93,8 +115,13 @@ def trend_stats(qty: np.ndarray, alpha: float = MANN_KENDALL_ALPHA) -> tuple[str
     rather than silently 'none' by coincidence — p and slope are None
     there). Significance is Mann-Kendall; Theil-Sen is its paired slope
     estimator (median of pairwise slopes, units/month) and carries the
-    magnitude, not a second vote on significance."""
-    qty = from_first_sale(qty)
+    magnitude, not a second vote on significance.
+
+    A missing (blank-quantity) month is skipped; the slope keeps the true
+    month positions of the observed months, so it stays in units/month."""
+    seg = np.asarray(from_first_sale(qty), dtype=float)
+    keep = ~np.isnan(seg)
+    qty, months = seg[keep], np.arange(len(seg))[keep]
     n = len(qty)
     if n < 2:
         return "none", None, None
@@ -104,7 +131,7 @@ def trend_stats(qty: np.ndarray, alpha: float = MANN_KENDALL_ALPHA) -> tuple[str
     var_s = n * (n - 1) * (2 * n + 5) / 18.0
     if var_s <= 0:
         return "none", None, None
-    slope = float(stats.theilslopes(qty, np.arange(n))[0])
+    slope = float(stats.theilslopes(qty, months)[0])
     if s > 0:
         z = (s - 1) / np.sqrt(var_s)
     elif s < 0:
@@ -125,8 +152,8 @@ def mann_kendall_trend(qty: np.ndarray, alpha: float = MANN_KENDALL_ALPHA) -> st
 def coefficient_of_variation(qty: np.ndarray) -> float | None:
     """std/mean from first sale onward (see from_first_sale). None if the
     mean is not positive (a CV of a non-positive-mean series is not
-    meaningful, never fabricated as 0 or inf)."""
-    qty = from_first_sale(qty)
+    meaningful, never fabricated as 0 or inf). A missing month is skipped."""
+    qty = known_months(from_first_sale(qty))
     if len(qty) == 0:
         return None
     mean = qty.mean()
@@ -138,11 +165,12 @@ def coefficient_of_variation(qty: np.ndarray) -> float | None:
 def has_restart(qty: np.ndarray, gap_months: int = RESTART_GAP_MONTHS) -> bool:
     """True if the SKU had `gap_months` or more consecutive zero months
     AFTER its first sale, then sold again. Leading zeros before the first
-    sale are newness, not a restart, so they never count toward the gap."""
+    sale are newness, not a restart, so they never count toward the gap.
+    A missing month is skipped: unknown is not a zero month."""
     started = False
     zero_run = 0
     restarted = False
-    for v in qty:
+    for v in known_months(qty):
         if v > 0:
             if started and zero_run >= gap_months:
                 restarted = True

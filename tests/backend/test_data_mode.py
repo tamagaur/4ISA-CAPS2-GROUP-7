@@ -186,6 +186,10 @@ def test_on_request_abc_reproduces_every_stored_unilever_run(live_db):
 # segment_unilever_2026-02_2d2dd97c, negatives kept per 6c6f741 / DEC-15):
 # the 8 products with a negative month (19, 174, 345, 644, 666, 674, 832,
 # 1037) changed cv, and 644 / 1037 also trend_pvalue; no bin moved.
+# kelvin/blank-qty-fix (2026-10-04): a blank quantity is now missing, not 0, in
+# both paths. That stored run still read it as 0, so this test disagrees for a
+# cohort product with a blank month (product_key 150, 2025-12, per the
+# 2026-10-03 model audit) until segmentation is re-run with the fix.
 def test_on_request_traits_reproduce_the_stored_segmentation_run(live_db):
     from sqlalchemy import text
     stored = live_db.execute(text("""
