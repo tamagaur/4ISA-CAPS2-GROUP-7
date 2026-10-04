@@ -1063,10 +1063,11 @@ Order: 0032 -> 0033 -> 0036 -> 0037 -> 0038 (`python -m scripts.run_canonical_lo
 | fill dry rerun | 2026-10-03 | 0 added, 0 removed, 0 gap cells (idempotent) |
 | 2026-02 segmentation recompute | 2026-10-03 | Tier A as of 2026-02, method single: run `segment_unilever_2026-02_2d2dd97c` (132 traits, 660 segment rows; `length_v1` untouched). Exactly the 8 products with a negative month changed `cv` (19, 174, 345, 644, 666, 674, 832, 1037); 644 and 1037 also `trend_pvalue` (0.0098 -> 0.0119, 0.0092 -> 0.0112), still under alpha 0.05, so no bin moved. Pre-write rows: `backups/segmentation_2026-02_pre_recompute_20261003T063026Z/` |
 | scratch | 2026-10-03 | `ssm_fills` and `ssm_seg_negkept` dropped; no `ssm_*` schema left; database 252 MB -> 137 MB (`pg_database_size`) |
+| H2 / H3 holes (coverage check) | 2026-10-03 / 04 | rehearsed on scratch `ssm_fills_h2h3b` with 0039's trigger added there only (17/17 DB tests; dropped); backup `full_backup_20261003T095403Z`; 0040 applied 2026-10-03 10:02:54; fill run `fill-20261004T120358Z-a00f9489` 2026-10-04 12:03:58: +120 Del Monte Pangasinan stock 2023-02 rows (copy of 2023-01, `synthetic_branch_adjacent`), +2,592 Unilever receipts with opening assumed 0 (11 negative; 192 after the possibly partial 2025-05 count, pending SSM), +2,553 with closing assumed 0 (1,365 negative). Details: `reports/diagnostics/coverage_check_2026-10-03.md` |
 
 **Rule breach on record:** the 2026-10-02 session applied 0037 and 0038 from uncommitted files (0037 = `0035_lp_run.sql` renumbered, because
 public already held `0035_user_two_factor.sql`). They were committed afterwards in ef08b70; the committed files hash to the checksums
-`schema_migrations` recorded. Next free migration number: **0039** (reserved by the stock-timing fix), then 0040.
+`schema_migrations` recorded. 0039 (stock-timing fix) and 0040 (fill holes) are live; reserved: **0041 = data marts, 0042 = in-transit stock**; anything else starts at 0043.
 
 ### 18.5 Del Monte preview pipeline (ABC SKU level, forecast router, LP) — NOT built; what is left
 

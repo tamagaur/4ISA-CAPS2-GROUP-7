@@ -1,5 +1,4 @@
-# Agent context files — session memory, rules, state (local only)
-CLAUDE.md
+# Agent context files — session memory, state (local only). CLAUDE.md (project rules) is committed since 2026-10-04.
 agent/
 .claude/
 
@@ -124,3 +123,6 @@ tools/dsd_dev_viewer/data/
 # Layout-guard drills (2026-09-30): reformatted COPIES of real client files,
 # loaded only into a scratch schema - same never-committed class as data/raw/.
 drills/
+
+# Per-product sales and prices: never committed (CLAUDE.md hard rule 9)
+local/
