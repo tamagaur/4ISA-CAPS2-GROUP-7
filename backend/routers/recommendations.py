@@ -488,8 +488,8 @@ def _on_order(r, in_count, stock_not_in_count, present) -> tuple[float | None, f
     if r.get("on_order_unparsed") is None:
         return None, None, "no row in the cycle's opening stock count to read stock on order from"
     if r["on_order_unparsed"]:
-        return None, None, ("the cycle's opening stock count was loaded before its PO Qty column was read; "
-                            "reload that count to fill it")
+        return None, None, ("PO Qty is not loaded for the cycle's opening stock count: counts loaded before "
+                            "migration 0042 are not reloaded while its meaning is unverified (DEC-34)")
     cases = _opt_float(r, "on_order_cases")
     pieces = _opt_float(r, "on_order_pieces")
     if pieces is None:

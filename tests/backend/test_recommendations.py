@@ -666,7 +666,7 @@ def test_on_order_unknown_is_none_with_a_reason_never_zero():
     cases = {
         "not loaded yet": (_counted(), {"review_flag": True, "on_order": False}, "migration 0042"),
         "loaded before 0042": (_counted(on_order_unparsed=3, on_order_pieces=None, on_order_cases=None), None,
-                               "reload that count"),
+                               "not reloaded while its meaning is unverified"),
         "no pack size": (_counted(on_order_pieces=None), None, "no usable pack size"),
         "Del Monte": (_counted(principal="delmonte"), None, "no purchase-order column"),
         "not in the count": (_counted(in_stock_count=False, current_stock=None, on_order_unparsed=None,
