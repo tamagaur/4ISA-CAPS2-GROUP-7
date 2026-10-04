@@ -381,7 +381,7 @@ from analytics.params import (
     DEAD_SKU_MONTHS,
     MASE_GATE,
     PLACEHOLDERS,
-    SURPLUS_RUN_MONTHS,
+    REVIEW_OVER_RUN_MONTHS,
 )
 # SSM's "keep 3 weeks of sales" and the weeks-per-month convention, under
 # the names this module and policy_comparison.py already use.
@@ -1957,14 +1957,14 @@ def get_dashboard(
     # (backend/marts.accuracy_rows). Actuals are real sales only. Del Monte has
     # no product-level forecasts (its sales are category grain).
     if scope == "delmonte":
-        forecast_accuracy = marts.accuracy_summary([], range_start, range_end, SURPLUS_RUN_MONTHS)
+        forecast_accuracy = marts.accuracy_summary([], range_start, range_end, REVIEW_OVER_RUN_MONTHS)
         forecast_accuracy["blocked_reason"] = (
             "No product-level forecasts exist for Del Monte: its sales data is category grain, "
             "so no per-product forecast is made to check."
         )
     else:
         forecast_accuracy = marts.accuracy_summary(
-            marts.accuracy_rows(db, range_start, range_end), range_start, range_end, SURPLUS_RUN_MONTHS,
+            marts.accuracy_rows(db, range_start, range_end), range_start, range_end, REVIEW_OVER_RUN_MONTHS,
         )
     forecast_accuracy["coverage"] = [] if scope == "delmonte" else ["unilever"]
 
@@ -2092,7 +2092,7 @@ def get_dashboard(
         "portfolio_forecast": portfolio_forecast,
         "reorder_preview": reorder_preview,
         # The forecast-error card for the range (mart.accuracy_mart): pieces and
-        # pesos, surplus vs shortage, each month's direction, the review list.
+        # pesos, surplus vs shortage, each month's direction, the over-forecast runs.
         "forecast_accuracy": forecast_accuracy,
         # Products in the count at the range's end with no sale in the 6 sales
         # months up to it (mart.idle_stock), the 10 largest by value; the full

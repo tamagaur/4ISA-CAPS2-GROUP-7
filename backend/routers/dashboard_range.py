@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF, pareto_check
-from analytics.params import DEAD_SKU_MONTHS, SURPLUS_RUN_MONTHS
+from analytics.params import DEAD_SKU_MONTHS, REVIEW_OVER_RUN_MONTHS
 from backend import marts
 from backend.data_mode import PREVIEW, get_data_mode, preview_block
 from backend.deps import TokenPayload, get_db
@@ -151,12 +151,12 @@ def get_range_accuracy(
     scope = normalize_principal(principal) or "all"
     start, end = resolve_range(db, period, start_period, scope if scope != "delmonte" else "unilever")
     if scope == "delmonte":
-        summary = marts.accuracy_summary([], start, end, SURPLUS_RUN_MONTHS)
+        summary = marts.accuracy_summary([], start, end, REVIEW_OVER_RUN_MONTHS)
         summary["blocked_reason"] = ("No product-level forecasts exist for Del Monte: its sales data is "
                                      "category grain, so no per-product forecast is made to check.")
         return {**summary, "level": level, "rows": []}
     rows = marts.accuracy_rows(db, start, end, run_id)
-    summary = marts.accuracy_summary(rows, start, end, SURPLUS_RUN_MONTHS, review_limit=1000)
+    summary = marts.accuracy_summary(rows, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000)
     detail: list[dict] = []
     if level == "category":
         detail = marts.accuracy_by_category(rows)

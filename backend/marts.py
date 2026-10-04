@@ -571,6 +571,13 @@ def _num(row: dict, key: str) -> float | None:
     return float(row[key]) if row.get(key) is not None else None
 
 
+# The over-forecast half of DEC-33's review rule, applied to the selected range: a product
+# over-forecast `review_months` (REVIEW_OVER_RUN_MONTHS) months or more in a row as of its last
+# scored month in the range. The plan's own flag for the cycle is review_flag (GET /recommendations).
+OVER_RUN_RULE = ("over-forecast {n}+ months in a row as of the product's last scored month in the range "
+                 "(the over-forecast part of DEC-33, on this range's forecasts)")
+
+
 def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int, review_limit: int = 20) -> dict:
     """The forecast-error card for the scored rows of a range (accuracy_rows): pieces and
     pesos (selling price, VAT-inclusive), surplus against shortage, each month's direction
@@ -579,7 +586,7 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
     if not rows:
         return {"start_period": start, "end_period": end, "label": None, "months": [], "forecast_source": None,
                 "run_labels": [], "products": 0, "product_months": 0, "by_month": [],
-                "review": {"run_months": review_months, "count": 0, "items": []},
+                "over_forecast_runs": {"run_months": review_months, "count": 0, "items": [], "rule": OVER_RUN_RULE.format(n=review_months)},
                 "blocked_reason": (f"No scored forecasts for {range_label(start, end)}: no forecast "
                                    "with a real actual in these months.")}
     by_month: dict[str, dict] = {}
@@ -662,7 +669,8 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
         "possibly_stock_limited_unknown": sum(1 for r in rows if r["direction"] == "over"
                                               and r.get("possibly_stock_limited") is None),
         "by_month": month_rows,
-        "review": {"run_months": review_months, "count": len(review), "items": review[:review_limit]},
+        "over_forecast_runs": {"run_months": review_months, "count": len(review), "items": review[:review_limit],
+                               "rule": OVER_RUN_RULE.format(n=review_months)},
         "blocked_reason": None,
     }
 

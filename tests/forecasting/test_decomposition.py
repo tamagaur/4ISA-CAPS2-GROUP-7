@@ -55,3 +55,34 @@ def test_two_cycles_are_not_enough_to_call_seasonality():
 
 def test_never_sold_is_not_decomposed():
     assert stl_summary(_periods(2023, 1, 30), [0.0] * 30)["available"] is False
+
+
+# ---- the seasonality label: yearly_pattern (2026-10-04) --------------------
+from analytics.forecasting.decomposition import (  # noqa: E402
+    LABEL_NO_PATTERN, LABEL_REPEATS, LABEL_SHORT, yearly_pattern,
+)
+
+
+def test_a_clean_yearly_cycle_repeats_yearly():
+    values = [1000 + 300 * math.cos(2 * math.pi * (i - 11) / 12) for i in range(38)]
+    y = yearly_pattern(values)
+    assert y["label"] == LABEL_REPEATS and y["repeats_yearly"] is True
+    assert y["acf_lag12"] > y["acf_bound"] == round(1.96 / math.sqrt(38), 3)
+
+
+def test_under_24_months_from_the_first_sale_is_not_enough_history():
+    # 30 months on record, but the first 8 are before the first sale.
+    values = [0.0] * 8 + [100 + 50 * math.cos(2 * math.pi * i / 12) for i in range(22)]
+    y = yearly_pattern(values)
+    assert y["label"] == LABEL_SHORT == "Not enough history (needs 24 months)"
+    assert y["repeats_yearly"] is None and y["months"] == 22
+
+
+def test_a_flat_or_anti_yearly_series_does_not_repeat_yearly():
+    assert yearly_pattern([50.0] * 30)["label"] == LABEL_NO_PATTERN
+    # Each month runs opposite to the same month a year earlier: a strong
+    # NEGATIVE ACF(12) passes |ACF| but is not a yearly repeat.
+    flip = [100 + (40 if (i // 12) % 2 == 0 else -40) * math.cos(2 * math.pi * i / 12) for i in range(38)]
+    y = yearly_pattern(flip)
+    assert y["acf_lag12"] < -y["acf_bound"]
+    assert y["label"] == LABEL_NO_PATTERN and y["repeats_yearly"] is False

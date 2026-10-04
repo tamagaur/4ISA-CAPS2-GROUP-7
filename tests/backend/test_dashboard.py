@@ -1775,7 +1775,7 @@ def test_stock_card_compares_with_the_last_count_not_flagged_as_unusual():
     assert trend["delta_pct"] == pytest.approx(-6.7)
     assert trend["months_apart"] == 2
     assert [s["period"] for s in trend["skipped"]] == ["2026-02"]
-    assert "outlier" in trend["skipped"][0]["reason"]
+    assert "accepted for planning, pending SSM confirmation" in trend["skipped"][0]["reason"]
     assert "2026-02" in [pt["period"] for pt in trend["points"]], "the count is kept, only not compared against"
 
     flags = body["stock_on_hand_flags"]
@@ -2002,9 +2002,10 @@ def test_error_card_signed_miss_in_pieces_and_pesos_with_review_list():
     assert acc["shortage_pesos"] == pytest.approx(200.0)        # 20 x 10; the unpriced miss stays in pieces
     assert acc["direction"] == "over"
     assert [(m["period"], m["direction"]) for m in acc["by_month"]] == [("2024-01", "exact"), ("2024-02", "over")]
-    assert acc["review"]["run_months"] == 3
-    assert [it["product_key"] for it in acc["review"]["items"]] == [1]
-    assert acc["review"]["items"][0]["possibly_stock_limited"] is True
+    runs = acc["over_forecast_runs"]
+    assert runs["run_months"] == 3 and "DEC-33" in runs["rule"]
+    assert [it["product_key"] for it in runs["items"]] == [1]
+    assert runs["items"][0]["possibly_stock_limited"] is True
     assert acc["possibly_stock_limited"] == 1
     assert acc["products_without_price"] == 0, "product 2 has a price in another month"
 

@@ -1100,7 +1100,7 @@ public already held `0035_user_two_factor.sql`). They were committed afterwards 
 
 ---
 
-## 19. Data marts + range-based dashboard (DEC-33) — LIVE on `public` 2026-10-04
+## 19. Data marts + range-based dashboard (DEC-36) — LIVE on `public` 2026-10-04
 
 Branch `kelvin/data-marts` (off `kelvin-etl` 1edf5cf). Schema `mart`, migration **0041**, applied 2026-10-04 13:37:42 UTC
 through the runner after backup `backups/full_backup_20261004T133536Z` (PASS). Pre-approved apply conditions (prompt
@@ -1146,7 +1146,7 @@ is reported, never raised (`python -m analytics.marts --refresh`).
 | Inventory value | latest count (2026-03) | **count at the range's end** (default range: 2026-02, counted 2026-03-02, ₱46,576,778.51 — the count flagged unusual); `weeks_of_cover` keeps the latest count, `weeks_of_cover_range_end` added |
 | Below safety stock | latest count (35 of 70) | range-end count (default **6 of 72**, = the 2 Mar figure on record); refused for a count before the plan's opening count |
 | ABC ring + dead stock | stored single-month run | ranked on the range (default UL: A 174 / B 242 / C 666, Pareto check passes at 84.3%) |
-| Forecast error (new) | — | `forecast_accuracy`: at-the-time backtest for months it covers, stored runs after; default range 248 products, pooled 33.4%, 56.7% of the peso miss is surplus, 59 products over-forecast 3+ months in a row |
+| Forecast error (new) | — | `forecast_accuracy`: at-the-time backtest for months it covers, stored runs after; default range 248 products, pooled 33.4%, 56.7% of the peso miss is surplus, 59 products over-forecast 3+ months in a row (DEC-33's over-run rule on the range; the plan's own flag is `review_flag`, 15 products for cycle 2026-03) |
 | Idle stock (new) | — | `idle_stock` at the range-end count (default 2026-02: 83 products, ₱1,417,263.94); full list `GET /dashboard/idle-stock` |
 | Sales vs stock chart | real rows only (H1) | `*_estimated` points from filled rows (generated too in preview); `returns` / `returns_estimated` (H4) |
 
