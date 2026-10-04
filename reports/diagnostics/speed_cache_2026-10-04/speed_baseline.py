@@ -1,7 +1,7 @@
 """speed_baseline.py — rerunnable dashboard speed baseline. READ-ONLY.
 
 Copied from kelvin/speed-baseline (reports/diagnostics/speed_baseline_2026-10-04/,
-not merged) on 2026-10-04 and adapted for the round-trip + cache work:
+later merged into kelvin-etl at 5f635a7) on 2026-10-04 and adapted for the round-trip + cache work:
   - `serve` runs the backend's REAL session-check statement (deps._principal_sql:
     session + permission overrides + data version, one round trip) for an existing
     admin account, read-only, so the response cache works exactly as in production.

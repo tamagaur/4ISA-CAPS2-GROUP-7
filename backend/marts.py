@@ -283,6 +283,17 @@ def stock_by_period(db: Session, periods: list[str], principal: str) -> dict[str
     return {p: _f((_real_stock(db, principal, p) or {}).get("pesos")) for p in periods}
 
 
+def neighbour_counts(db: Session, period: str, principal: str) -> list[float]:
+    """The real stock pesos of the counts just before and just after `period` for one
+    principal (whichever exist): what an unusual count is judged against."""
+    months = sorted(k[1] for k, r in _snapshot(db).stock.items()
+                    if k[0] == principal and k[2] == "real" and r["pesos"] is not None)
+    before = [m for m in months if m < period]
+    after = [m for m in months if m > period]
+    picked = ([before[-1]] if before else []) + ([after[0]] if after else [])
+    return [float(_real_stock(db, principal, m)["pesos"]) for m in picked]
+
+
 def stock_pieces_at(db: Session, period: str | None, principal: str) -> float | None:
     """Real stock in pieces at one count, Unilever only (Del Monte: no pack size)."""
     if period is None or principal != "unilever":

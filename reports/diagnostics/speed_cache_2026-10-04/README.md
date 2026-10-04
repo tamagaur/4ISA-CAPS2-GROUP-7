@@ -1,14 +1,18 @@
 # Fewer round trips + response cache — 2026-10-04
 
-Branch `kelvin/speed-cache`, base `kelvin-etl` @ `282df97`. Measured with this folder's
+Branch `kelvin/speed-cache`, started from `kelvin-etl` @ `282df97` and merged with
+`kelvin-etl` @ `5f635a7` (data-mart decisions, 0043, speed baseline) before the final
+measurements. Measured with this folder's
 `speed_baseline.py`, a copy of the one on `kelvin/speed-baseline`
-(`reports/diagnostics/speed_baseline_2026-10-04/`, not merged) with the changes listed in
+(`reports/diagnostics/speed_baseline_2026-10-04/`, merged into `kelvin-etl` at `5f635a7`) with the changes listed in
 its docstring. Local FastAPI on a laptop in the Philippines against the **live** Supabase
 DB (pooler `aws-0-ap-south-1`, Mumbai). Every number below is in a file in `results/`
 (copied from the script's `out/`, which is git-ignored with the raw per-request logs).
 
-"Before" = the unchanged code (`282df97`, a detached worktree) on the same DB, measured
-the same way minutes earlier. Both were checked against each other first (§4).
+"Before" = the unchanged code (`kelvin-etl` @ `5f635a7`, a detached worktree) on the same
+DB, measured the same way minutes earlier. Both were checked against each other first (§4).
+The same comparison was first run against `282df97`, before the merge; its numbers agree
+(page medians within 9.1% of each other) and are not repeated here.
 
 ## 1. What changed
 
@@ -69,28 +73,28 @@ Fixed cost per request, `results/select1.json` (20 runs each, median):
 
 ## 3. Page timings, local (ms; 3 runs each; calls in a wave fired in parallel like the browser)
 
-Before: `results/pages_before_final.csv`. After: `results/cache_after_final.csv`. **Cold** = the
+Before: `results/pages_before_merge.csv`. After: `results/cache_merged.csv`. **Cold** = the
 cache emptied just before (harness-only `POST /__speed/invalidate`), so every call
 computes; **warm** = the same page loaded straight after.
 
 | page | principal | before median (slowest) | after **cold** median (slowest) | after **warm** median (slowest) |
 |---|---|---:|---:|---:|
-| Dashboard (12m default) | Unilever | 4,008 (5,325) | **859** (945) | **147** (150) |
-| SKU Management | Unilever | 1,146 (1,296) | 614 (672) | 149 (149) |
-| ABC | Unilever | 3,310 (3,465) | 1,673 (2,735) | 349 (357) |
-| SKU Forecast | Unilever | 2,318 (2,474) | 1,589 (1,841) | 376 (382) |
-| Reorder | Unilever | 1,785 (1,822) | 1,448 (1,550) | 178 (185) |
-| Category Trends | Unilever | 668 (718) | 419 (426) | 145 (146) |
-| Dashboard (12m default) | Del Monte | 2,984 (3,480) | **938** (962) | **143** (144) |
-| SKU Management | Del Monte | 1,102 (1,151) | 853 (887) | 140 (146) |
-| ABC | Del Monte | 2,057 (2,067) | 1,428 (1,495) | 327 (336) |
-| SKU Forecast | Del Monte | 1,858 (1,970) | 1,130 (1,234) | 462 (511) |
-| Reorder | Del Monte | 1,122 (1,165) | 809 (898) | 167 (176) |
-| Category Trends | Del Monte | 507 (535) | 243 (253) | 140 (140) |
+| Dashboard (12m default) | Unilever | 4,266 (4,403) | **882** (937) | **146** (146) |
+| SKU Management | Unilever | 1,250 (1,259) | 609 (610) | 144 (144) |
+| ABC | Unilever | 3,119 (3,518) | 1,539 (2,548) | 341 (346) |
+| SKU Forecast | Unilever | 2,291 (2,410) | 1,561 (1,828) | 365 (366) |
+| Reorder | Unilever | 1,698 (1,801) | 1,434 (1,479) | 181 (186) |
+| Category Trends | Unilever | 701 (704) | 391 (441) | 137 (138) |
+| Dashboard (12m default) | Del Monte | 3,009 (3,011) | **924** (1,202) | **140** (143) |
+| SKU Management | Del Monte | 1,135 (1,161) | 842 (843) | 135 (139) |
+| ABC | Del Monte | 2,137 (2,333) | 1,450 (1,474) | 308 (325) |
+| SKU Forecast | Del Monte | 1,906 (1,916) | 1,083 (1,328) | 446 (458) |
+| Reorder | Del Monte | 1,146 (1,164) | 833 (840) | 165 (168) |
+| Category Trends | Del Monte | 538 (540) | 236 (242) | 140 (140) |
 
 **First request after the server starts** (dashboard 12m Unilever, cache empty, pools just
-opened): **2,264 ms** (`cache_after_final.csv`, state `first request`). Every cold view is
-under 3 s; the slowest cold run of any view is ABC Unilever's first, 2,735 ms.
+opened): **2,350 ms** (`cache_merged.csv`, state `first request`). Every cold view is under
+3 s; the slowest cold run of any view is ABC Unilever's first, 2,548 ms.
 
 Warm Del Monte SKU Forecast stays ~460 ms: its `/forecast`, `/segment` and
 `/decomposition` calls answer 404 (side finding F1 of the baseline) and errors are not
@@ -99,8 +103,9 @@ cached.
 ## 4. Same answers
 
 Every frontend GET (59 endpoint × principal × range combinations, including 7 date ranges
-per principal for `/dashboard`, `scratchpad` capture, not committed: it holds sales) was
-fetched from the old and the new code against the same data and compared field by field:
+per principal for `/dashboard`; the captures are not committed: they hold sales) was
+fetched from the old (`5f635a7`) and the new (merged) code against the same data and
+compared field by field:
 **0 of 58 data responses differ**, both freshly computed and served from the cache. The
 59th, `/auth/me`, differs only in name and email: the new harness signs in as a real admin
 row (§ docstring). Preview mode (`X-Data-Mode: preview`, dashboard × 2 ranges, `/abc`,
@@ -131,7 +136,7 @@ migration `0043_mart_stock_limited_rule.sql` and refreshed the marts (trigger
 ```
 P=reports/diagnostics/speed_cache_2026-10-04/speed_baseline.py
 python $P select1
-python $P serve --port 8094 --label after_final &      # instrumented, real session-check SQL
-python $P cache --base http://127.0.0.1:8094 --label after_final   # first, cold, warm per page
-python $P pages --base http://127.0.0.1:8093 --label before_final  # against an old-code serve
+python $P serve --port 8094 --label merged &           # instrumented, real session-check SQL
+python $P cache --base http://127.0.0.1:8094 --label merged        # first, cold, warm per page
+python $P pages --base http://127.0.0.1:8093 --label before_merge  # against an old-code serve
 ```

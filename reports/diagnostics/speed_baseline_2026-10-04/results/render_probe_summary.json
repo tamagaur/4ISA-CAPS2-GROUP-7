@@ -1,0 +1,18 @@
+{
+  "medians_ms": {
+    "health (no auth, no DB)": 114.5,
+    "401 no token (no DB)": 113.75,
+    "401 bad signature (no DB)": 113.6,
+    "422 link-info short token (no DB)": 114.30000000000001,
+    "400 link-info unknown token (1 SELECT)": 433.0
+  },
+  "comparison_valid": true,
+  "render_db_delta_ms": 318.7,
+  "calibration": {
+    "local_rtt_ms": 94.5,
+    "local_delta_ms": 509.5,
+    "rt_equivalents": 5.39,
+    "render_rtt_estimate_ms": 59.1
+  },
+  "at": "2026-10-04 22:33:14"
+}
