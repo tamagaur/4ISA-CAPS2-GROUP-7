@@ -17,6 +17,7 @@ see the Quality check section near the end.
   **Total-level WAPE** adds all products up within each month first, so misses can cancel.
 - Pesos are at selling price, VAT-inclusive (value-added tax), each product's own net amount ÷ pieces over
   its scored months (the eebd741 basis).
+- Note 2026-10-05: `GET /dashboard/accuracy` reads this total-level figure as 9.8% (9.82%), not 9.9% (9.87%); the one input that differs is 3 product-months with a blank quantity, counted here as 0 sold and by the endpoint as missing (3,503 against 3,500 scored product-months).
 
 **Why two cohorts.** The ~27% figure scored the 107 products that were Tier A in February 2026, the *last*
 test month. (Tier A = the products making up the top 80% of revenue; ABC method `single` ranks them on one

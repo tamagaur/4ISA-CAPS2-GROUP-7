@@ -117,6 +117,13 @@ def test_pareto_lists_the_products_in_each_class_for_the_range():
     assert uni["pareto_check"]["top_count"] == 1
 
 
+def test_pareto_counts_a_returns_heavy_month_as_zero():
+    """One revenue rule everywhere (Yuan, 2026-10-05): the stored ABC run's, orchestrate_abc.py:208."""
+    from backend.marts import PARETO_SQL
+    assert "SUM(GREATEST(s.pesos, 0)) AS revenue" in PARETO_SQL
+    assert "SUM(s.pesos) AS revenue" not in PARETO_SQL
+
+
 def test_pareto_ranks_del_monte_by_category_and_says_when_nothing_ranks():
     session = FakeSession([("WITH rev AS", lambda p: [])])
     body = get(session, "/dashboard/pareto?principal=delmonte&period=2025-12")
@@ -257,9 +264,8 @@ def test_class_changes_list_who_entered_and_left_class_a():
     assert (left["sku_id"], left["class"], left["compare_class"], left["change_pesos"]) == ("S3", "B", "A", -150.0)
     assert (uni["entered_revenue"], uni["entered_compare_revenue"]) == (200.0, 60.0)
     assert (uni["left_revenue"], uni["left_compare_revenue"]) == (150.0, 300.0)
-    # Both ranges are ranked with the ABC run's several-month rule: a negative month counts as 0.
     ranked = [s for s, _ in session.calls if "WITH rev AS" in s]
-    assert len(ranked) == 2 and all("SUM(GREATEST(s.pesos, 0))" in s for s in ranked)
+    assert len(ranked) == 2
 
 
 def test_class_changes_say_why_a_side_has_no_class():
