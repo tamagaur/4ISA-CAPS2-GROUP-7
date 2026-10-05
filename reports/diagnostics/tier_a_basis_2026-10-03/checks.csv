@@ -1,0 +1,10 @@
+check,value,out_of,note
+reproduction_runs_matching_live,52,52.0,"single + t3m, 2024-01..2026-02"
+lp_plan_products_compared,73,,plan_aggregate_103.csv
+lp_plan_max_abs_ss_diff_pieces,0.0,,flat 90% safety stock vs the plan's safety_stock
+lp_plan_max_abs_cost_diff_php_per_piece,0.0001,,
+rule1_added_products_changed_if_first_sale_by_pesos,0,,
+impact_status_matches_todays_forecast,132,132.0,
+impact_bin_matches_todays_forecast,119,119.0,
+impact_sales_months_match_todays_forecast,132,132.0,
+sales_unchanged_between_snapshots,True,,"24906 rows, PHP 1,230,639,943.77"
