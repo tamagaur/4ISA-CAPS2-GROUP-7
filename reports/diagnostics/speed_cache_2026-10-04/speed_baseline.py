@@ -384,13 +384,19 @@ def cache_cmd(args) -> None:
         if r.status_code != 404:
             r.raise_for_status()
 
-    t0 = time.perf_counter()
-    get(f"/dashboard?period={LATEST}&start_period={START_12}&principal=unilever", f"{args.label}-first|0")
-    first_ms = 1000 * (time.perf_counter() - t0)
-    print(f"first request after start (dashboard 12m unilever): {first_ms:.0f} ms")
-    rows.append({"label": args.label, "principal": "unilever", "page": "dashboard (12m default)",
-                 "state": "first request", "run": 0, "calls": 1, "waves": 1, "ms": round(first_ms, 1)})
-    skus = _resolve_skus(client)
+    if args.page and args.page != "forecast":
+        # One page that needs no sample SKU: only /auth/me first (opens the pools), so the
+        # run does not start with the dashboard and both /abc lists.
+        get("/auth/me", f"{args.label}-first|0")
+        skus = {p: "" for p in PRINCIPALS}
+    else:
+        t0 = time.perf_counter()
+        get(f"/dashboard?period={LATEST}&start_period={START_12}&principal=unilever", f"{args.label}-first|0")
+        first_ms = 1000 * (time.perf_counter() - t0)
+        print(f"first request after start (dashboard 12m unilever): {first_ms:.0f} ms")
+        rows.append({"label": args.label, "principal": "unilever", "page": "dashboard (12m default)",
+                     "state": "first request", "run": 0, "calls": 1, "waves": 1, "ms": round(first_ms, 1)})
+        skus = _resolve_skus(client)
     with ThreadPoolExecutor(max_workers=8) as pool:
         for p in PRINCIPALS:
             for page, waves in page_waves(p, _fill(f"{{sku_{p}}}", skus)).items():

@@ -1283,3 +1283,69 @@ Full write-up: `reports/diagnostics/tier_a_refresh_2026-10-05/README.md`. Branch
 | At-the-time accuracy, Jan 2024 – Feb 2026 | old list: median product WAPE 36.3%, company total 9.5% (pesos) | new list: 39.0%, 10.7% |
 
 Open: TA confirmation; forecast runs 2-3 (stored backtests, read by the accuracy card) are still on the single-month list and pre-date the blank-quantity fix; `stability_v1` reads "churn" for all 189 (cut-offs count out of 38 monthly runs, the new basis has 27). Next free migration: 0045 (0046 is taken by the planning-mart session).
+
+## 23. Planning mart — LIVE on `public` 2026-10-05 (migration 0046, part of DEC-36; branch `kelvin/planning-mart`)
+
+`mart.planning_mart`: one row per product x LP cycle with everything the Reorder page shows already joined. `GET /recommendations`
+reads it in one statement; the response fields are unchanged. Applied after Claude Code 1's push (kelvin-etl 87edd5e, `lp_run` 2).
+
+| item | value | source |
+|---|---|---|
+| Rows | 277 = `lp_recommendation` rows (34 cycles; 97 pending of `lp_run` 2 + 1 accepted in cycle 2026-03) | `scripts/rehearse_planning_mart.py --check-only` |
+| Size | 176 kB (table + indexes + TOAST) | same |
+| Same answer as the joins | 0 differences in 17 scope x cycle x status cases: all 277 rows, all 97 rows of `lp_run` 2, every field, plus freshness, LP model and stock counts. Checked on a scratch build before the apply and on live after it | same |
+| Stored `stock_status` / `urgency` against the endpoint's | 0 of 277 differ; 0 NaN | same |
+| Refresh | `mart.refresh_planning()`: 1.2 s at 253 rows, 2.8 s at 277 (scratch builds) | `refresh_log.duration_ms` |
+| Backup before the apply | `backups/mart_backup_before_0046_20261005T080301Z`: the `mart` schema only (8 tables, 112,511 rows, structure SQL; re-read and checked). The full backup was started first and lost its connection after 26 minutes; 0046 writes nothing outside `mart` | scratch log |
+
+**What each row holds.** Product name + SKU, principal, pack size; tier, revenue share, its basis (`t12m_new` for Unilever, `single` for
+Del Monte) and month; the cycle's forecast in pieces with its range and the `mart.forecast_run` that keeps it; safety stock; target stock;
+the opening count's stock (pieces, cases, pesos) and count date; `on_order` (PO Qty: information only, never subtracted, DEC-34/37);
+the order in pieces and in pesos at the last purchase price (unit cost per case of the product's latest real count on or before the
+opening count / pack size; in the mart only, not in the response); status (IN STOCK / LOW / CRITICAL / NO DATA; NO ROP cannot occur on a
+planned row) and urgency; `needs_review` + reasons; `lp_run_key` and its allocation %; decision status (pending / accepted / dismissed).
+
+**Kept in step.**
+
+| change | what refreshes the mart |
+|---|---|
+| Data load, fill, forecast run, LP run, backtest | every full `mart.refresh()` now also runs the planning refresh, same transaction (`analytics/marts.refresh_marts_cursor`) |
+| Review-flag write | `scripts/compute_review_flags.py --write` runs the planning refresh after its commit |
+| Reorder decision | `PATCH /recommendations/{id}` updates the mart's own row in the decision's transaction |
+| Product edited through the app | `PATCH /sku` runs the planning refresh in its transaction (about 1-3 s added to the edit) |
+| ABC run on its own | NOT wired. The mart then reads as stale and the endpoint uses the joins until the next forecast or LP run refreshes it |
+
+**Never served out of step.** `mart.refresh_status` gained `planning_refreshed_at` and `planning_stale` (a source changed after the last
+planning refresh); `refreshed_at` / `stale` still mean the last FULL refresh. The endpoint falls back to the per-request joins when the
+mart is missing, `planning_stale`, or its row count / pending count / latest decision differ from `lp_recommendation`'s, and in preview
+mode. The response cache needs no change: its data version already reads `refresh_status`, so a planning refresh clears it.
+
+**Queries per request** (`reports/diagnostics/speed_cache_2026-10-04/results/planning_mart_statements_per_request.txt`; session check included):
+
+| request | before (87edd5e) | after, cache cold | after, cache warm |
+|---|---:|---:|---:|
+| `/recommendations?status=pending&principal=unilever` | 11 | **2** | **1** |
+| `/recommendations?status=pending&principal=delmonte` | 7 | **2** | **1** |
+| `/sku` (the Reorder page's other call, not changed) | 4 | 4 | 1 |
+
+On the database the mart statement runs in about 25 ms (EXPLAIN ANALYZE: head 22 ms, rows 2 ms). It returns 26 kB for the 97 pending
+Unilever rows (rows sent as JSON arrays; 78 kB as objects before that change) against about 16 kB of values for the joins' row query.
+
+**Timings: NOT a clean measurement.** Local server on a laptop against live, 2026-10-05. The laptop's link to Supabase was unstable all
+session: a bare 78 kB value took 0.3-0.9 s at its best and 5-15 s at its worst, a full backup lost its connection, and one `/sku` call
+failed on a dropped connection. Time followed bytes, not statements, so the page's wall clock is mostly `/sku` (about 0.8 MB).
+
+| measure (cold, interleaved before/after passes, link at 5-7 s per 78 kB) | before | after |
+|---|---:|---:|
+| `/recommendations` Unilever, server time, median | 4,433 ms (n=6) | 2,910 ms (n=6) |
+| `/recommendations` Del Monte, server time, median | 883 ms (n=6) | 655 ms (n=3) |
+| Reorder page Unilever (both calls), wall clock, 3 runs | 45.6 / 28.2 / 26.8 s | 40.9 / 38.5 / 27.5 s |
+| Reorder page Del Monte, wall clock, 3 runs | 15.9 / 16.0 / 7.0 s | 6.4 / 9.1 / 7.4 s |
+| Warm (cached), either endpoint, server time, median | 190-200 ms | 190-200 ms |
+
+One earlier pass on a better link gave the unchanged page 2.1 / 3.6 / 1.5 / 2.6 / 2.2 s cold (Unilever); the mart's pass that followed
+ran after the link had dropped again, so there is no matching "after" for it. Re-time on a stable connection before quoting a speed-up.
+Render was not timed.
+
+Tests (touched files only): `tests/test_planning_mart.py`, `tests/backend/test_recommendations.py`, `test_lp_cycle.py`, `test_sku.py`,
+`test_response_cache.py`, `test_stock_timing.py`. Open: the ABC run's refresh hook; a clean re-timing; the full backup to rerun on a stable link.
