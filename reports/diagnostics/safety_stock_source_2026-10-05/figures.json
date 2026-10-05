@@ -1,0 +1,126 @@
+{
+ "run_at_utc": "2026-10-05T06:10:21+00:00",
+ "class_period": "2026-02",
+ "class_method": "single",
+ "backtest": "backtest 2023-10..2026-02, Tier A the month before each month",
+ "z": 1.28,
+ "service_level_pct": 90,
+ "window_business_days": 8.0,
+ "min_months": 2,
+ "checks": [
+  {
+   "check": "classified Unilever products, single run for 2026-02",
+   "value": 710
+  },
+  {
+   "check": "pending plan rows for cycle 2026-03-01 among them",
+   "value": 73
+  },
+  {
+   "check": "of those, current-method safety stock recomputed here",
+   "value": 73
+  },
+  {
+   "check": "largest |recomputed - stored ss_i|, pieces (stored is rounded to 2 places)",
+   "value": 0.005
+  },
+  {
+   "check": "check passes (largest difference <= 0.01 piece)",
+   "value": true
+  }
+ ],
+ "summary": [
+  {
+   "class": "A",
+   "class_period": "2026-02",
+   "products": 132,
+   "with_current_safety_stock": 128,
+   "with_current_and_price": 128,
+   "current_pesos_all_priced": 7196280.13,
+   "with_forecast_errors": 111,
+   "comparable_products": 111,
+   "comparable_without_price": 0,
+   "median_error_months": 19,
+   "current_pieces": 687932.87,
+   "forecast_error_pieces": 653218.51,
+   "current_pesos": 6581013.08,
+   "forecast_error_pesos": 6397234.11,
+   "difference_pesos": -183778.97,
+   "difference_pct": -2.8,
+   "products_forecast_error_lower": 56,
+   "products_forecast_error_higher": 55,
+   "forecast_error_rmse_pesos": 6356195.84,
+   "sales_same_months_pesos": 6432346.84,
+   "forecast_error_vs_sales_same_months_pct": -0.5
+  },
+  {
+   "class": "B",
+   "class_period": "2026-02",
+   "products": 194,
+   "with_current_safety_stock": 188,
+   "with_current_and_price": 188,
+   "current_pesos_all_priced": 1803226.79,
+   "with_forecast_errors": 53,
+   "comparable_products": 53,
+   "comparable_without_price": 0,
+   "median_error_months": 7,
+   "current_pieces": 45579.58,
+   "forecast_error_pieces": 44529.06,
+   "current_pesos": 905152.46,
+   "forecast_error_pesos": 957621.36,
+   "difference_pesos": 52468.89,
+   "difference_pct": 5.8,
+   "products_forecast_error_lower": 23,
+   "products_forecast_error_higher": 30,
+   "forecast_error_rmse_pesos": 988039.38,
+   "sales_same_months_pesos": 893472.3,
+   "forecast_error_vs_sales_same_months_pct": 7.2
+  },
+  {
+   "class": "C",
+   "class_period": "2026-02",
+   "products": 384,
+   "with_current_safety_stock": 364,
+   "with_current_and_price": 341,
+   "current_pesos_all_priced": 1563436.53,
+   "with_forecast_errors": 10,
+   "comparable_products": 10,
+   "comparable_without_price": 0,
+   "median_error_months": 7.0,
+   "current_pieces": 12424.82,
+   "forecast_error_pieces": 12594.49,
+   "current_pesos": 523496.35,
+   "forecast_error_pesos": 541753.8,
+   "difference_pesos": 18257.45,
+   "difference_pct": 3.5,
+   "products_forecast_error_lower": 6,
+   "products_forecast_error_higher": 4,
+   "forecast_error_rmse_pesos": 583219.16,
+   "sales_same_months_pesos": 479418.04,
+   "forecast_error_vs_sales_same_months_pct": 13.0
+  },
+  {
+   "class": "all",
+   "class_period": "2026-02",
+   "products": 710,
+   "with_current_safety_stock": 680,
+   "with_current_and_price": 657,
+   "current_pesos_all_priced": 10562943.44,
+   "with_forecast_errors": 174,
+   "comparable_products": 174,
+   "comparable_without_price": 0,
+   "median_error_months": 14.5,
+   "current_pieces": 745937.27,
+   "forecast_error_pieces": 710342.06,
+   "current_pesos": 8009661.89,
+   "forecast_error_pesos": 7896609.27,
+   "difference_pesos": -113052.63,
+   "difference_pct": -1.4,
+   "products_forecast_error_lower": 85,
+   "products_forecast_error_higher": 89,
+   "forecast_error_rmse_pesos": 7927454.38,
+   "sales_same_months_pesos": 7805237.17,
+   "forecast_error_vs_sales_same_months_pct": 1.2
+  }
+ ]
+}

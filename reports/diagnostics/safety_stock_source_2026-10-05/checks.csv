@@ -1,0 +1,6 @@
+check,value
+"classified Unilever products, single run for 2026-02",710
+pending plan rows for cycle 2026-03-01 among them,73
+"of those, current-method safety stock recomputed here",73
+"largest |recomputed - stored ss_i|, pieces (stored is rounded to 2 places)",0.005
+check passes (largest difference <= 0.01 piece),True
