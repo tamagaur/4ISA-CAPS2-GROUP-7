@@ -33,3 +33,24 @@ export function getDashboardData(args = {}, { force = false } = {}) {
 export function peekDashboardData(args = {}) {
   return peekCache(dashboardPath(args));
 }
+
+// GET /dashboard/pareto and /dashboard/yoy (backend/routers/dashboard_range
+// .py): the selected range's ranking with each class's products, and each
+// product's sales against the same months a year earlier. Same query shape
+// and cache as the dashboard itself.
+function rangeRequest(route, { period, startPeriod, principal } = {}) {
+  const query = new URLSearchParams();
+  if (period) query.append('period', period);
+  if (startPeriod) query.append('start_period', startPeriod);
+  appendPrincipal(query, principal);
+  const qs = query.toString();
+  const path = `/dashboard/${route}${qs ? `?${qs}` : ''}`;
+  return cachedRequest(path, async () => {
+    const res = await apiFetch(path);
+    if (!res.ok) throw new Error(`Failed to fetch the ${route} data`);
+    return res.json();
+  });
+}
+
+export const getRangePareto = (args) => rangeRequest('pareto', args);
+export const getRangeYoy = (args) => rangeRequest('yoy', args);

@@ -26,8 +26,6 @@ const CategoryTrends = lazy(pageLoaders.categoryTrends);
 const AuditLog = lazy(pageLoaders.auditLog);
 const DataUpload = lazy(pageLoaders.upload);
 const UserManagement = lazy(pageLoaders.users);
-// The section B cards on sample data (admin only, not in the navigation).
-const PendingPreview = lazy(() => import('./components/PendingPreview'));
 
 const routeTitles = {
   '/login': 'SAN2 | Login',
@@ -41,7 +39,6 @@ const routeTitles = {
   '/audit-log': 'SAN2 | Audit Log',
   '/upload': 'SAN2 | Data Management',
   '/users': 'SAN2 | User Management',
-  '/preview': 'SAN2 | Card preview (sample data)',
 };
 
 function DynamicTitle() {
@@ -96,7 +93,6 @@ function App() {
           <Route path="audit-log" element={guard(P.AUDIT_LOG_VIEW, <AuditLog />)} />
           <Route path="upload" element={guard(P.UPLOAD_RUN, <DataUpload />)} />
           <Route path="users" element={guard(P.USERS_MANAGE, <UserManagement />)} />
-          <Route path="preview" element={guard(P.USERS_MANAGE, <PendingPreview />)} />
         </Route>
         {/* Unknown or retired URLs land on the dashboard instead of a
             blank page. */}

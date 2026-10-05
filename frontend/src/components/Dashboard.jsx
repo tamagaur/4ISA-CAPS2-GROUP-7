@@ -2,10 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import KPICard from './KPICard';
 import AtRiskProductsModal from './AtRiskProductsModal';
+import ClassProductsModal from './ClassProductsModal';
+import IdleStockWidget from './IdleStockWidget';
 import { ClassChanges } from './PendingCards';
 import DateFilter from './DateFilter';
 import {
-  SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
+  SalesVsStockWidget, ABCDonutWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
   AllocationWidget, formatCompactPesos,
 } from './Charts';
@@ -19,6 +21,7 @@ import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
 import { formatDate, formatMonth } from '../utils/formatDate';
+import { formatUnits } from '../utils/formatNumber';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
 import { Package, Wallet, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
 import './Dashboard.css';
@@ -343,6 +346,8 @@ const Dashboard = () => {
   const [error, setError] = useState(null); // { key, message }
   // The list behind "N below safety stock" (AtRiskProductsModal).
   const [showAtRisk, setShowAtRisk] = useState(false);
+  // The class whose products are listed (ClassProductsModal), or null.
+  const [listedClass, setListedClass] = useState(null);
   const navigate = useNavigate();
   const loadedKey = loaded?.key;
 
@@ -470,11 +475,34 @@ const Dashboard = () => {
   const salesBasis = !salesBasisRaw ? null
     : salesMonth && salesBasisRaw.includes(salesMonth) ? 'selling price, VAT-inclusive (recorded with tax)'
       : salesBasisRaw.split(' (')[0];
-  const sales = kpiDisplay(
-    kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
-    [salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales', salesBasis, vatNote]
-      .filter(Boolean).join(' · '),
-  );
+  // Cumulative AND snapshot, each named (Technical Adviser, 2 Oct 2026:
+  // "snapshot or cumulative? as of when?"). The headline is the total for
+  // the selected range (kpis.sales_cumulative); the latest month sits under
+  // it with its own change. A range missing months says how many it has.
+  // Without a range total (an older payload, or blocked) the card is the
+  // latest month alone, as before.
+  const salesTotal = kpis.sales_cumulative && kpis.sales_cumulative.value != null && !kpis.sales_cumulative.blocked_reason
+    ? kpis.sales_cumulative : null;
+  const salesMonthsNote = salesTotal && salesTotal.months_with_data < salesTotal.months_in_range
+    ? `${salesTotal.months_with_data} of ${salesTotal.months_in_range} months have sales on record` : null;
+  const sales = salesTotal
+    ? kpiDisplay(
+        salesTotal.value, null, formatCompactPesos,
+        [`Total for ${salesTotal.label}`, salesMonthsNote, salesBasis, vatNote].filter(Boolean).join(' · '),
+      )
+    : kpiDisplay(
+        kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
+        [salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales', salesBasis, vatNote]
+          .filter(Boolean).join(' · '),
+      );
+  const salesLatest = salesTotal && kpis.sales != null && salesMonth
+    ? { label: `Latest month · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}`, value: formatCompactPesos(kpis.sales) }
+    : undefined;
+  // The pill compares months, so under a range total it says which.
+  const salesTrendExtras = sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {};
+  if (salesTotal && salesTrendExtras.deltaLine && salesMonth) {
+    salesTrendExtras.deltaLine = `${salesMonth}: ${salesTrendExtras.deltaLine}`;
+  }
   // The stock card also answers SSM's own rule (client meeting, Sep 2026:
   // keep three weeks of sales in stock) with the backend's weeks_of_cover,
   // so the target and the actual sit on one line. The figure deliberately
@@ -525,13 +553,22 @@ const Dashboard = () => {
     || (countDay ? `counted ${countDay}` : sohMonth ? `${sohMonth} count` : null);
   // Del Monte's stock files carry no pack size, so its stock can't be
   // turned into pieces: the card says why it is in pesos only.
-  const pesosOnlyNote = pagePrincipal === 'delmonte' ? 'pesos only, since Del Monte files have no pack size' : null;
+  // kpis.soh_snapshot: the same count in pieces (Unilever), or the reason
+  // there are none (Del Monte: pieces_note).
+  const sohSnapshot = kpis.soh_snapshot || {};
+  const pesosOnlyNote = sohSnapshot.pieces_note
+    || (pagePrincipal === 'delmonte' ? 'pesos only, since Del Monte files have no pack size' : null);
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
-    // kpis.soh_count_note: set when this count is one the team flagged as
-    // unusual — the card keeps the figure and says so beside it.
-    ['At last purchase price', countLabel, kpis.soh_count_note, pesosOnlyNote, sohCoverage, coverLine].filter(Boolean).join(' · '),
+    // "Snapshot": one count, not a total for the range. kpis.soh_count_note
+    // is set when this count is one the team flagged as unusual — the card
+    // keeps the figure and says so beside it.
+    ['Snapshot at last purchase price', countLabel, kpis.soh_count_note, pesosOnlyNote, sohCoverage, coverLine]
+      .filter(Boolean).join(' · '),
   );
+  const sohPieces = sohValue.value !== '—' && sohSnapshot.pieces != null
+    ? { label: 'The same count in pieces', value: formatUnits(sohSnapshot.pieces) }
+    : undefined;
 
   // stock_on_hand_flags: counts the team reviewed and judged unusual — the
   // chart marks those points and gives the reason, it never drops them.
@@ -547,6 +584,10 @@ const Dashboard = () => {
     // purchase records): the chart's Purchases view only, never a KPI.
     receivedEstimated: pt.received_estimated ?? null,
     receivedEstimatedNegativeSkus: pt.received_estimated_negative_skus ?? null,
+    // A gap month the backend filled in (sales_estimated /
+    // stock_on_hand_estimated): drawn dotted on the chart, never in a KPI.
+    salesEstimated: pt.sales_estimated ?? null,
+    stockEstimated: pt.stock_on_hand_estimated ?? null,
     stockUnusual: stockFlags.get(pt.period) || null,
   }));
 
@@ -566,14 +607,6 @@ const Dashboard = () => {
   const abcUnits = abcCovered.length === 1 && abcCovered[0] === 'delmonte'
     ? 'categories'
     : abcCovered.includes('delmonte') ? 'items' : 'SKUs';
-
-  const tierStock = (data.tier_stock || []).map((t) => ({
-    tier: t.tier,
-    inStock: t.in_stock,
-    deadStock: t.dead_stock,
-    noData: t.no_data,
-    pendingReorderCount: t.pending_reorder_count,
-  }));
 
   // The page's own payload, so the card and the MASE reliability count
   // (GET /dashboard's forecast block) describe the page's principal.
@@ -727,13 +760,15 @@ const Dashboard = () => {
               // Slate, like every blocked card, when there is no figure.
               metricType={sales.value === '—' ? undefined : 'healthy'}
               contextLine={sales.contextLine}
+              secondary={salesLatest}
               icon={<Wallet size={20} />}
-              {...(sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {})}
+              {...salesTrendExtras}
             />
             <KPICard
               title="Inventory value"
               value={sohValue.value}
               contextLine={sohValue.contextLine}
+              secondary={sohPieces}
               tooltip={coverTooltip}
               icon={<Package size={20} />}
               {...(sohValue.value !== '—' ? trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries, 'count') : {})}
@@ -778,17 +813,14 @@ const Dashboard = () => {
                 atRisk={canListAtRisk
                   ? { below: exposure.below_count, measurable: exposure.comparable_count, onOpen: openAtRisk }
                   : null}
+                onOpenClass={setListedClass}
               />
             </Slot>
+            {/* Idle stock from actual sales (GET /dashboard's idle_stock). It
+                took the place of CategoryStockBarWidget, which read the
+                warehouse's Active/Inactive flag (still in Charts.jsx). */}
             <Slot kind="Descriptive" question="Is any of our stock dead?">
-              <CategoryStockBarWidget
-                data={tierStock}
-                note={placeholderNote(data.abc_revenue?.period)}
-                period={data.tier_stock_period}
-                countDay={countDayKnown ? dayLabel(data.tier_stock_count_date) : null}
-                cycleLabel={lpCycleLabel}
-                coverage={abcCoverage}
-              />
+              <IdleStockWidget idle={data.idle_stock} />
             </Slot>
           </div>
 
@@ -868,6 +900,13 @@ const Dashboard = () => {
           )}
         </div>
       </div>
+      <ClassProductsModal
+        isOpen={listedClass != null}
+        onClose={() => setListedClass(null)}
+        tier={listedClass}
+        args={{ period, startPeriod, principal }}
+        onOpenAbcPage={() => navigate(`/abc?class=${listedClass}`)}
+      />
       <AtRiskProductsModal
         isOpen={showAtRisk && canListAtRisk}
         onClose={() => setShowAtRisk(false)}

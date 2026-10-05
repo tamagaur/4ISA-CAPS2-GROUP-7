@@ -420,7 +420,7 @@ const SalesStockTooltip = ({ active, payload, label, years }) => {
             {/* The month on this point is the one the count is filed under;
                 the day it was actually counted can be a week later. */}
             {metricOf(p.dataKey) === 'stock' && meta?.stockCountDay && ` · counted ${meta.stockCountDay}`}
-            {metricOf(p.dataKey) === 'recest' && ' · estimated'}
+            {['recest', 'salesest', 'stockest'].includes(metricOf(p.dataKey)) && ' · estimated'}
             {metricOf(p.dataKey) === 'recest' && meta?.estWasNegative && ' · negative estimate, shown as 0'}
             {metricOf(p.dataKey) === 'recest' && meta?.estNegativeSkus > 0
               && ` · ${meta.estNegativeSkus.toLocaleString()} products had a negative estimate`}
@@ -557,6 +557,9 @@ export const SalesVsStockWidget = ({
   const hasReceived = data.some((pt) => pt.received != null);
   // Unilever has no purchase records, only this estimate (see ESTIMATED_LABEL).
   const hasEstimated = data.some((pt) => pt.receivedEstimated != null);
+  // Gap months the backend filled in for sales or stock: the same colour as
+  // the metric, dotted, with a hollow marker — an estimate, never a record.
+  const hasFilled = data.some((pt) => pt.salesEstimated != null || pt.stockEstimated != null);
   const metricViews = hasReceived || hasEstimated ? [...METRIC_VIEWS, PURCHASES_VIEW] : METRIC_VIEWS;
   const widgetRef = useRef(null);
   const wide = useElementWidth(widgetRef) >= YOY_WIDE_PX;
@@ -577,6 +580,8 @@ export const SalesVsStockWidget = ({
         row[`stock_${slot}`] = pt?.stockOnHand ?? null;
         row[`received_${slot}`] = pt?.received ?? null;
         row[`recest_${slot}`] = pt?.receivedEstimated != null ? Math.max(0, pt.receivedEstimated) : null;
+        row[`salesest_${slot}`] = pt?.salesEstimated ?? null;
+        row[`stockest_${slot}`] = pt?.stockEstimated ?? null;
         row[`meta_${slot}`] = pt
           ? {
               period: pt.period,
@@ -610,7 +615,13 @@ export const SalesVsStockWidget = ({
     ...(hasEstimated
       ? slots.map((slot) => ({ key: `recest_${slot}`, slot, metric: 'recest', estimated: true, name: `${ESTIMATED_LABEL} · ${slotYears[slot]}`, color: COLORS.forecast }))
       : []),
-  ], [slots, slotYears, salesLabel, receivedLabel, hasReceived, hasEstimated]);
+    ...(hasFilled
+      ? slots.flatMap((slot) => [
+          { key: `salesest_${slot}`, slot, metric: 'sales', estimated: true, filled: true, name: `${salesLabel}, estimated · ${slotYears[slot]}`, color: CHART_COLORS.heroSales },
+          { key: `stockest_${slot}`, slot, metric: 'stock', estimated: true, filled: true, name: `${INVENTORY_LABEL}, estimated · ${slotYears[slot]}`, color: CHART_COLORS.heroInventory },
+        ])
+      : []),
+  ], [slots, slotYears, salesLabel, receivedLabel, hasReceived, hasEstimated, hasFilled]);
   // Purchases received ride with "Both": they are neither metric the
   // control names, and a sales-only or inventory-only view is for a
   // single comparison.
@@ -618,7 +629,7 @@ export const SalesVsStockWidget = ({
     // "Both" keeps to recorded figures; the estimate is drawn only in the
     // Purchases view, beside sales.
     const shown = series.filter((sr) => (
-      metricView === 'both' ? !sr.estimated
+      metricView === 'both' ? sr.metric !== 'recest'
         : metricView === 'purchases' ? PURCHASES_METRICS.includes(sr.metric)
           : sr.metric === METRIC_PREFIX[metricView]
     ));
@@ -795,6 +806,12 @@ export const SalesVsStockWidget = ({
                 Unusual stock count — hover or tap it for why
               </li>
             )}
+            {visible.some((sr) => sr.filled) && (
+              <li className="legend-item">
+                <span className="legend-line legend-line-dotted" aria-hidden="true" />
+                Estimated month (dotted)
+              </li>
+            )}
             {hasPlaceholder && <PlaceholderLegendItem />}
           </ul>
           <div className="chart-container chart-container-yoy">
@@ -858,7 +875,9 @@ export const SalesVsStockWidget = ({
                       strokeOpacity={dimmable(sr.key) * (prev ? PREV_YEAR_OPACITY : 1) * (sr.estimated ? ESTIMATED_OPACITY : 1)}
                       fill={sr.estimated ? 'none' : `url(#svs-fill-${sr.key})`}
                       fillOpacity={dimmable(sr.key)}
-                      dot={sr.metric === 'stock' ? unusualStockDot(sr.slot) : false}
+                      dot={sr.filled
+                        ? { r: 3, fill: 'var(--color-surface, #fff)', stroke: sr.color, strokeWidth: 1.5 }
+                        : sr.metric === 'stock' ? unusualStockDot(sr.slot) : false}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                       label={labels[sr.key] ?? false}
                       connectNulls={false}
@@ -947,7 +966,7 @@ const abcSegments = (data) => {
 // can't be trusted (no total, or shares that don't add up to ~100%) reads
 // "Revenue not available", and the sentence is left out rather than stated
 // on numbers that aren't real.
-const AbcTierCard = ({ facts, atRisk = null }) => {
+const AbcTierCard = ({ facts, atRisk = null, onOpenClass = null }) => {
   const x = facts.skuPct.toFixed(0);
   const y = facts.revenuePct != null ? facts.revenuePct.toFixed(0) : null;
   const revenueKnown = facts.amount != null && y != null;
@@ -1001,7 +1020,16 @@ const AbcTierCard = ({ facts, atRisk = null }) => {
         </button>
       )}
       {/* "Which ones?" — the products behind this class's count, one click
-          away: the ABC page opens on the class picked here (?class=). */}
+          away. While the ring ranks a range, the list opens here on the
+          dashboard from the same ranking (ClassProductsModal), so its count
+          is this card's; the ABC page, which ranks one month, is the link
+          under it. */}
+      {facts.rangeBased && onOpenClass && (
+        <button type="button" className="abc-tier-card-link abc-tier-card-atrisk" onClick={() => onOpenClass(facts.tier)}>
+          See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units}{' '}
+          <span className="abc-tier-card-nowrap">in this range <ArrowRight size={12} aria-hidden="true" /></span>
+        </button>
+      )}
       <Link to={`/abc?class=${facts.tier}`} className="abc-tier-card-link">
         {/* The count is this card's only while both rank the same period.
             Since 2026-10-04 the ring ranks the selected range and the ABC
@@ -1106,7 +1134,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 // page's filter ("Unilever only", Dashboard.jsx's coverageNote). `units` is
 // what a row is: 'SKUs', or 'categories' for Del Monte, which is ranked by
 // product category.
-export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null }) => {
+export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null }) => {
   const [selectedTier, setSelectedTier] = useState('A');
   const [hover, setHover] = useState(null);
   const ringRef = useRef(null);
@@ -1273,7 +1301,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                 ))}
               </ul>
             </div>
-            <AbcTierCard facts={factsFor(selected)} atRisk={atRisk} />
+            <AbcTierCard facts={factsFor(selected)} atRisk={atRisk} onOpenClass={onOpenClass} />
           </div>
           <div
             className="abc-share-pair"
@@ -2110,7 +2138,7 @@ export const ReorderRecommendationWidget = ({
           <p>
             LP-optimized order quantities, in pieces, for the SKUs the LP planned as Class A ·{' '}
             {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
-            {countLabel ? ` · urgency against the stock ${countLabel}` : ''}
+            {countLabel ? ` · urgency against the ${/^stock /.test(countLabel) ? '' : 'stock '}${countLabel}` : ''}
           </p>
         </div>
       </div>

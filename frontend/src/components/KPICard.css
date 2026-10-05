@@ -154,3 +154,25 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* The card's second figure (KPICard `secondary`): its name, then the value. */
+.kpi-secondary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--color-border);
+  font-size: 12px;
+}
+
+.kpi-secondary-label {
+  color: var(--color-text-muted);
+}
+
+.kpi-secondary-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}

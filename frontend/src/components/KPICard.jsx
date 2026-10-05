@@ -99,6 +99,11 @@ const Sparkline = ({ points, color }) => {
 // accent tier. Without it, deltaLine keeps the tier-coloured text line.
 // unit: a short muted word after the value ("SKUs"); callers leave it off
 // when the card is blocked and the value is "—".
+// secondary: { label, value } — a second figure under the headline, named
+// by what it is: the latest month under a range total, pieces under pesos.
+// The headline says which kind it is in contextLine ("Total for …" or
+// "Snapshot …"), so cumulative and snapshot are never mistaken for each
+// other (Technical Adviser, 2 Oct 2026).
 // action: { label, onClick } or { label, to } — the way from this figure to
 // what is behind it (a list, another page), as a quiet link in the footer.
 // The figure's detail sits one click away instead of on the card.
@@ -116,6 +121,7 @@ const KPICard = ({
   deltaTone,
   tooltip,
   trend,
+  secondary,
   action,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
@@ -145,6 +151,12 @@ const KPICard = ({
       </div>
       <div className="kpi-footer">
         {contextLine && <div className="kpi-context">{contextLine}</div>}
+        {secondary && (
+          <div className="kpi-secondary">
+            <span className="kpi-secondary-label">{secondary.label}</span>
+            <span className="kpi-secondary-value">{secondary.value}</span>
+          </div>
+        )}
         {deltaLine && deltaTone && (
           <span className={`kpi-delta-pill is-${deltaTone}`}>
             {TrendIcon && <TrendIcon size={12} className="kpi-trend-icon" aria-hidden="true" />}
