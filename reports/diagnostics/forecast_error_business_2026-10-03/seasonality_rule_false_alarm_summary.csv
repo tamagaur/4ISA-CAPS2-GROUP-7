@@ -1,0 +1,4 @@
+null,R0_rate,R1_rate,R2_rate,R3_rate,R0_expected_false_labels,R1_expected_false_labels,R2_expected_false_labels,R3_expected_false_labels
+white noise,0.1460,0.0088,0.0082,0.0020,5.8400,0.6320,0.5880,0.0800
+"AR(1), phi = 0.085 (cohort median lag-1 autocorrelation)",0.1580,0.0095,0.0127,0.0020,6.3200,0.6820,0.9140,0.0800
+each product's own trend + its own residual months in random order,0.1776,0.0065,0.0125,0.0037,7.1050,0.4700,0.9000,0.1500
