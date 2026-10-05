@@ -57,8 +57,10 @@ def bin_at(history: pd.Series) -> tuple[str, int]:
 
 
 def ma3_value(history: pd.Series) -> float:
-    """The single MA3: baseline.moving_average_forecast, one step ahead."""
-    return float(baseline.moving_average_forecast(history, 1, baseline.MA_WINDOW)[0])
+    """The single MA3: baseline.moving_average_forecast, one step ahead, over
+    the last 3 OBSERVED months (a missing, blank-quantity month is skipped,
+    never read as 0 - global_model.with_missing)."""
+    return float(baseline.moving_average_forecast(history.dropna(), 1, baseline.MA_WINDOW)[0])
 
 
 def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForecaster | None = None,
@@ -77,7 +79,8 @@ def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForec
     A served MA3 is floored at zero, as the runner has always done.
     """
     assert_real_history(series, allow_placeholder)
-    history = series[series.index < target_month]
+    # A missing (blank-quantity) month is unknown, not zero: every model reads observed months only.
+    history = series[series.index < target_month].dropna()
     if len(history) < 1:
         raise ValueError("route() needs at least one month of history before target_month")
     # Months before the first sale are "not launched yet", not zero demand. TSB would
@@ -135,9 +138,13 @@ def rolling_one_step(series: pd.Series, months, forecaster: GlobalForecaster | N
                      force_bin: str | None = None, allow_placeholder: bool = False) -> pd.DataFrame:
     """route() at each of `months`, one step ahead, refit at every origin.
     Columns: month, actual, value (as served, guards applied), ma3 (the
-    benchmark, floored at zero like a served MA3), method, backup_fired."""
+    benchmark, floored at zero like a served MA3), method, backup_fired.
+    A month whose actual is missing (blank quantity) is not scored: there is
+    nothing to score it against, and scoring it as 0 would invent a miss."""
     rows = []
     for month in months:
+        if pd.isna(series.loc[month]):
+            continue
         r = route(series, month, forecaster, force_bin=force_bin, allow_placeholder=allow_placeholder)
         if r["value"] is None:
             continue
