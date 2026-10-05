@@ -12,6 +12,11 @@ reads mart.refresh_status and says when a source changed after the last refresh.
 After the commit, vacuum_marts() reclaims the replaced rows (VACUUM cannot run inside a
 transaction), so a mart table peaks at its live rows plus one refresh's worth of dead ones.
 
+The planning mart (migration 0046: one row per product x LP cycle, what the Reorder page
+reads) is rebuilt with every full refresh, in the same transaction, and on its own after a
+review-flag write (refresh_planning_conn). A reorder decision updates its own row
+(backend/planning_mart.py).
+
 Only `public` has marts. A write to a scratch schema skips the refresh (the marts read public,
 not the schema just written), and so does a database without migration 0041 — both return
 None and print why, never raise: a load must not fail because its summary tables could not
@@ -24,15 +29,29 @@ import re
 from analytics.params import (
     DEAD_SKU_MONTHS,
     POSSIBLY_PARTIAL_COUNTS,
+    SKU_COVER_HISTORY_MONTHS,
     STOCK_LIMITED_AVG_MIN_MONTHS,
     STOCK_LIMITED_AVG_MONTHS,
     STOCK_LIMITED_WEEKS,
 )
 
 MART_SCHEMA = "mart"
-MART_TABLES = ("sales_mart", "flow_month", "inventory_mart", "idle_stock", "accuracy_mart")
+# planning_mart last: on a database without migration 0046 its VACUUM fails and ends the loop.
+MART_TABLES = ("sales_mart", "flow_month", "inventory_mart", "idle_stock", "accuracy_mart", "planning_mart")
 # mart.refresh()'s arguments since migration 0043 (the stock-limited rule's three numbers).
 REFRESH_SIGNATURE = "refresh(text,integer,text[],numeric,integer,integer)"
+
+# mart.refresh_planning()'s arguments (migration 0046).
+PLANNING_SIGNATURE = "refresh_planning(text,integer,text[])"
+# Principals whose stock count never lists a zero-stock item, so a product missing from it
+# has 0 on hand: backend/stock_status.COUNT_OMITS_ZERO_STOCK (pinned by tests/test_planning_mart.py).
+PLANNING_ZERO_OMITTING = ("unilever",)
+
+
+def planning_params(trigger: str) -> dict:
+    """The arguments mart.refresh_planning() takes — one definition."""
+    return {"trigger": trigger, "cover_months": SKU_COVER_HISTORY_MONTHS,
+            "zero_omitting": list(PLANNING_ZERO_OMITTING)}
 
 
 def refresh_params(trigger: str) -> dict:
@@ -69,7 +88,40 @@ def refresh_marts_cursor(cur, trigger: str, schema: str | None = "public", mart_
     cur.execute(f"SELECT {mart}.refresh(%(trigger)s, %(idle_months)s, %(partial)s, %(low_weeks)s, %(avg_months)s, %(avg_min_months)s)", refresh_params(trigger))
     counts = cur.fetchone()[0]
     print(f"[marts] refreshed ({trigger}): {counts}")
+    planning = refresh_planning_cursor(cur, trigger, schema, mart_schema)
+    return {**counts, **planning} if planning else counts
+
+
+def refresh_planning_cursor(cur, trigger: str, schema: str | None = "public", mart_schema: str = MART_SCHEMA) -> dict | None:
+    """<mart_schema>.refresh_planning() on a psycopg2 cursor, inside the caller's transaction.
+    None when skipped (a scratch target, or migration 0046 not applied)."""
+    mart = _mart(mart_schema)
+    reason = _skip(schema)
+    if reason is None:
+        cur.execute(f"SELECT to_regprocedure('{mart}.{PLANNING_SIGNATURE}') IS NOT NULL")
+        if not cur.fetchone()[0]:
+            reason = "migration 0046 (planning mart) is not applied"
+    if reason is not None:
+        print(f"[marts] planning refresh skipped: {reason}")
+        return None
+    cur.execute(f"SELECT {mart}.refresh_planning(%(trigger)s, %(cover_months)s, %(zero_omitting)s)", planning_params(trigger))
+    counts = cur.fetchone()[0]
+    print(f"[marts] planning mart refreshed ({trigger}): {counts}")
     return counts
+
+
+def refresh_planning_conn(conn, trigger: str) -> dict | None:
+    """The planning refresh on a psycopg2 connection whose own work has ALREADY committed
+    (the review-flag write): its own transaction; a failure is reported, not raised."""
+    try:
+        with conn.cursor() as cur:
+            counts = refresh_planning_cursor(cur, trigger)
+        conn.commit()
+        return counts
+    except Exception as exc:  # noqa: BLE001 - see _failed
+        conn.rollback()
+        _failed(trigger, exc)
+        return None
 
 
 def vacuum_marts(db_url: str, mart_schema: str = MART_SCHEMA) -> None:
@@ -174,9 +226,10 @@ def capture_forecast_cursor(cur, code_version: str | None, created_by: str | Non
 
 
 def main() -> int:
-    """python -m analytics.marts --refresh [--capture-forecast]: the manual refresh a failed
-    hook asks for. --capture-forecast first keeps forecast_result in the history (a no-op
-    when that run is already kept). Writes public's mart schema only."""
+    """python -m analytics.marts --refresh [--capture-forecast] [--planning-only]: the manual
+    refresh a failed hook asks for. --capture-forecast first keeps forecast_result in the
+    history (a no-op when that run is already kept). --planning-only rebuilds the planning
+    mart alone. Writes public's mart schema only."""
     import argparse
     import getpass
 
@@ -187,6 +240,7 @@ def main() -> int:
     p = argparse.ArgumentParser(description=main.__doc__)
     p.add_argument("--refresh", action="store_true", required=True)
     p.add_argument("--capture-forecast", action="store_true")
+    p.add_argument("--planning-only", action="store_true")
     p.add_argument("--trigger", default="manual")
     args = p.parse_args()
     db_url = get_settings().supabase_db_url
@@ -195,7 +249,8 @@ def main() -> int:
         cur = conn.cursor()
         if args.capture_forecast:
             capture_forecast_cursor(cur, None, getpass.getuser())
-        counts = refresh_marts_cursor(cur, args.trigger)
+        refresh = refresh_planning_cursor if args.planning_only else refresh_marts_cursor
+        counts = refresh(cur, args.trigger)
         conn.commit()
     except BaseException:
         conn.rollback()

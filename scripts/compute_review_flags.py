@@ -143,6 +143,9 @@ def write(conn, cycle_date, flags: pd.DataFrame) -> None:
             sys.exit(f"rolled back: expected {expected} rows for {cycle_date}, the table holds {got}")
     conn.commit()
     print(f"wrote {expected} review_flag rows for {cycle_date} (replaced {replaced})")
+    # Migration 0046: the Reorder page reads each row's flag from the planning mart.
+    from analytics.marts import refresh_planning_conn
+    refresh_planning_conn(conn, "compute_review_flags --write")
 
 
 def main():
