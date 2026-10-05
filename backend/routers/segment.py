@@ -137,7 +137,7 @@ def get_segment(
         raise HTTPException(status_code=404, detail=f"No product found for '{sku}' ({principal or 'any principal'})")
 
     product_key = product["product_key"]
-    # The cohort of the Tier A basis in use (DEC-37): runs on other bases are kept
+    # The cohort of the Tier A basis in use (DEC-38): runs on other bases are kept
     # in the tables, and unpinned they return each scheme once per basis.
     basis = abc_method(product["principal"])
 

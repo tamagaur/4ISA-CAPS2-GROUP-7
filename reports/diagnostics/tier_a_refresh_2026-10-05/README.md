@@ -1,6 +1,6 @@
 # Tier A on the 12-month basis + full refresh (2026-10-05)
 
-**Decision, PENDING TA CONFIRMATION (DEC-37):** Unilever Tier A = products making 80% of revenue over the last 12 months, plus products first sold within those 12 months that are Class A on the last 3 months. Rule and measurements: `kelvin/tier-a-basis` f753f4e README §7. Del Monte is unchanged (its tiers stay on the single month).
+**Decision, PENDING TA CONFIRMATION (DEC-38):** Unilever Tier A = products making 80% of revenue over the last 12 months, plus products first sold within those 12 months that are Class A on the last 3 months. Rule and measurements: `kelvin/tier-a-basis` f753f4e README §7. Del Monte is unchanged (its tiers stay on the single month).
 
 **The basis is a setting:** `analytics/params.py` `TIER_A_BASIS = "t12m_new"`. To switch back, set it to `"single"` and re-run the steps in "What ran" from the forecast step on. The single-month runs are still in the table and still written.
 
@@ -101,7 +101,8 @@ Each test month uses the Tier A list of the month before, and a model trained on
 
 | Item | For |
 |---|---|
-| The basis itself is pending TA confirmation (DEC-37) | TA |
+| The basis itself is pending TA confirmation (DEC-38) | TA |
+| Migration 0044's header says DEC-37: it was applied before another session took that number (PO Qty). The decision is DEC-38; an applied migration is not edited | — |
 | Coverage gate read as met with 5 dead products at 0; say if these should be handled differently | Yuan |
 | `stability_v1` bins read "churn" for all 189: its cut-offs count Tier A months out of 38, and the new basis has 27 runs. No new cut-off was invented. Not used by the forecast router | Yuan |
 | Stored backtests (forecast runs 2 and 3) are still on the single-month list and pre-date the blank-quantity fix; the dashboard's accuracy card reads them. Rewriting them on the new list needs a decision | Yuan |

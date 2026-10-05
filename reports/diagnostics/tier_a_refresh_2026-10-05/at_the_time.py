@@ -7,7 +7,7 @@ scripts/backtest_forecast_run.py): per test month T, the products Tier A at T-1,
 trained on those products only, the router on the history before T; headline() is that
 script's own (median product WAPE, company-total WAPE in pesos).
 
-Two lists: 'single' (Tier A on the month alone, the stored run's) and 't12m_new' (DEC-37).
+Two lists: 'single' (Tier A on the month alone, the stored run's) and 't12m_new' (DEC-38).
 t12m_new runs start at 2023-12, so its test months start at 2024-01; 'single' is also scored on
 those same months so the two compare like for like, and on its full window 2023-10..2026-02.
 

@@ -18,16 +18,29 @@ month. Keep the two queries in step.
 The rule's 3 weeks is a target for ALL stock, so target vs rule is the
 like-for-like comparison; safety stock alone is kept as a detail.
 
-Units (pieces), never pesos. reports/IMPLEMENTATION_PLAN_2026-09.md Phase 1
-rules peso conversion out until an agreed cost per piece exists
-(Product_Dimension.unit_price is 0/17,536 populated; Inventory_Fact's
-unit_cost_per_case is per CASE, and dividing by pack_size — trusted since
-backend/stock_units.py — is only the LP plan's placeholder so far). So
-working_capital / capital_freed stay null with the reason. est_stockout_rate
-is null too: ss_i covers the review + lead window (5 + 3 business days,
-placeholders in analytics/optimization/lp_inputs.py) under a
-daily-independence assumption still awaiting the adviser's ruling —
-computing it now would state a risk the model hasn't settled.
+Pesos (2026-10-05, PENDING SSM CONFIRMATION): the `pesos` block values the same
+rows at each product's last purchase price per piece (backend/stock_units.
+last_purchase_price_sql — the stock file's unit cost per case ÷ pack size, the
+price the LP plan itself uses). SSM has not confirmed that price as its
+purchase cost, nor the weekly-order assumption, so the block carries
+status = "pending_ssm_confirmation" and the page must show that label.
+
+  headline  = AVERAGE stock on hand: ss_i + half of one weekly order (one
+              order covers review_days of demand: w x review_days / 5 / 2)
+  alongside = PEAK stock: rop_i, the order-up-to target, the level right
+              after a delivery
+  rule      = POLICY_WEEKS x weekly forecast, at the same price
+
+reports/diagnostics/lp_logic_check_2026-10-03 section 4 is the check these
+reproduce (cycle 2026-03, 73 products: average 28.1% less than the rule, peak
+PHP 706,464 more). A product with no price is left out of the peso sums and
+counted in skus_without_price — never given a default price.
+
+working_capital / capital_freed stay null: neither figure is claimed (at peak
+the targets hold MORE than the rule). est_stockout_rate is null too: ss_i
+covers the review + lead window (5 + 3 business days, placeholders in
+analytics/params.py) under a daily-independence assumption still awaiting the
+adviser's ruling — computing it now would state a risk the model hasn't settled.
 """
 from __future__ import annotations
 
@@ -41,16 +54,87 @@ from backend.principals import PrincipalQuery, principal_clause
 from backend.data_mode import PREVIEW, get_data_mode, forecast_source, lp_source, predictive_preview, preview_block
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle
 from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, POLICY_WEEKS
+from backend.stock_units import last_purchase_price_sql
+from analytics.params import BUSINESS_DAYS_PER_WEEK, PLACEHOLDERS
 
 router = APIRouter(prefix="/policy-comparison", tags=["policy-comparison"])
 
 VALUATION_BLOCKED_REASON = (
-    "Units only. No agreed cost per piece exists (Product_Dimension.unit_price is empty; "
-    "the stock file's unit cost per case ÷ pack size is only a planning placeholder), so "
-    "working capital isn't valued in pesos. Stockout exposure is left out until the safety stock's "
+    "No working-capital or capital-freed figure is claimed. The pesos block values both policies at "
+    "each product's last purchase price (the stock file's unit cost per case ÷ pack size), pending SSM "
+    "confirmation; at peak the per-product targets hold more than the 3-week rule, not less. "
+    "Stockout exposure is left out until the safety stock's "
     "window (review + lead days, placeholders until SSM confirms them) and its daily-independence "
-    "assumption are settled — see analytics/optimization/lp_inputs.py."
+    "assumption are settled — see analytics/params.py."
 )
+
+PESOS_STATUS = "pending_ssm_confirmation"
+PESOS_STATUS_LABEL = (
+    "Pending SSM confirmation: the price per piece (last purchase price from the stock file) and the "
+    "weekly-order assumption have not been confirmed by SSM."
+)
+PESOS_PRICE_BASIS = "last purchase price per piece (stock file's unit cost per case ÷ pack size), without VAT"
+
+# One purchase order covers this many weeks of demand (review_days is a placeholder).
+ORDER_WEEKS = PLACEHOLDERS["review_days"] / BUSINESS_DAYS_PER_WEEK
+
+
+def _vs_rule(lp_pesos: float, rule_pesos: float, label: str, definition: str) -> dict:
+    """One side of the peso comparison. difference_pesos and pct_vs_rule are per-product
+    policy minus rule: negative = it holds less than the 3-week rule."""
+    diff = lp_pesos - rule_pesos
+    return {
+        "label": label,
+        "definition": definition,
+        "lp_stock_pesos": round(lp_pesos, 2),
+        "rule_stock_pesos": round(rule_pesos, 2),
+        "difference_pesos": round(diff, 2),
+        "pct_vs_rule": round(diff / rule_pesos * 100, 1) if rule_pesos > 0 else None,
+        "direction": "less" if diff < 0 else "more" if diff > 0 else "same",
+    }
+
+
+def pesos_comparison(rows: list[dict]) -> dict:
+    """The peso block from per-product rows of ss_units, target_units, weekly_units,
+    rule_units and price (None = no last purchase price). Arithmetic only, no database."""
+    priced = [r for r in rows if r["price"] is not None]
+    rule = sum(r["price"] * r["rule_units"] for r in priced)
+    peak = sum(r["price"] * r["target_units"] for r in priced)
+    average = sum(r["price"] * (r["ss_units"] + r["weekly_units"] * ORDER_WEEKS / 2) for r in priced)
+    rule_average_if_peak = sum(r["price"] * (r["rule_units"] - r["weekly_units"] * ORDER_WEEKS / 2) for r in priced)
+    block = {
+        "status": PESOS_STATUS,
+        "status_label": PESOS_STATUS_LABEL,
+        "price_basis": PESOS_PRICE_BASIS,
+        "headline": "average",
+        "sku_count": len(priced),
+        "skus_without_price": len(rows) - len(priced),
+        "rule_weeks": POLICY_WEEKS,
+        "review_days": PLACEHOLDERS["review_days"],
+        "inputs_are_placeholders": True,
+        "average": None,
+        "peak": None,
+        "rule_average_if_three_weeks_is_a_peak": None,
+        "blocked_reason": None,
+    }
+    if not priced or rule <= 0:
+        block["blocked_reason"] = ("No product in the comparison has a last purchase price, "
+                                   "so nothing is valued in pesos.")
+        return block
+    block["average"] = _vs_rule(
+        average, rule, "Average stock on hand",
+        "Per-product safety stock plus half of one weekly order, against 3 weeks of forecast sales held all the time.")
+    block["peak"] = _vs_rule(
+        peak, rule, "Peak stock (right after a delivery)",
+        "Per-product order-up-to targets against 3 weeks of forecast sales.")
+    # If SSM's 3 weeks is itself a peak, the rule's own average is 3 weeks minus half an order.
+    block["rule_average_if_three_weeks_is_a_peak"] = {
+        "label": "If the 3 weeks is the rule's own peak, its average is 3 weeks minus half a weekly order.",
+        "rule_stock_pesos": round(rule_average_if_peak, 2),
+        "average_pct_vs_rule": (round((average - rule_average_if_peak) / rule_average_if_peak * 100, 1)
+                                if rule_average_if_peak > 0 else None),
+    }
+    return block
 
 
 @router.get("")
@@ -69,14 +153,17 @@ def get_policy_comparison(
     cycle_clause = CURRENT_CYCLE_CLAUSE if cycle is not None else " AND 1=0"
     lp, lp_params = lp_source(mode)
     fc, fc_params = forecast_source(mode)
+    price_expr, price_join = last_purchase_price_sql("pd")
     rows = db.execute(
         text(f"""
             SELECT lr.planning_cycle_date, lr.ss_i, lr.rop_i, fr.forecast_value,
-                   COALESCE(pd.sku_code, pd.category_path) AS sku_id, pd.product_name, pd.principal
+                   COALESCE(pd.sku_code, pd.category_path) AS sku_id, pd.product_name, pd.principal,
+                   {price_expr} AS price_per_piece
             FROM {lp} lr
             JOIN Product_Dimension pd ON pd.product_key = lr.product_key
             JOIN {fc} fr
               ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
+            {price_join}
             WHERE lr.status = 'pending'
               {cycle_clause}
               {scope_sql}
@@ -89,12 +176,18 @@ def get_policy_comparison(
     ]
 
     items = []
+    peso_rows = []
     # Unrounded, so the totals match GET /dashboard exactly.
     lp_total = target_total = rule_total = 0.0
     for r in rows:
         lp_units = float(r["ss_i"])
         target_units = float(r["rop_i"])
-        rule_units = POLICY_WEEKS * float(r["forecast_value"]) / AVG_WEEKS_PER_MONTH
+        weekly_units = float(r["forecast_value"]) / AVG_WEEKS_PER_MONTH
+        rule_units = POLICY_WEEKS * weekly_units
+        average_units = lp_units + weekly_units * ORDER_WEEKS / 2
+        price = float(r["price_per_piece"]) if r.get("price_per_piece") is not None else None
+        peso_rows.append({"ss_units": lp_units, "target_units": target_units, "weekly_units": weekly_units,
+                          "rule_units": rule_units, "price": price})
         lp_total += lp_units
         target_total += target_units
         rule_total += rule_units
@@ -110,6 +203,12 @@ def get_policy_comparison(
             # Positive: the LP's target holds less stock than the rule for
             # this SKU (target vs rule, the like-for-like pair).
             "difference_units": round(rule_units - target_units, 2),
+            # Pesos at last purchase price (pending SSM confirmation); null without a price.
+            "lp_average_stock_units": round(average_units, 2),
+            "price_per_piece": round(price, 4) if price is not None else None,
+            "lp_average_stock_pesos": round(price * average_units, 2) if price is not None else None,
+            "lp_peak_stock_pesos": round(price * target_units, 2) if price is not None else None,
+            "rule_stock_pesos": round(price * rule_units, 2) if price is not None else None,
         })
     items.sort(key=lambda i: i["difference_units"], reverse=True)
 
@@ -129,6 +228,7 @@ def get_policy_comparison(
             "skus_lp_holds_less": sum(1 for i in items if i["difference_units"] > 0),
         },
         "items": items,
+        "pesos": pesos_comparison(peso_rows),
         "working_capital": None,
         "capital_freed": None,
         "est_stockout_rate": None,
@@ -139,5 +239,5 @@ def get_policy_comparison(
         ),
     }
     if mode == PREVIEW:
-        payload["data_mode"] = preview_block(db, real_only=None if predictive_preview(mode) else ["items", "portfolio"])
+        payload["data_mode"] = preview_block(db, real_only=None if predictive_preview(mode) else ["items", "portfolio", "pesos"])
     return payload

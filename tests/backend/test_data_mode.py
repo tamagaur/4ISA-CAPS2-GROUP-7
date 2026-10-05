@@ -191,7 +191,7 @@ def test_on_request_abc_reproduces_every_stored_unilever_run(live_db):
 # cohort product with a blank month (product_key 150, 2025-12, per the
 # 2026-10-03 model audit) until segmentation is re-run with the fix.
 # 2026-10-05: reads the cohort of the Tier A basis in use (analytics.params,
-# DEC-37), the run segmentation now refreshes; the older 'single' run is kept
+# DEC-38), the run segmentation now refreshes; the older 'single' run is kept
 # as written.
 def test_on_request_traits_reproduce_the_stored_segmentation_run(live_db):
     from sqlalchemy import text

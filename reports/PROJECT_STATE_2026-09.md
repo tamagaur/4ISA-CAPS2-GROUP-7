@@ -1210,7 +1210,65 @@ Suite before the fixes: 1,324 passed, 26 skipped (raw files not in the worktree;
 | Render not re-timed after the cache; /recommendations still 7–11 statements cold; the preview dashboard is never cached | next speed pass |
 | Del Monte preview pipeline (§18.5) not built | Yuan |
 
-## 21. Tier A on the 12-month basis + full refresh — LIVE on `public` 2026-10-05 (DEC-37, PENDING TA CONFIRMATION)
+## 21. Remaining endpoints + housekeeping — 2026-10-05 (branch `kelvin/endpoints-housekeeping`)
+
+No migration, no database write, no forecast, segmentation or LP run. Everything below was read from live in
+read-only transactions on 2026-10-05.
+
+### 21.1 Report branches merged (kelvin-etl 6cd014c, pushed)
+
+| Branch | Merged as | Note |
+|---|---|---|
+| `kelvin/tier-a-basis` | `kelvin/tier-a-basis-clean` de93b6e | 7 tables: per-product revenue, price and peso columns moved to git-ignored `local/` |
+| `kelvin/lp-logic-check` | `kelvin/lp-logic-check-clean` 5964deb | 2 tables: per-product price and peso columns moved to `local/` (hard rule 9) |
+| `kelvin/forecast-error-business` | b4f6b77 | as is |
+| `kelvin/surplus-bias-experiment` | 3226cc4 | as is |
+| `kelvin/model-audit` | 36a5548 | as is |
+
+The two original branches still hold the per-product columns in their history: keep them local, never push them.
+
+### 21.2 Endpoints (for the frontend)
+
+| Endpoint | What changed | Live check |
+|---|---|---|
+| `GET /policy-comparison` | new `pesos` block, `status: "pending_ssm_confirmation"`: per-product targets against the 3-week rule at last purchase price; headline `average`, `peak` alongside; per-item peso fields | cycle 2026-03, 73 products: rule ₱8,211,106.33; average ₱5,906,831.95 (−28.1%); peak ₱8,917,570.23 (+₱706,463.89, +8.6%) = `lp_logic_check_2026-10-03` §4 |
+| `GET /dashboard/class-changes` (new) | products that entered or left Class A between two ranges, with both ranges' revenue, class and rank | 2025 against 2024, Unilever: 44 entered (₱8.59M → ₱39.62M), 38 left (₱38.03M → ₱4.71M), 123 stayed = `tier_a_basis_2026-10-03` §4 |
+| `GET /dashboard/accuracy`, `GET /dashboard` `forecast_accuracy` | two labelled figures, always both: `company_total` and `typical_product_weighted`; `level=summary` replaces `level=total` (still accepted) | default backtest 2023-10..2026-02, 337 products: company total 9.8% (0.098194), typical product weighted 29.6% (0.296344) |
+
+Decisions made here (Yuan ruled on the first two the same day, see the rows):
+
+| Item | What was done | Why |
+|---|---|---|
+| Class-changes revenue rule | a month where returns exceeded sales counts as 0 (the ABC runner's rule for several months, `analytics/classification/orchestrate_abc.py:208`) | it is the rule the tier-a-basis report used. **Yuan, 2026-10-05: one revenue rule everywhere** — `GET /dashboard/pareto` and the dashboard's ABC ring now use it too (they netted returns over the range before and gave 43 / 37 on the same years); live check after the change in §21.5. |
+| Company total reads 9.8%, not 9.9% | reported as measured | traced: 3 product-months whose quantity is blank. The model audit counted them as 0 sold (9.87%); the mart counts them as missing (9.82%). Same forecasts, same price basis (§19). |
+| A product with no last purchase price | left out of the peso sums and counted (`skus_without_price`) | hard rule 3: the plan's ₱25 placeholder is never shown as a measured price. Cycle 2026-03 has none. |
+
+### 21.3 Recorded and reported
+
+| Item | Where |
+|---|---|
+| DEC-37: PO Qty is not treated as in-transit stock (scale check), information only, pending SSM | `ARCHITECTURE.md`; no code change |
+| Safety-stock source comparison: current method ₱8.01M against forecast-error ₱7.90M (−1.4%) on 174 comparable products; Class A as of 2026-02 −2.8%, B +5.8%, C +3.5%; current stays the default | `reports/diagnostics/safety_stock_source_2026-10-05/README.md` |
+
+### 21.4 Tests
+
+`tests/backend/test_policy_comparison.py`, `tests/backend/test_dashboard_range.py`, `tests/backend/test_dashboard.py`,
+`tests/test_marts.py`, `tests/test_dec_references.py`, `tests/backend/test_stock_timing.py`: 158 passed, 3 skipped (the live-database tests in `test_marts.py`,
+which need `SUPABASE_DB_URL`). The full suite was not run.
+
+
+### 21.5 Follow-up decisions (Yuan, 2026-10-05)
+
+| Decision | Done | Check |
+|---|---|---|
+| Delete the original `kelvin/tier-a-basis` and `kelvin/lp-logic-check` | both local branches and their worktrees removed; neither was ever on `group7` | `git ls-remote --heads group7`: 0 matches; the LP check's offline pull kept in git-ignored `scratch/lp_logic_check_2026-10-03/` |
+| One revenue rule everywhere | `backend/marts.PARETO_SQL` counts a month where returns exceeded sales as 0 (`analytics/classification/orchestrate_abc.py:208`); `GET /dashboard/pareto`, the dashboard ABC ring and `GET /dashboard/class-changes` all rank with it | live, read-only: reproduces every stored `single` ABC run (`tests/test_marts.py`, 1 passed); Unilever 2025 against 2024: Class A 167 and 161, 44 entered, 38 left |
+| Company-total gap traced | one line in `reports/diagnostics/model_audit_2026-10-03/README.md` | 3 blank-quantity product-months: 0 sold in the audit (9.87%), missing in the mart (9.82%) |
+
+Tests after the change: `tests/backend/test_dashboard_range.py`, `tests/backend/test_dashboard.py`, `tests/test_marts.py`,
+`tests/test_dec_references.py`: 132 passed, 3 skipped (live tests), plus the live ABC reproduction test run on its own.
+
+## 22. Tier A on the 12-month basis + full refresh — LIVE on `public` 2026-10-05 (DEC-38, PENDING TA CONFIRMATION)
 
 Full write-up: `reports/diagnostics/tier_a_refresh_2026-10-05/README.md`. Branch `kelvin/tier-a-12m` (also merges `kelvin/blank-qty-fix` e78748c). Backup `full_backup_20261005T061733Z`. Migration 0044.
 

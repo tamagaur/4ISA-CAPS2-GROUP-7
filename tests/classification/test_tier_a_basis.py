@@ -1,7 +1,7 @@
 """
 tests/classification/test_tier_a_basis.py — the 't12m_new' Tier A basis
 (analytics.classification.orchestrate_abc.classify_unilever_t12m_new,
-migration 0044, DEC-37) and the setting that says which basis is Tier A
+migration 0044, DEC-38) and the setting that says which basis is Tier A
 (analytics.params.TIER_A_BASIS / abc_method / abc_method_sql).
 
 In-memory SQLite stand-ins for the _Real view and abc_classification, as in

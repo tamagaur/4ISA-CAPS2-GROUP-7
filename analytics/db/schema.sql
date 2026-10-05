@@ -498,7 +498,7 @@ CREATE INDEX IF NOT EXISTS ix_unilever_sku_demand_product ON Unilever_SKU_Demand
 -- 'single' = that month's revenue, 't3m' = trailing 3 months including that
 -- month. Natural key widened to (product_key, classification_period, method)
 -- since both bases legitimately coexist for the same product/period.
--- 't12m_new' (migration 0044, DEC-37): 12 months + new products; which method
+-- 't12m_new' (migration 0044, DEC-38): 12 months + new products; which method
 -- is Tier A is analytics.params.TIER_A_BASIS / abc_method().
 CREATE TABLE IF NOT EXISTS ABC_Classification (
     classification_key      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

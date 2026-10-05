@@ -31,7 +31,7 @@ from scripts.run_baseline_forecast import fetch_tier_a, resolve_abc_period
 
 load_dotenv()
 
-# The Tier A basis in use (analytics.params.TIER_A_BASIS, DEC-37): 'single'
+# The Tier A basis in use (analytics.params.TIER_A_BASIS, DEC-38): 'single'
 # until 2026-10-05, 't12m_new' since.
 DEPLOYED_METHOD = abc_method("unilever")
 # The cohort as of 2026-02 on the t12m_new basis: 189, measured 2026-10-05
