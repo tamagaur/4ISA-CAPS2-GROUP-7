@@ -349,5 +349,6 @@ def test_runner_refuses_a_scratch_search_path_on_the_pooled_url():
     with pytest.raises(RuntimeError, match="ssm_forecast_p3"):
         refuse_pooled_scratch(pooled, "ssm_forecast_p3, public")
     refuse_pooled_scratch(pooled, default)                          # normal start on the pooler
+    refuse_pooled_scratch(pooled, r'"\$user", public, extensions')   # the postgres role's own spelling (2026-10-05)
     refuse_pooled_scratch(direct, "ssm_forecast_p3, public")        # scratch rehearsal on the direct URL
     refuse_pooled_scratch(direct, default)

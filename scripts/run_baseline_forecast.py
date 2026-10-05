@@ -92,7 +92,9 @@ CLASS_EVIDENCE_ROWS = [
 # --------------------------------------------------------------------------- #
 POOLED_PORT = 6543
 # Supabase's default search_path on both the pooled and the direct URL (read 2026-09-21).
-DEFAULT_SEARCH_PATH_SCHEMAS = frozenset({"$user", "public", "extensions", "pg_catalog", "pg_temp"})
+# The postgres role's own setting spells the first entry "\$user" (pg_db_role_setting, read
+# 2026-10-05; current_schemas() = public, extensions), so both spellings are the default.
+DEFAULT_SEARCH_PATH_SCHEMAS = frozenset({"$user", r"\$user", "public", "extensions", "pg_catalog", "pg_temp"})
 
 
 def refuse_pooled_scratch(db_url: str, search_path: str) -> None:
