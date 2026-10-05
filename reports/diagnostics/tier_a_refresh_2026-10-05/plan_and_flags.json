@@ -1,0 +1,105 @@
+{
+ "run1": {
+  "products": 73,
+  "order_pieces": 325468,
+  "order_pesos_at_cost": 6964217,
+  "short_products": 0,
+  "short_pieces": 0,
+  "order_zero": 31,
+  "stock_on_hand": 2093786,
+  "safety_stock": 485541,
+  "target_stock": 884856,
+  "not_in_count": 1
+ },
+ "run2": {
+  "products": 97,
+  "order_pieces": 356254,
+  "order_pesos_at_cost": 7017551,
+  "short_products": 0,
+  "short_pieces": 0,
+  "order_zero": 38,
+  "stock_on_hand": 2147475,
+  "safety_stock": 529279,
+  "target_stock": 930602,
+  "not_in_count": 6
+ },
+ "products": {
+  "in_both": 68,
+  "run1_only": 5,
+  "run2_only": 29
+ },
+ "same_products": {
+  "order_run1": 293511,
+  "order_run2": 290631,
+  "order_changed": 27,
+  "forecast_changed": 50,
+  "ss_changed": 0
+ },
+ "run2_new_products": {
+  "products": 29,
+  "order_pieces": 65623,
+  "order_pesos_at_cost": 1157292,
+  "short_products": 0,
+  "short_pieces": 0,
+  "order_zero": 7,
+  "stock_on_hand": 80331,
+  "safety_stock": 53594,
+  "target_stock": 74361,
+  "not_in_count": 5
+ },
+ "review_flags": {
+  "flagged": 51,
+  "flagged_with_plan_row": 17,
+  "collapse": 29,
+  "over_run_3plus": 37,
+  "dead_sku": 5,
+  "insufficient_data": 0,
+  "flagged_not_in_old_tier_a": 36
+ },
+ "forecast_status_mase_pass_nullvalue": [
+  [
+   "dead_sku",
+   5,
+   0,
+   0
+  ],
+  [
+   "insufficient_data",
+   9,
+   0,
+   0
+  ],
+  [
+   "ok",
+   175,
+   97,
+   0
+  ]
+ ],
+ "served": [
+  [
+   "long",
+   "ma3",
+   1,
+   1
+  ],
+  [
+   "long",
+   "xgb_ma3_avg",
+   104,
+   0
+  ],
+  [
+   "medium",
+   "tsb",
+   34,
+   0
+  ],
+  [
+   "short",
+   "ma3",
+   36,
+   0
+  ]
+ ]
+}
