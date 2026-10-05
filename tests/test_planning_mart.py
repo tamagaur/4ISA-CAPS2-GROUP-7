@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from analytics import marts
-from analytics.params import SKU_COVER_HISTORY_MONTHS
+from analytics.params import SKU_COVER_HISTORY_MONTHS, TIER_A_BASIS
 from backend import planning_mart
 from backend.routers import recommendations as rec
 from backend.stock_status import COUNT_OMITS_ZERO_STOCK, STATUSES, URGENCY
@@ -54,8 +54,11 @@ def test_refresh_planning_defaults_are_the_values_the_code_passes():
     default = re.search(r"p_zero_omitting text\[\] DEFAULT ARRAY\[(.*?)\]", sql).group(1)
     assert {v.strip().strip("'") for v in default.split(",")} == set(COUNT_OMITS_ZERO_STOCK)
     assert set(marts.PLANNING_ZERO_OMITTING) == set(COUNT_OMITS_ZERO_STOCK)
+    assert re.search(r"p_tier_a_basis text DEFAULT '(\w+)'", sql).group(1) == TIER_A_BASIS
     assert marts.planning_params("x") == {"trigger": "x", "cover_months": SKU_COVER_HISTORY_MONTHS,
-                                          "zero_omitting": list(marts.PLANNING_ZERO_OMITTING)}
+                                          "zero_omitting": list(marts.PLANNING_ZERO_OMITTING),
+                                          "tier_a_basis": TIER_A_BASIS}
+    assert marts.PLANNING_SIGNATURE.count(",") == sql.split("FUNCTION mart.refresh_planning(")[1].split(") RETURNS")[0].count("DEFAULT") - 1
 
 
 def test_the_mart_allows_exactly_the_status_names_the_app_uses():

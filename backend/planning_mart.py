@@ -193,7 +193,7 @@ def refresh(db, trigger: str) -> bool:
         return False
     try:
         with db.begin_nested():
-            db.execute(text(f"SELECT {_STATE['schema']}.refresh_planning(:trigger, :cover_months, :zero_omitting)"),
+            db.execute(text(f"SELECT {_STATE['schema']}.refresh_planning(:trigger, :cover_months, :zero_omitting, :tier_a_basis)"),
                        planning_params(trigger))
         return True
     except Exception as exc:  # noqa: BLE001 - the caller's write must not fail on a summary table

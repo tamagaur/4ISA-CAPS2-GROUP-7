@@ -30,6 +30,7 @@ from analytics.params import (
     DEAD_SKU_MONTHS,
     POSSIBLY_PARTIAL_COUNTS,
     SKU_COVER_HISTORY_MONTHS,
+    TIER_A_BASIS,
     STOCK_LIMITED_AVG_MIN_MONTHS,
     STOCK_LIMITED_AVG_MONTHS,
     STOCK_LIMITED_WEEKS,
@@ -42,7 +43,7 @@ MART_TABLES = ("sales_mart", "flow_month", "inventory_mart", "idle_stock", "accu
 REFRESH_SIGNATURE = "refresh(text,integer,text[],numeric,integer,integer)"
 
 # mart.refresh_planning()'s arguments (migration 0046).
-PLANNING_SIGNATURE = "refresh_planning(text,integer,text[])"
+PLANNING_SIGNATURE = "refresh_planning(text,integer,text[],text)"
 # Principals whose stock count never lists a zero-stock item, so a product missing from it
 # has 0 on hand: backend/stock_status.COUNT_OMITS_ZERO_STOCK (pinned by tests/test_planning_mart.py).
 PLANNING_ZERO_OMITTING = ("unilever",)
@@ -51,7 +52,7 @@ PLANNING_ZERO_OMITTING = ("unilever",)
 def planning_params(trigger: str) -> dict:
     """The arguments mart.refresh_planning() takes — one definition."""
     return {"trigger": trigger, "cover_months": SKU_COVER_HISTORY_MONTHS,
-            "zero_omitting": list(PLANNING_ZERO_OMITTING)}
+            "zero_omitting": list(PLANNING_ZERO_OMITTING), "tier_a_basis": TIER_A_BASIS}
 
 
 def refresh_params(trigger: str) -> dict:
@@ -104,7 +105,7 @@ def refresh_planning_cursor(cur, trigger: str, schema: str | None = "public", ma
     if reason is not None:
         print(f"[marts] planning refresh skipped: {reason}")
         return None
-    cur.execute(f"SELECT {mart}.refresh_planning(%(trigger)s, %(cover_months)s, %(zero_omitting)s)", planning_params(trigger))
+    cur.execute(f"SELECT {mart}.refresh_planning(%(trigger)s, %(cover_months)s, %(zero_omitting)s, %(tier_a_basis)s)", planning_params(trigger))
     counts = cur.fetchone()[0]
     print(f"[marts] planning mart refreshed ({trigger}): {counts}")
     return counts

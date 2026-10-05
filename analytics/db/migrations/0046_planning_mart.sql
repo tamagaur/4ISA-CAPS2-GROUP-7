@@ -11,8 +11,10 @@
 -- the one backend/routers/recommendations.py computed per request, by the same rules:
 --   product          sku_code, sku_id (sku_code, else category_path), product_name, principal,
 --                    pack_size (pieces per case, NULL when not a usable positive number)
---   Tier A class     tier + revenue_share at the principal's latest ABC run of basis
---                    tier_basis ('single' = one month's sales) for month tier_period
+--   Tier A class     tier + revenue_share at the principal's latest ABC run on its Tier A
+--                    basis, tier_basis (Unilever: p_tier_a_basis, 't12m_new' = the last 12
+--                    months plus new products, DEC-38; Del Monte: 'single', one month's
+--                    sales), for month tier_period
 --   forecast         forecast_pieces + forecast_lower/upper (forecast_result for the cycle
 --                    month), forecast_run_id (the mart.forecast_run that keeps those forecasts)
 --   plan             safety_stock (ss_i), target_stock (rop_i), order_pieces (q_i)
@@ -47,7 +49,7 @@
 -- refresh_status.refreshed_at / stale keep their meaning: the last FULL refresh (a log row that
 -- counts sales_mart), so a planning-only refresh cannot hide a stale dashboard mart.
 --
--- Rollback: DROP FUNCTION mart.refresh_planning(text, integer, text[]); DROP TABLE
+-- Rollback: DROP FUNCTION mart.refresh_planning(text, integer, text[], text); DROP TABLE
 -- mart.planning_mart; re-create mart.refresh_status from 0041 (DROP VIEW first: it gained two
 -- columns); DELETE FROM mart.refresh_log WHERE row_counts -> 'sales_mart' IS NULL;
 -- DELETE FROM schema_migrations WHERE filename = '0046_planning_mart.sql';
@@ -112,11 +114,14 @@ ALTER TABLE mart.planning_mart ENABLE ROW LEVEL SECURITY;
 
 -- p_cover_months: analytics.params.SKU_COVER_HISTORY_MONTHS. p_zero_omitting: the principals
 -- whose stock count never lists a zero-stock item (backend/stock_status.COUNT_OMITS_ZERO_STOCK).
--- analytics/marts.py passes both; the defaults are the same, pinned by tests/test_planning_mart.py.
+-- p_tier_a_basis: analytics.params.TIER_A_BASIS, the ABC method that is Unilever's Tier A
+-- (migration 0044; Del Monte stays on 'single', analytics.params.abc_method).
+-- analytics/marts.py passes all three; the defaults are the same, pinned by tests/test_planning_mart.py.
 CREATE FUNCTION mart.refresh_planning(
     p_trigger text DEFAULT 'manual',
     p_cover_months integer DEFAULT 3,
-    p_zero_omitting text[] DEFAULT ARRAY['unilever']
+    p_zero_omitting text[] DEFAULT ARRAY['unilever'],
+    p_tier_a_basis text DEFAULT 't12m_new'
 ) RETURNS jsonb LANGUAGE plpgsql SET search_path = mart, public AS $$
 DECLARE
     t0 timestamptz := clock_timestamp();
@@ -171,10 +176,12 @@ BEGIN
         WHERE i._period IN (SELECT opening_period FROM periods)
         GROUP BY i.principal, i._period
     ),
-    -- Each principal's latest ABC run on one month's sales (method 'single').
+    -- Each principal's latest ABC run on its own Tier A basis.
     abc_latest AS (
         SELECT principal, MAX(classification_period) AS period
-        FROM abc_classification WHERE method = 'single' GROUP BY principal
+        FROM abc_classification
+        WHERE method = CASE principal WHEN 'unilever' THEN p_tier_a_basis ELSE 'single' END
+        GROUP BY principal
     ),
     -- The p_cover_months most recent sales months the file has at or before each opening
     -- count; a month the product has no row in counts as 0 (the divisor is the window).
@@ -204,8 +211,7 @@ BEGIN
                CASE WHEN pd.pack_size ~ '^[0-9]+(\.[0-9]+)?$' AND pd.pack_size::numeric > 0
                     THEN pd.pack_size::numeric END AS pack_size,
                abc.tier, abc.revenue_share,
-               CASE WHEN abc.product_key IS NOT NULL THEN 'single' END AS tier_basis,
-               CASE WHEN abc.product_key IS NOT NULL THEN abc.classification_period END AS tier_period,
+               abc.method AS tier_basis, abc.classification_period AS tier_period,
                fr.forecast_value AS forecast_pieces, fr.confidence_lower AS forecast_lower,
                fr.confidence_upper AS forecast_upper, fr.status AS forecast_status,
                CASE WHEN fr.product_key IS NOT NULL THEN (SELECT run_id FROM served_run) END AS forecast_run_id,
@@ -238,7 +244,8 @@ BEGIN
         LEFT JOIN counted ON counted.principal = pd.principal AND counted.period = lr.opening_period
         LEFT JOIN abc_latest ON abc_latest.principal = pd.principal
         LEFT JOIN abc_classification abc
-               ON abc.product_key = lr.product_key AND abc.method = 'single'
+               ON abc.product_key = lr.product_key
+              AND abc.method = CASE pd.principal WHEN 'unilever' THEN p_tier_a_basis ELSE 'single' END
               AND abc.classification_period = abc_latest.period
         LEFT JOIN sales ON sales.product_key = lr.product_key AND sales.opening_period = lr.opening_period
         LEFT JOIN review_flag rf
@@ -287,7 +294,7 @@ BEGIN
     INSERT INTO mart.refresh_log (trigger, duration_ms, row_counts, params)
     VALUES (p_trigger, (EXTRACT(EPOCH FROM clock_timestamp() - t0) * 1000)::int, v_counts,
             jsonb_build_object('scope', 'planning', 'cover_months', p_cover_months,
-                               'zero_omitting', to_jsonb(p_zero_omitting)));
+                               'zero_omitting', to_jsonb(p_zero_omitting), 'tier_a_basis', p_tier_a_basis));
     RETURN v_counts;
 END
 $$;
@@ -320,7 +327,7 @@ CREATE OR REPLACE VIEW mart.refresh_status AS
     ) src
     CROSS JOIN LATERAL (
         SELECT (SELECT MAX(computed_at) FROM review_flag) AS latest_review_flag,
-               (SELECT MAX(computed_at) FROM abc_classification WHERE method = 'single') AS latest_abc,
+               (SELECT MAX(computed_at) FROM abc_classification) AS latest_abc,
                (SELECT MAX(created_at) FROM audit_log WHERE action = 'Edit SKU') AS latest_product_edit
     ) plan;
 
