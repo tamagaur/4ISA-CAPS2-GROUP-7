@@ -1,0 +1,13 @@
+label,principal,page,state,run,calls,waves,ms
+planbefore5,unilever,reorder,cold,1,2,1,45615.9
+planbefore5,unilever,reorder,warm,1,2,1,526.0
+planbefore5,unilever,reorder,cold,2,2,1,28243.3
+planbefore5,unilever,reorder,warm,2,2,1,521.8
+planbefore5,unilever,reorder,cold,3,2,1,26842.7
+planbefore5,unilever,reorder,warm,3,2,1,557.6
+planbefore5,delmonte,reorder,cold,1,2,1,15938.7
+planbefore5,delmonte,reorder,warm,1,2,1,680.6
+planbefore5,delmonte,reorder,cold,2,2,1,15985.5
+planbefore5,delmonte,reorder,warm,2,2,1,893.6
+planbefore5,delmonte,reorder,cold,3,2,1,7045.5
+planbefore5,delmonte,reorder,warm,3,2,1,846.6

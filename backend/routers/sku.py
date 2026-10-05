@@ -36,7 +36,7 @@ from backend.principals import (
 )
 from backend.schemas.sku import SKUCreate, SKUItem, SKUListResponse, SKUUpdate
 from backend.stock_units import STOCK_AT_LATEST_SQL
-from backend import response_cache
+from backend import planning_mart, response_cache
 from backend.response_cache import cached
 
 router = APIRouter(prefix="/sku", tags=["sku"])
@@ -299,6 +299,9 @@ def update_sku(
         raise HTTPException(status_code=404, detail="SKU not found")
     if changes:
         audit.record(db, "Edit SKU", f"SKU {updated['sku_id']}: {changes}", actor=current_user)
+        # The Reorder page reads the product's name and pack size (and the stock in pieces
+        # worked out from it) from the planning mart, migration 0046.
+        planning_mart.refresh(db, "Edit SKU")
     db.commit()
     response_cache.invalidate()
 

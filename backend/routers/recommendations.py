@@ -148,6 +148,19 @@ on_order_blocked_reason when the count's PO Qty isn't loaded (live rows stay
 unloaded until SSM answers), the principal's file has no PO column (Del
 Monte), the product is absent from the count, or it has no usable pack size.
 
+PLANNING MART (2026-10-05, migration 0046). In real mode GET reads
+mart.planning_mart: one row per product x cycle that already carries every
+column _SELECT_ONE joins per request, built by the same rules
+(mart.refresh_planning). One statement instead of 12 (_from_mart,
+backend/planning_mart.py); the rows go through the same _to_item, so the
+response is field for field the one the joins give
+(scripts/rehearse_planning_mart.py compares the two for every row before the
+migration is applied). The joins below stay: preview mode reads them, and so
+does real mode whenever the mart is missing or out of step with its sources
+(backend/planning_mart.usable / read), so a missed refresh costs speed, never
+a wrong figure. A decision (PATCH) updates the mart's row in its own
+transaction.
+
 PACK SIZE (2026-10-01). Every quantity here is in PIECES, while SSM buys
 in cases: an order of 104,575 pieces is about 363 cases of 288. pack_size
 (Product_Dimension's pieces per case, None when unusable — the same rule
@@ -177,7 +190,7 @@ from backend.principals import (
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
 from backend.data_mode import PREVIEW, REAL, forecast_source, get_data_mode, lp_source, predictive_preview, preview_block
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, lp_model_info, stored_run
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, freshness_from, lp_model_info, stored_run
 from backend.lp_cycle import freshness as lp_freshness
 from analytics.params import DAYS_PER_MONTH, SKU_COVER_HISTORY_MONTHS
 from backend.stock_status import COUNT_OMITS_ZERO_STOCK, NO_DATA, URGENCY, stock_status
@@ -190,9 +203,10 @@ from backend.stock_units import (
     STOCK_AT_PERIOD_SQL,
     missing_opening_count_reason,
     opening_period,
+    stock_count_info,
     stock_counts,
 )
-from backend import response_cache
+from backend import planning_mart, response_cache
 from backend.response_cache import cached
 
 # Order quantities are counted in whole units rounded UP, the rule the Reorder
@@ -525,6 +539,10 @@ def get_recommendations(
     # lp_recommendation currently holds 430 Unilever rows and ZERO Del
     # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte
     # honestly returns an empty list until the LP is run for Del Monte.
+    if planning_mart.usable(db, mode):
+        served = _from_mart(db, status, cycle, from_date, to_date, principal)
+        if served is not None:
+            return served
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     present = _present(db)
     select_sql, lp_params = select_one(mode, present)
@@ -607,6 +625,47 @@ def get_recommendations(
     ), db, mode)
 
 
+# The planning mart is built on migration 0042's table and columns.
+_MART_PRESENT = {"review_flag": True, "on_order": True}
+
+
+def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | None, to_date: str | None,
+               principal: str | None) -> RecommendationsResponse | None:
+    """get_recommendations' answer from mart.planning_mart (real mode), in one statement.
+    None when the mart must not be served (backend/planning_mart.read): the caller then
+    runs the per-request joins."""
+    got = planning_mart.read(db, principal, status, cycle, from_date, to_date)
+    if got is None:
+        return None
+    head = got["head"]
+    freshness = freshness_from(head["cycle"], head["fc_at"], head["lp_at"], int(head["row_count"] or 0),
+                               int(head["stale_count"] or 0), int(head["superseded"] or 0))
+    if cycle == "current" and head["cycle"] is None:
+        return RecommendationsResponse(
+            items=[], count=0, planning_cycle_date=None,
+            superseded_count=0, freshness=freshness, lp_model=lp_model_info(),
+            stock_counts=[],
+        )
+    rows = got["rows"]
+    # The opening count each principal's rows were checked against, per cycle (newest
+    # first): the count's own figures as the mart keeps them, None when there is no count.
+    counts = [
+        stock_count_info(c["principal"], c["opening_period"], None if c["row_count"] is None else c,
+                         c["planning_cycle_date"])
+        for c in got["counts"]
+    ]
+    items = [_to_item(r, _MART_PRESENT) for r in rows]
+    return RecommendationsResponse(
+        items=items,
+        count=len(items),
+        planning_cycle_date=freshness["cycle_date"],
+        superseded_count=freshness["superseded_pending_count"] if cycle == "current" else 0,
+        freshness=freshness,
+        lp_model=lp_model_info(got["run"]),
+        stock_counts=counts,
+    )
+
+
 def _with_data_mode(response: RecommendationsResponse, db: Session, mode: str):
     """Real mode: the model untouched. Preview: the data_mode block beside it,
     saying whether these rows are the five-year what-if (never saved, not
@@ -634,6 +693,12 @@ def update_recommendation(
             "Accept it from its own row after checking it; it is never accepted in bulk."
         ))
 
+    decision_params = {
+        "status": decision.status,
+        "decided_at": datetime.datetime.utcnow(),
+        "decided_by": current_user.email,
+        "key": recommendation_key,
+    }
     decided = db.execute(
         text("""
             UPDATE lp_recommendation
@@ -643,16 +708,13 @@ def update_recommendation(
                         WHERE pd.product_key = lp_recommendation.product_key) AS sku,
                       planning_cycle_date
         """),
-        {
-            "status": decision.status,
-            "decided_at": datetime.datetime.utcnow(),
-            "decided_by": current_user.email,
-            "key": recommendation_key,
-        },
+        decision_params,
     ).mappings().first()
     if decided is None:
         db.rollback()
         raise HTTPException(status_code=404, detail="Recommendation not found")
+    # The planning mart's row for this decision, in the same transaction (migration 0046).
+    planning_mart.decide(db, decision_params)
     audit.record(
         db,
         f"Reorder Recommendation {'Accepted' if decision.status == 'accepted' else 'Dismissed'}",
