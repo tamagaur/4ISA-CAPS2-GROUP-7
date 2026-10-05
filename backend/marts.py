@@ -373,20 +373,22 @@ def stock_status_query(period: str, product_keys: list[int]) -> tuple[str, dict]
 # ---------------------------------------------------------------------------
 
 # The ABC run's rules (analytics/classification/orchestrate_abc.py, 'single'), applied to
-# the range's total per product instead of one month's: a product is ranked when it sold
-# more than it took back over the range (net pesos > 0); an explicit blank peso amount
+# the range's months per product instead of one month's: a month where returns exceeded
+# sales counts as 0 (orchestrate_abc.py:208, the run's rule for a window of several months;
+# Yuan, 2026-10-05: one revenue rule everywhere, so this and class_changes() agree), and a
+# product is ranked when what is left is above 0; an explicit blank peso amount
 # anywhere in the range leaves it out, as the run does; ties go to the lower product_key
 # (classify_abc's sku_id order); class A while the running share is <= the A cutoff, B
 # while <= the B cutoff, else C. Del Monte ranks product categories (DEC-03).
 PARETO_SQL = """
     WITH rev AS (
-        SELECT s.product_key, {revenue} AS revenue, SUM(s.pieces) AS pieces,
+        SELECT s.product_key, SUM(GREATEST(s.pesos, 0)) AS revenue, SUM(s.pieces) AS pieces,
                COUNT(*) AS months_with_sales
         FROM mart.sales_mart s
         WHERE s.principal = :principal AND s.in_principal_total
           AND s.period BETWEEN :start AND :end AND {kind}
         GROUP BY s.product_key
-        HAVING bool_and(s.pesos IS NOT NULL) AND {revenue} > 0
+        HAVING bool_and(s.pesos IS NOT NULL) AND SUM(GREATEST(s.pesos, 0)) > 0
     ),
     ranked AS (
         SELECT rev.*,
@@ -405,10 +407,10 @@ PARETO_SQL = """
 """
 
 
-def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL,
-           zero_negative_months: bool = False) -> list[dict]:
-    """Every product (Del Monte: category) ranked on its net sales over start..end."""
-    rows = batch.rows(db, *pareto_query(start, end, principal, mode, zero_negative_months))
+def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL) -> list[dict]:
+    """Every product (Del Monte: category) ranked on its sales over start..end, a month
+    where returns exceeded sales counted as 0."""
+    rows = batch.rows(db, *pareto_query(start, end, principal, mode))
     return [
         {
             "rank": int(r["rank"]),
@@ -429,19 +431,8 @@ def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL,
     ]
 
 
-# Two ways to add a range's months up. NET: returns in one month come off another month's
-# sales (the range cards, DEC-36). ZEROED: a month where returns exceeded sales counts as 0,
-# the ABC runner's own rule for a window of several months (analytics/classification/orchestrate_abc.py:208)
-# and the one reports/diagnostics/tier_a_basis_2026-10-03 used. A single month ranks the
-# same under both; over calendar 2024 or 2025 they differ by one product at the Class A line.
-REVENUE_NET = "SUM(s.pesos)"
-REVENUE_NEGATIVE_MONTHS_ZEROED = "SUM(GREATEST(s.pesos, 0))"
-
-
-def pareto_query(start: str, end: str, principal: str, mode: str = REAL,
-                 zero_negative_months: bool = False) -> tuple[str, dict]:
-    return (PARETO_SQL.format(kind=_kind_filter(mode, "s"),
-                              revenue=REVENUE_NEGATIVE_MONTHS_ZEROED if zero_negative_months else REVENUE_NET),
+def pareto_query(start: str, end: str, principal: str, mode: str = REAL) -> tuple[str, dict]:
+    return (PARETO_SQL.format(kind=_kind_filter(mode, "s")),
             {"principal": principal, "start": start, "end": end, "a": TIER_A_CUTOFF, "b": TIER_B_CUTOFF})
 
 
@@ -472,14 +463,12 @@ def _unranked_side(row: dict | None, prefix: str) -> tuple[float | None, str]:
 
 def class_changes(db: Session, start: str, end: str, compare_start: str, compare_end: str, principal: str) -> dict:
     """Products (Del Monte: categories) that entered or left Class A between the compare range
-    and start..end, each range ranked by pareto() on real rows with the ABC runner's
-    several-month rule (REVENUE_NEGATIVE_MONTHS_ZEROED), so revenue is the range's sales with
-    each returns-heavy month counted as 0. A product not ranked in a range has class None and
-    the reason in its *_note."""
-    batch.prefetch(db, [pareto_query(start, end, principal, REAL, True),
-                        pareto_query(compare_start, compare_end, principal, REAL, True)])
-    now = {r["product_key"]: r for r in pareto(db, start, end, principal, REAL, True)}
-    before = {r["product_key"]: r for r in pareto(db, compare_start, compare_end, principal, REAL, True)}
+    and start..end, each range ranked by pareto() on real rows, so revenue is the range's
+    sales with each returns-heavy month counted as 0. A product not ranked in a range has
+    class None and the reason in its *_note."""
+    batch.prefetch(db, [pareto_query(start, end, principal), pareto_query(compare_start, compare_end, principal)])
+    now = {r["product_key"]: r for r in pareto(db, start, end, principal)}
+    before = {r["product_key"]: r for r in pareto(db, compare_start, compare_end, principal)}
     a_now = {k for k, r in now.items() if r["class"] == "A"}
     a_before = {k for k, r in before.items() if r["class"] == "A"}
     entered, left = a_now - a_before, a_before - a_now

@@ -68,7 +68,8 @@ def get_range_pareto(
     current_user: TokenPayload = Depends(require_permission("dashboard.view")),
 ) -> dict:
     """Each principal ranked against its own revenue: Unilever by SKU, Del Monte by product
-    category (DEC-03), with the ABC run's rules applied to the range's total."""
+    category (DEC-03), with the ABC run's rules applied to the range: a month where returns
+    exceeded sales counts as 0, so ranked_revenue can sit above net_sales."""
     scope = normalize_principal(principal) or "all"
     start, end = resolve_range(db, period, start_period, scope)
     out = []
@@ -150,10 +151,9 @@ def get_class_changes(
     current_user: TokenPayload = Depends(require_permission("dashboard.view")),
 ) -> dict:
     """Products that entered or left Class A between two ranges (Del Monte: product
-    categories), each range ranked on its own real sales with the ABC run's rules for a
-    window of several months: a month where returns exceeded sales counts as 0 (revenue_rule;
-    GET /dashboard/pareto nets returns over the range instead, so its Class A list can differ
-    by a product at the line). 'entered' = Class A in the range, not in the compare range;
+    categories), each range ranked on its own real sales exactly as GET /dashboard/pareto
+    ranks it: a month where returns exceeded sales counts as 0 (revenue_rule).
+    'entered' = Class A in the range, not in the compare range;
     'left' = the reverse. Each row has both ranges' revenue, class and rank; a side where the
     product was not ranked has class null and says why in class_note / compare_class_note."""
     scope = normalize_principal(principal) or "all"

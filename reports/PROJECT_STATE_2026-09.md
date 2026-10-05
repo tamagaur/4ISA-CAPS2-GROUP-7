@@ -1235,12 +1235,12 @@ The two original branches still hold the per-product columns in their history: k
 | `GET /dashboard/class-changes` (new) | products that entered or left Class A between two ranges, with both ranges' revenue, class and rank | 2025 against 2024, Unilever: 44 entered (₱8.59M → ₱39.62M), 38 left (₱38.03M → ₱4.71M), 123 stayed = `tier_a_basis_2026-10-03` §4 |
 | `GET /dashboard/accuracy`, `GET /dashboard` `forecast_accuracy` | two labelled figures, always both: `company_total` and `typical_product_weighted`; `level=summary` replaces `level=total` (still accepted) | default backtest 2023-10..2026-02, 337 products: company total 9.8% (0.098194), typical product weighted 29.6% (0.296344) |
 
-Decisions made here, for Yuan to confirm:
+Decisions made here (Yuan ruled on the first two the same day, see the rows):
 
 | Item | What was done | Why |
 |---|---|---|
-| Class-changes revenue rule | a month where returns exceeded sales counts as 0 (the ABC runner's rule for several months, `analytics/classification/orchestrate_abc.py:208`) | it is the rule the tier-a-basis report used; `GET /dashboard/pareto` nets returns over the range (DEC-36) and gives 43 / 37 on the same years, one product different at the Class A line each year. The two endpoints can disagree by a product until one rule is chosen for both. |
-| Company total reads 9.8%, not 9.9% | reported as measured | the mart prices each product at its average selling price over its scored months; the model audit's 9.9% (`model_audit_2026-10-03`) used its own price basis. Same forecasts, same months. |
+| Class-changes revenue rule | a month where returns exceeded sales counts as 0 (the ABC runner's rule for several months, `analytics/classification/orchestrate_abc.py:208`) | it is the rule the tier-a-basis report used. **Yuan, 2026-10-05: one revenue rule everywhere** — `GET /dashboard/pareto` and the dashboard's ABC ring now use it too (they netted returns over the range before and gave 43 / 37 on the same years); live check after the change in §21.5. |
+| Company total reads 9.8%, not 9.9% | reported as measured | traced: 3 product-months whose quantity is blank. The model audit counted them as 0 sold (9.87%); the mart counts them as missing (9.82%). Same forecasts, same price basis (§19). |
 | A product with no last purchase price | left out of the peso sums and counted (`skus_without_price`) | hard rule 3: the plan's ₱25 placeholder is never shown as a measured price. Cycle 2026-03 has none. |
 
 ### 21.3 Recorded and reported
@@ -1256,3 +1256,14 @@ Decisions made here, for Yuan to confirm:
 `tests/test_marts.py`, `tests/test_dec_references.py`, `tests/backend/test_stock_timing.py`: 158 passed, 3 skipped (the live-database tests in `test_marts.py`,
 which need `SUPABASE_DB_URL`). The full suite was not run.
 
+
+### 21.5 Follow-up decisions (Yuan, 2026-10-05)
+
+| Decision | Done | Check |
+|---|---|---|
+| Delete the original `kelvin/tier-a-basis` and `kelvin/lp-logic-check` | both local branches and their worktrees removed; neither was ever on `group7` | `git ls-remote --heads group7`: 0 matches; the LP check's offline pull kept in git-ignored `scratch/lp_logic_check_2026-10-03/` |
+| One revenue rule everywhere | `backend/marts.PARETO_SQL` counts a month where returns exceeded sales as 0 (`analytics/classification/orchestrate_abc.py:208`); `GET /dashboard/pareto`, the dashboard ABC ring and `GET /dashboard/class-changes` all rank with it | live, read-only: reproduces every stored `single` ABC run (`tests/test_marts.py`, 1 passed); Unilever 2025 against 2024: Class A 167 and 161, 44 entered, 38 left |
+| Company-total gap traced | one line in `reports/diagnostics/model_audit_2026-10-03/README.md` | 3 blank-quantity product-months: 0 sold in the audit (9.87%), missing in the mart (9.82%) |
+
+Tests after the change: `tests/backend/test_dashboard_range.py`, `tests/backend/test_dashboard.py`, `tests/test_marts.py`,
+`tests/test_dec_references.py`: 132 passed, 3 skipped (live tests), plus the live ABC reproduction test run on its own.
