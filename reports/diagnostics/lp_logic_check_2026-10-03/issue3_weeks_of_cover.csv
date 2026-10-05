@@ -1,0 +1,6 @@
+basis,ratio_sales_to_shown_basis,weekly_sales_php_or_pcs,weeks
+shown: stock at cost / sales incl. VAT (dashboard.py:1337-1368),1.0,7495665.913073238,3.0285268971776538
+GSV: stock at Last Purchase Price (GSV/CS) / sales at GSV (demand fact gsv column),0.9158277247265862,6864738.658480493,3.306874006333231
+cost: stock at cost / pieces sold x run_lp cost per piece,0.9073182874079192,6800954.759231527,3.3378880809618963
+ex-VAT only: sales / 1.12,0.8928571428571428,6692558.850958248,3.3919501248389725
+pieces: stock pieces / pieces sold,,538180.3148528406,3.132074796271421
