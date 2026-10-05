@@ -1,0 +1,39 @@
+{
+  "feature_table_132_seconds": 0.2,
+  "Q1_seconds": 78.8,
+  "Q1_negative_training_labels_clipped_for_poisson_tweedie": 7,
+  "Q1_training_rows_latest": 2600,
+  "Q2": {
+    "chosen_weight_on_selection_months": 0.0,
+    "confirm_chosen_vs_half": {
+      "median_wape_change": 0.022587871318269614,
+      "ci_low": 0.009677242247433826,
+      "ci_high": 0.03962151635894223,
+      "products_better": 19,
+      "products_worse": 88
+    },
+    "confirm_chosen_vs_ma3": {
+      "median_wape_change": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0,
+      "products_better": 0,
+      "products_worse": 0
+    },
+    "confirm_long_chosen_vs_half": {
+      "median_wape_change": 0.02117203401162096,
+      "ci_low": 0.007310841898469089,
+      "ci_high": 0.040252413051014346,
+      "products_better": 13,
+      "products_worse": 54
+    },
+    "seconds": 0.1
+  },
+  "feature_table_all_seconds": 1.6,
+  "Q3_pool_seconds": 55.7,
+  "Q3_cohort_seconds": 2.8,
+  "Q3_cohort_served_minus_ma3_median_wape": {
+    "fixed_107": -0.0110309192213362,
+    "as_of_cohort": -0.01146361138044999
+  },
+  "Q4_seconds": 0.5
+}

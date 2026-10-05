@@ -1,0 +1,19 @@
+{
+  "fixed_107": {
+    "products": 107,
+    "product_months": 2419,
+    "median_product_wape_served": 0.2686016900572908,
+    "median_product_wape_ma3": 0.279632609278627
+  },
+  "at_the_time": {
+    "products": 337,
+    "product_months": 3503,
+    "median_product_wape_served": 0.3479260599810523,
+    "median_product_wape_ma3": 0.3593896713615023
+  },
+  "noise_floor": {
+    "products": 89,
+    "median_floor_method_of_moments": 0.23524337087245265,
+    "median_floor_max_likelihood": 0.25218081579683516
+  }
+}
