@@ -1,0 +1,7 @@
+number,readme_value,independent_value,result
+fixed_served,0.269,0.2686,PASS
+fixed_ma3,0.28,0.2796,PASS
+asof_served,0.348,0.3479,PASS
+asof_ma3,0.359,0.3594,PASS
+floor,0.235,0.2352,PASS
+"floor, different method (maximum likelihood)",,0.2522,cross-check

@@ -1,0 +1,7 @@
+group,window,product_months,products,median_this_month_vs_avg,median_next_month_vs_avg,share_next_month_below_avg_pct,share_next_month_below_70pct_of_avg
+high carryover (opening > 6 wk),"all months with a label, 2023-02 to 2026-01",429,92,0.9938,0.9958,50.8159,19.1142
+neither,"all months with a label, 2023-02 to 2026-01",1024,98,0.9884,0.9846,52.4414,16.2109
+stock-limited,"all months with a label, 2023-02 to 2026-01",1126,101,0.9913,0.9829,52.3091,20.6927
+high carryover (opening > 6 wk),"test window, 2023-10 to 2026-01",399,91,0.9931,0.9884,51.6291,19.7995
+neither,"test window, 2023-10 to 2026-01",866,98,0.9880,0.9738,53.5797,18.4758
+stock-limited,"test window, 2023-10 to 2026-01",1054,101,0.9920,0.9832,52.3719,21.2524

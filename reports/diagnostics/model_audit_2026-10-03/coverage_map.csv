@@ -1,0 +1,49 @@
+row,set,family,candidates,n,what_it_is,objective_or_fit,tuned,pool,protocol,result_vs_ma3,source
+1,original 50,naive,naive,1,last month,none,no,per product,29-month rolling (harness A),short L 0.333; medium L 0.329; long L 0.357,scripts/model_bakeoff.py:144
+2,original 50,naive,snaive12,1,same month last year,none,no,per product,harness A,short L 0.333; medium L 0.327; long L 0.321,scripts/model_bakeoff.py:145
+3,original 50,naive,mean,1,mean of full history,none,no,per product,harness A,T 0.285 / 0.250 / 0.291,scripts/model_bakeoff.py:146
+4,original 50,naive,drift,1,last + average slope,none,no,per product,harness A,L 0.387 / 0.343 / 0.363,scripts/model_bakeoff.py:147
+5,original 50,moving average,"ma2, ma4, ma6, ma12",4,k-month mean,none,no (fixed k),per product,harness A,ma4 T 0.281/0.256/0.268; ma12 T 0.285/0.244/0.277; ma2 long L 0.282,experiment_artifacts/scripts/final_fit.py:13
+6,original 50,moving average,ma_trained,1,MA window picked per product from past errors,lowest past abs error over {ma3 naive ma2 ma4 ma6 ma12},window per product,per product,harness A,T 0.287 / 0.258 / 0.264,experiment_artifacts/scripts/final_models.py:45-48
+7,original 50,moving average,median3,1,median of last 3 months,none,no,per product,harness A,T (MASE 0.778 / 0.887 / 0.802),candidate_followup_2026-09-22/arms_local.py:48-49
+8,original 50,intermittent demand,"croston, sba, sba_a3",3,Croston / SBA alpha 0.1 / SBA alpha 0.3,fixed alpha,no,per product,harness A,croston short L 0.409; sba short L 0.395; sba_a3 short T 0.306; all T in medium/long,scripts/model_bakeoff.py:152-174
+9,original 50,intermittent demand,tsb,1,TSB (served for medium),fixed 0.3 / 0.1,no,per product,harness A,T 0.265 / 0.250 / 0.263,scripts/model_bakeoff.py:177-187
+10,original 50,intermittent demand,"adida, imapa",2,SES on temporally aggregated buckets,SSE; alpha in [0.1 0.3],alpha fitted,per product,harness A,identical; T 0.291 / 0.254 / 0.268 (DEC-28: SES-equivalent),candidate_followup_2026-09-22/run7.py:8-28
+11,original 50,exponential smoothing,ses,1,simple exponential smoothing,statsmodels,alpha fitted,per product,harness A,T 0.291 / 0.258 / 0.276,scripts/model_bakeoff.py:200
+12,original 50,exponential smoothing,"holt, holt_damped",2,trend / damped trend,statsmodels,fitted,per product,harness A,L / L / T,scripts/model_bakeoff.py:201-202
+13,original 50,exponential smoothing,hw_add12,1,Holt-Winters additive period 12,statsmodels,fitted,per product (24+ months),harness A,long T 0.297,scripts/model_bakeoff.py:205-214
+14,original 50,exponential smoothing,ets_auto,1,best of 3 additive-error ETS by AICc,MLE,form by AICc,per product,harness A,short L; medium T 0.253; long T 0.274,experiment_artifacts/scripts/final_models.py:15-32
+15,original 50,theta,theta,1,statsmodels ThetaModel,statsmodels,no,per product,harness A,short L 0.322; T 0.263 / 0.266,scripts/model_bakeoff.py:217-222
+16,original 50,theta,otm,1,optimised Theta (hand-coded; DEC-28: unvalidated),MSE L-BFGS-B,yes,per product,harness A,T 0.278 / 0.254 / 0.272,candidate_followup_2026-09-22/run7.py:30-49
+17,original 50,ARIMA,sarima_plain,1,"ARIMA(1,1,1) fixed",MLE,no,per product,harness A,T on scorable subsets,scripts/model_bakeoff.py:241
+18,original 50,tree global,"xgb_abs@A, xgb_sq@A, xgb_raw@A",3,XGBoost 14 features; raw = unscaled,absolute / squared / absolute,no (depth 4 eta 0.05 300 rounds),Tier A,harness A,abs long T 0.241 (blocks NNNTW); sq long T 0.251; raw L/L/T,experiment_artifacts/scripts/final_models.py:62-109
+19,original 50,tree global,"xgb_abs@ABC, xgb_sq@ABC, xgb_raw@ABC",3,same trained on Tier A+B+C,same,no,Tier A+B+C,harness A,abs long W 0.250 (blocks NNNTT); others T,experiment_artifacts/scripts/final_models.py:98-99
+20,original 50,tree global,lgbm@A,1,LightGBM same features,L1,no,Tier A,harness A,long W 0.239 (blocks NNNTW); T elsewhere,candidate_followup_2026-09-22/run_lgbm.py:110-113
+21,original 50,tree global,lgbm_q50@A,1,LightGBM median quantile,pinball 0.5 (= L1 target),no,Tier A,harness A,short L; medium T; long W (MASE 0.722),candidate_followup_2026-09-22/arms_venv.py:14
+22,original 50,tree global,lgbm_tweedie@A,1,LightGBM Tweedie on clipped scaled target,tweedie (library default power),no,Tier A,harness A,short L (MASE 0.906 35/78); medium T; long T (MASE 0.789 40/24),candidate_followup_2026-09-22/arms_venv.py:15-28
+23,original 50,tree global,"rf@A, rf@ABC",2,random forest,squared error,no,Tier A / A+B+C,harness A,rf@A long W 0.244; else T,experiment_artifacts/scripts/final_models.py:89-90
+24,original 50,linear global,"ridge@A, ridge@ABC",2,ridge regression,squared + L2,no,Tier A / A+B+C,harness A,@A T; @ABC L/L/T,experiment_artifacts/scripts/final_models.py:91-93
+25,original 50,neural,"mlp@A, mlp@ABC",2,small neural net (32 16),squared,no,Tier A / A+B+C,harness A,L everywhere,experiment_artifacts/scripts/final_models.py:94-95
+26,original 50,pooled analog,knn_analog,1,k=5 shape-matched older products,none,no,cross-product,harness A,T/T/L on 73/49/24 products,candidate_followup_2026-09-22/arms_local.py:90-105
+27,original 50,hierarchical,shrink_cat,1,MA12 x ratio shrunk toward category peer median,empirical-Bayes weight,weight from variances,category,harness A,short T (DEC-28 short-bin backup); T elsewhere,candidate_followup_2026-09-22/arms_local.py:52-73
+28,original 50,hierarchical,topdown_cat,1,SES on category total x product's 6-month share,SES,alpha,category,harness A,short L; T elsewhere,candidate_followup_2026-09-22/arms_local.py:76-87
+29,original 50,blend,ens_xgb_ma3@A,1,(XGBoost + MA3) / 2 - SERVED for long,fixed 50/50,no,Tier A,harness A + half-year blocks,long W 0.247 [-0.042 -0.008] 51/13; blocks all bins 0W/4T/1L,analytics/forecasting/router.py:109
+30,original 50,blend,ens_xgb_ma3@ABC,1,same with A+B+C model,fixed 50/50,no,Tier A+B+C,harness A,T,experiment_artifacts/scripts/final_models.py:121
+31,original 50,ensemble,"ens_4global@A, @ABC",2,median of xgb rf ridge mlp,median,no,Tier A / A+B+C,harness A,T; @ABC long W 0.251,experiment_artifacts/scripts/final_models.py:122
+32,original 50,ensemble,"comb_m4, comb_simple, med_3",3,means / median of classical models,equal weights,no,per product,harness A,comb_simple T everywhere (DEC-28 medium backup); comb_m4 short L,candidate_followup_2026-09-22/run7.py:77-78
+33,original 50,ensemble,comb_inv_err,1,inverse past-error weights over ma3 ses xgb lgbm,1/past MAE,weights adapt,mixed,harness A,long W (MASE 0.702 52/12); T elsewhere,candidate_followup_2026-09-22/score_arms.py:14-35
+34,phase 1 (35),target transform,sqrt x {ma3 comb_simple xgb_ma3_avg tsb},4,square root then back,-,no,as base,harness A + B,1W/11T/0L (A); 0/12/0 (B),experiments/target_transforms_2026-09-26/SUMMARY.md:134
+35,phase 1 (35),target transform,log1p + smearing x 4,4,log,-,no,as base,harness A + B,0/3/9 (A); 0/7/5 (B),target_transforms SUMMARY.md:135
+36,phase 1 (35),target transform,"Box-Cox, Yeo-Johnson, Anscombe x 3 models",9,power transforms,lambda by MLE,lambda fitted,as base,harness A + B,ties,target_transforms SUMMARY.md:136-140
+37,phase 1 (35),target transform,"cube root, asinh, winsorize x 4",12,squeezes and p5/p95 clipping,-,no,as base,harness A + B,ties (ma3 winsorized short 0.263 vs 0.269 [-0.013 +0.003]),target_transforms SUMMARY.md:138-143
+38,phase 1 (35),differencing / STL,"diff1, STL x 3 (long only)",6,first difference / seasonal adjustment,-,no,as base,harness A + B,losses,target_transforms SUMMARY.md:141-142
+39,phase 2 (77),differencing,"D2, D3, S12, S12+D1 x {ma3 comb_simple}",8,higher-order / seasonal differences,-,no,per product,harness A + B,long 0/0/8,experiments/differencing_phase2_2026-09-26/SUMMARY.md:155-156
+40,phase 2 (77),transform + difference,8 transforms x {D1 S12} x {ma3 comb_simple},32,transform then difference,-,no,per product,harness A + B,losses (2 ties),differencing_phase2 SUMMARY.md:157-170
+41,phase 2 (77),repeated transform,"sqrt, cbrt, asinh, log1p x2 x3 on 4 models",32,repeated squeezing,-,no,as base,harness A + B,roots tie; log1p loses,differencing_phase2 SUMMARY.md:159-173
+42,phase 2 (77),differencing,AUTO-d x 2,2,KPSS picks d,KPSS,d per month,per product,harness A + B,long 0/0/2,differencing_phase2 SUMMARY.md:162
+43,phase 2 (77),ARIMA,"E1 auto-ARIMA, E2 on log1p, E3 SARIMA(1,1,1)(0,1,1,12)",3,re-chosen every month,AICc,yes (order grid),per product,harness A + B,losses / tie on few products,differencing_phase2 SUMMARY.md:181-183
+44,outside 162,ARIMA,arima_auto (Gate D),-,auto-ARIMA chosen once,AICc,yes,per product,last 6 months,T 0.332 vs 0.308,reports/MODEL_BAKEOFF_UNILEVER.md:156-163
+45,outside 162,tree global,xgboost (old bake-off),-,12 features incl. product code and time index,squared error,no,Tier A,last 6 months,T 0.324 vs 0.287,scripts/xgboost_bakeoff.py:40-109
+46,outside 162,feature ablation,XGBoost without month_of_year,-,drop 1 of 14 features,absolute,no,Tier A,6 months and long-bin 2025-01..2026-02,WORSE without: +2.8 pts [+0.2 +3.6]; seed-only -0.2,kelvin/forecast-error-business eebd741 README
+47,outside 162,bias correction,surplus fixes A-E,-,post-hoc caps / error feedback / drop stock-limited months,-,B and C picked on test months,served,6 and 29 months,<1% surplus cut; chose D (flag only),kelvin/surplus-bias-experiment 675ed3b README
+48,outside 162,foundation model,chronos_bolt,-,zero-shot,-,-,-,-,NOT RUN (torch blocked),candidate_followup_2026-09-22/arms_venv.py:36

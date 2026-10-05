@@ -1,0 +1,4 @@
+cv_full_tercile,products,cv_min,cv_max,median_wape
+low swing,36,0.1594,0.3132,0.2227
+middle,35,0.3154,0.4493,0.2950
+high swing,36,0.4501,0.8715,0.4921

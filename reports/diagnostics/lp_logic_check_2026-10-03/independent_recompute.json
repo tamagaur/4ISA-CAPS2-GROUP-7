@@ -1,0 +1,45 @@
+{
+ "pool_size": 73,
+ "max_abs_diff_vs_stored": {
+  "ss_i": 0.004999417891554003,
+  "rop_i": 0.0048718255493440665
+ },
+ "lp": {
+  "2026-04-06": {
+   "need": 1255471.2179025458,
+   "ordered": 1193368.21385712,
+   "short_pieces": 62103.004045426125,
+   "short_products": 45,
+   "allocation": 1193368.2141666666,
+   "not_in_count": 3
+  },
+  "2026-03-02": {
+   "need": 325467.94718567247,
+   "ordered": 325467.94685990445,
+   "short_pieces": 0.0003257679594526053,
+   "short_products": 0,
+   "allocation": 1193368.2141666666,
+   "not_in_count": 1
+  }
+ },
+ "tier_a_below_ss": {
+  "2026-04-06": {
+   "below": 35.0,
+   "comparable": 70
+  },
+  "2026-03-02": {
+   "below": 6.0,
+   "comparable": 72
+  }
+ },
+ "policy": {
+  "rule_php": 8211106.332995147,
+  "peak_minus_rule_php": 706463.8930582544,
+  "average_vs_rule_pct": -28.062897853845676
+ },
+ "cover": {
+  "shown": 3.028526897177654,
+  "gsv_matched": 3.3068740063332314,
+  "stock_php": 22700825.830000002
+ }
+}

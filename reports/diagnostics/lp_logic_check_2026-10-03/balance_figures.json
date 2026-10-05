@@ -1,0 +1,64 @@
+{
+ "counts_equal_workbook_soh": 13,
+ "counts_equal_workbook_inventory_sheet": 13,
+ "workbooks": 13,
+ "balance_qty_equals_stock_plus_po_minus_open_so": 4,
+ "baseline_months": "2025-04..2026-01 (10)",
+ "implied_receipts_ilocos_baseline_php": {
+  "min": 36573992.269999996,
+  "median": 45619634.8,
+  "max": 64693533.21
+ },
+ "implied_over_sales_baseline": {
+  "min": 0.7658448342838177,
+  "median": 1.0597134913099115,
+  "max": 1.3157093990323758
+ },
+ "last3": [
+  {
+   "month": "2025-11",
+   "implied_receipts_ilocos_php": 56677001.45,
+   "implied_over_sales_ilocos": 1.1186993466863684
+  },
+  {
+   "month": "2025-12",
+   "implied_receipts_ilocos_php": 36573992.269999996,
+   "implied_over_sales_ilocos": 1.208553711505812
+  },
+  {
+   "month": "2026-01",
+   "implied_receipts_ilocos_php": 43032602.83,
+   "implied_over_sales_ilocos": 0.7828329718519197
+  }
+ ],
+ "feb_mar": {
+  "opening_2026-02-03": 24339386.24,
+  "closing_2026-04-06": 22700825.83,
+  "sales_ilocos": 89691640.46000001,
+  "implied_receipts_ilocos": 88053080.05000001,
+  "implied_over_sales": 0.981731180279496
+ },
+ "two_month_implied_over_sales_baseline": {
+  "min": 0.9208226218351059,
+  "max": 1.2430825854839629
+ },
+ "la_union_over_ilocos": {
+  "min": 0.5658515675326717,
+  "max": 0.7566084728085319,
+  "median": 0.6178678280822925
+ },
+ "months_implied_below_open_po": {
+  "ilocos": [],
+  "la_union": [
+   "2025-08",
+   "2025-12",
+   "2026-01"
+  ]
+ },
+ "cover_window": "2025-03..2026-02",
+ "cover_months": {
+  "pool_la_union": 12,
+  "ilocos": 12
+ },
+ "pool_gsv_null_rows": 0
+}

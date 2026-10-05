@@ -1,0 +1,22 @@
+measure,unit,at-the-time cohort (Tier A the month before each test month),"today's Tier A (Tier A as of 2026-02, the ~27% figure)"
+products,count,337.000000,107.000000
+product_months,count,3503.000000,2419.000000
+months,count,29.000000,29.000000
+median_product_wape_served,ratio,0.347926,0.268602
+median_product_wape_ma3,ratio,0.359390,0.279633
+pooled_wape_pcs_served,ratio (pieces),0.295603,0.285045
+pooled_wape_pcs_ma3,ratio (pieces),0.301873,0.290837
+bias_pct_served,% of sum|actual| (pieces),5.238925,3.287163
+share_product_months_over_forecast,ratio,0.573223,0.516329
+total_wape_pcs_served,ratio (pieces),0.151430,0.141691
+total_wape_pcs_ma3,ratio (pieces),0.155006,0.149496
+products_without_price,count,6.000000,0.000000
+product_months_without_price,count,7.000000,0.000000
+total_wape_pesos_served,"ratio (pesos at selling price, VAT-inclusive (value-added tax))",0.098720,0.106532
+total_wape_pesos_ma3,"ratio (pesos at selling price, VAT-inclusive (value-added tax))",0.109189,0.113693
+avg_monthly_sales_pesos,"pesos per month, at selling price, VAT-inclusive (value-added tax)",23537515.754483,19092944.346207
+avg_monthly_miss_pesos,"pesos per month, at selling price, VAT-inclusive (value-added tax)",7846629.148437,5722021.621600
+avg_monthly_surplus_pesos,"pesos per month, at selling price, VAT-inclusive (value-added tax)",4389914.131513,2924119.358484
+avg_monthly_shortage_pesos,"pesos per month, at selling price, VAT-inclusive (value-added tax)",3456715.016924,2797902.263116
+surplus_share_of_miss_pesos,"ratio (pesos at selling price, VAT-inclusive (value-added tax))",0.559465,0.511029
+miss_share_of_sales_pesos,"ratio (pesos at selling price, VAT-inclusive (value-added tax))",0.333367,0.299693

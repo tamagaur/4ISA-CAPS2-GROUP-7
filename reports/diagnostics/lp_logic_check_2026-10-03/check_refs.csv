@@ -1,0 +1,60 @@
+reference,status,text_at_target
+analytics/db/schema.sql:859-866,same,CREATE OR REPLACE VIEW Inventory_Fact_Real AS
+backend/stock_units.py:101-114,same,"STOCK_AT_LATEST_SQL = f"""""""
+scripts/run_lp.py:233-251,same,"STOCK_AND_COST_QUERY = f"""""""
+scripts/run_lp.py:784,same,"stock_and_cost = fetch_stock_and_cost(cur, product_keys)"
+analytics/optimization/lp.py:99,same,stock_on_hand: float      # S_i: stock at the start of the month
+scripts/run_baseline_forecast.py:887-892,same,"train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)"
+analytics/forecasting/diagnostic_metrics.py:63-83,same,"def mase(actual, pred, scale: float) -> float:"
+backend/routers/dashboard.py:1337-1368,same,stock = soh_value
+backend/routers/dashboard.py:1810-1866,same,policy_rows = db.execute(
+frontend/src/components/Charts.jsx:1822-1826,same,{c.target_vs_rule_pct != null && (
+scripts/run_lp.py:184-205,same,"CANDIDATE_QUERY = """""""
+scripts/run_lp.py:812,same,"products_by_cycle.setdefault(row.forecast_date, []).append(product)"
+scripts/run_lp.py:229-251,same,# Stock on hand in pieces at the principal's latest snapshot (in_stock_file
+ARCHITECTURE.md:90,same,| DEC-20 | Unilever SOH — **`_period` is the join key; `snapshot_date` is provenance only** | **DECIDED (2026-08)** | Unlike Del Monte's `inventory_sign_off` (w
+scripts/run_lp.py:469-477,same,"in_file, pieces, cost = stock_and_cost.get(int(product_key), (False, None, None))"
+analytics/optimization/lp.py:148-151,same,"def net_need(monthly_demand: float, target: float, stock_on_hand: float) -> float:"
+backend/routers/dashboard.py:723-734,same,"def _latest_inventory_period(db: Session, principal: str = ""unilever"") -> str | None:"
+backend/routers/dashboard.py:1175,same,"inventory_period = _latest_inventory_period(db, scope)"
+backend/routers/dashboard.py:1229-1257,same,ss_rows = db.execute(
+backend/routers/recommendations.py:391,same,"""inv_period"": latest_inventory_period(db, principal),"
+analytics/db/migrations/0010_gsv_and_guards.sql:35-44,same,-- 3. days_offset / demand_period — Unilever SOH's snapshot_date (R5) is
+backend/data_notes.py:26-29,same,"(""unilever"", ""2026-02""): ("
+analytics/params.py:48,same,HOLDOUT_FRACTION = 0.20
+analytics/forecasting/split.py:17,same,def train_holdout_split(
+scripts/run_baseline_forecast.py:887-889,same,"train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)"
+analytics/forecasting/router.py:134-146,same,"def rolling_one_step(series: pd.Series, months, forecaster: GlobalForecaster | None = None,"
+analytics/forecasting/diagnostic_metrics.py:78-83,same,def naive_scale(real_train) -> float:
+analytics/params.py:29,same,MASE_GATE = 1.0
+scripts/run_lp.py:202,same,WHERE fr.status = 'ok' AND fr.mase < %s
+scripts/run_baseline_forecast.py:196-206,same,def build_series(sku_df: pd.DataFrame) -> pd.Series:
+backend/routers/dashboard.py:772-778,same,"return _query_period_sums(db, f"""""""
+ARCHITECTURE.md:89,same,"| DEC-19 | `last_purchase_price_gsv_per_cs` is **NOT** mapped to `Inventory_Fact.cost` | **DECIDED (2026-08)** | Verified unit mismatch, not a naming preference"
+analytics/db/migrations/0010_gsv_and_guards.sql:24-33,same,-- 2. GSV (Gross Sales Value) — the OTHER money column in the La Union
+analytics/params.py:113-114,same,DAYS_PER_MONTH = 365.25 / 12
+analytics/optimization/lp.py:141-145,same,weekly = weekly_demand(monthly_demand)
+backend/routers/dashboard.py:1859,same,"""lp_vs_rule_pct"": round((rule_units - lp_units) / rule_units * 100, 1) if rule_units > 0 else None,"
+backend/routers/dashboard.py:1836-1851,same,"target_units = sum(float(r[""rop_i""]) for r in policy_rows)"
+profiling/grain_map.md:99,same,"The **Unilever La Union per-SKU file** (`SANSAN MARKETING_Unilever/Unilever-La-Union-Sales-per-SKU-2023-to-2026.xls`, actually an MHTML web archive) is the **so"
+scripts/run_lp.py:829-834,same,if plan.orders is None:
+scripts/run_lp.py:915-917,same,"logger.info(f""  Infeasible cycles:           {len(infeasible_cycles)}"")"
+scripts/run_lp.py:56-60,same,"stock on hand   pieces, at the principal's latest stock snapshot"
+frontend/src/components/ReorderRecommendations.jsx:109,same,const onHand = item.stockNotInCount ? '0 on hand (not in the latest stock count)' : `${n(item.stock)} on hand`;
+backend/routers/dashboard.py:584-616,same,def _sales_by_period(
+backend/routers/dashboard.py:899-920,same,"def _avg_weekly_demand(period_values: dict[str, float | None]) -> tuple[float | None, str | None]:"
+analytics/optimization/lp.py:22-23,same,"need_i  = max(0, F_i + T_i - S_i): the month's demand plus the gap to the"
+scripts/run_lp.py:403-409,same,"def fetch_stock_and_cost(cur, product_keys: list[int]) -> dict[int, tuple[bool, float | None, float | None]]:"
+scripts/run_lp.py:823,same,"for planning_cycle_date, products in sorted(products_by_cycle.items()):"
+scripts/run_lp.py:575-596,same,"def run_record(args: argparse.Namespace, plan: CyclePlan, planning_cycle_date) -> dict:"
+scripts/run_lp.py:542-560,same,"def plan_rows(plan: CyclePlan, planning_cycle_date) -> list[dict]:"
+scripts/run_lp.py:794-812,same,for row in candidates_df.itertuples():
+scripts/run_lp.py:503-539,same,"def plan_cycle(products: list[ProductInput], args: argparse.Namespace) -> CyclePlan:"
+scripts/run_lp.py:684-698,same,"def _log_cycle(plan: CyclePlan, allocation_pct: float, prior_year: int) -> None:"
+scripts/run_lp.py:464-480,same,def product_input(
+scripts/run_lp.py:51-60,same,"INPUTS, per product:"
+scripts/run_lp.py:242-249,same,LEFT JOIN LATERAL (
+backend/routers/dashboard.py:1299-1313,same,safety_stock_exposure = {
+backend/schemas/recommendations.py:101-116,same,class RecommendationsResponse(BaseModel):
+frontend/src/components/Dashboard.jsx:520-528,same,const exposure = data.safety_stock_exposure || {};
+backend/stock_units.py:83-92,same,"STOCK_AT_PERIOD_SQL = f"""""""

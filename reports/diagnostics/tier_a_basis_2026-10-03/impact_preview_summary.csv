@@ -1,0 +1,4 @@
+list,products,history_under_3_months,history_3_11_months,history_12_23_months,history_24_plus_months,runner_insufficient_data,runner_dead_sku,runner_ok_short_ma3,runner_ok_medium_tsb,runner_ok_long_xgb_ma3,in_stock_file_2026_03,stock_above_zero_2026_03,forecast_ok_today,in_stock_file_no_forecast_today,of_which_no_forecast_row,of_which_forecast_not_ok
+latest month (today),132,13,30,17,72,13,0,30,17,72,120,120,119,9,0,9
+12m,175,5,26,36,108,5,5,26,34,105,147,147,106,45,40,5
+12m+new,189,9,36,36,108,9,5,36,34,105,158,158,114,49,42,7

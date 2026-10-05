@@ -1,0 +1,79 @@
+key,value,unit,period,source
+snapshot_main_utc,2026-10-03T06:26:16.118777+00:00,timestamp,,extract_meta.json
+base_table_real_rows,24906,rows,2023-01..2026-02,base_counts
+base_table_real_products,1807,products,2023-01..2026-02,base_counts
+base_table_generated_synthetic_v2_rows,12243,rows,2021-01..2026-08,base_counts
+base_table_generated_synthetic_v2_products,911,products,2021-01..2026-08,base_counts
+real_rows_used,24906,product-months,2023-01..2026-02,demand_real
+real_products_used,1807,products,2023-01..2026-02,demand_real
+real_months,38,months,2023-01..2026-02,demand_real
+real_regions,la_union,region,,demand_real
+real_net_amount_total,1230639943.77,PHP,2023-01..2026-02,demand_real
+real_negative_net_months,1681,product-months,2023-01..2026-02,demand_real
+blank_net_amount_64369313,2024-12,month,,demand_real: LADYS CHOICE RL MY+KOPIKOTP 12(3+1)80ML
+blank_net_amount_69704383,2023-09,month,,demand_real: CREAMSILK ULT REBORN SS 24(12+1)11ML
+net_total_2023-01,31729405.85,PHP,2023-01,demand_real (net of returns)
+net_total_2023-02,29563908.86,PHP,2023-02,demand_real (net of returns)
+net_total_2023-03,35752907.39,PHP,2023-03,demand_real (net of returns)
+net_total_2023-04,25626893.47,PHP,2023-04,demand_real (net of returns)
+net_total_2023-05,35355386.54,PHP,2023-05,demand_real (net of returns)
+net_total_2023-06,34778694.49,PHP,2023-06,demand_real (net of returns)
+net_total_2023-07,29338106.73,PHP,2023-07,demand_real (net of returns)
+net_total_2023-08,30563215.54,PHP,2023-08,demand_real (net of returns)
+net_total_2023-09,35474816.3,PHP,2023-09,demand_real (net of returns)
+net_total_2023-10,33405019.68,PHP,2023-10,demand_real (net of returns)
+net_total_2023-11,28071188.43,PHP,2023-11,demand_real (net of returns)
+net_total_2023-12,35181510.36,PHP,2023-12,demand_real (net of returns)
+net_total_2024-01,35511697.04,PHP,2024-01,demand_real (net of returns)
+net_total_2024-02,31143743.12,PHP,2024-02,demand_real (net of returns)
+net_total_2024-03,33540269.29,PHP,2024-03,demand_real (net of returns)
+net_total_2024-04,31397111.47,PHP,2024-04,demand_real (net of returns)
+net_total_2024-05,31301366.23,PHP,2024-05,demand_real (net of returns)
+net_total_2024-06,35535668.86,PHP,2024-06,demand_real (net of returns)
+net_total_2024-07,28561438.65,PHP,2024-07,demand_real (net of returns)
+net_total_2024-08,32064514.02,PHP,2024-08,demand_real (net of returns)
+net_total_2024-09,33032676.75,PHP,2024-09,demand_real (net of returns)
+net_total_2024-10,34133591.74,PHP,2024-10,demand_real (net of returns)
+net_total_2024-11,36931759.33,PHP,2024-11,demand_real (net of returns)
+net_total_2024-12,24148502.7,PHP,2024-12,demand_real (net of returns)
+net_total_2025-01,37308988.31,PHP,2025-01,demand_real (net of returns)
+net_total_2025-02,30074423.37,PHP,2025-02,demand_real (net of returns)
+net_total_2025-03,33913905.33,PHP,2025-03,demand_real (net of returns)
+net_total_2025-04,33842385.47,PHP,2025-04,demand_real (net of returns)
+net_total_2025-05,36754602.15,PHP,2025-05,demand_real (net of returns)
+net_total_2025-06,36824031.59,PHP,2025-06,demand_real (net of returns)
+net_total_2025-07,28495631.81,PHP,2025-07,demand_real (net of returns)
+net_total_2025-08,32668408.4,PHP,2025-08,demand_real (net of returns)
+net_total_2025-09,35389246.47,PHP,2025-09,demand_real (net of returns)
+net_total_2025-10,35791064.27,PHP,2025-10,demand_real (net of returns)
+net_total_2025-11,33181823.5,PHP,2025-11,demand_real (net of returns)
+net_total_2025-12,19171731.96,PHP,2025-12,demand_real (net of returns)
+net_total_2026-01,37165964.39,PHP,2026-01,demand_real (net of returns)
+net_total_2026-02,27914343.91,PHP,2026-02,demand_real (net of returns)
+net_monthly_average_2025,32784686.89,PHP per month,2025-01..2025-12,demand_real (net of returns)
+top10_share_pct_2025-01,24.7309,% of month revenue,2025-01,demand_real (negative months as 0)
+top10_share_pct_2025-02,29.3085,% of month revenue,2025-02,demand_real (negative months as 0)
+top10_share_pct_2025-03,27.1916,% of month revenue,2025-03,demand_real (negative months as 0)
+top10_share_pct_2025-04,24.6915,% of month revenue,2025-04,demand_real (negative months as 0)
+top10_share_pct_2025-05,26.6786,% of month revenue,2025-05,demand_real (negative months as 0)
+top10_share_pct_2025-06,25.4802,% of month revenue,2025-06,demand_real (negative months as 0)
+top10_share_pct_2025-07,27.1018,% of month revenue,2025-07,demand_real (negative months as 0)
+top10_share_pct_2025-08,26.2399,% of month revenue,2025-08,demand_real (negative months as 0)
+top10_share_pct_2025-09,28.1851,% of month revenue,2025-09,demand_real (negative months as 0)
+top10_share_pct_2025-10,29.5364,% of month revenue,2025-10,demand_real (negative months as 0)
+top10_share_pct_2025-11,26.276,% of month revenue,2025-11,demand_real (negative months as 0)
+top10_share_pct_2025-12,34.204,% of month revenue,2025-12,demand_real (negative months as 0)
+top10_share_pct_2026-01,27.4383,% of month revenue,2026-01,demand_real (negative months as 0)
+top10_share_pct_2026-02,27.8805,% of month revenue,2026-02,demand_real (negative months as 0)
+unilever_products_in_master,2098,products,,product_dim
+unilever_products_with_supersedes,0,products,,product_dim
+names_with_more_than_one_code,6,names,2023-01..2026-02,product_dim x demand_real
+codes_under_shared_names,12,codes,2023-01..2026-02,product_dim x demand_real
+missing_with_exact_name_twin_in_current_tier_a,4,products,,missing_from_current_tier_a x product_dim
+snapshot_followup_utc,2026-10-03T06:46:18.880296+00:00,timestamp,,extract_meta_followup.json
+stock_latest_period,2026-03,month,,stock_periods
+stock_products_latest_period,785,products,2026-03,stock_periods
+forecast_rows_insufficient_data,13,rows,2026-03-01,forecast_dates
+forecast_generated_insufficient_data,2026-09-21,date,2026-03-01,forecast_dates
+forecast_rows_ok,119,rows,2026-03-01,forecast_dates
+forecast_generated_ok,2026-09-21,date,2026-03-01,forecast_dates

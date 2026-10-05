@@ -1,0 +1,15 @@
+basis,variant,class_a_primary,class_a_variant,products_that_change,changed
+1m,"negatives=net over window, blank=drop product",132,132,0,
+1m,"negatives=per month, blank=skip month",132,132,0,
+3m,"negatives=net over window, blank=drop product",143,140,3,SURF BAR SUN FRESH SXFL 36X360G (69731886); KNORR SINGLES CHKN + CHKN 48(12+2)X10G (64957373); LADY'S CHOICE SS CHICKEN JAR 12X470ML (68763994)
+3m,"negatives=per month, blank=skip month",143,143,0,
+12m,"negatives=net over window, blank=drop product",175,174,1,SURF BAR SUN FRESH SXFL 36X360G (69731886)
+12m,"negatives=per month, blank=skip month",175,175,0,
+24m,"negatives=net over window, blank=drop product",185,184,1,SURF POWDER PURPLE BLOOMS L 6X2200G (69668146)
+24m,"negatives=per month, blank=skip month",185,186,1,LADYS CHOICE RL MY+KOPIKOTP 12(3+1)80ML (64369313)
+full,"negatives=net over window, blank=drop product",217,217,0,
+full,"negatives=per month, blank=skip month",217,219,2,CREAM SILK HC ULTREBORN HFALL 12X350ML (68565212); CREAMSILK ULT REBORN SS 24(12+1)11ML (69704383)
+calendar 2024,"negatives=net over window, blank=drop product",161,160,1,REXONA MEN RO SPORT DEFENSE 24X45ML (69642635)
+calendar 2024,"negatives=per month, blank=skip month",161,162,1,SURF BAR PURPLE BLOOMS SXFL 36X360G (69731868)
+calendar 2025,"negatives=net over window, blank=drop product",167,166,1,LADY'S CHOICE SS PLAIN JAR 12X470ML (68764013)
+calendar 2025,"negatives=per month, blank=skip month",167,167,0,

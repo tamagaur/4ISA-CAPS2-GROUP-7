@@ -1,0 +1,7 @@
+pool,scope,rows,products,median_product_wape,pooled_wape,bias_pct,vs_served_pool_median_wape_change,vs_served_pool_ci_low,vs_served_pool_ci_high,vs_served_pool_products_better,vs_served_pool_products_worse,training_rows_at_2026_02
+Tier A as of 2026-02 (served),"XGBoost alone, every bin",2419,107,0.2826,0.3031,5.1680,0.0000,0.0000,0.0000,0,0,2600.0000
+Tier A as of 2026-02 (served),long average,759,67,0.2477,0.3063,5.7041,0.0000,0.0000,0.0000,0,0,
+Tier A as of the month before (no look-ahead),"XGBoost alone, every bin",2419,107,0.2912,0.3058,7.3819,0.0085,-0.0061,0.0163,55,52,3062.0000
+Tier A as of the month before (no look-ahead),long average,759,67,0.2508,0.3067,7.1726,0.0031,-0.0078,0.0174,33,34,
+every real Unilever product,"XGBoost alone, every bin",2419,107,0.2739,0.2921,0.3419,-0.0087,-0.0216,0.0111,72,35,21671.0000
+every real Unilever product,long average,759,67,0.2583,0.3023,6.3292,0.0106,-0.0066,0.0246,31,36,

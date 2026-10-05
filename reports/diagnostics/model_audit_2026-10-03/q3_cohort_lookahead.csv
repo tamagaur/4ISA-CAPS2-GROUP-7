@@ -1,0 +1,13 @@
+cohort,model,rows,products,median_product_wape,pooled_wape,bias_pct,tier_a_product_months,not_scored_insufficient_or_no_row
+"fixed 107 (Tier A as of 2026-02), served pool",served,2419,107,0.2686,0.2850,3.2872,,
+"fixed 107 (Tier A as of 2026-02), served pool",MA3,2419,107,0.2796,0.2908,2.4770,,
+"Tier A as of the month before each test month, no-look-ahead pool",served,3503,337,0.3479,0.2956,5.2389,3663.0000,160.0000
+"Tier A as of the month before each test month, no-look-ahead pool",MA3,3503,337,0.3594,0.3019,4.2311,3663.0000,160.0000
+as-of cohort: products also in the fixed 107,served,1969,106,0.2800,0.2825,3.7292,,
+as-of cohort: products also in the fixed 107,MA3,1969,106,0.2880,0.2879,2.5516,,
+as-of cohort: products NOT in the fixed 107,served,1534,231,0.4080,0.3673,13.4786,,
+as-of cohort: products NOT in the fixed 107,MA3,1534,231,0.4250,0.3780,13.3972,,
+as-of cohort: products scored 12+ months,served,2574,119,0.2671,0.2818,4.1067,,
+as-of cohort: products scored 12+ months,MA3,2574,119,0.2712,0.2879,2.9394,,
+as-of cohort: products scored under 12 months,served,929,218,0.4415,0.4510,18.0167,,
+as-of cohort: products scored under 12 months,MA3,929,218,0.4546,0.4598,18.8098,,

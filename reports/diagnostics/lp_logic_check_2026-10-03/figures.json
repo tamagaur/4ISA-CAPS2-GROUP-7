@@ -1,0 +1,84 @@
+{
+ "check_latest_count_equals_run_lp_query": "73/73",
+ "replay_vs_stored_2026-03_pending": {
+  "products": 73,
+  "gated_out": 0,
+  "max_abs_diff_rop_i": 0.0048718255493440665,
+  "max_abs_diff_ss_i": 0.004999417891610847,
+  "max_abs_diff_q_i_at_105": 0.005000000004656613
+ },
+ "tier_a_period": "2026-02",
+ "tier_a_count": 132,
+ "whole_file_opening_count_jump": {
+  "products_in_feb3_and_mar2": 704,
+  "ratio_quartiles_mar2_vs_feb3": {
+   "0.25": 0.87,
+   "0.5": 1.67,
+   "0.75": 4.14
+  },
+  "products_over_1.5x": 376
+ },
+ "pool_opening_count_jump": {
+  "median_ratio_mar2_vs_feb3": 2.91,
+  "median_ratio_mar2_vs_apr6": 4.59,
+  "products_mar2_over_1.5x_feb3": 50,
+  "products_with_feb3_value": 72,
+  "pool_value_php": {
+   "2026-03": 6105203.23,
+   "2026-02": 16782794.43
+  }
+ },
+ "mase_recomputed_short_medium": "47/47",
+ "mase": {
+  "ok_rows": 119,
+  "common_window_rows": 107,
+  "pass_stored": 64,
+  "pass_common": 77,
+  "flips": 15,
+  "pass_to_fail": 1,
+  "fail_to_pass": 14,
+  "flips_in_lp_pool": 1,
+  "within_0.1_of_gate_stored": 18
+ },
+ "cover": {
+  "stock_php_2026-04-06": 22700825.83,
+  "window": "2025-03..2026-02",
+  "months_with_sales": 12,
+  "avg_month_net_php": 32592761.604166668,
+  "avg_month_gsv_php": 29849354.7025,
+  "gsv_null_rows": 21,
+  "rows": 8735,
+  "cost_basis_net_coverage": 0.9982635605868362,
+  "stock_pcs_rows_without_pack": 0
+ },
+ "policy": {
+  "products": 73,
+  "missing_cost": 0,
+  "pieces": {
+   "sum_ss": 485540.82,
+   "sum_target": 884856.2300000001,
+   "rule": 748716.4583162218,
+   "ss_vs_rule_pct_less": 35.15024084124902,
+   "target_vs_rule_pct_less": -18.183087892837445,
+   "sum_average_on_hand": 610326.896386037,
+   "average_vs_rule_pct_less": 18.483574174582355
+  },
+  "php": {
+   "rule_3wk": 8211106.332995147,
+   "peak_targets": 8917570.226053402,
+   "peak_minus_rule": 706463.8930582544,
+   "peak_vs_rule_pct": 8.603760131803812,
+   "average_targets": 5906831.950096066,
+   "average_minus_rule": -2304274.3828990813,
+   "average_vs_rule_pct": -28.062897853845676,
+   "sensitivity_rule_average_if_3wk_is_its_peak": 6842588.610829289,
+   "sensitivity_average_vs_that_pct": -13.675477424614801,
+   "ssm_stock_2026-04-06": 6105203.23,
+   "ssm_stock_2026-03-02": 16782794.43
+  },
+  "weeks": {
+   "peak": 3.2581128039541145,
+   "average": 2.15811306438463
+  }
+ }
+}

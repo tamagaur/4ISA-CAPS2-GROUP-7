@@ -1,0 +1,195 @@
+{
+  "window": "six_months",
+  "test_months": [
+    "2025-09",
+    "2026-02",
+    6
+  ],
+  "recorded_decisions": {
+    "threshold": "remove >= 5% of surplus pesos over the 29-month window and add no more shortage than it removes",
+    "counts": {
+      "2026-02": "team-flagged outlier (backend/data_notes.py:26-29); ACCEPTED 2026-10-03, pending SSM confirmation",
+      "2025-05": "possibly partial (fewest rows of any real count); missing = 0 rule kept; open question for SSM"
+    }
+  },
+  "data_facts": {
+    "real_count_periods": 39,
+    "real_first": "2023-01",
+    "real_last": "2026-03",
+    "snapshots_per_real_period_max": 1,
+    "generated_snapshots": {
+      "synthetic_v2": {
+        "periods": 24,
+        "first": "2021-01",
+        "last": "2022-12"
+      },
+      "synthetic_v2_gap": {
+        "periods": 6,
+        "first": "2026-04",
+        "last": "2026-09"
+      }
+    },
+    "rows_2025_05": 404,
+    "rows_other_real_counts_min_max": [
+      513,
+      812
+    ],
+    "tierA_rows_nan_cases": 0,
+    "tierA_rows_nan_loose": 0,
+    "tierA_duplicate_product_periods": 0,
+    "tierA_count_rows_zero_or_less_pieces": 0,
+    "products_with_usable_pack_size": 132,
+    "products": 132
+  },
+  "halves": [
+    [
+      "2025-09",
+      "2025-11"
+    ],
+    [
+      "2025-12",
+      "2026-02"
+    ]
+  ],
+  "bin_rule": "served bin (as of 2026-03) held fixed - the forecast-error diagnostic's window A",
+  "reproduction": {
+    "forecast_result_rows_matched": 132,
+    "series_csv_rows_matched": 642,
+    "series_csv_max_forecast_gap": 4.962594175594859e-07
+  },
+  "common_products": 107,
+  "test_product_months": 642,
+  "prices_missing": 0,
+  "stock_periods_real": [
+    "2023-01",
+    "2023-02",
+    "2023-03",
+    "2023-04",
+    "2023-05",
+    "2023-06",
+    "2023-07",
+    "2023-08",
+    "2023-09",
+    "2023-10",
+    "2023-11",
+    "2023-12",
+    "2024-01",
+    "2024-02",
+    "2024-03",
+    "2024-04",
+    "2024-05",
+    "2024-06",
+    "2024-07",
+    "2024-08",
+    "2024-09",
+    "2024-10",
+    "2024-11",
+    "2024-12",
+    "2025-01",
+    "2025-02",
+    "2025-03",
+    "2025-04",
+    "2025-05",
+    "2025-06",
+    "2025-07",
+    "2025-08",
+    "2025-09",
+    "2025-10",
+    "2025-11",
+    "2025-12",
+    "2026-01",
+    "2026-02",
+    "2026-03"
+  ],
+  "labels_test": {
+    "stock_limited": 250,
+    "stock_limited_unknown": 5,
+    "high_carryover": 141,
+    "reasons": {
+      "opening < 1 wk": 143,
+      "closing < 1 wk": 123,
+      "opening zero": 32,
+      "closing zero": 28
+    }
+  },
+  "overrun_3plus": {
+    "products": 44,
+    "run_months": 161,
+    "run_months_stock_limited": 60,
+    "products_with_any_stock_limited_run_month": 23,
+    "products_all_run_months_stock_limited": 7,
+    "run_months_high_carryover": 36
+  },
+  "best_B": "B k=0.25, 3-month bias",
+  "E": {
+    "max_gap_no_exclusion_vs_baseline": 0.0,
+    "training_rows_dropped": {
+      "2025-09": 977,
+      "2025-10": 1022,
+      "2025-11": 1066,
+      "2025-12": 1109,
+      "2026-01": 1156,
+      "2026-02": 1204
+    },
+    "training_rows_kept": {
+      "2025-09": 1073,
+      "2025-10": 1129,
+      "2025-11": 1192,
+      "2025-12": 1260,
+      "2026-01": 1327,
+      "2026-02": 1396
+    }
+  },
+  "rows_changed": {
+    "baseline": {
+      "product_months": 0,
+      "products": 0
+    },
+    "A collapse cap": {
+      "product_months": 16,
+      "products": 8
+    },
+    "B k=0.25, 3-month bias": {
+      "product_months": 168,
+      "products": 76
+    },
+    "B k=0.5, 3-month bias": {
+      "product_months": 168,
+      "products": 76
+    },
+    "B k=1, 3-month bias": {
+      "product_months": 168,
+      "products": 76
+    },
+    "B k=0.25, 6-month bias": {
+      "product_months": 536,
+      "products": 107
+    },
+    "B k=0.5, 6-month bias": {
+      "product_months": 536,
+      "products": 107
+    },
+    "B k=1, 6-month bias": {
+      "product_months": 536,
+      "products": 107
+    },
+    "C = A + B k=0.25, 3-month bias": {
+      "product_months": 169,
+      "products": 76
+    },
+    "E1": {
+      "product_months": 432,
+      "products": 72
+    },
+    "E2": {
+      "product_months": 582,
+      "products": 102
+    }
+  },
+  "baseline_check": {
+    "over": 361,
+    "under": 281,
+    "surplus_pesos_per_month": 3789634.018625766,
+    "shortage_pesos_per_month": 3030237.705617789
+  }
+}
