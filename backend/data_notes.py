@@ -25,7 +25,7 @@ from __future__ import annotations
 UNUSUAL_STOCK_SNAPSHOTS: dict[tuple[str, str], str] = {
     ("unilever", "2026-02"): (
         "About twice the stock counted the month before and after (₱46.6M vs ₱24.3M and ₱22.7M); "
-        "treated as an outlier (team review, 2026-09-29)."
+        "accepted for planning, pending SSM confirmation (decided 2026-10-03)."
     ),
     ("delmonte", "2023-02"): (
         "Ilocos warehouse only — Pangasinan's count is missing (200 rows, ₱2.5M vs about ₱8.7M "
@@ -65,7 +65,50 @@ def opening_count_ruling(principal: str, period: str) -> tuple[str, str] | None:
     return ruling
 
 
+# Weeks of cover divides one principal's stock by its sales; where the two come from
+# different places the figure carries this caveat (GET /dashboard kpis.weeks_of_cover.caveat,
+# Yuan 2026-10-04). Same fact as PLANNING_NOTES, in the card's words.
+COVER_CAVEATS: dict[str, str] = {
+    "unilever": "stock = Ilocos Sur warehouse; sales = La Union only; territory match unverified",
+}
+
 _PRINCIPAL_NAMES = {"unilever": "Unilever", "delmonte": "Del Monte"}
+
+
+def _compact_pesos(value: float) -> str:
+    """₱46.6M / ₱812.3K / ₱950 — the dashboard's compact peso format."""
+    if abs(value) >= 1_000_000:
+        return f"₱{value / 1_000_000:.1f}M"
+    if abs(value) >= 1_000:
+        return f"₱{value / 1_000:.1f}K"
+    return f"₱{value:,.0f}"
+
+
+def flagged_count_note(principal: str, period: str, value: float | None, neighbours: list[float],
+                       counted_on: str | None) -> str | None:
+    """The stock card's note when the count it shows is in UNUSUAL_STOCK_SNAPSHOTS (Yuan,
+    2026-10-04): "Counted 2 Mar 2026: unusually high (₱46.6M), accepted pending SSM
+    confirmation" for a count the team accepted (OPENING_COUNT_RULINGS 'use'); a flagged
+    count without that ruling gives its reviewed reason instead. High or low against the
+    mean of the counts either side (`neighbours`). None when the count is not flagged."""
+    reason = UNUSUAL_STOCK_SNAPSHOTS.get((principal, period))
+    if reason is None:
+        return None
+    if counted_on:
+        year, month, day = (int(x) for x in counted_on[:10].split("-"))
+        when = f"Counted {day} {_MONTH_ABBR[month - 1]} {year}"
+    else:
+        year, month = int(period[:4]), int(period[5:7])
+        when = f"Counted for {_MONTH_ABBR[month - 1]} {year} (exact date not recorded)"
+    ruling = opening_count_ruling(principal, period)
+    if ruling is not None and ruling[0] == "use" and value is not None and neighbours:
+        level = sum(neighbours) / len(neighbours)
+        direction = "high" if value > level else "low"
+        return f"{when}: unusually {direction} ({_compact_pesos(value)}), accepted pending SSM confirmation"
+    return f"{when}: {reason}"
+
+
+_MONTH_ABBR = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 def unusual_stock_snapshots(principal: str, periods) -> dict[str, str]:

@@ -1,30 +1,42 @@
-# Coverage check — both principals, 2021-01 → 2026-09 (read-only, 2026-10-03)
+# Coverage check — both principals, 2021-01 → 2026-09 (read-only, 2026-10-03; re-run 2026-10-04 after the H2/H3 fill)
 
 Read-only: every database query ran as `BEGIN; SET TRANSACTION READ ONLY; …; ROLLBACK`, including the dashboard calls
-(the API's database session was swapped for a read-only one). Nothing was written to the database.
+(the API's database session was swapped for a read-only one). Nothing was written to the database by this check.
 Window: 2021-01 (the earliest month either principal has) through **2026-09**, the last complete month (D5).
-No table holds a row dated after 2026-09.
+No table holds a row dated after 2026-09. Every figure below is from the 2026-10-04 re-run unless marked otherwise.
 
 ## Verdict
 
-**Not clean: four holes, plus one latent risk.** Every Del Monte data type except product-level sales has rows in all 69
-months, and every Unilever cell is real, filled, generated, or an intended gap. The `_Real` views hide every fill. The
-negative receipts are stored, zeroed and flagged. The holes:
+**Two holes fixed (H2, H3), two deferred (H1, H4), one latent risk unchanged.** Every Del Monte data type except
+product-level sales has rows in all 69 months, and every Unilever cell is real, filled, generated, or an intended gap.
+The `_Real` views hide every fill. Every negative receipt is stored, shown as 0 and flagged.
 
-| # | hole | size | expected? |
+| # | hole (found 2026-10-03) | size then | status 2026-10-04 |
 |---|---|---|---|
-| H1 | **Sales vs Stock chart shows none of the fills, even in preview.** Del Monte has 6 empty months out of the default 12 (2025-01, 02, 05, 07, 10, 11), in both modes | 6 of 12 months (Del Monte), 6 of 12 (all) | Default mode: yes (real-only by design). Preview mode: **no**. The rows exist in the database (generated or filled), but preview adds only Unilever's 2021-22 placeholder sales |
-| H2 | **Del Monte stock 2023-02 has no Pangasinan count.** SSM's workbook `FEBRUARY_2023_INVENTORY_SANSAN_ILOCOS.xlsx` has one sheet (`ILOCOS INVENTORY SIGNOFF`); March has both branches | 1 branch-month (Ilocos 200 rows real) | **No**: not documented anywhere; the fill step fills whole cells only, so a real cell missing one branch is never filled |
-| H3 | **2,600 Unilever SKU-months get no derived receipt** because the product was absent from the previous month's count, although `backend/stock_status.py:36-46` treats "missing from a count" as 0 on hand for Unilever | 2,600 SKU-months, 1,276 products, inside the 37 derived months | **No**: two rules on record disagree; needs a decision |
-| H4 | **The preview-only fills are served nowhere.** Del Monte product sales (`sku_demand_fill`) and Unilever returns (`salesreturn_fact`) have no reader in `backend/` | 3,130 + 68 rows | Partly: documented as not built (PROJECT_STATE §18.5, §18.6), but they do not appear "in preview mode" either |
-| latent | `product_demand_view` and `bo_monitoring_view` read the base tables with **no `is_demo` filter** | 12,243 + 4,639 demo rows reach `product_demand_view`; 2,289 demo purchase + 445 demo BO-return rows reach `bo_monitoring_view` | Not an active leak: no code queries either view (only `schema.sql` defines them, `analytics/db/models.py` comments on them) |
+| H1 | **Sales vs Stock chart shows none of the fills, even in preview.** Del Monte has 6 empty months out of the default 12 (2025-01, 02, 05, 07, 10, 11), in both modes | 6 of 12 months (Del Monte), 6 of 12 (all) | **Open, deferred** (Yuan, 2026-10-03): the data marts session gives each mart row a real / filled / generated flag; charts show fills styled as estimated, KPIs exclude them. Unchanged today |
+| H2 | **Del Monte stock 2023-02 had no Pangasinan count.** SSM's workbook `FEBRUARY_2023_INVENTORY_SANSAN_ILOCOS.xlsx` has one sheet (`ILOCOS INVENTORY SIGNOFF`); March has both branches | 1 branch-month (Ilocos 200 rows real) | **Fixed**: Pangasinan's adjacent real count (2023-01, carried forward) is copied in: 120 rows, ₱5,943,030.02, tagged `synthetic_branch_adjacent` (DEC-31, migration 0040). Coverage stays `partial`: the branch's real count is still missing |
+| H3 | **2,600 Unilever SKU-months got no derived receipt** because the product was absent from the previous month's count, although `backend/stock_status.py:36-46` treats "missing from a count" as 0 on hand for Unilever | 2,600 SKU-months, 1,276 products | **Fixed**: 2,592 now derived with opening 0, flagged `opening_assumed_0_not_in_count` (the other 8 have a blank sales quantity). Also the reverse case: 2,553 with closing 0, flagged `closing_assumed_0_not_in_count` |
+| H4 | **The preview-only fills are served nowhere.** Del Monte product sales (`sku_demand_fill`) and Unilever returns (`salesreturn_fact`) have no reader in `backend/` | 3,130 + 68 rows | **Open, deferred** to the data marts session (Yuan, 2026-10-03). Unchanged today |
+| latent | `product_demand_view` and `bo_monitoring_view` read the base tables with **no `is_demo` filter** | 12,243 + 4,639 demo rows reach `product_demand_view`; 2,289 demo purchase + 445 demo BO-return rows reach `bo_monitoring_view` (2026-10-04) | Not an active leak: no code queries either view (only `schema.sql` defines them, `analytics/db/models.py` comments on them) |
+
+## What changed on live (2026-10-03 / 2026-10-04)
+
+| step | when (UTC) | result |
+|---|---|---|
+| Backup | 2026-10-03 09:54 | `backups/full_backup_20261003T095403Z`: 29 tables, 289,514 rows, every file re-opened and matched its manifest |
+| Migration 0040 | 2026-10-03 10:02:54 | three flag columns on `derived_receipt_fact` (each allowed only on its own zero), `synthetic_branch_adjacent` added to the five Del Monte fill-source checks; ledger checksum = committed file |
+| Fill dry run, then fill | 2026-10-04 12:03:58 | run `fill-20261004T120358Z-a00f9489`: 38 cells, +5,265 rows (5,145 receipts + 120 stock), 0 removed; existing 23,100 receipts unchanged; a second run writes nothing |
+| H3 by the numbers | | 2,592 opening-assumed-0 receipts (11 negative), ₱137,047,548.18; **192 of them (2025-06, ₱14,919,483.31) flagged `after_possibly_partial_count`**: their opening is the 2025-05 count, on record as possibly partial (404 rows against 513–812 in every other real month; 36 of 96 selling Tier A products absent per Claude Code 8, branch `kelvin/surplus-bias-experiment`; pending SSM confirmation) |
+| Reverse case | | 2,553 closing-assumed-0 receipts, **1,365 negative** (stored, shown as 0, flagged; ₱14,072,132.43 below zero before the floor, from the 2026-10-04 dry run), ₱34,328,967.30 of positive receipts. Not clustered around the partial count: 92 of the 1,365 negatives (6.7%) fall in 2025-05/06; they are spread over all 37 months, most in 2024-10 (127) |
+| Estimated receipts total | | ₱1,006,949,077.54 → ₱1,178,325,593.02 (+₱171,376,515.48) |
 
 ## Legend
 
 **R** real (`is_demo = false`) · **G** generated by the synthetic v2 generator (`fill_source = 'synthetic_v2'`) ·
 **F·gap** `synthetic_v2_gap` · **F·rate** `synthetic_rate_transfer` · **F·split** `synthetic_category_split` ·
-**F·derived** `derived_stock_balance` · **—** MISSING (no rows) · **n/a** the table cannot hold this principal ·
-⚑ real but a branch is missing. Numbers are row counts.
+**F·derived** `derived_stock_balance` · **F·branch** `synthetic_branch_adjacent` (a branch's adjacent real month, copied; H2) ·
+**—** MISSING (no rows) · **n/a** the table cannot hold this principal · ⚑ real but a branch's real rows are missing.
+Numbers are row counts.
 
 **GENERATED is not only 2021-22.** The synthetic v2 generator's rows (tagged `synthetic_v2` by migration 0038) also fill every
 interior month with no real data, e.g. Del Monte sales 2024-03..2025-02, Del Monte purchases 2021-01..2023-08, and Unilever sales
@@ -45,11 +57,11 @@ already product (SKU) × month, so **product-level sales are the same rows**; pu
 | sell-out | 69 | 17 | FILLED gap, GENERATED |
 | purchases | 69 | 10 | FILLED gap, GENERATED |
 | returns | 69 | 20 | FILLED gap, GENERATED |
-| stock | 69 | 17 | FILLED gap, GENERATED |
+| stock | 69 | 17 | FILLED gap, GENERATED, REAL+F·branch |
 | product sales | 17 | 0 | FILLED split |
 
-**Yes for sales, sell-out, purchases, returns and stock: rows in all 69 months.** One real cell is incomplete (H2: stock 2023-02,
-Ilocos only).
+**Yes for sales, sell-out, purchases, returns and stock: rows in all 69 months.** One real month has only one branch real:
+stock 2023-02 is Ilocos's real count (200 rows) plus Pangasinan's 2023-01 count copied in (120 rows, H2, fixed 2026-10-04).
 
 **Product-level sales: 17 of 69 months.** The split holds 3,130 rows / 374 products and covers exactly
 the 17 months with **real** sell-out: 2023-01..2023-06, 2023-08..2023-09, 2023-11, 2024-01..2024-02, 2025-03..2025-04, 2025-06, 2025-08..2025-09, 2025-12. Every month is split at principal level; the split total equals the
@@ -62,24 +74,29 @@ real sell-out total to the centavo in all 17 months (difference 0). The other 52
 |---|---|---|---|---|---|
 | 2021-01..2022-12 | no (generated) | no | no (generated) | — | MISSING |
 | 2023-01 | yes | no (2022-12 generated) | yes | — | MISSING |
-| 2023-02..2026-02 (37) | yes | yes | yes | 23,100 rows | FILLED derived |
+| 2023-02..2026-02 (37) | yes | yes | yes | 28,245 rows | FILLED derived |
 | 2026-03 | yes | yes | **no** (generated `synthetic_v2`, real sales end 2026-02) | — | MISSING |
 | 2026-04..2026-09 | no (gap fill) | no | no | — | MISSING |
 
 **Yes at month level:** every month that has a real count at both ends **and** real sales has derived receipts (37 months, 2023-02..2026-02).
 Real counts run 2023-01..2026-03 (39 months, no gaps); real sales 2023-01..2026-02 (38).
 The one month between two real counts without receipts is **2026-03**: the rule also requires real sales that month
-(`scripts/fill_missing.py:206`). None of the not-derivable months is filled by anything else; they are empty.
+(`scripts/fill_missing.py:311`). None of the not-derivable months is filled by anything else; they are empty.
 
-Inside the 37 derived months, product-level (SKU-months with a closing count):
+Product level, every SKU-month with a real Unilever count (2023-01..2026-03). Unilever files omit zero rows, so a product
+missing from a count that was taken has 0 on hand (`backend/stock_status.py:36-46`; DEC-31, migration 0040):
 
 | outcome | SKU-months |
 |---|---|
-| derived | 23,100 |
-| no row: product not in the previous month's count (H3) | 2,600 (1,276 products); the remaining 771 of this reason's 3,371 are 2023-01, the first count |
-| no row: NULL sales quantity | 26 |
+| derived: opening from the previous count | 23,100 |
+| derived: opening assumed 0, not in the previous count (H3, `opening_flag`) | 2,592 |
+| no row: blank sales quantity | 34 |
+| no row: no count taken the month before (2023-01, the first count) | 771 |
+| no row: month has no real sales (2026-03) | 785 |
 | no row: missing pack size | 0 |
-| 2026-03 (no real sales) | 785 |
+
+Plus the reverse case, product-months with no count of their own: in the previous count, missing from this month's, closing 0
+(`closing_flag`): 2,553 rows, 1,365 of them negative.
 
 **Returns:** 68 months, 2021-01..2026-08, one row each (`synthetic_rate_transfer`; 20 at Del Monte's own
 month rate, 48 at a nearest month-of-year rate, from the 2026-10-03 fill dry run). These are exactly the months with any Unilever sales rows.
@@ -96,11 +113,11 @@ month rate, 48 at a nearest month-of-year rate, from the 2026-10-03 fill dry run
 | unilever | returns | 2026-09 | 1 | No Unilever sales in 2026-09 to multiply by the return rate (follows from D4) | yes |
 | unilever | sales | 2026-09 | 1 | D4: a Unilever demand gap stays missing (the generator writes parquet only). Same cell is Unilever product-level sales | yes |
 
-Total **86** MISSING cells, all intended under the rules on record. Not MISSING cells, but holes: H2 (a missing branch inside a
-real cell) and H3 (SKU-months inside derived months).
+Total **86** MISSING cells, all intended under the rules on record, the same 86 as on 2026-10-03. H2 (a missing
+branch inside a real cell) and H3 (SKU-months inside derived months) were not MISSING cells; both are fixed (see "What changed").
 
-- **After the last complete month (D5):** no table has any row dated 2026-10 or later. `etl_coverage` still lists 2026-10 as `missing`
-  for all 10 principal × table rows, because its refresh ran on 2026-10-02 UTC.
+- **After the last complete month (D5):** no table has any row dated 2026-10 or later. `etl_coverage` lists 2026-10 as `missing`
+  for all 10 principal × table rows: its rows run through the current UTC month, which is never filled.
 - **"Pieces with no pack size":** no MISSING cell has this cause. The Del Monte split works in sell-out pesos and quantity, not
   pieces (0 of its products carry a pack size, PROJECT_STATE §18.5). The Unilever receipt rule lost 0 SKU-months to a missing pack size.
 
@@ -112,13 +129,13 @@ real cell) and H3 (SKU-months inside derived months).
 | `sellout_fact_real` | 1,367 | 1,367 | 4,639 (yes) | **0** |
 | `purchase_fact_real` | 499 | 499 | 2,289 (yes) | **0** |
 | `salesreturn_fact_real` | 1,604 | 1,604 | 3,957 (yes) | **0** |
-| `inventory_fact_real` | 32,823 | 32,823 | 28,050 (yes) | **0** |
+| `inventory_fact_real` | 32,823 | 32,823 | 28,170 (yes) | **0** |
 | `unilever_sku_demand_fact_real` | 24,906 | 24,906 | 12,243 (yes) | **0** |
 | `unilever_inventory_monthly` | 27,282 | 27,282 (Unilever) | — | **0** (row counts equal; definition filters `is_demo = false`) |
 
 **0 fill or generated rows are visible through any `_Real` view.** Each view is `SELECT … FROM <table> WHERE is_demo = false`.
 Every fill row has `is_demo = true` (a CHECK constraint from migration 0038 allows `fill_source` only on demo rows), and every demo row
-carries a `fill_source` tag. `derived_receipt_fact` (23,100 rows) and `sku_demand_fill` (3,130) are all `is_demo = true` and have no
+carries a `fill_source` tag. `derived_receipt_fact` (28,245 rows) and `sku_demand_fill` (3,130) are all `is_demo = true` and have no
 `_Real` view.
 
 **Preview-only fills:** no file in `backend/` reads `sku_demand_fill` or `salesreturn_fact`, so the Del Monte product split and the
@@ -165,12 +182,14 @@ both principals' real values, so it is empty whenever either side is.
 
 | check | result |
 |---|---|
-| rows flagged `negative_balance` | **5,392** of 23,100 (months 2023-02..2026-02) |
-| stored: signed balance kept | all 5,392 have `balance_pieces < 0` (lowest -292,022 pieces; sum -7,883,741 pieces) |
-| shown as 0 | all 5,392 have `receipt_pieces = 0` and `receipt_value = 0`; `receipt_pieces = max(balance, 0)` broken on 0 of 23,100 rows |
+| rows flagged `negative_balance` | **6,768** of 28,245 (months 2023-02..2026-02) |
+| stored: signed balance kept | all 6,768 have `balance_pieces < 0` (lowest -292,022 pieces; sum -8,336,195 pieces) |
+| shown as 0 | all 6,768 have `receipt_pieces = 0` and `receipt_value = 0`; `receipt_pieces = max(balance, 0)` broken on 0 of 28,245 rows |
 | flagged correctly | negative but unflagged: 0 · flagged but not negative: 0 · other flag values: 0 |
 | balance identity (closing − opening + sold) | broken on 0 rows |
-| what the API serves | `received_estimated` = SUM(`receipt_value`) matches the table in all 37 months, both modes; `received_estimated_negative_skus` sums to 5,392 |
+| by assumption | counted opening and closing: 23,100 (5,392 negative) · opening assumed 0: 2,592 (11 negative) · closing assumed 0: 2,553 (1,365 negative) · flagged `after_possibly_partial_count`: 192 |
+| assumption flags only on a zero | violations: 0 (migration 0040's constraints) |
+| what the API serves | `received_estimated` = SUM(`receipt_value`) matches the table in all 37 months, both modes; `received_estimated_negative_skus` sums to 6,768 |
 
 **Confirmed: stored, shown as 0, flagged.**
 
@@ -184,7 +203,7 @@ both principals' real values, so it is empty whenever either side is.
 | sell-out | 21-01→22-12 **GENERATED** 2,932 · 23-01→23-06 **REAL** 705 · 23-07 **GENERATED** 122 · 23-08→23-09 **REAL** 246 · 23-10 **GENERATED** 121 · 23-11 **REAL** 121 · 23-12 **GENERATED** 117 · 24-01→24-02 **REAL** 243 · 24-03→25-02 **GENERATED** 1,229 · 25-03→25-04 **REAL** 19 · 25-05 **GENERATED** 10 · 25-06 **REAL** 9 · 25-07 **GENERATED** 10 · 25-08→25-09 **REAL** 16 · 25-10→25-11 **GENERATED** 20 · 25-12 **REAL** 8 · 26-01→26-08 **GENERATED** 70 · 26-09 **FILLED gap** 8 |
 | purchases | 21-01→23-08 **GENERATED** 1,159 · 23-09 **REAL** 34 · 23-10 **GENERATED** 31 · 23-11→24-02 **REAL** 162 · 24-03→25-02 **GENERATED** 472 · 25-03→25-04 **REAL** 102 · 25-05 **GENERATED** 54 · 25-06 **REAL** 58 · 25-07 **GENERATED** 27 · 25-08 **REAL** 74 · 25-09 **FILLED gap** 34 · 25-10→25-11 **GENERATED** 69 · 25-12 **REAL** 69 · 26-01→26-08 **GENERATED** 409 · 26-09 **FILLED gap** 34 |
 | returns | 21-01→22-12 **GENERATED** 1,971 · 23-01→23-06 **REAL** 336 · 23-07 **FILLED gap** 115 · 23-08→23-09 **REAL** 150 · 23-10 **FILLED gap** 84 · 23-11→24-02 **REAL** 285 · 24-03→25-02 **FILLED gap** 957 · 25-03→25-04 **REAL** 140 · 25-05 **FILLED gap** 69 · 25-06 **REAL** 120 · 25-07 **FILLED gap** 127 · 25-08→25-12 **REAL** 573 · 26-01→26-03 **FILLED gap** 188 · 26-04→26-08 **GENERATED** 251 · 26-09 **FILLED gap** 127 |
-| stock | 21-01→22-12 **GENERATED** 7,358 · 23-01→23-06 **REAL** 1,695 · 23-07 **GENERATED** 291 · 23-08→23-09 **REAL** 1,033 · 23-10→23-11 **GENERATED** 602 · 23-12→24-02 **REAL** 883 · 24-03→25-02 **GENERATED** 3,853 · 25-03→25-04 **REAL** 584 · 25-05 **GENERATED** 309 · 25-06 **REAL** 304 · 25-07 **GENERATED** 304 · 25-08→25-09 **REAL** 627 · 25-10→25-11 **GENERATED** 718 · 25-12 **REAL** 415 · 26-01→26-08 **GENERATED** 2,417 · 26-09 **FILLED gap** 303 |
+| stock | 21-01→22-12 **GENERATED** 7,358 · 23-01 **REAL** 307 · 23-02 **REAL+F·branch** 320 · 23-03→23-06 **REAL** 1,188 · 23-07 **GENERATED** 291 · 23-08→23-09 **REAL** 1,033 · 23-10→23-11 **GENERATED** 602 · 23-12→24-02 **REAL** 883 · 24-03→25-02 **GENERATED** 3,853 · 25-03→25-04 **REAL** 584 · 25-05 **GENERATED** 309 · 25-06 **REAL** 304 · 25-07 **GENERATED** 304 · 25-08→25-09 **REAL** 627 · 25-10→25-11 **GENERATED** 718 · 25-12 **REAL** 415 · 26-01→26-08 **GENERATED** 2,417 · 26-09 **FILLED gap** 303 |
 | product sales | 21-01→22-12 **MISSING** 0 · 23-01→23-06 **FILLED split** 1,089 · 23-07 **MISSING** 0 · 23-08→23-09 **FILLED split** 382 · 23-10 **MISSING** 0 · 23-11 **FILLED split** 176 · 23-12 **MISSING** 0 · 24-01→24-02 **FILLED split** 354 · 24-03→25-02 **MISSING** 0 · 25-03→25-04 **FILLED split** 336 · 25-05 **MISSING** 0 · 25-06 **FILLED split** 170 · 25-07 **MISSING** 0 · 25-08→25-09 **FILLED split** 365 · 25-10→25-11 **MISSING** 0 · 25-12 **FILLED split** 258 · 26-01→26-09 **MISSING** 0 |
 
 ### Unilever
@@ -192,7 +211,7 @@ both principals' real values, so it is empty whenever either side is.
 | data type | runs of identical months (status, rows) |
 |---|---|
 | sales | 21-01→22-12 **GENERATED** 8,444 · 23-01→26-02 **REAL** 24,906 · 26-03→26-08 **GENERATED** 3,799 · 26-09 **MISSING** 0 |
-| purchases | 21-01→23-01 **MISSING** 0 · 23-02→26-02 **FILLED derived** 23,100 · 26-03→26-09 **MISSING** 0 |
+| purchases | 21-01→23-01 **MISSING** 0 · 23-02→26-02 **FILLED derived** 28,245 · 26-03→26-09 **MISSING** 0 |
 | returns | 21-01→26-08 **FILLED rate** 68 · 26-09 **MISSING** 0 |
 | stock | 21-01→22-12 **GENERATED** 8,292 · 23-01→26-03 **REAL** 27,282 · 26-04→26-09 **FILLED gap** 3,603 |
 | sell-out | 21-01→26-09 **N/A** 0 |
@@ -228,7 +247,7 @@ both principals' real values, so it is empty whenever either side is.
 | 2022-11 | G 1,088 | G 115 | G 43 | G 35 | G 291 | **—** |
 | 2022-12 | G 585 | G 125 | G 38 | G 73 | G 291 | **—** |
 | 2023-01 | R 781 | R 118 | G 58 | R 70 | R 307 | F·split 190 |
-| 2023-02 | R 781 | R 114 | G 38 | R 47 | R 200 ⚑ | F·split 182 |
+| 2023-02 | R 781 | R 114 | G 38 | R 47 | R+F·branch 320 ⚑ | F·split 182 |
 | 2023-03 | R 872 | R 121 | G 38 | R 42 | R 292 | F·split 175 |
 | 2023-04 | R 675 | R 120 | G 33 | R 37 | R 296 | F·split 179 |
 | 2023-05 | R 862 | R 114 | G 51 | R 69 | R 309 | F·split 182 |
@@ -273,7 +292,8 @@ both principals' real values, so it is empty whenever either side is.
 | 2026-08 | G 1,004 | G 8 | G 74 | G 48 | G 324 | **—** |
 | 2026-09 | F·gap 954 | F·gap 8 | F·gap 34 | F·gap 127 | F·gap 303 | **—** |
 
-⚑ 2023-02 stock: Ilocos only (H2).
+⚑ 2023-02 stock: 200 real Ilocos rows + 120 Pangasinan rows copied from 2023-01 (`synthetic_branch_adjacent`, H2); `demand_period`
+2023-03 and `days_offset` NULL on all 320, set by migration 0039's trigger like every Del Monte count.
 
 ### Unilever
 
@@ -306,43 +326,43 @@ Product-level sales = the `sales` column (same table, SKU × month).
 | 2022-11 | G 430 | **—** | F·rate 1 | G 416 | n/a |
 | 2022-12 | G 433 | **—** | F·rate 1 | G 389 | n/a |
 | 2023-01 | R 593 | **—** | F·rate 1 | R 771 | n/a |
-| 2023-02 | R 589 | F·derived 724 | F·rate 1 | R 751 | n/a |
-| 2023-03 | R 587 | F·derived 726 | F·rate 1 | R 752 | n/a |
-| 2023-04 | R 576 | F·derived 713 | F·rate 1 | R 745 | n/a |
-| 2023-05 | R 619 | F·derived 716 | F·rate 1 | R 772 | n/a |
-| 2023-06 | R 608 | F·derived 748 | F·rate 1 | R 793 | n/a |
-| 2023-07 | R 610 | F·derived 751 | F·rate 1 | R 785 | n/a |
-| 2023-08 | R 627 | F·derived 706 | F·rate 1 | R 757 | n/a |
-| 2023-09 | R 589 | F·derived 670 | F·rate 1 | R 719 | n/a |
-| 2023-10 | R 596 | F·derived 657 | F·rate 1 | R 687 | n/a |
-| 2023-11 | R 597 | F·derived 653 | F·rate 1 | R 711 | n/a |
-| 2023-12 | R 563 | F·derived 646 | F·rate 1 | R 663 | n/a |
-| 2024-01 | R 582 | F·derived 633 | F·rate 1 | R 695 | n/a |
-| 2024-02 | R 659 | F·derived 632 | F·rate 1 | R 671 | n/a |
-| 2024-03 | R 560 | F·derived 607 | F·rate 1 | R 665 | n/a |
-| 2024-04 | R 597 | F·derived 598 | F·rate 1 | R 647 | n/a |
-| 2024-05 | R 627 | F·derived 609 | F·rate 1 | R 690 | n/a |
-| 2024-06 | R 644 | F·derived 592 | F·rate 1 | R 654 | n/a |
-| 2024-07 | R 680 | F·derived 614 | F·rate 1 | R 743 | n/a |
-| 2024-08 | R 637 | F·derived 628 | F·rate 1 | R 695 | n/a |
-| 2024-09 | R 649 | F·derived 650 | F·rate 1 | R 760 | n/a |
-| 2024-10 | R 666 | F·derived 578 | F·rate 1 | R 621 | n/a |
-| 2024-11 | R 691 | F·derived 561 | F·rate 1 | R 653 | n/a |
-| 2024-12 | R 660 | F·derived 600 | F·rate 1 | R 659 | n/a |
-| 2025-01 | R 699 | F·derived 582 | F·rate 1 | R 641 | n/a |
-| 2025-02 | R 666 | F·derived 575 | F·rate 1 | R 649 | n/a |
-| 2025-03 | R 674 | F·derived 576 | F·rate 1 | R 646 | n/a |
-| 2025-04 | R 665 | F·derived 535 | F·rate 1 | R 608 | n/a |
-| 2025-05 | R 732 | F·derived 350 | F·rate 1 | R 404 | n/a |
-| 2025-06 | R 708 | F·derived 320 | F·rate 1 | R 513 | n/a |
-| 2025-07 | R 708 | F·derived 468 | F·rate 1 | R 670 | n/a |
-| 2025-08 | R 716 | F·derived 582 | F·rate 1 | R 693 | n/a |
-| 2025-09 | R 774 | F·derived 601 | F·rate 1 | R 715 | n/a |
-| 2025-10 | R 768 | F·derived 671 | F·rate 1 | R 785 | n/a |
-| 2025-11 | R 754 | F·derived 716 | F·rate 1 | R 780 | n/a |
-| 2025-12 | R 687 | F·derived 703 | F·rate 1 | R 775 | n/a |
-| 2026-01 | R 770 | F·derived 703 | F·rate 1 | R 747 | n/a |
-| 2026-02 | R 779 | F·derived 706 | F·rate 1 | R 812 | n/a |
+| 2023-02 | R 589 | F·derived 796 | F·rate 1 | R 751 | n/a |
+| 2023-03 | R 587 | F·derived 777 | F·rate 1 | R 752 | n/a |
+| 2023-04 | R 576 | F·derived 780 | F·rate 1 | R 745 | n/a |
+| 2023-05 | R 619 | F·derived 799 | F·rate 1 | R 772 | n/a |
+| 2023-06 | R 608 | F·derived 817 | F·rate 1 | R 793 | n/a |
+| 2023-07 | R 610 | F·derived 826 | F·rate 1 | R 785 | n/a |
+| 2023-08 | R 627 | F·derived 836 | F·rate 1 | R 757 | n/a |
+| 2023-09 | R 589 | F·derived 804 | F·rate 1 | R 719 | n/a |
+| 2023-10 | R 596 | F·derived 749 | F·rate 1 | R 687 | n/a |
+| 2023-11 | R 597 | F·derived 745 | F·rate 1 | R 711 | n/a |
+| 2023-12 | R 563 | F·derived 728 | F·rate 1 | R 663 | n/a |
+| 2024-01 | R 582 | F·derived 724 | F·rate 1 | R 695 | n/a |
+| 2024-02 | R 659 | F·derived 734 | F·rate 1 | R 671 | n/a |
+| 2024-03 | R 560 | F·derived 725 | F·rate 1 | R 665 | n/a |
+| 2024-04 | R 597 | F·derived 714 | F·rate 1 | R 647 | n/a |
+| 2024-05 | R 627 | F·derived 728 | F·rate 1 | R 690 | n/a |
+| 2024-06 | R 644 | F·derived 752 | F·rate 1 | R 654 | n/a |
+| 2024-07 | R 680 | F·derived 779 | F·rate 1 | R 743 | n/a |
+| 2024-08 | R 637 | F·derived 809 | F·rate 1 | R 695 | n/a |
+| 2024-09 | R 649 | F·derived 804 | F·rate 1 | R 760 | n/a |
+| 2024-10 | R 666 | F·derived 803 | F·rate 1 | R 621 | n/a |
+| 2024-11 | R 691 | F·derived 711 | F·rate 1 | R 653 | n/a |
+| 2024-12 | R 660 | F·derived 712 | F·rate 1 | R 659 | n/a |
+| 2025-01 | R 699 | F·derived 718 | F·rate 1 | R 641 | n/a |
+| 2025-02 | R 666 | F·derived 711 | F·rate 1 | R 649 | n/a |
+| 2025-03 | R 674 | F·derived 717 | F·rate 1 | R 646 | n/a |
+| 2025-04 | R 665 | F·derived 719 | F·rate 1 | R 608 | n/a |
+| 2025-05 | R 732 | F·derived 660 | F·rate 1 | R 404 | n/a |
+| 2025-06 | R 708 | F·derived 594 | F·rate 1 | R 513 | n/a |
+| 2025-07 | R 708 | F·derived 707 | F·rate 1 | R 670 | n/a |
+| 2025-08 | R 716 | F·derived 779 | F·rate 1 | R 693 | n/a |
+| 2025-09 | R 774 | F·derived 807 | F·rate 1 | R 715 | n/a |
+| 2025-10 | R 768 | F·derived 823 | F·rate 1 | R 785 | n/a |
+| 2025-11 | R 754 | F·derived 845 | F·rate 1 | R 780 | n/a |
+| 2025-12 | R 687 | F·derived 842 | F·rate 1 | R 775 | n/a |
+| 2026-01 | R 770 | F·derived 819 | F·rate 1 | R 747 | n/a |
+| 2026-02 | R 779 | F·derived 852 | F·rate 1 | R 812 | n/a |
 | 2026-03 | G 644 | **—** | F·rate 1 | R 785 | n/a |
 | 2026-04 | G 635 | **—** | F·rate 1 | F·gap 608 | n/a |
 | 2026-05 | G 626 | **—** | F·rate 1 | F·gap 404 | n/a |

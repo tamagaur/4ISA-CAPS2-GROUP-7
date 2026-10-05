@@ -33,7 +33,7 @@ from backend.api_errors import ApiError, api_error_handler
 from backend.client_ip import RealClientIPMiddleware
 from backend.deps import check_db_connection, get_db
 from backend.routers import (
-    abc, audit_log, auth, category_trends, dashboard, data_mode, decomposition, forecast, fsn,
+    abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, forecast, fsn,
     inventory, pareto, permissions, policy_comparison, recommendations, segment, sku, two_factor, users,
 )
 
@@ -112,6 +112,7 @@ app.include_router(forecast.router)
 app.include_router(recommendations.router)
 app.include_router(abc.router)
 app.include_router(dashboard.router)
+app.include_router(dashboard_range.router)
 app.include_router(sku.router)
 app.include_router(audit_log.router)
 app.include_router(segment.router)

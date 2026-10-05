@@ -47,3 +47,6 @@ class ForecastResponse(BaseModel):
     # names the band's level instead of calling it a bare "confidence
     # interval".
     interval: dict | None = None
+    # Why there is no forecast at all for this request (Del Monte: no
+    # product-level sales), None otherwise.
+    blocked_reason: str | None = None

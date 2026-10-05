@@ -528,7 +528,9 @@ const Dashboard = () => {
   const pesosOnlyNote = pagePrincipal === 'delmonte' ? 'pesos only, since Del Monte files have no pack size' : null;
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
-    ['At last purchase price', countLabel, pesosOnlyNote, sohCoverage, coverLine].filter(Boolean).join(' · '),
+    // kpis.soh_count_note: set when this count is one the team flagged as
+    // unusual — the card keeps the figure and says so beside it.
+    ['At last purchase price', countLabel, kpis.soh_count_note, pesosOnlyNote, sohCoverage, coverLine].filter(Boolean).join(' · '),
   );
 
   // stock_on_hand_flags: counts the team reviewed and judged unusual — the

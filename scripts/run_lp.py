@@ -1040,6 +1040,13 @@ def main():
 
     conn.close()
 
+    # Migration 0041: rebuild the dashboard's marts after a real run (the LP figures
+    # themselves are joined per request; the refresh keeps the log and freshness check
+    # in step with every LP run).
+    if not args.dry_run:
+        from analytics.marts import refresh_marts
+        refresh_marts(db_url, "run_lp")
+
     if args.csv:
         pd.DataFrame(csv_rows).to_csv(args.csv, index=False)
         logger.info(f"Per-product plan written to {args.csv}")

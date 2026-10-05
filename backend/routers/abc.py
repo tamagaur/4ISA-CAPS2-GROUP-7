@@ -143,6 +143,7 @@ from backend.stock_units import STOCK_AT_LATEST_SQL
 from backend.routers.sku import STOCK_COUNT_DATE_SQL, stock_count_dates
 from analytics.classification.abc import abc_rules, pareto_check
 from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
+from backend.response_cache import cached
 
 router = APIRouter(prefix="/abc", tags=["abc"])
 
@@ -400,6 +401,7 @@ def _item(r, tier_period: str | None, *, lp_visible: bool, has_cycle: bool) -> A
 
 
 @router.get("", response_model=ABCResponse)
+@cached("GET /abc")
 def get_abc(
     classification_period: str | None = Query(
         None,

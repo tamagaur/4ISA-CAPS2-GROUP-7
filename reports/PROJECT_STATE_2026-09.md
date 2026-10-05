@@ -1063,10 +1063,11 @@ Order: 0032 -> 0033 -> 0036 -> 0037 -> 0038 (`python -m scripts.run_canonical_lo
 | fill dry rerun | 2026-10-03 | 0 added, 0 removed, 0 gap cells (idempotent) |
 | 2026-02 segmentation recompute | 2026-10-03 | Tier A as of 2026-02, method single: run `segment_unilever_2026-02_2d2dd97c` (132 traits, 660 segment rows; `length_v1` untouched). Exactly the 8 products with a negative month changed `cv` (19, 174, 345, 644, 666, 674, 832, 1037); 644 and 1037 also `trend_pvalue` (0.0098 -> 0.0119, 0.0092 -> 0.0112), still under alpha 0.05, so no bin moved. Pre-write rows: `backups/segmentation_2026-02_pre_recompute_20261003T063026Z/` |
 | scratch | 2026-10-03 | `ssm_fills` and `ssm_seg_negkept` dropped; no `ssm_*` schema left; database 252 MB -> 137 MB (`pg_database_size`) |
+| H2 / H3 holes (coverage check) | 2026-10-03 / 04 | rehearsed on scratch `ssm_fills_h2h3b` with 0039's trigger added there only (17/17 DB tests; dropped); backup `full_backup_20261003T095403Z`; 0040 applied 2026-10-03 10:02:54; fill run `fill-20261004T120358Z-a00f9489` 2026-10-04 12:03:58: +120 Del Monte Pangasinan stock 2023-02 rows (copy of 2023-01, `synthetic_branch_adjacent`), +2,592 Unilever receipts with opening assumed 0 (11 negative; 192 after the possibly partial 2025-05 count, pending SSM), +2,553 with closing assumed 0 (1,365 negative). Details: `reports/diagnostics/coverage_check_2026-10-03.md` |
 
 **Rule breach on record:** the 2026-10-02 session applied 0037 and 0038 from uncommitted files (0037 = `0035_lp_run.sql` renumbered, because
 public already held `0035_user_two_factor.sql`). They were committed afterwards in ef08b70; the committed files hash to the checksums
-`schema_migrations` recorded. Next free migration number: **0039** (reserved by the stock-timing fix), then 0040.
+`schema_migrations` recorded. 0039 (stock-timing fix) and 0040 (fill holes) are live; reserved: **0041 = data marts, 0042 = in-transit stock**; anything else starts at 0043.
 
 ### 18.5 Del Monte preview pipeline (ABC SKU level, forecast router, LP) — NOT built; what is left
 
@@ -1095,3 +1096,116 @@ public already held `0035_user_two_factor.sql`). They were committed afterwards 
 | Del Monte | forecasts and LP in PREVIEW only, labelled preview-only (once 18.5 is built); product-level sales label **"Demo: Del Monte product sales estimated from total sales × stock share — SSM has no product-level sales"** |
 | returns | no endpoint reads `salesreturn_fact` yet; Unilever returns are preview-only data with no chart |
 | coverage | `etl_coverage` now says real / derived / synthetic / partial / missing per principal × table × month; no endpoint serves it yet (`GET /admin/data-loads` still planned, DEC-30) |
+
+
+---
+
+## 19. Data marts + range-based dashboard (DEC-36) — LIVE on `public` 2026-10-04
+
+Branch `kelvin/data-marts` (off `kelvin-etl` 1edf5cf). Schema `mart`, migration **0041**, applied 2026-10-04 13:37:42 UTC
+through the runner after backup `backups/full_backup_20261004T133536Z` (PASS). Pre-approved apply conditions (prompt
+2026-10-04): mart size under 60 MB and a scratch rehearsal matching source totals exactly — both met (§19.2).
+
+### 19.1 What is in `mart`
+
+| object | grain | rows (live, 2026-10-04) | source |
+|---|---|---|---|
+| `sales_mart` (+ `_real`, `sales_month`, `sales_category_month`) | product (DM: category) × month × source tag | 43,528 | `unilever_sku_demand_fact`, `sellout_fact`, `sku_demand_fill` (DM split, level `product`, never in a total) |
+| `flow_month` | principal × month × flow × source tag | 243 | purchases (`purchase_fact`, DM ex-VAT), estimated receipts (`derived_receipt_fact`), returns (`salesreturn_fact`) |
+| `inventory_mart` (+ `_real`, `inventory_count`) | product × count × source tag | 52,387 | `inventory_fact`: cases, loose, pieces (UL cases × pack + loose; DM `no_pack_size`), pesos at last purchase price, previous count |
+| `idle_stock` | product × real UL count | 3,857 | products in the count with no piece sold in the 6 (`DEAD_SKU_MONTHS`) real sales months up to it |
+| `forecast_run` / `forecast_run_value` | run × product × month | 3 runs / 6,054 | history, never rebuilt: run 1 = `forecast_result` (stored_run), runs 2-3 = recreated backtests |
+| `accuracy_mart` (+ category / total views) | run × product × month | 6,054 | forecast vs real actual, signed miss (pieces, pesos), direction, run length, possibly_stock_limited |
+| `refresh_log`, `refresh_status` | — | — | each refresh's trigger, time, row counts; whether a source changed since |
+
+Every row: `data_kind` = `real` (`is_demo = false`, the `_Real` views' rule) / `generated` (`synthetic_v2`) / `filled` (every
+other `fill_source`). KPIs, Pareto and accuracy read real rows only. `mart.refresh()` rebuilds every derived table in one
+transaction (~6 s server side); called after every slice load (after its fill step), `fill_missing` run alone,
+`run_baseline_forecast --write` (which first keeps the run in the history), `run_lp`, and `backtest_forecast_run`; a failure
+is reported, never raised (`python -m analytics.marts --refresh`).
+
+### 19.2 Verification
+
+| check | result |
+|---|---|
+| scratch rehearsal (`scripts/rehearse_marts.py`, built from the committed file into `ssm_mart_rehearsal`, dropped) | 12 exact comparisons: 0 differences; NaN 0 |
+| same checks on live `mart` after the apply (`--check-only --schema mart`, `tests/test_marts.py`) | 0 differences; 9/9 tests pass |
+| idle stock, Unilever count 2026-03 (counted 2026-04-06), no piece sold 2025-09..2026-02 | **108 products, ₱1,689,351.75** — the figure quoted to the team; no committed file or branch states it, so it is reproduced here from `inventory_fact_real` + `unilever_sku_demand_fact_real`. 101 of the 108 never sold at all in the La Union sales file: the Ilocos Sur stock vs La Union sales question, UNVERIFIED with SSM |
+| range Pareto over one month vs every stored ABC `single` run | 54 of 54 runs: same products, same tiers; shares within the stored 4-decimal rounding |
+| backtest regenerated (`scripts/backtest_forecast_run.py`, production router) vs the reports' own rows | at-the-time cohort 3,503 rows / 337 products, max \|diff\| 2.9e-11; fixed-107 cohort 2,419 / 107, max 5.0e-05 (4-dp CSV); every headline metric = `headline_two_cohorts.csv` |
+| accuracy mart headline (29 months) | at-the-time: median product WAPE **34.56%** (report 34.79%), pooled 29.63% (29.56%), total pesos 9.82% (9.87%), surplus share 55.8% (55.9%). Differs only by 3 product-months whose quantity is blank: the reports counted them as 0 sold, the mart as missing (2026-10-03 blank-quantity decision); all other rows identical |
+| size | live rows ~21 MB; on disk 41.6 MB including the space the next refresh reuses (steady-state peak); limit 60 MB |
+| `GET /dashboard`, default range, from this machine (median of 3) | Unilever 4.40 s → **3.68 s**, Del Monte 3.72 → **2.74**, all 4.64 → **3.88**; 53 → 29 queries (each costs ~0.12 s round trip); the month-level marts are one read per request |
+| backend tests touched (`tests/backend`, `test_marts`, `test_params`, LP script, fills, loader) | 691 passed, 1 skipped; `scripts/smoke_api.py` 13/13 PASS; `npm run build` exit 0 |
+
+### 19.3 What the dashboard now answers for the selected range
+
+| card | before | now |
+|---|---|---|
+| Sales | end-month snapshot only | `kpis.sales_cumulative` (range total, months with data, missing months, label) + `kpis.sales_snapshot` (= `kpis.sales`) |
+| Inventory value | latest count (2026-03) | **count at the range's end** (default range: 2026-02, counted 2026-03-02, ₱46,576,778.51 — the count flagged unusual); `weeks_of_cover` keeps the latest count, `weeks_of_cover_range_end` added |
+| Below safety stock | latest count (35 of 70) | range-end count (default **6 of 72**, = the 2 Mar figure on record); refused for a count before the plan's opening count |
+| ABC ring + dead stock | stored single-month run | ranked on the range (default UL: A 174 / B 242 / C 666, Pareto check passes at 84.3%) |
+| Forecast error (new) | — | `forecast_accuracy`: at-the-time backtest for months it covers, stored runs after; default range 248 products, pooled 33.4%, 56.7% of the peso miss is surplus, 59 products over-forecast 3+ months in a row (DEC-33's over-run rule on the range; the plan's own flag is `review_flag`, 15 products for cycle 2026-03) |
+| Idle stock (new) | — | `idle_stock` at the range-end count (default 2026-02: 83 products, ₱1,417,263.94); full list `GET /dashboard/idle-stock` |
+| Sales vs stock chart | real rows only (H1) | `*_estimated` points from filled rows (generated too in preview); `returns` / `returns_estimated` (H4) |
+
+New routes (`dashboard.view`): `/dashboard/pareto`, `/yoy`, `/accuracy`, `/idle-stock`, `/product-sales` (serves the DM product
+split, H4), `/forecast-runs`. `GET /pareto` reads the mart too.
+
+### 19.4 Decisions (Yuan, 2026-10-04) and what is still open
+
+| # | item | outcome |
+|---|---|---|
+| 1 | Range-end stock card on a flagged count | **Kept.** `kpis.soh_count_note` (and `soh_snapshot.note`): "Counted 2 Mar 2026: unusually high (₱46.6M), accepted pending SSM confirmation" for an accepted flagged count; a flagged count with no ruling gives its reviewed reason (`backend/data_notes.flagged_count_note`) |
+| 2 | Which count weeks of cover reads | **The card's own (range-end) count**; the 2026-09-29 latest-count rule is superseded (DEC-36). `kpis.weeks_of_cover` is that figure (`weeks_of_cover_range_end` the same object); `caveat` "stock = Ilocos Sur warehouse; sales = La Union only; territory match unverified" for Unilever |
+| 3 | `possibly_stock_limited` | **Replaced** by 3226cc4 README Part 0.1 (migration 0043): opening or closing count 0, or below 1 week of average sales (12 months before, from first sale, ≥ 3 months, week = mean × 12 ÷ 52), any direction; 2025-05 missing = 0 and flagged `count_possibly_partial`. Reproduces Part 0's **1,142 of 2,419** on the fixed-107 backtest (1,277 not) |
+| 4 | H1 in real mode | Del Monte's empty months are generated (synthetic_v2), not filled: still gaps outside preview, as designed (DEC-29) |
+| 5 | Under `all`, the range total covers only months both principals have | labelled (`months_with_data`, `missing_months`) |
+| 6 | Audrey's `Charts.jsx:1133` "Ranked on <month> sales (single month)" | frontend: use `abc_revenue.label` (done on kelvin-etl's own `Charts.jsx`) |
+
+---
+
+## 20. Final QA — 2026-10-04 (branch `kelvin/final-qa`, off kelvin-etl 668b78e)
+
+### 20.1 State of `public` and the app today
+
+| area | state (source) |
+|---|---|
+| Migrations | Live `public.schema_migrations` = 44 rows: committed files 0001–0043 (43 files, every checksum matches) **plus `0035_user_two_factor.sql`**, which is still **not on kelvin-etl**. The file exists only on `group7/UIFixes_Audrey` (5633063, with the MFA backend). Its checksum matches the live row (`4d2dd018…`). Next free number: **0044** |
+| Data marts (0041, 0043, DEC-36) | Schema `mart`. Live row counts by kind: sales_mart 25,658 real / 3,134 filled / 14,736 generated; inventory_mart 30,656 / 3,895 / 17,836; flow_month 30 / 127 / 86. Refreshed after every load, fill, forecast `--write`, LP run and backtest (§19) |
+| Review flag + in-transit (0042, DEC-33/34) | `review_flag` 2026-03-01: 15 flagged of 132 assessed; 7 of the flagged are in the current plan's 74 rows. PO Qty is shown and never subtracted |
+| Dashboard speed + cache (668b78e) | GET /dashboard: 4 statements cold, 1 cached (was 30 + pre-ping + BEGIN). Reads are batched (`backend/batch.py`), GETs use an autocommit pool, and the response cache is keyed on endpoint + params + permission set and cleared when the data version moves (`backend/response_cache.py`). Report: `reports/diagnostics/speed_cache_2026-10-04/README.md`. Render not re-timed |
+| Coverage | `etl_coverage` recomputed read-only: 700 rows, **0 differences** from stored. Gaps (2021-01..2026-09) are the ones §18.1 records: Unilever purchases 32 missing (37 derived), Unilever returns 2026-09, Unilever demand 2026-09 (D4), Del Monte product sales 52 missing. Del Monte stock 2023-02 `partial` (Pangasinan = the H2 adjacent copy, demo) |
+| Real vs filled | Six `_Real` views: 0 demo rows, every definition filters `is_demo = false`. 0 real rows carry a `fill_source`. KPI / Pareto / accuracy read `data_kind = 'real'` only (tests: `test_abc_ranking_reads_real_rows_only`, `test_chart_draws_filled_months_as_estimates_never_as_sales`, `test_real_kind_is_exactly_is_demo_false`, live `test_every_mart_total_equals_its_source`) |
+
+### 20.2 End-to-end spot checks (database → mart → endpoint, read only)
+
+| check | database | mart | endpoint |
+|---|---|---|---|
+| March plan | `lp_recommendation` 2026-03-01, lp_run 1: 73 pending, 325,467.96 pcs (+1 accepted, 1,331.24) | — | GET /recommendations: same 73 + 1, `lp_model.run.run_key` 1 |
+| Idle stock | 108 products in the 2026-03 count with no piece sold 2025-09..2026-02 | `idle_stock`: 108, ₱1,689,351.75, counted 2026-04-06, 101 never sold | GET /dashboard/idle-stock?period=2026-03: same. **Default period** (range end 2026-02) reads the 2026-02 count instead: 83 products, ₱1,417,263.94 |
+| Range Pareto, product 138 (REX WMN DLN POWDER DRY + BRGHT 360X3ML) | 2024 ₱467,464.84 / 3 months; 2025 ₱2,798,496.67 / 12 months | same | 2024: class B (rank 165, cumulative 0.805); 2025: class A (rank 31) |
+| Stock at range end | Unilever 2026-02: ₱46,576,778.51, 812 rows, counted 2026-03-02 | same | `kpis.soh_value` same, `soh_count_date` 2026-03-02, `soh_count_note` "Counted 2 Mar 2026: unusually high (₱46.6M), accepted pending SSM confirmation" |
+| needs_review | `review_flag` product 613 (69668140 SURF POWDER CHERRY BLOSSOM), 2026-03-01: collapse, ratio 0.1796 | — | the /recommendations row: `needs_review` true, `review_reasons` ['collapse'], 0.1796 |
+| Accuracy, at-the-time cohort (run 2, 2023-10..2026-02) | — | 337 products, 3,500 scored product-months (3 blank actuals) | `wape_pieces` 0.296344, `median_product_wape` 0.345610 (SQL recompute on the mart gives the same) |
+
+### 20.3 QA fixes (minimal, no feature change)
+
+| fix | files |
+|---|---|
+| GET /forecast for Del Monte (scope `delmonte`, or a code that resolves to a Del Monte product) is now 200 with `forecast: []` and `blocked_reason` "No product-level forecast for Del Monte: its sales files have no product detail." instead of 404. Unknown codes elsewhere are still 404. The SKU Forecast page shows `blocked_reason` when it is present | `backend/routers/forecast.py`, `backend/schemas/forecast.py`, `tests/backend/test_forecast.py`, `frontend/src/components/SKUForecast.jsx` |
+| `scripts/backup_live_db.py` **retired as a command**: its restore check fails on JSON columns because the command dumps them without `json_as_text`. It now prints a pointer to `python -m scripts.backup_everything` and exits 2. `create_backup()` stays (backup_everything calls it with `json_as_text=True`) | `scripts/backup_live_db.py` |
+
+Suite before the fixes: 1,324 passed, 26 skipped (raw files not in the worktree; `FILLS_SCRATCH_SCHEMA` unset). Touched tests after: 29/29. `npm run build` exit 0. `scripts/smoke_api.py` 13/13 PASS.
+
+### 20.4 Open items
+
+| item | owner / waiting on |
+|---|---|
+| Merge Audrey's `UIFixes_Audrey` (22 commits not on kelvin-etl, including the 0035 file and MFA backend) so the repo matches the live ledger | Audrey |
+| LP cost inputs (procurement cost, storage cost, warehouse capacity, supplier ceilings) | SSM |
+| 2026-02 count (₱46.6M) accepted pending SSM confirmation; PO Qty meaning; stock (Ilocos Sur) vs sales (La Union) territory match | SSM |
+| Forecast model sign-off (DEC-25/26) | Sir Catubag |
+| Render not re-timed after the cache; /recommendations still 7–11 statements cold; the preview dashboard is never cached | next speed pass |
+| Del Monte preview pipeline (§18.5) not built | Yuan |

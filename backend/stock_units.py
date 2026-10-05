@@ -56,8 +56,7 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import text
-
+from backend import batch
 from backend.data_notes import UNUSUAL_STOCK_SNAPSHOTS, opening_count_ruling
 
 # A positive integer or decimal, as TEXT. Product_Dimension.pack_size is a
@@ -118,6 +117,39 @@ STOCK_AT_LATEST_SQL = f"""
     ) latest_inv ON latest_inv.principal = inv.principal AND inv._period = latest_inv.latest_period
     GROUP BY inv.product_key, pd_pack.pack_size
 """
+
+# The count's "PO Qty" at :inv_period, in pieces (migration 0042,
+# Inventory_Fact.po_qty_cases/po_qty_pieces), converted with the same pack
+# size rule as stock on hand. Its meaning is UNVERIFIED (pending SSM; DEC-34):
+# information only, kept out of every figure above and never subtracted from
+# an order quantity. on_order_unparsed counts the product's rows in
+# that count whose PO Qty was never parsed (loaded before 0042): the figure is
+# unknown then, not 0. A separate fragment, so the stock figures every other
+# screen reads are untouched. Callers check that the columns exist first
+# (backend/routers/recommendations._present).
+ON_ORDER_AT_PERIOD_SQL = f"""
+    SELECT inv.product_key,
+           CASE WHEN {PACK_SIZE_NUMERIC}
+                THEN SUM(inv.po_qty_cases) * pd_pack.pack_size::numeric + COALESCE(SUM(inv.po_qty_pieces), 0)
+           END AS on_order_pieces,
+           SUM(inv.po_qty_cases) AS on_order_cases,
+           COUNT(*) - COUNT(inv.po_qty_cases) AS on_order_unparsed
+    FROM inventory_fact_real inv
+    JOIN product_dimension pd_pack ON pd_pack.product_key = inv.product_key
+    WHERE inv._period = :inv_period
+    GROUP BY inv.product_key, pd_pack.pack_size
+"""
+# The same columns from no rows, for a database where 0042 isn't applied yet.
+ON_ORDER_ABSENT_SQL = """
+    SELECT NULL::bigint AS product_key, NULL::numeric AS on_order_pieces,
+           NULL::numeric AS on_order_cases, NULL::bigint AS on_order_unparsed
+    WHERE false
+"""
+# Principals whose stock file carries a PO column. Unilever's SOH file has
+# "PO Qty" (config/column_maps/ssis_soh.yaml); Del Monte's inventory sign-off
+# has none (config/column_maps/inventory_sign_off.yaml), so its on-order is
+# unknown rather than 0.
+ON_ORDER_PRINCIPALS = frozenset({"unilever"})
 
 # Why a comparison could not be made, for the UI to show instead of a number.
 NO_PACK_SIZE_REASON = (
@@ -245,5 +277,5 @@ def stock_counts(db, period: str | None, principals, cycle=None) -> list[dict]:
     Pass `cycle` for a plan's opening count (period = opening_period(cycle))."""
     rows = {}
     if period is not None:
-        rows = {r["principal"]: r for r in db.execute(text(STOCK_COUNTS_SQL), {"count_period": period}).mappings().all()}
+        rows = {r["principal"]: r for r in batch.rows(db, STOCK_COUNTS_SQL, {"count_period": period})}
     return [stock_count_info(p, period, rows.get(p), cycle) for p in principals]

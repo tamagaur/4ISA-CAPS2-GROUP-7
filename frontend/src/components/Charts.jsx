@@ -1127,7 +1127,9 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     ...(sharesAddUp ? [{ key: 'sharePct', label: 'Share of revenue (%)', value: (d) => d.sharePct }] : []),
     { key: 'skuPct', label: `Share of ${units} (%)`, value: skuSharePct },
   ];
-  const rankedMonth = revenue?.period ? formatMonth(revenue.period) : null;
+  // The ring ranks the selected range since 2026-10-04 (abc_revenue.label,
+  // e.g. "Mar 2025 – Feb 2026"); a payload without it still names its month.
+  const rankedMonth = revenue?.label || (revenue?.period ? formatMonth(revenue.period) : null);
   const factsFor = (d) => ({
     tier: d.tier,
     count: d.count,
@@ -1173,7 +1175,11 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
               ? `Important products (Class A) are the top sellers that together make ${Math.round(rules.tier_a_cutoff * 100)}% of revenue`
                 + `${rankedMonth ? ` in ${rankedMonth}` : ''}. `
               : 'Which products earn the most. '}
-            {rankedMonth ? `Ranked on ${rankedMonth} sales (single month)` : `${unitsTitle} are ranked by revenue`}
+            {/* "(single month)" only while the ranking is one month; a range
+                names itself (abc_revenue.label). */}
+            {rankedMonth
+              ? `Ranked on ${rankedMonth} sales${revenue?.label ? '' : ' (single month)'}`
+              : `${unitsTitle} are ranked by revenue`}
             {rules
               ? `: B is the next ${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, `
                 + `C the last ${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`

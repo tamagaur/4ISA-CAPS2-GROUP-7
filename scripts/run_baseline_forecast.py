@@ -429,6 +429,7 @@ def main():
     # ---- optional DB write ----------------------------------------- #
     if args.write:
         _write_forecast_result(cur, df)
+        _keep_forecast_history(conn)
     else:
         print("\n(--write not passed: Forecast_Result untouched, this was report-only.)")
 
@@ -895,6 +896,43 @@ def served_forecasts(df, demand_by_key, planning_month) -> dict:
             "holdout_backups": int(scored["backup_fired"].sum()), "holdout_months": int(len(scored)),
         }
     return out
+
+
+def _keep_forecast_history(conn) -> None:
+    """Migration 0041: Forecast_Result holds one run and the next --write overwrites it,
+    so the run just committed is kept in mart.forecast_run (stored_run) for the accuracy
+    mart to score once its month's sales arrive; then the marts are rebuilt. Skipped,
+    with a message, on a scratch search_path or a database without migration 0041.
+    A failure here is reported, not raised: Forecast_Result has already committed, and
+    `python -m analytics.marts --refresh --capture-forecast` keeps the run afterwards
+    (as long as no later --write has overwritten it)."""
+    import getpass
+    import subprocess
+
+    from analytics.marts import capture_forecast_cursor, refresh_marts_cursor, vacuum_marts
+
+    head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() or None
+    previous = conn.autocommit
+    conn.autocommit = False
+    counts = None
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT current_schema()")
+            if cur.fetchone()[0] == "public":
+                capture_forecast_cursor(cur, head, getpass.getuser())
+                counts = refresh_marts_cursor(cur, "run_baseline_forecast --write")
+            else:
+                print("[marts] forecast history skipped: this run wrote a scratch schema")
+        conn.commit()
+    except Exception as exc:  # noqa: BLE001 - Forecast_Result is already committed
+        conn.rollback()
+        print(f"[marts] !!! forecast history / refresh FAILED: {exc!r}\n"
+              "[marts] !!! Run now: python -m analytics.marts --refresh --capture-forecast")
+        counts = None
+    finally:
+        conn.autocommit = previous
+    if counts is not None:
+        vacuum_marts(os.environ["SUPABASE_DB_URL"])
 
 
 def _write_forecast_result(cur, df):

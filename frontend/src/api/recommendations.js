@@ -28,11 +28,14 @@ export function getRecommendations({ status, from, to, principal } = {}) {
 
 // `reason` (optional, at most 500 characters) is why the decision was made;
 // the server records it in the decision's Audit Log entry. Left out when
-// empty.
-export async function decideRecommendation(recommendationKey, status, reason) {
+// empty. `reviewed` confirms a person checked a row flagged for review
+// (needs_review); the server refuses to accept a flagged row without it, so
+// only a single row's confirm dialog sends it — never bulk accept.
+export async function decideRecommendation(recommendationKey, status, reason, { reviewed = false } = {}) {
   const body = { status };
   const trimmedReason = reason?.trim();
   if (trimmedReason) body.reason = trimmedReason;
+  if (reviewed) body.reviewed = true;
   const res = await apiFetch(`/recommendations/${recommendationKey}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
