@@ -1,0 +1,31 @@
+setting,item,product_months
+counts as recorded,both sides,642
+counts as recorded,opening only,0
+counts as recorded,closing only,0
+counts as recorded,no count either side,0
+counts as recorded,a side rests on stock_not_in_count (missing from the count = 0),52
+counts as recorded,stock-limited label known,637
+counts as recorded,stock-limited,250
+counts as recorded,stock-limited only because a product was missing from the count,28
+counts as recorded,high carryover,141
+counts as recorded,can't tell (no label),5
+2026-02 count treated as missing,both sides,535
+2026-02 count treated as missing,opening only,107
+2026-02 count treated as missing,closing only,0
+2026-02 count treated as missing,no count either side,0
+2026-02 count treated as missing,a side rests on stock_not_in_count (missing from the count = 0),50
+2026-02 count treated as missing,stock-limited label known,637
+2026-02 count treated as missing,stock-limited,247
+2026-02 count treated as missing,stock-limited only because a product was missing from the count,27
+2026-02 count treated as missing,high carryover,141
+2026-02 count treated as missing,can't tell (no label),5
+2025-05 count treated as missing,both sides,642
+2025-05 count treated as missing,opening only,0
+2025-05 count treated as missing,closing only,0
+2025-05 count treated as missing,no count either side,0
+2025-05 count treated as missing,a side rests on stock_not_in_count (missing from the count = 0),52
+2025-05 count treated as missing,stock-limited label known,637
+2025-05 count treated as missing,stock-limited,250
+2025-05 count treated as missing,stock-limited only because a product was missing from the count,28
+2025-05 count treated as missing,high carryover,141
+2025-05 count treated as missing,can't tell (no label),5
