@@ -27,6 +27,7 @@ from sqlalchemy import Engine, MetaData, Table, create_engine, select, and_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from analytics.config import get_settings
+from analytics.params import abc_method
 from analytics.segmentation import bins as bin_schemes
 from analytics.segmentation.traits import (
     history_months, first_sale_index, longest_positive_run,
@@ -358,7 +359,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Phase 2 binning: sku_traits + sku_segment, one row per SKU per scheme.")
     parser.add_argument("--principal", default="unilever")
     parser.add_argument("--cohort-period", default="2026-02")
-    parser.add_argument("--abc-method", default="single")
+    parser.add_argument("--abc-method", default=abc_method("unilever"),
+                        help="ABC basis of the cohort; default the Tier A basis (analytics.params.TIER_A_BASIS).")
     parser.add_argument(
         "--schema", required=True,
         help="Schema to WRITE results into. REQUIRED and deliberately has no default — "

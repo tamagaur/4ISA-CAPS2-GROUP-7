@@ -190,13 +190,19 @@ def test_on_request_abc_reproduces_every_stored_unilever_run(live_db):
 # both paths. That stored run still read it as 0, so this test disagrees for a
 # cohort product with a blank month (product_key 150, 2025-12, per the
 # 2026-10-03 model audit) until segmentation is re-run with the fix.
+# 2026-10-05: reads the cohort of the Tier A basis in use (analytics.params,
+# DEC-37), the run segmentation now refreshes; the older 'single' run is kept
+# as written.
 def test_on_request_traits_reproduce_the_stored_segmentation_run(live_db):
     from sqlalchemy import text
+
+    from analytics.params import abc_method
     stored = live_db.execute(text("""
         SELECT product_key, history_months, first_sale_period, longest_run, trend, restart_flag,
                cv::float8 AS cv, adi::float8 AS adi
-        FROM sku_traits WHERE cohort_period = '2026-02' AND abc_method = 'single'
-    """)).mappings().all()
+        FROM sku_traits WHERE cohort_period = '2026-02' AND abc_method = :m
+    """), {"m": abc_method("unilever")}).mappings().all()
+    assert stored, "no stored segmentation run for the Tier A basis"
     matrices, periods = dm.demand_matrix(live_db, [r["product_key"] for r in stored], "2023-01", "2026-02", dm.REAL)
     for r in stored:
         got = dm.series_traits(matrices[r["product_key"]], periods)

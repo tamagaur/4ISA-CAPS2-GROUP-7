@@ -65,7 +65,8 @@ Fixed 2026-09-17: migration 0017 added ABC_Classification.method
 this file (safety_stock_rate, abc_mix, tier_stock) had no method filter,
 so each product_key was double-counted the moment t3m rows landed in
 public (abc_mix's revenue_share summing past 100% was the visible
-symptom). All three now filter to method = 'single', the deployed basis.
+symptom). All three now pin the method; since migration 0044 to each
+principal's Tier A basis (analytics.params.abc_method_sql).
 
 Honest-null policy (matches the frontend's null-handling contract — a null
 value means "cannot honestly compute this", never a guess or a fabricated
@@ -376,6 +377,7 @@ from backend.data_mode import (
 )
 from analytics.allocation import allocation_levels, basis_year as allocation_basis_year, planning_month_after
 from analytics.classification.abc import abc_rules
+from analytics.params import abc_method_sql
 from analytics.params import (
     ALLOCATION_DEFAULT_PCT,
     COVER_KPI_HISTORY_MONTHS,
@@ -816,15 +818,16 @@ def _latest_abc_period(db: Session, principal: str = "unilever") -> str | None:
     scope. ABC_Classification carries both principals, so an unfiltered MAX
     could resolve to a period the selected principal has no rows for.
 
-    method='single' is REQUIRED (migration 0017): a 't3m' run is live
-    alongside 'single', and an unpinned MAX can resolve to a period only
-    t3m produced — which would then read back zero 'single' rows."""
+    The method pin is REQUIRED (migration 0017): several bases are live,
+    and an unpinned MAX can resolve to a period only another basis produced
+    — which would then read back zero rows. Pinned to each principal's Tier A
+    basis (analytics.params.abc_method_sql, migration 0044)."""
     row = batch.first(db, *_latest_abc_period_query(principal))
     return row["p"] if row else None
 
 
 def _latest_abc_period_query(principal: str = "unilever") -> tuple[str, dict]:
-    sql = "SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE method = 'single'"
+    sql = f"SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE {abc_method_sql()}"
     params: dict = {}
     if principal != "all":
         sql += " AND principal = :principal"
@@ -854,7 +857,7 @@ def _nearest_abc_period_at_or_before(
 def _nearest_abc_period_query(period: str, principal: str = "unilever") -> tuple[str, dict]:
     sql = (
         "SELECT MAX(classification_period) AS p FROM ABC_Classification "
-        "WHERE method = 'single' AND classification_period <= :period"
+        f"WHERE {abc_method_sql()} AND classification_period <= :period"
     )
     params: dict = {"period": period}
     if principal != "all":
@@ -939,8 +942,8 @@ def _forecast_counts_query(scope: str, mode: str) -> tuple[str, dict]:
 def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_period: str) -> tuple[str, dict]:
     lp_src, lp_params = lp_source(mode)
     # Same scope against ABC_Classification's own alias. Paired with
-    # method='single' at every ABC read: migration 0017 put a live 't3m' run
-    # alongside 'single', so an unpinned query returns each SKU TWICE.
+    # the Tier A basis at every ABC read: migration 0017 put a live 't3m' run
+    # alongside 'single', so an unpinned query returns each SKU once per basis.
     abc_scope = "" if scope == "all" else f"AND ac.principal = '{scope}'"
     return f"""
                 SELECT
@@ -960,7 +963,7 @@ def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_period: str) -> tuple[
                     ORDER BY lr.product_key, lr.planning_cycle_date DESC
                 ) rop ON rop.product_key = ac.product_key
                 WHERE ac.classification_period = :period AND ac.tier = 'A'
-                      AND ac.method = 'single' {abc_scope}
+                      AND {abc_method_sql("ac")} {abc_scope}
             """, {"period": abc_period, "current_cycle": lp_cycle, **lp_params}
 
 

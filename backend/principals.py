@@ -29,6 +29,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend import batch
+from analytics.params import abc_method_sql
 
 # The only two principals in the corpus (schema.sql ck_*_principal
 # constraints use these exact lowercase spellings).
@@ -104,10 +105,11 @@ def latest_abc_period(
 ) -> str | None:
     """Latest ABC_Classification.classification_period within scope.
 
-    method='single' is REQUIRED (migration 0017): a 't3m' run is live
-    alongside 'single', so an unpinned MAX can resolve to a period only
-    t3m produced, which then reads back zero 'single' rows — and an
-    unpinned join fans out two tier rows per product_key.
+    The method is REQUIRED (migration 0017): several bases are live side by
+    side, so an unpinned MAX can resolve to a period only another basis
+    produced, which then reads back zero rows — and an unpinned join fans
+    out one tier row per basis per product_key. Each principal reads its
+    own Tier A basis (analytics.params.abc_method_sql, migration 0044).
 
     `at_or_before` supports the dashboard's date picker, whose applied end
     month routinely runs ahead of the latest ABC run; without it that
@@ -121,7 +123,7 @@ def latest_abc_period_query(principal: str | None, at_or_before: str | None = No
     scope_sql, scope_params = principal_clause(principal, "principal")
     sql = (
         "SELECT MAX(classification_period) AS p FROM ABC_Classification "
-        "WHERE method = 'single'"
+        f"WHERE {abc_method_sql()}"
     )
     params: dict = {**scope_params}
     if at_or_before is not None:

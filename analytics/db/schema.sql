@@ -498,17 +498,20 @@ CREATE INDEX IF NOT EXISTS ix_unilever_sku_demand_product ON Unilever_SKU_Demand
 -- 'single' = that month's revenue, 't3m' = trailing 3 months including that
 -- month. Natural key widened to (product_key, classification_period, method)
 -- since both bases legitimately coexist for the same product/period.
+-- 't12m_new' (migration 0044, DEC-37): 12 months + new products; which method
+-- is Tier A is analytics.params.TIER_A_BASIS / abc_method().
 CREATE TABLE IF NOT EXISTS ABC_Classification (
     classification_key      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     product_key                BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
     principal                    TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
     classification_period          TEXT NOT NULL,   -- 'YYYY-MM'
-    method                           TEXT NOT NULL DEFAULT 'single' CHECK (method IN ('single', 't3m')),
+    method                           TEXT NOT NULL DEFAULT 'single' CHECK (method IN ('single', 't3m', 't12m_new')),  -- 't12m_new': migration 0044
     run_id                            TEXT NOT NULL DEFAULT 'legacy_pre_0017',  -- audit tag for the orchestration run that wrote this row, not part of the natural key
     tier                             TEXT NOT NULL CHECK (tier IN ('A', 'B', 'C')),
     revenue_share                     NUMERIC(7,4),  -- this item's share of period revenue
     cumulative_share                   NUMERIC(7,4), -- running total used for the 80/95 cut points
     boundary_flag                       BOOLEAN NOT NULL DEFAULT FALSE,  -- backlog #43; margin (analytics/classification/abc.py BOUNDARY_MARGIN) unconfirmed vs manuscript Sec.3.6
+    added_as_new                        BOOLEAN NOT NULL DEFAULT FALSE,  -- migration 0044: t12m_new row made Class A by the new-product rule
     computed_at                          TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (product_key, classification_period, method)
 );
@@ -530,7 +533,7 @@ CREATE TABLE IF NOT EXISTS sku_traits (
     principal                 TEXT NOT NULL CHECK (principal IN ('unilever', 'delmonte')),
     product_key                BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
     cohort_period                TEXT NOT NULL,
-    abc_method                    TEXT NOT NULL DEFAULT 'single' CHECK (abc_method IN ('single', 't3m')),  -- migration 0020
+    abc_method                    TEXT NOT NULL DEFAULT 'single' CHECK (abc_method IN ('single', 't3m', 't12m_new')),  -- migration 0020; 't12m_new' 0044
     history_months                INT NOT NULL,   -- months with quantity_sold > 0
     first_sale_period               TEXT,
     longest_run                      INT NOT NULL,
@@ -557,7 +560,7 @@ CREATE TABLE IF NOT EXISTS sku_segment (
     product_key                  BIGINT NOT NULL REFERENCES Product_Dimension(product_key),
     sku_code                       TEXT,
     cohort_period                    TEXT NOT NULL,
-    abc_method                        TEXT NOT NULL DEFAULT 'single' CHECK (abc_method IN ('single', 't3m')),
+    abc_method                        TEXT NOT NULL DEFAULT 'single' CHECK (abc_method IN ('single', 't3m', 't12m_new')),  -- 't12m_new': migration 0044
     scheme                              TEXT NOT NULL,
     bin                                  TEXT NOT NULL,
     bin_reason                            TEXT NOT NULL,

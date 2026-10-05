@@ -41,7 +41,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from analytics.forecasting.split import train_holdout_split
 from analytics.classification.fsn import no_sale_in_last_months
-from analytics.params import DEAD_SKU_MONTHS, FORECAST_INTERVAL_Z, HOLDOUT_FRACTION
+from analytics.params import DEAD_SKU_MONTHS, FORECAST_INTERVAL_Z, HOLDOUT_FRACTION, abc_method
 from analytics.forecasting.baseline import (
     MIN_MONTHS_WITH_SALES,
     MASE_GATE,
@@ -135,19 +135,20 @@ def connect():
 
 def resolve_abc_period(cur) -> str:
     """Latest ABC classification_period that is not after the latest real
-    demand month. run_sarima.py's unconditional MAX resolves to a
-    synthetic-only period on this data - hence the <= guard."""
+    demand month, on the Tier A basis (analytics.params.TIER_A_BASIS).
+    run_sarima.py's unconditional MAX resolves to a synthetic-only period on
+    this data - hence the <= guard."""
     cur.execute(
         """
         SELECT MAX(classification_period)
         FROM ABC_Classification
         WHERE principal = %s
-          AND method = 'single'
+          AND method = %s
           AND classification_period <= (
               SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real
           )
         """,
-        (PRINCIPAL,),
+        (PRINCIPAL, abc_method(PRINCIPAL)),
     )
     row = cur.fetchone()
     if not row or row[0] is None:
@@ -163,12 +164,12 @@ def fetch_tier_a(cur, abc_period: str) -> pd.DataFrame:
         FROM ABC_Classification abc
         JOIN Product_Dimension pd ON pd.product_key = abc.product_key
         WHERE abc.principal = %s
-          AND abc.method = 'single'
+          AND abc.method = %s
           AND abc.classification_period = %s
           AND abc.tier = 'A'
         ORDER BY abc.product_key
         """,
-        (PRINCIPAL, abc_period),
+        (PRINCIPAL, abc_method(PRINCIPAL), abc_period),
     )
     return pd.DataFrame(cur.fetchall(), columns=["product_key", "sku_code"])
 
@@ -1097,6 +1098,7 @@ def _write_forecast_result(cur, df):
             status = r["status"]
             base_mp = {
                 "abc_period_used": r["abc_period_used"],
+                "abc_method_used": abc_method(PRINCIPAL),
                 "min_months_threshold": MIN_MONTHS_WITH_SALES,
                 "abc_tier_a_cutoff": ABC_TIER_A_CUTOFF,
                 "months_span": int(r["months_span"]),

@@ -60,6 +60,7 @@ from sqlalchemy.orm import Session
 
 from analytics.classification.abc import classify_abc
 from analytics.classification.orchestrate_abc import _split_negative_revenue, _split_zero_revenue
+from analytics.params import abc_method
 from analytics.segmentation.traits import (
     average_demand_interval,
     coefficient_of_variation,
@@ -360,10 +361,14 @@ def abc_relation(computed: pd.DataFrame, *, with_stored: bool) -> tuple[str, dic
         "pv_abc_shares": [None if pd.isna(v) else float(v) for v in computed["revenue_share"]],
         "pv_abc_cumulative": [None if pd.isna(v) else float(v) for v in computed["cumulative_share"]],
         "pv_abc_boundary": [bool(v) for v in computed["boundary_flag"]],
+        # Stamped with Unilever's Tier A basis so the readers' method pin keeps
+        # them: a placeholder month is still ranked on that month alone (synthetic,
+        # frontend validation only, never fed to the LP).
+        "pv_abc_method": abc_method("unilever"),
     }
     placeholder_sql = """
         SELECT u.product_key, 'unilever'::text AS principal, u.classification_period,
-               'single'::text AS method, u.tier, u.revenue_share, u.cumulative_share, u.boundary_flag
+               CAST(:pv_abc_method AS text) AS method, u.tier, u.revenue_share, u.cumulative_share, u.boundary_flag
         FROM unnest(
             CAST(:pv_abc_keys AS bigint[]), CAST(:pv_abc_periods AS text[]), CAST(:pv_abc_tiers AS text[]),
             CAST(:pv_abc_shares AS numeric(7,4)[]), CAST(:pv_abc_cumulative AS numeric(7,4)[]),

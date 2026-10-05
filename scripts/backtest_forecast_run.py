@@ -88,9 +88,10 @@ def ym(ts) -> str:
     return pd.Timestamp(ts).strftime("%Y-%m")
 
 
-def read_inputs(db_url: str):
+def read_inputs(db_url: str, abc_method: str = "single"):
     """Real demand (as the runner reads it), each product's pesos and raw pieces (for the
-    report's price rule), and Tier A by ABC period. One read-only transaction."""
+    report's price rule), and Tier A by ABC period on `abc_method`. One read-only transaction.
+    'single' by default: the stored at-the-time and fixed-107 runs are defined on it."""
     conn = psycopg2.connect(db_url)
     try:
         cur = conn.cursor()
@@ -103,8 +104,8 @@ def read_inputs(db_url: str):
         money = pd.DataFrame(cur.fetchall(), columns=["product_key", "month", "net_amount", "quantity_raw"])
         cur.execute("""
             SELECT product_key, classification_period FROM abc_classification
-            WHERE principal = 'unilever' AND method = 'single' AND tier = 'A'
-        """)
+            WHERE principal = 'unilever' AND method = %s AND tier = 'A'
+        """, (abc_method,))
         tier_a = pd.DataFrame(cur.fetchall(), columns=["product_key", "period"])
         conn.rollback()
     finally:
