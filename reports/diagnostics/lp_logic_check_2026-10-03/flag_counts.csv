@@ -1,0 +1,11 @@
+table_name,principal,is_demo,fill_source,valuation_source,derived_cost_period,row_count
+inventory_fact,delmonte,False,(null),(null),,5332
+inventory_fact,delmonte,False,(null),derived_cost,2023-02,200
+inventory_fact,delmonte,False,(null),derived_cost,2023-03,9
+inventory_fact,delmonte,True,synthetic_v2,(null),,15852
+inventory_fact,delmonte,True,synthetic_v2_gap,(null),,303
+inventory_fact,unilever,False,(null),(null),,27282
+inventory_fact,unilever,True,synthetic_v2,(null),,8292
+inventory_fact,unilever,True,synthetic_v2_gap,(null),,3603
+unilever_sku_demand_fact,unilever,False,(null),(n/a),,24906
+unilever_sku_demand_fact,unilever,True,synthetic_v2,(n/a),,12243

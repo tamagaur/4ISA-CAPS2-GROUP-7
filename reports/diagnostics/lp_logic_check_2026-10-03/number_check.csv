@@ -1,0 +1,400 @@
+line,token,status,source,context
+5,59,sourced,derived: check_refs.csv references; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,at  : all 59 point to unchanged lines ( ). A teammat
+9,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,order optimizer ( ). The LP pool = the 73 Unilever products
+21,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,- MA3 = 3-month moving average. TSB = Teunter–Syn
+23,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,"- Bin = history-length group: short 3-11 months of sales, medium 12-23, long"
+23,11,constant,short bin ends at 11 months | also matches derived: balance months with La Union sales; pull/lp_counts.csv:row_count,"- Bin = history-length group: short 3-11 months of sales, medium 12-23, long 24+"
+23,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,"oup: short 3-11 months of sales, medium 12-23, long 24+."
+23,23,constant,medium bin ends at 23 months,": short 3-11 months of sales, medium 12-23, long 24+."
+23,24,constant,long bin starts at 24 sales months | also matches issue1_stock_timing_per_product.csv:cost_per_piece_php; issue1_stock_timing_per_product.csv:stock_2026-04-06_pcs; issue4_policy_card_per_product.csv:cost_per_piece_php,"-11 months of sales, medium 12-23, long 24+."
+25,132,sourced,derived: forecast rows at 2026-03-01; figures.json.tier_a_count; issue1_stock_timing_per_product.csv:stock_2026-04-06_pcs,"** (method  , 132 Unilever products)."
+31,12%,sourced,balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,"s Amt Inc. Tax""; VAT = value-added tax, 12% |"
+34,91.78%,sourced,"derived: INVENTORY at cost / without VAT, %","SSM's own ""AT COST without VAT"": a flat 91.78% of the last purchase price  . No figure"
+39,209,sourced,derived: flag_counts.csv derived_cost rows; ssis_soh_columns.csv:po_rows,"in the base tables, the location of the 209 derived-cost inventory"
+41,13,constant,count of SOH workbooks / counts | also matches balance_figures.json.counts_equal_workbook_inventory_sheet; balance_figures.json.counts_equal_workbook_soh; balance_figures.json.workbooks,"-   and  , which read 13 SSIS monthly workbooks in  ."
+54,5,constant,review business days / business days per week | also matches figures.json.pool_opening_count_jump.median_ratio_mar2_vs_apr6; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,"-SKU negative-balance counts in section 5, labelled as derived | not a real figur"
+57,"24,144",sourced,derived: flag_counts.csv rows inventory_fact fill_source=synthetic_v2,"with   set is  , so the views drop it: 24,144"
+58,"3,906",sourced,derived: flag_counts.csv rows inventory_fact fill_source=synthetic_v2_gap,"and 3,906   inventory rows, and 12,243   demand ro"
+58,"12,243",sourced,derived: flag_counts.csv rows unilever_sku_demand_fact fill_source=synthetic_v2; flag_counts.csv:row_count,"and 3,906   inventory rows, and 12,243   demand rows. The 209 real inventory ro"
+58,209,sourced,derived: flag_counts.csv derived_cost rows; ssis_soh_columns.csv:po_rows,"ory rows, and 12,243   demand rows. The 209 real inventory rows with"
+59,13,constant,count of SOH workbooks / counts | also matches balance_figures.json.counts_equal_workbook_inventory_sheet; balance_figures.json.counts_equal_workbook_soh; balance_figures.json.workbooks,"te  /03, outside every figure here. The 13 Unilever counts used"
+67,"1,255,471",sourced,derived: sum issue1_stock_timing_per_product.csv:need_with_closing_pcs; independent_recompute.json.lp.2026-04-06.need; issue1_totals.csv:need_pcs,"tart-of-month stock | Total need for  : 1,255,471 pieces with the count dated   (used now"
+67,"325,468",sourced,derived: sum issue1_stock_timing_per_product.csv:need_with_opening_pcs; derived: sum issue1_stock_timing_per_product.csv:order_103_opening_pcs; independent_recompute.json.lp.2026-03-02.need,"es with the count dated   (used now) vs 325,468 pieces with the count dated   (opening)"
+67,103%,sourced,issue1_totals.csv:allocation_pct; issue2_mase_flips.csv:mase_stored_gate; issue4_policy_card_per_product.csv:weekly_pcs,"h the count dated   (opening). Short at 103% allocation: 45 products / 62,103 pieces"
+67,45,sourced,independent_recompute.json.lp.2026-04-06.short_products; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue1_totals.csv:products_short,"(opening). Short at 103% allocation: 45 products / 62,103 pieces vs 0 / 0. Tier"
+67,"62,103",sourced,derived: sum issue1_stock_timing_per_product.csv:short_103_closing_pcs; independent_recompute.json.lp.2026-04-06.short_pieces; issue1_totals.csv:short_pcs,"Short at 103% allocation: 45 products / 62,103 pieces vs 0 / 0. Tier A products below"
+67,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"ocation: 45 products / 62,103 pieces vs 0 / 0. Tier A products below SS: 35 of 70"
+67,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"ion: 45 products / 62,103 pieces vs 0 / 0. Tier A products below SS: 35 of 70 vs"
+67,35,sourced,figures.json.policy.pieces.ss_vs_rule_pct_less; independent_recompute.json.tier_a_below_ss.2026-04-06.below; issue1_totals.csv:tier_a_below_ss,ces vs 0 / 0. Tier A products below SS: 35 of 70 vs 6 of 72 | Plan cycle M from th
+67,70,sourced,independent_recompute.json.tier_a_below_ss.2026-04-06.comparable; issue1_stock_timing_per_product.csv:product_key; issue1_totals.csv:tier_a_comparable,0 / 0. Tier A products below SS: 35 of 70 vs 6 of 72 | Plan cycle M from the coun
+67,6,constant,"common test window, months / DEC-20 maximum days | also matches cover_both_counts.csv:weeks; independent_recompute.json.tier_a_below_ss.2026-03-02.below; issue1_stock_timing_per_product.csv:cost_per_piece_php",. Tier A products below SS: 35 of 70 vs 6 of 72 | Plan cycle M from the count of
+67,72,sourced,figures.json.pool_opening_count_jump.products_with_feb3_value; independent_recompute.json.tier_a_below_ss.2026-03-02.comparable; issue1_stock_timing_per_product.csv:cost_per_piece_php,r A products below SS: 35 of 70 vs 6 of 72 | Plan cycle M from the count of period
+67,1,estimate,"effort estimate (judgement, not data)",", pending SSM confirmation** | M: about 1 day of code and tests, then an LP rerun"
+68,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,| MASE < 1 gate | **CONFIRMED** (standard in-sampl
+68,15,sourced,figures.json.mase.flips; issue1_stock_timing_per_product.csv:need_with_closing_pcs; issue1_stock_timing_per_product.csv:short_103_closing_pcs,"andard in-sample naive one-step scale); 15 products flip |  ,  . Recomputed 47/47"
+68,47,sourced,figures.json.mase_recomputed_short_medium ('47/47'),"e); 15 products flip |  ,  . Recomputed 47/47 short- and medium-bin products | 107"
+68,107,sourced,derived: fit_diagnosis per_sku verdict_source=common; figures.json.mase.common_window_rows,47/47 short- and medium-bin products | 107 products scorable on both windows: 64 p
+68,64,sourced,figures.json.mase.pass_stored; issue1_stock_timing_per_product.csv:order_103_closing_pcs; ssis_sales_monthly.csv:lines,"107 products scorable on both windows: 64 pass on the stored window, 77 on the co"
+68,77,sourced,figures.json.mase.pass_common; issue1_stock_timing_per_product.csv:need_with_opening_pcs; issue1_stock_timing_per_product.csv:order_103_opening_pcs,"windows: 64 pass on the stored window, 77 on the common window. 15 flip: 14 fail→"
+68,15,sourced,figures.json.mase.flips; issue1_stock_timing_per_product.csv:need_with_closing_pcs; issue1_stock_timing_per_product.csv:short_103_closing_pcs,"stored window, 77 on the common window. 15 flip: 14 fail→pass, 1 pass→fail. Only t"
+68,14,sourced,figures.json.mase.fail_to_pass; figures.json.policy.php.sensitivity_average_vs_that_pct; issue4_policy_card_totals.csv:value,"ndow, 77 on the common window. 15 flip: 14 fail→pass, 1 pass→fail. Only that 1 is"
+68,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,"e common window. 15 flip: 14 fail→pass, 1 pass→fail. Only that 1 is in the LP poo"
+68,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,"p: 14 fail→pass, 1 pass→fail. Only that 1 is in the LP pool | Wording only, propo"
+68,1,estimate,"effort estimate (judgement, not data)","Wording only, proposed below | S: under 1 hour |"
+69,3.03,sourced,independent_recompute.json.cover.shown; issue3_weeks_of_cover.csv:weeks,"ation) | Unilever, count of  , sales  : 3.03 weeks shown (stock at last purchase pri"
+69,3.31,sourced,cover_both_counts.csv:weeks; independent_recompute.json.cover.gsv_matched; issue3_weeks_of_cover.csv:weeks,"les at selling price, VAT-inclusive) vs 3.31 weeks with sales at GSV (ratio 0.9158)."
+69,0.9158,sourced,issue3_weeks_of_cover.csv:ratio_sales_to_shown_basis,vs 3.31 weeks with sales at GSV (ratio 0.9158). Cross-check with sales at last purcha
+69,3.34,sourced,issue3_weeks_of_cover.csv:weeks,sales at last purchase price per piece: 3.34 weeks | Put weekly sales on the GSV bas
+69,2,estimate,"effort estimate (judgement, not data)","t, same rows), or relabel the card | S: 2-3 hours |"
+69,3,estimate,"effort estimate (judgement, not data)","same rows), or relabel the card | S: 2-3 hours |"
+70,35.2%,sourced,figures.json.policy.pieces.ss_vs_rule_pct_less,"| Policy card (""35.2% less"") | **PARTLY** |  ,   | 73 product"
+70,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,"rd (""35.2% less"") | **PARTLY** |  ,   | 73 products, cycle  , pesos at last purcha"
+70,"₱8,917,570",sourced,derived: sum issue4_policy_card_per_product.csv:peak_target_php; figures.json.policy.php.peak_targets; issue4_policy_card_totals.csv:value,"s at last purchase price. Peak: targets ₱8,917,570 vs rule ₱8,211,106 = **+₱706,464 (+8.6%"
+70,"₱8,211,106",sourced,derived: sum issue4_policy_card_per_product.csv:rule_3wk_php; figures.json.policy.php.rule_3wk; independent_recompute.json.policy.rule_php,"price. Peak: targets ₱8,917,570 vs rule ₱8,211,106 = **+₱706,464 (+8.6%)**, confirmed. Aver"
+70,"+₱706,464",sourced,figures.json.policy.php.peak_minus_rule; independent_recompute.json.policy.peak_minus_rule_php; issue4_policy_card_totals.csv:value,"rgets ₱8,917,570 vs rule ₱8,211,106 = **+₱706,464 (+8.6%)**, confirmed. Average: ₱5,906,83"
+70,+8.6%,sourced,figures.json.policy.php.peak_vs_rule_pct; issue4_policy_card_totals.csv:value,"7,570 vs rule ₱8,211,106 = **+₱706,464 (+8.6%)**, confirmed. Average: ₱5,906,832 = **"
+70,"₱5,906,832",sourced,derived: sum issue4_policy_card_per_product.csv:avg_target_php; figures.json.policy.php.average_targets; issue4_policy_card_totals.csv:value,"₱706,464 (+8.6%)**, confirmed. Average: ₱5,906,832 = **28.1% less**. The 18.5% figure is th"
+70,28.1%,sourced,figures.json.policy.php.average_vs_rule_pct; independent_recompute.json.policy.average_vs_rule_pct; issue4_policy_card_totals.csv:value,")**, confirmed. Average: ₱5,906,832 = **28.1% less**. The 18.5% figure is the pieces"
+70,18.5%,sourced,figures.json.policy.pieces.average_vs_rule_pct_less,"erage: ₱5,906,832 = **28.1% less**. The 18.5% figure is the pieces version. 35.2% is"
+70,35.2%,sourced,figures.json.policy.pieces.ss_vs_rule_pct_less,"The 18.5% figure is the pieces version. 35.2% is safety stock alone, in pieces | Show"
+70,35.2%,sourced,figures.json.policy.pieces.ss_vs_rule_pct_less,in pesos with the formulas. Stop citing 35.2% | M: about half a day |
+91,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,"### Recomputed both ways (Unilever, 73 products, allocation 103%, other inputs"
+91,103%,sourced,issue1_totals.csv:allocation_pct; issue2_mase_flips.csv:mase_stored_gate; issue4_policy_card_per_product.csv:weekly_pcs,"ways (Unilever, 73 products, allocation 103%, other inputs at placeholder defaults)"
+93,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,functions on its own inputs matches the 73 stored pending rows to
+94,0.005,sourced,figures.json.replay_vs_stored_2026-03_pending.max_abs_diff_q_i_at_105; figures.json.replay_vs_stored_2026-03_pending.max_abs_diff_rop_i; figures.json.replay_vs_stored_2026-03_pending.max_abs_diff_ss_i,"within 0.005 pieces ( ,  , and   at 105%, the stored"
+94,105%,sourced,issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php; reports/evidence/ch08_totals.csv:allocation_pct,"within 0.005 pieces ( ,  , and   at 105%, the stored run's allocation). It also"
+95,103%,sourced,issue1_totals.csv:allocation_pct; issue2_mase_flips.csv:mase_stored_gate; issue4_policy_card_per_product.csv:weekly_pcs,at 103% exactly. The only thing changed below i
+102,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,"| stock on hand, 73 products (pieces) | 759,258 | 2,093,786"
+102,"759,258",sourced,derived: sum issue1_stock_timing_per_product.csv:stock_2026-04-06_pcs; issue1_totals.csv:stock_on_hand_pcs,"| stock on hand, 73 products (pieces) | 759,258 | 2,093,786 |"
+102,"2,093,786",sourced,derived: sum issue1_stock_timing_per_product.csv:stock_2026-03-02_pcs; issue1_totals.csv:stock_on_hand_pcs,"hand, 73 products (pieces) | 759,258 | 2,093,786 |"
+103,"6,105,203",sourced,cover_both_counts.csv:stock_php; derived: sum issue4_policy_card_per_product.csv:stock_2026-04-06_php; figures.json.policy.php.ssm_stock_2026-04-06,"same stock at last purchase price (₱) | 6,105,203 | 16,782,794 |"
+103,"16,782,794",sourced,cover_both_counts.csv:stock_php; figures.json.policy.php.ssm_stock_2026-03-02; figures.json.pool_opening_count_jump.pool_value_php.2026-02,"t last purchase price (₱) | 6,105,203 | 16,782,794 |"
+104,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"| products not in the count (counted as 0, Unilever rule) | 3 | 1 |"
+104,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,"e count (counted as 0, Unilever rule) | 3 | 1 |"
+104,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,"unt (counted as 0, Unilever rule) | 3 | 1 |"
+105,"1,255,471",sourced,derived: sum issue1_stock_timing_per_product.csv:need_with_closing_pcs; independent_recompute.json.lp.2026-04-06.need; issue1_totals.csv:need_pcs,"| **total need,   (pieces)** | **1,255,471** | **325,468** |"
+105,"325,468",sourced,derived: sum issue1_stock_timing_per_product.csv:need_with_opening_pcs; derived: sum issue1_stock_timing_per_product.csv:order_103_opening_pcs; independent_recompute.json.lp.2026-03-02.need,"need,   (pieces)** | **1,255,471** | **325,468** |"
+106,103%,sourced,issue1_totals.csv:allocation_pct; issue2_mase_flips.csv:mase_stored_gate; issue4_policy_card_per_product.csv:weekly_pcs,"| allocation ceiling at 103% (pieces a month) | 1,193,368 (binds) |"
+106,"1,193,368",sourced,derived: sum issue1_stock_timing_per_product.csv:order_103_closing_pcs; independent_recompute.json.lp.2026-03-02.allocation; independent_recompute.json.lp.2026-04-06.allocation,"tion ceiling at 103% (pieces a month) | 1,193,368 (binds) | 1,193,368 (does not bind) |"
+106,"1,193,368",sourced,derived: sum issue1_stock_timing_per_product.csv:order_103_closing_pcs; independent_recompute.json.lp.2026-03-02.allocation; independent_recompute.json.lp.2026-04-06.allocation,"(pieces a month) | 1,193,368 (binds) | 1,193,368 (does not bind) |"
+107,"1,193,368",sourced,derived: sum issue1_stock_timing_per_product.csv:order_103_closing_pcs; independent_recompute.json.lp.2026-03-02.allocation; independent_recompute.json.lp.2026-04-06.allocation,"| ordered (pieces) | 1,193,368 | 325,468 |"
+107,"325,468",sourced,derived: sum issue1_stock_timing_per_product.csv:need_with_opening_pcs; derived: sum issue1_stock_timing_per_product.csv:order_103_opening_pcs; independent_recompute.json.lp.2026-03-02.need,"| ordered (pieces) | 1,193,368 | 325,468 |"
+108,45,sourced,independent_recompute.json.lp.2026-04-06.short_products; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue1_totals.csv:products_short,"| **short: products / pieces** | **45 / 62,103** | **0 / 0** |"
+108,"62,103",sourced,derived: sum issue1_stock_timing_per_product.csv:short_103_closing_pcs; independent_recompute.json.lp.2026-04-06.short_pieces; issue1_totals.csv:short_pcs,"| **short: products / pieces** | **45 / 62,103** | **0 / 0** |"
+108,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"oducts / pieces** | **45 / 62,103** | **0 / 0** |"
+108,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"ts / pieces** | **45 / 62,103** | **0 / 0** |"
+109,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,| products ordering 0 (already above target) | 4 | 31 |
+109,4,sourced,balance_figures.json.balance_qty_equals_stock_plus_po_minus_open_so; cover_both_counts.csv:weeks; figures.json.whole_file_opening_count_jump.ratio_quartiles_mar2_vs_feb3.0.75,cts ordering 0 (already above target) | 4 | 31 |
+109,31,sourced,issue1_totals.csv:products_order_0_overstocked,ordering 0 (already above target) | 4 | 31 |
+110,3.000,sourced,balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); independent_recompute.json.lp.2026-04-06.not_in_count,"ed month-end cover, aggregate (weeks) | 3.000 | 4.328 |"
+110,4.328,sourced,issue1_totals.csv:month_end_cover_weeks,"-end cover, aggregate (weeks) | 3.000 | 4.328 |"
+111,35,sourced,figures.json.policy.pieces.ss_vs_rule_pct_less; independent_recompute.json.tier_a_below_ss.2026-04-06.below; issue1_totals.csv:tier_a_below_ss,oard rule: no stock row = excluded) | **35 of 70** | **6 of 72** |
+111,70,sourced,independent_recompute.json.tier_a_below_ss.2026-04-06.comparable; issue1_stock_timing_per_product.csv:product_key; issue1_totals.csv:tier_a_comparable,ule: no stock row = excluded) | **35 of 70** | **6 of 72** |
+111,6,constant,"common test window, months / DEC-20 maximum days | also matches cover_both_counts.csv:weeks; independent_recompute.json.tier_a_below_ss.2026-03-02.below; issue1_stock_timing_per_product.csv:cost_per_piece_php",tock row = excluded) | **35 of 70** | **6 of 72** |
+111,72,sourced,figures.json.pool_opening_count_jump.products_with_feb3_value; independent_recompute.json.tier_a_below_ss.2026-03-02.comparable; issue1_stock_timing_per_product.csv:cost_per_piece_php,row = excluded) | **35 of 70** | **6 of 72** |
+118,₱46.6M,sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,after (₱46.6M vs ₱24.3M and ₱22.7M); treated as an ou
+118,₱24.3M,sourced,balance_figures.json.feb_mar.opening_2026-02-03; balance_monthly.csv:closing_if_zero_receipts_ilocos_php; balance_monthly.csv:closing_php,after (₱46.6M vs ₱24.3M and ₱22.7M); treated as an outlier (tea
+118,₱22.7M,sourced,balance_figures.json.feb_mar.closing_2026-04-06; balance_monthly.csv:closing_php; counts_are_real.csv:value_pesos,"after (₱46.6M vs ₱24.3M and ₱22.7M); treated as an outlier (team review,"
+119,5,constant,review business days / business days per week | also matches figures.json.pool_opening_count_jump.median_ratio_mar2_vs_apr6; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,", **pending SSM confirmation**. Section 5 has the balance evidence. What the coun"
+123,"₱24,339,386",sourced,balance_figures.json.feb_mar.opening_2026-02-03; balance_monthly.csv:closing_php; balance_monthly.csv:opening_php,"unt at last purchase price:   /   /   | ₱24,339,386 / ₱46,576,779 / ₱22,700,826 |"
+123,"₱46,576,779",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"rchase price:   /   /   | ₱24,339,386 / ₱46,576,779 / ₱22,700,826 |"
+123,"₱22,700,826",sourced,balance_figures.json.feb_mar.closing_2026-04-06; balance_monthly.csv:closing_php; counts_are_real.csv:value_pesos,"/   /   | ₱24,339,386 / ₱46,576,779 / ₱22,700,826 |"
+124,704,sourced,figures.json.whole_file_opening_count_jump.products_in_feb3_and_mar2,"| per product,   ÷   value (704 products in both counts) | quartiles 0."
+124,0.87×,sourced,figures.json.whole_file_opening_count_jump.ratio_quartiles_mar2_vs_feb3.0.25,04 products in both counts) | quartiles 0.87× / 1.67× / 4.14×; 376 products above 1.5
+124,1.67×,sourced,figures.json.whole_file_opening_count_jump.ratio_quartiles_mar2_vs_feb3.0.5,cts in both counts) | quartiles 0.87× / 1.67× / 4.14×; 376 products above 1.5×. The j
+124,4.14×,sourced,figures.json.whole_file_opening_count_jump.ratio_quartiles_mar2_vs_feb3.0.75,oth counts) | quartiles 0.87× / 1.67× / 4.14×; 376 products above 1.5×. The jump is s
+124,376,sourced,figures.json.whole_file_opening_count_jump.products_over_1.5x,nts) | quartiles 0.87× / 1.67× / 4.14×; 376 products above 1.5×. The jump is spread
+124,1.5×,constant,jump threshold used in the analysis (×),"87× / 1.67× / 4.14×; 376 products above 1.5×. The jump is spread out, not one flat m"
+125,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,| the 73 LP products | median 2.91× the   count;
+125,2.91×,sourced,figures.json.pool_opening_count_jump.median_ratio_mar2_vs_feb3,| the 73 LP products | median 2.91× the   count; 50 of 72 above 1.5× |
+125,50,sourced,figures.json.pool_opening_count_jump.products_mar2_over_1.5x_feb3,LP products | median 2.91× the   count; 50 of 72 above 1.5× |
+125,72,sourced,figures.json.pool_opening_count_jump.products_with_feb3_value; independent_recompute.json.tier_a_below_ss.2026-03-02.comparable; issue1_stock_timing_per_product.csv:cost_per_piece_php,ducts | median 2.91× the   count; 50 of 72 above 1.5× |
+125,1.5×,constant,jump threshold used in the analysis (×),edian 2.91× the   count; 50 of 72 above 1.5× |
+126,₱47.3M,sourced,issue1_unilever_stock_counts.csv:implied_receipts_estimate_php; ssis_soh_columns.csv:total_without_vat,"ce; Unilever has no purchase records) | ₱47.3M, vs ₱11.3M–₱48.9M in the 12 months befo"
+126,₱11.3M,sourced,issue1_unilever_stock_counts.csv:implied_receipts_estimate_php,"r has no purchase records) | ₱47.3M, vs ₱11.3M–₱48.9M in the 12 months before ( : ₱48."
+126,₱48.9M,sourced,issue1_unilever_stock_counts.csv:implied_receipts_estimate_php; ssis_sales_monthly.csv:gsv,"o purchase records) | ₱47.3M, vs ₱11.3M–₱48.9M in the 12 months before ( : ₱48.9M). Se"
+126,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,"ords) | ₱47.3M, vs ₱11.3M–₱48.9M in the 12 months before ( : ₱48.9M). Section 5 re"
+126,₱48.9M,sourced,issue1_unilever_stock_counts.csv:implied_receipts_estimate_php; ssis_sales_monthly.csv:gsv,1.3M–₱48.9M in the 12 months before ( : ₱48.9M). Section 5 redoes this with the Ilocos
+126,5,constant,review business days / business days per week | also matches figures.json.pool_opening_count_jump.median_ratio_mar2_vs_apr6; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,e 12 months before ( : ₱48.9M). Section 5 redoes this with the Ilocos Sur registe
+126,₱55.9M,sourced,balance_monthly.csv:implied_receipts_ilocos_php,s with the Ilocos Sur register's sales: ₱55.9M |
+130,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,MASE < 1 gate
+134,20%,constant,holdout % (HOLDOUT_FRACTION 0.20),"- Test months are the last 20% of the product's months ( ,  )."
+137,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,"- The scale is  , the mean |lag-1 difference| of the training months"
+139,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,"- The gate is MASE < 1 ( , applied in  )."
+140,47,sourced,figures.json.mase_recomputed_short_medium ('47/47'),- Verified: I recomputed MASE for 47 of 47 short- and medium-bin products of
+140,47,sourced,figures.json.mase_recomputed_short_medium ('47/47'),"- Verified: I recomputed MASE for 47 of 47 short- and medium-bin products offline,"
+140,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,"bin products offline, and it matched to 3 decimals."
+141,119,sourced,derived: forecast rows status ok; figures.json.mase.ok_rows; pull/forecast_dates.csv:row_count,"reproduced all 119, including the XGBoost bin."
+145,20%,constant,holdout % (HOLDOUT_FRACTION 0.20),he stored window is each product's last 20% of months (2-8 months ending
+145,2,constant,"half the cycle order (÷ 2) | also matches balance_monthly.csv:implied_over_sales_ilocos; cover_both_counts.csv:weeks; derived: La Union-based / Ilocos-based cover, 2026-04-06",w is each product's last 20% of months (2-8 months ending
+145,8,sourced,derived: longest stored test window (months); issue1_stock_timing_per_product.csv:cost_per_piece_php; issue1_stock_timing_per_product.csv:stock_2026-04-06_pcs,is each product's last 20% of months (2-8 months ending
+146,6,constant,"common test window, months / DEC-20 maximum days | also matches cover_both_counts.csv:weeks; independent_recompute.json.tier_a_below_ss.2026-03-02.below; issue1_stock_timing_per_product.csv:cost_per_piece_php",. The moved window is the common   (6 months) from
+147,107,sourced,derived: fit_diagnosis per_sku verdict_source=common; figures.json.mase.common_window_rows,. 107 products can be scored on both; the 12
+147,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,107 products can be scored on both; the 12 short-bin products
+148,64,sourced,figures.json.mase.pass_stored; issue1_stock_timing_per_product.csv:order_103_closing_pcs; ssis_sales_monthly.csv:lines,"stored window. Passing products go from 64 to 77, and 15 flip ( ):"
+148,77,sourced,figures.json.mase.pass_common; issue1_stock_timing_per_product.csv:need_with_opening_pcs; issue1_stock_timing_per_product.csv:order_103_opening_pcs,"window. Passing products go from 64 to 77, and 15 flip ( ):"
+148,15,sourced,figures.json.mase.flips; issue1_stock_timing_per_product.csv:need_with_closing_pcs; issue1_stock_timing_per_product.csv:short_103_closing_pcs,"Passing products go from 64 to 77, and 15 flip ( ):"
+152,0.996,sourced,issue2_mase_flips.csv:mase_stored_gate,| long / XGBoost+MA3 |   | 0.996 | 1.019 | pass → fail | **yes** |
+152,1.019,sourced,issue2_mase_flips.csv:mase_common_window,| long / XGBoost+MA3 |   | 0.996 | 1.019 | pass → fail | **yes** |
+153,1.024,sourced,issue2_mase_flips.csv:mase_stored_gate,| long / XGBoost+MA3 |   | 1.024 | 0.695 | fail → pass | no |
+153,0.695,sourced,issue2_mase_flips.csv:mase_common_window,| long / XGBoost+MA3 |   | 1.024 | 0.695 | fail → pass | no |
+154,1.027,sourced,issue2_mase_flips.csv:mase_stored_gate,| long / XGBoost+MA3 |   | 1.027 | 0.925 | fail → pass | no |
+154,0.925,sourced,issue2_mase_flips.csv:mase_common_window,| long / XGBoost+MA3 |   | 1.027 | 0.925 | fail → pass | no |
+155,1.031,sourced,issue2_mase_flips.csv:mase_stored_gate,| long / XGBoost+MA3 |   | 1.031 | 0.833 | fail → pass | no |
+155,0.833,sourced,issue2_mase_flips.csv:mase_common_window,| long / XGBoost+MA3 |   | 1.031 | 0.833 | fail → pass | no |
+156,1.033,sourced,issue2_mase_flips.csv:mase_stored_gate,| medium / TSB |   | 1.033 | 0.741 | fail → pass | no |
+156,0.741,sourced,issue2_mase_flips.csv:mase_common_window,| medium / TSB |   | 1.033 | 0.741 | fail → pass | no |
+157,1.060,sourced,balance_figures.json.implied_over_sales_baseline.median; issue2_mase_flips.csv:mase_stored_gate,| short / MA3 |   | 1.060 | 0.637 | fail → pass | no |
+157,0.637,sourced,issue2_mase_flips.csv:mase_common_window,| short / MA3 |   | 1.060 | 0.637 | fail → pass | no |
+158,1.063,sourced,issue2_mase_flips.csv:mase_stored_gate,| long / XGBoost+MA3 |   | 1.063 | 0.980 | fail → pass | no |
+158,0.980,sourced,issue2_mase_flips.csv:mase_common_window,| long / XGBoost+MA3 |   | 1.063 | 0.980 | fail → pass | no |
+159,1.071,sourced,issue2_mase_flips.csv:mase_stored_gate,| long / XGBoost+MA3 |   | 1.071 | 0.940 | fail → pass | no |
+159,0.940,sourced,issue2_mase_flips.csv:mase_common_window,| long / XGBoost+MA3 |   | 1.071 | 0.940 | fail → pass | no |
+160,1.082,sourced,issue2_mase_flips.csv:mase_stored_gate,| short / MA3 |   | 1.082 | 0.544 | fail → pass | no |
+160,0.544,sourced,issue2_mase_flips.csv:mase_common_window,| short / MA3 |   | 1.082 | 0.544 | fail → pass | no |
+161,1.165,sourced,issue2_mase_flips.csv:mase_stored_gate,| medium / TSB |   | 1.165 | 0.734 | fail → pass | no |
+161,0.734,sourced,issue2_mase_flips.csv:mase_common_window,| medium / TSB |   | 1.165 | 0.734 | fail → pass | no |
+162,1.173,sourced,issue2_mase_flips.csv:mase_stored_gate,| medium / TSB |   | 1.173 | 0.923 | fail → pass | no |
+162,0.923,sourced,issue2_mase_flips.csv:mase_common_window,| medium / TSB |   | 1.173 | 0.923 | fail → pass | no |
+163,1.196,sourced,issue2_mase_flips.csv:mase_stored_gate,| medium / TSB |   | 1.196 | 0.765 | fail → pass | no |
+163,0.765,sourced,issue2_mase_flips.csv:mase_common_window,| medium / TSB |   | 1.196 | 0.765 | fail → pass | no |
+164,40,sourced,reports/evidence/ch08_totals.csv:n_short,| SURF POWDER TAWAS L 40(6+1)57G   | short / MA3 |   | 1.899 | 0
+164,6,constant,"common test window, months / DEC-20 maximum days | also matches cover_both_counts.csv:weeks; independent_recompute.json.tier_a_below_ss.2026-03-02.below; issue1_stock_timing_per_product.csv:cost_per_piece_php",| SURF POWDER TAWAS L 40(6+1)57G   | short / MA3 |   | 1.899 | 0.7
+164,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,| SURF POWDER TAWAS L 40(6+1)57G   | short / MA3 |   | 1.899 | 0.744
+164,1.899,sourced,issue2_mase_flips.csv:mase_stored_gate,AWAS L 40(6+1)57G   | short / MA3 |   | 1.899 | 0.744 | fail → pass | no |
+164,0.744,sourced,issue2_mase_flips.csv:mase_common_window,0(6+1)57G   | short / MA3 |   | 1.899 | 0.744 | fail → pass | no |
+165,1.974,sourced,issue2_mase_flips.csv:mase_stored_gate,| short / MA3 |   | 1.974 | 0.580 | fail → pass | no |
+165,0.580,sourced,issue2_mase_flips.csv:mase_common_window,| short / MA3 |   | 1.974 | 0.580 | fail → pass | no |
+166,40,sourced,reports/evidence/ch08_totals.csv:n_short,| SURF POWDER KALAMANSI L 40(6+1)57G   | short / MA3 |   | 2.194 | 0
+166,6,constant,"common test window, months / DEC-20 maximum days | also matches cover_both_counts.csv:weeks; independent_recompute.json.tier_a_below_ss.2026-03-02.below; issue1_stock_timing_per_product.csv:cost_per_piece_php",| SURF POWDER KALAMANSI L 40(6+1)57G   | short / MA3 |   | 2.194 | 0.8
+166,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,| SURF POWDER KALAMANSI L 40(6+1)57G   | short / MA3 |   | 2.194 | 0.861
+166,2.194,sourced,issue2_mase_flips.csv:mase_stored_gate,ANSI L 40(6+1)57G   | short / MA3 |   | 2.194 | 0.861 | fail → pass | no |
+166,0.861,sourced,issue2_mase_flips.csv:mase_common_window,0(6+1)57G   | short / MA3 |   | 2.194 | 0.861 | fail → pass | no |
+168,14,sourced,figures.json.mase.fail_to_pass; figures.json.policy.php.sensitivity_average_vs_that_pct; issue4_policy_card_totals.csv:value,singles would leave the pool. The other 14 would join it.
+169,18,sourced,figures.json.mase.within_0.1_of_gate_stored; figures.json.policy.pieces.average_vs_rule_pct_less; figures.json.policy.pieces.target_vs_rule_pct_less,18 of 107 products have a stored MASE with
+169,107,sourced,derived: fit_diagnosis per_sku verdict_source=common; figures.json.mase.common_window_rows,18 of 107 products have a stored MASE within ±0.1
+169,0.1,constant,band around the MASE gate,107 products have a stored MASE within ±0.1 of 1.
+169,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,ducts have a stored MASE within ±0.1 of 1.
+172,20%,constant,holdout % (HOLDOUT_FRACTION 0.20),"ted on its most recent months: the last 20% of its sales history, which is"
+173,2,constant,"half the cycle order (÷ 2) | also matches balance_monthly.csv:implied_over_sales_ilocos; cover_both_counts.csv:weeks; derived: La Union-based / Ilocos-based cover, 2026-04-06",2 to 8 months ending  . At each test mont
+173,8,sourced,derived: longest stored test window (months); issue1_stock_timing_per_product.csv:cost_per_piece_php; issue1_stock_timing_per_product.csv:stock_2026-04-06_pcs,2 to 8 months ending  . At each test month the
+176,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,"ta (Hyndman & Koehler,  ). A MASE below 1 means the forecast missed"
+178,15,sourced,figures.json.mase.flips; issue1_stock_timing_per_product.csv:need_with_closing_pcs; issue1_stock_timing_per_product.csv:short_103_closing_pcs,months (  to  ) changes the result for 15 of
+179,107,sourced,derived: fit_diagnosis per_sku verdict_source=common; figures.json.mase.common_window_rows,"107 products, and 18 of 107 lie within 0.1"
+179,18,sourced,figures.json.mase.within_0.1_of_gate_stored; figures.json.policy.pieces.average_vs_rule_pct_less; figures.json.policy.pieces.target_vs_rule_pct_less,"107 products, and 18 of 107 lie within 0.1 of the cut-off. T"
+179,107,sourced,derived: fit_diagnosis per_sku verdict_source=common; figures.json.mase.common_window_rows,"107 products, and 18 of 107 lie within 0.1 of the cut-off. The gate"
+179,0.1,constant,band around the MASE gate,"107 products, and 18 of 107 lie within 0.1 of the cut-off. The gate is a screen, n"
+180,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,"ip:* ""Forecast check passed (MASE below 1): in recent test months this forecast m"
+181,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,h-to-month change in sales. Values near 1 are borderline and can change
+186,4.348,constant,weeks per month = 365.25 / 12 / 7 (params.py:113-114),stock value ÷ (average monthly sales ÷ 4.348).
+187,"₱22,700,825.83",sourced,balance_figures.json.feb_mar.closing_2026-04-06; balance_monthly.csv:closing_php; counts_are_real.csv:value_pesos,"- Stock value: ₱22,700,825.83 at last purchase price, Unilever count"
+190,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,). Averaged over the 12 months   (12 of 12
+190,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,). Averaged over the 12 months   (12 of 12
+190,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,). Averaged over the 12 months   (12 of 12
+191,"₱32,592,762",sourced,figures.json.cover.avg_month_net_php,"months have data): ₱32,592,762 a month. Divided by 4.348 weeks a month"
+191,4.348,constant,weeks per month = 365.25 / 12 / 7 (params.py:113-114),"data): ₱32,592,762 a month. Divided by 4.348 weeks a month (= 365.25 ÷ 12 ÷ 7,"
+191,365.25,constant,days per year,"onth. Divided by 4.348 weeks a month (= 365.25 ÷ 12 ÷ 7,"
+191,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,"ided by 4.348 weeks a month (= 365.25 ÷ 12 ÷ 7,"
+191,7,constant,days per week | also matches cover_both_counts.csv:weeks; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,"by 4.348 weeks a month (= 365.25 ÷ 12 ÷ 7,"
+192,"₱7,495,666",sourced,issue3_weeks_of_cover.csv:weekly_sales_php_or_pcs,"), that is ₱7,495,666 a week."
+196,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,"sales at selling price, VAT-inclusive | 1.  | **3.03** |"
+196,3.03,sourced,independent_recompute.json.cover.shown; issue3_weeks_of_cover.csv:weeks,"selling price, VAT-inclusive | 1.  | **3.03** |"
+197,0.9158,sourced,issue3_weeks_of_cover.csv:ratio_sales_to_shown_basis,s at the demand file's own GSV column | 0.9158 | **3.31** |
+197,3.31,sourced,cover_both_counts.csv:weeks; independent_recompute.json.cover.gsv_matched; issue3_weeks_of_cover.csv:weeks,mand file's own GSV column | 0.9158 | **3.31** |
+198,99.8%,sourced,figures.json.cover.cost_basis_net_coverage,e per piece ( 's cost per piece; covers 99.8% of net sales) | 0.9073 | 3.34 |
+198,0.9073,sourced,issue3_weeks_of_cover.csv:ratio_sales_to_shown_basis,per piece; covers 99.8% of net sales) | 0.9073 | 3.34 |
+198,3.34,sourced,issue3_weeks_of_cover.csv:weeks,; covers 99.8% of net sales) | 0.9073 | 3.34 |
+199,1.12,sourced,balance_figures.json.last3[0].implied_over_sales_ilocos; balance_monthly.csv:implied_over_sales_ilocos,| VAT removed only (selling price ÷ 1.12) | 0.8929 | 3.39 |
+199,0.8929,sourced,issue3_weeks_of_cover.csv:ratio_sales_to_shown_basis,T removed only (selling price ÷ 1.12) | 0.8929 | 3.39 |
+199,3.39,sourced,issue3_weeks_of_cover.csv:weeks,only (selling price ÷ 1.12) | 0.8929 | 3.39 |
+200,3.13,sourced,issue3_weeks_of_cover.csv:weeks,| pieces ÷ pieces (no price) | n/a | 3.13 |
+202,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,comes from:** Σ GSV ÷ Σ   over the same 12 months and the same rows. Both columns
+204,21,sourced,figures.json.cover.gsv_null_rows,"valued on ( ). 21 of 8,735 rows in the window have no GSV"
+204,"8,735",sourced,figures.json.cover.rows,"valued on ( ). 21 of 8,735 rows in the window have no GSV. The cos"
+204,1%,sourced,balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,cost-per-piece cross-check lands within 1% of it.
+206,97.5%,sourced,"derived: ex-VAT net sales / GSV, % (0.8929 / 0.9158)","Once VAT is removed, net sales come to 97.5% of GSV (0.8929 ÷ 0.9158). So the 3.03 v"
+206,0.8929,sourced,issue3_weeks_of_cover.csv:ratio_sales_to_shown_basis,"emoved, net sales come to 97.5% of GSV (0.8929 ÷ 0.9158). So the 3.03 vs 3.31"
+206,0.9158,sourced,issue3_weeks_of_cover.csv:ratio_sales_to_shown_basis,et sales come to 97.5% of GSV (0.8929 ÷ 0.9158). So the 3.03 vs 3.31
+206,3.03,sourced,independent_recompute.json.cover.shown; issue3_weeks_of_cover.csv:weeks,97.5% of GSV (0.8929 ÷ 0.9158). So the 3.03 vs 3.31
+206,3.31,sourced,cover_both_counts.csv:weeks; independent_recompute.json.cover.gsv_matched; issue3_weeks_of_cover.csv:weeks,f GSV (0.8929 ÷ 0.9158). So the 3.03 vs 3.31
+207,2.5%,sourced,derived: 100% - ex-VAT net sales / GSV,"gap is VAT, partly offset by about 2.5% of discounts or price differences, not"
+210,5,constant,review business days / business days per week | also matches figures.json.pool_opening_count_jump.median_ratio_mar2_vs_apr6; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,Section 5 adds a caveat. The counts come from wor
+212,2.10,sourced,cover_both_counts.csv:weeks,"the like-for-like figure is **2.10 weeks** (count of  , sales at UL GSV,"
+212,3.31,sourced,cover_both_counts.csv:weeks; independent_recompute.json.cover.gsv_matched; issue3_weeks_of_cover.csv:weeks,"* (count of  , sales at UL GSV,  ), not 3.31."
+216,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,"Same 73 pending products, cycle  , 90% service"
+216,90%,constant,service level %,"Same 73 pending products, cycle  , 90% service level (Z = 1.28, the normal-dis"
+216,1.28,constant,Z for 90% service (params.py:108),"oducts, cycle  , 90% service level (Z = 1.28, the normal-distribution factor for 90%"
+216,90%,constant,service level %,".28, the normal-distribution factor for 90%). Pesos"
+217,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,"price per piece,  's ""cost per piece"" (73 of 73 from the stock file). Per product"
+217,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,"per piece,  's ""cost per piece"" (73 of 73 from the stock file). Per product:"
+218,4.348,constant,weeks per month = 365.25 / 12 / 7 (params.py:113-114),"=   ÷ 4.348 (weekly forecast, pieces),   = 3 ×  , an"
+218,3 ×,sourced,balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,"÷ 4.348 (weekly forecast, pieces),   = 3 ×  , and pesos = Σ price per piece × piec"
+219,5,constant,review business days / business days per week | also matches figures.json.pool_opening_count_jump.median_ratio_mar2_vs_apr6; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,order-up-to level:**   =   × (R + L) ÷ 5 +   with R = 5 and L = 3 business days (
+219,5,constant,review business days / business days per week | also matches figures.json.pool_opening_count_jump.median_ratio_mar2_vs_apr6; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,"vel:**   =   × (R + L) ÷ 5 +   with R = 5 and L = 3 business days (placeholders),"
+219,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,"× (R + L) ÷ 5 +   with R = 5 and L = 3 business days (placeholders),"
+220,1.6 ×,sourced,"derived: La Union-based / Ilocos-based cover, 2026-04-06",so   = 1.6 ×   +   ( ). This is the stored  .
+222,5,constant,review business days / business days per week | also matches figures.json.pool_opening_count_jump.median_ratio_mar2_vs_apr6; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,"× R ÷ 5 =  , so the average is   +   ÷ 2."
+222,2,constant,"half the cycle order (÷ 2) | also matches balance_monthly.csv:implied_over_sales_ilocos; cover_both_counts.csv:weeks; derived: La Union-based / Ilocos-based cover, 2026-04-06","× R ÷ 5 =  , so the average is   +   ÷ 2."
+224,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,"| measure (cycle  , 73 products) | pieces | pesos (last purcha"
+224,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,eces | pesos (last purchase price) | vs 3-week rule |
+226,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,"| 3-week rule | 748,716 | ₱8,211,106 | n/a"
+226,"748,716",sourced,figures.json.policy.pieces.rule,"| 3-week rule | 748,716 | ₱8,211,106 | n/a |"
+226,"₱8,211,106",sourced,derived: sum issue4_policy_card_per_product.csv:rule_3wk_php; figures.json.policy.php.rule_3wk; independent_recompute.json.policy.rule_php,"| 3-week rule | 748,716 | ₱8,211,106 | n/a |"
+227,"884,856",sourced,derived: sum issue1_stock_timing_per_product.csv:target_stock_pcs; derived: sum issue4_policy_card_per_product.csv:order_up_to_pcs; figures.json.policy.pieces.sum_target,"| (a) peak, per-product targets | 884,856 | ₱8,917,570 | **+₱706,464 (+8.6%)**; pi"
+227,"₱8,917,570",sourced,derived: sum issue4_policy_card_per_product.csv:peak_target_php; figures.json.policy.php.peak_targets; issue4_policy_card_totals.csv:value,") peak, per-product targets | 884,856 | ₱8,917,570 | **+₱706,464 (+8.6%)**; pieces +18.2% |"
+227,"+₱706,464",sourced,figures.json.policy.php.peak_minus_rule; independent_recompute.json.policy.peak_minus_rule_php; issue4_policy_card_totals.csv:value,"duct targets | 884,856 | ₱8,917,570 | **+₱706,464 (+8.6%)**; pieces +18.2% |"
+227,+8.6%,sourced,figures.json.policy.php.peak_vs_rule_pct; issue4_policy_card_totals.csv:value,"s | 884,856 | ₱8,917,570 | **+₱706,464 (+8.6%)**; pieces +18.2% |"
+227,+18.2%,sourced,figures.json.policy.pieces.target_vs_rule_pct_less,"917,570 | **+₱706,464 (+8.6%)**; pieces +18.2% |"
+228,"610,327",sourced,figures.json.policy.pieces.sum_average_on_hand,"| (b) average on hand | 610,327 | ₱5,906,832 | **−₱2,304,274 (−28.1%)**;"
+228,"₱5,906,832",sourced,derived: sum issue4_policy_card_per_product.csv:avg_target_php; figures.json.policy.php.average_targets; issue4_policy_card_totals.csv:value,"| (b) average on hand | 610,327 | ₱5,906,832 | **−₱2,304,274 (−28.1%)**; pieces −18.5"
+228,"−₱2,304,274",sourced,figures.json.policy.php.average_minus_rule; issue4_policy_card_totals.csv:value,"rage on hand | 610,327 | ₱5,906,832 | **−₱2,304,274 (−28.1%)**; pieces −18.5% |"
+228,−28.1%,sourced,figures.json.policy.php.average_vs_rule_pct; independent_recompute.json.policy.average_vs_rule_pct; issue4_policy_card_totals.csv:value,"| 610,327 | ₱5,906,832 | **−₱2,304,274 (−28.1%)**; pieces −18.5% |"
+228,−18.5%,sourced,figures.json.policy.pieces.average_vs_rule_pct_less,",832 | **−₱2,304,274 (−28.1%)**; pieces −18.5% |"
+229,"485,541",sourced,derived: sum issue1_stock_timing_per_product.csv:safety_stock_pcs; derived: sum issue4_policy_card_per_product.csv:safety_stock_pcs; figures.json.policy.pieces.sum_ss,"stock alone (the card's old headline) | 485,541 | n/a | pieces −35.2% |"
+229,−35.2%,sourced,figures.json.policy.pieces.ss_vs_rule_pct_less,"old headline) | 485,541 | n/a | pieces −35.2% |"
+230,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,"sensitivity: rule's own average if its 3 weeks is a peak (3w − w/2) | n/a | ₱6,8"
+230,"₱6,842,589",sourced,figures.json.policy.php.sensitivity_rule_average_if_3wk_is_its_peak; issue4_policy_card_totals.csv:value,"ts 3 weeks is a peak (3w − w/2) | n/a | ₱6,842,589 | (b) is 13.7% less than this |"
+230,13.7%,sourced,figures.json.policy.php.sensitivity_average_vs_that_pct; issue4_policy_card_totals.csv:value,"(3w − w/2) | n/a | ₱6,842,589 | (b) is 13.7% less than this |"
+231,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,"| SSM's actual stock on these 73 at the   /   counts | n/a | ₱6,105,203"
+231,"₱6,105,203",sourced,cover_both_counts.csv:stock_php; derived: sum issue4_policy_card_per_product.csv:stock_2026-04-06_php; figures.json.policy.php.ssm_stock_2026-04-06,"on these 73 at the   /   counts | n/a | ₱6,105,203 / ₱16,782,794 | n/a |"
+231,"₱16,782,794",sourced,cover_both_counts.csv:stock_php; figures.json.policy.php.ssm_stock_2026-03-02; figures.json.pool_opening_count_jump.pool_value_php.2026-02,"t the   /   counts | n/a | ₱6,105,203 / ₱16,782,794 | n/a |"
+233,+₱0.71M,sourced,figures.json.policy.php.peak_minus_rule; independent_recompute.json.policy.peak_minus_rule_php; issue4_policy_card_per_product.csv:rule_3wk_php,"**Verdict.** The +₱0.71M at peak is confirmed. The 18.5% ""less a"
+233,18.5%,sourced,figures.json.policy.pieces.average_vs_rule_pct_less,"* The +₱0.71M at peak is confirmed. The 18.5% ""less at average"" is right in pieces bu"
+234,28.1%,sourced,figures.json.policy.php.average_vs_rule_pct; independent_recompute.json.policy.average_vs_rule_pct; issue4_policy_card_totals.csv:value,it is **28.1% less**. Pesos weight each product by it
+235,35.2%,sourced,figures.json.policy.pieces.ss_vs_rule_pct_less,"y less safety stock per week of sales. ""35.2% less"" is safety stock alone against the"
+237,18.2%,sourced,figures.json.policy.pieces.target_vs_rule_pct_less,"which reads ""18.2% more"" ( ,  ). If 35.2% is still on scre"
+237,35.2%,sourced,figures.json.policy.pieces.ss_vs_rule_pct_less,"which reads ""18.2% more"" ( ,  ). If 35.2% is still on screen, the deployed"
+244,2,constant,"half the cycle order (÷ 2) | also matches balance_monthly.csv:implied_over_sales_ilocos; cover_both_counts.csv:weeks; derived: La Union-based / Ilocos-based cover, 2026-04-06",pening count **refuses the plan** (rule 2 of the proposed fix).
+248,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,The evidence below shows why decision 3 stays pending: the balance cannot prove
+256,644,sourced,issue1_stock_timing_per_product.csv:product_key; issue1_stock_timing_per_product.csv:target_stock_pcs; issue4_policy_card_per_product.csv:order_up_to_pcs,|   sales | **No real rows.** All 644 Unilever SKU rows for   are synthetic p
+256,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"ders ( ,  ).   marks   ""synthetic"" with 0 real rows | ** ** (already in  ) holds"
+256,"8,567",sourced,derived: ssis_sales_monthly.csv 2026-03 register lines,"the full   daily sales report: sheet  , 8,567 lines. It has the same layout and total"
+256,"₱30,262,612",sourced,balance_monthly.csv:sales_ilocos_ul_gsv_php; derived: ssis_sales_monthly.csv 2025-12 net UL GSV,"PORT"" files: for   both give net UL GSV ₱30,262,612. So   most likely duplicates what is on"
+263,13,constant,count of SOH workbooks / counts | also matches balance_figures.json.counts_equal_workbook_inventory_sheet; balance_figures.json.counts_equal_workbook_soh; balance_figures.json.workbooks,"ir SOH sheets are the stock counts. All 13 counts ( ) equal the database value, an"
+265,"₱46,576,778.51",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"includes ₱46,576,778.51 (last purchase price) for  : **SSM's own"
+269,57%,sourced,balance_figures.json.la_union_over_ilocos.min; balance_monthly.csv:implied_over_sales_ilocos; balance_monthly.csv:la_union_over_ilocos,"ry month  , La Union sales (at GSV) are 57%–76% (median 62%) of the Ilocos Sur regi"
+269,76%,sourced,balance_figures.json.la_union_over_ilocos.max; balance_monthly.csv:la_union_over_ilocos,"onth  , La Union sales (at GSV) are 57%–76% (median 62%) of the Ilocos Sur register"
+269,62%,sourced,balance_figures.json.la_union_over_ilocos.median; balance_monthly.csv:la_union_over_ilocos; issue4_policy_card_per_product.csv:weekly_pcs,nion sales (at GSV) are 57%–76% (median 62%) of the Ilocos Sur register's sales
+278,98.0%,sourced,"derived: UL GSV / register GSV, 2025-03..2026-02, %; issue2_mase_flips.csv:mase_common_window","net of credit notes. Over  , UL GSV is 98.0%"
+283,"23,952,053",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"|   | 23,952,053 ( ) | 29,965,754 ( ) | 50,663,301 | −26,"
+283,"29,965,754",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"|   | 23,952,053 ( ) | 29,965,754 ( ) | 50,663,301 | −26,711,248 | 56,677,"
+283,"50,663,301",sourced,balance_monthly.csv:sales_ilocos_ul_gsv_php; derived: ssis_sales_monthly.csv 2025-11 net UL GSV,"|   | 23,952,053 ( ) | 29,965,754 ( ) | 50,663,301 | −26,711,248 | 56,677,001 (1.12×) | 20,"
+283,"−26,711,248",sourced,balance_monthly.csv:closing_if_zero_receipts_ilocos_php,"053 ( ) | 29,965,754 ( ) | 50,663,301 | −26,711,248 | 56,677,001 (1.12×) | 20,821,061 | 30,4"
+283,"56,677,001",sourced,balance_figures.json.last3[0].implied_receipts_ilocos_php; balance_monthly.csv:implied_receipts_ilocos_php,"65,754 ( ) | 50,663,301 | −26,711,248 | 56,677,001 (1.12×) | 20,821,061 | 30,422,228 | 36,4"
+283,1.12×,sourced,balance_figures.json.last3[0].implied_over_sales_ilocos; balance_monthly.csv:implied_over_sales_ilocos,"50,663,301 | −26,711,248 | 56,677,001 (1.12×) | 20,821,061 | 30,422,228 | 36,435,929"
+283,"20,821,061",sourced,balance_monthly.csv:open_po_at_opening_php; ssis_soh_columns.csv:po_php,"01 | −26,711,248 | 56,677,001 (1.12×) | 20,821,061 | 30,422,228 | 36,435,929 |"
+283,"30,422,228",sourced,balance_monthly.csv:sales_la_union_gsv_php,"248 | 56,677,001 (1.12×) | 20,821,061 | 30,422,228 | 36,435,929 |"
+283,"36,435,929",sourced,balance_monthly.csv:implied_receipts_la_union_php,"001 (1.12×) | 20,821,061 | 30,422,228 | 36,435,929 |"
+284,"29,965,754",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"|   | 29,965,754 ( ) | 36,277,134 ( ) | 30,262,612 | −296"
+284,"36,277,134",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"|   | 29,965,754 ( ) | 36,277,134 ( ) | 30,262,612 | −296,858 | 36,573,992"
+284,"30,262,612",sourced,balance_monthly.csv:sales_ilocos_ul_gsv_php; derived: ssis_sales_monthly.csv 2025-12 net UL GSV,"|   | 29,965,754 ( ) | 36,277,134 ( ) | 30,262,612 | −296,858 | 36,573,992 (1.21×) | 26,755"
+284,"−296,858",sourced,balance_monthly.csv:closing_if_zero_receipts_ilocos_php,"754 ( ) | 36,277,134 ( ) | 30,262,612 | −296,858 | 36,573,992 (1.21×) | 26,755,276 | 17,9"
+284,"36,573,992",sourced,balance_figures.json.implied_receipts_ilocos_baseline_php.min; balance_figures.json.last3[1].implied_receipts_ilocos_php; balance_monthly.csv:implied_receipts_ilocos_php,"6,277,134 ( ) | 30,262,612 | −296,858 | 36,573,992 (1.21×) | 26,755,276 | 17,923,426 | 24,2"
+284,1.21×,sourced,balance_figures.json.last3[1].implied_over_sales_ilocos; balance_monthly.csv:implied_over_sales_ilocos,") | 30,262,612 | −296,858 | 36,573,992 (1.21×) | 26,755,276 | 17,923,426 | 24,234,806"
+284,"26,755,276",sourced,balance_monthly.csv:open_po_at_opening_php; ssis_soh_columns.csv:po_php,"2,612 | −296,858 | 36,573,992 (1.21×) | 26,755,276 | 17,923,426 | 24,234,806, below open PO"
+284,"17,923,426",sourced,balance_monthly.csv:sales_la_union_gsv_php,"858 | 36,573,992 (1.21×) | 26,755,276 | 17,923,426 | 24,234,806, below open POs |"
+284,"24,234,806",sourced,balance_monthly.csv:implied_receipts_la_union_php,"992 (1.21×) | 26,755,276 | 17,923,426 | 24,234,806, below open POs |"
+285,"36,277,134",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"|   | 36,277,134 ( ) | 24,339,386 ( ) | 54,970,350 | −18,"
+285,"24,339,386",sourced,balance_figures.json.feb_mar.opening_2026-02-03; balance_monthly.csv:closing_php; balance_monthly.csv:opening_php,"|   | 36,277,134 ( ) | 24,339,386 ( ) | 54,970,350 | −18,693,217 | 43,032,"
+285,"54,970,350",sourced,balance_monthly.csv:sales_ilocos_ul_gsv_php; derived: ssis_sales_monthly.csv 2026-01 net UL GSV,"|   | 36,277,134 ( ) | 24,339,386 ( ) | 54,970,350 | −18,693,217 | 43,032,603 (0.78×) | 25,"
+285,"−18,693,217",sourced,balance_monthly.csv:closing_if_zero_receipts_ilocos_php,"134 ( ) | 24,339,386 ( ) | 54,970,350 | −18,693,217 | 43,032,603 (0.78×) | 25,297,925 | 33,9"
+285,"43,032,603",sourced,balance_figures.json.last3[2].implied_receipts_ilocos_php; balance_monthly.csv:implied_receipts_ilocos_php,"39,386 ( ) | 54,970,350 | −18,693,217 | 43,032,603 (0.78×) | 25,297,925 | 33,964,411 | 22,0"
+285,0.78×,sourced,balance_figures.json.last3[2].implied_over_sales_ilocos; balance_monthly.csv:implied_over_sales_ilocos,"54,970,350 | −18,693,217 | 43,032,603 (0.78×) | 25,297,925 | 33,964,411 | 22,026,663"
+285,"25,297,925",sourced,balance_monthly.csv:open_po_at_opening_php; ssis_soh_columns.csv:po_php,"50 | −18,693,217 | 43,032,603 (0.78×) | 25,297,925 | 33,964,411 | 22,026,663, below open PO"
+285,"33,964,411",sourced,balance_monthly.csv:sales_la_union_gsv_php,"217 | 43,032,603 (0.78×) | 25,297,925 | 33,964,411 | 22,026,663, below open POs |"
+285,"22,026,663",sourced,balance_monthly.csv:implied_receipts_la_union_php,"603 (0.78×) | 25,297,925 | 33,964,411 | 22,026,663, below open POs |"
+286,"24,339,386",sourced,balance_figures.json.feb_mar.opening_2026-02-03; balance_monthly.csv:closing_php; balance_monthly.csv:opening_php,"| ** ** | 24,339,386 ( ) | **46,576,779 ( )** | 33,706,098 |"
+286,"46,576,779",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"| ** ** | 24,339,386 ( ) | **46,576,779 ( )** | 33,706,098 | −9,366,711 | **55,9"
+286,"33,706,098",sourced,balance_monthly.csv:sales_ilocos_ul_gsv_php; derived: ssis_sales_monthly.csv 2026-02 net UL GSV,"| 24,339,386 ( ) | **46,576,779 ( )** | 33,706,098 | −9,366,711 | **55,943,490 (1.66×)** |"
+286,"−9,366,711",sourced,balance_monthly.csv:closing_if_zero_receipts_ilocos_php,"( ) | **46,576,779 ( )** | 33,706,098 | −9,366,711 | **55,943,490 (1.66×)** | 20,296,406 |"
+286,"55,943,490",sourced,balance_monthly.csv:implied_receipts_ilocos_php,"779 ( )** | 33,706,098 | −9,366,711 | **55,943,490 (1.66×)** | 20,296,406 | 25,502,319 | 47"
+286,1.66×,sourced,balance_monthly.csv:implied_over_sales_ilocos,"33,706,098 | −9,366,711 | **55,943,490 (1.66×)** | 20,296,406 | 25,502,319 | 47,739,7"
+286,"20,296,406",sourced,balance_monthly.csv:open_po_at_opening_php; ssis_soh_columns.csv:po_php,"| −9,366,711 | **55,943,490 (1.66×)** | 20,296,406 | 25,502,319 | 47,739,711 |"
+286,"25,502,319",sourced,balance_monthly.csv:sales_la_union_gsv_php,"| **55,943,490 (1.66×)** | 20,296,406 | 25,502,319 | 47,739,711 |"
+286,"47,739,711",sourced,balance_monthly.csv:implied_receipts_la_union_php,"0 (1.66×)** | 20,296,406 | 25,502,319 | 47,739,711 |"
+287,"46,576,779",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"| ** ** | **46,576,779 ( )** | 22,700,826 ( ) | 55,985,543 | −9"
+287,"22,700,826",sourced,balance_figures.json.feb_mar.closing_2026-04-06; balance_monthly.csv:closing_php; counts_are_real.csv:value_pesos,"| ** ** | **46,576,779 ( )** | 22,700,826 ( ) | 55,985,543 | −9,408,764 | **32,109"
+287,"55,985,543",sourced,balance_monthly.csv:sales_ilocos_ul_gsv_php; derived: ssis_sales_monthly.csv 2026-03 net UL GSV,"| **46,576,779 ( )** | 22,700,826 ( ) | 55,985,543 | −9,408,764 | **32,109,590 (0.57×)** |"
+287,"−9,408,764",sourced,balance_monthly.csv:closing_if_zero_receipts_ilocos_php,"9 ( )** | 22,700,826 ( ) | 55,985,543 | −9,408,764 | **32,109,590 (0.57×)** | 17,592,964 |"
+287,"32,109,590",sourced,balance_monthly.csv:implied_receipts_ilocos_php,"0,826 ( ) | 55,985,543 | −9,408,764 | **32,109,590 (0.57×)** | 17,592,964 | none (no real M"
+287,0.57×,sourced,balance_figures.json.la_union_over_ilocos.min; balance_monthly.csv:implied_over_sales_ilocos; balance_monthly.csv:la_union_over_ilocos,"55,985,543 | −9,408,764 | **32,109,590 (0.57×)** | 17,592,964 | none (no real March r"
+287,"17,592,964",sourced,balance_monthly.csv:open_po_at_opening_php; ssis_soh_columns.csv:po_php,"| −9,408,764 | **32,109,590 (0.57×)** | 17,592,964 | none (no real March rows) | n/a |"
+288,10,sourced,issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,"| baseline   (10 months) | | | | | ₱36.6M–₱64.7M, median"
+288,₱36.6M,sourced,balance_figures.json.implied_receipts_ilocos_baseline_php.min; balance_figures.json.last3[1].implied_receipts_ilocos_php; balance_monthly.csv:implied_receipts_ilocos_php,"| baseline   (10 months) | | | | | ₱36.6M–₱64.7M, median ₱45.6M; 0.77×–1.32×, med"
+288,₱64.7M,sourced,balance_figures.json.implied_receipts_ilocos_baseline_php.max; balance_monthly.csv:implied_receipts_ilocos_php,"baseline   (10 months) | | | | | ₱36.6M–₱64.7M, median ₱45.6M; 0.77×–1.32×, median 1.0"
+288,₱45.6M,sourced,balance_figures.json.implied_receipts_ilocos_baseline_php.median,"months) | | | | | ₱36.6M–₱64.7M, median ₱45.6M; 0.77×–1.32×, median 1.06× | | | |"
+288,0.77×,sourced,balance_figures.json.implied_over_sales_baseline.min; balance_monthly.csv:implied_over_sales_ilocos; issue2_mase_flips.csv:mase_common_window,"| | | | | ₱36.6M–₱64.7M, median ₱45.6M; 0.77×–1.32×, median 1.06× | | | |"
+288,1.32×,sourced,balance_figures.json.implied_over_sales_baseline.max; balance_monthly.csv:implied_over_sales_ilocos,"| | ₱36.6M–₱64.7M, median ₱45.6M; 0.77×–1.32×, median 1.06× | | | |"
+288,1.06×,sourced,balance_figures.json.implied_over_sales_baseline.median; issue2_mase_flips.csv:mase_stored_gate,".7M, median ₱45.6M; 0.77×–1.32×, median 1.06× | | | |"
+290,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,All 12 months are in  .
+295,₱32.1M,sourced,balance_monthly.csv:implied_receipts_ilocos_php,₱32.1M (0.57× March sales). That is below ever
+295,0.57×,sourced,balance_figures.json.la_union_over_ilocos.min; balance_monthly.csv:implied_over_sales_ilocos; balance_monthly.csv:la_union_over_ilocos,₱32.1M (0.57× March sales). That is below every basel
+295,₱36.6M,sourced,balance_figures.json.implied_receipts_ilocos_baseline_php.min; balance_figures.json.last3[1].implied_receipts_ilocos_php; balance_monthly.csv:implied_receipts_ilocos_php,ow every baseline month: the lowest was ₱36.6M ( ) and the lowest
+296,0.77×,sourced,balance_figures.json.implied_over_sales_baseline.min; balance_monthly.csv:implied_over_sales_ilocos; issue2_mase_flips.csv:mase_common_window,ratio 0.77× ( ).
+297,₱55.9M,sourced,balance_monthly.csv:implied_receipts_ilocos_php,"es to equal the   count, February needs ₱55.9M"
+298,1.66×,sourced,balance_monthly.csv:implied_over_sales_ilocos,of receipts (1.66× sales). The peso amount is inside the b
+298,₱64.7M,sourced,balance_figures.json.implied_receipts_ilocos_baseline_php.max; balance_monthly.csv:implied_receipts_ilocos_php,"unt is inside the baseline range (  was ₱64.7M), but the ratio is the"
+299,1.32×,sourced,balance_figures.json.implied_over_sales_baseline.max; balance_monthly.csv:implied_over_sales_ilocos,highest of any month (baseline maximum 1.32×).
+300,₱24.3M,sourced,balance_figures.json.feb_mar.opening_2026-02-03; balance_monthly.csv:closing_if_zero_receipts_ilocos_php; balance_monthly.csv:closing_php,s together close normally.** Going from ₱24.3M on   to ₱22.7M on   with ₱89.7M of sale
+300,₱22.7M,sourced,balance_figures.json.feb_mar.closing_2026-04-06; balance_monthly.csv:closing_php; counts_are_real.csv:value_pesos,e normally.** Going from ₱24.3M on   to ₱22.7M on   with ₱89.7M of sales
+300,₱89.7M,sourced,balance_figures.json.feb_mar.sales_ilocos,ng from ₱24.3M on   to ₱22.7M on   with ₱89.7M of sales
+301,₱88.1M,sourced,balance_figures.json.feb_mar.implied_receipts_ilocos,"needs ₱88.1M of receipts, or 0.98× sales. That is in"
+301,0.98×,sourced,balance_figures.json.feb_mar.implied_over_sales; issue2_mase_flips.csv:mase_common_window,"needs ₱88.1M of receipts, or 0.98× sales. That is inside the baseline rang"
+302,0.92×,sourced,balance_figures.json.two_month_implied_over_sales_baseline.min; issue2_mase_flips.csv:mase_common_window; issue3_weeks_of_cover.csv:ratio_sales_to_shown_basis,(0.92×–1.24×). The   count moves receipts betw
+302,1.24×,sourced,balance_figures.json.two_month_implied_over_sales_baseline.max,(0.92×–1.24×). The   count moves receipts between Fe
+304,1.06×,sourced,balance_figures.json.implied_over_sales_baseline.median; issue2_mase_flips.csv:mase_stored_gate,"ry's receipts been at the median ratio (1.06× sales), the   count would be about ₱26."
+304,₱26.4M,sourced,derived: hypothetical 2 Mar count at median ratio,".06× sales), the   count would be about ₱26.4M, which is"
+305,₱20.2M,sourced,derived: reported 2 Mar count - hypothetical,₱20.2M less than reported. That figure is a de
+308,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,opening count (0 of 12 months). On the La Union basis th
+308,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,opening count (0 of 12 months). On the La Union basis they are
+308,3,constant,lead business days / rule weeks (POLICY_COVER_WEEKS) | also matches balance_figures.json.last3 (count); balance_figures.json.months_implied_below_open_po.la_union (count); cover_both_counts.csv:weeks,"On the La Union basis they are below in 3 of 11 months ( ,  ,"
+308,11,constant,short bin ends at 11 months | also matches derived: balance months with La Union sales; pull/lp_counts.csv:row_count,"e La Union basis they are below in 3 of 11 months ( ,  ,"
+309,13,constant,count of SOH workbooks / counts | also matches balance_figures.json.counts_equal_workbook_inventory_sheet; balance_figures.json.counts_equal_workbook_soh; balance_figures.json.workbooks,count had the lowest open POs of the 13 counts (₱17.6M; range ₱17.6M–₱26.8M).
+309,₱17.6M,sourced,balance_monthly.csv:closing_if_zero_receipts_ilocos_php; balance_monthly.csv:open_po_at_opening_php; pull/snapshot_meta.csv:value_pesos,d the lowest open POs of the 13 counts (₱17.6M; range ₱17.6M–₱26.8M).
+309,₱17.6M,sourced,balance_monthly.csv:closing_if_zero_receipts_ilocos_php; balance_monthly.csv:open_po_at_opening_php; pull/snapshot_meta.csv:value_pesos,pen POs of the 13 counts (₱17.6M; range ₱17.6M–₱26.8M).
+309,₱26.8M,sourced,balance_monthly.csv:implied_receipts_la_union_php; balance_monthly.csv:open_po_at_opening_php; ssis_soh_columns.csv:po_php,of the 13 counts (₱17.6M; range ₱17.6M–₱26.8M).
+310,₱0.26M,sourced,balance_monthly.csv:open_customer_orders_at_opening_php; issue4_policy_card_per_product.csv:peak_target_php; ssis_soh_columns.csv:bo_without_vat,"- **Open customer orders** on   were ₱0.26M, so they are not the source of the jump"
+311,133,sourced,balance_monthly.csv:negative_skus; issue1_stock_timing_per_product.csv:safety_stock_pcs; issue4_policy_card_per_product.csv:safety_stock_pcs,"**Per SKU, La Union basis.** Each month 133–237 of 601–716 SKUs ( ) show stock fall"
+311,237,sourced,balance_monthly.csv:negative_skus,"r SKU, La Union basis.** Each month 133–237 of 601–716 SKUs ( ) show stock falling"
+311,601,sourced,balance_monthly.csv:skus; pull/balance_sources.csv:row_count,La Union basis.** Each month 133–237 of 601–716 SKUs ( ) show stock falling by more
+311,716,sourced,balance_monthly.csv:skus; pull/balance_sources.csv:row_count,nion basis.** Each month 133–237 of 601–716 SKUs ( ) show stock falling by more tha
+321,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,are averaged over   (12 of 12 months) and divided by 4.348 week
+321,12,constant,VAT rate % / months in a window / months per year | also matches balance_figures.json.cover_months.ilocos; balance_figures.json.cover_months.pool_la_union; derived: balance months,are averaged over   (12 of 12 months) and divided by 4.348 weeks a mo
+321,4.348,constant,weeks per month = 365.25 / 12 / 7 (params.py:113-114),over   (12 of 12 months) and divided by 4.348 weeks a month. Output:
+326,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,"| 73 LP products (₱16,782,794 / ₱6,105,203)"
+326,"₱16,782,794",sourced,cover_both_counts.csv:stock_php; figures.json.policy.php.ssm_stock_2026-03-02; figures.json.pool_opening_count_jump.pool_value_php.2026-02,"| 73 LP products (₱16,782,794 / ₱6,105,203) | La Union file GSV, ₱2,82"
+326,"₱6,105,203",sourced,cover_both_counts.csv:stock_php; derived: sum issue4_policy_card_per_product.csv:stock_2026-04-06_php; figures.json.policy.php.ssm_stock_2026-04-06,"| 73 LP products (₱16,782,794 / ₱6,105,203) | La Union file GSV, ₱2,825,076 a week"
+326,"₱2,825,076",sourced,cover_both_counts.csv:weekly_sales_php,",794 / ₱6,105,203) | La Union file GSV, ₱2,825,076 a week | **5.94 weeks** | **2.16 weeks*"
+326,5.94,sourced,cover_both_counts.csv:weeks,"a Union file GSV, ₱2,825,076 a week | **5.94 weeks** | **2.16 weeks** |"
+326,2.16,sourced,cover_both_counts.csv:weeks; figures.json.policy.weeks.average,"₱2,825,076 a week | **5.94 weeks** | **2.16 weeks** |"
+327,"₱46,576,779",sourced,balance_monthly.csv:closing_php; balance_monthly.csv:opening_php; counts_are_real.csv:value_pesos,"| whole count (₱46,576,779 / ₱22,700,826) | La Union file GSV, ₱6,8"
+327,"₱22,700,826",sourced,balance_figures.json.feb_mar.closing_2026-04-06; balance_monthly.csv:closing_php; counts_are_real.csv:value_pesos,"| whole count (₱46,576,779 / ₱22,700,826) | La Union file GSV, ₱6,864,739 a week"
+327,"₱6,864,739",sourced,cover_both_counts.csv:weekly_sales_php; issue3_weeks_of_cover.csv:weekly_sales_php_or_pcs,"779 / ₱22,700,826) | La Union file GSV, ₱6,864,739 a week | 6.78 weeks | 3.31 weeks |"
+327,6.78,sourced,cover_both_counts.csv:weeks,"La Union file GSV, ₱6,864,739 a week | 6.78 weeks | 3.31 weeks |"
+327,3.31,sourced,cover_both_counts.csv:weeks; independent_recompute.json.cover.gsv_matched; issue3_weeks_of_cover.csv:weeks,"e GSV, ₱6,864,739 a week | 6.78 weeks | 3.31 weeks |"
+328,"₱10,804,764",sourced,cover_both_counts.csv:weekly_sales_php,"ole count | Ilocos Sur register UL GSV, ₱10,804,764 a week | 4.31 weeks | 2.10 weeks |"
+328,4.31,sourced,cover_both_counts.csv:weeks,"r register UL GSV, ₱10,804,764 a week | 4.31 weeks | 2.10 weeks |"
+328,2.10,sourced,cover_both_counts.csv:weeks,"GSV, ₱10,804,764 a week | 4.31 weeks | 2.10 weeks |"
+330,73,sourced,figures.json.check_latest_count_equals_run_lp_query ('73/73'); figures.json.policy.products; figures.json.replay_vs_stored_2026-03_pending.products,The 73 products have no Ilocos Sur figure beca
+331,1.6×,sourced,"derived: La Union-based / Ilocos-based cover, 2026-04-06","nion-based cover is overstated by about 1.6× (3.31 vs 2.10 weeks at  ), the"
+331,3.31,sourced,cover_both_counts.csv:weeks; independent_recompute.json.cover.gsv_matched; issue3_weeks_of_cover.csv:weeks,"ased cover is overstated by about 1.6× (3.31 vs 2.10 weeks at  ), the"
+331,2.10,sourced,cover_both_counts.csv:weeks,"er is overstated by about 1.6× (3.31 vs 2.10 weeks at  ), the"
+332,91.78%,sourced,"derived: INVENTORY at cost / without VAT, %","""AT COST without VAT"" column is a flat 91.78% of the GSV value on all 13"
+332,13,constant,count of SOH workbooks / counts | also matches balance_figures.json.counts_equal_workbook_inventory_sheet; balance_figures.json.counts_equal_workbook_soh; balance_figures.json.workbooks,s a flat 91.78% of the GSV value on all 13
+336,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,## Proposed fix for issue 1 (not implemented; implementation spec)
+346,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,"Per  , counts land 1-6 days after the period ends."
+346,6,constant,"common test window, months / DEC-20 maximum days | also matches cover_both_counts.csv:weeks; independent_recompute.json.tier_a_below_ss.2026-03-02.below; issue1_stock_timing_per_product.csv:cost_per_piece_php","Per  , counts land 1-6 days after the period ends."
+355,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"product absent:** unchanged. Unilever = 0 on hand ( ), Del Monte = NO DATA"
+389,2,constant,"half the cycle order (÷ 2) | also matches balance_monthly.csv:implied_over_sales_ilocos; cover_both_counts.csv:weeks; derived: La Union-based / Ilocos-based cover, 2026-04-06","- Dashboard and reorder API (decision 2, latest count kept):"
+419,"325,468",sourced,derived: sum issue1_stock_timing_per_product.csv:need_with_opening_pcs; derived: sum issue1_stock_timing_per_product.csv:order_103_opening_pcs; independent_recompute.json.lp.2026-03-02.need,"counted  , a need of 325,468 pieces, and 0 products / 0 pieces short"
+419,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"ounted  , a need of 325,468 pieces, and 0 products / 0 pieces short. This holds w"
+419,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"eed of 325,468 pieces, and 0 products / 0 pieces short. This holds while the inpu"
+430,"27,282",sourced,flag_counts.csv:row_count,"backfilled 27,282/27,282, and they are exactly the column"
+430,1,constant,MASE gate | also matches balance_figures.json.feb_mar.implied_over_sales; balance_figures.json.implied_over_sales_baseline.max; balance_figures.json.implied_over_sales_baseline.median,columns that would have prevented issue 1.
+433,0,constant,zero | also matches balance_figures.json.months_implied_below_open_po.ilocos (count); balance_figures.json.pool_gsv_null_rows; balance_monthly.csv:implied_below_open_po_ilocos,"-   exists on public with 0 rows, and all 74 cycle   rows have   NU"
+433,74,sourced,"derived: lp_cycle rows with lp_run_key NULL; derived: lp_cycle rows, cycle 2026-03","exists on public with 0 rows, and all 74 cycle   rows have   NULL. The app there"
+437,59,sourced,derived: check_refs.csv references; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,edits. All 59   references in this report point to unc
+448,15,sourced,figures.json.mase.flips; issue1_stock_timing_per_product.csv:need_with_closing_pcs; issue1_stock_timing_per_product.csv:short_103_closing_pcs,|   | the 15 flips |
+451,5,constant,review business days / business days per week | also matches figures.json.pool_opening_count_jump.median_ratio_mar2_vs_apr6; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,"|   | section 5's read-only pull: every Unilever sales,"
+454,5,constant,review business days / business days per week | also matches figures.json.pool_opening_count_jump.median_ratio_mar2_vs_apr6; issue1_stock_timing_per_product.csv:cost_per_piece_php; issue4_policy_card_per_product.csv:cost_per_piece_php,"|   →  ,  ,   | section 5's balance and weeks of cover |"
+455,13,constant,count of SOH workbooks / counts | also matches balance_figures.json.counts_equal_workbook_inventory_sheet; balance_figures.json.counts_equal_workbook_soh; balance_figures.json.workbooks,"|   →   | the 13 counts in the base table, by   /   /"
