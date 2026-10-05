@@ -1003,7 +1003,14 @@ const AbcTierCard = ({ facts, atRisk = null }) => {
       {/* "Which ones?" — the products behind this class's count, one click
           away: the ABC page opens on the class picked here (?class=). */}
       <Link to={`/abc?class=${facts.tier}`} className="abc-tier-card-link">
-        See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
+        {/* The count is this card's only while both rank the same period.
+            Since 2026-10-04 the ring ranks the selected range and the ABC
+            page still ranks one month, so its Class A is a different list
+            and the link doesn't promise this card's number. */}
+        {facts.rangeBased
+          ? `See Class ${facts.tier} ${facts.units}, ranked month by month`
+          : `See the ${facts.count.toLocaleString()} Class ${facts.tier} ${facts.units}`}{' '}
+        <ArrowRight size={12} aria-hidden="true" />
       </Link>
     </div>
   );
@@ -1132,6 +1139,8 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
   const rankedMonth = revenue?.label || (revenue?.period ? formatMonth(revenue.period) : null);
   const factsFor = (d) => ({
     tier: d.tier,
+    // The ring ranks a range; the ABC page ranks one month (see the link).
+    rangeBased: revenue?.basis === 'range',
     count: d.count,
     units,
     month: rankedMonth,
