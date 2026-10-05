@@ -13,7 +13,8 @@ never written here.
 Fixed 2026-09-17: the tier subquery had no ABC_Classification.method
 filter, so once migration 0017's t3m rows landed in public every product
 joined to two tier rows (one per method), duplicating list rows. Filtered
-to method = 'single', the deployed basis.
+to one method: since migration 0044 each principal's Tier A basis
+(analytics.params.abc_method_sql).
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from analytics.params import abc_method_sql
 from backend import audit
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.permissions import can_see_lp, require_permission
@@ -78,17 +80,18 @@ _SELECT_ONE = f"""
         SELECT DISTINCT ON (product_key)
                product_key, tier, classification_period
         FROM abc_classification
-        WHERE method = 'single'
+        WHERE {abc_method_sql()}
           AND (CAST(:abc_period AS TEXT) IS NULL
                OR classification_period <= CAST(:abc_period AS TEXT))
         ORDER BY product_key, classification_period DESC
     ) abc ON abc.product_key = pd.product_key
 """
-# method='single' is load-bearing in BOTH places above (migration 0017):
-# a 't3m' run is live alongside 'single', so without it this subquery
-# returns two tier rows per product_key and the LEFT JOIN fans out —
+# The method pin is load-bearing in BOTH places above (migration 0017):
+# several bases are live side by side, so without it this subquery
+# returns one tier row per basis per product_key and the LEFT JOIN fans out —
 # silently DUPLICATING every row in the SKU list. Pinned in the inner
-# MAX() too, so the period resolved is one 'single' actually has.
+# MAX() too, so the period resolved is one the basis actually has
+# (analytics.params.abc_method_sql, migration 0044).
 #
 # LAST-KNOWN tier, not latest-period-only (2026-09-21). This used to
 # require classification_period = the single resolved anchor, so a SKU that

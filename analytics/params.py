@@ -108,6 +108,37 @@ FSN_WINDOW_MONTHS = 12
 FSN_MIN_FAST_SALES_MONTHS = 3
 
 # --------------------------------------------------------------------------- #
+# Tier A basis (analytics/classification/orchestrate_abc.py)
+# --------------------------------------------------------------------------- #
+# TEAM, PENDING TA CONFIRMATION (decided 2026-10-05 for this refresh): which
+# ABC run is "Tier A" for Unilever, read by the forecast runner, segmentation,
+# the LP's pool and every backend tier read. 't12m_new' = Class A on the last
+# 12 months' revenue, plus products first sold within those 12 months that are
+# Class A on the last 3 (kelvin/tier-a-basis f753f4e, README section 7: 189
+# products as of 2026-02). 'single' = Class A on the month alone, the basis
+# until 2026-10-05; its runs are still written, so switching back is this one
+# value plus a refresh. Del Monte stays on 'single': its ABC is category grain
+# (DEC-03) and the 12-month rule was measured on Unilever SKUs only.
+TIER_A_BASIS = "t12m_new"
+TIER_A_BASES = ("single", "t12m_new")
+TIER_A_BASIS_WINDOW_MONTHS = 12
+TIER_A_NEW_PRODUCT_WINDOW_MONTHS = 3
+
+
+def abc_method(principal: str) -> str:
+    """The ABC_Classification.method holding `principal`'s Tier A."""
+    return TIER_A_BASIS if principal == "unilever" else "single"
+
+
+def abc_method_sql(alias: str = "") -> str:
+    """SQL predicate pinning ABC_Classification.method to each row's own
+    principal's basis, for queries that read both principals. `alias` is the
+    table alias ('' for none); the basis is a checked constant, never input."""
+    col = f"{alias}." if alias else ""
+    return f"{col}method = CASE {col}principal WHEN 'unilever' THEN '{TIER_A_BASIS}' ELSE 'single' END"
+
+
+# --------------------------------------------------------------------------- #
 # Global model (analytics/forecasting/global_model.py)
 # --------------------------------------------------------------------------- #
 # TEAM: the served XGBoost trains single-threaded so a rerun is
@@ -238,3 +269,4 @@ SAFETY_STOCK_ASSUMPTION = (
 )
 
 assert abs(sum(LP_WEIGHTS.values()) - 1.0) < 1e-9, "LP_WEIGHTS must sum to 1"
+assert TIER_A_BASIS in TIER_A_BASES, "TIER_A_BASIS must be one of TIER_A_BASES"

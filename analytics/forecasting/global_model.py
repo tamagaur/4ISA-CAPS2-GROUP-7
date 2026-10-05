@@ -34,6 +34,7 @@ import xgboost as xgb
 from analytics.params import XGB_NTHREAD
 
 PLACEHOLDER_ATTR = "placeholder_months"  # series.attrs key marking is_demo months (see with_placeholder)
+MISSING_ATTR = "missing_quantity_months"  # series.attrs key marking blank-quantity months (see with_missing)
 MIN_HISTORY = 3                          # months of history before a month can be a training row
 MIN_TRAINING_ROWS = 100                  # below this no model is returned (the diagnostics' own floor)
 SCALE_WINDOW = 6
@@ -58,6 +59,24 @@ def with_placeholder(series: pd.Series, months) -> pd.Series:
     out = series.copy()
     out.attrs[PLACEHOLDER_ATTR] = frozenset(pd.Timestamp(m) for m in months)
     return out
+
+
+def with_missing(series: pd.Series, months) -> pd.Series:
+    """A copy of `series` with `months` set to NaN and marked missing. A month whose row has a
+    blank (NULL) quantity is unknown, not zero (DEC-31: "unknown is not zero"; 69 of the 71
+    blank real product-months found 2026-10-03 carry a peso amount, so a sale happened). Every
+    model here reads observed months only, and a missing month is never scored. The mark
+    lives in series.attrs[MISSING_ATTR], next to any placeholder mark."""
+    out = series.copy()
+    marked = frozenset(pd.Timestamp(m) for m in months)
+    out[out.index.isin(list(marked))] = np.nan
+    out.attrs[MISSING_ATTR] = marked | frozenset(series.attrs.get(MISSING_ATTR, ()))
+    return out
+
+
+def missing_months(series: pd.Series) -> list[pd.Timestamp]:
+    """The months of `series` that are missing (blank quantity), oldest first."""
+    return sorted(set(series.attrs.get(MISSING_ATTR, ())) | set(series.index[series.isna()]))
 
 
 def assert_real_history(series: pd.Series, allow_placeholder: bool = False) -> None:
@@ -116,7 +135,7 @@ def training_rows(pool: dict, before: pd.Timestamp, allow_placeholder: bool = Fa
     X, y = [], []
     for series in pool.values():
         assert_real_history(series, allow_placeholder)
-        s = from_first_sale(series)
+        s = from_first_sale(series.dropna())          # a missing (blank-quantity) month is neither a feature nor a target
         values = s.to_numpy(dtype=float)
         for t in range(MIN_HISTORY, len(s)):
             month = s.index[t]
@@ -160,7 +179,7 @@ class GlobalForecaster:
         booster, n_rows = self.booster_for(target_month)
         if booster is None:
             return None, n_rows, f"xgb_unavailable: {n_rows} training rows < {MIN_TRAINING_ROWS}"
-        history = from_first_sale(series[series.index < target_month]).to_numpy(dtype=float)
+        history = from_first_sale(series[series.index < target_month].dropna()).to_numpy(dtype=float)
         feats, scale = build_features(history, target_month)
         if feats is None:
             return None, n_rows, "xgb_no_forecast: last-6-month mean is not positive"

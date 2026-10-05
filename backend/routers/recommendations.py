@@ -164,6 +164,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from analytics.params import abc_method_sql
 from sqlalchemy.orm import Session
 
 from backend import audit
@@ -260,7 +261,7 @@ _SELECT_ONE = f"""
     LEFT JOIN (
         SELECT DISTINCT ON (product_key) product_key, revenue_share, tier
         FROM abc_classification
-        WHERE method = 'single' AND classification_period = :abc_period
+        WHERE {abc_method_sql()} AND classification_period = :abc_period
         ORDER BY product_key, classification_period DESC
     ) abc ON abc.product_key = lr.product_key
     LEFT JOIN (

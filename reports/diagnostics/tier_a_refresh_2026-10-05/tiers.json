@@ -1,0 +1,219 @@
+{
+ "lists_2026_02": [
+  {
+   "method": "single",
+   "tier_a": 132,
+   "added_as_new": 0,
+   "classified": 710
+  },
+  {
+   "method": "t12m_new",
+   "tier_a": 189,
+   "added_as_new": 14,
+   "classified": 1091
+  }
+ ],
+ "overlap": {
+  "in_both": 123,
+  "old_only": 9,
+  "new_only": 66
+ },
+ "revenue_covered": [
+  {
+   "window": "Feb 2026",
+   "method": "single",
+   "products": 132,
+   "list_pesos": 22443150.52,
+   "total_pesos": 28056898.43,
+   "covered_pct": 80.0
+  },
+  {
+   "window": "Feb 2026",
+   "method": "t12m_new",
+   "products": 175,
+   "list_pesos": 23055335.02,
+   "total_pesos": 28056898.43,
+   "covered_pct": 82.2
+  },
+  {
+   "window": "Mar 2025 - Feb 2026",
+   "method": "single",
+   "products": 132,
+   "list_pesos": 265856320.6,
+   "total_pesos": 392655664.45,
+   "covered_pct": 67.7
+  },
+  {
+   "window": "Mar 2025 - Feb 2026",
+   "method": "t12m_new",
+   "products": 189,
+   "list_pesos": 318017087.64,
+   "total_pesos": 392655664.45,
+   "covered_pct": 81.0
+  }
+ ],
+ "t12m_new_runs": [
+  {
+   "period": "2023-12",
+   "tier_a": 158,
+   "added_as_new": 9,
+   "classified": 782
+  },
+  {
+   "period": "2024-01",
+   "tier_a": 162,
+   "added_as_new": 13,
+   "classified": 785
+  },
+  {
+   "period": "2024-02",
+   "tier_a": 160,
+   "added_as_new": 12,
+   "classified": 791
+  },
+  {
+   "period": "2024-03",
+   "tier_a": 159,
+   "added_as_new": 13,
+   "classified": 790
+  },
+  {
+   "period": "2024-04",
+   "tier_a": 163,
+   "added_as_new": 14,
+   "classified": 812
+  },
+  {
+   "period": "2024-05",
+   "tier_a": 164,
+   "added_as_new": 14,
+   "classified": 820
+  },
+  {
+   "period": "2024-06",
+   "tier_a": 163,
+   "added_as_new": 14,
+   "classified": 849
+  },
+  {
+   "period": "2024-07",
+   "tier_a": 163,
+   "added_as_new": 15,
+   "classified": 896
+  },
+  {
+   "period": "2024-08",
+   "tier_a": 173,
+   "added_as_new": 23,
+   "classified": 903
+  },
+  {
+   "period": "2024-09",
+   "tier_a": 179,
+   "added_as_new": 26,
+   "classified": 918
+  },
+  {
+   "period": "2024-10",
+   "tier_a": 177,
+   "added_as_new": 22,
+   "classified": 949
+  },
+  {
+   "period": "2024-11",
+   "tier_a": 183,
+   "added_as_new": 24,
+   "classified": 966
+  },
+  {
+   "period": "2024-12",
+   "tier_a": 181,
+   "added_as_new": 20,
+   "classified": 959
+  },
+  {
+   "period": "2025-01",
+   "tier_a": 177,
+   "added_as_new": 16,
+   "classified": 960
+  },
+  {
+   "period": "2025-02",
+   "tier_a": 172,
+   "added_as_new": 14,
+   "classified": 955
+  },
+  {
+   "period": "2025-03",
+   "tier_a": 169,
+   "added_as_new": 14,
+   "classified": 949
+  },
+  {
+   "period": "2025-04",
+   "tier_a": 163,
+   "added_as_new": 10,
+   "classified": 944
+  },
+  {
+   "period": "2025-05",
+   "tier_a": 159,
+   "added_as_new": 10,
+   "classified": 952
+  },
+  {
+   "period": "2025-06",
+   "tier_a": 159,
+   "added_as_new": 10,
+   "classified": 938
+  },
+  {
+   "period": "2025-07",
+   "tier_a": 168,
+   "added_as_new": 15,
+   "classified": 926
+  },
+  {
+   "period": "2025-08",
+   "tier_a": 172,
+   "added_as_new": 15,
+   "classified": 938
+  },
+  {
+   "period": "2025-09",
+   "tier_a": 177,
+   "added_as_new": 15,
+   "classified": 995
+  },
+  {
+   "period": "2025-10",
+   "tier_a": 182,
+   "added_as_new": 16,
+   "classified": 1010
+  },
+  {
+   "period": "2025-11",
+   "tier_a": 187,
+   "added_as_new": 20,
+   "classified": 1032
+  },
+  {
+   "period": "2025-12",
+   "tier_a": 185,
+   "added_as_new": 18,
+   "classified": 1036
+  },
+  {
+   "period": "2026-01",
+   "tier_a": 190,
+   "added_as_new": 18,
+   "classified": 1068
+  },
+  {
+   "period": "2026-02",
+   "tier_a": 189,
+   "added_as_new": 14,
+   "classified": 1091
+  }
+ ]
+}

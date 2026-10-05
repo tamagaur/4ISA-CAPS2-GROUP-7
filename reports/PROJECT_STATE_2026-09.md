@@ -1267,3 +1267,19 @@ which need `SUPABASE_DB_URL`). The full suite was not run.
 
 Tests after the change: `tests/backend/test_dashboard_range.py`, `tests/backend/test_dashboard.py`, `tests/test_marts.py`,
 `tests/test_dec_references.py`: 132 passed, 3 skipped (live tests), plus the live ABC reproduction test run on its own.
+
+## 22. Tier A on the 12-month basis + full refresh — LIVE on `public` 2026-10-05 (DEC-38, PENDING TA CONFIRMATION)
+
+Full write-up: `reports/diagnostics/tier_a_refresh_2026-10-05/README.md`. Branch `kelvin/tier-a-12m` (also merges `kelvin/blank-qty-fix` e78748c). Backup `full_backup_20261005T061733Z`. Migration 0044.
+
+| item | before | after |
+|---|---|---|
+| Unilever Tier A as of 2026-02 | 132 (Feb 2026 alone, `single`) | **189** (12 months + new, `t12m_new`: 175 + 14); setting `analytics.params.TIER_A_BASIS` |
+| Revenue covered, Mar 2025 – Feb 2026 | 67.7% | 81.0% |
+| Forecasts, cycle 2026-03 | run 1: 119 ok / 13 insufficient | run 4: 175 ok / 9 insufficient / 5 dead; run 1 kept |
+| Segmentation cohort 2026-02 | 132 (`single`, kept) | 189 (`t12m_new`) |
+| March plan at 103% | `lp_run` 1: 73 products, 325,468 pcs, ₱6,964,217 at cost, 0 short | `lp_run` 2: 97 products, 356,254 pcs, ₱7,017,551 at cost, 0 short |
+| Review flags, cycle 2026-03 | 15 flagged of 132 | 51 flagged of 189 (17 in the plan) |
+| At-the-time accuracy, Jan 2024 – Feb 2026 | old list: median product WAPE 36.3%, company total 9.5% (pesos) | new list: 39.0%, 10.7% |
+
+Open: TA confirmation; forecast runs 2-3 (stored backtests, read by the accuracy card) are still on the single-month list and pre-date the blank-quantity fix; `stability_v1` reads "churn" for all 189 (cut-offs count out of 38 monthly runs, the new basis has 27). Next free migration: 0045 (0046 is taken by the planning-mart session).

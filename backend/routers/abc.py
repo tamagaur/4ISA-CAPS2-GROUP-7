@@ -60,8 +60,9 @@ categories in 2025, so view=last_known mixes the two grains for Del Monte.
 METHOD FILTER (migration 0017): abc_classification's natural key widened
 to (product_key, classification_period, method), and a 't3m' run is now
 live alongside 'single' (25,437 + 23,223 rows). Every read here MUST pin
-method='single' or each SKU comes back twice and revenue_share sums to
-~200%.
+the method or each SKU comes back once per basis and revenue_share sums to
+~200%. Since migration 0044 the pin is each principal's Tier A basis
+(analytics.params.abc_method_sql: Unilever TIER_A_BASIS, Del Monte 'single').
 
 The method fix here was also made independently upstream in e6a7a13
 (same five sites, same verified 0.9986-vs-1.9973 evidence); this version
@@ -138,6 +139,7 @@ from backend.principals import (
 from backend.stock_status import CRITICAL, NO_DATA, stock_status
 from backend.stock_units import STOCK_AT_LATEST_SQL
 from analytics.classification.abc import abc_rules, pareto_check
+from analytics.params import abc_method_sql
 from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
 from backend.response_cache import cached
 
@@ -348,13 +350,13 @@ def _plan_pool_joins(fc_src: str) -> str:
         LEFT JOIN (
             SELECT m.principal, MAX(m.classification_period) AS p
             FROM abc_classification m
-            WHERE m.method = 'single'
+            WHERE {abc_method_sql("m")}
             GROUP BY m.principal
         ) pool_run ON pool_run.principal = ac.principal
         LEFT JOIN abc_classification pool
                ON pool.product_key = ac.product_key
               AND pool.classification_period = pool_run.p
-              AND pool.method = 'single'
+              AND {abc_method_sql("pool")}
         LEFT JOIN (
             SELECT DISTINCT ON (f.product_key) f.product_key, f.status, f.mase
             FROM {fc_src} f
@@ -503,7 +505,7 @@ def _get_abc_period(
             WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
         {_plan_pool_joins(fc_src)}
-        WHERE ac.classification_period = :period AND ac.method = 'single'
+        WHERE ac.classification_period = :period AND {abc_method_sql("ac")}
     """
     query += principal_clause(principal, "ac.principal")[0]
     query += " ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST"
@@ -564,7 +566,7 @@ def _get_abc_last_known(
     unclassified_sql = (
         "SELECT COUNT(*) AS n FROM product_dimension pd WHERE NOT EXISTS ("
         f" SELECT 1 FROM {abc_source} a WHERE a.product_key = pd.product_key"
-        " AND a.method = 'single'"
+        f" AND {abc_method_sql('a')}"
         " AND (CAST(:period AS TEXT) IS NULL OR a.classification_period <= CAST(:period AS TEXT)))"
         + pd_scope_sql
     )
@@ -583,15 +585,16 @@ def _get_abc_last_known(
     lp_src, lp_params = lp_source(mode, "lp_recommendation")
     fc_src, fc_params = forecast_source(mode, "forecast_result")
     cycle = current_cycle(db, principal, mode)
-    # method='single' inside the DISTINCT ON is what keeps this one row per
-    # product_key (migration 0017) — see the module docstring.
+    # The method pin inside the DISTINCT ON is what keeps this one row per
+    # product_key (migration 0017) — see the module docstring. Each
+    # principal's own Tier A basis (analytics.params.abc_method_sql).
     query = f"""
         WITH latest AS (
             SELECT DISTINCT ON (product_key)
                    product_key, principal, tier, revenue_share,
                    cumulative_share, boundary_flag, classification_period
             FROM {abc_source}
-            WHERE method = 'single' AND classification_period <= :period{ac_scope_sql}
+            WHERE {abc_method_sql()} AND classification_period <= :period{ac_scope_sql}
             ORDER BY product_key, classification_period DESC
         )
         SELECT
