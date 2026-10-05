@@ -131,8 +131,8 @@ def test_every_mart_total_equals_its_source(cur):
 
 @live
 def test_one_month_range_ranking_reproduces_every_stored_abc_run(cur):
-    from backend.marts import PARETO_SQL
-    sql = PARETO_SQL.format(kind="s.data_kind = 'real'").replace("mart.", f"{SCHEMA}.")
+    from backend.marts import PARETO_SQL, REVENUE_NET
+    sql = PARETO_SQL.format(kind="s.data_kind = 'real'", revenue=REVENUE_NET).replace("mart.", f"{SCHEMA}.")
     for token in ("principal", "start", "end", "a", "b"):
         sql = sql.replace(f":{token}", f"%({token})s")
     cur.execute("SELECT DISTINCT principal, classification_period FROM abc_classification WHERE method = 'single'")

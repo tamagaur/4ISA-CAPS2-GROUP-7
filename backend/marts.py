@@ -380,13 +380,13 @@ def stock_status_query(period: str, product_keys: list[int]) -> tuple[str, dict]
 # while <= the B cutoff, else C. Del Monte ranks product categories (DEC-03).
 PARETO_SQL = """
     WITH rev AS (
-        SELECT s.product_key, SUM(s.pesos) AS revenue, SUM(s.pieces) AS pieces,
+        SELECT s.product_key, {revenue} AS revenue, SUM(s.pieces) AS pieces,
                COUNT(*) AS months_with_sales
         FROM mart.sales_mart s
         WHERE s.principal = :principal AND s.in_principal_total
           AND s.period BETWEEN :start AND :end AND {kind}
         GROUP BY s.product_key
-        HAVING bool_and(s.pesos IS NOT NULL) AND SUM(s.pesos) > 0
+        HAVING bool_and(s.pesos IS NOT NULL) AND {revenue} > 0
     ),
     ranked AS (
         SELECT rev.*,
@@ -405,9 +405,10 @@ PARETO_SQL = """
 """
 
 
-def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL) -> list[dict]:
+def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL,
+           zero_negative_months: bool = False) -> list[dict]:
     """Every product (Del Monte: category) ranked on its net sales over start..end."""
-    rows = batch.rows(db, *pareto_query(start, end, principal, mode))
+    rows = batch.rows(db, *pareto_query(start, end, principal, mode, zero_negative_months))
     return [
         {
             "rank": int(r["rank"]),
@@ -428,9 +429,105 @@ def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL) 
     ]
 
 
-def pareto_query(start: str, end: str, principal: str, mode: str = REAL) -> tuple[str, dict]:
-    return (PARETO_SQL.format(kind=_kind_filter(mode, "s")),
+# Two ways to add a range's months up. NET: returns in one month come off another month's
+# sales (the range cards, DEC-36). ZEROED: a month where returns exceeded sales counts as 0,
+# the ABC runner's own rule for a window of several months (analytics/classification/orchestrate_abc.py:208)
+# and the one reports/diagnostics/tier_a_basis_2026-10-03 used. A single month ranks the
+# same under both; over calendar 2024 or 2025 they differ by one product at the Class A line.
+REVENUE_NET = "SUM(s.pesos)"
+REVENUE_NEGATIVE_MONTHS_ZEROED = "SUM(GREATEST(s.pesos, 0))"
+
+
+def pareto_query(start: str, end: str, principal: str, mode: str = REAL,
+                 zero_negative_months: bool = False) -> tuple[str, dict]:
+    return (PARETO_SQL.format(kind=_kind_filter(mode, "s"),
+                              revenue=REVENUE_NEGATIVE_MONTHS_ZEROED if zero_negative_months else REVENUE_NET),
             {"principal": principal, "start": start, "end": end, "a": TIER_A_CUTOFF, "b": TIER_B_CUTOFF})
+
+
+# Why chosen products have no rank in either of two ranges: months on file and blank
+# amounts, for the side of a class change where pareto() has no row for the product.
+RANGE_REVENUE_SQL = """
+    SELECT s.product_key,
+           COUNT(*) FILTER (WHERE s.period BETWEEN :start AND :end) AS months,
+           COALESCE(bool_or(s.pesos IS NULL) FILTER (WHERE s.period BETWEEN :start AND :end), false) AS has_blank,
+           COUNT(*) FILTER (WHERE s.period BETWEEN :cstart AND :cend) AS compare_months,
+           COALESCE(bool_or(s.pesos IS NULL) FILTER (WHERE s.period BETWEEN :cstart AND :cend), false) AS compare_has_blank
+    FROM mart.sales_mart_real s
+    WHERE s.principal = :principal AND s.in_principal_total AND s.product_key = ANY(:keys)
+      AND (s.period BETWEEN :start AND :end OR s.period BETWEEN :cstart AND :cend)
+    GROUP BY s.product_key
+"""
+
+
+def _unranked_side(row: dict | None, prefix: str) -> tuple[float | None, str]:
+    """(revenue, why it has no class) for a product pareto() did not rank in a range."""
+    months = int(row[f"{prefix}months"] or 0) if row else 0
+    if months == 0:
+        return 0.0, "no sales in the range"
+    if row[f"{prefix}has_blank"]:
+        return None, "a month with a blank sales amount, so it is not ranked"
+    return 0.0, "returns matched or exceeded sales in every month it has, so it is not ranked"
+
+
+def class_changes(db: Session, start: str, end: str, compare_start: str, compare_end: str, principal: str) -> dict:
+    """Products (Del Monte: categories) that entered or left Class A between the compare range
+    and start..end, each range ranked by pareto() on real rows with the ABC runner's
+    several-month rule (REVENUE_NEGATIVE_MONTHS_ZEROED), so revenue is the range's sales with
+    each returns-heavy month counted as 0. A product not ranked in a range has class None and
+    the reason in its *_note."""
+    batch.prefetch(db, [pareto_query(start, end, principal, REAL, True),
+                        pareto_query(compare_start, compare_end, principal, REAL, True)])
+    now = {r["product_key"]: r for r in pareto(db, start, end, principal, REAL, True)}
+    before = {r["product_key"]: r for r in pareto(db, compare_start, compare_end, principal, REAL, True)}
+    a_now = {k for k, r in now.items() if r["class"] == "A"}
+    a_before = {k for k, r in before.items() if r["class"] == "A"}
+    entered, left = a_now - a_before, a_before - a_now
+    unranked = sorted({k for k in entered if k not in before} | {k for k in left if k not in now})
+    sums = {}
+    if unranked:
+        sums = {int(r["product_key"]): r for r in db.execute(text(RANGE_REVENUE_SQL), {
+            "principal": principal, "keys": unranked, "start": start, "end": end,
+            "cstart": compare_start, "cend": compare_end}).mappings().all()}
+
+    def item(key: int, change: str) -> dict:
+        n, b = now.get(key), before.get(key)
+        ref = n or b
+        revenue, note = (n["revenue"], None) if n else _unranked_side(sums.get(key), "")
+        compare_revenue, compare_note = (b["revenue"], None) if b else _unranked_side(sums.get(key), "compare_")
+        both = revenue is not None and compare_revenue is not None
+        return {
+            "change": change, "product_key": key, "sku_id": ref["sku_id"], "product_name": ref["product_name"],
+            "category_path": ref["category_path"],
+            "class": n["class"] if n else None, "compare_class": b["class"] if b else None,
+            "rank": n["rank"] if n else None, "compare_rank": b["rank"] if b else None,
+            "revenue": revenue, "compare_revenue": compare_revenue,
+            "change_pesos": round(revenue - compare_revenue, 2) if both else None,
+            "change_pct": (round((revenue - compare_revenue) / compare_revenue * 100, 1)
+                           if both and compare_revenue > 0 else None),
+            "class_note": note, "compare_class_note": compare_note,
+        }
+
+    entered_items = sorted((item(k, "entered") for k in entered), key=lambda i: (-(i["revenue"] or 0), i["product_key"]))
+    left_items = sorted((item(k, "left") for k in left), key=lambda i: (-(i["compare_revenue"] or 0), i["product_key"]))
+
+    def total(items: list[dict], field: str) -> float:
+        return round(sum(i[field] or 0.0 for i in items), 2)
+
+    return {
+        "principal": principal,
+        "grain": "category" if principal == "delmonte" else "sku",
+        "revenue_rule": ("Each range's sales added up month by month; a month where returns exceeded sales "
+                         "counts as 0 (the ABC run's rule for several months)."),
+        "class_a_count": len(a_now), "compare_class_a_count": len(a_before),
+        "stayed_count": len(a_now & a_before),
+        "entered_count": len(entered_items), "left_count": len(left_items),
+        "entered_revenue": total(entered_items, "revenue"),
+        "entered_compare_revenue": total(entered_items, "compare_revenue"),
+        "left_revenue": total(left_items, "revenue"),
+        "left_compare_revenue": total(left_items, "compare_revenue"),
+        "entered": entered_items, "left": left_items,
+    }
 
 
 def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]:
@@ -628,6 +725,33 @@ def _num(row: dict, key: str) -> float | None:
 # The over-forecast half of DEC-33's review rule, applied to the selected range: a product
 # over-forecast `review_months` (REVIEW_OVER_RUN_MONTHS) months or more in a row as of its last
 # scored month in the range. The plan's own flag for the cycle is review_flag (GET /recommendations).
+# The two headline error figures, always returned together and always under these names
+# (Yuan, 2026-10-05): the same forecasts read 9.9% or 29.6% on the default backtest depending
+# on which is meant, so neither is ever called just "the total" or "the accuracy".
+ACCURACY_LABELS = {
+    "company_total": (
+        "Company total: every product's forecast and sales are added up first, month by month, then "
+        "compared in pesos. Misses on different products cancel out, so this is the smaller figure."),
+    "typical_product_weighted": (
+        "Typical product, weighted by sales: each product's own miss in pieces, with bigger sellers "
+        "counting more. Nothing cancels out, so this is what a planner sees product by product."),
+}
+
+
+def accuracy_headlines(company_total: float | None, typical_product_weighted: float | None) -> dict:
+    """Both headline figures with their plain labels; value is a share of sales (0.099 = 9.9%)."""
+    return {
+        "company_total": {
+            "value": company_total, "label": ACCURACY_LABELS["company_total"],
+            "measure": "sum over months of |forecast pesos - actual pesos| / actual pesos",
+            "unit": "pesos at selling price, VAT-inclusive"},
+        "typical_product_weighted": {
+            "value": typical_product_weighted, "label": ACCURACY_LABELS["typical_product_weighted"],
+            "measure": "sum over product-months of |forecast - actual| / actual",
+            "unit": "pieces"},
+    }
+
+
 OVER_RUN_RULE = ("over-forecast {n}+ months in a row as of the product's last scored month in the range "
                  "(the over-forecast part of DEC-33, on this range's forecasts)")
 
@@ -640,6 +764,7 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
     if not rows:
         return {"start_period": start, "end_period": end, "label": None, "months": [], "forecast_source": None,
                 "run_labels": [], "products": 0, "product_months": 0, "by_month": [],
+                **accuracy_headlines(None, None),
                 "over_forecast_runs": {"run_months": review_months, "count": 0, "items": [], "rule": OVER_RUN_RULE.format(n=review_months)},
                 "blocked_reason": (f"No scored forecasts for {range_label(start, end)}: no forecast "
                                    "with a real actual in these months.")}
@@ -703,6 +828,8 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
             "wape_pieces": _wape(m["abs_miss_pieces"], m["actual_pieces"]),
         })
     net = totals["net_miss_pieces"]
+    pooled_wape = _wape(totals["abs_miss_pieces"], totals["actual_pieces"])
+    month_total_wape = _wape(sum(abs(by_month[mo]["net_miss_pesos"]) for mo in months), totals["actual_pesos"])
     return {
         "start_period": start, "end_period": end, "label": range_label(months[0], months[-1]), "months": months,
         "forecast_source": "/".join(sorted({r["forecast_source"] for r in rows})),
@@ -712,9 +839,12 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
         "direction": "over" if net > 0 else "under" if net < 0 else "exact",
         # Pooled over every product-month; the median of each product's own; and the miss
         # of each month's total (over- and under-forecasts cancel inside a month).
-        "wape_pieces": _wape(totals["abs_miss_pieces"], totals["actual_pieces"]),
+        # company_total / typical_product_weighted are the labelled pair to show; wape_pieces
+        # and total_wape_pesos are the same two numbers under their older names.
+        **accuracy_headlines(month_total_wape, pooled_wape),
+        "wape_pieces": pooled_wape,
         "median_product_wape": round(median, 6) if median is not None else None,
-        "total_wape_pesos": _wape(sum(abs(by_month[mo]["net_miss_pesos"]) for mo in months), totals["actual_pesos"]),
+        "total_wape_pesos": month_total_wape,
         "surplus_share_of_miss_pesos": (round(totals["surplus_pesos"] / totals["abs_miss_pesos"], 6)
                                         if totals["abs_miss_pesos"] > 0 else None),
         "pesos_basis": "selling price, VAT-inclusive (each product's average over its scored months in the run)",

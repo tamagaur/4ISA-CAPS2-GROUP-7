@@ -225,3 +225,92 @@ def test_forecast_runs_mark_the_default_backtest():
                             ("to_regclass('mart.refresh_log')", [{"present": False}])]), "/dashboard/forecast-runs")
     assert [(r["forecast_source"], r["default"]) for r in body["runs"]] == [("stored_run", False), ("backtest_recreated", True)]
     assert body["marts"]["present"] is False
+
+
+# ---- class changes ------------------------------------------------------------
+
+def _two_ranges(now_rows, before_rows):
+    """PARETO_SQL answers for the range ending 2025-12 and for any earlier one."""
+    def answer(params):
+        if params["principal"] != "unilever":
+            return []
+        return _ranked("unilever", now_rows if params["end"] == "2025-12" else before_rows)(params)
+    return answer
+
+
+def test_class_changes_list_who_entered_and_left_class_a():
+    now = [(1, 600.0, 0.6, 0.6, "A"), (2, 200.0, 0.2, 0.8, "A"), (3, 150.0, 0.15, 0.95, "B"), (4, 50.0, 0.05, 1.0, "C")]
+    before = [(1, 500.0, 0.5, 0.5, "A"), (3, 300.0, 0.3, 0.8, "A"), (5, 100.0, 0.1, 0.9, "B"), (2, 60.0, 0.06, 0.96, "C"),
+              (6, 40.0, 0.04, 1.0, "C")]
+    session = FakeSession([("WITH rev AS", _two_ranges(now, before))])
+    body = get(session, "/dashboard/class-changes?principal=unilever&period=2025-12&start_period=2025-01")
+    assert (body["start_period"], body["end_period"]) == ("2025-01", "2025-12")
+    assert (body["compare_start_period"], body["compare_end_period"]) == ("2024-01", "2024-12"), "default: a year earlier"
+    assert body["compare_label"] == "Jan 2024 – Dec 2024"
+    uni = body["principals"][0]
+    assert (uni["class_a_count"], uni["compare_class_a_count"], uni["stayed_count"]) == (2, 2, 1)
+    assert (uni["entered_count"], uni["left_count"]) == (1, 1)
+    entered, left = uni["entered"][0], uni["left"][0]
+    assert (entered["sku_id"], entered["class"], entered["compare_class"]) == ("S2", "A", "C")
+    assert (entered["revenue"], entered["compare_revenue"], entered["change_pesos"]) == (200.0, 60.0, 140.0)
+    assert entered["change_pct"] == pytest.approx(233.3)
+    assert (left["sku_id"], left["class"], left["compare_class"], left["change_pesos"]) == ("S3", "B", "A", -150.0)
+    assert (uni["entered_revenue"], uni["entered_compare_revenue"]) == (200.0, 60.0)
+    assert (uni["left_revenue"], uni["left_compare_revenue"]) == (150.0, 300.0)
+    # Both ranges are ranked with the ABC run's several-month rule: a negative month counts as 0.
+    ranked = [s for s, _ in session.calls if "WITH rev AS" in s]
+    assert len(ranked) == 2 and all("SUM(GREATEST(s.pesos, 0))" in s for s in ranked)
+
+
+def test_class_changes_say_why_a_side_has_no_class():
+    now = [(1, 900.0, 0.9, 0.9, "A"), (7, 100.0, 0.1, 1.0, "B")]       # 1 is new; 8 and 9 are gone
+    before = [(8, 500.0, 0.5, 0.5, "A"), (9, 300.0, 0.3, 0.8, "A"), (7, 200.0, 0.2, 1.0, "C")]
+    sums = [{"product_key": 9, "months": 2, "has_blank": False, "compare_months": 12, "compare_has_blank": False}]
+    session = FakeSession([("WITH rev AS", _two_ranges(now, before)), ("bool_or(s.pesos IS NULL)", sums)])
+    body = get(session, "/dashboard/class-changes?principal=unilever&period=2025-12&start_period=2025-01"
+                        "&compare_period=2024-06")
+    assert (body["compare_start_period"], body["compare_end_period"]) == ("2023-07", "2024-06"), "same length"
+    uni = body["principals"][0]
+    new = uni["entered"][0]
+    assert (new["compare_class"], new["compare_revenue"], new["compare_class_note"]) == (None, 0.0, "no sales in the range")
+    assert new["change_pesos"] == 900.0 and new["change_pct"] is None
+    left = {i["product_key"]: i for i in uni["left"]}
+    assert left[8]["class_note"] == "no sales in the range"
+    assert left[9]["class"] is None and "returns matched or exceeded sales" in left[9]["class_note"]
+    _, params = next((s, p) for s, p in session.calls if "bool_or(s.pesos IS NULL)" in s)
+    assert params["keys"] == [1, 8, 9]
+
+
+def test_class_changes_refuse_a_compare_start_without_its_end():
+    app.dependency_overrides[get_db] = lambda: FakeSession([])
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
+    with TestClient(app) as c:
+        resp = c.get("/dashboard/class-changes?principal=unilever&period=2025-12&compare_start_period=2024-01",
+                     headers={"Authorization": f"Bearer {user_token()}"})
+    assert resp.status_code == 422
+
+
+# ---- accuracy: two labelled headline figures ------------------------------------
+
+def test_accuracy_returns_both_headline_figures_with_plain_labels():
+    # One month: product 1 over by 20, product 2 under by 50. Summed first they largely cancel.
+    rows = [_acc(1, "2025-12", 120, 100), _acc(2, "2025-12", 50, 100)]
+    body = get(FakeSession([("FROM mart.accuracy_mart a", rows)]), "/dashboard/accuracy?principal=unilever")
+    company, typical = body["company_total"], body["typical_product_weighted"]
+    assert company["value"] == pytest.approx(30 / 200)      # |170 - 200| x price / (200 x price)
+    assert typical["value"] == pytest.approx(70 / 200)      # (20 + 50) / 200
+    assert company["label"].startswith("Company total:") and "added up first" in company["label"]
+    assert typical["label"].startswith("Typical product, weighted by sales:")
+    assert "pesos" in company["unit"] and typical["unit"] == "pieces"
+    assert "total" not in body, "never a bare total"
+    # The old names carry the same two numbers; 'total' is still accepted as the level and read as 'summary'.
+    assert (body["total_wape_pesos"], body["wape_pieces"]) == (company["value"], typical["value"])
+    assert body["level"] == "summary"
+    assert get(FakeSession([("FROM mart.accuracy_mart a", rows)]),
+               "/dashboard/accuracy?principal=unilever&level=total")["level"] == "summary"
+
+
+def test_accuracy_headline_figures_are_null_not_missing_when_nothing_is_scored():
+    body = get(FakeSession([("FROM mart.accuracy_mart a", [])]), "/dashboard/accuracy?principal=unilever")
+    assert body["company_total"]["value"] is None and body["typical_product_weighted"]["value"] is None
+    assert body["company_total"]["label"] and body["typical_product_weighted"]["label"]

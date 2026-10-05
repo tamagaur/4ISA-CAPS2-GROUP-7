@@ -150,3 +150,90 @@ def test_blocked_when_nothing_compares():
     assert body["portfolio"]["lp_vs_rule_pct"] is None
     assert body["portfolio"]["target_vs_rule_pct"] is None
     assert body["blocked_reason"]
+
+
+# ---- pesos at last purchase price (pending SSM confirmation) -----------------
+
+PRICED_ROWS = [
+    {**ROWS[0], "price_per_piece": 10.0},
+    {**ROWS[1], "price_per_piece": 2.0},
+    # No last purchase price: left out of the peso sums and counted, never defaulted.
+    {"planning_cycle_date": CYCLE, "ss_i": 5.0, "rop_i": 30.0, "forecast_value": 90.0, "sku_id": "D4",
+     "product_name": "NO PRICE", "principal": "unilever", "price_per_piece": None},
+]
+
+
+def test_pesos_headline_is_average_stock_with_peak_alongside():
+    with make_client(FakeSession(PRICED_ROWS)) as c:
+        body = c.get("/policy-comparison?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    pesos = body["pesos"]
+    assert pesos["status"] == "pending_ssm_confirmation" and "Pending SSM confirmation" in pesos["status_label"]
+    assert "last purchase price" in pesos["price_basis"]
+    assert pesos["headline"] == "average"
+    assert (pesos["sku_count"], pesos["skus_without_price"]) == (2, 1)
+    w1, w2 = 100.0 / AVG_WEEKS_PER_MONTH, 500.0 / AVG_WEEKS_PER_MONTH
+    rule = 10.0 * 3 * w1 + 2.0 * 3 * w2
+    # Average on hand = safety stock + half of one weekly order (review_days = 5 = one week).
+    average = 10.0 * (40.0 + w1 / 2) + 2.0 * (10.0 + w2 / 2)
+    peak = 10.0 * 120.0 + 2.0 * 60.0
+    assert pesos["average"]["rule_stock_pesos"] == pytest.approx(rule, abs=0.01)
+    assert pesos["average"]["lp_stock_pesos"] == pytest.approx(average, abs=0.01)
+    assert pesos["average"]["difference_pesos"] == pytest.approx(average - rule, abs=0.01)
+    assert pesos["average"]["pct_vs_rule"] == pytest.approx(round((average - rule) / rule * 100, 1))
+    assert pesos["average"]["direction"] == "less"
+    assert pesos["peak"]["lp_stock_pesos"] == pytest.approx(peak, abs=0.01)
+    assert pesos["peak"]["difference_pesos"] == pytest.approx(peak - rule, abs=0.01)
+    rule_avg = rule - (10.0 * w1 + 2.0 * w2) / 2
+    assert pesos["rule_average_if_three_weeks_is_a_peak"]["rule_stock_pesos"] == pytest.approx(rule_avg, abs=0.01)
+    items = {i["sku_id"]: i for i in body["items"]}
+    assert items["A1"]["lp_peak_stock_pesos"] == pytest.approx(1200.0)
+    assert items["A1"]["lp_average_stock_pesos"] == pytest.approx(10.0 * (40.0 + w1 / 2), abs=0.01)
+    assert items["D4"]["price_per_piece"] is None and items["D4"]["rule_stock_pesos"] is None
+    # No capital-freed claim rides on the peso block.
+    assert body["working_capital"] is None and body["capital_freed"] is None
+
+
+def test_pesos_reads_the_last_purchase_price_from_the_stock_file():
+    session = FakeSession(PRICED_ROWS)
+    with make_client(session) as c:
+        c.get("/policy-comparison?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    assert "inventory_fact_real" in session.last_sql and "unit_cost_per_case > 0" in session.last_sql
+    assert "AS price_per_piece" in session.last_sql
+
+
+def test_pesos_blocked_when_no_product_has_a_price():
+    with make_client(FakeSession(ROWS)) as c:   # ROWS carry no price column at all
+        body = c.get("/policy-comparison", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    pesos = body["pesos"]
+    assert pesos["average"] is None and pesos["peak"] is None and pesos["blocked_reason"]
+    assert pesos["status"] == "pending_ssm_confirmation"
+    assert pesos["skus_without_price"] == 2
+
+
+def test_pesos_reproduce_the_lp_logic_check_totals():
+    """reports/diagnostics/lp_logic_check_2026-10-03 section 4, from its full per-product table
+    (git-ignored local/ copy: per-product prices are never committed). Skipped without it."""
+    import csv
+    from pathlib import Path
+
+    from backend.routers.policy_comparison import pesos_comparison
+
+    path = (Path(__file__).resolve().parents[2] / "reports" / "diagnostics" / "lp_logic_check_2026-10-03"
+            / "local" / "issue4_policy_card_per_product.csv")
+    if not path.exists():
+        pytest.skip("local/issue4_policy_card_per_product.csv is not on this machine")
+    with path.open(encoding="utf-8") as f:
+        table = list(csv.DictReader(f))
+    assert len(table) == 73
+    rows = [{"ss_units": float(r["safety_stock_pcs"]), "target_units": float(r["order_up_to_pcs"]),
+             "weekly_units": float(r["forecast_mar2026_pcs"]) / AVG_WEEKS_PER_MONTH,
+             "rule_units": 3 * float(r["forecast_mar2026_pcs"]) / AVG_WEEKS_PER_MONTH,
+             "price": float(r["cost_per_piece_php"])} for r in table]
+    pesos = pesos_comparison(rows)
+    # The table is rounded (price to 4 places), so pesos match to a few pesos, percents exactly.
+    assert pesos["average"]["pct_vs_rule"] == -28.1
+    assert pesos["peak"]["pct_vs_rule"] == 8.6
+    assert pesos["peak"]["difference_pesos"] == pytest.approx(706_464, abs=25)
+    assert pesos["average"]["lp_stock_pesos"] == pytest.approx(5_906_832, abs=25)
+    assert pesos["average"]["rule_stock_pesos"] == pytest.approx(8_211_106, abs=25)
+    assert pesos["rule_average_if_three_weeks_is_a_peak"]["average_pct_vs_rule"] == -13.7
