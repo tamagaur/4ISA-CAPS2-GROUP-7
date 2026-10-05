@@ -4,7 +4,7 @@ backend.planning_mart — the Reorder page's reads from mart.planning_mart (migr
 One row per product x LP planning cycle, already joined to everything GET /recommendations
 shows for it (the product, its tier, the cycle's forecast, its opening stock count, stock on
 order, the review flag, the LP run, the decision). The endpoint reads it in ONE statement
-(batch.prefetch of the three queries below) where the per-request joins took 12.
+(batch.prefetch of the four queries below) where the per-request joins took 12.
 
 NEVER SERVED OUT OF STEP. usable() answers False, and the endpoint falls back to the
 per-request joins (backend/routers/recommendations.py's _SELECT_ONE), when:
@@ -24,6 +24,8 @@ Scope strings reach this module already allowlisted by backend.principals.princi
 and are bound as parameters, never interpolated.
 """
 from __future__ import annotations
+
+import datetime
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -65,19 +67,26 @@ def usable(db, mode: str = REAL) -> bool:
     return mode == REAL and present(db)
 
 
-# The row query's columns, under the names recommendations._to_item reads from _SELECT_ONE.
-_COLUMNS = """
-        pm.recommendation_key, pm.sku_id, pm.product_name, pm.principal, pm.pack_size,
-        pm.planning_cycle_date, pm.order_pieces AS q_i, pm.target_stock AS rop_i, pm.safety_stock AS ss_i,
-        pm.decision_status AS status,
-        pm.stock_pieces AS current_stock, pm.stock_cases AS current_stock_cases,
-        pm.stock_pesos AS stock_value_pesos, pm.in_stock_count,
-        pm.revenue_share, pm.tier, pm.avg_monthly_sales_pesos, pm.forecast_pieces AS forecast_units,
-        pm.on_order_pieces, pm.on_order_cases, pm.on_order_unparsed,
-        pm.needs_review, pm.review_reasons, pm.review_over_run_months, pm.review_collapse_ratio,
-        pm.opening_period, pm.opening_count_first_date, pm.opening_count_last_date, pm.opening_count_rows,
-        pm.stock_status AS mart_stock_status, pm.urgency AS mart_urgency
-"""
+# The row query's columns: (the name recommendations._to_item reads from _SELECT_ONE, the
+# mart column). Each row travels as ONE JSON array in this order, not an object: the column
+# names are not repeated on every row, which cuts the payload to about a third (the round
+# trip's time follows its bytes on a slow link, measured 2026-10-05).
+ROW_COLUMNS = (
+    ("recommendation_key", "pm.recommendation_key"), ("sku_id", "pm.sku_id"),
+    ("product_name", "pm.product_name"), ("principal", "pm.principal"), ("pack_size", "pm.pack_size"),
+    ("planning_cycle_date", "pm.planning_cycle_date"), ("q_i", "pm.order_pieces"),
+    ("rop_i", "pm.target_stock"), ("ss_i", "pm.safety_stock"), ("status", "pm.decision_status"),
+    ("current_stock", "pm.stock_pieces"), ("current_stock_cases", "pm.stock_cases"),
+    ("stock_value_pesos", "pm.stock_pesos"), ("in_stock_count", "pm.in_stock_count"),
+    ("revenue_share", "pm.revenue_share"), ("tier", "pm.tier"),
+    ("avg_monthly_sales_pesos", "pm.avg_monthly_sales_pesos"), ("forecast_units", "pm.forecast_pieces"),
+    ("on_order_pieces", "pm.on_order_pieces"), ("on_order_cases", "pm.on_order_cases"),
+    ("on_order_unparsed", "pm.on_order_unparsed"),
+    ("needs_review", "pm.needs_review"), ("review_reasons", "pm.review_reasons"),
+    ("review_over_run_months", "pm.review_over_run_months"), ("review_collapse_ratio", "pm.review_collapse_ratio"),
+)
+# Read only by scripts/rehearse_planning_mart.py, to check the mart's stored status columns.
+STORED_STATUS_COLUMNS = (("mart_stock_status", "pm.stock_status"), ("mart_urgency", "pm.urgency"))
 
 
 def _current_cycle(scope_sql: str) -> str:
@@ -112,10 +121,8 @@ def head_query(principal: str | None) -> tuple[str, dict]:
     """, params
 
 
-def rows_query(principal: str | None, status: str | None, cycle: str,
-               from_date: str | None, to_date: str | None) -> tuple[str, dict]:
-    """The page's rows: the current cycle's ('current') or every cycle's ('all'), newest
-    cycle first, highest target stock first within one."""
+def _where(principal: str | None, status: str | None, cycle: str,
+           from_date: str | None, to_date: str | None) -> tuple[str, dict]:
     scope_sql, params = principal_clause(principal, "pm.principal")
     where = scope_sql
     params = dict(params)
@@ -128,11 +135,49 @@ def rows_query(principal: str | None, status: str | None, cycle: str,
         params["to_date"] = to_date
     if cycle == "current":
         where += f" AND pm.planning_cycle_date = {_current_cycle(scope_sql)}"
+    return where, params
+
+
+def rows_query(principal: str | None, status: str | None, cycle: str,
+               from_date: str | None, to_date: str | None, columns=ROW_COLUMNS, packed: bool = True) -> tuple[str, dict]:
+    """The page's rows: the current cycle's ('current') or every cycle's ('all'), newest
+    cycle first, highest target stock first within one. packed: each row as one JSON array
+    `r` in `columns` order (unpack() names them); otherwise ordinary named columns."""
+    where, params = _where(principal, status, cycle, from_date, to_date)
+    select = (f"json_build_array({', '.join(expr for _, expr in columns)}) AS r" if packed
+              else ", ".join(f"{expr} AS {name}" for name, expr in columns))
     return f"""
-        SELECT {_COLUMNS}
+        SELECT {select}
         FROM {_STATE['schema']}.planning_mart pm
         WHERE 1=1{where}
         ORDER BY pm.planning_cycle_date DESC, pm.target_stock DESC, pm.recommendation_key
+    """, params
+
+
+def unpack(rows, columns=ROW_COLUMNS) -> list[dict]:
+    """rows_query's packed rows as dicts under the column names. A date inside the array
+    arrives as ISO text (backend/batch.py revives top-level values only)."""
+    names = [name for name, _ in columns]
+    out = []
+    for row in rows:
+        item = dict(zip(names, row["r"]))
+        item["planning_cycle_date"] = datetime.date.fromisoformat(item["planning_cycle_date"])
+        out.append(item)
+    return out
+
+
+def counts_query(principal: str | None, status: str | None, cycle: str,
+                 from_date: str | None, to_date: str | None) -> tuple[str, dict]:
+    """The opening stock count behind those rows: one row per cycle x principal (the count's
+    month, its dates and its row count; all NULL when the principal has no count)."""
+    where, params = _where(principal, status, cycle, from_date, to_date)
+    return f"""
+        SELECT DISTINCT pm.planning_cycle_date, pm.principal, pm.opening_period,
+               pm.opening_count_first_date AS first_date, pm.opening_count_last_date AS last_date,
+               pm.opening_count_rows AS row_count
+        FROM {_STATE['schema']}.planning_mart pm
+        WHERE 1=1{where}
+        ORDER BY pm.planning_cycle_date DESC, pm.principal
     """, params
 
 
@@ -153,16 +198,18 @@ def run_query(principal: str | None) -> tuple[str, dict]:
 
 def read(db, principal: str | None, status: str | None, cycle: str,
          from_date: str | None, to_date: str | None) -> dict | None:
-    """{head, rows, run} in one round trip, or None when the mart must not be served."""
+    """{head, rows, counts, run} in one round trip, or None when the mart must not be served."""
     head_q = head_query(principal)
     rows_q = rows_query(principal, status, cycle, from_date, to_date)
+    counts_q = counts_query(principal, status, cycle, from_date, to_date)
     run_q = run_query(principal)
-    batch.prefetch(db, [head_q, rows_q, run_q])
+    batch.prefetch(db, [head_q, rows_q, counts_q, run_q])
     head = batch.first(db, *head_q)
     if head is None or head["planning_stale"] is not False or not head["in_step"]:
         return None
     run = batch.first(db, *run_q)
-    return {"head": head, "rows": batch.rows(db, *rows_q), "run": dict(run) if run else None}
+    return {"head": head, "rows": unpack(batch.rows(db, *rows_q)), "counts": batch.rows(db, *counts_q),
+            "run": dict(run) if run else None}
 
 
 def decide(db, params: dict) -> bool:

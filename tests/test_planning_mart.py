@@ -158,8 +158,20 @@ def test_queries_bind_the_scope_and_filters_and_never_interpolate_them():
     assert sql.count("pm.principal = :principal") == 2  # the rows and the current-cycle subquery
     all_sql, all_params = planning_mart.rows_query(None, None, "all", None, None)
     assert all_params == {} and ":principal" not in all_sql and "MAX(pm.planning_cycle_date)" not in all_sql
-    for query in (planning_mart.head_query("delmonte"), planning_mart.run_query("delmonte")):
+    for query in (planning_mart.head_query("delmonte"), planning_mart.run_query("delmonte"),
+                  planning_mart.counts_query("delmonte", None, "current", None, None)):
         assert query[1] == {"principal": "delmonte"} and "delmonte" not in query[0]
+
+
+def test_packed_rows_unpack_under_the_names_the_endpoint_reads():
+    sql, _ = planning_mart.rows_query(None, None, "all", None, None)
+    assert "json_build_array(" in sql and " AS r" in sql
+    values = [1, "S1", "Product 1", "unilever", 12, "2026-03-01", 100, 300, 120, "pending", 240, 20, 2400, True,
+              0.02, "A", 3000, 40, None, None, 1, True, ["collapse"], 0, 0.4]
+    (row,) = planning_mart.unpack([{"r": values}])
+    assert list(row) == [name for name, _ in planning_mart.ROW_COLUMNS] and len(values) == len(row)
+    assert row["planning_cycle_date"] == datetime.date(2026, 3, 1) and row["q_i"] == 100
+    assert rec._to_item(row, rec._MART_PRESENT).urgency == "URGENT"
 
 
 # ---- the endpoint's answer from mart rows --------------------------------------
@@ -177,11 +189,14 @@ def _mart_row(**overrides) -> dict:
         "in_stock_count": True, "revenue_share": 0.02, "tier": "A", "avg_monthly_sales_pesos": 3000.0,
         "forecast_units": 40.0, "on_order_pieces": None, "on_order_cases": None, "on_order_unparsed": 1,
         "needs_review": True, "review_reasons": ["collapse"], "review_over_run_months": 0,
-        "review_collapse_ratio": 0.4, "opening_period": "2026-02", "opening_count_first_date": COUNTED,
-        "opening_count_last_date": COUNTED, "opening_count_rows": 785,
-        "mart_stock_status": "LOW", "mart_urgency": "URGENT",
+        "review_collapse_ratio": 0.4,
     }
     return {**row, **overrides}
+
+
+def _count(**overrides) -> dict:
+    return {"planning_cycle_date": CYCLE, "principal": "unilever", "opening_period": "2026-02",
+            "first_date": COUNTED, "last_date": COUNTED, "row_count": 785, **overrides}
 
 
 def _head(**overrides) -> dict:
@@ -193,7 +208,8 @@ def test_mart_rows_become_the_same_items_the_joined_rows_do(monkeypatch):
     rows = [_mart_row(), _mart_row(recommendation_key=2, sku_id="S2", in_stock_count=False, current_stock=None,
                                    current_stock_cases=None, stock_value_pesos=None, needs_review=None,
                                    review_reasons=None)]
-    monkeypatch.setattr(planning_mart, "read", lambda *a: {"head": _head(), "rows": rows, "run": None})
+    monkeypatch.setattr(planning_mart, "read",
+                        lambda *a: {"head": _head(), "rows": rows, "counts": [_count()], "run": None})
     out = rec._from_mart(object(), "pending", "current", None, None, "unilever")
     assert [i.model_dump() for i in out.items] == [rec._to_item(r, rec._MART_PRESENT).model_dump() for r in rows]
     first, second = out.items
@@ -209,9 +225,10 @@ def test_mart_rows_become_the_same_items_the_joined_rows_do(monkeypatch):
 
 
 def test_a_principal_with_no_opening_count_says_so(monkeypatch):
-    row = _mart_row(in_stock_count=None, current_stock=None, current_stock_cases=None, stock_value_pesos=None,
-                    opening_count_rows=None, opening_count_first_date=None, opening_count_last_date=None)
-    monkeypatch.setattr(planning_mart, "read", lambda *a: {"head": _head(), "rows": [row], "run": None})
+    row = _mart_row(in_stock_count=None, current_stock=None, current_stock_cases=None, stock_value_pesos=None)
+    no_count = _count(first_date=None, last_date=None, row_count=None)
+    monkeypatch.setattr(planning_mart, "read",
+                        lambda *a: {"head": _head(), "rows": [row], "counts": [no_count], "run": None})
     out = rec._from_mart(object(), None, "current", None, None, None)
     assert out.items[0].urgency == "NO DATA" and "no opening stock count" in out.items[0].stock_blocked_reason
     assert out.stock_counts[0]["available"] is False and "no opening stock count" in out.stock_counts[0]["reason"]
@@ -219,15 +236,17 @@ def test_a_principal_with_no_opening_count_says_so(monkeypatch):
 
 def test_no_pending_cycle_is_an_empty_list_with_the_reason(monkeypatch):
     head = _head(cycle=None, lp_at=None, row_count=0, superseded=0)
-    monkeypatch.setattr(planning_mart, "read", lambda *a: {"head": head, "rows": [], "run": None})
+    monkeypatch.setattr(planning_mart, "read", lambda *a: {"head": head, "rows": [], "counts": [], "run": None})
     out = rec._from_mart(object(), None, "current", None, None, "delmonte")
     assert out.items == [] and out.count == 0 and out.planning_cycle_date is None and out.stock_counts == []
     assert out.freshness["reason"] == "No pending LP recommendations, so there is nothing to date."
 
 
 def test_all_cycles_list_each_cycles_own_count_newest_first_and_withhold_nothing(monkeypatch):
-    older = _mart_row(recommendation_key=3, planning_cycle_date=datetime.date(2026, 2, 1), opening_period="2026-01")
-    monkeypatch.setattr(planning_mart, "read", lambda *a: {"head": _head(), "rows": [_mart_row(), older], "run": None})
+    older = _mart_row(recommendation_key=3, planning_cycle_date=datetime.date(2026, 2, 1))
+    counts = [_count(), _count(planning_cycle_date=datetime.date(2026, 2, 1), opening_period="2026-01")]
+    monkeypatch.setattr(planning_mart, "read",
+                        lambda *a: {"head": _head(), "rows": [_mart_row(), older], "counts": counts, "run": None})
     out = rec._from_mart(object(), None, "all", None, None, None)
     assert [c["period"] for c in out.stock_counts] == ["2026-02", "2026-01"]
     assert out.superseded_count == 0 and out.count == 2

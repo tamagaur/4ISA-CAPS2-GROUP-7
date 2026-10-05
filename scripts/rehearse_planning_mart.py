@@ -169,7 +169,8 @@ def stored_columns(cur, schema: str, covered: set[int]) -> bool:
     print(f"\nlp_recommendation rows {len(rows)}, compared {len(covered)}, not compared {len(missing)}")
     print(f"latest lp_run = {latest}: {len(of_latest)} rows, compared {len(of_latest & covered)}")
     planning_mart.use_schema(schema)
-    cur.execute(planning_mart.rows_query(None, None, "all", None, None)[0])
+    cur.execute(planning_mart.rows_query(None, None, "all", None, None, packed=False,
+                                         columns=planning_mart.ROW_COLUMNS + planning_mart.STORED_STATUS_COLUMNS)[0])
     names = [d[0] for d in cur.description]
     wrong = 0
     for values in cur.fetchall():

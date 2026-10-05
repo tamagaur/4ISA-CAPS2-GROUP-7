@@ -648,18 +648,12 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
         )
     rows = got["rows"]
     # The opening count each principal's rows were checked against, per cycle (newest
-    # first), from the count's own figures on the rows.
-    by_cycle: dict = {}
-    for r in rows:
-        by_cycle.setdefault(r["planning_cycle_date"], {}).setdefault(r["principal"], r)
-    counts: list[dict] = []
-    for planning_cycle in sorted(by_cycle, reverse=True):
-        for who, r in sorted(by_cycle[planning_cycle].items()):
-            count_row = None if r["opening_count_rows"] is None else {
-                "first_date": r["opening_count_first_date"], "last_date": r["opening_count_last_date"],
-                "row_count": r["opening_count_rows"],
-            }
-            counts.append(stock_count_info(who, r["opening_period"], count_row, planning_cycle))
+    # first): the count's own figures as the mart keeps them, None when there is no count.
+    counts = [
+        stock_count_info(c["principal"], c["opening_period"], None if c["row_count"] is None else c,
+                         c["planning_cycle_date"])
+        for c in got["counts"]
+    ]
     items = [_to_item(r, _MART_PRESENT) for r in rows]
     return RecommendationsResponse(
         items=items,
