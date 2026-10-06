@@ -584,7 +584,12 @@ def get_recommendations(
     if planning_mart.usable(db, mode):
         served = _from_mart(db, status, cycle, from_date, to_date, principal)
         if served is not None:
-            return served
+            # The page's period labels, as the join path below gives them: the
+            # newest listed cycle's opening count, else no stock period.
+            newest = max((c["cycle"] for c in served.stock_counts if c.get("cycle")), default=None)
+            labels = label_context(db, opening_period(newest) if newest else None,
+                                   latest_abc_period(db, principal), principal)
+            return served.model_copy(update=labels)
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     present = _present(db)
     select_sql, lp_params = select_one(mode, present)
