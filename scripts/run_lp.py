@@ -129,6 +129,7 @@ from analytics.optimization.lp import (
 )
 from analytics.params import (
     COVER_RULES, LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION, SERVICE_LEVEL_PCT, SERVICE_Z,
+    abc_method_sql,
 )
 from backend.data_notes import PLANNING_NOTES, opening_count_ruling
 from backend.stock_units import (
@@ -201,11 +202,13 @@ CANDIDATE_QUERY = """
     WITH latest_forecast AS (SELECT MAX(forecast_date) AS d FROM Forecast_Result),
          -- Per-principal, method-pinned. An unscoped MAX() would let one
          -- principal's latest period gate the other's, and an unpinned one
-         -- would resolve against the unapproved 't3m' rows (migration 0017).
+         -- would resolve against another basis's rows (migration 0017).
+         -- Each principal's Tier A basis: analytics.params.abc_method_sql
+         -- (Unilever TIER_A_BASIS, Del Monte 'single').
          latest_abc AS (
              SELECT principal, MAX(classification_period) AS p
              FROM ABC_Classification
-             WHERE method = 'single'
+             WHERE {basis}
              GROUP BY principal
          )
     SELECT pd.product_key, COALESCE(pd.sku_code, pd.category_path) AS sku_id, pd.principal,
@@ -216,9 +219,9 @@ CANDIDATE_QUERY = """
     JOIN latest_forecast lf ON fr.forecast_date = lf.d
     JOIN latest_abc la ON la.principal = ac.principal AND ac.classification_period = la.p
     WHERE fr.status = 'ok' AND fr.mase < %s
-      AND ac.method = 'single'
+      AND {ac_basis}
       AND ac.tier = 'A'
-"""
+""".format(basis=abc_method_sql(), ac_basis=abc_method_sql("ac"))
 
 # Monthly sales per product (pieces and pesos): sigma_d, and last year's
 # totals for the allocation and the priority.
@@ -1039,6 +1042,13 @@ def main():
     older_pending = cur.fetchall()
 
     conn.close()
+
+    # Migration 0041: rebuild the dashboard's marts after a real run (the LP figures
+    # themselves are joined per request; the refresh keeps the log and freshness check
+    # in step with every LP run).
+    if not args.dry_run:
+        from analytics.marts import refresh_marts
+        refresh_marts(db_url, "run_lp")
 
     if args.csv:
         pd.DataFrame(csv_rows).to_csv(args.csv, index=False)

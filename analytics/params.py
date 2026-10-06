@@ -62,8 +62,31 @@ FORECAST_INTERVAL_LEVEL_PCT = 90
 MIN_MONTHS_WITH_SALES = 3
 
 # TEAM: no sale in the last 6 months = dead SKU (the runner's
-# Forecast_Result.status 'dead_sku') = FSN non-moving.
+# Forecast_Result.status 'dead_sku') = FSN non-moving. Also the data marts'
+# idle stock: a product in a stock count with no piece sold in the 6 sales
+# months up to it (mart.idle_stock, migration 0041).
 DEAD_SKU_MONTHS = 6
+
+# DATA: Unilever stock counts on record as possibly partial. 2025-05: 404 rows
+# against 513-812 in every other real month (inventory_fact_real, checked
+# 2026-10-03), and 36 of 96 selling Tier A products absent (Claude Code 8,
+# branch kelvin/surplus-bias-experiment, part0_count_completeness.csv). A list,
+# not a threshold: none is on record. PENDING SSM CONFIRMATION that the 2025-05
+# count was partial (Yuan). A product missing from one of these is unknown,
+# not 0 on hand, in scripts/fill_missing.py; mart.accuracy_mart counts it as 0
+# (the stock-limited rule below) and flags the row count_possibly_partial.
+POSSIBLY_PARTIAL_COUNTS = ("2025-05",)
+
+# TEAM: "possibly stock-limited" (kelvin/surplus-bias-experiment 3226cc4,
+# README Part 0.1; adopted for mart.accuracy_mart by Yuan 2026-10-04,
+# migration 0043): the opening or closing stock count is 0, or below
+# STOCK_LIMITED_WEEKS weeks of the product's average sales — the mean monthly
+# pieces over the STOCK_LIMITED_AVG_MONTHS months before the month, from the
+# first sale, at least STOCK_LIMITED_AVG_MIN_MONTHS months; 1 week = mean x 12 / 52.
+STOCK_LIMITED_WEEKS = 1.0
+STOCK_LIMITED_AVG_MONTHS = 12
+STOCK_LIMITED_AVG_MIN_MONTHS = 3
+
 
 # LIT: Syntetos, Boylan & Croston (2005), "On the categorization of demand
 # patterns", JORS 56(5). ADI (average inter-demand interval) >= 1.32 is
@@ -85,6 +108,37 @@ FSN_WINDOW_MONTHS = 12
 FSN_MIN_FAST_SALES_MONTHS = 3
 
 # --------------------------------------------------------------------------- #
+# Tier A basis (analytics/classification/orchestrate_abc.py)
+# --------------------------------------------------------------------------- #
+# TEAM, PENDING TA CONFIRMATION (decided 2026-10-05 for this refresh): which
+# ABC run is "Tier A" for Unilever, read by the forecast runner, segmentation,
+# the LP's pool and every backend tier read. 't12m_new' = Class A on the last
+# 12 months' revenue, plus products first sold within those 12 months that are
+# Class A on the last 3 (kelvin/tier-a-basis f753f4e, README section 7: 189
+# products as of 2026-02). 'single' = Class A on the month alone, the basis
+# until 2026-10-05; its runs are still written, so switching back is this one
+# value plus a refresh. Del Monte stays on 'single': its ABC is category grain
+# (DEC-03) and the 12-month rule was measured on Unilever SKUs only.
+TIER_A_BASIS = "t12m_new"
+TIER_A_BASES = ("single", "t12m_new")
+TIER_A_BASIS_WINDOW_MONTHS = 12
+TIER_A_NEW_PRODUCT_WINDOW_MONTHS = 3
+
+
+def abc_method(principal: str) -> str:
+    """The ABC_Classification.method holding `principal`'s Tier A."""
+    return TIER_A_BASIS if principal == "unilever" else "single"
+
+
+def abc_method_sql(alias: str = "") -> str:
+    """SQL predicate pinning ABC_Classification.method to each row's own
+    principal's basis, for queries that read both principals. `alias` is the
+    table alias ('' for none); the basis is a checked constant, never input."""
+    col = f"{alias}." if alias else ""
+    return f"{col}method = CASE {col}principal WHEN 'unilever' THEN '{TIER_A_BASIS}' ELSE 'single' END"
+
+
+# --------------------------------------------------------------------------- #
 # Global model (analytics/forecasting/global_model.py)
 # --------------------------------------------------------------------------- #
 # TEAM: the served XGBoost trains single-threaded so a rerun is
@@ -95,6 +149,36 @@ FSN_MIN_FAST_SALES_MONTHS = 3
 # served-vs-artifact comparison can differ in the last digits for that
 # reason alone.
 XGB_NTHREAD = 1
+
+# --------------------------------------------------------------------------- #
+# Review flag (analytics/forecasting/review_flag.py) and the yearly-pattern
+# label (analytics/forecasting/decomposition.py)
+# --------------------------------------------------------------------------- #
+# TEAM: the collapse rule, last-3-month mean < 0.5 x last-12-month mean, with
+# at least 12 months since the first sale. 0.5 is Yuan's example (2026-10-03),
+# recorded in reports/diagnostics/forecast_error_business_2026-10-03/README.md
+# section 7 (kelvin/forecast-error-business b4f6b77).
+REVIEW_COLLAPSE_RATIO = 0.5
+REVIEW_COLLAPSE_RECENT_MONTHS = 3
+REVIEW_COLLAPSE_BASE_MONTHS = 12
+
+# TEAM: option D of the surplus-bias experiment (kelvin/surplus-bias-
+# experiment 3226cc4, README "Candidate fixes"; chosen 2026-10-03 because no
+# forecast change met the recorded 5% threshold): flag a product when it is in
+# a run of 3+ over-forecast months ending the month before the cycle. The
+# look-back is that experiment's PRIOR_MONTHS: how far back a run is counted,
+# so a stored run length of 6 reads "6 or more".
+REVIEW_OVER_RUN_MONTHS = 3
+REVIEW_LOOKBACK_MONTHS = 6
+
+# DEC-23 / LIT: the lag-12 autocorrelation test against the 95% white-noise
+# bound 1.96 / sqrt(n), on 24+ months from the first sale. Rule R1 of
+# b4f6b77 README section 10: its false-alarm rate on no-seasonality series at
+# our lengths is under 1%, against 15-18% for the STL-strength >= 0.6 band
+# ("Strong seasonality") it replaces. The label reads only the positive side
+# (decomposition.yearly_pattern says why).
+YEARLY_ACF_MIN_MONTHS = 24
+YEARLY_ACF_Z = 1.96
 
 # --------------------------------------------------------------------------- #
 # LP (analytics/optimization/lp.py, scripts/run_lp.py)
@@ -185,3 +269,4 @@ SAFETY_STOCK_ASSUMPTION = (
 )
 
 assert abs(sum(LP_WEIGHTS.values()) - 1.0) < 1e-9, "LP_WEIGHTS must sum to 1"
+assert TIER_A_BASIS in TIER_A_BASES, "TIER_A_BASIS must be one of TIER_A_BASES"

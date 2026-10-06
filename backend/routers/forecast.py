@@ -14,7 +14,9 @@ the row's `status` ('ok' | 'insufficient_data' | 'dead_sku') and holdout
 `?principal=` scopes the sku_code lookup (codes aren't unique across
 principals, see backend/principals.py); the response's `principal` is the
 resolved product's own. Forecasts exist for Unilever Tier A only: Del
-Monte's sales data has no SKU column, so its rows never resolve here.
+Monte's sales data has no SKU column, so a Del Monte request (scope
+delmonte, or a code that resolves to a Del Monte product) is a 200 with
+forecast: [] and blocked_reason saying so, never a 404.
 
 404 if sku_id doesn't resolve to a Product_Dimension row in scope.
 Forecast_Result may legitimately be empty for a resolved product (every
@@ -40,8 +42,9 @@ from backend.data_mode import (
 from analytics.params import FORECAST_INTERVAL_LEVEL_PCT, FORECAST_INTERVAL_Z
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
-from backend.principals import PrincipalQuery, principal_clause
+from backend.principals import PrincipalQuery, normalize_principal, principal_clause
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
+from backend.response_cache import cached
 
 # The band the forecast runner stores: forecast +/- CONFIDENCE_Z x the served
 # model's holdout RMSE (scripts/run_baseline_forecast.py). Both read
@@ -51,10 +54,13 @@ FORECAST_INTERVAL = {
     "basis": "the served model's holdout RMSE",
 }
 
+DEL_MONTE_NO_FORECAST = "No product-level forecast for Del Monte: its sales files have no product detail."
+
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 
 
 @router.get("/{sku_id}", response_model=ForecastResponse)
+@cached("GET /forecast/{sku_id}")
 def get_forecast(
     sku_id: str,
     principal: str | None = PrincipalQuery,
@@ -74,6 +80,13 @@ def get_forecast(
         ),
         {"sku_id": sku_id, **scope_params},
     ).mappings().first()
+    if normalize_principal(principal) == "delmonte" or (product_row and product_row["principal"] == "delmonte"):
+        return ForecastResponse(
+            sku_id=sku_id,
+            product_name=product_row["product_name"] if product_row else None,
+            principal="delmonte",
+            blocked_reason=DEL_MONTE_NO_FORECAST,
+        )
     if product_row is None:
         scope_label = principal or "any principal"
         raise HTTPException(status_code=404, detail=f"No product found for '{sku_id}' ({scope_label})")

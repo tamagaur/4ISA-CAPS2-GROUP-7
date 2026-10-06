@@ -58,6 +58,12 @@ const URGENCY_RANK = { CRITICAL: 0, URGENT: 1, PLANNED: 2, 'NO DATA': 3 };
 // no bulk endpoint, so this is N sequential-ish writes against Supabase.
 const BULK_CONCURRENCY = 5;
 
+// GET /recommendations review_reasons in a planner's words (review_flag).
+const REVIEW_REASON_TEXT = {
+  collapse: 'sales over the last 3 months fell below half the 12-month average',
+  over_forecast_run: 'the forecast ran above sales 3 or more months in a row',
+};
+
 // Accept needs no typed reason; this is the one recorded for it.
 const ACCEPT_REASON = 'Accepted the LP-recommended order quantity as-is.';
 
@@ -267,11 +273,18 @@ const ReorderRecommendations = () => {
         // (GET /recommendations): LP qty = forecast + target - stock - short.
         forecast: item.forecast_units,
         shortUnits: item.short_units,
-        // Section B fields (PendingCards.jsx), null until the backend
-        // serves them: why this row needs a look before ordering, and the
-        // pieces already ordered that have not arrived.
-        reviewFlag: item.review_flag || null,
-        onOrderQty: item.on_order_qty ?? null,
+        // Review before ordering (review_flag): a likely large miss, never
+        // accepted in bulk; the server needs reviewed=true to accept it.
+        needsReview: item.needs_review === true,
+        reviewReasons: item.review_reasons || [],
+        // The badge's hover text (PendingCards ReviewBadge): the reasons in a planner's words.
+        reviewFlag: item.needs_review === true
+          ? `Flagged for review: ${(item.review_reasons || []).map((r) => REVIEW_REASON_TEXT[r] || r).join('; ') || 'likely large miss'}.`
+          : null,
+        // Pieces on order from the opening count's PO Qty: information only,
+        // never subtracted from the order (DEC-34; on_order_note says so).
+        onOrderQty: item.on_order ?? null,
+        onOrderNote: item.on_order_note || item.on_order_blocked_reason || null,
         actionStatus: item.status === 'pending' ? null : item.status.toUpperCase(),
         loadingAction: null,
       })),
@@ -321,9 +334,8 @@ const ReorderRecommendations = () => {
   const actNowRows = rankedRows.slice(0, ACT_NOW_COUNT);
   const reviewLaterRows = rankedRows.slice(ACT_NOW_COUNT);
   const visibleRows = showReviewLater ? rankedRows : actNowRows;
-  // A row flagged "Review before ordering" is never accepted in bulk: it
-  // has to be opened and decided on its own.
-  const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction && !r.reviewFlag);
+  // Rows flagged for review are left out: each is accepted from its own row.
+  const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction && !r.needsReview);
 
   // Deep link from the Dashboard's reorder widget (?sku=...): switch to the
   // most recent cycle holding that SKU, then open its detail modal — the
@@ -463,13 +475,13 @@ const ReorderRecommendations = () => {
   // Writes one decision, with its reason. Returns true on success. `silent`
   // skips the per-row toast so a bulk accept can report once at the end;
   // `rethrow` passes a failure on to a dialog that shows it itself.
-  const applyAction = async (id, actionType, { silent = false, reason, rethrow = false } = {}) => {
+  const applyAction = async (id, actionType, { silent = false, reason, rethrow = false, reviewed = false } = {}) => {
     setLocalData(prev => prev.map(item =>
       item.id === id ? { ...item, loadingAction: actionType } : item
     ));
 
     try {
-      await decideRecommendation(id, actionType === 'ACCEPTED' ? 'accepted' : 'dismissed', reason);
+      await decideRecommendation(id, actionType === 'ACCEPTED' ? 'accepted' : 'dismissed', reason, { reviewed });
       setLocalData(prev => prev.map(item =>
         item.id === id ? { ...item, loadingAction: null, actionStatus: actionType } : item
       ));
@@ -515,7 +527,7 @@ const ReorderRecommendations = () => {
     if (!item) return;
     setAcceptError('');
     acceptSave.run(async () => {
-      await applyAction(item.id, 'ACCEPTED', { reason: ACCEPT_REASON, silent: true, rethrow: true });
+      await applyAction(item.id, 'ACCEPTED', { reason: ACCEPT_REASON, silent: true, rethrow: true, reviewed: item.needsReview });
       logDecision(item, 'ACCEPTED', ACCEPT_REASON);
     }, {
       onSaved: () => setPendingAccept(null),
@@ -716,7 +728,7 @@ const ReorderRecommendations = () => {
             : <span className="cell-empty" title={item.stockBlockedReason || 'No stock figure in pieces for this SKU'}>—</span>}
         </td>
         {hasOnOrder && (
-          <td className="table-num" title="Pieces ordered from the supplier that have not arrived yet">
+          <td className="table-num" title={item.onOrderNote || 'Pieces on order (PO Qty), information only'}>
             {item.onOrderQty != null ? formatUnits(item.onOrderQty) : <span className="cell-empty">—</span>}
           </td>
         )}
@@ -1162,6 +1174,12 @@ const ReorderRecommendations = () => {
                 {pendingAccept.planningCycleDate ? `${formatMonth(pendingAccept.planningCycleDate)} plan` : 'current plan'},
                 as recommended by the LP optimizer.
               </p>
+              {pendingAccept.needsReview && (
+                <p className="reorder-accept-body">
+                  Flagged for review: {pendingAccept.reviewReasons.map((r) => REVIEW_REASON_TEXT[r] || r).join('; ')}.
+                  A large miss is likely; accepting confirms you checked this quantity.
+                </p>
+              )}
               {acceptError && <p className="reorder-accept-error" role="alert">{acceptError}</p>}
               <div className="reorder-accept-actions">
                 <button className="reorder-accept-cancel" onClick={() => setPendingAccept(null)} disabled={acceptSave.saving}>

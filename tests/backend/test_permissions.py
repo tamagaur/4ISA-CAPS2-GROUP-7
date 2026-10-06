@@ -316,9 +316,10 @@ def _routes():
 # Method/path pairs the app serves: 37 = what a flat app.routes walk found under
 # fastapi 0.115.5 at the UIFixes_Audrey merge (2026-10-02), plus the 9 two-step
 # sign-in routes (/auth/login/verify, /auth/login/setup[/confirm], /auth/mfa*,
-# /users/{user_id}/mfa/reset) merged in 2026-10-03. Change it when a route is
+# /users/{user_id}/mfa/reset) merged in 2026-10-03, plus the seven GET /dashboard/*
+# range routes the data marts added (2026-10-04/05). Change it when a route is
 # added or removed.
-ROUTE_COUNT = 46
+ROUTE_COUNT = 53
 
 
 def test_the_walk_finds_every_route():

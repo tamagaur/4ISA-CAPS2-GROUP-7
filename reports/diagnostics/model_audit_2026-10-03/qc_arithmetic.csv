@@ -1,0 +1,32 @@
+check,computed,readme,tolerance,result
+"surplus + shortage = miss, at-the-time (pesos/month)",7846629.148437,7846629.148437,1.000000,PASS
+"surplus + shortage = miss, today's Tier A (pesos/month)",5722021.621600,5722021.621600,1.000000,PASS
+"miss / sales = 33.3%, at-the-time",0.333367,0.333000,0.000500,PASS
+"miss / sales = 30.0%, today's Tier A",0.299693,0.300000,0.000500,PASS
+shortage share = 44.1% = 1 - 55.9%,0.440535,0.441000,0.000500,PASS
+shortage share = 48.9% = 1 - 51.1%,0.488971,0.489000,0.000500,PASS
+"served - MA3 = -1.1 pts, at-the-time",-1.146400,-1.100000,0.050000,PASS
+"served - MA3 = -1.1 pts, today's Tier A",-1.103100,-1.100000,0.050000,PASS
+"at-the-time rows: in 107 + not in 107 = 3,503",3503.000000,3503.000000,0.000000,PASS
+"at-the-time rows: 12+ months + under 12 = 3,503",3503.000000,3503.000000,0.000000,PASS
+at-the-time products: 106 + 231 = 337,337.000000,337.000000,0.000000,PASS
+"Tier A product-months 3,663 - not scorable 160 = 3,503",3503.000000,3503.000000,0.000000,PASS
+"bins: short + medium + long = 2,419",2419.000000,2419.000000,0.000000,PASS
+"bins by month sum = 2,419; insufficient dropped = 103",2419.000000,2419.000000,0.000000,PASS
+insufficient dropped = 103,103.000000,103.000000,0.000000,PASS
+81.4% of scored rows Tier A the month before,0.813973,0.814000,0.000500,PASS
+"collapse windows 143 / 2,419 = 5.9%",0.059115,0.059000,0.000500,PASS
+"TSB = SES: 937 / 1,002 = 93.5%",0.935130,0.935000,0.000500,PASS
+Ljung-Box pure-noise expectation: rate x 89 = 17.0,17.016800,17.000000,0.050000,PASS
+volume thirds: 36 + 35 + 36 = 107 products,107.000000,107.000000,0.000000,PASS
+23 month pairs = 2024-04..2026-02,23.000000,23.000000,0.000000,PASS
+29 test months = 2023-10..2026-02,29.000000,29.000000,0.000000,PASS
+162 = 50 + 35 + 77 (coverage_map.csv n),162.000000,162.000000,0.000000,PASS
+"headroom vs served, low end: served 25.2% - ML floor 25.2% = 0.0 pts",-0.008082,0.000000,0.050000,PASS
+"headroom vs served, high end: 25.2% - 23.5% = 1.7 pts",1.690000,1.700000,0.050000,PASS
+"headroom vs MA3, low end: 26.8% - 25.2% = 1.6 pts",1.621918,1.600000,0.050000,PASS
+"headroom vs MA3, high end: 26.8% - 23.5% = 3.3 pts",3.320000,3.300000,0.050000,PASS
+"shared month shock, served: 1 - sqrt(1 - 0.114) = 5.9%",0.058565,0.059000,0.000500,PASS
+"shared month shock, MA3: 1 - sqrt(1 - 0.132) = 6.8%",0.068388,0.068000,0.000500,PASS
+payoff low: 5.9% of the 26.9% median WAPE = 1.6 pts,1.573066,1.600000,0.050000,PASS
+payoff high: 6.8% of the 26.9% median WAPE = 1.8 pts,1.836929,1.800000,0.050000,PASS

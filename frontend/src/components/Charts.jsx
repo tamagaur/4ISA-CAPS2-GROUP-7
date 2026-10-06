@@ -1127,7 +1127,9 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     ...(sharesAddUp ? [{ key: 'sharePct', label: 'Share of revenue (%)', value: (d) => d.sharePct }] : []),
     { key: 'skuPct', label: `Share of ${units} (%)`, value: skuSharePct },
   ];
-  const rankedMonth = revenue?.period ? formatMonth(revenue.period) : null;
+  // The ring ranks the selected range since 2026-10-04 (abc_revenue.label,
+  // e.g. "Mar 2025 – Feb 2026"); a payload without it still names its month.
+  const rankedMonth = revenue?.label || (revenue?.period ? formatMonth(revenue.period) : null);
   const factsFor = (d) => ({
     tier: d.tier,
     count: d.count,

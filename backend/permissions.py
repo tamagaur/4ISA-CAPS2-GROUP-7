@@ -54,6 +54,7 @@ from fastapi import Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend import batch
 from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_current_user, get_db
 
@@ -105,6 +106,7 @@ NOT_READY = ("Per-user permissions aren't set up on this server yet "
 # Cached: True for good once seen; a False is re-checked after a minute, so
 # applying the migration takes effect without restarting the server.
 _READY_RECHECK_SECONDS = 60
+READY_SQL = "SELECT to_regclass('public.user_permission_override') IS NOT NULL"
 _ready_cache = {"value": False, "checked_at": 0.0}
 
 
@@ -114,9 +116,15 @@ def permissions_ready(db: Session) -> bool:
     now = time.monotonic()
     if now - _ready_cache["checked_at"] < _READY_RECHECK_SECONDS and _ready_cache["checked_at"]:
         return False
-    found = db.execute(text("SELECT to_regclass('public.user_permission_override') IS NOT NULL")).scalar()
+    found = batch.scalar(db, READY_SQL)
     _ready_cache.update(value=bool(found), checked_at=now)
     return bool(found)
+
+
+def permissions_ready_known() -> bool:
+    """True once the table has been seen, so the session check can read the
+    overrides in its own round trip (backend/deps.OVERRIDES_COLUMN)."""
+    return bool(_ready_cache["value"])
 
 
 def require_ready(db: Session) -> None:
@@ -186,6 +194,9 @@ def load_overrides(db: Session, user_id: int) -> dict[str, bool]:
 def permissions_for(db: Session, user: TokenPayload) -> set[str]:
     if user.role == "admin":
         return set(ALL_KEYS)
+    # Read with the session check on this request (backend/deps.py), when it could.
+    if getattr(user, "permissions", None) is not None:
+        return set(user.permissions)
     return effective(user.role, load_overrides(db, user.user_id))
 
 

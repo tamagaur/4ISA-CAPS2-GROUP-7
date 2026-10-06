@@ -1,0 +1,6 @@
+basis,basis_label,window_start,window_end,months,products_ranked,class_a,class_b,class_c,total_revenue_php,class_a_revenue_php,class_a_revenue_pct,products_dropped_for_blank_revenue
+1m,latest month,2026-02,2026-02,1,710,132,194,384,28056898.43,22443150.52,79.9916,0
+3m,last 3 months,2025-12,2026-02,3,843,143,215,485,85519159.08,68343056.23,79.9155,0
+12m,last 12 months,2025-03,2026-02,12,1091,175,244,672,392655664.45,314003747.58,79.9692,0
+24m,last 24 months,2024-03,2026-02,24,1330,185,289,856,780293704.24,623942962.32,79.9626,1
+full,full real history,2023-01,2026-02,38,1529,217,324,988,1231298137.26,984093528.94,79.9233,2

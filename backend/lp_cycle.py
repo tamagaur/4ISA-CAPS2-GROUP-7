@@ -46,12 +46,12 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from analytics.params import LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION
 from analytics.params import SERVICE_LEVEL_PCT as LP_SERVICE_LEVEL_PCT
 from analytics.params import SERVICE_Z as LP_SERVICE_Z
+from backend import batch
 from backend.data_mode import REAL, forecast_source, lp_source
 
 # Applied to every LP read. Bound (not interpolated) so it is safe to
@@ -74,9 +74,35 @@ def stored_run(db: Session, cycle: datetime.date | None, principal: str | None =
     request's transaction), or rows written before runs were recorded."""
     if mode != REAL or cycle is None:
         return None
-    present = db.execute(text("SELECT to_regclass('lp_run') IS NOT NULL AS present")).mappings().first()
-    if not present or not present["present"]:
+    if not lp_run_present(db):
         return None
+    row = batch.first(db, *stored_run_query(cycle, principal))
+    return dict(row) if row else None
+
+
+# Remembered once seen on the real database (a migration isn't rolled back under a
+# running server), so it costs a round trip only until then; a False is asked again
+# next time, so applying 0037 needs no restart. Tests' fake sessions are never cached.
+_LP_RUN_PRESENT = {"value": False}
+LP_RUN_PRESENT_SQL = "SELECT to_regclass('lp_run') IS NOT NULL AS present"
+
+
+def lp_run_present(db: Session) -> bool:
+    if _LP_RUN_PRESENT["value"]:
+        return True
+    row = batch.first(db, LP_RUN_PRESENT_SQL)
+    present = bool(row and row["present"])
+    if present and isinstance(db, Session):
+        _LP_RUN_PRESENT["value"] = True
+    return present
+
+
+def lp_run_present_known() -> bool:
+    """True once lp_run_present has seen the table (no lookup needed any more)."""
+    return _LP_RUN_PRESENT["value"]
+
+
+def stored_run_query(cycle, principal: str | None = None) -> tuple[str, dict]:
     sql = """
         SELECT r.run_key, r.planning_cycle_date, r.principal_scope, r.inputs, r.model,
                r.code_version, r.created_at
@@ -93,8 +119,7 @@ def stored_run(db: Session, cycle: datetime.date | None, principal: str | None =
     if _principal_key(principal):
         clause = " AND pd.principal = :principal"
         params["principal"] = _principal_key(principal)
-    row = db.execute(text(sql.format(principal_clause=clause)), params).mappings().first()
-    return dict(row) if row else None
+    return sql.format(principal_clause=clause), params
 
 
 def lp_model_info(run: dict | None = None) -> dict:
@@ -164,6 +189,11 @@ def current_cycle(db: Session, principal: str | None = None, mode: str = REAL) -
     Scoped by principal because LP_Recommendation carries both (today it
     holds Unilever rows only), so an unscoped MAX could resolve to a cycle
     the selected principal has no rows in."""
+    row = batch.first(db, *current_cycle_query(principal, mode))
+    return row["d"] if row else None
+
+
+def current_cycle_query(principal: str | None = None, mode: str = REAL) -> tuple[str, dict]:
     lp, params = lp_source(mode, "lp_recommendation")
     sql = f"""
         SELECT MAX(lr.planning_cycle_date) AS d
@@ -175,8 +205,7 @@ def current_cycle(db: Session, principal: str | None = None, mode: str = REAL) -
     if _principal_key(principal):
         sql += " AND pd.principal = :principal"
         params["principal"] = _principal_key(principal)
-    row = db.execute(text(sql), params).mappings().first()
-    return row["d"] if row else None
+    return sql, params
 
 
 def superseded_count(
@@ -187,6 +216,10 @@ def superseded_count(
     remembers 429 rows should be told where the other 179 went."""
     if cycle is None:
         return 0
+    return int(batch.scalar(db, *superseded_count_query(cycle, principal, mode)) or 0)
+
+
+def superseded_count_query(cycle, principal: str | None = None, mode: str = REAL) -> tuple[str, dict]:
     lp, lp_params = lp_source(mode, "lp_recommendation")
     sql = f"""
         SELECT COUNT(*) FROM {lp} lr
@@ -197,7 +230,7 @@ def superseded_count(
     if _principal_key(principal):
         sql += " AND pd.principal = :principal"
         params["principal"] = _principal_key(principal)
-    return int(db.execute(text(sql), params).scalar() or 0)
+    return sql, params
 
 
 def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> dict:
@@ -217,30 +250,15 @@ def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> di
     rows; MAX(generated_at) alone would then call the cycle fresh while 177
     rows still carried q_i and rop_i from the old forecasts."""
     cycle = current_cycle(db, principal, mode)
-    fc, fc_params = forecast_source(mode, "forecast_result")
-    fc_at = db.execute(text(f"SELECT MAX(generated_at) AS t FROM {fc}"), fc_params).scalar()
+    fc_at = batch.scalar(db, *forecast_generated_query(mode))
+    lp = batch.first(db, *freshness_query(cycle, fc_at, principal, mode)) or {}
+    return freshness_from(cycle, fc_at, lp.get("t"), int(lp.get("row_count") or 0),
+                          int(lp.get("stale_count") or 0), superseded_count(db, cycle, principal, mode))
 
-    # Scoped like current_cycle(), so the count can't mix in the other
-    # principal's rows.
-    lp, lp_params = lp_source(mode, "lp_recommendation")
-    sql = f"""
-        SELECT MAX(lr.generated_at) AS t,
-               COUNT(*) AS row_count,
-               COUNT(*) FILTER (WHERE lr.generated_at < :fc_at) AS stale_count
-        FROM {lp} lr
-        JOIN product_dimension pd ON pd.product_key = lr.product_key
-        WHERE lr.status = 'pending'
-          AND (:cycle IS NULL OR lr.planning_cycle_date = :cycle)
-    """
-    params: dict = {"cycle": cycle, "fc_at": fc_at, **lp_params}
-    if _principal_key(principal):
-        sql += " AND pd.principal = :principal"
-        params["principal"] = _principal_key(principal)
-    lp = db.execute(text(sql), params).mappings().first() or {}
-    lp_at = lp.get("t")
-    row_count = int(lp.get("row_count") or 0)
-    stale_count = int(lp.get("stale_count") or 0)
 
+def freshness_from(cycle, fc_at, lp_at, row_count: int, stale_count: int, superseded: int) -> dict:
+    """freshness()'s answer from its figures, however they were read (the queries above, or
+    backend/planning_mart.head_query in one statement)."""
     is_stale = None
     reason = None
     if lp_at is not None and fc_at is not None:
@@ -277,6 +295,32 @@ def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> di
         "is_stale": is_stale,
         "row_count": row_count,
         "stale_row_count": stale_count,
-        "superseded_pending_count": superseded_count(db, cycle, principal, mode),
+        "superseded_pending_count": superseded,
         "reason": reason,
     }
+
+
+def forecast_generated_query(mode: str = REAL) -> tuple[str, dict]:
+    """When the served forecasts were written: freshness()'s comparison point."""
+    fc, fc_params = forecast_source(mode, "forecast_result")
+    return f"SELECT MAX(generated_at) AS t FROM {fc}", fc_params
+
+
+def freshness_query(cycle, fc_at, principal: str | None = None, mode: str = REAL) -> tuple[str, dict]:
+    """The cycle's pending rows: newest generated_at, how many, how many predate fc_at.
+    Scoped like current_cycle(), so the count can't mix in the other principal's rows."""
+    lp, lp_params = lp_source(mode, "lp_recommendation")
+    sql = f"""
+        SELECT MAX(lr.generated_at) AS t,
+               COUNT(*) AS row_count,
+               COUNT(*) FILTER (WHERE lr.generated_at < :fc_at) AS stale_count
+        FROM {lp} lr
+        JOIN product_dimension pd ON pd.product_key = lr.product_key
+        WHERE lr.status = 'pending'
+          AND (:cycle IS NULL OR lr.planning_cycle_date = :cycle)
+    """
+    params: dict = {"cycle": cycle, "fc_at": fc_at, **lp_params}
+    if _principal_key(principal):
+        sql += " AND pd.principal = :principal"
+        params["principal"] = _principal_key(principal)
+    return sql, params

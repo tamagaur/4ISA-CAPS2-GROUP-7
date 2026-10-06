@@ -1,0 +1,16 @@
+{
+  "readme_sha256_at_check": "387fa43b57971f0359ac44bfc85a04c4929ab8354791c1ab63d9e3ed009dbc09",
+  "body_numbers": 821,
+  "body_traced_to_cited_file": 388,
+  "body_identifiers": 339,
+  "body_design_constants": 94,
+  "body_untraced_or_review": 0,
+  "body_small_integers_reviewed_by_hand": 84,
+  "all_numbers_untraced_or_review": 0,
+  "arithmetic_checks": 31,
+  "arithmetic_pass": 31,
+  "recompute_checks": 5,
+  "recompute_pass": 5,
+  "product_mentions_with_code": 6,
+  "product_mentions_name_first": 6
+}

@@ -1,0 +1,39 @@
+section,check,status,evidence
+1 number,largest 29-month surplus cut belongs to E1,PASS,largest cut: E1 XGBoost rows excluded
+1 number,LP check figure 57%-76% (median 62%) present at 65ed2cc,PASS,La Union sales are 57%–76% (median 62%)
+1 number,every README number traced to a source,PASS,"865 numbers: committed file 578, rule constant 214, derived 56, external commit 17"
+1 number,derived claims match their formula (44 claims),PASS,all match
+1 number,main tables checked cell by cell (520 cells in 9 tables),PASS,every cell equals its CSV value at the shown rounding
+1 number,self-test: 8 deliberate README errors are each caught,PASS,"table cell: A's 29-month products changed 13 -> 14 -> caught by: main tables checked cell by cell (520 cells i; prose: 6-month share over 56.2% -> 56.3% -> caught by: derived claims match their formula (44 claims; prose peso: E1 bin cut ₱86,465 -> ₱86,466 -> caught by: every README number traced to a source + derived claims match their formula (44 claims; range: D 12 to 26 -> 12 to 27 -> caught by: derived claims match their formula (44 claims; new unsourced number -> caught by: every README number traced to a source + every peso figure carries its price basis (at; missing price basis -> caught by: every peso figure carries its price basis (at; missing period -> caught by: derived claims match their formula (44 claims; SKU before product name -> caught by: every README number traced to a source + product NAME first, SKU after"
+2 arithmetic,six_months: surplus + shortage = total miss = source diagnostic's miss,PASS,"₱3,789,634.02 + ₱3,030,237.71 = ₱6,819,871.72; Σ|error|×price/6 from the per-product file = ₱6,819,871.70 (rounding bound ₱0.32); b4f6b77 window_comparison.csv = ₱6,819,871.72; recomputed price vs file price: largest gap ₱0.000049"
+2 arithmetic,"six_months: over + under + exact = scored product-months (48 candidate rows, 27 recount rows)",PASS,"mismatches: candidates 0, recount 0"
+2 arithmetic,"six_months: per-product surplus and shortage sum to each candidate's total, and surplus + shortage = miss",PASS,largest gap ₱0.0228 per month over 11 candidates (rounding bound ₱0.32)
+2 arithmetic,six_months: the three history bins add up to the overall row,PASS,largest gap ₱0.000100 per month
+2 arithmetic,six_months: the two halves add up to the whole-window change,PASS,largest gap ₱0.000050 per month (halves of 3 and 3 months)
+2 arithmetic,six_months: side-split groups add up to the whole window,PASS,"product-months 642 of 642; surplus ₱3,789,634.02 vs ₱3,789,634.02"
+2 arithmetic,six_months: recount (b) = surplus and shortage of the months not possibly stock-limited,PASS,"₱2,441,152.15 / ₱1,564,960.90 vs recomputed ₱2,441,152.15 / ₱1,564,960.89 (392 product-months incl. 5 without a label; rounding bound ₱0.32)"
+2 arithmetic,six_months: D monthly rows add up to the window row,PASS,flagged 106 = 106; surplus share recomputed 18.4643% vs 18.4643%
+2 arithmetic,six_months: over-run table adds up,PASS,"44 products, 161 run months, 60 possibly stock-limited"
+2 arithmetic,long_window: surplus + shortage = total miss = source diagnostic's miss,PASS,"₱2,924,119.36 + ₱2,797,902.26 = ₱5,722,021.62; Σ|error|×price/29 from the per-product file = ₱5,722,021.62 (rounding bound ₱0.24); b4f6b77 window_comparison.csv = ₱5,722,021.62; recomputed price vs file price: largest gap ₱0.000049"
+2 arithmetic,"long_window: over + under + exact = scored product-months (48 candidate rows, 27 recount rows)",PASS,"mismatches: candidates 0, recount 0"
+2 arithmetic,"long_window: per-product surplus and shortage sum to each candidate's total, and surplus + shortage = miss",PASS,largest gap ₱0.0113 per month over 11 candidates (rounding bound ₱0.24)
+2 arithmetic,long_window: the three history bins add up to the overall row,PASS,largest gap ₱0.000100 per month
+2 arithmetic,long_window: the two halves add up to the whole-window change,PASS,largest gap ₱0.000076 per month (halves of 15 and 14 months)
+2 arithmetic,long_window: side-split groups add up to the whole window,PASS,"product-months 2419 of 2419; surplus ₱2,924,119.36 vs ₱2,924,119.36"
+2 arithmetic,long_window: recount (b) = surplus and shortage of the months not possibly stock-limited,PASS,"₱1,537,541.99 / ₱1,331,014.45 vs recomputed ₱1,537,541.99 / ₱1,331,014.45 (1277 product-months incl. 0 without a label; rounding bound ₱0.24)"
+2 arithmetic,long_window: D monthly rows add up to the window row,PASS,flagged 283 = 283; surplus share recomputed 12.2924% vs 12.2924%
+2 arithmetic,long_window: over-run table adds up,PASS,"87 products, 545 run months, 255 possibly stock-limited"
+3 independent,"29-month share over-forecast, as measured = 51.7%",PASS,1249 over / 1169 under / 1 exact of 2419 -> 51.654% (over ÷ all 2419 = 51.633%)
+3 independent,"29-month share over-forecast, possibly stock-limited excluded = 52.7%",PASS,672 over / 604 under of 1277 kept (1142 possibly stock-limited) -> 52.665%
+3 independent,"29-month candidate A: surplus removed ₱25,572 / shortage added ₱36,660 per month",PASS,"removed ₱25,571.60, added ₱36,660.43 per month at selling price, VAT-inclusive; 26 product-months tripped the collapse rule, 23 changed"
+4 data rules,demand: generated rows excluded (is_demo = false via Unilever_SKU_Demand_Fact_Real),PASS,is_demo values in demand_real_tierA.csv: {'false': 3087}; months 2023-01 to 2026-02; pull SQL reads Unilever_SKU_Demand_Fact_Real
+4 data rules,stock: real counts only (is_demo = false AND fill_source IS NULL),PASS,"39 periods read, all among 39 real periods (2023-01 to 2026-03); 0 of the 30 generated periods (synthetic_v2, synthetic_v2_gap)"
+4 data rules,"each month uses its own opening count (period M-1) and closing count (period M), not the latest",PASS,"2419 product-months (29 months): fresh recompute vs committed weeks of cover, largest gap opening 5.0e-05, closing 5.0e-05 weeks; negative control: built from the latest count (2026-03), only 27 of 2419 opening values would agree"
+5 wording,"every peso figure carries its price basis (at selling price, VAT-inclusive)",PASS,all lines with ₱ covered
+5 wording,every result line names its period,PASS,all result lines covered
+5 wording,"product NAME first, SKU after",PASS,"9 product mentions, all 'NAME (SKU)'"
+5 wording,jargon spelled out,PASS,"13 terms spelled out at or before first use: VAT, SKU, ABC, SSM, LP, PO Qty, NaN, MA3, TSB, XGBoost, WAPE, k, Tier A"
+5 wording,decisions recorded; 'stock-limited' described as an approximation from monthly counts,PASS,all 4 decisions and the approximation wording present
+6 hygiene,no pulled input or local/ per-month file in any commit on the branch or in the files to commit,PASS,"1 commit(s) on the branch, 30 files; flagged: []"
+6 hygiene,"no per-product sales, prices or raw stock/sales fields in any commit (git log -p) or file to commit",PASS,"23 CSV headers in git log -p and 23 CSVs checked; none has ['_src_file', '_src_sheet', 'actual', 'avg_monthly_pcs', 'blocked_cases', 'blocked_pieces', 'cases', 'closing_pcs', 'cost_per_piece', 'customer_name', 'gsv', 'last12_mean', 'last3_before', 'last3_mean', 'loose_pieces', 'ma3', 'mean_actual', 'naive', 'net_amount', 'opening_pcs', 'price_per_piece_sell_vat_inc', 'price_sell_vat_inc', 'quantity', 'quantity_on_hand', 'quantity_pieces', 'salesman_name', 'stock_value', 'unit_cost_per_case', 'valuation']; no per-product monthly sales figure in any README version"
+6 hygiene,inputs/ and local/ (client data) are git-ignored,PASS,"ignored: {'inputs/stock_real_tierA_by_period.csv': True, 'local/six_months/per_product_month.csv': True, 'local/long_window/per_product_month.csv': True}; present on this machine: {'inputs/stock_real_tierA_by_period.csv': True, 'local/six_months/per_product_month.csv': True, 'local/long_window/per_product_month.csv': True}"

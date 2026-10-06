@@ -113,7 +113,9 @@ def test_fsn_period_param_is_the_window_end():
 
 def test_brand_pareto_ranks_with_abc_cutoffs():
     session = FakeSession([
-        ("MAX(calendar_month) AS p", [{"p": "2026-02"}]),
+        # backend/marts.SNAPSHOT_SQL: Unilever's real sales end 2026-02.
+        ("'sales' AS src", [{"src": "sales", "principal": "unilever", "period": "2026-02", "data_kind": "real",
+                              "pesos": 1.0, "pieces": None, "recorded_with_tax": False, "placeholder": False}]),
         ("COALESCE(pd.brand, 'NO BRAND')", [
             {"name": "KNORR", "revenue": 700.0, "products": 10},
             {"name": "SURF", "revenue": 200.0, "products": 8},
@@ -146,6 +148,9 @@ def test_decomposition_zero_fills_and_runs_stl():
     assert body["months"] == 40  # the missing month was zero-filled, not dropped
     assert body["observed"][5] == 0.0
     assert body["method"]["name"] == "STL"
+    # The label is the lag-12 test (2026-10-04), not an STL-strength band.
+    assert body["yearly_pattern"]["label"] == "Repeats yearly"
+    assert body["yearly_pattern"]["months"] == 40
 
 
 def test_decomposition_unknown_or_non_unilever_is_404():

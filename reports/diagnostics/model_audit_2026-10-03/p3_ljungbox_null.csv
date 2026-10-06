@@ -1,0 +1,2 @@
+test,rejection_rate,products,expected_products_flagged_if_pure_noise
+"Ljung-Box lag 3 on MA3 errors of pure noise, same product lengths, 200 draws each",0.1912,89,17.0150

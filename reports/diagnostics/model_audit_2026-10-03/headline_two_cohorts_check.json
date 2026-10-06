@@ -1,0 +1,15 @@
+{
+  "reproduces_eebd741_window_C_max_relative_gap": 0.0,
+  "pairs_checked": {
+    "total_wape_pesos_served": "total_wape_pesos_sell",
+    "total_wape_pesos_ma3": "total_ma3_wape_pesos_sell",
+    "avg_monthly_surplus_pesos": "avg_monthly_surplus_pesos_sell",
+    "avg_monthly_shortage_pesos": "avg_monthly_shortage_pesos_sell",
+    "avg_monthly_miss_pesos": "avg_monthly_miss_pesos_sell",
+    "avg_monthly_sales_pesos": "avg_monthly_sales_pesos_sell",
+    "surplus_share_of_miss_pesos": "surplus_share_of_miss",
+    "total_wape_pcs_served": "total_wape_pcs",
+    "median_product_wape_served": "median_product_wape",
+    "median_product_wape_ma3": "median_product_ma3_wape"
+  }
+}

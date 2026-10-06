@@ -1,0 +1,4 @@
+window,product_months,share_of_rows,share_of_abs_error_served,share_of_abs_error_ma3,pooled_wape_served,pooled_wape_ma3,events,products_with_event
+collapse,143,0.0591,0.1229,0.1204,1.0028,1.0024,67,33
+none,2172,0.8979,0.8298,0.8317,0.2524,0.2581,0,0
+surge,104,0.0430,0.0473,0.0479,0.4826,0.4995,43,25

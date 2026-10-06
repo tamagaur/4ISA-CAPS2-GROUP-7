@@ -206,12 +206,14 @@ def test_anchors_carry_the_principal_bind(client, session):
     assert all(p.get("principal") == "delmonte" for _, p in anchors)
 
 
-def test_method_single_still_pinned(client, session):
-    """Migration 0017 guard — without it the tier join fans out to two rows
-    per product_key. Out of scope for this change; must not regress."""
+def test_method_still_pinned(client, session):
+    """Migration 0017 guard — without it the tier join fans out to one row
+    per basis per product_key. Pinned to each principal's Tier A basis since
+    migration 0044 (analytics.params.abc_method_sql)."""
+    from analytics.params import abc_method_sql
     client.get("/sku?principal=unilever")
     row_query = next(s for s, _ in session.calls if "FROM product_dimension pd" in s)
-    assert "method = 'single'" in row_query
+    assert abc_method_sql() in row_query
 
 
 def test_all_scope_keeps_each_principals_own_stock(client):

@@ -72,20 +72,25 @@ const BIN_LABELS = {
   long_down: 'Long history, falling',
 };
 
-// STL seasonal strength (GET /decomposition, analytics/forecasting/
-// decomposition.py: F_S = max(0, 1 - Var(R)/Var(S+R))) in display bands —
-// a convention over the measured number, which always stays beside it, the
-// same rule as the volatility band. The peak and trough months are only
-// named when there is a pattern worth naming.
-// "Strong seasonality" is not shown for now (3 Oct 2026 analysis): most of
-// the products STL strength labels strong fail the proper yearly-repeat
-// test. Until the backend serves that test's own label ("Repeats yearly"),
-// a high strength reads "Under review" and names no peak or trough month.
-const SEASONALITY_UNDER_REVIEW = 0.6;
-const seasonalityBand = (strength) => {
-  if (strength >= SEASONALITY_UNDER_REVIEW) return 'Under review';
-  if (strength >= 0.3) return 'Moderate seasonality';
-  return 'Weak seasonality';
+// The seasonality label is the backend's (GET /decomposition yearly_pattern,
+// analytics/forecasting/decomposition.py, 2026-10-04): "Repeats yearly",
+// "No reliable yearly pattern" or "Not enough history (needs 24 months)",
+// from the lag-12 autocorrelation test. It replaced bands over STL strength
+// ("Strong seasonality" at >= 0.6), which read 15-18% of patternless series
+// as strong at our lengths. Peak and trough months are named only for a
+// product that repeats yearly; STL strength stays as a measured number.
+const SEASONALITY_TOOLTIP =
+  'Does a month sell like the same month a year earlier? Lag-12 autocorrelation of monthly '
+  + 'demand from the first sale, against the 95% bound 1.96/√months; needs 24 months.';
+
+const yearlyDescription = (stl) => {
+  const yp = stl.yearly_pattern;
+  if (!yp) return stl.available ? `STL seasonal strength ${stl.seasonal_strength.toFixed(2)}` : stl.reason;
+  if (yp.repeats_yearly == null) return `${yp.months} month${yp.months === 1 ? '' : 's'} from the first sale`;
+  const acf = `ACF(12) ${yp.acf_lag12 == null ? 'n/a' : yp.acf_lag12.toFixed(2)} vs bound ${yp.acf_bound.toFixed(2)}`;
+  const peaks = yp.repeats_yearly && stl.available ? `peaks in ${stl.peak_month}, lowest in ${stl.trough_month} · ` : '';
+  const strength = stl.available ? ` · STL seasonal strength ${stl.seasonal_strength.toFixed(2)}, trend ${stl.trend_strength.toFixed(2)}` : '';
+  return `${peaks}${acf}${strength}`;
 };
 
 const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
@@ -246,21 +251,15 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
 
           {/* Seasonality: STL decomposition of the SKU's monthly demand. */}
           {principal !== 'delmonte' && (
-            <div className="sku-pattern-tile" title="STL decomposition (period 12, robust) of monthly demand from the first sale">
+            <div className="sku-pattern-tile" title={SEASONALITY_TOOLTIP}>
               <span className="sku-pattern-tile-label">
                 <Waves size={11} aria-hidden="true" /> Seasonality
               </span>
               <span className="sku-pattern-tile-value">
-                {!stl ? '…' : stl.available ? seasonalityBand(stl.seasonal_strength) : 'Not enough history'}
+                {!stl ? '…' : stl.yearly_pattern?.label || 'Not enough history'}
               </span>
               <span className="sku-pattern-tile-desc">
-                {!stl
-                  ? 'Decomposing…'
-                  : !stl.available
-                    ? stl.reason
-                    : `${stl.seasonal_strength >= SEASONALITY_UNDER_REVIEW
-                      ? 'the yearly-repeat test is being redone, so no seasonality label yet · '
-                      : stl.seasonal_strength >= 0.3 ? `peaks in ${stl.peak_month}, lowest in ${stl.trough_month} · ` : 'no reliable yearly pattern · '}STL seasonal strength ${stl.seasonal_strength.toFixed(2)}, trend ${stl.trend_strength.toFixed(2)} (0–1)${stl.periods?.length ? ` · ${formatMonth(stl.periods[0])} – ${formatMonth(stl.periods[stl.periods.length - 1])}` : ''}`}
+                {!stl ? 'Decomposing…' : `${yearlyDescription(stl)}${stl.periods?.length ? ` · ${formatMonth(stl.periods[0])} – ${formatMonth(stl.periods[stl.periods.length - 1])}` : ''}`}
               </span>
             </div>
           )}

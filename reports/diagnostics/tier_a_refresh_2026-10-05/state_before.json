@@ -1,0 +1,90 @@
+{
+ "forecast_result": [
+  [
+   "insufficient_data",
+   13,
+   "2026-09-21 10:08:03.839825+00"
+  ],
+  [
+   "ok",
+   119,
+   "2026-09-21 10:08:03.839825+00"
+  ]
+ ],
+ "forecast_runs": [
+  [
+   1,
+   "stored_run",
+   "forecast_result generated 2026-09-21 10:08:03 UTC"
+  ],
+  [
+   2,
+   "backtest_recreated",
+   "backtest 2023-10..2026-02, Tier A the month before each month"
+  ],
+  [
+   3,
+   "backtest_recreated",
+   "backtest 2023-10..2026-02, Tier A as of 2026-02 (107, survivor cohort)"
+  ]
+ ],
+ "lp_runs": [
+  [
+   1,
+   "2026-10-03 08:08:41.509691+00",
+   "e6991b556a26b0b5f25a7564765e67bdf8716b92"
+  ]
+ ],
+ "cycle_2026_03": [
+  [
+   "accepted",
+   null,
+   1,
+   1331.24
+  ],
+  [
+   "pending",
+   1,
+   73,
+   325467.96
+  ]
+ ],
+ "review_flag": [
+  [
+   "2026-03-01",
+   false,
+   104
+  ],
+  [
+   "2026-03-01",
+   true,
+   15
+  ],
+  [
+   "2026-03-01",
+   null,
+   13
+  ]
+ ],
+ "sku_traits": [
+  [
+   "single",
+   "2026-02",
+   132
+  ]
+ ],
+ "mart_refresh_log": [
+  [
+   "migration 0043",
+   "2026-10-04 14:41:43.694897+00"
+  ],
+  [
+   "backtest_forecast_run",
+   "2026-10-04 13:38:51.40794+00"
+  ],
+  [
+   "migration 0041",
+   "2026-10-04 13:37:42.765454+00"
+  ]
+ ]
+}

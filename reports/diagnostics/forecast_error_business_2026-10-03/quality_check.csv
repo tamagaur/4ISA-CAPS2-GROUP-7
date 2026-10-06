@@ -1,0 +1,29 @@
+area,item,status,evidence
+1 numbers,"every README number (§14 excluded) found in its own section's files, product rows in that product's rows (or a stated parameter)",PASS,"1001 numbers: 988 sourced (262 on product rows), 13 parameters, 0 unsourced"
+2 arithmetic,"monthly totals: shortage + surplus = total miss (each month, 107 products)",PASS,largest gap ₱0.0000 over 6 months
+2 arithmetic,monthly totals: surplus with cost basis + without = surplus,PASS,largest gap ₱0.0000
+2 arithmetic,monthly totals: 'average per month' row = mean of the 6 months,PASS,largest gap 0.0000
+2 arithmetic,"A: 6 months, bin fixed: surplus + shortage = miss; shares add to 100%; over + under + exact = scored",PASS,₱ gap 0.0000; share gap 0.00e+00; months 361 + 281 + 0 = 642
+2 arithmetic,"B: 6 months, bin re-worked: surplus + shortage = miss; shares add to 100%; over + under + exact = scored",PASS,₱ gap 0.0000; share gap 0.00e+00; months 357 + 279 + 0 = 636
+2 arithmetic,"C: 29 months, bin re-worked: surplus + shortage = miss; shares add to 100%; over + under + exact = scored",PASS,₱ gap 0.0000; share gap 0.00e+00; months 1249 + 1169 + 1 = 2419
+2 arithmetic,first report: over + under + exact = 642 scored product-months,PASS,361 + 281 + 0
+2 arithmetic,category product counts add to the total (107),PASS,18 + 21 + 10 + 25 + 4 + 25 + 1 + 3 = 107
+2 arithmetic,"A: 6 months: category sales and misses (₱ at selling price, VAT-inclusive (value-added tax)) add to the total",PASS,"largest gap ₱0.0000 across 8 categories; total sales ₱123,432,071, miss ₱40,919,230"
+2 arithmetic,"C: 29 months: category sales and misses (₱ at selling price, VAT-inclusive (value-added tax)) add to the total",PASS,"largest gap ₱0.0000 across 8 categories; total sales ₱553,695,323, miss ₱165,938,627"
+2 arithmetic,"review list exposure adds to ₱339,703",PASS,"sum of 15 rows = ₱339,703.24; followups_results.json = ₱339,703.24"
+2 arithmetic,"each exposure = max(forecast − recent average, 0) × price",PASS,largest gap ₱0.004369
+3 recompute,"empty quantities treated as 0 pieces, as the pipeline does",PASS,1 product-month with an empty quantity in inputs/demand_money_tierA.csv
+3 recompute,6-month median product WAPE,PASS,fresh code 29.315% vs README 29.3% (107 products)
+3 recompute,29-month median product WAPE,PASS,fresh code 26.860% vs README 26.9% (107 products)
+3 recompute,"6-month total WAPE, ₱ at selling price, VAT-inclusive (value-added tax)",PASS,fresh code 8.254% vs README 8.3% (107 products)
+3 recompute,"29-month total WAPE, ₱ at selling price, VAT-inclusive (value-added tax)",PASS,fresh code 10.653% vs README 10.7% (107 products)
+3 recompute,29-month surplus share of the peso miss,PASS,fresh code 51.103% vs README 51.1% (107 products)
+3 recompute,"'Repeats yearly' list (lag-12 test, 24+ months)",PASS,"fresh code finds 3: ['AXE DEO AP RLN DARKTEMP 24X25ML', 'BESTFOODS RGLR MYNS MAYOMAGICDOY24X220ML', 'CREAM SILK HC ULTREBORN HFALL 24X180ML']"
+4 data rules,demand rows carry no is_demo = true row,PASS,"3087 + 3087 pulled product-months, is_demo = true: 0; months 2023-01..2026-02"
+4 data rules,demand read only through Unilever_SKU_Demand_Fact_Real (filter: is_demo = false),PASS,schema.sql view = WHERE is_demo = false; harness + pull_inputs.py read the view; harness calls assert_real_rows
+4 data rules,gap fills cannot pass the is_demo filter (fill_source needs is_demo = true),PASS,0038_data_fills.sql: fill_source IS NULL OR (is_demo AND fill_source IN (...))
+4 data rules,stock count filtered on is_demo = false AND fill_source IS NULL,PASS,"pull_stock_count.py filter present; snapshot 2026-04-06: is_demo False, fill_source empty, 785 rows, 120 Tier A products"
+5 wording,"every peso figure carries its price basis (selling price VAT-incl, or at cost)",PASS,"all peso figures labelled in the line, its table header or its paragraph"
+5 wording,product name before SKU,PASS,all 84 SKU mentions follow their product name
+5 wording,jargon spelled out at first use,PASS,all terms expanded at first use
+5 wording,"DEC-26 'tied' wording kept, no claim of beating MA3",PASS,"3 DEC-26 sentences say tie; 2 'beat MA3' sentences, all negated"

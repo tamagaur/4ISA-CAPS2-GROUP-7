@@ -1,0 +1,4 @@
+volume_tercile,product_months,products,wape_served,wape_ma3,bias_pct_served,bias_pct_ma3,mean_z_served,share_over_served,median_product_wape_served,median_product_wape_ma3
+low,782,36,0.2779,0.2865,-1.5255,-1.3387,-0.0153,0.5141,0.2658,0.2799
+mid,793,35,0.3034,0.3157,-0.4170,1.1258,0.0002,0.4994,0.2705,0.2716
+high,844,36,0.2831,0.2882,3.7400,2.6652,0.0249,0.5344,0.2689,0.2704

@@ -55,7 +55,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from analytics.params import XYZ_CV_HIGH, XYZ_CV_LOW
+from analytics.params import XYZ_CV_HIGH, XYZ_CV_LOW, abc_method
 from analytics.segmentation.orchestrate_segment import SCHEME_BUILDERS
 from backend.data_mode import (
     PREVIEW,
@@ -77,6 +77,7 @@ from backend.schemas.segment import (
     SkuSegmentRow,
     SkuTraits,
 )
+from backend.response_cache import cached
 
 router = APIRouter(prefix="/segment", tags=["segment"])
 
@@ -116,6 +117,7 @@ def _preview_payload(response, db: Session, window: dict, cohort_period: str, **
 
 
 @router.get("", response_model=SegmentResponse)
+@cached("GET /segment")
 def get_segment(
     sku: str = Query(..., description="Product_Dimension.sku_code of the SKU whose demand pattern to read."),
     principal: str | None = PrincipalQuery,
@@ -135,6 +137,9 @@ def get_segment(
         raise HTTPException(status_code=404, detail=f"No product found for '{sku}' ({principal or 'any principal'})")
 
     product_key = product["product_key"]
+    # The cohort of the Tier A basis in use (DEC-38): runs on other bases are kept
+    # in the tables, and unpinned they return each scheme once per basis.
+    basis = abc_method(product["principal"])
 
     traits_row = db.execute(
         text("""
@@ -142,22 +147,23 @@ def get_segment(
                    restart_flag, stability_group, revenue_share_2026_02,
                    adi, trend_pvalue, trend_slope
             FROM sku_traits
-            WHERE product_key = :product_key
+            WHERE product_key = :product_key AND abc_method = :abc_method
             ORDER BY cohort_period DESC
             LIMIT 1
         """),
-        {"product_key": product_key},
+        {"product_key": product_key, "abc_method": basis},
     ).mappings().first()
 
     segment_rows = db.execute(
         text("""
             SELECT scheme, abc_method, cohort_period, bin, bin_reason
             FROM sku_segment
-            WHERE product_key = :product_key
-              AND cohort_period = (SELECT MAX(cohort_period) FROM sku_segment WHERE product_key = :product_key)
+            WHERE product_key = :product_key AND abc_method = :abc_method
+              AND cohort_period = (SELECT MAX(cohort_period) FROM sku_segment
+                                   WHERE product_key = :product_key AND abc_method = :abc_method)
             ORDER BY scheme, abc_method
         """),
-        {"product_key": product_key},
+        {"product_key": product_key, "abc_method": basis},
     ).mappings().all()
 
     # Preview: this cohort member's series traits and series-based bins,

@@ -1,0 +1,7 @@
+product_name,sku_code,product_key,month,bin,served_method,actual_over_level,served_over_level,ma3_over_level,tsb_over_level,level_definition
+DOVE SH KERATIN STRT&SILKY 288X13.5ML,64314335,674,2025-12,medium,tsb,-0.0031,0.9059,0.7524,0.9059,average of the product's own 2025-06..2025-11 sales (not shown)
+DOVE SH KERATIN STRT&SILKY 288X13.5ML,64314335,674,2026-01,medium,tsb,0.0427,0.8106,0.5141,0.8106,average of the product's own 2025-06..2025-11 sales (not shown)
+DOVE SH KERATIN STRT&SILKY 288X13.5ML,64314335,674,2026-02,medium,tsb,0.3952,0.5858,0.2821,0.5858,average of the product's own 2025-06..2025-11 sales (not shown)
+SURF POWDER CHERRY BLOSSOM L 288X65G,69668140,613,2025-12,long,xgb_ma3_avg,0.0334,0.9826,0.9387,,average of the product's own 2025-06..2025-11 sales (not shown)
+SURF POWDER CHERRY BLOSSOM L 288X65G,69668140,613,2026-01,long,xgb_ma3_avg,0.0962,0.7882,0.7052,,average of the product's own 2025-06..2025-11 sales (not shown)
+SURF POWDER CHERRY BLOSSOM L 288X65G,69668140,613,2026-02,long,xgb_ma3_avg,0.6339,0.6334,0.4089,,average of the product's own 2025-06..2025-11 sales (not shown)

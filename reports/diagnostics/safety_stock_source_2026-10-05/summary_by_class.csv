@@ -1,0 +1,5 @@
+class,class_period,products,with_current_safety_stock,with_current_and_price,current_pesos_all_priced,with_forecast_errors,comparable_products,comparable_without_price,median_error_months,current_pieces,forecast_error_pieces,current_pesos,forecast_error_pesos,difference_pesos,difference_pct,products_forecast_error_lower,products_forecast_error_higher,forecast_error_rmse_pesos,sales_same_months_pesos,forecast_error_vs_sales_same_months_pct
+A,2026-02,132,128,128,7196280.13,111,111,0,19,687932.87,653218.51,6581013.08,6397234.11,-183778.97,-2.8,56,55,6356195.84,6432346.84,-0.5
+B,2026-02,194,188,188,1803226.79,53,53,0,7,45579.58,44529.06,905152.46,957621.36,52468.89,5.8,23,30,988039.38,893472.3,7.2
+C,2026-02,384,364,341,1563436.53,10,10,0,7.0,12424.82,12594.49,523496.35,541753.8,18257.45,3.5,6,4,583219.16,479418.04,13.0
+all,2026-02,710,680,657,10562943.44,174,174,0,14.5,745937.27,710342.06,8009661.89,7896609.27,-113052.63,-1.4,85,89,7927454.38,7805237.17,1.2

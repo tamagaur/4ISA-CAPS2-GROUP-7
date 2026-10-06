@@ -1,0 +1,12 @@
+measure,value
+rule_3wk,8211106.332995147
+peak_targets,8917570.226053402
+peak_minus_rule,706463.8930582544
+peak_vs_rule_pct,8.603760131803812
+average_targets,5906831.950096066
+average_minus_rule,-2304274.3828990813
+average_vs_rule_pct,-28.062897853845676
+sensitivity_rule_average_if_3wk_is_its_peak,6842588.610829289
+sensitivity_average_vs_that_pct,-13.675477424614801
+ssm_stock_2026-04-06,6105203.23
+ssm_stock_2026-03-02,16782794.43

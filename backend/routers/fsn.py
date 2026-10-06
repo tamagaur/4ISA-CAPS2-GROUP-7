@@ -37,6 +37,7 @@ from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unile
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
+from backend.response_cache import cached
 
 router = APIRouter(prefix="/fsn", tags=["fsn"])
 
@@ -103,6 +104,7 @@ def classify_principal(
 
 
 @router.get("")
+@cached("GET /fsn")
 def get_fsn(
     principal: str | None = PrincipalQuery,
     period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$", description="Window end 'YYYY-MM'; default the latest data month."),

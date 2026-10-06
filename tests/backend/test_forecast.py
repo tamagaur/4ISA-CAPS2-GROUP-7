@@ -5,7 +5,8 @@ FakeSession pattern from tests/backend/test_segment.py — never touches
 Supabase. Covers what the frontend reads: each point's status / mase /
 model_params pass through, the response's principal is the resolved
 product's own (it was hard-coded to 'unilever'), a resolved product with no
-Forecast_Result rows is a 200 with forecast: [], and scope/unknown are 404.
+Forecast_Result rows is a 200 with forecast: [], unknown/out-of-scope codes are 404,
+and any Del Monte request is a 200 with blocked_reason (no product-level sales).
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from fastapi.testclient import TestClient
 from backend import auth_utils
 from backend.deps import get_current_user, get_db
 from backend.main import app
+from backend.routers import forecast as forecast_router
 
 
 @pytest.fixture(autouse=True)
@@ -138,6 +140,7 @@ def test_principal_is_the_resolved_products_not_hardcoded():
         body = get(c, "/forecast/DM-ONLY").json()
     assert body["principal"] == "delmonte"
     assert body["forecast"] == []
+    assert body["blocked_reason"] == forecast_router.DEL_MONTE_NO_FORECAST
 
 
 def test_resolved_product_without_forecast_is_200_empty():
@@ -151,7 +154,19 @@ def test_resolved_product_without_forecast_is_200_empty():
 def test_unknown_and_out_of_scope_are_404():
     with make_client(FakeSession(PRODUCTS, FORECASTS)) as c:
         assert get(c, "/forecast/nope").status_code == 404
-        assert get(c, "/forecast/21051980?principal=delmonte").status_code == 404
+        assert get(c, "/forecast/nope?principal=unilever").status_code == 404
+        assert get(c, "/forecast/DM-ONLY?principal=unilever").status_code == 404
+
+
+def test_del_monte_says_why_there_is_no_forecast_instead_of_404():
+    with make_client(FakeSession(PRODUCTS, FORECASTS)) as c:
+        for path in ("/forecast/21051980?principal=delmonte", "/forecast/nope?principal=delmonte"):
+            resp = get(c, path)
+            assert resp.status_code == 200, path
+            body = resp.json()
+            assert body["blocked_reason"] == ("No product-level forecast for Del Monte: "
+                                              "its sales files have no product detail.")
+            assert (body["principal"], body["forecast"], body["actuals"]) == ("delmonte", [], [])
 
 
 

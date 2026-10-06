@@ -1,0 +1,28 @@
+view,over,under,surplus_pesos_per_month,shortage_pesos_per_month,setting,product_months,stock_limited_months,exact,over_share_pct,surplus_minus_shortage_pesos_per_month,note
+(a) as measured,1249,1169,2924119.3585,2797902.2631,low stock < 0.5 wk; counts as recorded,2419,882,1,51.6543,126217.0954,
+(b) stock-limited months excluded,814,722,1854084.8112,1589640.2342,low stock < 0.5 wk; counts as recorded,2419,882,1,52.9948,264444.5769,
+(c) stock-limited months relabelled as shortage,814,1604,1854084.8112,2797902.2631,low stock < 0.5 wk; counts as recorded,2419,882,1,33.6642,-943817.4520,shortage pesos are a floor: the true shortfall in a stock-limited month is unknown
+(a) as measured,1249,1169,2924119.3585,2797902.2631,low stock < 1 wk; counts as recorded,2419,1142,1,51.6543,126217.0954,
+(b) stock-limited months excluded,672,604,1537541.9881,1331014.4530,low stock < 1 wk; counts as recorded,2419,1142,1,52.6646,206527.5350,
+(c) stock-limited months relabelled as shortage,672,1746,1537541.9881,2797902.2631,low stock < 1 wk; counts as recorded,2419,1142,1,27.7916,-1260360.2751,shortage pesos are a floor: the true shortfall in a stock-limited month is unknown
+(a) as measured,1249,1169,2924119.3585,2797902.2631,low stock < 2 wk; counts as recorded,2419,1559,1,51.6543,126217.0954,
+(b) stock-limited months excluded,462,397,1075269.8578,990338.6434,low stock < 2 wk; counts as recorded,2419,1559,1,53.7835,84931.2144,
+(c) stock-limited months relabelled as shortage,462,1956,1075269.8578,2797902.2631,low stock < 2 wk; counts as recorded,2419,1559,1,19.1067,-1722632.4053,shortage pesos are a floor: the true shortfall in a stock-limited month is unknown
+(a) as measured,1249,1169,2924119.3585,2797902.2631,low stock < 0.5 wk; 2026-02 count treated as missing,2419,878,1,51.6543,126217.0954,
+(b) stock-limited months excluded,814,726,1854084.8112,1595769.2800,low stock < 0.5 wk; 2026-02 count treated as missing,2419,878,1,52.8571,258315.5312,
+(c) stock-limited months relabelled as shortage,814,1604,1854084.8112,2797902.2631,low stock < 0.5 wk; 2026-02 count treated as missing,2419,878,1,33.6642,-943817.4520,shortage pesos are a floor: the true shortfall in a stock-limited month is unknown
+(a) as measured,1249,1169,2924119.3585,2797902.2631,low stock < 1 wk; 2026-02 count treated as missing,2419,1139,1,51.6543,126217.0954,
+(b) stock-limited months excluded,672,607,1537541.9881,1336186.8995,low stock < 1 wk; 2026-02 count treated as missing,2419,1139,1,52.5410,201355.0886,
+(c) stock-limited months relabelled as shortage,672,1746,1537541.9881,2797902.2631,low stock < 1 wk; 2026-02 count treated as missing,2419,1139,1,27.7916,-1260360.2751,shortage pesos are a floor: the true shortfall in a stock-limited month is unknown
+(a) as measured,1249,1169,2924119.3585,2797902.2631,low stock < 2 wk; 2026-02 count treated as missing,2419,1554,1,51.6543,126217.0954,
+(b) stock-limited months excluded,464,400,1078632.7129,995511.0899,low stock < 2 wk; 2026-02 count treated as missing,2419,1554,1,53.7037,83121.6231,
+(c) stock-limited months relabelled as shortage,464,1954,1078632.7129,2797902.2631,low stock < 2 wk; 2026-02 count treated as missing,2419,1554,1,19.1894,-1719269.5502,shortage pesos are a floor: the true shortfall in a stock-limited month is unknown
+(a) as measured,1249,1169,2924119.3585,2797902.2631,low stock < 0.5 wk; 2025-05 count treated as missing,2419,842,1,51.6543,126217.0954,
+(b) stock-limited months excluded,828,748,1865080.0532,1624626.9690,low stock < 0.5 wk; 2025-05 count treated as missing,2419,842,1,52.5381,240453.0842,
+(c) stock-limited months relabelled as shortage,828,1590,1865080.0532,2797902.2631,low stock < 0.5 wk; 2025-05 count treated as missing,2419,842,1,34.2432,-932822.2099,shortage pesos are a floor: the true shortfall in a stock-limited month is unknown
+(a) as measured,1249,1169,2924119.3585,2797902.2631,low stock < 1 wk; 2025-05 count treated as missing,2419,1100,1,51.6543,126217.0954,
+(b) stock-limited months excluded,687,631,1563612.0095,1367483.2084,low stock < 1 wk; 2025-05 count treated as missing,2419,1100,1,52.1244,196128.8011,
+(c) stock-limited months relabelled as shortage,687,1731,1563612.0095,2797902.2631,low stock < 1 wk; 2025-05 count treated as missing,2419,1100,1,28.4119,-1234290.2536,shortage pesos are a floor: the true shortfall in a stock-limited month is unknown
+(a) as measured,1249,1169,2924119.3585,2797902.2631,low stock < 2 wk; 2025-05 count treated as missing,2419,1517,1,51.6543,126217.0954,
+(b) stock-limited months excluded,474,427,1084716.2974,1032733.7610,low stock < 2 wk; 2025-05 count treated as missing,2419,1517,1,52.6082,51982.5364,
+(c) stock-limited months relabelled as shortage,474,1944,1084716.2974,2797902.2631,low stock < 2 wk; 2025-05 count treated as missing,2419,1517,1,19.6030,-1713185.9657,shortage pesos are a floor: the true shortfall in a stock-limited month is unknown

@@ -96,6 +96,27 @@ class RecommendationItem(BaseModel):
     # the supplier allocation couldn't cover the whole need. 0 when filled;
     # None without a forecast or a stock figure to work it out from.
     short_units: float | None = None
+    # The opening count's "PO Qty" (2026-10-04, migration 0042), in pieces
+    # (on_order_cases: as the file records it). INFORMATION ONLY: its meaning
+    # is unverified (pending SSM), so it is never subtracted from q_i or any
+    # order quantity (DEC-34); on_order_note says so. None with
+    # on_order_blocked_reason when unknown — never 0 for "not loaded".
+    on_order: float | None = None
+    on_order_cases: float | None = None
+    on_order_blocked_reason: str | None = None
+    on_order_note: str | None = None
+    # Review before ordering (2026-10-04, review_flag, DEC-33; the full
+    # contract is in backend/routers/recommendations.py): True = the forecast
+    # for this cycle is likely to miss by a lot — review_reasons says why
+    # ('collapse': last 3 months < half the last 12; 'over_forecast_run':
+    # over-forecast 3+ months running, review_over_run_months of them, 6 =
+    # "6 or more"). Not a direction to adjust. False = assessed, not
+    # flagged; None = not assessed. A flagged row is never accepted in bulk:
+    # PATCH needs reviewed=true to accept it.
+    needs_review: bool | None = None
+    review_reasons: list[str] = []
+    review_over_run_months: int | None = None
+    review_collapse_ratio: float | None = None
 
 
 class RecommendationsResponse(BaseModel):
@@ -140,3 +161,7 @@ class RecommendationDecision(BaseModel):
     # The admin's reason from the decision dialog; it goes into the audit log
     # entry the server writes for the decision.
     reason: str | None = Field(default=None, max_length=500)
+    # Required (true) to ACCEPT a row flagged for review (needs_review): the
+    # person confirms they checked it. The page sends it only from a single
+    # row's confirm dialog, never from bulk accept.
+    reviewed: bool = False

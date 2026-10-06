@@ -135,8 +135,39 @@ class FakeSession:
         # backend/stock_units.STOCK_COUNTS_SQL: {(principal, period): (row_count,
         # first_date, last_date)}. Empty = no principal counted at any period.
         stock_counts: dict | None = None,
+        # ---- the marts (migration 0041, backend/marts.py) ----
+        # Each product's net sales over the requested RANGE, per principal:
+        # {principal: {product_key: revenue}} — what mart.sales_mart sums;
+        # the fake ranks it the way backend/marts.PARETO_SQL does.
+        range_revenue: dict | None = None,
+        # {product_key: (any_active, any_inactive)} at the range-end count.
+        stock_status: dict | None = None,
+        # Product keys with a pending row in the LP's current cycle.
+        pending_keys: set | None = None,
+        # Non-real chart points: {principal: {period: (kind, value)}}.
+        estimated_sales: dict | None = None,
+        estimated_stock: dict | None = None,
+        # Returns flow: {principal: {period: (data_kind, pesos, source_tag)}}.
+        returns: dict | None = None,
+        # Scored rows mart.accuracy_mart returns for the range.
+        accuracy_rows: list | None = None,
+        # Unilever pieces per sales month (mart.sales_month).
+        sales_pieces: dict | None = None,
     ):
         self.stock_counts = stock_counts or {}
+        self.range_revenue = range_revenue or {}
+        self.stock_status = stock_status or {}
+        self.pending_keys = pending_keys or set()
+        self.estimated_sales = estimated_sales or {}
+        self.estimated_stock = estimated_stock or {}
+        self.returns = returns or {}
+        self.accuracy_rows = accuracy_rows or []
+        self.sales_pieces = sales_pieces or {}
+        # A current stock on an ABC fixture row means a count was taken that
+        # month: the safety-stock check reads the count at the range's end.
+        if latest_inventory_period is None:
+            stocked = [r["period"] for r in (abc_rows or []) if r.get("current_stock") is not None]
+            latest_inventory_period = max(stocked) if stocked else None
         self.recommendation_count = recommendation_count
         self.forecast_total = forecast_total
         self.forecast_unreliable = forecast_unreliable
@@ -186,11 +217,93 @@ class FakeSession:
         # itself — the only way to check scope/unit handling that lives in
         # SQL rather than in Python (see this module's docstring).
         self.calls: list[tuple[str, dict]] = []
+        # A real Session's per-request dict: backend/marts keeps the month-level
+        # snapshot here, so it is read once per request.
+        self.info: dict = {}
+
+    def _latest_stock(self, principal, end):
+        candidates = {p for p, v in self.soh.items() if v is not None}
+        if self.latest_inventory_period:
+            candidates.add(self.latest_inventory_period)
+        if end is not None:
+            candidates = {p for p in candidates if p <= end}
+        return max(candidates) if candidates else None
+
+    def _snapshot_rows(self):
+        """mart.sales_month / inventory_count / flow_month rows built from the fixtures,
+        in backend/marts.SNAPSHOT_SQL's shape."""
+        rows = []
+
+        def add(src, who, period, kind, **v):
+            rows.append({"src": src, "principal": who, "period": period, "data_kind": kind,
+                         "source_tag": v.get("source_tag"), "flow": v.get("flow"), "pesos": v.get("pesos"),
+                         "pieces": v.get("pieces"), "recorded_with_tax": v.get("recorded_with_tax", False),
+                         "placeholder": v.get("placeholder", False), "first_date": v.get("first_date"),
+                         "last_date": v.get("last_date"), "negative_rows": v.get("negative_rows"),
+                         "products": v.get("products")})
+
+        # Real sales; the latest-month fixtures count as months on file even with no pesos.
+        for who, source, latest in (("unilever", self.sales, self.latest_sales_period),
+                                    ("delmonte", self.delmonte_sales, self.delmonte_latest_sales_period)):
+            months = set(source) | ({latest} if latest else set())
+            if who == "delmonte":
+                months |= set(self.dm_tax_inclusive_periods)
+            for m in months:
+                add("sales", who, m, "real", pesos=source.get(m),
+                    pieces=self.sales_pieces.get(m) if who == "unilever" else None,
+                    recorded_with_tax=who == "delmonte" and m in self.dm_tax_inclusive_periods)
+        for who, by_month in self.estimated_sales.items():
+            for m, (kind, value) in by_month.items():
+                add("sales", who, m, kind, pesos=value)
+        # Real stock counts: Unilever's, plus any principal the coverage fixture names.
+        counts = {m for m, v in self.soh.items() if v is not None}
+        if self.latest_inventory_period:
+            counts.add(self.latest_inventory_period)
+        for who in {"unilever"} | set(self.stock_coverage):
+            for m in counts:
+                _, first, last = self.stock_counts.get((who, m), (None, None, None))
+                add("stock", who, m, "real", pesos=self.soh.get(m), first_date=first, last_date=last)
+        for who, by_month in self.estimated_stock.items():
+            for m, (kind, value) in by_month.items():
+                add("stock", who, m, kind, pesos=value)
+        # Flows: purchases (Del Monte's ex-VAT in the mart), estimated receipts, returns.
+        for who in ("unilever", "delmonte"):
+            for m, value in self.received.items():
+                if value is not None:
+                    add("flow", who, m, "real", flow="purchases", source_tag="real", negative_rows=0,
+                        pesos=value - (self.received_tax.get(m, 0.0) if who == "delmonte" else 0.0))
+        for m, (value, negative, skus) in (self.derived or {}).items():
+            add("flow", "unilever", m, "filled", flow="estimated_receipts", source_tag="derived_stock_balance",
+                pesos=value, negative_rows=negative, products=skus)
+        for who, by_month in self.returns.items():
+            for m, (kind, value, tag) in by_month.items():
+                add("flow", who, m, kind, flow="returns", source_tag=tag, pesos=value, negative_rows=0)
+        return rows
+
+    def _pareto(self, principal):
+        """backend/marts.PARETO_SQL on the fixture: net > 0 only, revenue desc then
+        product_key, running share rounded as exact numeric division would be."""
+        items = sorted(((k, v) for k, v in self.range_revenue.get(principal, {}).items() if v > 0),
+                       key=lambda kv: (-kv[1], kv[0]))
+        total = sum(v for _, v in items)
+        rows, running = [], 0.0
+        for rank, (key, value) in enumerate(items, 1):
+            running += value
+            cum = round(running / total, 12)
+            rows.append({"rank": rank, "product_key": key, "sku_code": f"SKU{key}", "product_name": f"Product {key}",
+                         "category_path": None, "brand": None, "revenue": value, "pieces": None,
+                         "months_with_sales": 1, "share": value / total, "cumulative_share": cum,
+                         "class": "A" if cum <= 0.80 else "B" if cum <= 0.95 else "C"})
+        return rows
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
         self.calls.append((sql, dict(params)))
+
+        # backend/marts.status: no refresh log in these fixtures.
+        if "to_regclass('mart.refresh_log')" in sql:
+            return FakeResult([{"present": False}])
 
         # backend/lp_cycle.stored_run (migration 0037). Before every
         # lp_recommendation matcher: its subquery reads that table too.
@@ -226,29 +339,15 @@ class FakeSession:
         if "lr.planning_cycle_date < :cycle" in sql:
             return FakeResult([self.lp_superseded_pending])
 
+        # tier_stock's pending reorders, before the _SELECT_ONE matcher.
+        if "SELECT DISTINCT lr.product_key" in sql:
+            return FakeResult([{"product_key": k} for k in sorted(self.pending_keys)])
+
         # Checked FIRST among the row queries: recommendations._SELECT_ONE
         # (reused verbatim by reorder_preview) embeds its own stock
-        # subquery, which the SOH matcher below would otherwise claim.
+        # subquery, which a stock matcher below would otherwise claim.
         if "FROM lp_recommendation lr" in sql and "WHERE lr.status = 'pending'" in sql:
             return FakeResult(self.reco_preview_rows)
-
-        # Which principals carry a stock valuation at the resolved period —
-        # what keeps weeks_of_cover's numerator and denominator on the same
-        # principals (_stock_valuation_coverage).
-        # _stock_count_dates: the day each stock snapshot was counted.
-        if "AS first_count_date" in sql:
-            rows = []
-            for p, d in self.count_dates.items():
-                if p in params["periods"]:
-                    first, last = d if isinstance(d, tuple) else (d, d)
-                    rows.append({"period": p, "first_count_date": first, "count_date": last})
-            return FakeResult(rows)
-
-        if "HAVING SUM(COALESCE(valuation" in sql:
-            return FakeResult([{"principal": p} for p in self.stock_coverage])
-
-        if "SELECT principal FROM ABC_Classification" in sql:
-            return FakeResult([{"principal": p} for p in self.abc_coverage])
 
         if "COUNT(*) AS product_count" in sql:
             return FakeResult([{"product_count": self.recommendation_count}])
@@ -258,72 +357,38 @@ class FakeSession:
             return FakeResult([{"total_count": self.forecast_total, "evaluated_count": self.forecast_evaluated,
                                 "unreliable_count": self.forecast_unreliable}])
 
-        if sql.strip() == "SELECT MAX(calendar_month) AS p FROM Unilever_SKU_Demand_Fact_Real":
-            return FakeResult([{"p": self.latest_sales_period}])
+        # ---- the marts -------------------------------------------------
+        if "WITH rev AS" in sql:
+            assert "data_kind = 'real'" in sql, "the Pareto ranks real rows only"
+            return FakeResult(self._pareto(params["principal"]))
 
-        if "MAX(_period) AS p FROM SellOut_Fact_Real" in sql:
-            return FakeResult([{"p": self.delmonte_latest_sales_period}])
+        # backend/marts.SNAPSHOT_SQL: every month-level mart row, one read per request.
+        if "'sales' AS src" in sql:
+            return FakeResult(self._snapshot_rows())
 
-        if "net_amount_tax_inclusive" in sql:
-            return FakeResult([{"p": p} for p in self.dm_tax_inclusive_periods])
+        if sql.strip().startswith("SELECT 1 FROM mart.inventory_count"):
+            return FakeResult([])  # the idle check's "is there a count"
 
-        # _abc_class_revenue — checked before the demand-fact sums below,
-        # whose table names its subqueries also carry. Mirrors the SQL: the
-        # period's ranked products joined to their own revenue, positive only.
-        if "AS class_revenue" in sql:
-            period = params["period"]
-            by_tier: dict = {}
-            for r in self.abc_rows:
-                rev = self.abc_product_revenue.get(r["product_key"])
-                if r["period"] == period and rev is not None and rev > 0:
-                    b = by_tier.setdefault(r["tier"], {"class_revenue": 0.0, "cnt": 0})
-                    b["class_revenue"] += rev
-                    b["cnt"] += 1
-            return FakeResult([{"tier": t, **b} for t, b in by_tier.items()])
+        if "FROM mart.inventory_mart_real" in sql:
+            keys = set(params["keys"])
+            if "any_active" in sql:
+                return FakeResult([{"product_key": k, "any_active": a, "any_inactive": i}
+                                   for k, (a, i) in self.stock_status.items() if k in keys])
+            return FakeResult([{"product_key": r["product_key"], "pieces": r["current_stock"]}
+                               for r in self.abc_rows
+                               if r["product_key"] in keys and r.get("current_stock") is not None])
 
-        if "FROM SellOut_Fact_Real" in sql and "SUM(net_amount)" in sql:
-            periods = params["periods"]
-            return FakeResult([
-                {"period": p, "total": v}
-                for p, v in self.delmonte_sales.items() if p in periods and v is not None
-            ])
+        if "FROM mart.accuracy_mart a" in sql:
+            return FakeResult(self.accuracy_rows)
 
-        if "to_regclass('derived_receipt_fact')" in sql:
-            return FakeResult(["derived_receipt_fact"] if self.derived is not None else [])
+        if "FROM mart.idle_stock" in sql:
+            return FakeResult([{"count_date": None, "window_start": None, "window_end": None, "window_months": None,
+                                "products": 0, "products_with_value": 0, "pesos": None, "never_sold": 0}])
 
-        if "FROM derived_receipt_fact" in sql:
-            periods = params["periods"]
-            return FakeResult([
-                {"period": p, "total": v, "negative_skus": neg, "skus": n}
-                for p, (v, neg, n) in (self.derived or {}).items() if p in periods
-            ])
+        if "AS qty" in sql:
+            return FakeResult([{"period": p, "qty": v} for p, v in self.portfolio_actual.items()])
 
-        if "FROM Purchase_Fact_Real" in sql:
-            periods = params["periods"]
-            ex_vat = "net_amount - COALESCE(tax_amount, 0)" in sql
-            return FakeResult([
-                {"period": p, "total": v - (self.received_tax.get(p, 0.0) if ex_vat else 0.0)}
-                for p, v in self.received.items() if p in periods and v is not None
-            ])
-
-        if "FROM Unilever_SKU_Demand_Fact_Real" in sql and "SUM(net_amount)" in sql:
-            periods = params["periods"]
-            return FakeResult([
-                {"period": p, "total": v} for p, v in self.sales.items() if p in periods and v is not None
-            ])
-
-        if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
-            return FakeResult([{"p": self.latest_inventory_period}])
-
-        # Inventory_Fact.valuation (the source file's own extended total) is
-        # preferred over the multiplication since 2026-09-23 — it prices the
-        # loose-piece remainder the old product dropped.
-        if "SUM(COALESCE(valuation, quantity_on_hand * unit_cost_per_case))" in sql:
-            periods = params["periods"]
-            return FakeResult([
-                {"period": p, "total": v} for p, v in self.soh.items() if p in periods and v is not None
-            ])
-
+        # ---- the stored ABC run (the safety-stock cohort) ------------
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql and "<=" not in sql:
             return FakeResult([{"p": self.latest_abc_period}])
 
@@ -338,30 +403,14 @@ class FakeSession:
             period = params["period"]
             rows = [r for r in self.abc_rows if r["period"] == period and r["tier"] == "A"]
             return FakeResult([
-                {"product_key": r["product_key"], "revenue_share": r.get("revenue_share"),
-                 "current_stock": r["current_stock"], "ss_i": r["ss_i"],
-                 "sku_id": f"SKU-{r['product_key']}", "product_name": f"Product {r['product_key']}",
-                 "rop_i": r.get("rop_i"), "q_i": r.get("q_i")}
+                {"product_key": r["product_key"], "sku_id": f"SKU{r['product_key']}",
+                 "product_name": f"Product {r['product_key']}", "revenue_share": r.get("revenue_share"),
+                 "ss_i": r["ss_i"], "rop_i": r.get("rop_i"), "q_i": r.get("q_i")}
                 for r in rows
             ])
 
         if "fr.forecast_date = lr.planning_cycle_date" in sql:
             return FakeResult(self.policy_rows)
-
-        if "SUM(revenue_share) AS rev_share_sum" in sql:
-            period = params["period"]
-            rows = [r for r in self.abc_rows if r["period"] == period]
-            by_tier: dict = {}
-            for r in rows:
-                b = by_tier.setdefault(r["tier"], {"cnt": 0, "rev": 0.0})
-                b["cnt"] += 1
-                b["rev"] += r.get("revenue_share") or 0.0
-            return FakeResult([{"tier": t, "cnt": b["cnt"], "rev_share_sum": b["rev"]} for t, b in by_tier.items()])
-
-        if "BOOL_OR(stock_status = 'Active') AS any_active" in sql:
-            period = params["period"]
-            rows = [r for r in self.tier_stock_rows if r["period"] == period]
-            return FakeResult([{"tier": r["tier"], "any_active": r["any_active"], "any_inactive": r["any_inactive"]} for r in rows])
 
         if sql.strip() == "SELECT MAX(forecast_date) AS d FROM Forecast_Result":
             return FakeResult([{"d": self.latest_forecast_date}])
@@ -372,17 +421,6 @@ class FakeSession:
 
         if "SELECT COUNT(*) FROM Forecast_Result fr" in sql:
             return FakeResult([self.scoped_forecast_count])
-
-        if "SUM(quantity_sold) AS qty" in sql:
-            return FakeResult([{"period": p, "qty": v} for p, v in self.portfolio_actual.items()])
-
-        if "COUNT(DISTINCT lr.product_key) AS cnt" in sql:
-            period = params["period"]
-            rows = [r for r in self.tier_pending_reorder_rows if r["period"] == period]
-            by_tier: dict = {}
-            for r in rows:
-                by_tier.setdefault(r["tier"], set()).add(r["product_key"])
-            return FakeResult([{"tier": t, "cnt": len(keys)} for t, keys in by_tier.items()])
 
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -465,7 +503,7 @@ def test_kpis_soh_value_null_when_inventory_fact_real_empty():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     kpis = resp.json()["kpis"]
     assert kpis["soh_value"] is None
-    assert kpis["soh_value_blocked_reason"] == "Inventory_Fact_Real has no rows for unilever at all."
+    assert kpis["soh_value_blocked_reason"] == "No stock count for unilever on or before Feb 2024."
 
 
 # ---- kpis.safety_stock_rate --------------------------------------------
@@ -550,27 +588,47 @@ def test_kpis_weeks_of_cover_null_when_no_inventory_data_at_all():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     wc = resp.json()["kpis"]["weeks_of_cover"]
     assert wc["value"] is None
-    assert wc["blocked_reason"] == "Inventory_Fact_Real has no rows for unilever at all."
+    assert wc["blocked_reason"] == "No stock count for unilever at all."
 
 
-def test_weeks_of_cover_does_not_follow_the_date_range():
-    """SSM's 3-week policy is judged by this figure, so it is always the
-    latest stock over the 12 months of sales up to it, whatever range the
-    picker shows. It used to average the picker's months, so the same
-    stock read 3.0-3.5 weeks live (2026-09-29)."""
+def test_weeks_of_cover_reads_the_stock_cards_count():
+    """Weeks of cover is the stock card's own count — the one at the range's end —
+    over the 12 months of sales up to it (DEC-36, 2026-10-04; supersedes the
+    2026-09-29 latest-count rule). Ranges of any width that end at the same count
+    give the same weeks: the denominator never follows the range's width (it used
+    to average the picker's months, reading 3.0-3.5 weeks for one count)."""
     periods = _periods()  # 2023-03 .. 2024-02
     sales = {p: 100.0 for p in periods}
     sales[periods[-1]] = 400.0  # one unusual month
     expected = round(1000.0 / ((sum(sales.values()) / 12) / AVG_WEEKS_PER_MONTH), 2)
-    for query in ("", "&start_period=2024-01&period=2024-02", "&start_period=2023-01&period=2023-07"):
-        session = FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0}, sales=dict(sales))
-        with make_client(session) as c:
-            wc = c.get(
-                f"/dashboard?principal=unilever{query}", headers={"Authorization": f"Bearer {user_token()}"}
-            ).json()["kpis"]["weeks_of_cover"]
+    for query in ("", "&start_period=2024-01&period=2024-02", "&start_period=2021-01&period=2024-02"):
+        session = FakeSession(latest_inventory_period="2024-02", soh={"2023-07": 300.0, "2024-02": 1000.0},
+                              sales=dict(sales))
+        wc = _get(session, f"principal=unilever{query}")["kpis"]["weeks_of_cover"]
         assert wc["value"] == pytest.approx(expected), query
-        assert wc["sales_window"] == {"start": periods[0], "end": periods[-1]}, query
+        assert wc["stock_period"] == "2024-02" and wc["sales_window"] == {"start": periods[0], "end": periods[-1]}
         assert wc["months_used"] == 12, query
+    # A range ending at the July 2023 count reads that count, over the sales up to it.
+    session = FakeSession(latest_inventory_period="2024-02", soh={"2023-07": 300.0, "2024-02": 1000.0},
+                          sales=dict(sales))
+    wc = _get(session, "principal=unilever&start_period=2023-01&period=2023-07")["kpis"]["weeks_of_cover"]
+    assert wc["stock_period"] == "2023-07"
+    assert wc["value"] == pytest.approx(round(300.0 / (100.0 / AVG_WEEKS_PER_MONTH), 2))
+    body = _get(FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0}, sales=dict(sales)),
+                "principal=unilever")["kpis"]
+    assert body["weeks_of_cover_range_end"] == body["weeks_of_cover"]
+
+
+def test_weeks_of_cover_carries_the_territory_caveat_for_unilever_only():
+    session = FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0},
+                          sales={p: 100.0 for p in _periods()})
+    caveat = _get(session, "principal=unilever")["kpis"]["weeks_of_cover"]["caveat"]
+    assert caveat == "stock = Ilocos Sur warehouse; sales = La Union only; territory match unverified"
+    dm = FakeSession(latest_sales_period=None, latest_inventory_period="2025-12", soh={"2025-12": 6_683_837.26},
+                     stock_coverage=["delmonte"])
+    dm.delmonte_latest_sales_period = "2025-12"
+    dm.delmonte_sales = {"2025-12": 22_134_295.57}
+    assert _get(dm, "principal=delmonte")["kpis"]["weeks_of_cover"]["caveat"] is None
 
 
 def test_weeks_of_cover_sales_year_ends_at_the_stock_count():
@@ -598,9 +656,14 @@ def test_sales_vs_stock_has_12_points_with_nulls_for_missing_periods():
     series = resp.json()["sales_vs_stock"]
     assert len(series) == 12
     assert series[-1] == {"period": current, "sales": 100.0, "stock_on_hand": None, "stock_count_date": None,
-                          "received": None,
-                          "received_estimated": None, "received_estimated_negative_skus": None,
-                          "provenance": {"sales": "real", "stock_on_hand": None, "received": None, "received_estimated": None}}
+                          "received": None, "received_estimated": None, "received_estimated_negative_skus": None,
+                          "sales_estimated": None, "sales_estimated_kind": None,
+                          "stock_on_hand_estimated": None, "stock_on_hand_estimated_kind": None,
+                          "returns": None, "returns_estimated": None, "returns_estimated_kind": None,
+                          "provenance": {"sales": "real", "stock_on_hand": None, "received": None,
+                                         "received_estimated": None, "sales_estimated": None,
+                                         "stock_on_hand_estimated": None, "returns": None,
+                                         "returns_estimated": None}}
     assert all(pt["sales"] is None for pt in series[:-1])
 
 
@@ -757,84 +820,64 @@ def test_estimated_received_is_null_before_migration_0038():
 # ---- abc_mix ---------------------------------------------------------
 
 def test_abc_mix_counts_and_revenue_share_pct():
-    abc_rows = [
-        {"product_key": 1, "tier": "A", "period": "2024-02", "current_stock": None, "ss_i": None, "revenue_share": 0.6},
-        {"product_key": 2, "tier": "A", "period": "2024-02", "current_stock": None, "ss_i": None, "revenue_share": 0.2},
-        {"product_key": 3, "tier": "B", "period": "2024-02", "current_stock": None, "ss_i": None, "revenue_share": 0.15},
-    ]
-    session = FakeSession(latest_abc_period="2024-02", abc_rows=abc_rows)
+    """The ring ranks each product's net sales over the selected range
+    (backend/marts.pareto): A while the running share is <= 80%, B <= 95%."""
+    session = FakeSession(range_revenue={"unilever": {1: 600.0, 2: 200.0, 3: 150.0, 4: 50.0}})
     with make_client(session) as c:
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     mix = {m["tier"]: m for m in resp.json()["abc_mix"]}
     assert mix["A"]["count"] == 2
     assert mix["A"]["revenue_share_pct"] == pytest.approx(80.0)
+    assert mix["A"]["revenue"] == pytest.approx(800.0)
     assert mix["B"]["count"] == 1
     assert mix["B"]["revenue_share_pct"] == pytest.approx(15.0)
+    assert mix["C"]["count"] == 1
 
 
-def test_abc_mix_empty_when_no_classification_rows_exist():
-    session = FakeSession(latest_abc_period=None)
-    with make_client(session) as c:
-        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
-    assert resp.json()["abc_mix"] == []
+def test_abc_mix_empty_when_nothing_sold_more_than_it_took_back():
+    session = FakeSession(range_revenue={"unilever": {1: -50.0, 2: 0.0}})
+    body = _get(session, "principal=unilever")
+    assert body["abc_mix"] == []
+    assert body["abc_revenue"]["ranked_total"] is None
+    assert "took back" in body["abc_revenue"]["blocked_reason"]
 
 
-def test_abc_mix_period_query_param_overrides_latest_abc_period_anchor():
-    """Same override convention as sales_vs_stock's period param — the
-    picker's applied end month/year must win over _latest_abc_period, an
-    EXACT match with no 'nearest available' fallback (mirrors GET /abc's
-    own classification_period param). Without this, abc_mix (and
-    tier_stock / kpis.safety_stock_rate, which share the same abc_period)
-    always showed the latest classification run regardless of the shared
-    date filter."""
-    abc_rows = [
-        {"product_key": 1, "tier": "A", "period": "2023-06", "current_stock": None, "ss_i": None, "revenue_share": 0.5},
-        # A different classification run the endpoint must NOT read from
-        # once an explicit period is requested.
-        {"product_key": 2, "tier": "B", "period": "2024-02", "current_stock": None, "ss_i": None, "revenue_share": 0.9},
-    ]
-    session = FakeSession(latest_abc_period="2024-02", abc_rows=abc_rows)
-    with make_client(session) as c:
-        resp = c.get("/dashboard?principal=unilever&period=2023-06", headers={"Authorization": f"Bearer {user_token()}"})
-    mix = resp.json()["abc_mix"]
-    assert [m["tier"] for m in mix] == ["A"]
-    assert mix[0]["revenue_share_pct"] == pytest.approx(50.0)
+def test_abc_mix_ranks_the_selected_range():
+    """The picker's start and end are the ranking's window — not a stored
+    single-month run — and the ring names that range."""
+    session = FakeSession(range_revenue={"unilever": {1: 500.0, 2: 500.0}})
+    body = _get(session, "principal=unilever&period=2023-06&start_period=2023-01")
+    _, params = _sql_for(session, "WITH rev AS")
+    assert (params["start"], params["end"]) == ("2023-01", "2023-06")
+    rev = body["abc_revenue"]
+    assert (rev["start_period"], rev["end_period"], rev["period"]) == ("2023-01", "2023-06", "2023-06")
+    assert rev["label"] == "Jan 2023 – Jun 2023"
+    assert rev["basis"] == "range"
 
 
 # ---- tier_stock (Inventory_Fact_Real.stock_status, dead-stock signal) --
 
 def test_tier_stock_dead_stock_from_stock_status_including_no_data_bucket():
-    tier_stock_rows = [
-        {"product_key": 1, "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": False},
-        {"product_key": 2, "tier": "A", "period": "2024-02", "any_active": False, "any_inactive": True},
-        # Both flags true (e.g. multiple snapshot rows) — dead stock takes priority.
-        {"product_key": 3, "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": True},
-        # No Inventory_Fact_Real row at all (LEFT JOIN miss) — must land in no_data.
-        {"product_key": 4, "tier": "A", "period": "2024-02", "any_active": None, "any_inactive": None},
-    ]
-    tier_pending_reorder_rows = [
-        {"product_key": 1, "tier": "A", "period": "2024-02"},
-        {"product_key": 3, "tier": "A", "period": "2024-02"},
-    ]
     session = FakeSession(
-        latest_abc_period="2024-02", tier_stock_rows=tier_stock_rows,
-        tier_pending_reorder_rows=tier_pending_reorder_rows,
+        latest_inventory_period=FIXED_ANCHOR,
+        range_revenue={"unilever": {1: 10.0, 2: 10.0, 3: 10.0, 4: 10.0, 9: 1.0}},
+        stock_status={1: (True, False), 2: (False, True),
+                      3: (True, True)},  # both flags (several rows): dead stock wins
+        # 4: no row at the count -> no_data
+        pending_keys={1, 3},
     )
-    with make_client(session) as c:
-        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
-    tier_a = next(t for t in resp.json()["tier_stock"] if t["tier"] == "A")
-    assert tier_a == {"tier": "A", "in_stock": 1, "dead_stock": 2, "no_data": 1, "pending_reorder_count": 2}
+    body = _get(session, "principal=unilever")
+    tiers = {t["tier"]: t for t in body["tier_stock"]}
+    # Running shares: 10/41, 20/41, 30/41 (A), 40/41 = 0.976 (C), 41/41 (C).
+    assert tiers["A"] == {"tier": "A", "in_stock": 1, "dead_stock": 2, "no_data": 0, "pending_reorder_count": 2}
+    assert tiers["C"]["no_data"] == 2
 
 
 def test_tier_stock_pending_reorder_count_is_zero_not_null_when_no_pending_rows():
-    tier_stock_rows = [
-        {"product_key": 1, "tier": "B", "period": "2024-02", "any_active": True, "any_inactive": False},
-    ]
-    session = FakeSession(latest_abc_period="2024-02", tier_stock_rows=tier_stock_rows)
-    with make_client(session) as c:
-        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
-    tier_b = next(t for t in resp.json()["tier_stock"] if t["tier"] == "B")
-    assert tier_b["pending_reorder_count"] == 0
+    session = FakeSession(latest_inventory_period=FIXED_ANCHOR, range_revenue={"unilever": {1: 10.0}},
+                          stock_status={1: (True, False)})
+    body = _get(session, "principal=unilever")
+    assert body["tier_stock"][0]["pending_reorder_count"] == 0
 
 
 # ---- portfolio_forecast ------------------------------------------------
@@ -1033,22 +1076,41 @@ def test_reorder_preview_empty_when_no_pending_recommendations():
     }
 
 
-def test_stock_cards_keep_the_latest_count_and_say_when_it_was_counted():
-    """'Stock now' (the stock card, weeks of cover, safety-stock exposure)
-    stays on the latest count — 2026-03, counted 2026-04-06 — and now names
-    its date (2026-10-03)."""
+def test_stock_cards_read_the_count_at_the_ranges_end():
+    """Every card answers for the selected range (2026-10-04): the stock card
+    and the safety-stock check read the latest count on or before the range's
+    end — 2026-02, counted 2026-03-02, for a range ending Feb 2026 — not the
+    2026-03 count after it. Weeks of cover keeps the latest count (its
+    2026-09-29 rule) and offers the range-end figure beside it."""
     session = FakeSession(
-        latest_inventory_period="2026-03", soh={"2026-03": 22_700_825.83},
+        latest_sales_period="2026-02", sales={"2026-02": 27_914_343.91},
+        latest_inventory_period="2026-03", soh={"2026-02": 46_576_778.51, "2026-03": 22_700_825.83},
         stock_counts={("unilever", "2026-03"): (785, datetime.date(2026, 4, 6), datetime.date(2026, 4, 6)),
                       ("unilever", "2026-02"): (812, datetime.date(2026, 3, 2), datetime.date(2026, 3, 2))},
     )
     with make_client(session) as c:
         body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
-    count = body["kpis"]["stock_counts"]
+    kpis = body["kpis"]
+    assert kpis["soh_period"] == "2026-02"
+    assert kpis["soh_value"] == pytest.approx(46_576_778.51)
+    assert kpis["soh_count_date"] == "2026-03-02"
+    assert kpis["soh_snapshot"]["period"] == "2026-02" and kpis["soh_snapshot"]["is_range_end"] is True
+    count = kpis["stock_counts"]
     assert [(x["principal"], x["period"], x["role"], x["counted_on"]) for x in count] == [
-        ("unilever", "2026-03", "latest", "2026-04-06")]
-    assert body["safety_stock_exposure"]["stock_period"] == "2026-03"
+        ("unilever", "2026-02", "latest", "2026-03-02")]
+    assert body["safety_stock_exposure"]["stock_period"] == "2026-02"
     assert body["safety_stock_exposure"]["stock_counts"] == count
+    # Weeks of cover reads the same count (DEC-36, 2026-10-04).
+    assert kpis["weeks_of_cover"]["stock_period"] == "2026-02"
+    assert kpis["weeks_of_cover"]["stock_count_date"] == "2026-03-02"
+    assert kpis["weeks_of_cover_range_end"] == kpis["weeks_of_cover"]
+    # The count is the one the team flagged: the card keeps it and says so.
+    assert kpis["soh_count_note"] == (
+        "Counted 2 Mar 2026: unusually high (₱46.6M), accepted pending SSM confirmation")
+    assert kpis["soh_snapshot"]["note"] == kpis["soh_count_note"]
+    # A range ending at the next count has nothing to note.
+    later = _get(session, "principal=unilever&period=2026-03&start_period=2025-04")["kpis"]
+    assert later["soh_period"] == "2026-03" and later["soh_count_note"] is None
 
 
 def test_reorder_preview_reads_the_count_that_opens_the_cycle():
@@ -1089,27 +1151,30 @@ def _abc_row(product_key, tier, period, revenue_share, current_stock=None, ss_i=
             "current_stock": current_stock, "ss_i": ss_i}
 
 
-def test_abc_revenue_totals_the_abc_periods_sales():
-    session = FakeSession(
-        latest_abc_period="2024-02",
-        abc_rows=[_abc_row(1, "A", "2024-02", 0.6)],
-        sales={"2024-02": 27_914_343.91},
-    )
-    with make_client(session) as c:
-        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
-    body = resp.json()["abc_revenue"]
-    assert body["period"] == "2024-02"
-    assert body["total"] == pytest.approx(27_914_343.91)
+def test_abc_revenue_totals_the_ranges_sales():
+    """total = the range's net sales (returns included, the sales card's own
+    sum); ranked_total = what the shares are shares of."""
+    periods = _periods()
+    session = FakeSession(sales={periods[0]: 1_000.0, periods[-1]: 2_000.0},
+                          range_revenue={"unilever": {1: 2_900.0, 2: 150.0, 3: -50.0}})
+    body = _get(session, "principal=unilever")["abc_revenue"]
+    assert body["period"] == periods[-1]
+    assert body["total"] == pytest.approx(3_000.0)
+    assert body["ranked_total"] == pytest.approx(3_050.0)
     assert body["blocked_reason"] is None
 
 
-def test_abc_revenue_blocked_when_no_sales_for_abc_period():
-    session = FakeSession(latest_abc_period="2024-02", abc_rows=[_abc_row(1, "A", "2024-02", 0.6)], sales={})
-    with make_client(session) as c:
-        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
-    body = resp.json()["abc_revenue"]
-    assert body["total"] is None
-    assert "2024-02" in body["blocked_reason"]
+def test_abc_revenue_under_all_withholds_shares_when_both_principals_rank():
+    """Each principal is ranked against its own revenue: the counts add up,
+    the shares would not (Class A summed to ~151% under 'all', 2026-09-29)."""
+    session = FakeSession(range_revenue={"unilever": {1: 100.0}, "delmonte": {50: 30.0}})
+    body = _get(session, "")
+    assert body["abc_coverage"] == ["delmonte", "unilever"]
+    # One product each: a lone product's running share is 100%, above the B
+    # cutoff, so both are class C (classify_abc's rule).
+    assert [(m["tier"], m["count"]) for m in body["abc_mix"]] == [("C", 2)]
+    assert all(m["revenue_share_pct"] is None and m["revenue"] is None for m in body["abc_mix"])
+    assert body["abc_revenue"]["total"] is None and "not combined" in body["abc_revenue"]["blocked_reason"]
 
 
 def test_safety_stock_exposure_counts_below_and_sums_their_revenue_share():
@@ -1158,9 +1223,9 @@ def test_safety_stock_exposure_lists_the_products_behind_the_count():
     exp = resp.json()["safety_stock_exposure"]
     items = exp["below_items"]
     assert len(items) == exp["below_count"] == 2
-    assert [i["sku_id"] for i in items] == ["SKU-2", "SKU-1"]
+    assert [i["sku_id"] for i in items] == ["SKU2", "SKU1"]
     assert items[0] == {
-        "sku_id": "SKU-2", "product_name": "Product 2", "current_stock": 0.0, "ss_i": 40.5,
+        "sku_id": "SKU2", "product_name": "Product 2", "current_stock": 0.0, "ss_i": 40.5,
         "short_by": 40.5, "target_stock": 120.0, "order_qty": 300.0, "revenue_share": 0.30,
     }
     assert items[1]["short_by"] == 40.0 and items[1]["order_qty"] is None
@@ -1278,27 +1343,31 @@ def _sql_for(session, needle):
 def test_safety_stock_compares_pieces_with_pieces_not_cases():
     """quantity_on_hand is CASES and ss_i is PIECES. Comparing them directly
     reported 109 of 120 measurable Category A SKUs below safety stock when
-    36 are — the conversion must be in the query."""
-    session = FakeSession(latest_abc_period="2024-02", latest_inventory_period="2024-02")
+    36 are. The stock side is mart.inventory_mart's pieces (cases x pack size
+    + loose, equal to backend/stock_units.STOCK_PIECES_EXPR on all 27,282 real
+    Unilever product-counts, scripts/rehearse_marts.py)."""
+    session = FakeSession(latest_abc_period="2024-02", latest_inventory_period="2024-02",
+                          abc_rows=[_abc_row(1, "A", "2024-02", 0.3, current_stock=10, ss_i=50)])
     with make_client(session) as c:
         c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
-    sql, _ = _sql_for(session, "rop.ss_i AS ss_i")
-    assert "stock_pieces" in sql, "safety stock must compare the converted figure"
-    assert "pack_size" in sql, "cases are converted to pieces via pack_size"
-    # And never the raw case count: that is the bug this guards.
-    assert "SUM(inv.quantity_on_hand) AS current_stock" not in sql
+    sql, params = _sql_for(session, "FROM mart.inventory_mart_real")
+    assert "SELECT product_key, pieces" in sql, "safety stock must compare the converted figure"
+    assert params["period"] == "2024-02" and params["keys"] == [1]
+    ss_sql, _ = _sql_for(session, "rop.ss_i AS ss_i")
+    assert "quantity_on_hand" not in ss_sql, "never the raw case count: that is the bug this guards"
 
 
 def test_every_lp_read_is_pinned_to_the_current_cycle():
     """Leftover `pending` rows from earlier runs (179 live, back to 2023-05)
     must not reach the page: they made the pending count read 429 not 250."""
-    session = FakeSession(lp_cycle_date=datetime.date(2026, 3, 1), latest_abc_period="2024-02")
+    session = FakeSession(lp_cycle_date=datetime.date(2026, 3, 1), latest_abc_period="2024-02",
+                          range_revenue={"unilever": {1: 100.0}})
     with make_client(session) as c:
         c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     for needle in ("COUNT(*) AS product_count",            # the KPI card
                    "rop.ss_i AS ss_i",                      # safety stock
                    "fr.forecast_date = lr.planning_cycle_date",  # policy comparison
-                   "COUNT(DISTINCT lr.product_key) AS cnt"):     # tier_stock
+                   "SELECT DISTINCT lr.product_key"):            # tier_stock
         sql, params = _sql_for(session, needle)
         assert ":current_cycle" in sql, f"{needle} is not pinned to the LP cycle"
         assert params.get("current_cycle") == datetime.date(2026, 3, 1)
@@ -1392,15 +1461,17 @@ def test_weeks_of_cover_denominator_follows_the_stock_coverage():
     assert wc["value"] == pytest.approx(round(expected, 2)), "Del Monte demand must not enter a Unilever-only ratio"
 
 
-def test_stock_value_prefers_the_sources_own_valuation():
-    """Inventory_Fact.valuation already prices the loose-piece remainder;
-    recomputing cases x cost dropped it (a 3.2% under-count live)."""
+def test_stock_value_reads_the_marts_count_total():
+    """The stock card is mart.inventory_count's total for the count: the
+    source's own valuation first (it prices the loose-piece remainder;
+    recomputing cases x cost under-counted 3.2% live), cases x unit cost only
+    for rows without one — the rule migration 0041 applies, checked against
+    inventory_fact by scripts/rehearse_marts.py and tests/test_marts.py."""
     session = FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 22_700_825.83})
     with make_client(session) as c:
         body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
-    # Needle is the projection itself: "AS total" alone also matches the
-    # forecast card's "AS total_count".
-    _sql_for(session, "SUM(COALESCE(valuation, quantity_on_hand * unit_cost_per_case))")
+    snapshot_reads = [s for s, _ in session.calls if "FROM mart.inventory_count" in s]
+    assert len(snapshot_reads) == 1, "the month-level marts are read once per request"
     assert body["kpis"]["soh_value"] == 22_700_825.83
     # The legacy field documented as "impossible" now carries the same figure.
     assert body["inventory"]["value"] == 22_700_825.83
@@ -1493,33 +1564,32 @@ def test_forecast_block_reports_its_mase_gate():
     assert body["forecast"]["mase_gate"] == 1.0
 
 
-def test_tier_stock_period_names_the_snapshot_month():
-    tier_stock_rows = [
-        {"product_key": 1, "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": False},
-    ]
-    session = FakeSession(
-        latest_abc_period="2024-02", tier_stock_rows=tier_stock_rows,
-        latest_inventory_period="2024-03",
-    )
-    with make_client(session) as c:
-        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+def test_tier_stock_period_names_the_count_at_the_ranges_end():
+    session = FakeSession(latest_inventory_period="2024-03", range_revenue={"unilever": {1: 10.0}},
+                          stock_status={1: (True, False)})
+    body = _get(session, "principal=unilever&period=2024-03")
     assert body["tier_stock_period"] == "2024-03"
+    body = _get(session, "principal=unilever&period=2024-02")
+    assert body["tier_stock_period"] is None, "no count on or before Feb 2024"
 
 
 # ---- stock on hand under 'all', and the reorder card's order (2026-09-29) ---
 
 class _PeriodSumSession:
-    """Answers _query_period_sums per principal and refuses an unscoped sum:
-    under 'all' that is exactly what mixed the two principals' coverage."""
+    """Answers the month-level snapshot with each principal's own stock counts
+    (mart.inventory_count): under 'all' a month gets a figure only when both
+    principals have one, never the sum of whatever rows existed."""
 
     def __init__(self, by_principal):
         self.by_principal = by_principal
 
     def execute(self, stmt, params=None):
-        sql = str(stmt)
-        who = next((p for p in self.by_principal if f"principal = '{p}'" in sql), None)
-        assert who, "the 'all' figure must be built from per-principal sums"
-        return FakeResult([{"period": p, "total": v} for p, v in self.by_principal[who].items()])
+        assert "'sales' AS src" in str(stmt)
+        return FakeResult([
+            {"src": "stock", "principal": who, "period": p, "data_kind": "real", "pesos": v, "pieces": None,
+             "first_date": None, "last_date": None, "products": 1}
+            for who, by_month in self.by_principal.items() for p, v in by_month.items()
+        ])
 
 
 def test_soh_under_all_counts_only_months_both_principals_have():
@@ -1699,10 +1769,9 @@ def _lp_rich_session():
         policy_rows=[{"planning_cycle_date": datetime.date(2024, 3, 1), "ss_i": 40.0, "rop_i": 120.0, "forecast_value": 100.0}],
         latest_abc_period="2024-02",
         abc_rows=[_abc_row(1, "A", "2024-02", 0.30, current_stock=10, ss_i=50)],
-        tier_stock_rows=[
-            {"product_key": 1, "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": False},
-        ],
-        tier_pending_reorder_rows=[{"product_key": 1, "tier": "A", "period": "2024-02"}],
+        range_revenue={"unilever": {1: 80.0, 2: 15.0, 3: 5.0}},  # 1 is class A (running share 80%)
+        stock_status={1: (True, False)},
+        pending_keys={1},
     )
 
 
@@ -1732,9 +1801,8 @@ def test_lp_figures_are_left_out_for_a_user_without_lp_view(monkeypatch):
     assert body["recommendations"] == {"order_value": None, "product_count": None}
     assert body["kpis"]["safety_stock_rate"] is None
     assert body["kpis"]["safety_stock_rate_blocked_reason"] == LP_HIDDEN_REASON
-    assert body["tier_stock"] == [
-        {"tier": "A", "in_stock": 1, "dead_stock": 0, "no_data": 0, "pending_reorder_count": None}
-    ]
+    assert body["tier_stock"][0] == {
+        "tier": "A", "in_stock": 1, "dead_stock": 0, "no_data": 0, "pending_reorder_count": None}
     assert body["abc_mix"] and body["forecast"]["total_count"] == 0
 
 
@@ -1758,14 +1826,16 @@ def test_stock_card_compares_with_the_last_count_not_flagged_as_unusual():
         latest_inventory_period="2026-03",
         soh={"2026-01": 24_339_386.24, "2026-02": 46_576_778.51, "2026-03": 22_700_825.83},
     )
-    body = _get(session, "principal=unilever&period=2026-02&start_period=2025-03")
+    # The stock card reads the count at the range's end, so the range ends
+    # Mar 2026 to put the Mar 2026 count on it.
+    body = _get(session, "principal=unilever&period=2026-03&start_period=2025-04")
     trend = body["kpis"]["soh_trend"]
     assert trend["latest_period"] == "2026-03"
     assert trend["prev_period"] == "2026-01"
     assert trend["delta_pct"] == pytest.approx(-6.7)
     assert trend["months_apart"] == 2
     assert [s["period"] for s in trend["skipped"]] == ["2026-02"]
-    assert "outlier" in trend["skipped"][0]["reason"]
+    assert "accepted for planning, pending SSM confirmation" in trend["skipped"][0]["reason"]
     assert "2026-02" in [pt["period"] for pt in trend["points"]], "the count is kept, only not compared against"
 
     flags = body["stock_on_hand_flags"]
@@ -1775,6 +1845,12 @@ def test_stock_card_compares_with_the_last_count_not_flagged_as_unusual():
     assert svs["2026-02"]["stock_on_hand"] == pytest.approx(46_576_778.51)
 
     text = body["sales_vs_stock_insight"]["text"]
+    assert "stood at ₱22.7M in Mar 2026" in text
+    assert "₱46.6M" not in text
+
+    # A range ending Feb 2026 puts the flagged count itself at the range's
+    # end: the sentence passes over it to the last ordinary count and says so.
+    text = _get(session, "principal=unilever&period=2026-02&start_period=2025-03")["sales_vs_stock_insight"]["text"]
     assert "stood at ₱24.3M in Jan 2026" in text
     assert "₱46.6M" not in text
     assert "Feb 2026's count is marked as unusual" in text
@@ -1795,7 +1871,8 @@ def test_all_principals_point_carries_a_contributors_unusual_count():
     """Under 'all' a month is the sum of both principals' counts, so Del
     Monte's Ilocos-only Feb 2023 count makes the combined point unusual too,
     and the reason says whose count it is."""
-    session = FakeSession(soh={"2023-01": 30_000_000.0, "2023-02": 26_000_000.0, "2023-03": 31_000_000.0})
+    session = FakeSession(soh={"2023-01": 30_000_000.0, "2023-02": 26_000_000.0, "2023-03": 31_000_000.0},
+                          stock_coverage=["delmonte", "unilever"])  # both principals counted each month
     body = _get(session, "period=2023-03&start_period=2023-01")
     flags = body["stock_on_hand_flags"]
     assert [f["period"] for f in flags] == ["2023-02"]
@@ -1819,9 +1896,11 @@ def test_del_monte_purchases_are_plotted_ex_vat_like_its_sales():
     body = _get(session, "principal=delmonte&period=2025-12&start_period=2025-01")
     dec = next(pt for pt in body["sales_vs_stock"] if pt["period"] == "2025-12")
     assert dec["received"] == pytest.approx(20_541_542.46)
-    assert body["sales_vs_stock_basis"] == {"sales": "selling price, ex-VAT", "received": "ex-VAT"}
-    sql = next(s for s, _ in session.calls if "principal = 'delmonte'" in s and "Purchase_Fact_Real" in s)
-    assert "net_amount - COALESCE(tax_amount, 0)" in sql
+    assert body["sales_vs_stock_basis"] == {"sales": "selling price, ex-VAT", "received": "ex-VAT",
+                                            "stock_on_hand": "at last purchase price",
+                                            "returns": "Net Amount as recorded in the returns file"}
+    # The ex-VAT rule is mart.flow_month's (migration 0041, checked against
+    # purchase_fact by scripts/rehearse_marts.py): the page plots that flow as is.
 
 
 def test_unilever_purchases_stay_on_its_vat_inclusive_sales_basis():
@@ -1829,9 +1908,12 @@ def test_unilever_purchases_stay_on_its_vat_inclusive_sales_basis():
     session = FakeSession(received={current: 700.0}, received_tax={current: 75.0})
     body = _get(session, "principal=unilever")
     assert body["sales_vs_stock"][-1]["received"] == 700.0
-    assert body["sales_vs_stock_basis"] == {"sales": "selling price, VAT-inclusive", "received": "incl. VAT"}
+    assert body["sales_vs_stock_basis"] == {"sales": "selling price, VAT-inclusive", "received": "incl. VAT",
+                                            "stock_on_hand": "at last purchase price",
+                                            "returns": "Net Amount as recorded in the returns file"}
     # Under 'all' the pesos mix the two bases; vat_note says so instead.
-    assert _get(FakeSession(), "principal=all")["sales_vs_stock_basis"] == {"sales": None, "received": None}
+    basis = _get(FakeSession(), "principal=all")["sales_vs_stock_basis"]
+    assert (basis["sales"], basis["received"]) == (None, None)
 
 
 def test_allocation_monthly_is_an_average_basis_month_when_the_basis_is_partial():
@@ -1852,85 +1934,200 @@ def test_allocation_monthly_is_an_average_basis_month_when_the_basis_is_partial(
     assert mid["annual"] is None
 
 
-def test_abc_class_shares_and_revenue_come_from_unrounded_product_revenue():
-    """Stored shares are 4-dp per product, so summing them drifts (Class B
-    read 14.93% for 14.99%), and the card multiplied them by the month's NET
-    sales, which include products that netted negative and were never
-    ranked (Class A ₱22.3M for ₱22,443,150)."""
-    rows = [
-        _abc_row(1, "A", "2024-02", 0.8000),
-        _abc_row(2, "B", "2024-02", 0.0499), _abc_row(3, "B", "2024-02", 0.0499),
-        _abc_row(4, "B", "2024-02", 0.0499),
-        _abc_row(5, "C", "2024-02", 0.0501),
-    ]
-    revenue = {1: 7_999.60, 2: 499.95, 3: 499.95, 4: 499.95, 5: 500.55, 6: -50.0}  # 6: net returns, not ranked
-    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows, abc_product_revenue=revenue,
-                          sales={"2024-02": 9_950.0})
+def test_abc_class_shares_and_revenue_come_from_the_products_own_revenue():
+    """Class revenue and share are sums of the products' own unrounded range
+    revenue, never of 4-dp stored shares (which drifted: 14.93% for 14.99%)."""
+    revenue = {1: 7_999.60, 2: 499.95, 3: 499.95, 4: 499.95, 5: 500.55}
+    session = FakeSession(range_revenue={"unilever": revenue}, sales={_periods()[-1]: 9_950.0})
     body = _get(session, "principal=unilever")
     mix = {m["tier"]: m for m in body["abc_mix"]}
-    assert mix["B"]["revenue_share_pct"] == pytest.approx(15.0, abs=0.005)   # stored sum: 14.97
     assert mix["A"]["revenue"] == pytest.approx(7_999.60)
-    assert mix["B"]["revenue"] == pytest.approx(1_499.85)
-    assert body["abc_revenue"]["total"] == pytest.approx(9_950.0)            # the month's net sales
-    assert body["abc_revenue"]["ranked_total"] == pytest.approx(10_000.0)    # what the shares are of
+    # Running shares: 0.79996 (1, A), 0.850015 (5, B), 0.90001 (2, B),
+    # 0.950005 (3, just past the B cutoff: C) — B is 5 + 2 = 10.005%.
+    assert mix["B"]["revenue"] == pytest.approx(1_000.50)
+    assert mix["B"]["revenue_share_pct"] == pytest.approx(10.005, abs=0.005)
+    assert body["abc_revenue"]["total"] == pytest.approx(9_950.0)
+    assert body["abc_revenue"]["ranked_total"] == pytest.approx(10_000.0)
 
 
-def test_abc_mix_keeps_the_stored_shares_when_a_ranked_products_revenue_is_missing():
-    rows = [_abc_row(1, "A", "2024-02", 0.6), _abc_row(2, "A", "2024-02", 0.2), _abc_row(3, "B", "2024-02", 0.2)]
-    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows, abc_product_revenue={1: 600.0, 3: 200.0})
+def test_abc_ranking_reads_real_rows_only():
+    """KPIs, the Pareto and accuracy read data_kind = 'real' (preview adds
+    Unilever's placeholder months): a filled or generated row never ranks."""
+    session = FakeSession(range_revenue={"unilever": {1: 10.0}})
+    _get(session, "principal=unilever")
+    sql, _ = _sql_for(session, "WITH rev AS")
+    assert "s.data_kind = 'real'" in sql and "generated" not in sql and "filled" not in sql
+
+
+# ---- the selected range and the marts (migration 0041, 2026-10-04) ---------
+
+def test_sales_card_gives_the_ranges_total_and_its_end_month():
+    """Every card answers for the selected range: the range's total over its
+    months with real sales, beside the end month's snapshot, each labelled."""
+    periods = _periods()
+    session = FakeSession(sales={periods[0]: 100.0, periods[5]: 250.0, periods[-1]: 400.0},
+                          sales_pieces={periods[0]: 10.0, periods[5]: 25.0, periods[-1]: 40.0})
+    kpis = _get(session, "principal=unilever")["kpis"]
+    cum, snap = kpis["sales_cumulative"], kpis["sales_snapshot"]
+    assert cum["value"] == pytest.approx(750.0)
+    assert cum["pieces"] == pytest.approx(75.0)
+    assert (cum["start_period"], cum["end_period"]) == (periods[0], periods[-1])
+    assert (cum["months_in_range"], cum["months_with_data"]) == (12, 3)
+    assert len(cum["missing_months"]) == 9
+    assert cum["label"] == "Mar 2023 – Feb 2024"
+    assert (snap["value"], snap["period"], snap["label"]) == (400.0, periods[-1], "Feb 2024")
+    assert snap["value"] == kpis["sales"] and snap["period"] == kpis["sales_period"]
+
+
+def test_sales_range_total_has_no_pieces_for_del_monte():
+    """Del Monte's sell-out quantity unit is unconfirmed: pesos only."""
+    session = FakeSession(latest_sales_period=None)
+    session.delmonte_latest_sales_period = "2025-12"
+    session.delmonte_sales = {"2025-12": 22_134_295.57}
+    cum = _get(session, "principal=delmonte")["kpis"]["sales_cumulative"]
+    assert cum["value"] == pytest.approx(22_134_295.57)
+    assert cum["pieces"] is None
+
+
+def test_chart_draws_filled_months_as_estimates_never_as_sales():
+    """Coverage hole H1: a month the database holds only as a fill is drawn
+    as an estimate with its kind; the real line and the KPI ignore it, and a
+    month with real sales gets no estimate."""
+    periods = _periods()
+    session = FakeSession(
+        sales={periods[-1]: 500.0},
+        estimated_sales={"unilever": {periods[-2]: ("filled", 450.0), periods[-1]: ("filled", 999.0),
+                                      periods[-3]: ("generated", 777.0)}},
+        estimated_stock={"unilever": {periods[-2]: ("filled", 1_000.0)}},
+    )
     body = _get(session, "principal=unilever")
-    mix = {m["tier"]: m for m in body["abc_mix"]}
-    assert mix["A"]["revenue_share_pct"] == pytest.approx(80.0)
-    assert mix["A"]["revenue"] is None
-    assert body["abc_revenue"]["ranked_total"] is None
+    pts = {pt["period"]: pt for pt in body["sales_vs_stock"]}
+    gap, real = pts[periods[-2]], pts[periods[-1]]
+    assert gap["sales"] is None and gap["sales_estimated"] == 450.0 and gap["sales_estimated_kind"] == "filled"
+    assert gap["provenance"]["sales_estimated"] == "filled"
+    assert gap["stock_on_hand"] is None and gap["stock_on_hand_estimated"] == 1_000.0
+    assert real["sales"] == 500.0 and real["sales_estimated"] is None
+    assert body["kpis"]["sales_cumulative"]["value"] == 500.0, "an estimate never reaches a KPI"
+    assert pts[periods[-3]]["sales_estimated"] is None, "real mode draws filled rows only, never generated ones"
+
+
+def test_estimate_under_all_needs_both_principals_covered():
+    """Under 'all' an estimated point still covers both principals: one side
+    real and the other estimated adds up; one side missing gives no point."""
+    periods = _periods()
+    session = FakeSession(sales={periods[-1]: 100.0, periods[-2]: 100.0},
+                          estimated_sales={"delmonte": {periods[-1]: ("filled", 30.0)}})
+    session.delmonte_latest_sales_period = periods[-3]
+    session.delmonte_sales = {periods[-3]: 50.0}
+    pts = {pt["period"]: pt for pt in _get(session, "")["sales_vs_stock"]}
+    assert pts[periods[-1]]["sales"] is None
+    assert pts[periods[-1]]["sales_estimated"] == pytest.approx(130.0)
+    assert pts[periods[-2]]["sales_estimated"] is None, "Del Monte has nothing for that month"
+
+
+def test_returns_are_served_and_unilevers_rate_fill_is_an_estimate():
+    """Coverage hole H4: Unilever's returns exist only as a rate fill; the
+    chart now carries them, labelled filled."""
+    current = _periods()[-1]
+    session = FakeSession(returns={"unilever": {current: ("filled", 912_323.85, "synthetic_rate_transfer")}})
+    pt = _get(session, "principal=unilever")["sales_vs_stock"][-1]
+    assert pt["returns"] is None
+    assert pt["returns_estimated"] == pytest.approx(912_323.85)
+    assert pt["returns_estimated_kind"] == "filled"
+
+
+def _accuracy_row(key, month, forecast, actual, run_length=1, price=10.0, limited=False, label="run"):
+    miss = forecast - actual
+    return {"run_id": 2, "forecast_source": "backtest_recreated", "run_label": label, "cohort": None,
+            "principal": "unilever", "product_key": key, "sku_code": f"SKU{key}", "product_name": f"P{key}",
+            "category_path": "CAT", "month": month, "forecast_pieces": forecast, "actual_pieces": actual,
+            "ma3_pieces": forecast, "miss_pieces": miss, "abs_miss_pieces": abs(miss),
+            "direction": "over" if miss > 0 else "under" if miss < 0 else "exact", "run_length": run_length,
+            "price_per_piece": price, "possibly_stock_limited": limited}
+
+
+def test_error_card_signed_miss_in_pieces_and_pesos_with_review_list():
+    rows = [
+        _accuracy_row(1, "2024-01", 120, 100, run_length=2),
+        _accuracy_row(1, "2024-02", 130, 100, run_length=3, limited=True),   # 3rd over in a row: review
+        _accuracy_row(2, "2024-01", 80, 100),
+        _accuracy_row(2, "2024-02", 90, 100, price=None),                    # no price: pieces only
+    ]
+    acc = _get(FakeSession(accuracy_rows=rows), "principal=unilever")["forecast_accuracy"]
+    assert acc["forecast_source"] == "backtest_recreated"
+    assert (acc["products"], acc["product_months"]) == (2, 4)
+    assert acc["net_miss_pieces"] == pytest.approx(20.0)        # 20 + 30 - 20 - 10
+    assert acc["abs_miss_pieces"] == pytest.approx(80.0)
+    assert acc["surplus_pesos"] == pytest.approx(500.0)         # (20 + 30) x 10
+    assert acc["shortage_pesos"] == pytest.approx(200.0)        # 20 x 10; the unpriced miss stays in pieces
+    assert acc["direction"] == "over"
+    assert [(m["period"], m["direction"]) for m in acc["by_month"]] == [("2024-01", "exact"), ("2024-02", "over")]
+    runs = acc["over_forecast_runs"]
+    assert runs["run_months"] == 3 and "DEC-33" in runs["rule"]
+    assert [it["product_key"] for it in runs["items"]] == [1]
+    assert runs["items"][0]["possibly_stock_limited"] is True
+    assert acc["possibly_stock_limited"] == 1
+    assert acc["products_without_price"] == 0, "product 2 has a price in another month"
+
+
+def test_error_card_says_why_del_monte_has_none():
+    acc = _get(FakeSession(), "principal=delmonte")["forecast_accuracy"]
+    assert acc["products"] == 0 and "category grain" in acc["blocked_reason"]
+
+
+def test_safety_stock_is_not_judged_on_a_count_before_the_plans_opening_count():
+    """The only plan in force is cycle 2026-03 (opening count 2026-02); a
+    range ending 2025-06 reads the 2025-06 count, which that plan's safety
+    stock is not compared with."""
+    session = FakeSession(
+        lp_cycle_date=datetime.date(2026, 3, 1), latest_abc_period="2025-06",
+        abc_rows=[_abc_row(1, "A", "2025-06", 0.3, current_stock=10, ss_i=50)],
+        latest_inventory_period="2025-06",
+    )
+    body = _get(session, "principal=unilever&period=2025-06")
+    exp = body["safety_stock_exposure"]
+    assert exp["below_count"] is None and exp["comparable_count"] == 0
+    assert "Feb 2026" in exp["blocked_reason"] and exp["plan_opening_period"] == "2026-02"
+    assert body["kpis"]["safety_stock_rate"] is None
+
+
+def test_below_safety_stock_list_is_the_rows_behind_the_count():
+    """Audrey's below_items: the products the count was taken from, most
+    revenue first, pieces throughout."""
+    rows = [_abc_row(1, "A", "2024-02", 0.10, current_stock=10, ss_i=50),
+            _abc_row(2, "A", "2024-02", 0.30, current_stock=5, ss_i=20),
+            _abc_row(3, "A", "2024-02", 0.20, current_stock=90, ss_i=50)]
+    exp = _get(FakeSession(latest_abc_period="2024-02", abc_rows=rows), "principal=unilever")["safety_stock_exposure"]
+    assert exp["below_count"] == 2
+    assert [(i["sku_id"], i["short_by"]) for i in exp["below_items"]] == [("SKU2", 15.0), ("SKU1", 40.0)]
+    assert exp["tier_a_period"] == "2024-02"
+
+
+def test_idle_stock_is_unilever_only_and_says_so_for_del_monte():
+    body = _get(FakeSession(), "principal=delmonte")
+    assert body["idle_stock"]["products"] == 0
+    assert "category" in body["idle_stock"]["blocked_reason"]
+    assert body["idle_stock"]["window_rule_months"] == 6
+
+
+def test_payload_says_when_the_marts_were_refreshed():
+    body = _get(FakeSession(), "principal=unilever")
+    assert body["marts"]["present"] is False
+
+
+def test_a_flagged_count_without_a_ruling_gives_its_reviewed_reason():
+    from backend.data_notes import UNUSUAL_STOCK_SNAPSHOTS, flagged_count_note
+
+    note = flagged_count_note("delmonte", "2023-02", 2_500_000.0, [8_700_000.0], None)
+    assert note == ("Counted for Feb 2023 (exact date not recorded): "
+                    + UNUSUAL_STOCK_SNAPSHOTS[("delmonte", "2023-02")])
+    assert flagged_count_note("unilever", "2026-01", 24_339_386.24, [46_576_778.51], "2026-02-03") is None
 
 
 # ---- stock count dates (2026-10-02) -------------------------------------------
 # The Technical Adviser's rule: every number states its period. A stock
 # snapshot's _period is not the day it was counted — Unilever's "2026-03" is
 # the 2026-04-06 count — so GET /dashboard exposes the count day, read-only.
-
-def test_stock_card_and_chart_carry_the_count_day():
-    periods = _periods()
-    session = FakeSession(
-        latest_inventory_period=periods[-1],
-        soh={periods[-2]: 40_000_000.0, periods[-1]: 22_700_825.83},
-        count_dates={periods[-2]: datetime.date(2024, 2, 1), periods[-1]: datetime.date(2024, 3, 6)},
-        tier_stock_rows=[{"product_key": 1, "tier": "A", "period": "2024-02", "any_active": True, "any_inactive": False}],
-        latest_abc_period="2024-02",
-    )
-    with make_client(session) as c:
-        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
-    assert body["kpis"]["soh_period"] == periods[-1]
-    assert body["kpis"]["soh_count_date"] == "2024-03-06"
-    assert body["tier_stock_count_date"] == "2024-03-06"
-    svs = {pt["period"]: pt for pt in body["sales_vs_stock"]}
-    assert svs[periods[-1]]["stock_count_date"] == "2024-03-06"
-    assert svs[periods[-2]]["stock_count_date"] == "2024-02-01"
-    # A month without a stock figure gets no count day.
-    assert svs[periods[-3]]["stock_count_date"] is None
-    # Display only: the stock figure itself is untouched.
-    assert body["kpis"]["soh_value"] == pytest.approx(22_700_825.83)
-    # The count query is read-only and scoped like the stock sums.
-    count_sql = [sql for sql, _ in session.calls if "AS first_count_date" in sql]
-    assert count_sql and all("principal = 'unilever'" in sql for sql in count_sql)
-    assert not any(word in sql.upper() for sql in count_sql for word in ("INSERT", "UPDATE", "DELETE"))
-
-
-def test_count_day_is_left_out_when_a_period_has_two_count_days():
-    """Under 'all' a period holds two principals' counts, taken on different
-    days (Unilever's 2025-12 on 2026-01-01, Del Monte's on 2025-12-01);
-    naming either would misdate the other's stock."""
-    from backend.routers.dashboard import _stock_count_dates
-
-    session = FakeSession(count_dates={
-        "2025-12": (datetime.date(2025, 12, 1), datetime.date(2026, 1, 1)),
-        "2026-03": datetime.date(2026, 4, 6),
-    })
-    out = _stock_count_dates(session, ["2025-12", "2026-03"], "all")
-    assert out == {"2026-03": "2026-04-06"}
-    assert _stock_count_dates(session, [], "all") == {}
-
 
 def test_insight_sentence_names_inventory_at_cost_and_its_count_day():
     from backend.chart_insights import sales_vs_stock_insight

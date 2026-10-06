@@ -1,0 +1,17 @@
+branch,check,value,result
+kelvin/model-audit,commits on the branch since its base,1,info
+kelvin/model-audit,files under inputs/ or local/ in any commit,0,PASS
+kelvin/model-audit,"per-product CSV columns with sales, quantity or price (product column + sales column)",0,PASS
+kelvin/model-audit,README lines pairing a product code with a piece count or peso price,0,PASS
+kelvin/model-audit,product 674 piece counts removed 2026-10-03 (any commit),0,PASS
+kelvin/blank-qty-fix,commits on the branch since its base,1,info
+kelvin/blank-qty-fix,files under inputs/ or local/ in any commit,0,PASS
+kelvin/blank-qty-fix,"per-product CSV columns with sales, quantity or price (product column + sales column)",0,PASS
+kelvin/blank-qty-fix,README lines pairing a product code with a piece count or peso price,0,PASS
+kelvin/blank-qty-fix,product 674 piece counts removed 2026-10-03 (any commit),0,PASS
+kelvin/model-audit,dry merge into group7/kelvin-etl: conflicts,0,PASS
+kelvin/model-audit,dry merge into group7/kelvin-etl: files the merge would change,54,info
+kelvin/model-audit,after git merge --abort: worktree clean,1,PASS
+kelvin/blank-qty-fix,dry merge into group7/kelvin-etl: conflicts,0,PASS
+kelvin/blank-qty-fix,dry merge into group7/kelvin-etl: files the merge would change,5,info
+kelvin/blank-qty-fix,after git merge --abort: worktree clean,1,PASS

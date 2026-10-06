@@ -117,16 +117,21 @@ def create_access_token(
 
 
 class TokenPayload:
-    __slots__ = ("user_id", "email", "role", "full_name", "session_id")
+    __slots__ = ("user_id", "email", "role", "full_name", "session_id", "permissions")
 
     def __init__(
-        self, user_id: int, email: str, role: str, full_name: str, session_id: str | None = None
+        self, user_id: int, email: str, role: str, full_name: str, session_id: str | None = None,
+        permissions: frozenset[str] | None = None,
     ) -> None:
         self.user_id = user_id
         self.email = email
         self.role = role
         self.full_name = full_name
         self.session_id = session_id
+        # The effective permission set, when backend/deps read it with the
+        # session check (never from the token itself); None = not read yet,
+        # and backend/permissions.permissions_for looks it up.
+        self.permissions = permissions
 
 
 def decode_access_token(token: str) -> TokenPayload:

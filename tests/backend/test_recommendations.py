@@ -18,6 +18,7 @@ import datetime
 import pytest
 from fastapi.testclient import TestClient
 
+from analytics.params import abc_method_sql
 from backend import auth_utils, data_notes
 from backend.deps import get_current_user, get_db
 from backend.main import app
@@ -86,12 +87,18 @@ class FakeSession:
         # 2026-03-02, opens the sample rows' cycle 2026-03.
         self.stock_counts = {("unilever", "2026-02"): (812, datetime.date(2026, 3, 2), datetime.date(2026, 3, 2))}
         self.calls: list[tuple[str, dict]] = []
+        # Migration 0042's review_flag table and PO Qty columns
+        # (recommendations._present). Off by default: the tests written
+        # before them see the database they were written against.
+        self.present = {"review_flag": False, "on_order": False}
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
         self.calls.append((sql, dict(params)))
         scope = params.get("principal")
+        if "to_regclass('review_flag')" in sql:
+            return FakeResult([self.present])
         # backend/lp_cycle.stored_run (migration 0037). Before every
         # lp_recommendation matcher: its subquery reads that table too.
         if "to_regclass('lp_run')" in sql:
@@ -224,7 +231,7 @@ def test_abc_join_is_pinned_to_one_period(client, session):
         if "FROM lp_recommendation lr" in s and "abc_classification" in s.lower()
     )
     assert "classification_period = :abc_period" in row_query
-    assert "method = 'single'" in row_query
+    assert abc_method_sql() in row_query   # each principal's Tier A basis (migration 0044)
 
 
 # ─── LP cycle scoping and stock units (2026-09-23) ───────────────────────
@@ -653,3 +660,150 @@ def test_a_decision_returns_the_row_against_its_cycles_opening_count():
     assert item.current_stock == 120.0
     row_params = next(p for s, p in db.calls if "FROM lp_recommendation lr" in s)
     assert row_params["inv_period"] == "2026-02"
+
+
+# ---- on order and the review flag (2026-10-04, migration 0042) -------------
+# on_order is the opening count's PO Qty in pieces, information only (its
+# meaning is unverified, DEC-34); unknown is None with a reason, never 0. A product flagged for review is never accepted without a
+# person confirming it (PATCH reviewed=true), so bulk accept can't take it.
+
+
+def _counted(**overrides):
+    return _item_row(**{"current_stock": 120.0, "rop_i": 30.0, "q_i": 50.0, "in_stock_count": True,
+                        "on_order_pieces": 576.0, "on_order_cases": 2.0, "on_order_unparsed": 0, **overrides})
+
+
+def test_on_order_is_the_counts_po_qty_shown_but_never_subtracted():
+    """DEC-34 (2026-10-04): PO Qty's meaning is unverified, so on_order is
+    information only — labelled, and no quantity on the row moves with it."""
+    from backend.routers.recommendations import ON_ORDER_NOTE, _to_item
+    from backend.schemas.recommendations import RecommendationItem
+
+    row = _counted(q_i=1000.0, forecast_units=900.0)
+    item = _to_item(row, {"review_flag": True, "on_order": True})
+    assert (item.on_order, item.on_order_cases, item.on_order_blocked_reason) == (576.0, 2.0, None)
+    assert item.on_order_note == ON_ORDER_NOTE and "unverified" in ON_ORDER_NOTE and "never subtracted" in ON_ORDER_NOTE
+    without = _to_item({**row, "on_order_pieces": None, "on_order_cases": None, "on_order_unparsed": None})
+    for field in ("q_i", "rop_i", "ss_i", "short_units", "stockout_gap", "priority_score", "urgency"):
+        assert getattr(item, field) == getattr(without, field), field
+    assert not any("net" in f for f in RecommendationItem.model_fields if f.startswith(("q_", "on_order")))
+    # The file had a blank PO Qty: 0 is the figure as recorded.
+    assert _to_item(_counted(on_order_pieces=0.0, on_order_cases=0.0)).on_order == 0.0
+
+
+def test_on_order_unknown_is_none_with_a_reason_never_zero():
+    from backend.routers.recommendations import _to_item
+
+    cases = {
+        "not loaded yet": (_counted(), {"review_flag": True, "on_order": False}, "migration 0042"),
+        "loaded before 0042": (_counted(on_order_unparsed=3, on_order_pieces=None, on_order_cases=None), None,
+                               "not reloaded while its meaning is unverified"),
+        "no pack size": (_counted(on_order_pieces=None), None, "no usable pack size"),
+        "Del Monte": (_counted(principal="delmonte"), None, "no purchase-order column"),
+        "not in the count": (_counted(in_stock_count=False, current_stock=None, on_order_unparsed=None,
+                                      on_order_pieces=None, on_order_cases=None), None, "not in the cycle's opening"),
+    }
+    for name, (row, present, reason) in cases.items():
+        item = _to_item(row, present)
+        assert item.on_order is None, name
+        assert reason in item.on_order_blocked_reason, name
+
+
+def test_row_query_reads_0042_only_where_it_exists():
+    from backend.routers.recommendations import select_one
+    from backend.stock_units import ON_ORDER_ABSENT_SQL, ON_ORDER_AT_PERIOD_SQL
+
+    on, _ = select_one(present={"review_flag": True, "on_order": True})
+    assert ON_ORDER_AT_PERIOD_SQL in on and "FROM review_flag" in on
+    assert "rf.planning_cycle_date = lr.planning_cycle_date" in " ".join(on.split())
+    off, _ = select_one(present={"review_flag": False, "on_order": False})
+    assert ON_ORDER_ABSENT_SQL in off and "FROM review_flag" not in off and "po_qty" not in off
+    assert "{_" not in on + off  # every placeholder filled
+
+
+def test_review_flag_reaches_the_response(sample_rows):
+    sample_rows[0].update(needs_review=True, review_reasons=["collapse", "over_forecast_run"],
+                          review_over_run_months=6, review_collapse_ratio=0.1836,
+                          on_order_pieces=288.0, on_order_cases=1.0, on_order_unparsed=0, in_stock_count=True)
+    session = FakeSession(
+        sample_rows, stock_by_period={(1, "2026-02"): 120.0},
+        inventory_period_by_scope={"unilever": "2026-03"}, abc_period_by_scope={"unilever": "2026-02"},
+    )
+    session.present = {"review_flag": True, "on_order": True}
+    item = _get(session, "/recommendations?principal=unilever")["items"][0]
+    assert item["needs_review"] is True
+    assert item["review_reasons"] == ["collapse", "over_forecast_run"]
+    assert (item["review_over_run_months"], item["review_collapse_ratio"]) == (6, 0.1836)
+    assert item["on_order"] == 288.0 and "q_net_of_on_order" not in item
+    assert "unverified" in item["on_order_note"]
+
+
+def test_not_assessed_is_none_not_false(client):
+    item = client.get("/recommendations?principal=unilever",
+                      headers={"Authorization": f"Bearer {user_token()}"}).json()["items"][0]
+    assert item["needs_review"] is None and item["review_reasons"] == []
+
+
+class _GuardSession:
+    """PATCH with review_flag present; `flagged` = the row's reasons or None."""
+
+    def __init__(self, flagged):
+        self.flagged = flagged
+        self.calls: list[str] = []
+        self.audit: list[dict] = []
+
+    def execute(self, stmt, params=None):
+        sql = str(stmt)
+        self.calls.append(sql)
+        if "to_regclass('review_flag')" in sql:
+            return FakeResult([{"review_flag": True, "on_order": True}])
+        if "JOIN review_flag rf" in sql:
+            return FakeResult([{"reasons": self.flagged}] if self.flagged else [])
+        if "UPDATE lp_recommendation" in sql:
+            return FakeResult([{"sku": "U-1", "planning_cycle_date": datetime.date(2026, 3, 1)}])
+        if "MAX(classification_period) AS p FROM ABC_Classification" in sql:
+            return FakeResult([{"p": "2026-02"}])
+        if "FROM lp_recommendation lr" in sql:
+            return FakeResult([_counted(needs_review=bool(self.flagged), review_reasons=self.flagged or [])])
+        if "audit_log" in sql.lower():
+            self.audit.append(dict(params or {}))
+        return FakeResult([])
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+
+def _decide(db, **body):
+    from backend.routers.recommendations import update_recommendation
+    from backend.schemas.recommendations import RecommendationDecision
+
+    return update_recommendation(1, RecommendationDecision(**body), db=db,
+                                 current_user=auth_utils.decode_access_token(user_token()))
+
+
+def test_a_flagged_row_is_never_accepted_without_review():
+    from fastapi import HTTPException
+
+    db = _GuardSession(["collapse"])
+    with pytest.raises(HTTPException) as err:
+        _decide(db, status="accepted", reason="Accepted in bulk")
+    assert err.value.status_code == 409 and "collapse" in err.value.detail
+    assert not any("UPDATE lp_recommendation" in s for s in db.calls)  # nothing written
+
+    item = _decide(_GuardSession(["collapse"]), status="accepted", reviewed=True)
+    assert item.needs_review is True
+    # Dismissing needs no confirmation; an unflagged row accepts as before.
+    _decide(_GuardSession(["over_forecast_run"]), status="dismissed", reason="Not needed")
+    _decide(_GuardSession(None), status="accepted")
+
+
+def test_reviewed_accept_is_recorded_in_the_audit_log(monkeypatch):
+    from backend import audit
+
+    recorded = []
+    monkeypatch.setattr(audit, "record", lambda db, action, detail, actor=None: recorded.append(detail))
+    _decide(_GuardSession(["collapse", "over_forecast_run"]), status="accepted", reviewed=True, reason="Checked")
+    assert recorded == ["SKU U-1: Checked [flagged for review: collapse, over_forecast_run; reviewed]"]
