@@ -5,10 +5,10 @@
 }
 
 .forecast-content {
-  padding: 0 3rem 3rem 3rem;
+  padding: 0 var(--page-padding-x) 48px;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 /* Header */
@@ -79,11 +79,17 @@
   border-color: var(--color-brand-primary);
 }
 
-/* Selection Area */
+/* Selection area: its own card (UI pass), so picking a product reads as
+   one step, apart from the result below it. */
 .forecast-selection {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 10px;
+  padding: 16px 20px 18px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 /* Was an unstyled block wrapper around the label alone; now also carries
@@ -496,10 +502,10 @@
    the fold rather than pushing it below it. */
 .selected-sku-card {
   background-color: var(--color-surface);
-  border-radius: 12px;
-  padding: 0.85rem 1.5rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
-  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 14px 20px;
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
   border-left: 4px solid var(--color-abc-a);
   display: flex;
   justify-content: space-between;
@@ -548,10 +554,11 @@
 }
 
 .forecast-cat-badge {
-  padding: 0.35rem 0.9rem;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-micro);
+  font-weight: 600;
+  line-height: 1.6;
   border: 1px solid transparent;
 }
 
@@ -588,11 +595,11 @@
   gap: 1.75rem;
   padding: 1.15rem 1.5rem;
   margin-bottom: 1.25rem;
-  /* Subtle violet wash keyed to the forecast series, so the stat strip
-     reads as part of the forecast card rather than generic grey chrome. */
-  background: linear-gradient(180deg, #faf8ff 0%, var(--color-surface-raised) 100%);
-  border: 1px solid #ede9fe;
-  border-radius: 10px;
+  /* A plain raised panel (UI pass): the swatches beside the figures carry
+     the tie to the chart; the panel itself wears no series colour. */
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .forecast-stat-block {
@@ -603,10 +610,10 @@
 }
 
 .forecast-stat-label {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #8b93a7;
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-text-subtle);
   text-transform: uppercase;
 }
 
@@ -695,11 +702,20 @@
 }
 
 .forecast-howmade-title {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #8b93a7;
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-text-subtle);
   text-transform: uppercase;
+}
+
+/* The folded version of the block above (SKUForecast.jsx, UI pass). */
+.forecast-howmade-disclosure {
+  margin: 0 0 1.25rem;
+}
+
+.forecast-howmade-disclosure .forecast-howmade-list {
+  margin-bottom: 8px;
 }
 
 .forecast-howmade-list {

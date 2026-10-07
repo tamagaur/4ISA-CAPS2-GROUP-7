@@ -29,6 +29,8 @@ import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import InfoTip from './InfoTip';
+import PageHeader from './ui/PageHeader';
+import Disclosure from './ui/Disclosure';
 import ProductName from './ProductName';
 import './SKUForecast.css';
 import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCards';
@@ -956,16 +958,33 @@ const SKUForecast = () => {
   return (
     <div className="forecast-page">
       <div className="forecast-content" data-enter-cycle={enterCycle}>
-        {/* Header */}
-        <div className="forecast-header">
-          <div className="header-text-group">
-            <h2 className="forecast-title">
-              Demand <span className="page-title-accent">forecasted</span>
-            </h2>
-            <p className="forecast-subtitle">
-              Next-month forecast for Class A SKUs, from Forecast_Result. Each SKU&apos;s model depends on
-              how many months of sales it has.
-            </p>
+        <PageHeader
+          title="Demand"
+          accent="forecast"
+          subtitle="Next month's demand for each Class A SKU, from its own sales history; the model used depends on how many months of sales it has."
+          actions={(
+            <>
+              {/* The range only trims the chart, and Del Monte has none. */}
+              {!isDelMonte && (
+                <DateFilter
+                  localValue={localRange}
+                  onLocalChange={setLocalRange}
+                  onReset={isCustomRange ? resetToDashboardRange : undefined}
+                  minMonths={effectiveMinMonths}
+                  realOnly={realFloor}
+                />
+              )}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => navigate('/sku-management')}
+                title="Go to SKU Management table"
+              >
+                Browse all SKUs <ArrowRight size={14} aria-hidden="true" />
+              </button>
+            </>
+          )}
+        >
             {whatIf && (
               <p className="chart-placeholder-note">
                 Preview: this forecast is a what-if run of the same models on the five-year history, 2021–22
@@ -980,29 +999,7 @@ const SKUForecast = () => {
                 2021–22 placeholder months.
               </p>
             )}
-          </div>
-
-          <div className="forecast-header-actions">
-            {/* The range only trims the chart, and Del Monte has none. */}
-            {!isDelMonte && (
-              <DateFilter
-                localValue={localRange}
-                onLocalChange={setLocalRange}
-                onReset={isCustomRange ? resetToDashboardRange : undefined}
-                minMonths={effectiveMinMonths}
-                realOnly={realFloor}
-              />
-            )}
-            <button
-              className="browse-all-skus-btn"
-              onClick={() => navigate('/sku-management')}
-              title="Go to SKU Management table"
-            >
-              <span>Browse all SKUs</span>
-              <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
+        </PageHeader>
 
         {/* Del Monte: the message REPLACES the picker and everything under
             it. Its ABC rows are product categories, and listing them here
@@ -1642,8 +1639,15 @@ const SKUForecast = () => {
                       no-order row isn't a forecast. Names models only; no
                       claim that one is more accurate than MA3. */}
                   {servedModel?.kind === 'forecast' && derivedForecast?.source === 'stored' && (
-                    <div className="forecast-howmade">
-                      <span className="forecast-howmade-title">How this forecast was made</span>
+                    <Disclosure
+                      flat
+                      className="forecast-howmade-disclosure"
+                      title="How this forecast was calculated"
+                      hint={[
+                        servedModel.label ?? storedParams.method ?? null,
+                        storedForecast?.mase != null ? `MASE ${storedForecast.mase.toFixed(2)}` : null,
+                      ].filter(Boolean).join(' · ') || undefined}
+                    >
                       <dl className="forecast-howmade-list">
                         <div className="forecast-howmade-item">
                           <dt>Model</dt>
@@ -1710,7 +1714,7 @@ const SKUForecast = () => {
                           Served MA3 as a fallback — {describeFallbackReason(storedParams.backup_reason)}
                         </span>
                       )}
-                    </div>
+                    </Disclosure>
                   )}
 
                   {/* Partial overlap: the chart is real but narrower than what
