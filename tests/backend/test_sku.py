@@ -74,7 +74,10 @@ class FakeSession:
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult([{"p": self.inventory_period_by_scope.get(scope)}])
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql:
-            return FakeResult([{"p": self.abc_period_by_scope.get(scope)}])
+            return FakeResult([
+                {"principal": who, "p": self.abc_period_by_scope.get(who)}
+                for who in (("unilever", "delmonte") if scope is None else (scope,))
+            ])
         if "MAX(lr.planning_cycle_date) AS d" in sql:
             return FakeResult([{"d": self.current_cycle}])
         if "FROM product_dimension pd" in sql:
@@ -95,7 +98,7 @@ class FakeSession:
                 else:
                     cycles = sorted(c for k, c in self.rop_by_cycle if k == key)
                     rop = self.rop_by_cycle[(key, cycles[-1])] if cycles else None
-                tier = r["tier"] if r["_abc_period"] == params.get("abc_period") else None
+                tier = r["tier"] if r["_abc_period"] == params.get("abc_p_" + r["principal"]) else None
                 out.append({**r, "current_stock": stock,
                             "current_stock_cases": None if stock is None else stock / 288,
                             "reorder_point": rop, "tier": tier})
@@ -259,3 +262,14 @@ def test_reorder_point_is_left_out_without_lp_view(client, monkeypatch):
     items = {i["sku_id"]: i for i in client.get("/sku?principal=unilever").json()["items"]}
     assert items["U-1"]["reorder_point"] is None
     assert items["U-1"]["current_stock"] == 120.0  # stock is not an LP figure
+
+
+def test_abc_period_params_keep_each_principal_on_its_own_run():
+    """Under 'all', Del Monte keeps its own 2025-12 run instead of Unilever's
+    2026-02 (a single MAX across both left Del Monte with no tier)."""
+    from backend.principals import abc_period_params, abc_period_pred, abc_periods_from_rows
+
+    periods = abc_periods_from_rows([{"principal": "unilever", "p": "2026-02"}, {"principal": "delmonte", "p": "2025-12"}])
+    assert abc_period_params(periods) == {"abc_p_unilever": "2026-02", "abc_p_delmonte": "2025-12"}
+    assert abc_period_params({"unilever": "2026-02"})["abc_p_delmonte"] is None
+    assert "CASE ac.principal" in abc_period_pred("=", "ac")

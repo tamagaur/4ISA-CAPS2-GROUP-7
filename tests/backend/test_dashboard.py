@@ -385,17 +385,17 @@ class FakeSession:
 
         # ---- the stored ABC run (the safety-stock cohort) ------------
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql and "<=" not in sql:
-            return FakeResult([{"p": self.latest_abc_period}])
+            return FakeResult([{"principal": "unilever", "p": self.latest_abc_period}])
 
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql and "<=" in sql:
             # _nearest_abc_period_at_or_before: latest fixture period at or
             # before the requested one, mirroring the real MAX(...) <= :period.
-            target = params["period"]
+            target = params["at_or_before"]
             candidates = sorted({r["period"] for r in self.abc_rows if r["period"] <= target})
-            return FakeResult([{"p": candidates[-1] if candidates else None}])
+            return FakeResult([{"principal": "unilever", "p": candidates[-1] if candidates else None}])
 
         if "rop.ss_i AS ss_i" in sql:
-            period = params["period"]
+            period = params["abc_p_unilever"]
             rows = [r for r in self.abc_rows if r["period"] == period and r["tier"] == "A"]
             return FakeResult([
                 {"product_key": r["product_key"], "sku_id": f"SKU{r['product_key']}",

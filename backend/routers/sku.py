@@ -31,7 +31,9 @@ from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import current_cycle
 from backend.principals import (
     PrincipalQuery,
-    latest_abc_period,
+    abc_period_params,
+    abc_period_pred,
+    latest_abc_periods,
     principal_clause,
 )
 from backend.schemas.sku import SKUCreate, SKUItem, SKUListResponse, SKUUpdate
@@ -81,8 +83,8 @@ _SELECT_ONE = f"""
                product_key, tier, classification_period
         FROM abc_classification
         WHERE {abc_method_sql()}
-          AND (CAST(:abc_period AS TEXT) IS NULL
-               OR classification_period <= CAST(:abc_period AS TEXT))
+          AND (CAST(:abc_p_unilever AS TEXT) IS NULL AND CAST(:abc_p_delmonte AS TEXT) IS NULL
+               OR {abc_period_pred("<=")})
         ORDER BY product_key, classification_period DESC
     ) abc ON abc.product_key = pd.product_key
 """
@@ -147,7 +149,7 @@ def _one_row_params(db: Session, product_key: int) -> dict:
     return {
         "key": product_key,
         "current_cycle": current_cycle(db),
-        "abc_period": latest_abc_period(db, None),
+        **abc_period_params(latest_abc_periods(db, None)),
     }
 
 
@@ -179,7 +181,7 @@ def get_skus(
     # (STOCK_AT_LATEST_SQL), which is what keeps it right under 'all' too.
     params: dict = {
         "current_cycle": current_cycle(db, principal),
-        "abc_period": latest_abc_period(db, principal),
+        **abc_period_params(latest_abc_periods(db, principal)),
         **scope_params,
     }
     if status:
@@ -242,7 +244,7 @@ def create_sku(
         {
             "key": row["product_key"],
             "current_cycle": current_cycle(db, "unilever"),
-            "abc_period": latest_abc_period(db, "unilever"),
+            **abc_period_params(latest_abc_periods(db, "unilever")),
         },
     ).mappings().first()
     return _to_item(result)

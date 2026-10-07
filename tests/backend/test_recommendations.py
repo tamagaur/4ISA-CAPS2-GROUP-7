@@ -104,7 +104,10 @@ class FakeSession:
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult([{"p": self.inventory_period_by_scope.get(scope)}])
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql:
-            return FakeResult([{"p": self.abc_period_by_scope.get(scope)}])
+            return FakeResult([
+                {"principal": who, "p": self.abc_period_by_scope.get(who)}
+                for who in (("unilever", "delmonte") if scope is None else (scope,))
+            ])
         # LP cycle + freshness — must precede the row matcher below, which
         # reads the same table with the same status predicate.
         if "MAX(lr.planning_cycle_date) AS d" in sql:
@@ -134,7 +137,7 @@ class FakeSession:
             out = []
             for r in matched:
                 stock = self.stock_by_period.get((r["product_key"], params.get("inv_period")))
-                share = r["revenue_share"] if r["_abc_period"] == params.get("abc_period") else None
+                share = r["revenue_share"] if r["_abc_period"] == params.get("abc_p_" + r["principal"]) else None
                 out.append({
                     **r, "current_stock": stock, "stock_value_pesos": None,
                     "revenue_share": share, "avg_monthly_sales_pesos": None,
@@ -222,7 +225,7 @@ def test_abc_join_is_pinned_to_one_period(client, session):
         s for s, _ in session.calls
         if "FROM lp_recommendation lr" in s and "abc_classification" in s.lower()
     )
-    assert "classification_period = :abc_period" in row_query
+    assert "classification_period = CASE principal" in row_query
     assert abc_method_sql() in row_query   # each principal's Tier A basis (migration 0044)
 
 
@@ -613,7 +616,7 @@ def test_a_decision_returns_the_row_against_its_cycles_opening_count():
             if "UPDATE lp_recommendation" in sql:
                 return FakeResult([{"sku": "U-1", "planning_cycle_date": datetime.date(2026, 3, 1)}])
             if "MAX(classification_period) AS p FROM ABC_Classification" in sql:
-                return FakeResult([{"p": "2026-02"}])
+                return FakeResult([{"principal": "unilever", "p": "2026-02"}])
             if "FROM lp_recommendation lr" in sql:
                 return FakeResult([_item_row(current_stock=120.0, rop_i=30.0, q_i=50.0)])
             return FakeResult([])  # the audit-log insert
@@ -732,7 +735,7 @@ class _GuardSession:
         if "UPDATE lp_recommendation" in sql:
             return FakeResult([{"sku": "U-1", "planning_cycle_date": datetime.date(2026, 3, 1)}])
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql:
-            return FakeResult([{"p": "2026-02"}])
+            return FakeResult([{"principal": "unilever", "p": "2026-02"}])
         if "FROM lp_recommendation lr" in sql:
             return FakeResult([_counted(needs_review=bool(self.flagged), review_reasons=self.flagged or [])])
         if "audit_log" in sql.lower():

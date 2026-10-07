@@ -64,7 +64,7 @@ class FakeSession:
         if "MAX(lr.planning_cycle_date)" in sql:
             return FakeResult([{"d": None}])
         if "MAX(classification_period)" in sql:
-            return FakeResult([{"p": self.latest_period}])
+            return FakeResult([{"principal": params.get("principal") or "unilever", "p": self.latest_period}])
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult(
                 [{"p": self.inventory_period_by_scope.get(params.get("principal"))}]
@@ -203,7 +203,7 @@ class LastKnownFakeSession:
             rows = self._scoped(self.abc_rows, params)
             cap = params.get("at_or_before")
             periods = [r["classification_period"] for r in rows if cap is None or r["classification_period"] <= cap]
-            return FakeResult([{"p": max(periods) if periods else None}])
+            return FakeResult([{"principal": params.get("principal") or "unilever", "p": max(periods) if periods else None}])
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult([{"p": "2026-03"}])
         if "SELECT COUNT(*) AS n FROM product_dimension" in sql:
@@ -345,7 +345,7 @@ class PeriodResolvingFakeSession(FakeSession):
             scope, cap = params.get("principal"), params.get("at_or_before")
             periods = [r["_period"] for r in self.rows
                        if (scope is None or r["principal"] == scope) and (cap is None or r["_period"] <= cap)]
-            return FakeResult([{"p": max(periods) if periods else None}])
+            return FakeResult([{"principal": params.get("principal") or "unilever", "p": max(periods) if periods else None}])
         return super().execute(stmt, params)
 
 

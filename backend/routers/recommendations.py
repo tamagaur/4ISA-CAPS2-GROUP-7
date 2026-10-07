@@ -172,7 +172,9 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import (
     PrincipalQuery,
-    latest_abc_period,
+    abc_period_params,
+    abc_period_pred,
+    latest_abc_periods,
     principal_clause,
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
@@ -261,7 +263,7 @@ _SELECT_ONE = f"""
     LEFT JOIN (
         SELECT DISTINCT ON (product_key) product_key, revenue_share, tier
         FROM abc_classification
-        WHERE {abc_method_sql()} AND classification_period = :abc_period
+        WHERE {abc_method_sql()} AND {abc_period_pred()}
         ORDER BY product_key, classification_period DESC
     ) abc ON abc.product_key = lr.product_key
     LEFT JOIN (
@@ -537,7 +539,7 @@ def get_recommendations(
     # None — already null-guarded below. The stock anchor (:inv_period) is
     # set per cycle below: the count that opens it.
     params: dict = {
-        "abc_period": latest_abc_period(db, principal),
+        **abc_period_params(latest_abc_periods(db, principal)),
         **scope_params,
         **lp_params,
     }
@@ -671,7 +673,7 @@ def update_recommendation(
         {
             "key": recommendation_key,
             "inv_period": opening_period(decided["planning_cycle_date"]),
-            "abc_period": latest_abc_period(db, None),
+            **abc_period_params(latest_abc_periods(db, None)),
         },
     ).mappings().first()
     return _to_item(row, present)
