@@ -128,3 +128,7 @@ drills/
 local/
 
 backups_run.log
+
+# Fit-diagnosis per-product outputs (per-SKU data stays in local/)
+reports/diagnostics/fit_diagnosis_*/per_sku.csv
+reports/diagnostics/fit_diagnosis_*/classified.csv
