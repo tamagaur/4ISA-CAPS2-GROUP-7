@@ -97,6 +97,10 @@ export const CHART_COLORS = {
   // (teal beside one blue) and read at ≥ 3.5:1 on the white card.
   heroSales: '#159BA6',
   heroInventory: '#3455A4',
+  // Returns, the same chart's own view (2026-10-08): a deep amber, apart
+  // from teal and navy, and >= 4.5:1 on the white card where the warning
+  // amber (#F5A623) is too faint for a line.
+  heroReturns: '#B45309',
   abcRamp: [COLORS.abcA, COLORS.abcB, COLORS.abcC], // Class A, B, C — sequential
   cumulativeCurve: '#475569',
   gridline: '#E2E8F0',

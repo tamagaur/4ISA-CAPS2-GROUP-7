@@ -20,10 +20,12 @@ import ProductName from './ProductName';
 import './Charts.css';
 
 // Legend entry for the placeholder band (utils/placeholderBand.jsx).
+// "Synthetic — SSM data not received": the label the data plan gives every
+// synthetic point (PROJECT_STATE §18.6), for preview's placeholder months.
 const PlaceholderLegendItem = () => (
   <li className="legend-item">
     <span className="legend-placeholder" aria-hidden="true" />
-    Placeholder months — not SSM&apos;s data
+    Synthetic — SSM data not received
   </li>
 );
 
@@ -388,6 +390,27 @@ const PURCHASES_METRICS = ['sales', 'received', 'recest'];
 const ESTIMATED_LABEL = 'Purchases (estimated from stock counts and sales)';
 const ESTIMATED_DASH = '2 5';
 const ESTIMATED_OPACITY = 0.75;
+// Mart estimates for a month with no real figure (GET /dashboard
+// *_estimated, DEC-31): 'filled' rows are worked out from SSM's own data
+// (real mode); 'generated' rows are synthetic and come in preview only.
+// Drawn like the purchases estimate, in the chart and its table only.
+const ESTIMATE_KIND_TEXT = {
+  filled: 'estimated (filled gap)',
+  generated: 'Synthetic — SSM data not received',
+};
+const estimateLabel = (base, kinds) => {
+  const set = [...new Set(kinds.filter(Boolean))];
+  if (set.length === 1 && set[0] === 'generated') return `${base} — ${ESTIMATE_KIND_TEXT.generated}`;
+  if (set.length === 1 && set[0] === 'filled') return `${base} — ${ESTIMATE_KIND_TEXT.filled}`;
+  return `${base} — estimated (filled gap or synthetic)`;
+};
+// Returns get a view of their own: they run at a few percent of sales, so on
+// the sales axis they would lie flat along zero.
+const RETURNS_VIEW = ['returns', 'Returns'];
+const RETURNS_METRICS = ['returns', 'retest'];
+// Which views draw each estimate: a sales or stock estimate rides with its
+// own metric (and with Both); returns stay in their own view.
+const ESTIMATE_VIEWS = { salesest: ['both', 'sales'], stockest: ['both', 'inventory'] };
 
 const SalesStockTooltip = ({ active, payload, label, years }) => {
   if (!active || !payload || !payload.length) return null;
@@ -421,6 +444,8 @@ const SalesStockTooltip = ({ active, payload, label, years }) => {
                 the day it was actually counted can be a week later. */}
             {metricOf(p.dataKey) === 'stock' && meta?.stockCountDay && ` · counted ${meta.stockCountDay}`}
             {metricOf(p.dataKey) === 'recest' && ' · estimated'}
+            {['salesest', 'stockest', 'retest'].includes(metricOf(p.dataKey)) && meta?.kinds?.[metricOf(p.dataKey)]
+              && ` · ${ESTIMATE_KIND_TEXT[meta.kinds[metricOf(p.dataKey)]] || 'estimated'}`}
             {metricOf(p.dataKey) === 'recest' && meta?.estWasNegative && ' · negative estimate, shown as 0'}
             {metricOf(p.dataKey) === 'recest' && meta?.estNegativeSkus > 0
               && ` · ${meta.estNegativeSkus.toLocaleString()} products had a negative estimate`}
@@ -436,7 +461,7 @@ const SalesStockTooltip = ({ active, payload, label, years }) => {
         </p>
       ))}
       {metas.some((m) => m.placeholder) && (
-        <p className="chart-tooltip-placeholder">Placeholder month — not SSM&apos;s data</p>
+        <p className="chart-tooltip-placeholder">Synthetic — SSM data not received</p>
       )}
     </div>
   );
@@ -557,7 +582,22 @@ export const SalesVsStockWidget = ({
   const hasReceived = data.some((pt) => pt.received != null);
   // Unilever has no purchase records, only this estimate (see ESTIMATED_LABEL).
   const hasEstimated = data.some((pt) => pt.receivedEstimated != null);
-  const metricViews = hasReceived || hasEstimated ? [...METRIC_VIEWS, PURCHASES_VIEW] : METRIC_VIEWS;
+  // Mart estimates and returns (GET /dashboard, data marts): each series and
+  // its legend entry appear only when at least one point carries it.
+  const hasSalesEst = data.some((pt) => pt.salesEstimated != null);
+  const hasStockEst = data.some((pt) => pt.stockEstimated != null);
+  const hasReturns = data.some((pt) => pt.returns != null);
+  const hasReturnsEst = data.some((pt) => pt.returnsEstimated != null);
+  const metricViews = [
+    ...METRIC_VIEWS,
+    ...(hasReceived || hasEstimated ? [PURCHASES_VIEW] : []),
+    ...(hasReturns || hasReturnsEst ? [RETURNS_VIEW] : []),
+  ];
+  const kindsOf = (key) => data.map((pt) => pt[key]);
+  const salesEstLabel = estimateLabel('Sales', kindsOf('salesEstimatedKind'));
+  const stockEstLabel = estimateLabel('Inventory value', kindsOf('stockEstimatedKind'));
+  const returnsLabel = withBasis('Returns', 'returns');
+  const returnsEstLabel = estimateLabel('Returns', kindsOf('returnsEstimatedKind'));
   const widgetRef = useRef(null);
   const wide = useElementWidth(widgetRef) >= YOY_WIDE_PX;
 
@@ -577,6 +617,10 @@ export const SalesVsStockWidget = ({
         row[`stock_${slot}`] = pt?.stockOnHand ?? null;
         row[`received_${slot}`] = pt?.received ?? null;
         row[`recest_${slot}`] = pt?.receivedEstimated != null ? Math.max(0, pt.receivedEstimated) : null;
+        row[`salesest_${slot}`] = pt?.salesEstimated ?? null;
+        row[`stockest_${slot}`] = pt?.stockEstimated ?? null;
+        row[`returns_${slot}`] = pt?.returns ?? null;
+        row[`retest_${slot}`] = pt?.returnsEstimated ?? null;
         row[`meta_${slot}`] = pt
           ? {
               period: pt.period,
@@ -585,6 +629,11 @@ export const SalesVsStockWidget = ({
               placeholder: isPlaceholderPeriod(pt.period, placeholder),
               estWasNegative: pt.receivedEstimated != null && pt.receivedEstimated < 0,
               estNegativeSkus: pt.receivedEstimatedNegativeSkus ?? null,
+              kinds: {
+                salesest: pt.salesEstimatedKind ?? null,
+                stockest: pt.stockEstimatedKind ?? null,
+                retest: pt.returnsEstimatedKind ?? null,
+              },
             }
           : null;
       }
@@ -610,18 +659,35 @@ export const SalesVsStockWidget = ({
     ...(hasEstimated
       ? slots.map((slot) => ({ key: `recest_${slot}`, slot, metric: 'recest', estimated: true, name: `${ESTIMATED_LABEL} · ${slotYears[slot]}`, color: COLORS.forecast }))
       : []),
-  ], [slots, slotYears, salesLabel, receivedLabel, hasReceived, hasEstimated]);
+    ...(hasSalesEst
+      ? slots.map((slot) => ({ key: `salesest_${slot}`, slot, metric: 'salesest', estimated: true, name: `${salesEstLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroSales }))
+      : []),
+    ...(hasStockEst
+      ? slots.map((slot) => ({ key: `stockest_${slot}`, slot, metric: 'stockest', estimated: true, name: `${stockEstLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroInventory }))
+      : []),
+    ...(hasReturns
+      ? slots.map((slot) => ({ key: `returns_${slot}`, slot, metric: 'returns', name: `${returnsLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroReturns }))
+      : []),
+    ...(hasReturnsEst
+      ? slots.map((slot) => ({ key: `retest_${slot}`, slot, metric: 'retest', estimated: true, name: `${returnsEstLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroReturns }))
+      : []),
+  ], [slots, slotYears, salesLabel, receivedLabel, hasReceived, hasEstimated, hasSalesEst, hasStockEst, hasReturns,
+    hasReturnsEst, salesEstLabel, stockEstLabel, returnsLabel, returnsEstLabel]);
   // Purchases received ride with "Both": they are neither metric the
   // control names, and a sales-only or inventory-only view is for a
   // single comparison.
   const { visible, visibleKeys } = useMemo(() => {
-    // "Both" keeps to recorded figures; the estimate is drawn only in the
-    // Purchases view, beside sales.
-    const shown = series.filter((sr) => (
-      metricView === 'both' ? !sr.estimated
+    // "Both" keeps to recorded figures plus the mart's sales and stock
+    // estimates for months with no record; the purchases estimate is drawn
+    // only in the Purchases view, beside sales, and returns in their own.
+    const shown = series.filter((sr) => {
+      if (ESTIMATE_VIEWS[sr.metric]) return ESTIMATE_VIEWS[sr.metric].includes(metricView);
+      if (metricView === 'returns') return RETURNS_METRICS.includes(sr.metric);
+      if (RETURNS_METRICS.includes(sr.metric)) return false;
+      return metricView === 'both' ? !sr.estimated
         : metricView === 'purchases' ? PURCHASES_METRICS.includes(sr.metric)
-          : sr.metric === METRIC_PREFIX[metricView]
-    ));
+          : sr.metric === METRIC_PREFIX[metricView];
+    });
     return { visible: shown, visibleKeys: new Set(shown.map((sr) => sr.key)) };
   }, [series, metricView]);
 
@@ -713,6 +779,10 @@ export const SalesVsStockWidget = ({
           format: (v) => (v < 0 ? '₱0 (negative estimate)' : formatCompactPesos(v)),
         }]
       : []),
+    ...(hasSalesEst ? [{ key: 'salesEstimated', label: `${salesEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasStockEst ? [{ key: 'stockEstimated', label: `${stockEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasReturns ? [{ key: 'returns', label: `${returnsLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasReturnsEst ? [{ key: 'returnsEstimated', label: `${returnsEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
     ...(data.some((pt) => pt.stockUnusual && pt.stockOnHand != null)
       ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Unusual count: ${v}`, align: 'left' }]
       : []),
@@ -723,6 +793,10 @@ export const SalesVsStockWidget = ({
     { metric: 'stock', label: INVENTORY_LABEL, color: CHART_COLORS.heroInventory },
     ...(hasReceived ? [{ metric: 'received', label: receivedLabel, color: COLORS.forecast }] : []),
     ...(hasEstimated ? [{ metric: 'recest', label: ESTIMATED_LABEL, color: COLORS.forecast, estimated: true }] : []),
+    ...(hasSalesEst ? [{ metric: 'salesest', label: salesEstLabel, color: CHART_COLORS.heroSales, estimated: true }] : []),
+    ...(hasStockEst ? [{ metric: 'stockest', label: stockEstLabel, color: CHART_COLORS.heroInventory, estimated: true }] : []),
+    ...(hasReturns ? [{ metric: 'returns', label: returnsLabel, color: CHART_COLORS.heroReturns }] : []),
+    ...(hasReturnsEst ? [{ metric: 'retest', label: returnsEstLabel, color: CHART_COLORS.heroReturns, estimated: true }] : []),
   ].filter((entry) => visible.some((sr) => sr.metric === entry.metric));
 
   return (

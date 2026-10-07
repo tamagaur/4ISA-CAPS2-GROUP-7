@@ -593,6 +593,16 @@ const Dashboard = () => {
     // purchase records): the chart's Purchases view only, never a KPI.
     receivedEstimated: pt.received_estimated ?? null,
     receivedEstimatedNegativeSkus: pt.received_estimated_negative_skus ?? null,
+    // The marts' estimates for months with no real figure, and returns
+    // (DEC-31; 'filled' in real mode, 'generated' in preview): the chart and
+    // its table only, labelled by kind, never a KPI.
+    salesEstimated: pt.sales_estimated ?? null,
+    salesEstimatedKind: pt.sales_estimated_kind ?? null,
+    stockEstimated: pt.stock_on_hand_estimated ?? null,
+    stockEstimatedKind: pt.stock_on_hand_estimated_kind ?? null,
+    returns: pt.returns ?? null,
+    returnsEstimated: pt.returns_estimated ?? null,
+    returnsEstimatedKind: pt.returns_estimated_kind ?? null,
     stockUnusual: stockFlags.get(pt.period) || null,
   }));
 
