@@ -27,6 +27,9 @@ class SKUItem(BaseModel):
     pack_size: str | None = None
     brand: str | None = None
     unit_price: float | None = None
+    # Cost per piece in pesos (what SSM pays), migration 0045; None without a
+    # cost row and a numeric pack size. Read-only: not in SKUCreate/SKUUpdate.
+    unit_cost: float | None = None
     lead_time_days: int | None = None
     status: str  # 'ACTIVE' | 'DISABLED'
     notes: str | None = None

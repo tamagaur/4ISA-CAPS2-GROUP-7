@@ -97,6 +97,7 @@ const SKUManagement = () => {
         currentStock: item.current_stock,
         currentStockCases: item.current_stock_cases,
         unitPrice: item.unit_price,
+        unitCost: item.unit_cost,
         notes: item.notes,
       })),
     [rawItems]

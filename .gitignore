@@ -126,3 +126,5 @@ drills/
 
 # Per-product sales and prices: never committed (CLAUDE.md hard rule 9)
 local/
+
+backups_run.log

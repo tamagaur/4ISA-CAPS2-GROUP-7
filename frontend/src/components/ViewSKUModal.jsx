@@ -157,6 +157,16 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
               </div>
             )}
 
+            {/* Cost per piece — Product_Dimension.unit_cost (migration 0045): what SSM
+                pays, latest month's case cost / pack size. Hidden when it cannot be
+                derived (no cost row or no pack size; all of Del Monte today). */}
+            {sku.unitCost !== undefined && sku.unitCost !== null && (
+              <div className="view-sku-field">
+                <span className="view-sku-label">COST PER PIECE</span>
+                <span className="view-sku-value mono-val">₱{Number(sku.unitCost).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            )}
+
             {/* Lead Time */}
             {sku.leadTime && sku.leadTime !== 'N/A' && (
               <div className="view-sku-field">
