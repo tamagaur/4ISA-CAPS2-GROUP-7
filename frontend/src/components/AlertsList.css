@@ -1,9 +1,9 @@
 .alerts-widget {
   background-color: var(--color-surface);
-  border-radius: 12px;
-  padding: 2rem;
-  border: 1px solid var(--color-border);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-card);
+  padding: var(--card-padding);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
 }
