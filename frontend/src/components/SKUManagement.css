@@ -5,10 +5,10 @@
 }
 
 .sku-content {
-  padding: 0 3rem 3rem 3rem;
+  padding: 0 var(--page-padding-x) 48px;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 /* Page Header */
@@ -64,15 +64,17 @@
 .sku-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
+/* Kept for the pages that still use the old card class; the summary row
+   itself is KPICard now. */
 .sku-summary-card {
   background-color: var(--color-surface);
-  border-radius: 12px;
-  padding: 1.5rem 2rem;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border-top: 3px solid transparent;
+  border-radius: var(--radius-card);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
 }
 
 .summary-total {

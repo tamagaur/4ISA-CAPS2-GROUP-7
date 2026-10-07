@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter } from 'lucide-react';
+import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter, List } from 'lucide-react';
+import KPICard from './KPICard';
+import PageHeader from './ui/PageHeader';
+import { ClassBadge } from './ui/StatusBadge';
 import AddSKUModal from './AddSKUModal';
 import { useToast } from './ToastProvider';
 import ViewSKUModal from './ViewSKUModal';
@@ -412,67 +415,69 @@ const SKUManagement = () => {
   return (
     <div className="sku-management">
       <div className="sku-content">
-        {/* Page Header */}
-        <div className="sku-page-header">
-          <div>
-            <h2 className="sku-page-title">SKU <span className="page-title-accent">Management</span></h2>
-            <p className="sku-page-subtitle">
-              {canEdit
-                ? 'Add products or edit their name and brand. This is the master product list the forecasts draw from.'
-                : "The master product list the forecasts draw from. View only — your account can't add or edit SKUs."}
-            </p>
-          </div>
-          {canEdit && (
-            <button className="add-sku-btn" onClick={() => setIsAddModalOpen(true)}>
-              <Plus size={16} />
+        <PageHeader
+          title="SKU"
+          accent="Management"
+          subtitle={canEdit
+            ? 'Add products or edit their name and brand. This is the master product list the forecasts draw from.'
+            : "The master product list the forecasts draw from. View only — your account can't add or edit SKUs."}
+          actions={canEdit && (
+            <button type="button" className="btn btn-primary" onClick={() => setIsAddModalOpen(true)}>
+              <Plus size={16} aria-hidden="true" />
               Add SKU
             </button>
           )}
-        </div>
+        />
 
         {/* Summary Cards — skeletons until the list lands: the counts are
             derived from it, so before then they would read 0, a number
             rather than a wait. */}
-        <div className="sku-summary-grid">
-          {loading ? <SkeletonStatCards count={4} cardClassName="sku-summary-card" /> : (<>
-          <div className="sku-summary-card summary-total">
-            <span className="summary-label">{categoryRows > 0 ? 'TOTAL PRODUCTS' : 'TOTAL SKUS'}</span>
-            <span className="summary-value">{totalSKUs.toLocaleString()} <span className="summary-unit">{countUnit}</span></span>
-            {/* A master-list count has no month: its period is "now". Said
-                outright so it isn't the one figure here with no period. */}
-            <span className="summary-desc">
-              {categoryRows > 0
-                ? `${(totalSKUs - categoryRows).toLocaleString()} item codes · ${categoryRows.toLocaleString()} Del Monte categories · current product master`
-                : 'in the current product master'}
-            </span>
-          </div>
-          <div className="sku-summary-card summary-cat-a">
-            <span className="summary-label">CLASS A</span>
-            <span className="summary-value">{categoryASKUs.toLocaleString()} <span className="summary-unit">{countUnit}</span></span>
-            <span className="summary-desc">
-              most recent ABC run per SKU{runMonthsText && ` (latest ${runMonthsText})`}
-              {categoryACarried > 0 && ` · ${categoryACarried.toLocaleString()} carried forward from earlier runs`}
-            </span>
-          </div>
-          <div className="sku-summary-card summary-not-classified">
-            <span className="summary-label">NOT CLASSIFIED</span>
-            <span className="summary-value">{notClassifiedSKUs.toLocaleString()} <span className="summary-unit">{countUnit}</span></span>
-            <span className="summary-desc">
-              {unrankedDelMonteItems === 0
-                ? 'no sales in any ABC run, so never ranked'
-                : unrankedDelMonteItems === notClassifiedSKUs
-                  ? 'Del Monte item codes: Del Monte is ranked by category, not item'
-                  : `${unrankedDelMonteItems.toLocaleString()} are Del Monte item codes (ranked by category); the rest had no sales in any ABC run`}
-            </span>
-          </div>
-          <div className="sku-summary-card summary-no-brand">
-            <span className="summary-label">NO BRAND RECORDED</span>
-            <span className="summary-value">{noBrandSKUs.toLocaleString()} <span className="summary-unit">{countUnit}</span></span>
-            <span className="summary-desc">
-              brand missing in the product master
-              {categoryRows > 0 && ` · includes ${categoryRows.toLocaleString()} categories, which carry no brand`}
-            </span>
-          </div>
+        {/* The shared KPI card (UI pass): one short line each, the longer
+            notes behind the "?". A master-list count has no month: its
+            period is "now", said in the first card's line. */}
+        <div className="kpi-strip sku-summary-grid">
+          {loading ? <SkeletonStatCards count={4} cardClassName="kpi-card" /> : (<>
+          <KPICard
+            title={categoryRows > 0 ? 'Total products' : 'Total SKUs'}
+            value={totalSKUs.toLocaleString()}
+            unit={countUnit}
+            contextLine={categoryRows > 0
+              ? `${(totalSKUs - categoryRows).toLocaleString()} item codes · ${categoryRows.toLocaleString()} Del Monte categories · now`
+              : 'in the current product master, now'}
+            icon={<List size={20} />}
+          />
+          <KPICard
+            title="Class A"
+            value={categoryASKUs.toLocaleString()}
+            unit={countUnit}
+            contextLine={`latest ABC run per SKU${runMonthsText ? ` · ${runMonthsText}` : ''}`}
+            tooltip={`Each SKU's class in the most recent ABC run that ranked it.${categoryACarried > 0
+              ? ` ${categoryACarried.toLocaleString()} of these are carried forward from earlier runs.` : ''}`}
+            icon={<Layers size={20} />}
+          />
+          <KPICard
+            title="Not classified"
+            value={notClassifiedSKUs.toLocaleString()}
+            unit={countUnit}
+            contextLine={unrankedDelMonteItems === 0
+              ? 'no sales in any ABC run'
+              : unrankedDelMonteItems === notClassifiedSKUs
+                ? 'Del Monte item codes · ranked by category'
+                : `${unrankedDelMonteItems.toLocaleString()} Del Monte item codes · the rest never sold`}
+            tooltip={unrankedDelMonteItems > 0
+              ? 'Del Monte is ranked by product category, not by item code, so its item codes carry no class of their own. The rest had no sales in any ABC run, so they were never ranked.'
+              : 'These SKUs had no sales in any ABC run, so they were never ranked. Not a data defect.'}
+            icon={<Filter size={20} />}
+          />
+          <KPICard
+            title="No brand recorded"
+            value={noBrandSKUs.toLocaleString()}
+            unit={countUnit}
+            metricType={noBrandSKUs > 0 ? 'watch' : undefined}
+            contextLine="brand missing in the product master"
+            tooltip={categoryRows > 0 ? `Includes ${categoryRows.toLocaleString()} Del Monte categories, which carry no brand.` : undefined}
+            icon={<Tag size={20} />}
+          />
           </>)}
         </div>
 
@@ -728,18 +733,14 @@ const SKUManagement = () => {
                         />
                       </td>
                       <td className={sku.brand ? 'cell-muted' : 'cell-empty'}>{sku.brand || '—'}</td>
-                      <td className="table-center" title={catTitle(sku)}>
-                        {sku.cat
-                          ? (
-                            <span
-                              className={`${getCatClass(sku.cat)}${
-                                sku.catPeriod && !isCurrentTier(sku) ? ' cat-stale' : ''
-                              }`}
-                            >
-                              {sku.cat}
-                            </span>
-                          )
-                          : <span className="cell-empty">—</span>}
+                      <td className="table-center">
+                        {/* The shared class badge; faded when the class is
+                            carried forward from an earlier run. */}
+                        <ClassBadge
+                          tier={sku.cat}
+                          faded={Boolean(sku.catPeriod && !isCurrentTier(sku))}
+                          title={catTitle(sku)}
+                        />
                       </td>
                       {/* Pieces when the pack size converts the warehouse's
                           case count; the cases alone, labelled, when it can't
