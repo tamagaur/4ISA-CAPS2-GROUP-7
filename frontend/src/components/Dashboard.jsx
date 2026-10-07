@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import KPICard from './KPICard';
+import PageHeader from './ui/PageHeader';
 import AtRiskProductsModal from './AtRiskProductsModal';
 import {
   ClassChanges, DelMonteProductSalesCard, ForecastErrorSummaryCard, IdleStockCard, ProductListModal,
@@ -21,7 +22,6 @@ import { staleCoverageNotice } from '../dataCoverage';
 import { usePermissions } from '../permissions/context';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
-import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
@@ -109,18 +109,19 @@ const coverageNote = (coverage, pagePrincipal) => {
 // both principals have sales, so a part-year total names the months left out
 // rather than passing for the year. Nothing for a one-month range, where the
 // total is the card's own figure.
-function rangeTotalLine(total, pagePrincipal) {
+function rangeTotal(total, pagePrincipal) {
   if (!total) return null;
-  if (total.value == null) return total.blocked_reason || null;
+  if (total.value == null) return total.blocked_reason ? { short: null, detail: total.blocked_reason } : null;
   if ((total.months_in_range || 0) <= 1) return null;
-  const months = total.months_with_data === total.months_in_range
-    ? `all ${total.months_in_range} months`
-    : `${total.months_with_data} of ${total.months_in_range} months`;
+  const partial = total.months_with_data !== total.months_in_range;
   const missing = total.missing_months || [];
-  const gap = missing.length === 0 ? ''
-    : `; no ${pagePrincipal === ALL_PRINCIPALS ? 'figure for both principals' : 'sales on record'} in `
-      + missing.map(periodLabel).join(', ');
-  return `${formatCompactPesos(total.value)} over ${total.label} (${months}${gap})`;
+  const short = `${formatCompactPesos(total.value)} over `
+    + `${partial ? `${total.months_with_data} of ${total.months_in_range} months, ` : ''}${total.label}`;
+  const detail = partial && missing.length
+    ? `No ${pagePrincipal === ALL_PRINCIPALS ? 'figure for both principals' : 'sales on record'} in `
+      + `${missing.map(periodLabel).join(', ')}; the range total covers the other months.`
+    : `All ${total.months_in_range} months of the range have sales on record.`;
+  return { short, detail };
 }
 
 // Sparkline + "vs last month" extras for a value card, from GET
@@ -247,29 +248,26 @@ const DashboardSkeleton = () => (
   </div>
 );
 
-// The sticky section menu's jump targets, in page order — the page's own
-// story: the headline numbers, what happened, what's next, what to do. Each
-// id sits on the row it names; the hint (the chip's tooltip) says which part
-// of that story the section tells.
-const DASH_SECTIONS = [
-  { id: 'dash-summary', label: 'Summary', hint: 'The four headline numbers' },
-  { id: 'dash-sales', label: 'Sales & inventory', hint: 'What happened: monthly sales against inventory value (₱, at last purchase price)' },
-  { id: 'dash-abc', label: 'ABC classes', hint: 'What happened: which products earn the most, and their stock status' },
-  { id: 'dash-forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast and the reorder list" },
-  { id: 'dash-policy', label: 'Client policy', hint: "What to do: the LP safety stock against SSM's 3-week policy, and sales against the supplier allocation" },
+// The page's views (UI pass, 2026-10-08). Summary is the page's own story
+// in six cards — the headline numbers, what happened, which products
+// matter, what's next, what to do; each other view holds the detail behind
+// one part of it. They were jump targets on one long scroll, where the
+// summary carried every card at the same weight.
+const DASH_TABS = [
+  { key: 'summary', label: 'Summary', hint: 'The headline numbers and one card for each question' },
+  { key: 'sales', label: 'Sales & inventory', hint: 'What happened: monthly sales against inventory value, estimates, returns and idle stock' },
+  { key: 'abc', label: 'ABC classes', hint: 'Which products earn the most, their stock status, and which entered or left Class A' },
+  { key: 'forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast, how far off it was, and the reorder list" },
+  { key: 'policy', label: 'Client policy', hint: "SSM's rules applied to the data: sales against the supplier allocation" },
 ];
-const DASH_SECTION_IDS = DASH_SECTIONS.map((s) => s.id);
 
 // The reason on the LP cards for an account without lp.view (GET
 // /dashboard's lp_hidden).
 const LP_HIDDEN_NOTE = 'Needs the reorder-recommendation permission';
 
-// Which section is being read, and whether the toolbar has stuck under the
-// top bar. Both are read off `.dashboard` — the element that scrolls on this
-// page; the top bar sits outside it — once per frame while it scrolls.
-// `enabled` is false until the sections exist (skeleton, error).
-function useSectionSpy(toolbarRef, enabled) {
-  const [active, setActive] = useState(DASH_SECTION_IDS[0]);
+// Whether the toolbar has stuck under the top bar, read off `.dashboard` —
+// the element that scrolls on this page — once per frame while it scrolls.
+function useToolbarStuck(toolbarRef) {
   const [stuck, setStuck] = useState(false);
   useEffect(() => {
     const bar = toolbarRef.current;
@@ -280,18 +278,6 @@ function useSectionSpy(toolbarRef, enabled) {
       frame = 0;
       const barRect = bar.getBoundingClientRect();
       setStuck(scroller.scrollTop > 0 && barRect.top <= scroller.getBoundingClientRect().top + 1);
-      if (!enabled) return;
-      // The last section whose top has reached the toolbar is the one being
-      // read. At the very bottom the last one wins, even though it is too
-      // short to ever scroll up to the toolbar.
-      let current = DASH_SECTION_IDS[0];
-      DASH_SECTION_IDS.forEach((id) => {
-        const el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top - barRect.bottom <= 24) current = id;
-      });
-      const scrollable = scroller.scrollHeight > scroller.clientHeight + 2;
-      const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
-      setActive(scrollable && atEnd ? DASH_SECTION_IDS[DASH_SECTION_IDS.length - 1] : current);
     };
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(measure);
@@ -304,41 +290,29 @@ function useSectionSpy(toolbarRef, enabled) {
       window.removeEventListener('resize', onScroll);
       cancelAnimationFrame(frame);
     };
-  }, [toolbarRef, enabled]);
-  return { active, stuck };
+  }, [toolbarRef]);
+  return stuck;
 }
 
-// One chip per section; the current one is filled. Chips are buttons, not
-// #hash links: a hash would land the section under the sticky toolbar and
-// push a history entry per click.
-const DashSectionNav = ({ active, enabled }) => {
-  const jumpTo = (id) => {
-    document.getElementById(id)?.scrollIntoView({
-      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-      block: 'start',
-    });
-  };
-  return (
-    <nav className="dash-section-nav" aria-label="Dashboard sections">
-      {DASH_SECTIONS.map((s) => {
-        const current = enabled && active === s.id;
-        return (
-          <button
-            key={s.id}
-            type="button"
-            className={`dash-section-chip${current ? ' is-active' : ''}`}
-            aria-current={current ? 'true' : undefined}
-            title={s.hint}
-            disabled={!enabled}
-            onClick={() => jumpTo(s.id)}
-          >
-            {s.label}
-          </button>
-        );
-      })}
-    </nav>
-  );
-};
+// The view switch: the shared segmented control (ui.css), one tab per view.
+const DashTabs = ({ view, onChange, enabled }) => (
+  <div className="segmented dash-tabs" role="tablist" aria-label="Dashboard views">
+    {DASH_TABS.map((t) => (
+      <button
+        key={t.key}
+        type="button"
+        role="tab"
+        className={`segmented-item${view === t.key ? ' is-active' : ''}`}
+        aria-selected={view === t.key}
+        title={t.hint}
+        disabled={!enabled}
+        onClick={() => onChange(t.key)}
+      >
+        {t.label}
+      </button>
+    ))}
+  </div>
+);
 
 const Dashboard = () => {
   const isAdmin = usePermissions().role === 'admin';
@@ -449,7 +423,14 @@ const Dashboard = () => {
   // the sections exist, so they stay disabled under the skeleton or an error.
   const sectionsReady = Boolean(loaded) && !currentError;
   const toolbarRef = useRef(null);
-  const { active: activeSection, stuck: toolbarStuck } = useSectionSpy(toolbarRef, sectionsReady);
+  const toolbarStuck = useToolbarStuck(toolbarRef);
+  // Which view is open (DASH_TABS). A view opens at its first card.
+  const [view, setView] = useState('summary');
+  const changeView = (key) => {
+    setView(key);
+    toolbarRef.current?.closest('.dashboard')?.scrollTo({ top: 0, behavior: 'auto' });
+  };
+  const show = (...keys) => keys.includes(view);
 
   // Header is rendered in every state — loading, error and loaded — rather
   // than only on success. The date picker lives inside it, so blanking the
@@ -464,14 +445,9 @@ const Dashboard = () => {
   // scrolls.
   const header = (
     <>
-      <div className="dashboard-header">
-        <div className="dashboard-title-row">
-          <h2>Inventory <span className="page-title-accent">pulse</span></h2>
-        </div>
-        <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
-      </div>
+      <PageHeader title="Inventory" accent="pulse" subtitle="Inventory and ordering overview — SSM Urdaneta warehouse" />
       <div className={`dash-toolbar${toolbarStuck ? ' is-stuck' : ''}`} ref={toolbarRef}>
-        <DashSectionNav active={activeSection} enabled={sectionsReady} />
+        <DashTabs view={view} onChange={changeView} enabled={sectionsReady} />
         <DateFilter />
       </div>
     </>
@@ -536,12 +512,20 @@ const Dashboard = () => {
   const salesBasis = !salesBasisRaw ? null
     : salesMonth && salesBasisRaw.includes(salesMonth) ? 'selling price, VAT-inclusive (recorded with tax)'
       : salesBasisRaw.split(' (')[0];
+  // One context line (UI pass): the month and the range's own total, both
+  // periods stated. The price basis and the months behind the total sit in
+  // the card's "?".
+  const salesRange = kpis.sales_blocked_reason ? null : rangeTotal(kpis.sales_cumulative, pagePrincipal);
   const sales = kpiDisplay(
     kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
-    [salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales', salesBasis, vatNote]
-      .filter(Boolean).join(' · '),
+    [salesMonth ? `${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : null, salesRange?.short]
+      .filter(Boolean).join(' · ') || 'Total sales',
   );
-  const salesRangeNote = kpis.sales_blocked_reason ? null : rangeTotalLine(kpis.sales_cumulative, pagePrincipal);
+  const salesTooltip = [
+    `Total sales for ${salesMonth || 'the latest month with data'}${salesBasis ? `, at ${salesBasis}` : ''}.`,
+    vatNote ? `${vatNote}.` : null,
+    salesRange?.detail,
+  ].filter(Boolean).join(' ');
   // The stock card also answers SSM's own rule (client meeting, Sep 2026:
   // keep three weeks of sales in stock) with the backend's weeks_of_cover,
   // so the target and the actual sit on one line. Since the data marts
@@ -560,17 +544,21 @@ const Dashboard = () => {
   // the card says "provisional" and the tooltip gives the caveat as served.
   const coverProvisional = Boolean(cover.caveat);
   const coverLine = cover.value != null
-    ? `≈ ${Number(cover.value).toFixed(1)} weeks of ${coverWindow ? `${coverWindow} ` : ''}sales`
-      + `${coverProvisional ? ' (provisional)' : ''} · SSM policy: ${policyWeeks} weeks`
+    ? `≈ ${Number(cover.value).toFixed(1)} weeks of cover${coverProvisional ? ' (provisional)' : ''}`
+      + ` · SSM policy: ${policyWeeks} weeks`
     : null;
   // Del Monte's year has sales in only some months (6 of 12 in 2025); the
   // average is over those, and the tooltip says so rather than imply a year.
   const coverMonthsNote = cover.months_used != null && cover.months_used < 12
     ? ` Only ${cover.months_used} of those months have sales on record; the average is over those.`
     : '';
+  // Del Monte's stock files carry no pack size, so its stock can't be
+  // turned into pieces: the card says why it is in pesos only.
+  const pesosOnlyNote = pagePrincipal === 'delmonte' ? 'pesos only, since Del Monte files have no pack size' : null;
   const priceBasisNote = 'Stock is valued at each product\'s last purchase price, which is not SSM\'s true cost.';
   const coverTooltip = cover.value != null && coverWindow
-    ? `${priceBasisNote} Weeks of cover = this stock ÷ average weekly sales over ${coverWindow}, the 12 months up to `
+    ? `${priceBasisNote}${pesosOnlyNote ? ` Pesos only: ${pesosOnlyNote.replace('pesos only, since ', '')}.` : ''}`
+      + ` Weeks of cover = this stock ÷ average weekly sales over ${coverWindow}, the 12 months up to `
       + `the stock count at the end of the selected range.${coverMonthsNote} SSM's policy is `
       + `to keep ${policyWeeks} weeks of sales in stock.`
       + (coverProvisional ? ` Provisional: ${cover.caveat}.` : '')
@@ -586,12 +574,9 @@ const Dashboard = () => {
   const countDay = countDayKnown ? dayLabel(kpis.soh_count_date) : null;
   const countLabel = stockCountedLine(kpis.stock_counts)
     || (countDay ? `counted ${countDay}` : sohMonth ? `${sohMonth} count` : null);
-  // Del Monte's stock files carry no pack size, so its stock can't be
-  // turned into pieces: the card says why it is in pesos only.
-  const pesosOnlyNote = pagePrincipal === 'delmonte' ? 'pesos only, since Del Monte files have no pack size' : null;
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
-    ['At last purchase price', countLabel, pesosOnlyNote, sohCoverage, coverLine].filter(Boolean).join(' · '),
+    ['At last purchase price', countLabel, sohCoverage].filter(Boolean).join(' · '),
   );
 
   // stock_on_hand_flags: counts the team reviewed and judged unusual — the
@@ -697,12 +682,14 @@ const Dashboard = () => {
     // stock count it is checked against (the latest count, stock_counts) —
     // so both are named.
     [
-      'Measurable Class A SKUs below safety stock',
+      'Class A SKUs with a stock count',
       lpCycleLabel ? `${lpCycleLabel} plan` : null,
       stockCountedLine(exposure.stock_counts),
       abcCoverage,
     ].filter(Boolean).join(' · ')
   );
+  const belowSsTooltip = `Of the Class A SKUs the ${lpCycleLabel ? `${lpCycleLabel} ` : ''}plan covers that have a `
+    + 'stock count, how many hold less than their safety stock — the plan\'s own figure for each SKU, in pieces.';
 
   // Pending action count — the "what to do" figure in the hero strip. Now
   // the CURRENT LP cycle only: it counted every undecided row ever written,
@@ -712,7 +699,7 @@ const Dashboard = () => {
   // Non-null only when the live data has moved past the hardcoded ceiling.
   const coverageStale = staleCoverageNotice(data.latest_data_period);
   const pendingContext = [
-    'Reorder suggestions awaiting a decision',
+    'Awaiting a decision',
     lpCycleLabel ? `${lpCycleLabel} plan` : null,
   ].filter(Boolean).join(' · ');
   // The cards connected (Technical Adviser, 2 Oct 2026): which products
@@ -804,16 +791,17 @@ const Dashboard = () => {
           {/* Hero strip — the four figures that answer "what is happening
               right now": money in, money parked, service risk, and work
               waiting. */}
-          <div className="kpi-strip kpi-strip-hero dash-section-anchor" id="dash-summary">
+          {show('summary') && (
+          <div className="kpi-strip kpi-strip-hero">
             <KPICard
               title="Sales"
               value={sales.value}
-              // Green accent (top bar + icon) for money coming in — card
-              // chrome only; the pill below carries the month's direction.
-              // Slate, like every blocked card, when there is no figure.
+              // Green accent (icon tile) for money coming in — card chrome
+              // only; the pill below carries the month's direction. Slate,
+              // like every blocked card, when there is no figure.
               metricType={sales.value === '—' ? undefined : 'healthy'}
               contextLine={sales.contextLine}
-              note={salesRangeNote}
+              tooltip={sales.value === '—' ? undefined : salesTooltip}
               icon={<Wallet size={20} />}
               {...(sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {})}
             />
@@ -821,9 +809,11 @@ const Dashboard = () => {
               title="Inventory value"
               value={sohValue.value}
               contextLine={sohValue.contextLine}
+              note={sohValue.value !== '—' ? coverLine : null}
               // A count the team judged unusual is kept and says so
-              // (kpis.soh_count_note, Yuan 2026-10-04), beside the figure.
-              flag={sohValue.value !== '—' ? kpis.soh_count_note || null : null}
+              // (kpis.soh_count_note, Yuan 2026-10-04): a badge beside the
+              // figure, the reviewed sentence one tap away.
+              flag={sohValue.value !== '—' && kpis.soh_count_note ? { label: 'Unusual count', detail: kpis.soh_count_note } : null}
               tooltip={coverTooltip}
               icon={<Package size={20} />}
               {...(sohValue.value !== '—' ? trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries, 'count') : {})}
@@ -834,6 +824,7 @@ const Dashboard = () => {
               unit={belowSs.value === '—' ? undefined : exposure.comparable_count === 1 ? 'SKU' : 'SKUs'}
               metricType={belowSs.value === '—' ? undefined : ssTier}
               contextLine={belowSs.contextLine}
+              tooltip={belowSs.value === '—' ? undefined : belowSsTooltip}
               action={canListAtRisk
                 ? { label: `See the ${exposure.below_count.toLocaleString()} products`, onClick: openAtRisk }
                 : undefined}
@@ -849,14 +840,18 @@ const Dashboard = () => {
               icon={<ClipboardList size={20} />}
             />
           </div>
+          )}
 
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
-          <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} /></Slot>
-          </div>
+          {show('summary', 'sales') && (
+            <div className="dash-row dash-row-trend">
+              <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} /></Slot>
+            </div>
+          )}
 
-          <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
+          {show('summary', 'abc') && (
+          <div className="dash-row dash-row-abc">
             <Slot kind="Descriptive" question="Which products matter most?">
               <ABCDonutWidget
                 data={abcMix}
@@ -881,17 +876,22 @@ const Dashboard = () => {
               />
             </Slot>
           </div>
+          )}
 
-          {/* Which products entered or left Class A against the same months a
-              year before, and the stock that has not moved: both answer for
-              the selected range (data marts, 2026-10-04/05). */}
-          {(rangeChanges || data.idle_stock) && (
-            <div className={`dash-row ${rangeChanges && data.idle_stock ? 'dash-row-even' : 'dash-row-trend'}`}>
-              {rangeChanges && (
-                <Slot kind="Descriptive" question="Which products entered or left the top sellers?">
-                  <ClassChanges changes={rangeChanges} onOpen={openForecast} />
-                </Slot>
-              )}
+          {/* ABC classes view: which products entered or left Class A against
+              the same months a year before (data marts, 2026-10-05). */}
+          {show('abc') && rangeChanges && (
+            <div className="dash-row dash-row-trend">
+              <Slot kind="Descriptive" question="Which products entered or left the top sellers?">
+                <ClassChanges changes={rangeChanges} onOpen={openForecast} />
+              </Slot>
+            </div>
+          )}
+
+          {/* Sales & inventory view: the stock that has not moved, and Del
+              Monte's estimated product sales, labelled as a demo. */}
+          {show('sales') && (data.idle_stock || dmProductSales) && (
+            <div className={`dash-row ${data.idle_stock && dmProductSales ? 'dash-row-even' : 'dash-row-trend'}`}>
               {data.idle_stock && (
                 <Slot kind="Descriptive" question="Is any stock sitting idle?">
                   <IdleStockCard
@@ -901,11 +901,17 @@ const Dashboard = () => {
                   />
                 </Slot>
               )}
+              {dmProductSales && (
+                <Slot kind="Descriptive" question="Which Del Monte products sell most?" hint="Estimated">
+                  <DelMonteProductSalesCard sales={dmProductSales} onOpenList={openSalesList} />
+                </Slot>
+              )}
             </div>
           )}
 
           {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
-          <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-forecast">
+          {show('summary', 'forecast') && (
+          <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'}`}>
             <Slot kind="Predictive" question="What will happen next?" hint="Demand forecast" realOnly={portfolioRealOnly}>
               <PortfolioForecastWidget
                 series={portfolioSeries}
@@ -939,18 +945,10 @@ const Dashboard = () => {
               </Slot>
             )}
           </div>
-
-          {/* Del Monte's product sales: estimates only, labelled as a demo. */}
-          {dmProductSales && (
-            <div className="dash-row dash-row-trend">
-              <Slot kind="Descriptive" question="Which Del Monte products sell most?" hint="Estimated">
-                <DelMonteProductSalesCard sales={dmProductSales} onOpenList={openSalesList} />
-              </Slot>
-            </div>
           )}
 
-          {/* How far off the forecasts were over the range, in pesos first. */}
-          {data.forecast_accuracy && (
+          {/* Forecast view: how far off the forecasts were over the range. */}
+          {show('forecast') && data.forecast_accuracy && (
             <div className="dash-row dash-row-trend">
               <Slot kind="Predictive" question="How far off were the forecasts?" hint="Forecast against actual sales">
                 <ForecastErrorSummaryCard
@@ -964,7 +962,8 @@ const Dashboard = () => {
 
           {/* PRESCRIPTIVE — the policy question this project exists to answer,
               beside SSM's own allocation rule applied to the sales data */}
-          <div className={`dash-row ${lpHidden || !SHOW_POLICY_CARD ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-policy">
+          {show('policy') && (
+          <div className={`dash-row ${lpHidden || !SHOW_POLICY_CARD ? 'dash-row-trend' : 'dash-row-even'}`}>
             {SHOW_POLICY_CARD && !lpHidden && (
               <Slot kind="Prescriptive" question="Is the 3-week rule working?" realOnly={preview && realOnly.has('policy_comparison')}>
                 <PolicyComparisonWidget comparison={data.policy_comparison} />
@@ -974,6 +973,7 @@ const Dashboard = () => {
               <AllocationWidget allocation={data.allocation} />
             </Slot>
           </div>
+          )}
 
           {/* Where Unilever's two data sets come from (3 Oct 2026 analysis):
               every figure that sets stock against sales rests on this match. */}
@@ -983,7 +983,7 @@ const Dashboard = () => {
               unverified with SSM.
             </p>
           )}
-          {!lpHidden && (
+          {!lpHidden && show('summary', 'forecast') && (
             <p className="dash-footnote">
               Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as
               &ldquo;Act now&rdquo;.{' '}

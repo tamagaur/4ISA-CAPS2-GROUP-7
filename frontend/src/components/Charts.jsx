@@ -16,6 +16,7 @@ import { ChartTable, ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
 import InfoTip from './InfoTip';
+import Disclosure from './ui/Disclosure';
 import ProductName from './ProductName';
 import './Charts.css';
 
@@ -703,12 +704,14 @@ export const SalesVsStockWidget = ({
   );
   // Which years the lines are, said outright — the legend shows it, but a
   // range holding one year only, or three, needs the words.
+  // The legend keys the two years' line styles, so the sentence stays only
+  // where it adds something: one year alone, or years the range holds but
+  // the chart doesn't draw.
   const yearsLine = slotYears.cur == null
     ? null
     : slotYears.prev == null
       ? `One calendar year per line: only ${slotYears.cur} is in the selected range — widen it to overlay ${slotYears.cur - 1}.`
-      : `${slotYears.cur} is the solid line, ${slotYears.prev} the dashed one; the colour tells the metric.`
-        + (undrawnYears.length ? ` Earlier years in the range (${undrawnYears.join(', ')}) aren't drawn.` : '');
+      : undrawnYears.length ? `Earlier years in the range (${undrawnYears.join(', ')}) aren't drawn.` : null;
 
   // Direct labels: the current year's latest sales and inventory values at
   // their line ends, plus the backend's peak/low sales months on whichever
@@ -1023,8 +1026,6 @@ const abcSegments = (data) => {
 // on numbers that aren't real.
 const AbcTierCard = ({ facts, atRisk = null }) => {
   const x = facts.skuPct.toFixed(0);
-  const y = facts.revenuePct != null ? facts.revenuePct.toFixed(0) : null;
-  const revenueKnown = facts.amount != null && y != null;
   const role = ABC_TIER_ROLE[facts.tier];
   const roleText = facts.units === 'categories' ? DEL_MONTE_TIER_ROLE : role?.role;
   return (
@@ -1046,22 +1047,12 @@ const AbcTierCard = ({ facts, atRisk = null }) => {
         </div>
         <div className="abc-tier-card-stat">
           <p className={`abc-tier-card-revenue${facts.amount == null ? ' is-unavailable' : ''}`}>
-            {facts.amount != null ? `${formatCompactPesos(facts.amount)} revenue` : 'Revenue not available'}
+            {facts.amount != null ? formatCompactPesos(facts.amount) : 'Revenue not available'}
           </p>
-          {/* The month the class's pesos were earned in (abc_revenue.period). */}
-          {y != null && <p className="abc-tier-card-note">{y}% of {facts.month ? `${facts.month} ` : 'total '}revenue</p>}
+          {/* The period the class's pesos were earned in (abc_revenue); its
+              share of revenue is the figure in the ring's centre. */}
+          {facts.amount != null && <p className="abc-tier-card-note">revenue{facts.month ? `, ${facts.month}` : ''}</p>}
         </div>
-        {revenueKnown && (
-          <p className="abc-tier-card-insight">
-            <span>
-              {Number(y) > Number(x) ? (
-                <>Class {facts.tier} is only <strong>{x}%</strong> of {facts.units} but brings in <strong>{y}%</strong> of revenue.</>
-              ) : (
-                <>Class {facts.tier} is <strong>{x}%</strong> of {facts.units} but brings in only <strong>{y}%</strong> of revenue.</>
-              )}
-            </span>
-          </p>
-        )}
       </div>
       {/* The next step of the story, on the class it is about: of these
           important products, how many are below safety stock — and the
@@ -1238,29 +1229,31 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>ABC classification</h4>
-          {/* The cutoffs are GET /dashboard's abc_rules (the ABC run's own
-              constants), never restated here. */}
+          <h4>
+            ABC classification
+            {/* The cut-offs are GET /dashboard's abc_rules (the ABC run's own
+                constants), never restated here. How a class is decided sits
+                behind the "?" (UI pass, 2026-10-08); the line below keeps the
+                definition of an important product and the ranking's period
+                (3 Oct 2026 analysis). */}
+            {rules && (
+              <InfoTip label="How classes are decided">
+                {`${unitsTitle} are ranked by revenue${rankedMonth ? ` over ${rankedMonth}` : ''}`
+                  + `${revenue?.label || !rankedMonth ? '' : ' (a single month)'}. Class A is the top sellers that `
+                  + `together make the first ${Math.round(rules.tier_a_cutoff * 100)}% of revenue, B the next `
+                  + `${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, C the last `
+                  + `${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`}
+                {/* With only a handful of categories a tier can't land on its
+                    cut-off (Del Monte 2025-12: A 71%, B 18%, C 11%). */}
+                {units === 'categories' && ' With only a few categories, a class cannot land exactly on its cut-off.'}
+              </InfoTip>
+            )}
+          </h4>
           <p>
-            {/* The definition of an "important" product, on screen, and the
-                basis of the ranking named as what it is: the selected range
-                (abc_revenue.label, data marts since 2026-10-04), else the
-                stored run's single month (3 Oct 2026 analysis). */}
             {rules
-              ? `Important products (Class A) are the top sellers that together make ${Math.round(rules.tier_a_cutoff * 100)}% of revenue`
-                + `${rankedMonth ? ` in ${rankedMonth}` : ''}. `
-              : 'Which products earn the most. '}
-            {rankedMonth
-              ? `Ranked on ${rankedMonth} sales${revenue?.label ? '' : ' (single month)'}`
-              : `${unitsTitle} are ranked by revenue`}
-            {rules
-              ? `: B is the next ${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, `
-                + `C the last ${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`
-              : '.'}
-            {/* With only a handful of categories a tier can't land on its
-                cut-off (Del Monte 2025-12: A 71%, B 18%, C 11%). */}
-            {units === 'categories' && ' With only a few categories, a class cannot land exactly on its cut-off.'}
-            {' '}Click a class for details.
+              ? `Class A = the top sellers that together make ${Math.round(rules.tier_a_cutoff * 100)}% of revenue`
+                + `${rankedMonth ? `, ${rankedMonth}` : ''}. Click a class for details.`
+              : `${unitsTitle} are ranked by revenue${rankedMonth ? `, ${rankedMonth}` : ''}. Click a class for details.`}
           </p>
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
           {!sharesAddUp && revenue?.blocked_reason && <p className="chart-placeholder-note">{revenue.blocked_reason}</p>}
@@ -1448,12 +1441,14 @@ export const CategoryStockBarWidget = ({
     <div className={`chart-widget tier-stock-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Active / dead stock by ABC class (warehouse status) <span className="chart-unit">products</span></h4>
-          <p>
-            Counts each class&apos;s products by the warehouse&apos;s own Active/Inactive flag on {countPhrase} —
-            not by whether stock covers the LP&apos;s target stock (that is the ABC page&apos;s
-            &ldquo;Cover vs target stock&rdquo;).
-          </p>
+          <h4>
+            Active / dead stock by ABC class <span className="chart-unit">products</span>
+            <InfoTip label="What this measures">
+              The warehouse&apos;s own Active / Inactive flag on each product in {countPhrase} — not whether its
+              stock covers the plan&apos;s target (that is the ABC page&apos;s &ldquo;Cover vs target stock&rdquo;).
+            </InfoTip>
+          </h4>
+          <p>Each class&apos;s products by warehouse status, {countPhrase}.</p>
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
           {note && <p className="chart-placeholder-note">{note}</p>}
         </div>
@@ -1886,14 +1881,21 @@ export const PortfolioForecastWidget = ({
         <div className="chart-title-area">
           {/* The unit is PIECES here and pesos on the chart above it; the
               y-axis reads "120k" in both, so it is named in the heading. */}
-          <h4>Portfolio-level aggregate forecast <span className="chart-unit">pieces</span></h4>
+          <h4>
+            Portfolio demand forecast <span className="chart-unit">pieces</span>
+            {gatedSkuCount != null && tierACount ? (
+              <InfoTip label="Which SKUs are summed">
+                {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} Class A SKUs: `
+                  + 'those whose forecasts beat a naive baseline (MASE < 1), the same gate the reorder plan uses. '
+                  + 'The rest are left out rather than summed on forecasts that failed the check.'}
+              </InfoTip>
+            ) : null}
+          </h4>
           <p>
-            {seriesSpan ? `Pieces per month, ${seriesSpan}: ` : 'Pieces per month: '}
+            {seriesSpan ? `Pieces per month, ${seriesSpan}` : 'Pieces per month'}
             {gatedSkuCount != null && tierACount
-              ? `summed demand across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} `
-                + 'Class A SKUs (those whose forecasts beat a naive baseline — MASE < 1, '
-                + 'the same gate the reorder plan uses) vs. forecast'
-              : 'summed demand across gated Class A SKUs vs. forecast'}
+              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} Class A SKUs (MASE < 1)`
+              : ' · planned Class A SKUs'}
           </p>
           {/* The card's takeaway, composed by the backend from this same
               series (portfolio_forecast.insight). */}
@@ -1919,12 +1921,16 @@ export const PortfolioForecastWidget = ({
               (Audrey, 2026-09-29); the subtitle still says how many SKUs the
               card sums. Dashboard still passes their props; restore from git
               history. */}
-          <div className="portfolio-stat-row">
-            <div className="portfolio-stat">
-              <span className="portfolio-stat-label">Scope</span>
-              <span className="portfolio-stat-value portfolio-stat-scope">{scopeLabel}</span>
+          {/* The scope sentence only when the subtitle could not state the
+              SKU count itself (UI pass); otherwise it said the same twice. */}
+          {!(gatedSkuCount != null && tierACount) && scopeLabel && (
+            <div className="portfolio-stat-row">
+              <div className="portfolio-stat">
+                <span className="portfolio-stat-label">Scope</span>
+                <span className="portfolio-stat-value portfolio-stat-scope">{scopeLabel}</span>
+              </div>
             </div>
-          </div>
+          )}
 
           {view === 'table' ? (
             <ChartTable
@@ -2172,9 +2178,8 @@ export const ReorderRecommendationWidget = ({
               current cycle since 2026-09-23 (backend/lp_cycle.py), the same
               rows Reorder Recs lists by default. */}
           <p>
-            LP-optimized order quantities, in pieces, for the SKUs the LP planned as Class A ·{' '}
-            {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
-            {countLabel ? ` · urgency against the stock ${countLabel}` : ''}
+            Order quantities in pieces from the optimizer (LP) · {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
+            {countLabel ? ` · ${countLabel}` : ''}
           </p>
         </div>
       </div>
@@ -2202,36 +2207,6 @@ export const ReorderRecommendationWidget = ({
               <span className="reorder-mini-value">{totalOrderQty.toLocaleString()}</span>
               <span className="reorder-mini-label">Pieces to order</span>
             </div>
-          </div>
-
-          <div className="reorder-priorities">
-            <div className="reorder-priorities-header">
-              <span className="reorder-priorities-title">How this was optimized</span>
-              <span className="reorder-priorities-caption">
-                The LP orders each SKU up to its target stock. These weights only matter when the supplier
-                allocation can&apos;t cover every order: together with SSM&apos;s 3-week stock rule, they decide
-                which SKUs come up short.
-              </span>
-            </div>
-
-            {/* Read-only bar per weight — was a draggable slider, but
-                GET /dashboard's reorder_preview.lp_weights docstring is
-                explicit that this value is "read-only display... not an
-                adjustable control" (see backend/routers/dashboard.py),
-                so this now matches what the data actually is: a fact
-                about how the solver ran, not a live control. */}
-            {LP_PRIORITY_ROWS.map((p) => (
-              <div className="reorder-priority-row" key={p.key}>
-                <div className="reorder-priority-row-top">
-                  <span className="reorder-priority-label">{p.label}</span>
-                  <PriorityInfo text={p.blurb} />
-                  <span className="reorder-priority-pct">{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</span>
-                </div>
-                <div className="reorder-priority-bar" role="img" aria-label={`${p.label}: ${solverPct[p.key] == null ? 'not available' : `${solverPct[p.key]}%`}`}>
-                  <span style={{ width: `${solverPct[p.key] ?? 0}%`, backgroundColor: CHART_COLORS.lpWeight }} />
-                </div>
-              </div>
-            ))}
           </div>
 
           <div className="reorder-mini-list">
@@ -2291,6 +2266,36 @@ export const ReorderRecommendationWidget = ({
             View all recommendations
             <ArrowRight size={14} />
           </Link>
+
+          {/* The solver's weights, folded away (UI pass): important for the
+              defence, not for the daily read of the list. */}
+          <Disclosure flat title="How these recommendations were calculated" className="reorder-priorities-disclosure">
+            <div className="reorder-priorities">
+              <p className="reorder-priorities-caption">
+                The LP orders each SKU up to its target stock. These weights only matter when the supplier
+                allocation can&apos;t cover every order: together with SSM&apos;s 3-week stock rule, they decide
+                which SKUs come up short.
+              </p>
+              {/* Read-only bar per weight — was a draggable slider, but
+                  GET /dashboard's reorder_preview.lp_weights docstring is
+                  explicit that this value is "read-only display... not an
+                  adjustable control" (see backend/routers/dashboard.py),
+                  so this matches what the data actually is: a fact about
+                  how the solver ran, not a live control. */}
+              {LP_PRIORITY_ROWS.map((p) => (
+                <div className="reorder-priority-row" key={p.key}>
+                  <div className="reorder-priority-row-top">
+                    <span className="reorder-priority-label">{p.label}</span>
+                    <PriorityInfo text={p.blurb} />
+                    <span className="reorder-priority-pct">{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</span>
+                  </div>
+                  <div className="reorder-priority-bar" role="img" aria-label={`${p.label}: ${solverPct[p.key] == null ? 'not available' : `${solverPct[p.key]}%`}`}>
+                    <span style={{ width: `${solverPct[p.key] ?? 0}%`, backgroundColor: CHART_COLORS.lpWeight }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Disclosure>
         </>
       )}
     </div>
@@ -2510,26 +2515,46 @@ export const AllocationWidget = ({ allocation }) => {
         <div className="chart-title-area">
           <h4>Sales vs supplier allocation <span className="chart-unit">₱</span></h4>
           <p>
-            SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total
-            sales ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4. Shown as average pesos
-            per month beside this year&apos;s actual monthly sales.
+            This year&apos;s average monthly sales against SSM&apos;s allocation rule (last year&apos;s sales ×103%,
+            ×105% or ×108%), in pesos per month.
           </p>
         </div>
+        <span className="badge badge-warning" title="SSM has not shared its real allocation figures; this card applies the rule to the sales data.">
+          Assumption · pending SSM
+        </span>
       </div>
 
       {!hasData ? (
         <p className="dashboard-empty-note">{a.blocked_reason || 'Allocation not available'}</p>
       ) : (
         <div className="chart-widget-body">
-          {usedPct != null && (
-            <p className="policy-headline">
-              <span className="policy-headline-number">{usedPct.toFixed(0)}%</span>
-              <span className="policy-headline-text">
-                of the {level.pct}% allocation pace — {latestYear} sales average {formatCompactPesos(avgMonthlySales)}/month
-                over {a.ytd_months} month{a.ytd_months === 1 ? '' : 's'}, vs {formatCompactPesos(level.monthly)}/month allocated
+          {/* The three figures first (UI pass): the sales pace, the allocation
+              it is measured against, and how much of it sales reach. */}
+          <div className="policy-stat-row">
+            {avgMonthlySales != null && (
+              <div className="policy-stat">
+                <span className="policy-stat-label">Sales, {ytdSpan}</span>
+                <span className="policy-stat-value">{formatCompactPesos(avgMonthlySales)}<small>/month</small></span>
+                <span className="policy-stat-sub">average over {a.ytd_months} month{a.ytd_months === 1 ? '' : 's'}</span>
+              </div>
+            )}
+            {level && (
+              <div className="policy-stat">
+                <span className="policy-stat-label">Allocation target ({level.pct}%)</span>
+                <span className="policy-stat-value">{formatCompactPesos(level.monthly)}<small>/month</small></span>
+                <span className="policy-stat-sub">{a.basis_year} sales × {level.pct}%, per month</span>
+              </div>
+            )}
+            <div className="policy-stat">
+              <span className="policy-stat-label">Achievement</span>
+              <span className="policy-stat-value">{usedPct != null ? `${usedPct.toFixed(0)}%` : '—'}</span>
+              <span className="policy-stat-sub">
+                {usedPct != null
+                  ? `of the ${level.pct}% pace`
+                  : `needs a full ${a.basis_year}: ${a.basis_months} of 12 months on record`}
               </span>
-            </p>
-          )}
+            </div>
+          </div>
           {/* The bars' unit, in place of an axis title. */}
           <p className="bar-scale-note">Pesos per month (₱){a.vat_basis ? ` · ${a.vat_basis}` : ''}</p>
           <div className="policy-bars">
@@ -2549,15 +2574,23 @@ export const AllocationWidget = ({ allocation }) => {
               </div>
             ))}
           </div>
-          <p className="dashboard-chart-footnote">
-            Basis: {a.basis_year} sales of {formatCompactPesos(a.basis_sales)} ({a.vat_basis}
-            {a.basis_months < 12 ? `, ${a.basis_months} of 12 months on record — a partial basis` : ''}).
-            {a.basis_months < 12
-              ? ` Each allocation bar is an average month of those ${a.basis_months} × the percentage.`
-              : ''}{' '}
-            SSM has not shared the real allocation figures, so these are the rule applied to the sales data;
-            which percentage applies in {latestYear} is a question for SSM.
-          </p>
+          <Disclosure flat title="Calculation basis" hint="assumptions pending SSM">
+            <p>
+              SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total
+              sales ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4.
+            </p>
+            <p>
+              Basis: {a.basis_year} sales of {formatCompactPesos(a.basis_sales)} ({a.vat_basis}
+              {a.basis_months < 12 ? `, ${a.basis_months} of 12 months on record — a partial basis` : ''}).
+              {a.basis_months < 12
+                ? ` Each allocation bar is an average month of those ${a.basis_months} × the percentage.`
+                : ''}
+            </p>
+            <p>
+              <strong>Not confirmed by SSM:</strong> SSM has not shared the real allocation figures, so these are the
+              rule applied to the sales data; which percentage applies in {latestYear} is a question for SSM.
+            </p>
+          </Disclosure>
         </div>
       )}
     </div>

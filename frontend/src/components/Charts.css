@@ -1,9 +1,10 @@
+/* The card frame (ui.css): a card sits on the page, it does not float. */
 .chart-widget {
   background-color: var(--color-surface);
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid var(--color-border);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-card);
+  padding: var(--card-padding);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
 }
@@ -23,8 +24,11 @@
 }
 
 .chart-header h4 {
-  margin: 0 0 0.2rem 0;
-  font-size: 0.95rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0 0 4px;
+  font-size: var(--text-card-title);
   color: var(--color-text);
   font-weight: 600;
 }
@@ -38,8 +42,10 @@
 
 .chart-header p {
   margin: 0;
-  font-size: 0.75rem;
-  color: var(--color-text-subtle);
+  max-width: 78ch;
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  color: var(--color-text-muted);
 }
 
 /* The unit a chart's y-axis is in, beside its title. The axes are compacted
@@ -1683,4 +1689,62 @@
 /* An estimated series' legend swatch: dotted, as its line is drawn. */
 .legend-line-dotted {
   border-top-style: dotted;
+}
+
+/* ── Allocation card: the three figures above the bars (UI pass) ───────── */
+.policy-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 36px;
+  margin-bottom: 16px;
+}
+
+.policy-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.policy-stat-label {
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.policy-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.policy-stat-value small {
+  margin-left: 2px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.policy-stat-sub {
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+/* The reorder card's weights, under the list. */
+.reorder-priorities-disclosure {
+  margin-top: 12px;
+}
+
+.reorder-priorities-disclosure .reorder-priorities {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.reorder-priorities-disclosure .reorder-priorities-caption {
+  display: block;
+  margin: 0 0 10px;
 }
