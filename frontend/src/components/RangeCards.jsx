@@ -306,3 +306,66 @@ export const ClassChanges = ({ changes, onOpen }) => {
     </CardShell>
   );
 };
+
+// Del Monte's product sales (GET /dashboard/product-sales): SSM has no
+// product-level Del Monte sales, so these are its real sell-out split by
+// each product's stock share (DEC-31) — every row an estimate. Shown under
+// the data plan's own label (PROJECT_STATE §18.6), never as a KPI.
+export const DEMO_PRODUCT_SALES_LABEL =
+  'Demo: Del Monte product sales estimated from total sales × stock share — SSM has no product-level sales';
+const PRODUCT_SALES_PREVIEW = 8;
+
+// One row per product: its estimated pesos summed over the range's months.
+export const productSalesTotals = (rows = []) => {
+  const byProduct = new Map();
+  for (const r of rows) {
+    const key = r.product_key ?? r.sku_id;
+    const entry = byProduct.get(key) || {
+      product_key: r.product_key, sku_id: r.sku_id, product_name: r.product_name, pesos: 0, months: new Set(),
+    };
+    if (r.pesos != null) entry.pesos += r.pesos;
+    entry.months.add(r.period);
+    byProduct.set(key, entry);
+  }
+  return [...byProduct.values()]
+    .map((e) => ({ ...e, months: e.months.size }))
+    .sort((a, b) => b.pesos - a.pesos);
+};
+
+export const PRODUCT_SALES_COLUMNS = [
+  { key: 'pesos', label: 'Estimated sales (₱)', sub: 'selling price, ex-VAT', render: (r) => formatCompactPesos(r.pesos) },
+  { key: 'months', label: 'Months', sub: 'with an estimate', render: (r) => r.months },
+];
+
+export const DelMonteProductSalesCard = ({ sales, onOpenList }) => {
+  if (!sales) return null;
+  const totals = productSalesTotals(sales.rows);
+  if (!totals.length) {
+    return (
+      <CardShell title="Del Monte product sales (demo)" blocked>
+        <p className="range-blocked">No estimated product sales in {sales.label}.</p>
+      </CardShell>
+    );
+  }
+  return (
+    <CardShell
+      title="Del Monte product sales (demo)"
+      lead={`${totals.length.toLocaleString()} products, ${sales.label}, highest estimated sales first.`}
+    >
+      <p className="range-regroup-note"><strong>{DEMO_PRODUCT_SALES_LABEL}.</strong></p>
+      <ol className="range-product-list">
+        {totals.slice(0, PRODUCT_SALES_PREVIEW).map((r) => (
+          <li key={r.product_key ?? r.sku_id}>
+            <ProductName name={r.product_name} code={r.sku_id} />
+            <span className="range-product-value">{formatCompactPesos(r.pesos)}</span>
+          </li>
+        ))}
+      </ol>
+      {totals.length > PRODUCT_SALES_PREVIEW && (
+        <button type="button" className="range-card-action" onClick={() => onOpenList(totals)}>
+          See all {totals.length.toLocaleString()} products <ArrowRight size={12} aria-hidden="true" />
+        </button>
+      )}
+    </CardShell>
+  );
+};

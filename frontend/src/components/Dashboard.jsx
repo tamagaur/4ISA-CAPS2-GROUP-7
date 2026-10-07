@@ -3,7 +3,8 @@ import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import KPICard from './KPICard';
 import AtRiskProductsModal from './AtRiskProductsModal';
 import {
-  ClassChanges, ForecastErrorSummaryCard, IdleStockCard, ProductListModal, IDLE_COLUMNS, OVER_RUN_COLUMNS,
+  ClassChanges, DelMonteProductSalesCard, ForecastErrorSummaryCard, IdleStockCard, ProductListModal,
+  DEMO_PRODUCT_SALES_LABEL, IDLE_COLUMNS, OVER_RUN_COLUMNS, PRODUCT_SALES_COLUMNS,
 } from './RangeCards';
 import DateFilter from './DateFilter';
 import {
@@ -12,7 +13,7 @@ import {
   AllocationWidget, formatCompactPesos,
 } from './Charts';
 import {
-  getClassChanges, getDashboardData, getForecastAccuracy, getIdleStock, peekDashboardData,
+  getClassChanges, getDashboardData, getForecastAccuracy, getIdleStock, getProductSales, peekDashboardData,
 } from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
 import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL } from '../principals';
@@ -372,6 +373,9 @@ const Dashboard = () => {
   const [classChanges, setClassChanges] = useState(null); // { key, data }
   // The list behind a range card's figure: { kind, rows, loading, error }.
   const [rangeList, setRangeList] = useState(null);
+  // Del Monte's estimated product sales (GET /dashboard/product-sales), on
+  // the Del Monte view only.
+  const [productSales, setProductSales] = useState(null); // { key, data }
   const navigate = useNavigate();
   const loadedKey = loaded?.key;
 
@@ -407,7 +411,18 @@ const Dashboard = () => {
     return () => { cancelled = true; };
   }, [requestKey, period, startPeriod, principal]);
 
+  useEffect(() => {
+    if (principal !== 'delmonte') return undefined;
+    let cancelled = false;
+    getProductSales({ period, startPeriod, principal })
+      .then((res) => { if (!cancelled) setProductSales({ key: requestKey, data: res }); })
+      .catch(() => { if (!cancelled) setProductSales({ key: requestKey, data: null }); });
+    return () => { cancelled = true; };
+  }, [requestKey, period, startPeriod, principal]);
+
   // Opens a range card's product list, fetched on demand for the same range.
+  // 'sales' arrives with its rows (the card already holds them).
+  const openSalesList = (rows) => setRangeList({ kind: 'sales', rows, loading: false, error: null });
   const openRangeList = (kind) => {
     setRangeList({ kind, rows: [], loading: true, error: null });
     const request = kind === 'idle'
@@ -712,6 +727,7 @@ const Dashboard = () => {
   // The range cards (RangeCards.jsx). Class A changes arrive on their own
   // request; only the answer for the range on screen is shown.
   const rangeChanges = classChanges?.key === loaded.key ? classChanges.data : null;
+  const dmProductSales = pagePrincipal === 'delmonte' && productSales?.key === loaded.key ? productSales.data : null;
   const openForecast = (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`);
   const idle = data.idle_stock || {};
   const idleSubtitle = [
@@ -924,6 +940,15 @@ const Dashboard = () => {
             )}
           </div>
 
+          {/* Del Monte's product sales: estimates only, labelled as a demo. */}
+          {dmProductSales && (
+            <div className="dash-row dash-row-trend">
+              <Slot kind="Descriptive" question="Which Del Monte products sell most?" hint="Estimated">
+                <DelMonteProductSalesCard sales={dmProductSales} onOpenList={openSalesList} />
+              </Slot>
+            </div>
+          )}
+
           {/* How far off the forecasts were over the range, in pesos first. */}
           {data.forecast_accuracy && (
             <div className="dash-row dash-row-trend">
@@ -978,6 +1003,11 @@ const Dashboard = () => {
           subtitle: idleSubtitle,
           columns: IDLE_COLUMNS,
           footnote: 'Most stock value first.',
+        } : rangeList?.kind === 'sales' ? {
+          title: 'Del Monte product sales (demo)',
+          subtitle: [dmProductSales?.label, DEMO_PRODUCT_SALES_LABEL].filter(Boolean).join(' · '),
+          columns: PRODUCT_SALES_COLUMNS,
+          footnote: 'Highest estimated sales first. Every figure here is an estimate, not a sale on record.',
         } : {
           title: 'Products over-forecast several months in a row',
           subtitle: overRunSubtitle,

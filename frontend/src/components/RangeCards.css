@@ -114,3 +114,30 @@
   color: var(--color-text-muted);
   line-height: 1.45;
 }
+
+/* Del Monte product sales (demo): a ranked list, value at the right. */
+.range-product-list {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.range-product-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8rem;
+}
+
+.range-product-list li:last-child {
+  border-bottom: none;
+}
+
+.range-product-value {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
