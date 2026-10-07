@@ -5,10 +5,10 @@
 }
 
 .abc-content {
-  padding: 0 3rem 3rem 3rem;
+  padding: 0 var(--page-padding-x) 48px;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 /* Everything below the header. Wrapped so a refetch can mark the previous
@@ -21,7 +21,7 @@
 .abc-body {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 /* Page Header */
@@ -59,7 +59,28 @@
 .abc-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
+  gap: var(--card-gap);
+}
+
+/* The class letter in the KPI card's icon tile, in the class's own colour. */
+.abc-kpi-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.abc-kpi-letter-a { background-color: var(--color-abc-a); }
+.abc-kpi-letter-b { background-color: var(--color-abc-b); }
+.abc-kpi-letter-c { background-color: var(--color-abc-c); color: #4a2540; }
+
+.abc-table-legend {
+  margin-bottom: -8px;
 }
 
 .abc-summary-card {
@@ -240,10 +261,10 @@
 /* Pareto Chart */
 .abc-pareto-container {
   background-color: var(--color-surface);
-  border-radius: 12px;
-  padding: 1.5rem 1.75rem;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: var(--card-padding);
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
 }
 
 .abc-pareto-header {
@@ -256,7 +277,7 @@
 }
 
 .abc-pareto-title {
-  font-size: 0.95rem;
+  font-size: var(--text-card-title);
   font-weight: 600;
   color: var(--color-text);
   margin: 0;
@@ -439,9 +460,12 @@
 }
 
 .abc-drilldown-tabs {
-  display: flex;
-  gap: 0.4rem;
-  margin-bottom: 0.9rem;
+  margin-bottom: 12px;
+}
+
+.abc-drilldown-tabs .segmented-item {
+  flex: 1;
+  justify-content: center;
 }
 
 .abc-drilldown-tab {

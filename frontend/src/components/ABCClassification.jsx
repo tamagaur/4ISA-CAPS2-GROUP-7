@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
-import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info } from 'lucide-react';
+import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info, Layers } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -17,6 +17,8 @@ import { GRID_PROPS, usePrefersTexture } from './ChartZoom';
 import { getABCClassification } from '../api/abc';
 import { getFsn } from '../api/analytics';
 import { ParetoCard, AbcFsnMatrix } from './AbcBreakdowns';
+import KPICard from './KPICard';
+import PageHeader from './ui/PageHeader';
 import DateFilter from './DateFilter';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { useBrandLookup } from '../utils/useBrandLookup';
@@ -239,7 +241,7 @@ const ClassAggregateTooltip = ({ active, payload, lpHidden, periodLabel, unit })
 const ABCSkeleton = () => (
   <div className="abc-body" aria-hidden="true">
     <div className="abc-summary-grid">
-      <SkeletonStatCards count={4} cardClassName="abc-summary-card" />
+      <SkeletonStatCards count={4} cardClassName="kpi-card" />
     </div>
     <div className="abc-analysis-row">
       <SkeletonChartCard className="abc-pareto-container abc-analysis-chart" variant="bars" height={260} />
@@ -799,43 +801,46 @@ const ABCClassification = () => {
   const periodPlaceholderNote = isPlaceholderPeriod(classificationPeriod, placeholder)
     ? " — a placeholder month: these classes come from placeholder sales, not SSM's"
     : '';
+  // How to read the table's faded rows and its boundary flag; shown above
+  // the table (tableLegend below), not in the page's subtitle. "More
+  // likely", not "likely": measured, 42% of flagged SKUs change class the
+  // next month against 17% of unflagged ones — most flagged SKUs stay put.
+  const tableLegend = (
+    <p className="ui-note abc-table-legend">
+      <Info size={14} aria-hidden="true" />
+      <span>
+        {isDelMonte
+          ? 'Categories with no sales that month keep their most recent tier, shown faded with the month it was set.'
+          : 'SKUs with no sales that month keep their most recent category, shown faded with the month it was set.'}
+        {rules && (
+          <> <AlertTriangle size={12} className="abc-boundary-legend-icon" aria-hidden="true" /> flags a {rowNoun.one} within{' '}
+            {asPp(rules.boundary_margin)} of a class cutoff — more likely to change class next month.</>
+        )}
+      </span>
+    </p>
+  );
   const header = (
     <div className="abc-page-header">
-      <div className="abc-page-title-row">
-        <h2 className="abc-page-title">ABC <span className="page-title-accent">Classification</span></h2>
-        <DateFilter
-          singleMonth
-          localValue={{
-            startMonth: selectedMonth.month, startYear: selectedMonth.year,
-            endMonth: selectedMonth.month, endYear: selectedMonth.year,
-          }}
-          onLocalChange={(v) => setSelectedMonth({ month: v.endMonth, year: v.endYear })}
-          onReset={isCustomMonth
-            ? () => setSelectedMonth({ month: dashboardRange.endMonth, year: dashboardRange.endYear })
-            : undefined}
-        />
-      </div>
-      <p className="abc-page-subtitle">
-        {isDelMonte ? (
-          <>
-            Product categories ranked by sales value.{rules && <> {tierRuleText(rules)}</>}
-            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}{periodPlaceholderNote}.</>}
-            {' '}Categories with no sales that month keep their most recent tier, shown faded with the month it was set.
-          </>
-        ) : (
-          <>
-            Products ranked by sales value.{rules && <> {tierRuleText(rules)}</>}
-            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}{periodPlaceholderNote}.</>}
-            {' '}SKUs with no sales that month keep their most recent category, shown faded with the month it was set.
-          </>
+      <PageHeader
+        title="ABC"
+        accent="Classification"
+        subtitle={`${isDelMonte ? 'Product categories' : 'Products'} ranked by sales value`
+          + `${classificationPeriod ? `, ${formatMonth(classificationPeriod)}${periodPlaceholderNote}` : ''}.`
+          + `${rules ? ` ${tierRuleText(rules)}` : ''}`}
+        actions={(
+          <DateFilter
+            singleMonth
+            localValue={{
+              startMonth: selectedMonth.month, startYear: selectedMonth.year,
+              endMonth: selectedMonth.month, endYear: selectedMonth.year,
+            }}
+            onLocalChange={(v) => setSelectedMonth({ month: v.endMonth, year: v.endYear })}
+            onReset={isCustomMonth
+              ? () => setSelectedMonth({ month: dashboardRange.endMonth, year: dashboardRange.endYear })
+              : undefined}
+          />
         )}
-        {/* "More likely", not "likely": measured, 42% of flagged SKUs change
-            class the next month against 17% of unflagged ones — most flagged
-            SKUs stay put. */}
-        {rules && (
-          <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a {rowNoun.one} within {asPp(rules.boundary_margin)} of a class cutoff — more likely to change class next month.</span>
-        )}
-      </p>
+      />
       {/* Del Monte's rows are product categories, not SKUs. Said once, up
           front, and it also separates the two meanings of "category" on
           this page: the product category a row IS, and the A/B/C tier it
@@ -920,64 +925,43 @@ const ABCClassification = () => {
         >
 
           {/* Summary Cards */}
-          <div className="abc-summary-grid">
-            <div className="abc-summary-card abc-card-a">
-              <span className="abc-card-label">CLASS A</span>
-              <span className="abc-card-value">
-                {catACount.toLocaleString()} <span className="abc-card-unit">{rowNoun.unit}</span>
-              </span>
-              {measuredShares('A') && <span className="abc-card-desc">{measuredShares('A')}</span>}
-              {carriedCountOf('A') > 0 && (
-                <span className="abc-card-desc">{carriedCountOf('A').toLocaleString()} carried forward from earlier months</span>
-              )}
-            </div>
-            <div className="abc-summary-card abc-card-b">
-              <span className="abc-card-label">CLASS B</span>
-              <span className="abc-card-value">
-                {catBCount.toLocaleString()} <span className="abc-card-unit">{rowNoun.unit}</span>
-              </span>
-              {measuredShares('B') && <span className="abc-card-desc">{measuredShares('B')}</span>}
-              {carriedCountOf('B') > 0 && (
-                <span className="abc-card-desc">{carriedCountOf('B').toLocaleString()} carried forward from earlier months</span>
-              )}
-            </div>
-            <div className="abc-summary-card abc-card-c">
-              <span className="abc-card-label">CLASS C</span>
-              <span className="abc-card-value">
-                {catCCount.toLocaleString()} <span className="abc-card-unit">{rowNoun.unit}</span>
-              </span>
-              {measuredShares('C') && <span className="abc-card-desc">{measuredShares('C')}</span>}
-              {carriedCountOf('C') > 0 && (
-                <span className="abc-card-desc">{carriedCountOf('C').toLocaleString()} carried forward from earlier months</span>
-              )}
-            </div>
-            <div className="abc-summary-card abc-card-total">
-              <span className="abc-card-label">CLASSIFIED {rowNoun.CAPS}</span>
-              <span className="abc-card-value">
-                {sourceData.length.toLocaleString()} <span className="abc-card-unit">{rowNoun.unit}</span>
-              </span>
-              <span className="abc-card-desc">
-                {currentRunCount.toLocaleString()} ranked in {periodLabel ?? 'this run'}
-                {/* Not for Del Monte: its unclassified count is SKU-level
-                    product records, which are never ranked one by one (the
-                    ranking is by category) — beside a category count it
-                    would read as categories missing. */}
-                {!isDelMonte && unclassifiedCount > 0 && (
-                  <>
-                    {' · '}{unclassifiedCount.toLocaleString()} never classified
-                    {/* Under All the count is GET /abc's for both principals,
-                        and most of Del Monte's share is item codes, which are
-                        never ranked one by one. */}
-                    {hasDelMonteRows && ' (includes Del Monte item codes, which are ranked by category)'}
-                  </>
-                )}
-              </span>
-              {boundaryCount > 0 && (
-                <span className="abc-card-desc abc-card-desc-warning">
-                  <AlertTriangle size={11} /> {boundaryCount} {boundaryCount === 1 ? rowNoun.one : rowNoun.many} near a class boundary
-                </span>
-              )}
-            </div>
+          {/* The shared KPI card (UI pass): the count, its measured shares
+              on one line, carried-forward rows as a second quiet line. */}
+          <div className="kpi-strip abc-summary-grid">
+            {['A', 'B', 'C'].map((cat) => (
+              <KPICard
+                key={cat}
+                title={`Class ${cat}`}
+                value={{ A: catACount, B: catBCount, C: catCCount }[cat].toLocaleString()}
+                unit={rowNoun.unit}
+                contextLine={measuredShares(cat) || undefined}
+                note={carriedCountOf(cat) > 0 ? `${carriedCountOf(cat).toLocaleString()} carried forward from earlier months` : null}
+                icon={<span className={`abc-kpi-letter abc-kpi-letter-${cat.toLowerCase()}`} aria-hidden="true">{cat}</span>}
+              />
+            ))}
+            <KPICard
+              title={`Classified ${rowNoun.many}`}
+              value={sourceData.length.toLocaleString()}
+              unit={rowNoun.unit}
+              contextLine={`${currentRunCount.toLocaleString()} ranked in ${periodLabel ?? 'this run'}`
+                + (!isDelMonte && unclassifiedCount > 0 ? ` · ${unclassifiedCount.toLocaleString()} never classified` : '')}
+              // Not for Del Monte: its unclassified count is SKU-level product
+              // records, which are never ranked one by one (the ranking is by
+              // category) — beside a category count it would read as
+              // categories missing. Under All, most of the never-classified
+              // count is Del Monte item codes, said behind the "?".
+              tooltip={!isDelMonte && unclassifiedCount > 0 && hasDelMonteRows
+                ? 'The never-classified count includes Del Monte item codes, which are ranked by category, never one by one.'
+                : undefined}
+              flag={boundaryCount > 0
+                ? {
+                    label: `${boundaryCount.toLocaleString()} near a class boundary`,
+                    detail: `${boundaryCount.toLocaleString()} ${boundaryCount === 1 ? rowNoun.one : rowNoun.many} within `
+                      + `${rules ? asPp(rules.boundary_margin) : 'a few points'} of a class cutoff — more likely to change class next month.`,
+                  }
+                : null}
+              icon={<Layers size={20} />}
+            />
           </div>
 
           {/* The manuscript's validation of the classification (§3.4.4.2.2),
@@ -987,7 +971,7 @@ const ABCClassification = () => {
               neutral note: Del Monte's 4 categories read as a red "fails"
               when the top fifth was simply one category. */}
           {paretoCheck && paretoState === 'not_applicable' && (
-            <p className="abc-pareto-check is-na">
+            <p className="ui-note is-info">
               <Info size={14} aria-hidden="true" />
               <span>
                 <strong>Pareto check not applicable:</strong> {paretoCheck.reason}
@@ -995,7 +979,7 @@ const ABCClassification = () => {
             </p>
           )}
           {paretoCheck && paretoState !== 'not_applicable' && (
-            <p className={`abc-pareto-check${paretoCheck.passes ? ' is-pass' : ' is-fail'}`}>
+            <p className={`ui-note ${paretoCheck.passes ? 'is-success' : 'is-warning'}`}>
               {paretoCheck.passes
                 ? <CheckCircle2 size={14} aria-hidden="true" />
                 : <AlertTriangle size={14} aria-hidden="true" />}
@@ -1217,13 +1201,14 @@ const ABCClassification = () => {
                 {stockBasisText && <p className="abc-pareto-period">{stockBasisText}.</p>}
                 {/* Tab buttons — same class-switching as clicking the chart,
                     but explicit/tappable for touch and keyboard users. */}
-                <div className="abc-drilldown-tabs" role="tablist" aria-label="Select ABC class to drill into">
+                <div className="segmented abc-drilldown-tabs" role="tablist" aria-label="Select ABC class to drill into">
                   {['A', 'B', 'C'].map((cat) => (
                     <button
                       key={cat}
+                      type="button"
                       role="tab"
                       aria-selected={selectedClass === cat}
-                      className={`abc-drilldown-tab abc-drilldown-tab-${cat.toLowerCase()} ${selectedClass === cat ? 'active' : ''}`}
+                      className={`segmented-item${selectedClass === cat ? ' is-active' : ''}`}
                       onClick={() => setSelectedClass(cat)}
                     >
                       Class {cat}
@@ -1296,6 +1281,8 @@ const ABCClassification = () => {
               unit={rowNoun.unit}
             />
           </div>
+
+          {tableLegend}
 
           {/* Searchable Combobox & Filters Bar */}
           <div className="abc-filters-row">
