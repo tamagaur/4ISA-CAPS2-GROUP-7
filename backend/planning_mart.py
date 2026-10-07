@@ -13,6 +13,8 @@ per-request joins (backend/routers/recommendations.py's _SELECT_ONE), when:
   - a source changed after the last planning refresh (mart.refresh_status.planning_stale:
     a data load, a fill, a forecast run, an LP run, a review-flag write, an ABC run or a
     product edited through the app);
+  - the last planning refresh was built on a Tier A basis other than the current
+    analytics.params.TIER_A_BASIS (mart.refresh_status.planning_tier_a_basis, migration 0047);
   - its rows don't match lp_recommendation's (row count, pending count, latest decision).
 So a missed refresh costs speed, never a wrong figure.
 
@@ -31,6 +33,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from analytics.marts import planning_params
+from analytics.params import TIER_A_BASIS
 from backend import batch
 from backend.data_mode import REAL
 from backend.principals import principal_clause
@@ -113,12 +116,14 @@ def head_query(principal: str | None) -> tuple[str, dict]:
                (SELECT COUNT(*) FROM pending p WHERE p.planning_cycle_date = cur.d AND p.generated_at < fc.t) AS stale_count,
                (SELECT COUNT(*) FROM pending p WHERE p.planning_cycle_date < cur.d) AS superseded,
                (SELECT planning_stale FROM {mart}.refresh_status) AS planning_stale,
+               (SELECT planning_tier_a_basis FROM {mart}.refresh_status)
+                   IS NOT DISTINCT FROM :tier_a_basis AS basis_current,
                (SELECT ROW(COUNT(*), COUNT(*) FILTER (WHERE status = 'pending'), MAX(decided_at)) FROM lp_recommendation)
                    IS NOT DISTINCT FROM
                (SELECT ROW(COUNT(*), COUNT(*) FILTER (WHERE decision_status = 'pending'), MAX(decided_at)) FROM {mart}.planning_mart)
                    AS in_step
         FROM cur CROSS JOIN fc
-    """, params
+    """, {**params, "tier_a_basis": TIER_A_BASIS}
 
 
 def _where(principal: str | None, status: str | None, cycle: str,
@@ -205,7 +210,8 @@ def read(db, principal: str | None, status: str | None, cycle: str,
     run_q = run_query(principal)
     batch.prefetch(db, [head_q, rows_q, counts_q, run_q])
     head = batch.first(db, *head_q)
-    if head is None or head["planning_stale"] is not False or not head["in_step"]:
+    if (head is None or head["planning_stale"] is not False or not head["in_step"]
+            or head["basis_current"] is not True):
         return None
     run = batch.first(db, *run_q)
     return {"head": head, "rows": unpack(batch.rows(db, *rows_q)), "counts": batch.rows(db, *counts_q),
