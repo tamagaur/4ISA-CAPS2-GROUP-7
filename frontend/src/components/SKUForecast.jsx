@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Search, Star, ArrowRight, Clock, Filter, X, ArrowUp, ArrowDown, Minus, AlertTriangle } from 'lucide-react';
 import {
   ComposedChart,
@@ -20,6 +20,7 @@ import RefreshingNote from './RefreshingNote';
 import { LoadingStatus, SkeletonChart, SkeletonLine } from './Skeleton';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
+import { getForecastAccuracy } from '../api/dashboard';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { describeServedModel, describeFallbackReason } from '../utils/forecastModel';
 import DateFilter from './DateFilter';
@@ -314,6 +315,20 @@ const SKUForecast = () => {
   // "this is my data" when it was only a placeholder.
   const [selectedSKU, setSelectedSKU] = useState(null);
 
+  // /forecast?sku=<code> — the dashboard's Class A changes and over-forecast
+  // lists open a product here. The code is read once and the parameter
+  // dropped, so it selects that product when the list loads and never
+  // overrides a pick made after.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedSkuRef = useRef(searchParams.get('sku'));
+  useEffect(() => {
+    if (!searchParams.has('sku')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('sku');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Re-attach the selection to the freshly loaded list. Covers two cases
   // with one read: restoring the module-remembered pick after a route
   // remount, and refreshing the already-selected row so a late-arriving
@@ -323,8 +338,13 @@ const SKUForecast = () => {
   // is deliberately left alone so switching the scope back restores it.
   useEffect(() => {
     if (sourceSKUs.length === 0) return;
+    const linked = linkedSkuRef.current;
+    if (linked) {
+      linkedSkuRef.current = null;
+      rememberedSKUCode = linked;
+    }
     setSelectedSKU((prev) => {
-      const code = prev?.code ?? rememberedSKUCode;
+      const code = linked ?? prev?.code ?? rememberedSKUCode;
       if (!code) return null;
       return sourceSKUs.find((s) => s.code === code) ?? null;
     });
@@ -480,6 +500,56 @@ const SKUForecast = () => {
     `${selectedSKU?.code ?? ''}|${principal ?? ''}|${rangeStartPeriod ?? ''}|${rangeEndPeriod ?? ''}`
   );
   const [forecastError, setForecastError] = useState(null);
+
+  // How far off the forecasts were for this product: its rows in GET
+  // /dashboard/accuracy?level=product over this page's range (one row per
+  // product x month, forecasts as made at the time). The endpoint has no
+  // product filter, so the range's rows are fetched once per principal and
+  // range (cached) and filtered here.
+  const accuracyKey = `${principal ?? ''}|${rangeStartPeriod ?? ''}|${rangeEndPeriod ?? ''}`;
+  const [accuracy, setAccuracy] = useState({ key: null, rows: [], basis: null });
+  const accuracyLoadedKey = accuracy.key;
+  useEffect(() => {
+    if (!selectedSKU || principal === 'delmonte' || accuracyLoadedKey === accuracyKey) return undefined;
+    let cancelled = false;
+    getForecastAccuracy({ level: 'product', period: rangeEndPeriod, startPeriod: rangeStartPeriod, principal })
+      .then((res) => {
+        if (!cancelled) setAccuracy({ key: accuracyKey, rows: res.rows || [], basis: res.pesos_basis || null });
+      })
+      // The cards are extra to the page: on a failure they are left out.
+      .catch(() => { if (!cancelled) setAccuracy({ key: accuracyKey, rows: [], basis: null }); });
+    return () => { cancelled = true; };
+  }, [selectedSKU, principal, accuracyKey, accuracyLoadedKey, rangeStartPeriod, rangeEndPeriod]);
+
+  // This product's miss, summed from its rows: the average size of the miss
+  // per month in pieces and (when every month has a price) pesos, and its
+  // direction by the sign of the net miss — the backend's own rule
+  // (backend/marts.py accuracy_summary) — with the months that ran each way.
+  const productAccuracy = useMemo(() => {
+    if (!selectedSKU || accuracy.key !== accuracyKey) return null;
+    const rows = accuracy.rows
+      .filter((r) => String(r.sku_code) === String(selectedSKU.code))
+      .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
+    if (!rows.length) return { checked: false };
+    const sum = (key) => rows.reduce((total, r) => total + (r[key] ?? 0), 0);
+    const net = sum('miss_pieces');
+    return {
+      checked: true,
+      error: {
+        pieces_per_month: sum('abs_miss_pieces') / rows.length,
+        pesos_per_month: rows.every((r) => r.abs_miss_pesos != null) ? sum('abs_miss_pesos') / rows.length : null,
+        pesos_basis: accuracy.basis,
+        direction: net > 0 ? 'surplus' : net < 0 ? 'shortage' : 'mixed',
+        over_months: rows.filter((r) => r.direction === 'over').length,
+        under_months: rows.filter((r) => r.direction === 'under').length,
+        months_scored: rows.length,
+        window_start: rows[0].month,
+        window_end: rows[rows.length - 1].month,
+        source: rows[0].forecast_source === 'backtest_recreated' ? 'forecasts as made at the time (backtest)' : 'stored forecast runs',
+      },
+      stockLimited: rows.filter((r) => r.possibly_stock_limited).map((r) => r.month),
+    };
+  }, [selectedSKU, accuracy, accuracyKey]);
 
   useEffect(() => {
     if (!selectedSKU) {
@@ -665,9 +735,10 @@ const SKUForecast = () => {
   // is the served model's own scoring window; holdout_months is the same
   // count on rows written before it existed.
   const storedParams = storedForecast?.model_params || {};
-  // Section B fields (PendingCards.jsx), absent until the backend serves
-  // them: the months where stock may have run out.
-  const stockLimitedPeriods = (forecastResult?.actuals || []).filter((a) => a.stock_limited).map((a) => a.period);
+  // The months where stock may have run out, from this product's accuracy
+  // rows (productAccuracy below; GET /dashboard/accuracy, migration 0043's
+  // stock-limited rule).
+  const stockLimitedPeriods = productAccuracy?.stockLimited || [];
   const holdoutMonths = storedParams.holdout_metrics_served?.months ?? storedParams.holdout_months ?? null;
 
   // The months behind the accuracy figures and the MA3 benchmark, so each
@@ -1543,16 +1614,22 @@ const SKUForecast = () => {
                     )}
                   </div>
 
-                  {/* The forecast's miss in pieces and pesos, its accuracy at
-                      three levels and any stock-limited months — each shown
-                      only once GET /forecast serves it (PendingCards.jsx). */}
-                  {(forecastResult?.error_summary || stockLimitedPeriods.length > 0
-                    || (SHOW_ACCURACY_PCT && forecastResult?.accuracy)) && (
+                  {/* The forecast's miss in pieces and pesos and any
+                      stock-limited months, from this product's accuracy rows
+                      over the page's range (productAccuracy). The accuracy
+                      percentages stay held back (SHOW_ACCURACY_PCT). */}
+                  {productAccuracy?.checked && (
                     <div className="forecast-pending-cards">
-                      <ForecastErrorCard error={forecastResult.error_summary} />
-                      {SHOW_ACCURACY_PCT && <AccuracyLevels accuracy={forecastResult.accuracy} />}
+                      <ForecastErrorCard error={productAccuracy.error} />
+                      {SHOW_ACCURACY_PCT && <AccuracyLevels accuracy={forecastResult?.accuracy} />}
                       <StockLimitedNote periods={stockLimitedPeriods} />
                     </div>
+                  )}
+                  {productAccuracy && !productAccuracy.checked && (
+                    <p className="forecast-accuracy-none">
+                      Not checked against sales in {formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}:
+                      no forecast for this product was scored in those months.
+                    </p>
                   )}
 
                   {/* How this forecast was made — the stored number's

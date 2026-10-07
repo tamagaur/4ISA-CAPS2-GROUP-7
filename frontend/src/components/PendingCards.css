@@ -229,3 +229,10 @@
   gap: 10px;
   margin-top: 14px;
 }
+
+/* SKU Forecast: a product with no scored forecast in the page's range. */
+.forecast-accuracy-none {
+  margin: 14px 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}

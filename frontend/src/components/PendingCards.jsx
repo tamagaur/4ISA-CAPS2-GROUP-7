@@ -8,9 +8,10 @@
 // stays held back (SHOW_ACCURACY_PCT, SKUForecast.jsx): no bare percentage
 // on screen. /preview (PendingPreview.jsx) shows it on labelled sample data.
 //
-// ForecastErrorCard's `error`: { pieces_per_month, pesos_per_month,
-//   direction: 'surplus' | 'shortage' | 'mixed', direction_months,
-//   months_scored, window_start, window_end }
+// ForecastErrorCard's `error` (SKUForecast.jsx productAccuracy):
+//   { pieces_per_month, pesos_per_month, pesos_basis, direction: 'surplus' |
+//   'shortage' | 'mixed' (the net miss's sign), over_months, under_months,
+//   months_scored, window_start, window_end, source }
 import React from 'react';
 import { AlertTriangle, Eye } from 'lucide-react';
 import { formatMonth } from '../utils/formatDate';
@@ -22,17 +23,19 @@ const pesos = (value) => `₱${Math.round(value).toLocaleString('en-PH')}`;
 
 // How far off the forecast is, in the units a buyer orders in and in money,
 // with its direction — never as a bare percentage (no "WAPE" on screen).
+// Direction is the sign of the net miss over the months scored, the
+// backend's own rule; the months that ran each way are said beside it.
 const DIRECTION_TEXT = {
-  surplus: 'Mostly surplus (the forecast ran above sales)',
-  shortage: 'Mostly shortage (the forecast ran below sales)',
-  mixed: 'No steady direction (above some months, below others)',
+  surplus: 'Overall above sales (a net surplus)',
+  shortage: 'Overall below sales (a net shortage)',
+  mixed: 'Above and below sales cancel out',
 };
 export const ForecastErrorCard = ({ error }) => {
   if (!error || error.pieces_per_month == null) return null;
   const perMonth = error.pieces_per_month;
-  const window = error.window_start && error.window_end
-    ? `${formatMonth(error.window_start)} – ${formatMonth(error.window_end)}`
-    : null;
+  const window = !error.window_start || !error.window_end ? null
+    : error.window_start === error.window_end ? formatMonth(error.window_start)
+      : `${formatMonth(error.window_start)} – ${formatMonth(error.window_end)}`;
   return (
     <div className="pending-error-card">
       <span className="pending-card-label">Typical forecast miss</span>
@@ -44,9 +47,13 @@ export const ForecastErrorCard = ({ error }) => {
       {DIRECTION_TEXT[error.direction] && (
         <p className="pending-error-direction">
           {DIRECTION_TEXT[error.direction]}
-          {error.direction !== 'mixed' && error.direction_months != null && error.months_scored != null
-            ? ` for ${error.direction_months} of ${error.months_scored} months` : ''}
-          {window ? ` · tested on ${window}` : ''}.
+          {error.months_scored != null && error.over_months != null
+            ? `: above sales in ${error.over_months} and below in ${error.under_months} of ${error.months_scored} `
+              + `month${error.months_scored === 1 ? '' : 's'}`
+            : ''}
+          {window ? ` · ${window}` : ''}
+          {error.source ? ` · ${error.source}` : ''}
+          {error.pesos_per_month != null && error.pesos_basis ? ` · pesos at ${error.pesos_basis}` : ''}.
         </p>
       )}
     </div>
