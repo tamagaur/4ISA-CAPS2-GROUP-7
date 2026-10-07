@@ -1,3 +1,4 @@
+import { formatMonth } from '../utils/formatDate';
 import './TierBasisLabel.css';
 
 // One statement of which ABC run the tiers on a page come from, shared by the
@@ -43,12 +44,12 @@ export function latestPeriod(periods, fallback) {
 
 export function tierBasisText(periods, period) {
   const entries = Object.entries(periods || {});
-  if (entries.length === 0) return period ? `Tiers as of ${period}` : null;
+  if (entries.length === 0) return period ? `Tiers as of ${formatMonth(period)}` : null;
   if (entries.length === 1) {
     const [name, p] = entries[0];
-    return `Tiers as of ${p}${BASIS[name] ? ` · ${BASIS[name]}` : ''}`;
+    return `Tiers as of ${formatMonth(p)}${BASIS[name] ? ` · ${BASIS[name]}` : ''}`;
   }
-  return entries.map(([name, p]) => `${name} as of ${p}`).join(' · ');
+  return entries.map(([name, p]) => `${name} as of ${formatMonth(p)}`).join(' · ');
 }
 
 export default function TierBasisLabel({ periods, period, className = '' }) {
@@ -64,19 +65,19 @@ export default function TierBasisLabel({ periods, period, className = '' }) {
 }
 
 // A tier letter with its run's age: current runs plain, carried-forward ones faded with
-// the month they were set ("C · 2025-06"), and a "stale" badge past 6 months. Display only:
+// the month they were set ("C · Jun 2025"), and a "stale" badge past 6 months. Display only:
 // nothing on a page counts, filters or ranks by an aged tier.
 export function TierChip({ tier, tierPeriod, isCurrent, anchor }) {
   if (!tier) return <span className="cell-empty">—</span>;
   const aged = isCurrent === false;
   const stale = aged && isStaleTier(tierPeriod, anchor);
   const title = aged
-    ? `Class ${tier} — last classified ${tierPeriod}; not ranked in the current run, so this is carried forward${stale ? ' (stale: over 6 months old)' : ''}`
-    : `Class ${tier} — current run${tierPeriod ? ` (${tierPeriod})` : ''}`;
+    ? `Class ${tier} — last classified ${formatMonth(tierPeriod)}; not ranked in the current run, so this is carried forward${stale ? ' (stale: over 6 months old)' : ''}`
+    : `Class ${tier} — current run${tierPeriod ? ` (${formatMonth(tierPeriod)})` : ''}`;
   return (
     <span className={`tier-chip tier-chip-${tier}${aged ? ' tier-chip-aged' : ''}`} title={title}>
       {tier}
-      {aged && tierPeriod && <span className="tier-chip-age">{tierPeriod}</span>}
+      {aged && tierPeriod && <span className="tier-chip-age">{formatMonth(tierPeriod)}</span>}
       {stale && <span className="tier-chip-stale">stale</span>}
     </span>
   );
