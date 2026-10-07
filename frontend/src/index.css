@@ -57,7 +57,7 @@ table td.table-center {
 
 /* Muted header: small caps-height labels, no fill competing with the rows. */
 .data-table thead th {
-  background-color: #FAFAF9;
+  background-color: #F8FAFC;
   border-bottom: 1px solid var(--color-border);
   padding: 10px 16px;
   font-size: var(--text-micro);
@@ -72,7 +72,7 @@ table td.table-center {
 /* Rows about 48px tall at 13.5px text; a separator, no vertical rules. */
 .data-table tbody td {
   padding: 12px 16px;
-  border-bottom: 1px solid #EEF0F2;
+  border-bottom: 1px solid #EDF0F4;
   vertical-align: middle;
 }
 
@@ -127,7 +127,7 @@ table td.table-center {
 }
 
 .data-table tbody tr:hover {
-  background-color: #F6F5F1;
+  background-color: #FAFBFC;
 }
 
 /* Short columns never wrap. (They used to also carry `width: 1%` to
@@ -531,42 +531,42 @@ table td.table-center {
   --font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
 
   /* Data Visualization Color Tokens */
-  --color-critical: #E5484D;
-  --color-warning: #F5A623;
-  --color-success: #2E9E5B;
+  --color-critical: #D9534F;
+  --color-warning: #E9A23B;
+  --color-success: #36A66B;
   --color-sales-trend: #5B5FEF;
-  --color-dispatched: #0E96A1; /* mirrors COLORS.dispatched — see theme/colors.js */
-  --color-forecast: #A855F7;
-  --color-forecast-bg: #F3E8FF;
+  --color-dispatched: #18A6B5; /* mirrors COLORS.dispatched — see theme/colors.js */
+  --color-forecast: #8866E8;
+  --color-forecast-bg: #EEE9FC;
   /* Placeholder months in preview mode (src/dataMode.js): a neutral tint
      whose one meaning is "not SSM's data", never a status. Mirrors
      CHART_COLORS.placeholder. */
   --color-placeholder: #94A3B8;
 
   /* ABC Single-Hue Plum Ramp */
-  --color-abc-a: #6B2C5F;
-  --color-abc-b: #B565A0;
-  --color-abc-c: #D6A0C8; /* was #EBC9E1 — 1.5:1 on white; this passes 2:1 */
+  --color-abc-a: #76295E;
+  --color-abc-b: #A9579A;
+  --color-abc-c: #D7AFCC; /* was #EBC9E1 — 1.5:1 on white; this passes 2:1 */
 
   /* Brand Chrome — sampled directly from public/logo.png (the swoosh is
      #C74E3D), replacing the cooler #c53030 the UI drifted to. Accent/hover
      are that same hue moved along one consistent lightness ramp rather
      than picked independently, so brand chrome always reads as one family. */
-  --color-brand-primary: #C74E3D;
-  --color-brand-accent: #E75C4B;
+  --color-brand-primary: #E85C4A;
+  --color-brand-accent: #F07A6B;
 
   /* Sidebar — ink navy, lifted from Login.css's dark panel (#1C2230) so
      the sidebar and the login screen read as the same product instead of
      the login screen being the only place the "other half" of the brand
      pairing appears. Additive: these are new tokens, nothing existing
      was renamed, so this can't silently change an unrelated component. */
-  --color-nav-bg: #1C2230;
+  --color-nav-bg: #111D32;
   /* The sidebar's ombre: the same navy, a shade lighter at the top (behind
      the logo) and a shade deeper at the bottom. --color-nav-bg stays the
      middle stop and the flat fallback (Login.css's panel uses it too). */
-  --color-nav-bg-top: #262F42;
-  --color-nav-bg-bottom: #131823;
-  --color-nav-border: #2C3444;
+  --color-nav-bg-top: #16233B;
+  --color-nav-bg-bottom: #0D1729;
+  --color-nav-border: #22314B;
   /* Text brightened for the gradient's lightest stop (#262F42), 2026-10-01:
      labels 3.6:1 -> 5.9:1, items 7.3:1 -> 10.3:1, sub-headings 4.4:1 ->
      6.5:1, and all still >= 4.9:1 on the hover wash. */
@@ -577,9 +577,9 @@ table td.table-center {
      of it (5.1:1 or more on every stop). */
   --color-nav-danger-text: #EE8070;
   --color-nav-item-hover-bg: rgba(255, 255, 255, 0.06);
-  --color-nav-item-active-bg: rgba(199, 78, 61, 0.16);
+  --color-nav-item-active-bg: rgba(232, 92, 74, 0.15);
   --color-nav-item-active-text: #F5F1EE;
-  --color-nav-item-active-rail: #C74E3D;
+  --color-nav-item-active-rail: #E85C4A;
   --color-nav-heading: #F5F1EE;
   --color-nav-subheading: #AEB5C2;
 
@@ -590,11 +590,11 @@ table td.table-center {
      deliberately DARKER than --color-brand-primary/critical above — an
      alert must not have the same visual weight as brand chrome or a
      data-viz negative delta; it needs to be its own, heavier thing.  */
-  --color-severity-critical: #8E1C1C;
-  --color-severity-critical-bg: #FDEDEC;
+  --color-severity-critical: #C84040;
+  --color-severity-critical-bg: #FDECEC;
   --color-severity-critical-border: #F3C6C2;
-  --color-severity-urgent: #B45309;
-  --color-severity-urgent-bg: #FDF3E3;
+  --color-severity-urgent: #B56E14;
+  --color-severity-urgent-bg: #FFF4DD;
   --color-severity-urgent-border: #F0D8AE;
   --color-severity-planned: #0F766E;
   --color-severity-planned-bg: #E6F2F0;
@@ -617,20 +617,20 @@ table td.table-center {
      content cards stay pure --color-surface white, so nothing sitting on
      them loses contrast; only the page ground behind those cards shifts. */
   --color-surface: #ffffff;
-  --color-surface-raised: #F7F7F4;
+  --color-surface-raised: #F7F8FA;
   --color-surface-sunken: #f1f5f9;
   --color-surface-muted: #edf2f7;
 
   /* Borders */
-  --color-border: #e2e8f0;
+  --color-border: #E7EBF0;
   --color-border-strong: #cbd5e1;     /* merged: was #cbd5e0 (18x) + #cbd5e1 (22x), 1/255 apart */
 
   /* Text — primary ramp */
-  --color-text: #1a202c;
-  --color-text-heading: #2d3748;
-  --color-text-body: #4a5568;         /* merged: was #4a5568 (58x) + #475569 (10x), 3/255 apart */
-  --color-text-muted: #556070;       /* was #718096 (3.7:1 on the page background, below WCAG AA 4.5:1); now 5.9:1 */
-  --color-text-subtle: #667085;      /* was #a0aec0 (2.1:1); now 4.6:1 — still the lighter of the two */
+  --color-text: #182230;
+  --color-text-heading: #1F2A3A;
+  --color-text-body: #475467;
+  --color-text-muted: #5F6B7D;       /* 5.3:1 on white */
+  --color-text-subtle: #667085;      /* 4.9:1 on white; the spec's #98A2B3 is below AA for small text, so it is kept for decoration only (slate-400) */
 
   /* Text — slate ramp. Genuinely distinct from the ramp above (12-15/255
      apart), so kept rather than merged; a future design pass could
@@ -639,10 +639,10 @@ table td.table-center {
   --color-slate-800: #1e293b;
   --color-slate-700: #334155;
   --color-slate-500: #64748b;
-  --color-slate-400: #94a3b8;
+  --color-slate-400: #98A2B3;
 
   /* Brand */
-  --color-brand-hover: #9E3628;
+  --color-brand-hover: #D14B39;
 
   /* Feedback — danger */
   --color-danger-bg: #fff5f5;

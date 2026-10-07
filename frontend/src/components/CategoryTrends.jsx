@@ -24,7 +24,6 @@ import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand
 import RefreshingNote from './RefreshingNote';
 import InfoTip from './InfoTip';
 import PageHeader from './ui/PageHeader';
-import Disclosure from './ui/Disclosure';
 import { LoadingStatus, SkeletonChart, SkeletonLine, SkeletonTable } from './Skeleton';
 import './CategoryTrends.css';
 
@@ -179,7 +178,7 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
         />
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={340}>
             <ComposedChart data={data} margin={{ top: 10, right: 16, left: 4, bottom: 8 }}>
               <CartesianGrid {...GRID_PROPS} />
               {renderPlaceholderBand(bandSpan)}
@@ -460,19 +459,15 @@ const CategoryTrends = () => {
             (analytics/forecasting/category_trend.py) — no fallbacks, so a
             number on this page can't disagree with the one the backend used. */}
         {data?.method && (
-          <Disclosure title="How this trend is measured" hint="a trend projection, not a validated forecast">
-            <p>
-              A Theil–Sen line through the last {data.method.window_months} months of revenue with data, starting at
-              the category&apos;s first sale, extended {data.method.projection_months} months. The direction counts as
-              real only when a Mann–Kendall test gives p &lt; {data.method.significance_alpha}.
-            </p>
-            <p>
-              The percentage compares the next {data.method.projection_months} months on the line with the last{' '}
-              {data.method.trailing_months} on the same line; the range in brackets uses the slope&apos;s{' '}
-              {Math.round(data.method.slope_confidence * 100)}% confidence bounds. A category needs{' '}
-              {data.method.min_points} months with data from its first sale before it gets a projection.
-            </p>
-          </Disclosure>
+          <p className="ct-method">
+            <strong>How this is measured.</strong> A trend projection, not a validated forecast: a Theil–Sen line through
+            the last {data.method.window_months} months of revenue with data, starting at the category&apos;s first sale,
+            extended {data.method.projection_months} months. The direction counts as real only when a Mann–Kendall test
+            gives p &lt; {data.method.significance_alpha}. The percentage compares the next {data.method.projection_months} months
+            on the line with the last {data.method.trailing_months} on the same line; the range in brackets uses the
+            slope&apos;s {Math.round(data.method.slope_confidence * 100)}% confidence bounds. A category needs{' '}
+            {data.method.min_points} months with data from its first sale before it gets a projection.
+          </p>
         )}
       </div>
     </div>

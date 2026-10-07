@@ -20,16 +20,16 @@
   --card-gap: 20px;
   --card-padding: 22px;
   --section-gap: 40px;
-  --page-padding-x: 40px;
+  --page-padding-x: 32px;
 
   /* Shape and depth: a card sits on the page, it does not float. */
   --radius-sm: 6px;
   --radius-md: 8px;
-  --radius-card: 12px;
+  --radius-card: 14px;
   --radius-pill: 999px;
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-card: 0 2px 8px rgba(15, 23, 42, 0.04);
   --shadow-raised: 0 6px 16px rgba(16, 24, 40, 0.10);
-  --card-border: 1px solid #E6E8EB;
+  --card-border: 1px solid #E7EBF0;
 
   /* Type scale. */
   --text-page-title: 30px;
@@ -42,22 +42,22 @@
   --text-micro: 11px;
 
   /* Soft badge tints: light background, darker ink of the same hue. */
-  --badge-critical-bg: #FCEDEC;
-  --badge-critical-fg: #9B2C2C;
-  --badge-warning-bg: #FDF3E3;
-  --badge-warning-fg: #8A4B0B;
-  --badge-success-bg: #E8F4EC;
-  --badge-success-fg: #1E6B3E;
+  --badge-critical-bg: #FDECEC;
+  --badge-critical-fg: #C84040;
+  --badge-warning-bg: #FFF4DD;
+  --badge-warning-fg: #B56E14;
+  --badge-success-bg: #E8F7EE;
+  --badge-success-fg: #278552;
   --badge-neutral-bg: #F1F2F4;
   --badge-neutral-fg: #4B5563;
   --badge-info-bg: #EAF0F8;
   --badge-info-fg: #2B4C7E;
-  --badge-plum-bg: #F5ECF3;
-  --badge-plum-fg: #6B2C5F;
-  --badge-teal-bg: #E5F3F4;
-  --badge-teal-fg: #0B6A72;
-  --badge-brand-bg: #FBECE9;
-  --badge-brand-fg: #A33A2B;
+  --badge-plum-bg: #F3E6EF;
+  --badge-plum-fg: #76295E;
+  --badge-teal-bg: #E6F6F7;
+  --badge-teal-fg: #0F7F8A;
+  --badge-brand-bg: #FDEBE8;
+  --badge-brand-fg: #C84A3A;
 }
 
 /* ── Page header ──────────────────────────────────────────────────────── */
@@ -169,9 +169,9 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 36px;
+  height: 38px;
   padding: 0 14px;
-  border-radius: var(--radius-md);
+  border-radius: 9px;
   border: 1px solid transparent;
   font-family: inherit;
   font-size: 13px;
@@ -296,9 +296,10 @@
   font-weight: 700;
 }
 
-.badge-class-a { background-color: var(--color-abc-a); color: #fff; }
-.badge-class-b { background-color: var(--badge-plum-bg); color: var(--badge-plum-fg); }
-.badge-class-c { background-color: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
+/* Pale tints with dark ink (the spec): A plum, B pink, C lavender. */
+.badge-class-a { background-color: #F0DFEA; color: #76295E; }
+.badge-class-b { background-color: #F9E8F1; color: #8E3A74; }
+.badge-class-c { background-color: #F3EFF9; color: #6B5A8A; }
 
 /* ── Segmented control (tabs, view switches, class pickers) ───────────── */
 .segmented {
@@ -306,18 +307,18 @@
   align-items: center;
   gap: 2px;
   padding: 3px;
-  border-radius: var(--radius-md);
-  background-color: #ECEDEA;
+  border-radius: var(--radius-pill);
+  background-color: #EEF1F5;
 }
 
 .segmented-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 12px;
+  height: 30px;
+  padding: 0 14px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-pill);
   background: none;
   font-family: inherit;
   font-size: 12.5px;
@@ -336,10 +337,9 @@
 .segmented-item.is-active,
 .segmented-item[aria-selected='true'],
 .segmented-item[aria-pressed='true'] {
-  background-color: var(--color-surface);
+  background-color: rgba(232, 92, 74, 0.13);
   color: var(--color-brand-primary);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.10);
 }
 
 .segmented-item:focus-visible {
@@ -377,7 +377,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 34px;
+  height: 38px;
   padding: 0 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);

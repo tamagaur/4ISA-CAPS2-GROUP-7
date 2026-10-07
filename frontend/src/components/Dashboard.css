@@ -63,20 +63,21 @@
 
 /* The chips give up space before the date picker does, scrolling sideways
    instead of wrapping — a second row would double the pinned strip. */
-/* The view tabs (ui.css .segmented); they scroll sideways before the date
-   picker gives up space, so the pinned strip stays one row. */
-.dash-tabs {
+/* The section chips (ui.css .segmented): they jump to a section and mark
+   the one being read. They scroll sideways before the date picker gives up
+   space, so the pinned strip stays one row. */
+.dash-section-nav {
   flex: none;
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
-.dash-tabs::-webkit-scrollbar {
+.dash-section-nav::-webkit-scrollbar {
   display: none;
 }
 
-.dash-tabs .segmented-item:disabled {
+.dash-section-nav .segmented-item:disabled {
   cursor: default;
   opacity: 0.55;
 }
@@ -458,6 +459,11 @@
    inside it for the 180px donut, a 28px gap and its 240px tier card. */
 .dash-row-abc         { grid-template-columns: 1fr 1fr; }
 .dash-row-even        { grid-template-columns: 1fr 1fr; }
+/* Two cards of very different lengths side by side (Class A changes beside
+   idle stock): each keeps its own height instead of the short one
+   stretching into empty space. */
+.dash-row-top         { align-items: start; }
+.dash-row-top .dash-slot > .chart-widget { min-height: 0; }
 .dash-row-single      { grid-template-columns: 1fr; }
 
 /* The slot owns the type tag; the widget inside keeps its own card chrome,

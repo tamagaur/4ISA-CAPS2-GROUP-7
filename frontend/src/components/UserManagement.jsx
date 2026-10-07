@@ -354,7 +354,7 @@ const UserManagement = () => {
                       </td>
                       <td className="user-mgmt-email-cell">{user.email}</td>
                       <td>
-                        <span className={`badge ${user.role === 'admin' ? 'badge-info' : 'badge-neutral'} user-mgmt-role-badge`}>
+                        <span className={`badge ${user.role === 'admin' ? 'badge-plum' : 'badge-info'} user-mgmt-role-badge`}>
                           {user.role}
                         </span>
                       </td>

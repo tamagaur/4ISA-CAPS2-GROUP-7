@@ -179,10 +179,11 @@
 
 .sku-search-input {
   width: 100%;
-  padding: 0.6rem 2.2rem 0.6rem 2.4rem;
+  height: 38px;
+  padding: 0 2.2rem 0 2.4rem;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  font-size: 0.85rem;
+  border-radius: 9px;
+  font-size: 13px;
   color: var(--color-text);
   background-color: var(--color-surface);
   outline: none;
@@ -359,9 +360,10 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  height: 38px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 9px;
   padding: 0 0.6rem;
   transition: border-color 0.2s;
 }

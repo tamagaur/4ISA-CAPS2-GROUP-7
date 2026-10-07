@@ -283,7 +283,7 @@
 .nav-item.active {
   background-color: var(--color-nav-item-active-bg);
   color: var(--color-nav-item-active-text);
-  box-shadow: inset 3px 0 0 var(--color-nav-item-active-rail);
+  box-shadow: inset 2px 0 0 var(--color-nav-item-active-rail);
 }
 
 .nav-item-left {

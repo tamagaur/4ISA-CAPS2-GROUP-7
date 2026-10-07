@@ -30,7 +30,6 @@ import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import InfoTip from './InfoTip';
 import PageHeader from './ui/PageHeader';
-import Disclosure from './ui/Disclosure';
 import ProductName from './ProductName';
 import './SKUForecast.css';
 import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCards';
@@ -1639,15 +1638,8 @@ const SKUForecast = () => {
                       no-order row isn't a forecast. Names models only; no
                       claim that one is more accurate than MA3. */}
                   {servedModel?.kind === 'forecast' && derivedForecast?.source === 'stored' && (
-                    <Disclosure
-                      flat
-                      className="forecast-howmade-disclosure"
-                      title="How this forecast was calculated"
-                      hint={[
-                        servedModel.label ?? storedParams.method ?? null,
-                        storedForecast?.mase != null ? `MASE ${storedForecast.mase.toFixed(2)}` : null,
-                      ].filter(Boolean).join(' · ') || undefined}
-                    >
+                    <div className="forecast-howmade">
+                      <span className="forecast-howmade-title">How this forecast was made</span>
                       <dl className="forecast-howmade-list">
                         <div className="forecast-howmade-item">
                           <dt>Model</dt>
@@ -1714,7 +1706,7 @@ const SKUForecast = () => {
                           Served MA3 as a fallback — {describeFallbackReason(storedParams.backup_reason)}
                         </span>
                       )}
-                    </Disclosure>
+                    </div>
                   )}
 
                   {/* Partial overlap: the chart is real but narrower than what

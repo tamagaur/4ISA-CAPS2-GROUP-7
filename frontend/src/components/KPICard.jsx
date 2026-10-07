@@ -104,6 +104,8 @@ const Sparkline = ({ points, color }) => {
 // flag: a caveat the reader must see beside the figure (e.g. a stock count
 // the team judged unusual): a string, or { label, detail } — a short amber
 // badge on the card with the full sentence one tap away.
+// accent: a colour for the thin top strip, when the card stands for
+// something other than a status (an ABC class's plum).
 // The status colour (metricType) marks the icon tile only, never the whole
 // card (UI pass, 2026-10-08): four KPI cards side by side were four
 // coloured stripes competing for the eye.
@@ -127,6 +129,7 @@ const KPICard = ({
   tooltip,
   trend,
   action,
+  accent,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
   const accentColor = CARD_ACCENT_COLORS[tier]; // card chrome (border, icon)
@@ -140,7 +143,7 @@ const KPICard = ({
   const flagLabel = flag && typeof flag === 'object' ? flag.label : flag;
   const flagDetail = flag && typeof flag === 'object' ? flag.detail : null;
   return (
-    <div className="kpi-card" data-tier={tier}>
+    <div className="kpi-card" data-tier={tier} style={accent ? { '--kpi-accent': accent } : undefined}>
       <div className="kpi-header">
         {icon && (
           <div className="kpi-icon" style={{ color: accentColor, backgroundColor: `color-mix(in srgb, ${accentColor} 12%, white)` }}>

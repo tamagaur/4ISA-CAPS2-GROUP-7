@@ -175,11 +175,20 @@
   font-variant-numeric: tabular-nums;
 }
 
+.abcb-matrix-table {
+  border-collapse: separate;
+  border-spacing: 3px;
+}
+
 .abcb-matrix-table th,
 .abcb-matrix-table td {
-  padding: 0.5rem 0.6rem;
+  padding: 10px 12px;
   text-align: right;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: none;
+}
+
+.abcb-matrix-table td {
+  border-radius: 6px;
 }
 
 .abcb-matrix-table thead th {
@@ -208,7 +217,7 @@
 }
 
 .abcb-matrix-table td.fsn-cell-N {
-  color: var(--color-critical);
+  color: #B4392B;
 }
 
 .abcb-matrix-total th,

@@ -937,6 +937,7 @@ const ABCClassification = () => {
                 unit={rowNoun.unit}
                 contextLine={measuredShares(cat) || undefined}
                 note={carriedCountOf(cat) > 0 ? `${carriedCountOf(cat).toLocaleString()} carried forward from earlier months` : null}
+                accent={{ A: 'var(--color-abc-a)', B: 'var(--color-abc-b)', C: 'var(--color-abc-c)' }[cat]}
                 icon={<span className={`abc-kpi-letter abc-kpi-letter-${cat.toLowerCase()}`} aria-hidden="true">{cat}</span>}
               />
             ))}
@@ -962,6 +963,7 @@ const ABCClassification = () => {
                   }
                 : null}
               icon={<Layers size={20} />}
+              accent="var(--color-nav-bg)"
             />
           </div>
 
@@ -1142,33 +1144,33 @@ const ABCClassification = () => {
                           status segment is on top. Each stacked segment is
                           clickable and outlines the whole column for
                           whichever class is selected. */}
-                      <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={28} {...chartAnim(0)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={44} {...chartAnim(0)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="noRopPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO ROP']} barSize={28} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="noRopPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO ROP']} barSize={44} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="criticalPct" stackId="stockMix" fill={wantsTexture ? "url(#criticalHatch)" : STOCK_STATUS_COLORS.CRITICAL} barSize={28} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="criticalPct" stackId="stockMix" fill={wantsTexture ? "url(#criticalHatch)" : STOCK_STATUS_COLORS.CRITICAL} barSize={44} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={28} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={44} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[4, 4, 0, 0]} barSize={28} {...chartAnim(4)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[4, 4, 0, 0]} barSize={44} {...chartAnim(4)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
                       {/* Zero, so invisible, unless the account lacks lp.view. */}
-                      <Bar dataKey="onHandPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['ON HAND']} radius={[4, 4, 0, 0]} barSize={28} {...chartAnim(5)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="onHandPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['ON HAND']} radius={[4, 4, 0, 0]} barSize={44} {...chartAnim(5)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}

@@ -16,7 +16,6 @@ import { ChartTable, ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
 import InfoTip from './InfoTip';
-import Disclosure from './ui/Disclosure';
 import ProductName from './ProductName';
 import './Charts.css';
 
@@ -1634,10 +1633,12 @@ const formatCompactQty = (value, millionDigits = 1) => {
 // would be "past" whenever the data lags, and the forecast — the reason
 // for the card — would sit under the wrong name.) A boundary falls halfway
 // between two months.
+// Softer bands (UI pass): the past barely tinted, the present a faint
+// coral, the future the forecast's lavender — read as regions, not blocks.
 const FORECAST_SECTION_STYLE = {
-  past: { label: 'Past', fill: 'var(--color-slate-500, #64748b)', fillOpacity: 0.06 },
-  present: { label: 'Present', narrowLabel: 'Now', fill: 'var(--color-brand-primary, #c53030)', fillOpacity: 0.09 },
-  future: { label: 'Future', fill: COLORS.forecast, fillOpacity: 0.05 },
+  past: { label: 'Past', fill: 'var(--color-slate-500, #64748b)', fillOpacity: 0.025 },
+  present: { label: 'Present', narrowLabel: 'Now', fill: 'var(--color-brand-primary, #c53030)', fillOpacity: 0.05 },
+  future: { label: 'Future', fill: COLORS.forecast, fillOpacity: 0.06 },
 };
 // Every month is labelled while a month name fits its slot; only below this
 // width per month (a phone) are labels thinned, to every 2nd or 3rd month.
@@ -2209,6 +2210,33 @@ export const ReorderRecommendationWidget = ({
             </div>
           </div>
 
+          {/* The solver's weights, compact: a subheading, one line and three
+              thin bars — kept on the card, under the figures, above the list.
+              Read-only: GET /dashboard's reorder_preview.lp_weights docstring
+              is explicit that this is "read-only display... not an adjustable
+              control" (backend/routers/dashboard.py). */}
+          <div className="reorder-priorities reorder-priorities-compact">
+            <div className="reorder-priorities-header">
+              <span className="reorder-priorities-title">How this was optimized</span>
+              <span className="reorder-priorities-caption">
+                Each SKU is ordered up to its target stock; these weights only decide which SKUs come up short when the
+                supplier allocation can&apos;t cover every order.
+              </span>
+            </div>
+            {LP_PRIORITY_ROWS.map((p) => (
+              <div className="reorder-priority-row" key={p.key}>
+                <div className="reorder-priority-row-top">
+                  <span className="reorder-priority-label">{p.label}</span>
+                  <PriorityInfo text={p.blurb} />
+                  <span className="reorder-priority-pct">{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</span>
+                </div>
+                <div className="reorder-priority-bar" role="img" aria-label={`${p.label}: ${solverPct[p.key] == null ? 'not available' : `${solverPct[p.key]}%`}`}>
+                  <span style={{ width: `${solverPct[p.key] ?? 0}%`, backgroundColor: CHART_COLORS.lpWeight }} />
+                </div>
+              </div>
+            ))}
+          </div>
+
           <div className="reorder-mini-list">
             {/* Own class name, not "reorder-table": that one is the full
                 Reorder Recs page table and carries min-width: 1180px, which
@@ -2266,36 +2294,6 @@ export const ReorderRecommendationWidget = ({
             View all recommendations
             <ArrowRight size={14} />
           </Link>
-
-          {/* The solver's weights, folded away (UI pass): important for the
-              defence, not for the daily read of the list. */}
-          <Disclosure flat title="How these recommendations were calculated" className="reorder-priorities-disclosure">
-            <div className="reorder-priorities">
-              <p className="reorder-priorities-caption">
-                The LP orders each SKU up to its target stock. These weights only matter when the supplier
-                allocation can&apos;t cover every order: together with SSM&apos;s 3-week stock rule, they decide
-                which SKUs come up short.
-              </p>
-              {/* Read-only bar per weight — was a draggable slider, but
-                  GET /dashboard's reorder_preview.lp_weights docstring is
-                  explicit that this value is "read-only display... not an
-                  adjustable control" (see backend/routers/dashboard.py),
-                  so this matches what the data actually is: a fact about
-                  how the solver ran, not a live control. */}
-              {LP_PRIORITY_ROWS.map((p) => (
-                <div className="reorder-priority-row" key={p.key}>
-                  <div className="reorder-priority-row-top">
-                    <span className="reorder-priority-label">{p.label}</span>
-                    <PriorityInfo text={p.blurb} />
-                    <span className="reorder-priority-pct">{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</span>
-                  </div>
-                  <div className="reorder-priority-bar" role="img" aria-label={`${p.label}: ${solverPct[p.key] == null ? 'not available' : `${solverPct[p.key]}%`}`}>
-                    <span style={{ width: `${solverPct[p.key] ?? 0}%`, backgroundColor: CHART_COLORS.lpWeight }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Disclosure>
         </>
       )}
     </div>
@@ -2574,23 +2572,19 @@ export const AllocationWidget = ({ allocation }) => {
               </div>
             ))}
           </div>
-          <Disclosure flat title="Calculation basis" hint="assumptions pending SSM">
-            <p>
-              SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total
-              sales ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4.
-            </p>
-            <p>
-              Basis: {a.basis_year} sales of {formatCompactPesos(a.basis_sales)} ({a.vat_basis}
-              {a.basis_months < 12 ? `, ${a.basis_months} of 12 months on record — a partial basis` : ''}).
-              {a.basis_months < 12
-                ? ` Each allocation bar is an average month of those ${a.basis_months} × the percentage.`
-                : ''}
-            </p>
-            <p>
-              <strong>Not confirmed by SSM:</strong> SSM has not shared the real allocation figures, so these are the
-              rule applied to the sales data; which percentage applies in {latestYear} is a question for SSM.
-            </p>
-          </Disclosure>
+          {/* The rule, the basis and the assumption stay on the card, as the
+              small print under the bars. */}
+          <p className="dashboard-chart-footnote">
+            SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total sales
+            ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4. Basis: {a.basis_year} sales of{' '}
+            {formatCompactPesos(a.basis_sales)} ({a.vat_basis}
+            {a.basis_months < 12 ? `, ${a.basis_months} of 12 months on record — a partial basis` : ''}).
+            {a.basis_months < 12
+              ? ` Each allocation bar is an average month of those ${a.basis_months} × the percentage.`
+              : ''}{' '}
+            <strong>Not confirmed by SSM:</strong> SSM has not shared the real allocation figures, so these are the rule
+            applied to the sales data; which percentage applies in {latestYear} is a question for SSM.
+          </p>
         </div>
       )}
     </div>

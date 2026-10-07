@@ -183,44 +183,46 @@
 /* The per-row severity stripe is gone (2026-09-18): with 248 of 250 rows
    CRITICAL it striped the whole table red and said nothing. Position in
    the ranked list now carries urgency; the pill keeps the LP state. */
-/* Essential columns fit a laptop; "All columns" scrolls sideways. Header
-   labels may wrap to two lines so a column is no wider than its figures. */
+/* All twelve columns: the table keeps its own width and scrolls sideways
+   inside its card on a narrow screen rather than squeezing every header
+   into a tower. Headers may wrap to two lines; the product column gets
+   the room a two-line name needs. */
 .reorder-table {
-  min-width: 900px;
+  min-width: 1180px;
 }
 
-/* Outranks .data-table .col-fit's nowrap (two classes + two elements). */
 .data-table.reorder-table thead th.col-fit {
   white-space: normal;
-  min-width: 72px;
+  min-width: 74px;
+}
+
+/* Twelve columns in one laptop-wide card: a little less side padding
+   per cell than the shared table. */
+.data-table.reorder-table th,
+.data-table.reorder-table td {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+/* The rank column is a short "#12". */
+.data-table.reorder-table thead th:first-child {
+  min-width: 44px;
 }
 
 .data-table.reorder-table thead th.col-product {
   width: auto;
-  min-width: 200px;
+  min-width: 230px;
 }
 
-/* Urgency pill with the review badge under it, not beside it; the badge's
-   words may wrap so the column stays as narrow as the pill. */
+/* Urgency pill with the review badge under it, each on one line. */
 .reorder-urgency-cell {
-  min-width: 112px;
+  min-width: 150px;
 }
 
 .reorder-urgency-cell .pending-review-badge {
   display: inline-flex;
   margin-top: 4px;
-  max-width: 120px;
-  white-space: normal;
-  line-height: 1.3;
-  text-align: left;
-}
-
-.reorder-filter-bar {
-  margin-bottom: 0;
-}
-
-.reorder-filter-bar .reorder-bulk-btn {
-  margin-left: auto;
+  white-space: nowrap;
 }
 
 /* The solver's weights inside the fold. */
@@ -549,4 +551,78 @@
 .reorder-plan-facts {
   font-weight: 600;
   color: var(--color-text-heading);
+}
+
+/* "How this was optimized": a compact block above the table — the rule as
+   small print at the left, the solver's weights as thin bars at the right. */
+.reorder-how {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 16px 32px;
+  padding: 16px 20px;
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
+}
+
+.reorder-how-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reorder-how-text .reorder-table-note {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.reorder-how-title {
+  font-size: var(--text-card-title);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.reorder-how-weights {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  align-self: center;
+}
+
+.reorder-how-weight dt {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--color-text-body);
+}
+
+.reorder-how-weight dt span {
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-how-weight dd {
+  height: 6px;
+  margin: 4px 0 0;
+  border-radius: 3px;
+  background-color: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+.reorder-how-weight dd span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background-color: var(--color-forecast);
+}
+
+@media (max-width: 900px) {
+  .reorder-how {
+    grid-template-columns: 1fr;
+  }
 }

@@ -129,8 +129,8 @@
    principal switch reads as the same control as every tab set below it. */
 .principal-segmented {
   display: flex;
-  background-color: #ECEDEA;
-  border-radius: var(--radius-md);
+  background-color: #EEF1F5;
+  border-radius: var(--radius-pill);
   padding: 3px;
   gap: 2px;
 }
@@ -138,13 +138,13 @@
 .principal-segment {
   border: none;
   background: none;
-  height: 28px;
-  padding: 0 12px;
+  height: 30px;
+  padding: 0 14px;
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 500;
   color: var(--color-text-body);
-  border-radius: 6px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
@@ -155,10 +155,9 @@
 }
 
 .principal-segment.active {
-  background-color: var(--color-surface);
+  background-color: rgba(232, 92, 74, 0.13);
   color: var(--color-brand-primary);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.10);
 }
 
 .principal-segment:focus-visible {
@@ -221,10 +220,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  height: 34px;
-  padding: 0 10px 0 12px;
+  height: 36px;
+  padding: 0 12px 0 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   background: var(--color-surface);
   color: var(--color-text-body);
   font-family: inherit;

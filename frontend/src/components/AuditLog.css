@@ -81,11 +81,11 @@
 }
 
 .audit-section-note {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
+  margin: 0 0 4px;
+  font-size: var(--text-meta);
   line-height: 1.5;
-  color: var(--color-text-subtle);
-  max-width: 70ch;
+  color: var(--color-text-muted);
+  max-width: 80ch;
 }
 
 .audit-section-status {

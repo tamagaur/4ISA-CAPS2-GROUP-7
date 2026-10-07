@@ -1,22 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
 import { getAuditLog, getAuditUserSummary } from '../api/auditLog';
 import { formatDate, formatDateTime } from '../utils/formatDate';
 import { LoadingStatus, SkeletonTable } from './Skeleton';
-import InfoTip from './InfoTip';
-import Pagination from './Pagination';
 import PageHeader from './ui/PageHeader';
 import './AuditLog.css';
 
-// Enough changes for the list to be searched and paged (UI pass,
-// 2026-10-08); it showed the latest 10. GET /audit-log allows up to 1000.
-const RECENT_CHANGES_LIMIT = 200;
-const CHANGES_PAGE_SIZE = 25;
 // Events out of the ordinary get the one badge on the page; the rest are
 // plain text, so a badge still means something.
 const EXCEPTIONAL_ACTIONS = new Set(['Sign-in Failed', 'Sign-in Locked', 'Delete User']);
-// A details cell longer than this is cut, with the rest one tap away.
-const DETAILS_PREVIEW = 110;
+
+const RECENT_CHANGES_LIMIT = 10;
 // Sign-ins are summarised per user above, so they are left out of the
 // changes list — otherwise it would be almost nothing but logins.
 const SIGN_IN_ACTIONS = ['Login', 'Logout'];
@@ -39,21 +32,6 @@ const getInitials = (name) => {
 // One neutral tile for every avatar (UI pass): a column of six strong
 // colours competed with the one badge on the page that means something.
 const getAvatarColor = () => 'var(--badge-neutral-bg)';
-
-// Long free text, cut to a preview with the rest one tap away.
-const DetailsCell = ({ text }) => {
-  const [open, setOpen] = useState(false);
-  if (!text) return '—';
-  if (text.length <= DETAILS_PREVIEW) return text;
-  return (
-    <>
-      {open ? text : `${text.slice(0, DETAILS_PREVIEW).trimEnd()}…`}{' '}
-      <button type="button" className="btn btn-tertiary audit-details-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        {open ? 'less' : 'more'}
-      </button>
-    </>
-  );
-};
 
 // A span of days as the page states periods: "Aug 23, 2026 – Oct 2, 2026", or
 // one day when both ends fall on it. Every count on this page says the span
@@ -157,29 +135,6 @@ const AuditLog = () => {
   const changeTimes = changes.items.map((c) => c.created_at).filter(Boolean).sort();
   const changesSpan = daySpan(changeTimes[0], changeTimes[changeTimes.length - 1]);
 
-  // The changes list's controls (UI pass): a search, a user and an action
-  // filter over the loaded rows, and a page. The rows are unchanged.
-  const [changeSearch, setChangeSearch] = useState('');
-  const [changeUser, setChangeUser] = useState('all');
-  const [changeAction, setChangeAction] = useState('all');
-  const [changePage, setChangePage] = useState(1);
-  useEffect(() => { setChangePage(1); }, [changeSearch, changeUser, changeAction]);
-  const userOf = (c) => c.user_name || c.user_email || '';
-  // Failed sign-in probes are recorded under a hash, not a person: they
-  // stay in the list but are not offered as a user to filter by.
-  const changeUsers = [...new Set(changes.items.map(userOf).filter((u) => u && !u.startsWith('sha256:')))].sort();
-  const changeActions = [...new Set(changes.items.map((c) => c.action).filter(Boolean))].sort();
-  const term = changeSearch.trim().toLowerCase();
-  const filteredChanges = changes.items.filter((c) => (
-    (changeUser === 'all' || userOf(c) === changeUser)
-    && (changeAction === 'all' || c.action === changeAction)
-    && (!term || [c.action, ACTION_LABELS[c.action], c.user_name, c.user_email, c.details]
-      .some((v) => String(v || '').toLowerCase().includes(term)))
-  ));
-  const changeTotalPages = Math.max(1, Math.ceil(filteredChanges.length / CHANGES_PAGE_SIZE));
-  const changeSafePage = Math.min(changePage, changeTotalPages);
-  const pagedChanges = filteredChanges.slice((changeSafePage - 1) * CHANGES_PAGE_SIZE, changeSafePage * CHANGES_PAGE_SIZE);
-
   return (
     <div className="audit-page">
       <div className="audit-content">
@@ -187,15 +142,7 @@ const AuditLog = () => {
 
         <section className="audit-section" aria-labelledby="audit-users-heading">
           <div className="audit-section-header">
-            <h3 id="audit-users-heading" className="audit-section-title">
-              Sign-ins by user
-              <InfoTip label="How sign-ins are counted">
-                Sign-ins are counted from the first recorded sign-in
-                {users.meta.first_login_at ? ` (${formatDate(users.meta.first_login_at)})` : ''}; nothing earlier is
-                on record. A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
-                30 minutes without activity. Older sign-ins have no measured length.
-              </InfoTip>
-            </h3>
+            <h3 id="audit-users-heading" className="audit-section-title">Sign-ins by user</h3>
             {!users.loading && !users.error && (
               <span className="audit-section-count">
                 {users.items.length.toLocaleString()} user{users.items.length === 1 ? '' : 's'} ·{' '}
@@ -204,6 +151,12 @@ const AuditLog = () => {
               </span>
             )}
           </div>
+          <p className="audit-section-note">
+            Sign-ins are counted from the first recorded sign-in
+            {users.meta.first_login_at ? ` (${formatDate(users.meta.first_login_at)})` : ''}; nothing earlier is
+            on record. A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
+            30 minutes without activity. Older sign-ins have no measured length.
+          </p>
           <SectionStatus loading={users.loading} error={users.error} label="sign-ins by user" columns={5} />
           {!users.loading && !users.error && (
             <div className="audit-table-wrapper">
@@ -269,39 +222,10 @@ const AuditLog = () => {
               {!changes.loading && !changes.error && changesSpan ? `, ${changesSpan}` : ''}
             </span>
           </div>
+          <p className="audit-section-note">
+            SKU edits, reorder decisions, user account changes and password or sign-in events, newest first.
+          </p>
           <SectionStatus loading={changes.loading} error={changes.error} label="recent changes" columns={4} rows={6} />
-          {!changes.loading && !changes.error && (
-            <div className="filter-bar audit-filter-bar">
-              <label className="filter-search filter-bar-search">
-                <Search size={15} aria-hidden="true" />
-                <input
-                  type="search"
-                  value={changeSearch}
-                  onChange={(e) => setChangeSearch(e.target.value)}
-                  placeholder="Search changes…"
-                  aria-label="Search changes"
-                />
-              </label>
-              <label className="audit-filter">
-                <span>User</span>
-                <select value={changeUser} onChange={(e) => setChangeUser(e.target.value)}>
-                  <option value="all">All users</option>
-                  {changeUsers.map((u) => <option key={u} value={u}>{u}</option>)}
-                </select>
-              </label>
-              <label className="audit-filter">
-                <span>Action</span>
-                <select value={changeAction} onChange={(e) => setChangeAction(e.target.value)}>
-                  <option value="all">All actions</option>
-                  {changeActions.map((a) => <option key={a} value={a}>{ACTION_LABELS[a] || a}</option>)}
-                </select>
-              </label>
-              <span className="audit-filter-count">
-                {filteredChanges.length.toLocaleString()} of {changes.items.length.toLocaleString()} · SKU edits, reorder
-                decisions, account changes and sign-in events, newest first
-              </span>
-            </div>
-          )}
           {!changes.loading && !changes.error && (
             <div className="audit-table-wrapper">
               <table className="audit-table audit-table-stack">
@@ -314,8 +238,8 @@ const AuditLog = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagedChanges.length > 0 ? (
-                    pagedChanges.map((log) => (
+                  {changes.items.length > 0 ? (
+                    changes.items.map((log) => (
                       <tr key={log.audit_log_key}>
                         <td className="audit-stack-head audit-action-cell">
                           {EXCEPTIONAL_ACTIONS.has(log.action)
@@ -324,31 +248,17 @@ const AuditLog = () => {
                         </td>
                         <td data-label="By"><UserBadge name={log.user_name || log.user_email} /></td>
                         <td data-label="When" className="audit-timestamp-cell">{formatDateTime(log.created_at)}</td>
-                        <td data-label="Details" className="audit-desc-cell"><DetailsCell text={log.details} /></td>
+                        <td data-label="Details" className="audit-desc-cell">{log.details || '—'}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="4" className="audit-no-results">
-                        {changes.items.length === 0 ? 'No changes recorded yet.' : 'No changes match this filter.'}
-                      </td>
+                      <td colSpan="4" className="audit-no-results">No changes recorded yet.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
-          )}
-          {!changes.loading && !changes.error && filteredChanges.length > CHANGES_PAGE_SIZE && (
-            <Pagination
-              currentPage={changeSafePage}
-              totalPages={changeTotalPages}
-              totalItems={filteredChanges.length}
-              pageSize={CHANGES_PAGE_SIZE}
-              onPageChange={setChangePage}
-              onPageSizeChange={() => {}}
-              pageSizeOptions={[CHANGES_PAGE_SIZE]}
-              idPrefix="audit"
-            />
           )}
         </section>
       </div>

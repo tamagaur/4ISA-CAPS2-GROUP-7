@@ -1,6 +1,7 @@
 /* KPI card (UI pass, 2026-10-08): a white card on the page, the status
    colour on the icon tile only, the figure dominant, one context line. */
 .kpi-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -10,7 +11,24 @@
   border: var(--card-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
+
+/* A thin accent at the top in the card's status colour (KPICard data-tier),
+   the spec's way of marking a card without colouring it. */
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background-color: var(--kpi-accent, transparent);
+}
+
+.kpi-card[data-tier='danger'] { --kpi-accent: var(--color-critical); }
+.kpi-card[data-tier='loss'] { --kpi-accent: var(--color-warning); }
+.kpi-card[data-tier='healthy'] { --kpi-accent: var(--color-success); }
+.kpi-card[data-tier='action'] { --kpi-accent: var(--color-forecast); }
+.kpi-card[data-tier='neutral'] { --kpi-accent: var(--color-slate-400); }
 
 .kpi-header {
   display: flex;
