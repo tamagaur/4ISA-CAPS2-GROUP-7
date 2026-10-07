@@ -619,7 +619,7 @@ const ReorderRecommendations = () => {
             </span>
           )}
         </td>
-        <td className="cell-code">
+        <td className="cell-product">
           <span
             className="cell-code-link"
             role="button"
@@ -633,11 +633,11 @@ const ReorderRecommendations = () => {
             }}
             title="View recommendation details"
           >
-            {formatSKU(item.sku)}
+            {item.product}
           </span>
+          <span className="cell-product-sku">{formatSKU(item.sku)}</span>
         </td>
         <td className={brand ? 'cell-muted' : 'cell-empty'}>{brand || '—'}</td>
-        <td className="cell-product">{item.product}</td>
         <td className="table-num" title="Share of period revenue at this SKU's latest ABC classification">
           {item.revenueShare != null ? `${(item.revenueShare * 100).toFixed(2)}%` : <span className="cell-empty">—</span>}
         </td>
@@ -691,7 +691,7 @@ const ReorderRecommendations = () => {
     );
   };
 
-  const COLUMN_COUNT = 13;
+  const COLUMN_COUNT = 12;
 
   const renderRecommendationsTab = () => (
     <>
@@ -785,9 +785,8 @@ const ReorderRecommendations = () => {
           <thead>
             <tr>
               <th className="table-num col-fit">#</th>
-              <th className="col-fit">SKU</th>
+              <th className="col-text col-product">Product / SKU</th>
               <th className="col-fit">Brand</th>
-              <th className="col-text col-product">Product</th>
               <th className="table-num col-fit">Rev share</th>
               <th className="table-num col-fit">Safety stock</th>
               <th className="table-num col-fit">
@@ -864,8 +863,7 @@ const ReorderRecommendations = () => {
         <thead>
           <tr>
             <th className="col-fit">When</th>
-            <th className="col-fit">SKU</th>
-            <th className="col-text col-product">Product</th>
+            <th className="col-text col-product">Product / SKU</th>
             <th className="col-fit">Decision</th>
             <th className="col-text col-reason">Reason</th>
             <th className="col-fit">Decided by</th>
@@ -874,7 +872,7 @@ const ReorderRecommendations = () => {
         <tbody>
           {decisionLog.length === 0 ? (
             <tr className="table-empty-row">
-              <td colSpan="6">
+              <td colSpan="5">
                 No decisions recorded yet this session. Accept or dismiss a recommendation to see it logged here.
               </td>
             </tr>
@@ -882,8 +880,10 @@ const ReorderRecommendations = () => {
             decisionLog.map((entry) => (
               <tr key={entry.id}>
                 <td className="cell-muted">{entry.timestamp}</td>
-                <td className="cell-code">{formatSKU(entry.sku)}</td>
-                <td className="cell-product">{entry.product}</td>
+                <td className="cell-product">
+                  {entry.product}
+                  <span className="cell-product-sku">{formatSKU(entry.sku)}</span>
+                </td>
                 <td>
                   <span className={getLogActionBadge(entry.action)}>
                     {entry.action}

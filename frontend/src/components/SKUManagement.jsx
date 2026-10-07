@@ -477,12 +477,12 @@ const SKUManagement = () => {
                               className="sku-suggestion-row"
                               onClick={() => handleSelectSuggestion(sku)}
                             >
-                              <div className="sku-row-left">
-                                <span className="sku-row-code">{sku.code}</span>
-                                <span className="sku-row-brand">{sku.brand || '—'}</span>
-                              </div>
                               <div className="sku-row-middle">
                                 <span className="sku-row-product">{sku.product}</span>
+                                <span className="sku-row-codeline">
+                                <span className="sku-row-code">{sku.code}</span>
+                                <span className="sku-row-brand">{sku.brand || '—'}</span>
+                                </span>
                               </div>
                               <div className="sku-row-right">
                                 <span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span>
@@ -508,12 +508,12 @@ const SKUManagement = () => {
                                 className="sku-suggestion-row"
                                 onClick={() => handleSelectSuggestion(sku)}
                               >
-                                <div className="sku-row-left">
-                                  <span className="sku-row-code">{sku.code}</span>
-                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
-                                </div>
                                 <div className="sku-row-middle">
                                   <span className="sku-row-product">{sku.product}</span>
+                                  <span className="sku-row-codeline">
+                                  <span className="sku-row-code">{sku.code}</span>
+                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
+                                  </span>
                                 </div>
                                 <div className="sku-row-right">
                                   <span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span>
@@ -532,12 +532,12 @@ const SKUManagement = () => {
                                 className="sku-suggestion-row"
                                 onClick={() => handleSelectSuggestion(sku)}
                               >
-                                <div className="sku-row-left">
-                                  <span className="sku-row-code">{sku.code}</span>
-                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
-                                </div>
                                 <div className="sku-row-middle">
                                   <span className="sku-row-product">{sku.product}</span>
+                                  <span className="sku-row-codeline">
+                                  <span className="sku-row-code">{sku.code}</span>
+                                  <span className="sku-row-brand">{sku.brand || '—'}</span>
+                                  </span>
                                 </div>
                                 <div className="sku-row-right">
                                   <span className={getCatClass(sku.cat)}>{sku.cat || '—'}</span>
@@ -633,9 +633,8 @@ const SKUManagement = () => {
                 <thead>
                   <tr>
                     <th className="table-num col-fit">#</th>
-                    <th className="col-fit">SKU code</th>
+                    <th className="col-text col-product">Product / SKU code</th>
                     <th className="col-fit">Brand</th>
-                    <th className="col-text col-product">Product</th>
                     <th className="table-center col-fit">Class</th>
                     <th className="table-num col-fit" title="The stock level the LP orders up to: demand expected before the next delivery, plus safety stock">Target stock</th>
                     <th className="table-center col-fit"><span className="visually-hidden">Actions</span></th>
@@ -651,7 +650,7 @@ const SKUManagement = () => {
                       {/* Row number is position in the FULL filtered set, not
                           within the page, so it stays stable across paging. */}
                       <td className="cell-rownum table-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
-                      <td className="cell-code">
+                      <td className="cell-product">
                         <span
                           className="cell-code-link"
                           role="button"
@@ -665,11 +664,11 @@ const SKUManagement = () => {
                           }}
                           title="View full SKU details"
                         >
-                          {sku.code}
+                          {sku.product}
                         </span>
+                        <span className="cell-product-sku">{sku.code}</span>
                       </td>
                       <td className={sku.brand ? 'cell-muted' : 'cell-empty'}>{sku.brand || '—'}</td>
-                      <td className="cell-product">{sku.product}</td>
                       <td className="table-center" title={catTitle(sku)}>
                         {sku.cat
                           ? (
@@ -702,7 +701,7 @@ const SKUManagement = () => {
                   ))}
                   {filteredSKUs.length === 0 && (
                     <tr className="table-empty-row">
-                      <td colSpan="7">No data for this selection.</td>
+                      <td colSpan="6">No data for this selection.</td>
                     </tr>
                   )}
                 </tbody>

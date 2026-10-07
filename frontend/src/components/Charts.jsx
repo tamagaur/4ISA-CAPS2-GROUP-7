@@ -364,6 +364,10 @@ const stockDot = (color) => {
 // whatever `name` each Line declares, so this constant is the only place
 // the label lives.
 const RECEIVED_LABEL = 'Purchases received';
+// Stock is a PESO VALUE of the units counted (units x unit cost), a snapshot
+// at a count date, while sales and purchases are flows over a month. The
+// series says which it is wherever it is named.
+const INVENTORY_LABEL = 'Inventory value (stock count)';
 
 // Sales vs. Stock on Hand — the dashboard's hero chart. `data` is
 // [{ period, sales, stockOnHand, received }], all three in pesos (GET
@@ -392,7 +396,7 @@ export const SalesVsStockWidget = ({
   // "Sales · ex-VAT" — a middle dot, not brackets: a Del Monte range holding
   // Aug 2023 brings its own "(except Aug 2023, recorded with tax)".
   const withBasis = (label, key) => (basis?.[key] ? `${label} · ${basis[key]}` : label);
-  const salesLabel = withBasis('Sales', 'sales');
+  const salesLabel = withBasis('Monthly sales', 'sales');
   const receivedLabel = withBasis(RECEIVED_LABEL, 'received');
   const hasUnusual = data.some((pt) => pt.stockUnusual && pt.stockOnHand != null);
   // Windows over whatever range the page's date filter fetched. At a wide
@@ -456,7 +460,7 @@ export const SalesVsStockWidget = ({
     const stockEntries = lastStock && !collide
       ? [{
           period: lastStock.period,
-          text: `Stock ${formatCompactPesos(lastStock.stockOnHand)}${lastStock.stockUnusual ? ' (unusual)' : ''}`,
+          text: `Inventory ${formatCompactPesos(lastStock.stockOnHand)}${lastStock.stockUnusual ? ' (unusual)' : ''}`,
           below: !(lastSales && lastSales.sales < (lastStock.stockOnHand ?? -Infinity)),
         }]
       : [];
@@ -469,7 +473,7 @@ export const SalesVsStockWidget = ({
   const tableColumns = [
     { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
     { key: 'sales', label: salesLabel, format: (v) => formatCompactPesos(v) },
-    { key: 'stockOnHand', label: 'Stock on hand', format: (v) => formatCompactPesos(v) },
+    { key: 'stockOnHand', label: INVENTORY_LABEL, format: (v) => formatCompactPesos(v) },
     ...(hasReceived ? [{ key: 'received', label: receivedLabel, format: (v) => formatCompactPesos(v) }] : []),
     ...(hasUnusual
       ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Unusual count: ${v}`, align: 'left' }]
@@ -480,7 +484,13 @@ export const SalesVsStockWidget = ({
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Sales vs Stock on Hand <span className="chart-unit">₱</span></h4>
+          <h4>Monthly sales vs inventory value <span className="chart-unit">₱</span></h4>
+          {/* What each line is a figure OF: a month's total, or a count. */}
+          <p>
+            {data.length > 0 ? `${formatMonth(data[0].period)} – ${formatMonth(data[data.length - 1].period)}. ` : ''}
+            Sales: each month&apos;s total. Inventory value: the stock count for that month, valued in pesos
+            (a snapshot, not a monthly total).
+          </p>
           {/* GET /dashboard's vat_note — only under All principals, where the
               combined pesos mix Unilever's VAT-inclusive amounts with Del
               Monte's VAT-exclusive ones. */}
@@ -498,7 +508,7 @@ export const SalesVsStockWidget = ({
         <ChartTable
           columns={tableColumns}
           rows={data}
-          caption="Sales versus stock on hand by month, in pesos"
+          caption="Monthly sales versus inventory value (stock count) by month, in pesos"
         />
       ) : (
         <>
@@ -515,7 +525,7 @@ export const SalesVsStockWidget = ({
               {...focusHandlers('stockOnHand')}
             >
               <span className="legend-line" style={{ borderTopColor: CHART_COLORS.stockSeries }} />
-              Stock on hand
+              {INVENTORY_LABEL}
             </li>
             {hasReceived && (
               <li className="legend-item" {...focusHandlers('received')}>
@@ -550,8 +560,10 @@ export const SalesVsStockWidget = ({
                 <YAxis
                   axisLine={false}
                   tickLine={false}
+                  width={64}
                   tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                   tickFormatter={(v) => formatCompactPesos(v)}
+                  label={{ value: '₱ per month · ₱ at count', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel, style: { textAnchor: 'middle' } }}
                 />
                 <Tooltip content={<SalesStockTooltip placeholder={placeholder} />} />
                 {/* The wash is declared ahead of the Lines so both lines
@@ -589,7 +601,7 @@ export const SalesVsStockWidget = ({
                 <Line
                   type="linear"
                   dataKey="stockOnHand"
-                  name="Stock on hand"
+                  name={INVENTORY_LABEL}
                   stroke={CHART_COLORS.stockSeries}
                   strokeWidth={2}
                   strokeLinecap="round"
@@ -1095,7 +1107,7 @@ export const CategoryStockBarWidget = ({ data = [], emptyReason, note, period = 
           <h4>Active / dead stock by ABC class (warehouse status)</h4>
           <p>
             Counts each class&apos;s products by the warehouse&apos;s own Active/Inactive flag on the latest
-            stock snapshot — not by whether stock covers the LP&apos;s target stock (that is the ABC page&apos;s
+            stock snapshot{period ? ` of ${formatMonth(period)}` : ''} — not by whether stock covers the LP&apos;s target stock (that is the ABC page&apos;s
             &ldquo;Cover vs target stock&rdquo;).
           </p>
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
@@ -1382,6 +1394,9 @@ export const PortfolioForecastWidget = ({
               y-axis reads "120k" in both, so it is named in the heading. */}
           <h4>Portfolio-level aggregate forecast <span className="chart-unit">pieces</span></h4>
           <p>
+            {series.length > 0 ? `Monthly totals, ${formatMonth(series[0].period)} – ${formatMonth(series[series.length - 1].period)}. ` : ''}
+          </p>
+          <p>
             {gatedSkuCount != null && tierACount
               ? `Summed demand across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} `
                 + 'Class A SKUs (those whose forecasts beat a naive baseline — MASE < 1, '
@@ -1459,6 +1474,8 @@ export const PortfolioForecastWidget = ({
                       domain={['auto', 'auto']}
                       tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                       tickFormatter={(v) => formatCompactQty(v, 2)}
+                      width={56}
+                      label={{ value: 'Pieces per month', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel, style: { textAnchor: 'middle' } }}
                     />
                     <Tooltip content={<PortfolioForecastTooltip />} />
                     {/* The uncertainty cone is this chart's ONE fill — the
@@ -1588,6 +1605,7 @@ export const ReorderRecommendationWidget = ({
   totalOrderQty = 0,
   weights,
   emptyReason,
+  cycle = null,
 }) => {
   const hasData = rows.length > 0;
 
@@ -1624,7 +1642,7 @@ export const ReorderRecommendationWidget = ({
           {/* GET /dashboard's reorder_preview has been scoped to the LP's
               current cycle since 2026-09-23 (backend/lp_cycle.py), the same
               rows Reorder Recs lists by default. */}
-          <p>LP-optimized purchase quantities for the SKUs the LP planned as Class A · current planning cycle</p>
+          <p>LP-optimized purchase quantities for the SKUs the LP planned as Class A · {cycle ? `${cycle} planning cycle` : 'current planning cycle'}. Pieces are for that cycle, not the selected date range.</p>
         </div>
       </div>
 
@@ -1690,7 +1708,6 @@ export const ReorderRecommendationWidget = ({
             <table className="reorder-mini-table">
               <thead>
                 <tr>
-                  <th>SKU</th>
                   <th>Product</th>
                   <th>Urgency</th>
                   <th>Pieces</th>
@@ -1699,18 +1716,17 @@ export const ReorderRecommendationWidget = ({
               <tbody>
                 {sortedRows.map((r) => (
                   <tr key={r.sku}>
-                    <td>
-                      {/* Was a plain <span> styled to look like a link (blue,
-                          same color as every other clickable SKU in the app)
-                          but had no click handler — a dead affordance. Now a
-                          real link to that SKU's own recommendation, which the
-                          Reorder Recs page opens in its detail modal on load
-                          (see the ?sku= handling in ReorderRecommendations.jsx). */}
+                    <td className="reorder-mini-product" title={r.product}>
+                      {/* Product name first, its SKU code beneath. The code is
+                          a real link to that SKU's own recommendation, which
+                          the Reorder Recs page opens in its detail modal on
+                          load (see the ?sku= handling in
+                          ReorderRecommendations.jsx). */}
+                      <span className="reorder-mini-name">{r.product || 'Unknown Product'}</span>
                       <Link to={`/reorder?sku=${encodeURIComponent(r.sku)}`} className="reorder-mini-sku">
                         {r.sku}
                       </Link>
                     </td>
-                    <td className="reorder-mini-product" title={r.product}>{r.product}</td>
                     <td>
                       <span
                         className="urgency-badge-mini"
@@ -1953,7 +1969,8 @@ export const AllocationWidget = ({ allocation }) => {
           <p>
             SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total
             sales ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4. Shown as average pesos
-            per month beside this year&apos;s actual monthly sales.
+            per month beside this year&apos;s actual monthly sales
+            {a.ytd_months > 0 && a.latest_month ? ` (${latestYear} to date: ${a.ytd_months} month${a.ytd_months === 1 ? '' : 's'} through ${formatMonth(a.latest_month)}; not the selected date range)` : ''}.
           </p>
         </div>
       </div>

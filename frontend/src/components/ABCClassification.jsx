@@ -1225,12 +1225,12 @@ const ABCClassification = () => {
                             className="abc-suggestion-row"
                             onClick={() => handleSelectSuggestion(item)}
                           >
-                            <div className="abc-row-left">
-                              <span className="abc-row-sku">{formatSKU(item.sku)}</span>
-                              <span className="abc-row-brand">{item.brand}</span>
-                            </div>
                             <div className="abc-row-middle">
                               <span className="abc-row-product">{item.product}</span>
+                              <span className="abc-row-codeline">
+                              <span className="abc-row-sku">{formatSKU(item.sku)}</span>
+                              <span className="abc-row-brand">{item.brand}</span>
+                              </span>
                               <span className="abc-row-rev">
                                 {item.revPct.toFixed(1)}% of {item.isCurrent ? '' : `${formatMonth(item.catPeriod)} `}revenue
                               </span>
@@ -1257,12 +1257,12 @@ const ABCClassification = () => {
                               className="abc-suggestion-row"
                               onClick={() => handleSelectSuggestion(item)}
                             >
-                              <div className="abc-row-left">
-                                <span className="abc-row-sku">{formatSKU(item.sku)}</span>
-                                <span className="abc-row-brand">{item.brand}</span>
-                              </div>
                               <div className="abc-row-middle">
                                 <span className="abc-row-product">{item.product}</span>
+                                <span className="abc-row-codeline">
+                                <span className="abc-row-sku">{formatSKU(item.sku)}</span>
+                                <span className="abc-row-brand">{item.brand}</span>
+                                </span>
                               </div>
                               <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
                             </div>
@@ -1280,12 +1280,12 @@ const ABCClassification = () => {
                             className="abc-suggestion-row"
                             onClick={() => handleSelectSuggestion(item)}
                           >
-                            <div className="abc-row-left">
-                              <span className="abc-row-sku">{formatSKU(item.sku)}</span>
-                              <span className="abc-row-brand">{item.brand}</span>
-                            </div>
                             <div className="abc-row-middle">
                               <span className="abc-row-product">{item.product}</span>
+                              <span className="abc-row-codeline">
+                              <span className="abc-row-sku">{formatSKU(item.sku)}</span>
+                              <span className="abc-row-brand">{item.brand}</span>
+                              </span>
                               <span className="abc-row-rev">
                                 {item.revPct.toFixed(1)}% of {item.isCurrent ? '' : `${formatMonth(item.catPeriod)} `}revenue
                               </span>
@@ -1416,8 +1416,7 @@ const ABCClassification = () => {
               <thead>
                 <tr>
                   <th className="table-num col-fit">#</th>
-                  <th className="col-fit">{rowNoun.header}</th>
-                  <th className="col-text col-product">Product</th>
+                  <th className="col-text col-product">Product / {rowNoun.header}</th>
                   <th className="col-fit">Brand</th>
                   <th className="table-center col-fit">Class</th>
                   <th className="table-center col-fit" title="Fast / Slow / Non-moving over the 12 months with data up to this run">FSN</th>
@@ -1433,8 +1432,16 @@ const ABCClassification = () => {
                     className={highlightedSKUId === item.id ? 'highlighted-row-flash' : ''}
                   >
                     <td className="cell-rownum table-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
-                    <td className="cell-code">{formatSKU(item.sku)}</td>
-                    <td className="cell-product">{item.product}</td>
+                    <td className="cell-product">
+                      {/* Product name first, its code beneath. A Del Monte row
+                          is a category whose code IS its name, so it shows once. */}
+                      {item.product && item.product !== '—' ? (
+                        <>
+                          {item.product}
+                          <span className="cell-product-sku">{formatSKU(item.sku)}</span>
+                        </>
+                      ) : formatSKU(item.sku)}
+                    </td>
                     <td className={item.brand ? 'cell-muted' : 'cell-empty'}>{item.brand || '—'}</td>
                     <td className="table-center" title={catTitle(item)}>
                       {/* The warning icon always has a reserved slot, so badges
@@ -1492,7 +1499,7 @@ const ABCClassification = () => {
                 ))}
                 {filteredData.length === 0 && (
                   <tr className="table-empty-row">
-                    <td colSpan="8">No data for this selection.</td>
+                    <td colSpan="7">No data for this selection.</td>
                   </tr>
                 )}
               </tbody>

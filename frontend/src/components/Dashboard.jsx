@@ -311,6 +311,9 @@ const Dashboard = () => {
     return cached ? { key: requestKey, data: cached } : null;
   });
   const [error, setError] = useState(null); // { key, message }
+  // Sales card: the range's total (kpis.sales_cumulative) or its end month
+  // (kpis.sales). Opens on the range, the period the date picker selected.
+  const [salesView, setSalesView] = useState('range');
   const loadedKey = loaded?.key;
 
   // Every card, the portfolio forecast included, follows the Topbar's
@@ -428,11 +431,38 @@ const Dashboard = () => {
   // pesos mix Unilever's VAT-inclusive amounts with Del Monte's
   // VAT-exclusive ones, and the card must say so rather than imply one basis.
   const vatNote = data.vat_note || null;
-  const sales = kpiDisplay(
-    kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
-    [salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales', vatNote]
-      .filter(Boolean).join(' · '),
-  );
+  const cumulative = kpis.sales_cumulative || null;
+  const salesRangeView = salesView === 'range' && cumulative != null;
+  const salesBase = [vatNote].filter(Boolean);
+  const sales = salesRangeView
+    ? kpiDisplay(
+      cumulative.value, cumulative.blocked_reason, formatCompactPesos,
+      [
+        `Range total · ${cumulative.label}`,
+        cumulative.months_with_data < cumulative.months_in_range
+          ? `${cumulative.months_with_data} of ${cumulative.months_in_range} months have sales`
+          : null,
+        ...salesBase,
+      ].filter(Boolean).join(' · '),
+    )
+    : kpiDisplay(
+      kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
+      [
+        salesMonth ? `End month · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'End month',
+        ...salesBase,
+      ].filter(Boolean).join(' · '),
+    );
+  const salesToggle = cumulative
+    ? {
+      label: 'Sales period',
+      value: salesView,
+      onChange: setSalesView,
+      options: [
+        { key: 'range', label: 'Range total', title: `Total over ${cumulative.label}` },
+        { key: 'month', label: 'End month', title: salesMonth ? `${salesMonth} only` : 'The last month with sales' },
+      ],
+    }
+    : null;
   // The stock card also answers SSM's own rule (client meeting, Sep 2026:
   // keep three weeks of sales in stock) with the backend's weeks_of_cover,
   // so the target and the actual sit on one line. The figure deliberately
@@ -441,8 +471,12 @@ const Dashboard = () => {
   // move with the range.
   const cover = kpis.weeks_of_cover || {};
   const policyWeeks = data.inventory?.policy_weeks ?? 3;
+  const stockDate = kpis.soh_count_date
+    ? formatDate(kpis.soh_count_date)
+    : sohMonth;
   const coverLine = cover.value != null
-    ? `≈ ${Number(cover.value).toFixed(1)} weeks of sales in stock · SSM policy: keep ${policyWeeks} weeks`
+    ? `≈ ${Number(cover.value).toFixed(1)} weeks of sales in stock, based on 12 months to ${stockDate}`
+      + ` · SSM policy: keep ${policyWeeks} weeks`
     : null;
   const coverWindow = cover.sales_window
     ? `${periodLabel(cover.sales_window.start)} – ${periodLabel(cover.sales_window.end)}`
@@ -459,7 +493,7 @@ const Dashboard = () => {
     : undefined;
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
-    [sohMonth ? `Stock-on-hand valuation · ${sohMonth}` : 'Stock-on-hand valuation', sohCoverage, coverLine]
+    [stockDate ? `Count as of ${stockDate}` : 'Stock count date unknown', sohCoverage, coverLine]
       .filter(Boolean).join(' · '),
   );
 
@@ -635,10 +669,13 @@ const Dashboard = () => {
               metricType={sales.value === '—' ? undefined : 'healthy'}
               contextLine={sales.contextLine}
               icon={<Wallet size={20} />}
-              {...(sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {})}
+              toggle={salesToggle}
+              // The sparkline and "vs last month" pill describe the end month
+              // against the one before it, so they sit with that view only.
+              {...(sales.value !== '—' && !salesRangeView ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {})}
             />
             <KPICard
-              title="Stock on hand value"
+              title="Inventory value (stock count)"
               value={sohValue.value}
               contextLine={sohValue.contextLine}
               tooltip={coverTooltip}
@@ -715,6 +752,7 @@ const Dashboard = () => {
               <Slot kind="Prescriptive" realOnly={preview && realOnly.has('reorder_preview')}>
                 <ReorderRecommendationWidget
                   rows={reorderRows}
+                  cycle={lpCycleLabel}
                   criticalCount={reorderPreview.critical_count ?? 0}
                   urgentCount={reorderPreview.urgent_count ?? 0}
                   totalOrderQty={reorderPreview.total_order_qty ?? 0}

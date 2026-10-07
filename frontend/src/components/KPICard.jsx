@@ -96,6 +96,9 @@ const Sparkline = ({ points, color }) => {
 // deltaTone: 'positive' | 'negative' | 'neutral' — renders deltaLine as a
 // shaded pill coloured by the change itself, independent of the card's
 // accent tier. Without it, deltaLine keeps the tier-coloured text line.
+// toggle: { label, value, onChange, options: [{ key, label, title }] } — a
+// small segmented control under the value that switches which period the
+// card shows; the caller owns the state and re-labels contextLine to match.
 // unit: a short muted word after the value ("SKUs"); callers leave it off
 // when the card is blocked and the value is "—".
 const KPICard = ({
@@ -112,6 +115,7 @@ const KPICard = ({
   deltaTone,
   tooltip,
   trend,
+  toggle,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
   const accentColor = CARD_ACCENT_COLORS[tier]; // card chrome (border, icon)
@@ -138,6 +142,22 @@ const KPICard = ({
         </div>
         {trend && <Sparkline points={trend.points} color={trend.color} />}
       </div>
+      {toggle && (
+        <div className="kpi-toggle" role="group" aria-label={toggle.label}>
+          {toggle.options.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              className={`kpi-toggle-btn${toggle.value === o.key ? ' is-active' : ''}`}
+              aria-pressed={toggle.value === o.key}
+              title={o.title}
+              onClick={() => toggle.onChange(o.key)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="kpi-footer">
         {contextLine && <div className="kpi-context">{contextLine}</div>}
         {deltaLine && deltaTone && (

@@ -1018,11 +1018,13 @@ const SKUForecast = () => {
                             >
                               <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                             </button>
-                            <div className="result-code-group">
+                            <div className="result-product-group">
+                              <span className="result-product-name">{sku.name}</span>
+                              <span className="result-code-line">
                               <span className="result-sku-code">{sku.code}</span>
                               <span className="result-brand">{sku.brand}</span>
+                              </span>
                             </div>
-                            <span className="result-product-name">{sku.name}</span>
                             <span className={`forecast-cat-badge cat-${sku.cat}`}>Cat {sku.cat}</span>
                           </div>
                         ))
@@ -1055,11 +1057,13 @@ const SKUForecast = () => {
                               >
                                 <Star size={15} fill={PIN_COLOR} />
                               </button>
-                              <div className="result-code-group">
+                              <div className="result-product-group">
+                                <span className="result-product-name">{sku.name}</span>
+                                <span className="result-code-line">
                                 <span className="result-sku-code">{sku.code}</span>
                                 <span className="result-brand">{sku.brand}</span>
+                                </span>
                               </div>
-                              <span className="result-product-name">{sku.name}</span>
                               <span className={`forecast-cat-badge cat-${sku.cat}`}>Cat {sku.cat}</span>
                             </div>
                           ))}
@@ -1088,11 +1092,13 @@ const SKUForecast = () => {
                               >
                                 <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
-                              <div className="result-code-group">
+                              <div className="result-product-group">
+                                <span className="result-product-name">{sku.name}</span>
+                                <span className="result-code-line">
                                 <span className="result-sku-code">{sku.code}</span>
                                 <span className="result-brand">{sku.brand}</span>
+                                </span>
                               </div>
-                              <span className="result-product-name">{sku.name}</span>
                               <span className={`forecast-cat-badge cat-${sku.cat}`}>Cat {sku.cat}</span>
                             </div>
                           ))}
@@ -1120,11 +1126,13 @@ const SKUForecast = () => {
                               >
                                 <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
-                              <div className="result-code-group">
+                              <div className="result-product-group">
+                                <span className="result-product-name">{sku.name}</span>
+                                <span className="result-code-line">
                                 <span className="result-sku-code">{sku.code}</span>
                                 <span className="result-brand">{sku.brand}</span>
+                                </span>
                               </div>
-                              <span className="result-product-name">{sku.name}</span>
                               <span className={`forecast-cat-badge cat-${sku.cat}`}>Cat {sku.cat}</span>
                             </div>
                           ))}

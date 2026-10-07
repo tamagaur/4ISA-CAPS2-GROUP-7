@@ -860,8 +860,16 @@
   }
 }
 
+.reorder-mini-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .reorder-mini-sku {
-  font-size: 0.75rem;
+  display: block;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--color-info);
   text-decoration: none;
@@ -1579,4 +1587,28 @@
   .policy-parts-legend {
     margin-left: 0;
   }
+}
+
+/* Product name first, its SKU code beneath (Reorder Recs, ABC, decision log). */
+.cell-product-sku {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--color-text-muted, #64748b);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Picker rows (ABC, SKU Management, Forecast): code and brand sit on a line under the product name. */
+.abc-row-codeline,
+.sku-row-codeline,
+.result-code-line {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.result-product-group {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
