@@ -28,6 +28,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from backend.api_errors import ApiError, api_error_handler
 from backend.client_ip import RealClientIPMiddleware
@@ -98,6 +99,10 @@ app.add_middleware(
 # CF-Connecting-IP) instead of a forwarded address the visitor can set; the
 # per-IP sign-in limits depend on it. See backend/client_ip.py.
 app.add_middleware(RealClientIPMiddleware)
+# GET /sku is ~0.94 MB of JSON (2,783 rows) but ~0.057 MB gzipped, measured
+# 2026-10-07; added last so it wraps the other middleware. Only applies when
+# the client sends Accept-Encoding: gzip; bodies under 1000 bytes are left alone.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # The permissions contract's error body: {"detail": <sentence>, "code": ...}
 # (backend/api_errors.py).
