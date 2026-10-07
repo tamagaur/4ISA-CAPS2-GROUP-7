@@ -14,6 +14,7 @@ import { usePermissions } from '../permissions/context';
 import { roleLabel } from '../permissions/keys';
 import { formatDateTime } from '../utils/formatDate';
 import { LoadingStatus, SkeletonTableRows } from './Skeleton';
+import PageHeader from './ui/PageHeader';
 import './UserManagement.css';
 
 
@@ -33,14 +34,8 @@ const getInitials = (name) => {
   return (first + last).toUpperCase();
 };
 
-const getAvatarColor = (name) => {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const colors = ['#f56565', '#4299e1', '#48bb78', '#ed8936', '#9f7aea', '#ed64a6'];
-  return colors[Math.abs(hash) % colors.length];
-};
+// One neutral tile for every avatar (UI pass), initials in ink.
+const getAvatarColor = () => 'var(--badge-neutral-bg)';
 
 const UserManagement = () => {
   const toast = useToast();
@@ -299,19 +294,17 @@ const UserManagement = () => {
   return (
     <div className="user-mgmt-page">
       <div className="user-mgmt-content">
-        <div className="user-mgmt-header">
-          <div>
-            <h2 className="user-mgmt-title">User <span className="page-title-accent">management</span></h2>
-            <p className="user-mgmt-subtitle">
-              Invite, edit and remove accounts, and choose what each person can open and do. New users
-              get an email link to set their own password.
-            </p>
-          </div>
-          <button className="user-mgmt-add-btn" onClick={handleOpenAdd}>
-            <Plus size={16} />
-            Add User
-          </button>
-        </div>
+        <PageHeader
+          title="User"
+          accent="management"
+          subtitle="Manage access to SAN2 Inventory DSS: invite, edit and remove accounts, and choose what each person can open and do. New users get an email link to set their own password."
+          actions={(
+            <button type="button" className="btn btn-primary" onClick={handleOpenAdd}>
+              <Plus size={16} aria-hidden="true" />
+              Add user
+            </button>
+          )}
+        />
 
         {loadError && (
           <div className="user-mgmt-banner-error">
@@ -361,20 +354,20 @@ const UserManagement = () => {
                       </td>
                       <td className="user-mgmt-email-cell">{user.email}</td>
                       <td>
-                        <span className={`user-mgmt-role-badge role-${user.role}`}>
+                        <span className={`badge ${user.role === 'admin' ? 'badge-info' : 'badge-neutral'} user-mgmt-role-badge`}>
                           {user.role}
                         </span>
                       </td>
                       <td>
                         {invited ? (
                           <span
-                            className="user-mgmt-status-badge"
+                            className="badge badge-warning badge-dot"
                             title="Hasn't set a password yet, so can't sign in"
                           >
                             Invite pending
                           </span>
                         ) : (
-                          <span className="user-mgmt-status-active">Active</span>
+                          <span className="badge badge-success badge-dot">Active</span>
                         )}
                       </td>
                       {mfaInfo.available && (

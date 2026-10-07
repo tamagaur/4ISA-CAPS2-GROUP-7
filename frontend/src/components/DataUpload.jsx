@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Upload, FileText, AlertTriangle } from 'lucide-react';
+import PageHeader from './ui/PageHeader';
 import './DataUpload.css';
 
 const DataUpload = () => {
@@ -73,25 +74,23 @@ const DataUpload = () => {
   return (
     <div className="du-page">
       <div className="du-content">
-        {/* Page Header */}
-        <div className="du-page-header">
-          <h2 className="du-page-title">Data <span className="page-title-accent">management</span></h2>
-          <p className="du-page-subtitle">
-            Upload sales and inventory files to feed the SSM engine. Supported formats: Excel (.xlsx, .xls) and CSV (.csv). Clean, consistent data improves forecast accuracy and optimization results.
-          </p>
-        </div>
+        <PageHeader
+          title="Data"
+          accent="management"
+          subtitle="The sales and stock files the system runs on. Excel (.xlsx, .xls) and CSV (.csv)."
+        />
 
         {/* Honest status. There is no ingestion endpoint on the backend yet,
             so this page cannot actually send a file anywhere — saying so
             plainly is the only correct behavior until one exists. */}
-        <div className="du-preview-banner" role="note">
-          <AlertTriangle size={16} className="du-preview-banner-icon" />
+        <p className="ui-note is-warning" role="note">
+          <AlertTriangle size={16} aria-hidden="true" />
           <span>
             <strong>Ingestion is not connected yet.</strong> You can select files here to check
             names and sizes, but nothing is sent to the server and no data is imported. Loading
             data into Supabase currently runs through the ETL scripts.
           </span>
-        </div>
+        </p>
 
         {/* Accepted Formats */}
         <div className="du-formats-section">
@@ -112,6 +111,7 @@ const DataUpload = () => {
             </div>
             <h3 className="du-card-title">Sales Data</h3>
             <p className="du-card-desc">Daily or monthly transactions</p>
+            <span className="badge badge-neutral">Loaded through the ETL scripts</span>
           </div>
 
           <div className="du-file-card">
@@ -121,6 +121,7 @@ const DataUpload = () => {
             </div>
             <h3 className="du-card-title">Inventory Log</h3>
             <p className="du-card-desc">Stock-in and stock-out records</p>
+            <span className="badge badge-neutral">Loaded through the ETL scripts</span>
           </div>
         </div>
 
@@ -146,8 +147,8 @@ const DataUpload = () => {
           </div>
           <h4 className="du-dropzone-text">Drop files, or click to browse</h4>
           <p className="du-dropzone-subtext">Supported formats: .xlsx, .xls, .csv</p>
-          <button type="button" className="du-select-btn" onClick={(e) => { e.stopPropagation(); onButtonClick(); }}>
-            Select Files
+          <button type="button" className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); onButtonClick(); }}>
+            Select files
           </button>
         </div>
 

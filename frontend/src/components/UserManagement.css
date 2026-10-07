@@ -5,10 +5,10 @@
 }
 
 .user-mgmt-content {
-  padding: 0 3rem 3rem 3rem;
+  padding: 0 var(--page-padding-x) 48px;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 /* Header */
@@ -76,48 +76,47 @@
 }
 
 /* Table */
+/* The shared table look (index.css .data-table), on this page's classes. */
 .user-mgmt-table-wrapper {
   background-color: var(--color-surface);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
 }
 
 .user-mgmt-table {
   width: 100%;
   min-width: 820px;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
 }
 
-.user-mgmt-table thead {
-  border-bottom: 2px solid var(--color-surface-muted);
-}
-
-.user-mgmt-table th {
+.user-mgmt-table thead th {
+  background-color: #FAFAF9;
+  border-bottom: 1px solid var(--color-border);
   text-align: left;
-  padding: 1rem 1.5rem;
-  font-size: 0.7rem;
+  padding: 10px 16px;
+  font-size: var(--text-micro);
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   color: var(--color-text-subtle);
   white-space: nowrap;
   text-transform: uppercase;
 }
 
 .user-mgmt-table tbody tr {
-  border-bottom: 1px solid var(--color-surface-raised);
-  transition: background-color 0.15s;
+  border-bottom: 1px solid #EEF0F2;
+  transition: background-color 0.12s;
 }
 
 .user-mgmt-table tbody tr:hover {
-  background-color: var(--color-surface-raised);
+  background-color: #F6F5F1;
 }
 
 .user-mgmt-table td {
-  padding: 1rem 1.5rem;
+  padding: 12px 16px;
   color: var(--color-text-body);
   vertical-align: middle;
 }
@@ -161,26 +160,10 @@
   font-style: italic;
 }
 
+/* Roles are identity, not alerts: the shared soft badges (info for admin,
+   neutral for staff), with the role word capitalised. */
 .user-mgmt-role-badge {
-  display: inline-block;
-  padding: 0.25rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-/* Roles are identity, not alerts: admin was red, the color every other page
-   reserves for critical status. Indigo vs. slate still tells the two apart. */
-.user-mgmt-role-badge.role-admin {
-  background-color: #eef0ff;
-  color: #4338ca;
-}
-
-.user-mgmt-role-badge.role-staff {
-  background-color: var(--color-surface-sunken);
-  color: var(--color-text-body);
+  text-transform: capitalize;
 }
 
 /* Invite pending: the account exists but its owner hasn't set a password,
@@ -210,6 +193,9 @@
   text-align: center;
 }
 
+/* Row actions (UI pass): quiet icon buttons, the same grey until hovered,
+   so a row is not a strip of five coloured tiles. Each keeps its own hover
+   colour below; the label lives in aria-label + title. */
 .user-mgmt-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -217,9 +203,9 @@
   width: 30px;
   height: 30px;
   border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background-color: var(--color-surface);
-  color: var(--color-text-body);
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--color-text-muted);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -234,60 +220,31 @@
   border-color: var(--color-border-strong);
 }
 
-/* One colour per kind of action, readable at a glance: blue sends a link
-   (invite or password reset), amber edits, red deletes. */
-.user-mgmt-icon-btn.link {
-  color: var(--color-info);
-  background-color: color-mix(in srgb, var(--color-info) 8%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-info) 35%, var(--color-border));
-}
-
+/* On hover each action shows its kind: a link in blue, permissions in
+   indigo, the two-step reset in amber, edit in the text colour, delete in
+   red. At rest they are all the same quiet grey. */
 .user-mgmt-icon-btn.link:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--color-info) 16%, var(--color-surface));
-  border-color: var(--color-info);
-}
-
-.user-mgmt-icon-btn.access {
-  color: #4338ca;
-  background-color: #eef0ff;
-  border-color: #c7d2fe;
+  color: var(--badge-info-fg);
+  background-color: var(--badge-info-bg);
 }
 
 .user-mgmt-icon-btn.access:hover:not(:disabled) {
-  background-color: #e0e7ff;
-  border-color: #a5b4fc;
-}
-
-.user-mgmt-icon-btn.mfa-reset {
-  color: var(--color-severity-urgent);
-  background-color: var(--color-severity-urgent-bg);
-  border-color: var(--color-severity-urgent-border);
+  color: #4338ca;
+  background-color: #eef0ff;
 }
 
 .user-mgmt-icon-btn.mfa-reset:hover:not(:disabled) {
-  border-color: var(--color-severity-urgent);
-}
-
-.user-mgmt-icon-btn.edit {
-  color: var(--color-warning-text);
-  background-color: var(--color-warning-bg);
-  border-color: var(--color-warning-border);
+  color: var(--badge-warning-fg);
+  background-color: var(--badge-warning-bg);
 }
 
 .user-mgmt-icon-btn.edit:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-surface));
-  border-color: var(--color-warning-deep);
-}
-
-.user-mgmt-icon-btn.danger {
-  color: var(--color-brand-primary);
-  background-color: var(--color-danger-bg);
-  border-color: var(--color-danger-border);
+  color: var(--color-text);
 }
 
 .user-mgmt-icon-btn.danger:hover:not(:disabled) {
-  background-color: var(--color-danger-bg-strong);
-  border-color: var(--color-danger-border-alt);
+  color: var(--badge-critical-fg);
+  background-color: var(--badge-critical-bg);
 }
 
 .user-mgmt-icon-btn:disabled {
@@ -571,4 +528,8 @@
   .user-mgmt-copy-btn {
     justify-content: center;
   }
+}
+
+.user-mgmt-name-info .user-mgmt-avatar {
+  color: var(--color-text-body);
 }

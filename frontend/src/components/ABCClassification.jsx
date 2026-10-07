@@ -19,6 +19,7 @@ import { getFsn } from '../api/analytics';
 import { ParetoCard, AbcFsnMatrix } from './AbcBreakdowns';
 import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
+import { ClassBadge } from './ui/StatusBadge';
 import DateFilter from './DateFilter';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { useBrandLookup } from '../utils/useBrandLookup';
@@ -1040,11 +1041,12 @@ const ABCClassification = () => {
                         </>
                       ) : (
                         <>
-                          Compares each SKU&apos;s current stock, in pieces, with its own target stock from the LP&apos;s
-                          current planning cycle. The plan covers only Class A SKUs whose forecast passed the
-                          accuracy check; every other SKU shows No target stock, and the ? beside it says why.
-                          Not the warehouse&apos;s Active/Inactive flag, which is what the Dashboard&apos;s
-                          warehouse-status chart shows.
+                          Each SKU&apos;s stock, in pieces, against its own target stock from the LP&apos;s current plan.
+                          <InfoTip label="What this measures">
+                            The plan covers only Class A SKUs whose forecast passed the accuracy check; every other SKU
+                            shows No target stock, and the ? beside it says why. Not the warehouse&apos;s Active/Inactive
+                            flag, which is what the Dashboard&apos;s warehouse-status chart shows.
+                          </InfoTip>
                         </>
                       )}
                     </p>
@@ -1549,7 +1551,7 @@ const ABCClassification = () => {
                           stay in one straight column whether or not a row is
                           near a tier boundary. */}
                       <span className="abc-cat-cell-inner">
-                        <span className={`${getCatBadgeClass(item.cat)}${item.isCurrent ? '' : ' abc-cat-stale'}`}>{item.cat}</span>
+                        <ClassBadge tier={item.cat} faded={!item.isCurrent} />
                         <span className="abc-boundary-slot">
                           {item.nearBoundary && (
                             <AlertTriangle
