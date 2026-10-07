@@ -101,8 +101,12 @@ const Sparkline = ({ points, color }) => {
 // when the card is blocked and the value is "—".
 // note: a second muted line under contextLine — another reading of the same
 // figure (e.g. the range's total under a month's sales).
-// flag: a line the reader must see beside the figure, never behind a "?"
-// (e.g. a stock count the team judged unusual), in the watch colour.
+// flag: a caveat the reader must see beside the figure (e.g. a stock count
+// the team judged unusual): a string, or { label, detail } — a short amber
+// badge on the card with the full sentence one tap away.
+// The status colour (metricType) marks the icon tile only, never the whole
+// card (UI pass, 2026-10-08): four KPI cards side by side were four
+// coloured stripes competing for the eye.
 // action: { label, onClick } or { label, to } — the way from this figure to
 // what is behind it (a list, another page), as a quiet link in the footer.
 // The figure's detail sits one click away instead of on the card.
@@ -133,14 +137,20 @@ const KPICard = ({
 
   // `tooltip` holds a technical definition (e.g. weeks of cover) off the
   // always-visible text, behind a "?" that taps, hovers and tabs open.
+  const flagLabel = flag && typeof flag === 'object' ? flag.label : flag;
+  const flagDetail = flag && typeof flag === 'object' ? flag.detail : null;
   return (
-    <div className="kpi-card" style={{ borderTopColor: accentColor }}>
+    <div className="kpi-card" data-tier={tier}>
       <div className="kpi-header">
+        {icon && (
+          <div className="kpi-icon" style={{ color: accentColor, backgroundColor: `color-mix(in srgb, ${accentColor} 12%, white)` }}>
+            {icon}
+          </div>
+        )}
         <h3 className="kpi-title">
           {title}
           {tooltip && <InfoTip label={`About ${title}`}>{tooltip}</InfoTip>}
         </h3>
-        {icon && <div className="kpi-icon" style={{ color: accentColor }}>{icon}</div>}
       </div>
       <div className="kpi-value-row">
         <div className="kpi-value">
@@ -152,10 +162,11 @@ const KPICard = ({
       <div className="kpi-footer">
         {contextLine && <div className="kpi-context">{contextLine}</div>}
         {note && <div className="kpi-context kpi-note">{note}</div>}
-        {flag && (
+        {flagLabel && (
           <div className="kpi-flag">
             <AlertTriangle size={12} aria-hidden="true" />
-            <span>{flag}</span>
+            <span>{flagLabel}</span>
+            {flagDetail && <InfoTip label={flagLabel} size={12}>{flagDetail}</InfoTip>}
           </div>
         )}
         {deltaLine && deltaTone && (

@@ -219,8 +219,8 @@
 }
 
 .sidebar-nav-section {
-  margin-bottom: 0.75rem;
-  padding-top: 0.75rem;
+  margin-bottom: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--color-nav-border);
 }
 
@@ -236,9 +236,9 @@
 
 .modules-title {
   color: var(--color-nav-group-label);
-  font-size: 0.75rem;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: 0.08em;
 }
 
 .sidebar-nav {
@@ -247,16 +247,21 @@
   flex: 1;
 }
 
+/* Every item is the same rounded row, inset 12px, so hover and active
+   share one shape (hover used to run edge to edge while active was inset).
+   12px margin + 15px padding = the 27px every icon starts at in the rail. */
 .nav-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.8rem 27px;
+  margin: 1px 12px;
+  padding: 10px 15px;
+  border-radius: 8px;
   color: var(--color-nav-item);
   text-decoration: none;
-  font-size: 0.9rem;
+  font-size: 13.5px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .nav-item:hover {
@@ -278,10 +283,6 @@
 .nav-item.active {
   background-color: var(--color-nav-item-active-bg);
   color: var(--color-nav-item-active-text);
-  border-radius: 8px;
-  margin: 0 12px;
-  /* 12px margin + 15px = the same 27px every icon starts at. */
-  padding-left: 15px;
   box-shadow: inset 3px 0 0 var(--color-nav-item-active-rail);
 }
 
