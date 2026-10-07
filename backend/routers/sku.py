@@ -34,6 +34,7 @@ from backend.principals import (
     abc_period_params,
     abc_period_pred,
     latest_abc_periods,
+    tier_a_periods,
     principal_clause,
 )
 from backend.schemas.sku import SKUCreate, SKUItem, SKUListResponse, SKUUpdate
@@ -194,7 +195,11 @@ def get_skus(
     if not can_see_lp(db, current_user):
         for item in items:
             item.reorder_point = None
-    return SKUListResponse(items=items, count=len(items))
+    # Anchor None = the latest run, per principal.
+    return SKUListResponse(
+        items=items, count=len(items),
+        tier_a_periods=tier_a_periods(latest_abc_periods(db, principal)),
+    )
 
 
 @router.post("", response_model=SKUItem, status_code=201)

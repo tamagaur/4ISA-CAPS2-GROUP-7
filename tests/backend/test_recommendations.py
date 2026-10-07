@@ -780,3 +780,32 @@ def test_reviewed_accept_is_recorded_in_the_audit_log(monkeypatch):
     monkeypatch.setattr(audit, "record", lambda db, action, detail, actor=None: recorded.append(detail))
     _decide(_GuardSession(["collapse", "over_forecast_run"]), status="accepted", reviewed=True, reason="Checked")
     assert recorded == ["SKU U-1: Checked [flagged for review: collapse, over_forecast_run; reviewed]"]
+
+
+def test_an_aged_tier_is_display_only_and_never_ranked():
+    """A tier carried forward from before the cycle's ABC run is shown with its
+    period but has no share, so it has no priority score; the guard in _to_item
+    trips if a query ever lets an aged tier's share through."""
+    from backend.routers.recommendations import _to_item
+
+    aged = _to_item(_item_row(
+        tier="C", tier_period="2025-06", tier_is_current=False, revenue_share=None,
+        current_stock=5.0, rop_i=50.0, q_i=45.0,
+    ))
+    assert (aged.tier, aged.tier_period, aged.tier_is_current) == ("C", "2025-06", False)
+    assert aged.revenue_share is None and aged.priority_score is None
+
+    current = _to_item(_item_row(tier="A", tier_period="2026-02", tier_is_current=True, current_stock=5.0, rop_i=50.0, q_i=45.0))
+    assert current.tier_is_current is True and current.priority_score is not None
+
+    with pytest.raises(AssertionError, match="aged tier"):
+        _to_item(_item_row(tier="C", tier_period="2025-06", tier_is_current=False, revenue_share=0.01, current_stock=5.0, rop_i=50.0, q_i=45.0))
+
+
+def test_reorder_sql_reads_shares_from_the_exact_run_and_the_tier_from_the_carried_one():
+    from backend.routers.recommendations import _SELECT_ONE
+
+    assert "abc_last.tier AS tier" in _SELECT_ONE and "abc_last.classification_period AS tier_period" in _SELECT_ONE
+    assert "abc.revenue_share AS revenue_share" in _SELECT_ONE  # exact-period join, never abc_last
+    assert "abc_last.revenue_share" not in _SELECT_ONE
+    assert "ac.classification_period <= CASE ac.principal" in _SELECT_ONE  # carried: at or before, per principal

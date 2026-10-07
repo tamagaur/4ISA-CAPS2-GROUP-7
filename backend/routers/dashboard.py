@@ -406,6 +406,7 @@ from backend.principals import (
     abc_period_pred,
     abc_periods_from_rows,
     latest_abc_period_query,
+    tier_a_periods,
     normalize_principal,
 )
 from backend.routers.recommendations import select_one as _recommendation_select_one
@@ -860,6 +861,19 @@ def _nearest_abc_period_query(period: str, principal: str = "unilever") -> tuple
     return latest_abc_period_query(principal, period)
 
 
+def _cycle_abc_periods(db: Session, scope: str, lp_cycle) -> dict[str, str]:
+    """The Reorder page's anchor: each principal's latest run at or before the
+    LP cycle's month. The prefetched latest run IS that run unless one postdates
+    the cycle month, so the capped query is asked only then."""
+    latest = _latest_abc_periods(db, scope)
+    if lp_cycle is None:
+        return latest
+    month = str(lp_cycle)[:7]
+    if all(v <= month for v in latest.values()):
+        return latest
+    return _nearest_abc_periods_at_or_before(db, month, scope)
+
+
 def _abc_periods_for(db: Session, period: str | None, scope: str) -> dict[str, str]:
     return _nearest_abc_periods_at_or_before(db, period, scope) if period is not None else _latest_abc_periods(db, scope)
 
@@ -1093,7 +1107,7 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
         freshness_query(lp_cycle, fc_at, scope, mode),
         _product_count_query(scope, mode, lp_cycle),
         _pending_keys_query(mode, lp_cycle),
-        _reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _latest_abc_periods(db, scope)),
+        _reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _cycle_abc_periods(db, scope, lp_cycle)),
         _policy_rows_query(scope, mode, lp_cycle),
     ]
     wave2 += [marts.pareto_query(range_start, range_end, who, mode)
@@ -1569,6 +1583,8 @@ def get_dashboard(
     safety_stock_exposure["stock_period"] = inventory_period
     safety_stock_exposure["stock_counts"] = latest_stock_counts
     safety_stock_exposure["tier_a_period"] = abc_period
+    # Per principal ({display name: 'YYYY-MM'}); tier_a_period above is unchanged.
+    safety_stock_exposure["tier_a_periods"] = tier_a_periods(abc_periods)
     safety_stock_exposure["plan_opening_period"] = lp_opening_period
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
@@ -1979,12 +1995,12 @@ def get_dashboard(
     # under the SAME scope as the rows it shows. The stock anchor is the
     # count that opens the LP's cycle (2026-10-03), the one the plan was made
     # from and GET /recommendations shows, not the stock card's latest. The
-    # ABC anchor is the scoped LATEST, deliberately not the page's
-    # `abc_period` — that one is rewound to the picker's applied end month,
-    # and reorder_preview answers "order now".
+    # ABC anchor is the LP cycle's month (the Reorder page's rule), deliberately
+    # not the page's `abc_period` — that one is rewound to the picker's applied
+    # end month, and reorder_preview answers "order now".
     rp_stock_period = opening_period(lp_cycle) if lp_cycle is not None else None
     rp_rows = batch.rows(
-        db, *_reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _latest_abc_periods(db, scope))
+        db, *_reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _cycle_abc_periods(db, scope, lp_cycle))
     )
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
     rp_stock_counts = (

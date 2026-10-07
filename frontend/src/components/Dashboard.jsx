@@ -19,6 +19,7 @@ import RefreshingNote from './RefreshingNote';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
 import { Package, Wallet, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
+import TierBasisLabel from './TierBasisLabel';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -659,6 +660,7 @@ const Dashboard = () => {
           {/* Hero strip — the four figures that answer "what is happening
               right now": money in, money parked, service risk, and work
               waiting. */}
+          <TierBasisLabel periods={exposure.tier_a_periods} period={exposure.tier_a_period} />
           <div className="kpi-strip kpi-strip-hero dash-section-anchor" id="dash-summary">
             <KPICard
               title="Sales"

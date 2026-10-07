@@ -25,6 +25,7 @@ import './DateFilter.css';
 // .dash-stale-note — the LP freshness notice, defined once with the
 // Dashboard's styles and reused here so both pages warn identically.
 import './Dashboard.css';
+import TierBasisLabel, { TierChip } from './TierBasisLabel';
 import './ReorderRecommendations.css';
 
 // Helper to format SKU to 5 digits (SKU-#####)
@@ -191,6 +192,7 @@ const ReorderRecommendations = () => {
         })));
         setMeta({
           cycleDate: res.planning_cycle_date || null,
+          tierAPeriods: res.tier_a_periods || {},
           supersededCount: res.superseded_count || 0,
           freshness: res.freshness || null,
           // The solver's own weights and service level (backend/lp_cycle.py),
@@ -255,7 +257,9 @@ const ReorderRecommendations = () => {
         urgency: item.urgency,
         planningCycleDate: item.planning_cycle_date,
         revenueShare: item.revenue_share,
-        tier: item.tier, // latest ABC run's tier; null = not ranked in that run
+        tier: item.tier, // last-known tier at or before the cycle month; carried forward when tierIsCurrent is false
+        tierPeriod: item.tier_period,
+        tierIsCurrent: item.tier_is_current,
         priorityScore: item.priority_score,
         stockoutGap: item.stockout_gap,
         daysOfCover: item.days_of_cover,
@@ -356,7 +360,8 @@ const ReorderRecommendations = () => {
   const noStockFigureCount = cycleRows.filter((r) => r.stock == null).length;
   // The LP plans Category A, but a cycle outlives the ABC run it was solved
   // against; GET /recommendations sends each row's tier in the latest run.
-  const notCategoryACount = cycleRows.filter((r) => r.tier !== 'A').length;
+  // An aged tier (tierIsCurrent false) is display only: a carried-forward A is not Class A here.
+  const notCategoryACount = cycleRows.filter((r) => r.tier !== 'A' || r.tierIsCurrent === false).length;
   // Summed in whole pieces, so the card equals the sum of the table's rows.
   const totalOrderQty = cycleRows.reduce((sum, item) => sum + (wholeUnits(item.orderQty) || 0), 0);
   // Rows the allocation couldn't fully fund (short_units > 0) — the
@@ -638,6 +643,9 @@ const ReorderRecommendations = () => {
           <span className="cell-product-sku">{formatSKU(item.sku)}</span>
         </td>
         <td className={brand ? 'cell-muted' : 'cell-empty'}>{brand || '—'}</td>
+        <td className="table-center">
+          <TierChip tier={item.tier} tierPeriod={item.tierPeriod} isCurrent={item.tierIsCurrent} anchor={String(item.planningCycleDate || '').slice(0, 7)} />
+        </td>
         <td className="table-num" title="Share of period revenue at this SKU's latest ABC classification">
           {item.revenueShare != null ? `${(item.revenueShare * 100).toFixed(2)}%` : <span className="cell-empty">—</span>}
         </td>
@@ -691,7 +699,7 @@ const ReorderRecommendations = () => {
     );
   };
 
-  const COLUMN_COUNT = 12;
+  const COLUMN_COUNT = 13;
 
   const renderRecommendationsTab = () => (
     <>
@@ -787,6 +795,7 @@ const ReorderRecommendations = () => {
               <th className="table-num col-fit">#</th>
               <th className="col-text col-product">Product / SKU</th>
               <th className="col-fit">Brand</th>
+              <th className="table-center col-fit">Tier</th>
               <th className="table-num col-fit">Rev share</th>
               <th className="table-num col-fit">Safety stock</th>
               <th className="table-num col-fit">
@@ -941,6 +950,7 @@ const ReorderRecommendations = () => {
               one flat storage cost for every SKU the storage term is the
               same whoever is cut, so it can't decide anything; this used to
               credit it with a say. */}
+          <TierBasisLabel periods={meta?.tierAPeriods} />
           <p className="reorder-page-subtitle">
             Order quantities, in pieces, suggested by the optimizer (an LP, or linear-programming model) for the Class A
             SKUs whose forecasts beat a simple last-month guess (MASE &lt; 1).

@@ -46,6 +46,8 @@ class SKUItem(BaseModel):
 class SKUListResponse(BaseModel):
     items: list[SKUItem]
     count: int
+    # {principal display name: 'YYYY-MM'} — each principal's latest ABC run.
+    tier_a_periods: dict[str, str] = {}
 
 
 class SKUCreate(BaseModel):

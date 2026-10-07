@@ -139,6 +139,16 @@ def abc_periods_from_rows(rows) -> dict[str, str]:
     return {r["principal"]: r["p"] for r in rows if r["p"] is not None}
 
 
+_PRINCIPAL_LABELS = {"unilever": "Unilever", "delmonte": "Del Monte"}
+
+
+def tier_a_periods(periods: dict[str, str]) -> dict[str, str]:
+    """The response field `tier_a_periods`: {display name: period}, one entry
+    per principal that has a run in scope. `tier_a_period` (the single value)
+    stays as it was; this is the per-principal view of it."""
+    return {_PRINCIPAL_LABELS[k]: v for k, v in periods.items() if k in _PRINCIPAL_LABELS}
+
+
 def abc_period_params(periods: dict[str, str]) -> dict[str, str | None]:
     """Bind params for ABC_PERIOD_PRED: one per principal, None where that
     principal has no run (so it matches no row, rather than another

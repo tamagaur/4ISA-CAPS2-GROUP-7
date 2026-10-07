@@ -2069,6 +2069,7 @@ def test_below_safety_stock_list_is_the_rows_behind_the_count():
     assert exp["below_count"] == 2
     assert [(i["sku_id"], i["short_by"]) for i in exp["below_items"]] == [("SKU2", 15.0), ("SKU1", 40.0)]
     assert exp["tier_a_period"] == "2024-02"
+    assert exp["tier_a_periods"] == {"Unilever": "2024-02"}  # the per-principal view; tier_a_period is unchanged
 
 
 def test_idle_stock_is_unilever_only_and_says_so_for_del_monte():

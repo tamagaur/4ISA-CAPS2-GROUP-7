@@ -29,6 +29,7 @@ import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards, Skel
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
+import TierBasisLabel, { currentPeriodFor, isStaleTier, latestPeriod } from './TierBasisLabel';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
@@ -287,6 +288,9 @@ const ABCClassification = () => {
   // them in its own copy.
   const [rules, setRules] = useState(null);
   const [tierSummary, setTierSummary] = useState([]);
+  // Each principal's own ABC run ({ 'Unilever': '2026-02', 'Del Monte': '2025-12' }): under
+  // All principals the two differ, and a row is current against ITS principal's run.
+  const [tierAPeriods, setTierAPeriods] = useState({});
   const [paretoCheck, setParetoCheck] = useState(null);
   // Which request the rows currently on screen came from — null until the
   // first one lands. Distinguishes "nothing to show yet" (cold load, needs
@@ -353,6 +357,7 @@ const ABCClassification = () => {
         setUnclassifiedCount(res.unclassified_count ?? null);
         setRules(res.rules ?? null);
         setTierSummary(res.tier_summary || []);
+        setTierAPeriods(res.tier_a_periods || {});
         setParetoCheck(res.pareto_check ?? null);
         setLoadedKey(`${requestedPeriod ?? ''}|${principal ?? ''}`);
       })
@@ -393,7 +398,10 @@ const ABCClassification = () => {
         // the page's period the tier is carried forward: the SKU had no sales
         // in the later runs, so it was not re-ranked.
         catPeriod: item.tier_period,
-        isCurrent: item.tier_period === classificationPeriod,
+        isCurrent: item.tier_period === currentPeriodFor(item.principal, tierAPeriods, classificationPeriod),
+        // Carried forward more than 6 months before the page's run: marked stale. Display only.
+        isStale: item.tier_period !== currentPeriodFor(item.principal, tierAPeriods, classificationPeriod)
+          && isStaleTier(item.tier_period, latestPeriod(tierAPeriods, classificationPeriod)),
         // revenue_share / cumulative_share come from the API as 0-1 fractions
         // (see analytics/classification/abc.py); everything downstream here
         // (table cells, chart axis 0-100, tooltip) expects 0-100 percentages.
@@ -404,14 +412,15 @@ const ABCClassification = () => {
         cumulativePct: (item.cumulative_share ?? 0) * 100,
         // Distance to a tier cutoff in an old run says nothing about the next
         // review, so the flag only counts on current-run rows.
-        nearBoundary: !!item.boundary_flag && item.tier_period === classificationPeriod,
+        nearBoundary: !!item.boundary_flag
+          && item.tier_period === currentPeriodFor(item.principal, tierAPeriods, classificationPeriod),
         status: item.stock_status,
         // Why the LP's current cycle gives this SKU no target stock (GET
         // /abc's _no_target_reason). Null when it has one, or without lp.view.
         noTargetReason: item.no_target_reason ?? null,
         noTargetCode: item.no_target_code ?? null,
       })),
-    [rawData, brandLookup, classificationPeriod]
+    [rawData, brandLookup, classificationPeriod, tierAPeriods]
   );
 
   // FSN (fast / slow / non-moving) per product over the 12 observed months
@@ -683,7 +692,7 @@ const ABCClassification = () => {
     if (item.principal === 'delmonte' && item.catPeriod < DEL_MONTE_REGROUP_PERIOD) {
       return `Class ${item.cat} — last classified ${when}: an older Del Monte sub-category from before the Jan 2025 regrouping, carried forward`;
     }
-    return `Class ${item.cat} — last classified ${when}; no sales since, so this is carried forward`;
+    return `Class ${item.cat} — last classified ${when}; no sales since, so this is carried forward${item.isStale ? ' (stale: over 6 months old)' : ''}`;
   };
 
   const getStatusClass = (status) => {
@@ -730,6 +739,7 @@ const ABCClassification = () => {
             : undefined}
         />
       </div>
+      <TierBasisLabel periods={tierAPeriods} period={classificationPeriod} />
       <p className="abc-page-subtitle">
         {isDelMonte ? (
           <>
@@ -1449,6 +1459,7 @@ const ABCClassification = () => {
                           near a tier boundary. */}
                       <span className="abc-cat-cell-inner">
                         <span className={`${getCatBadgeClass(item.cat)}${item.isCurrent ? '' : ' abc-cat-stale'}`}>{item.cat}</span>
+                        {item.isStale && <span className="tier-chip-stale">stale</span>}
                         <span className="abc-boundary-slot">
                           {item.nearBoundary && (
                             <AlertTriangle

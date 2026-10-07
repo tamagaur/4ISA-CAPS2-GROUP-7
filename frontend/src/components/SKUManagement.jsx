@@ -12,6 +12,7 @@ import { formatUnits, exactUnits } from '../utils/formatNumber';
 import { formatMonth } from '../utils/formatDate';
 import Pagination from './Pagination';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
+import TierBasisLabel, { currentPeriodFor, isStaleTier, latestPeriod } from './TierBasisLabel';
 import './SKUManagement.css';
 
 // Product names render verbatim. A helper used to pull a pack size out onto
@@ -38,6 +39,8 @@ const SKUManagement = () => {
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission(P.SKU_EDIT);
   const [rawItems, setRawItems] = useState([]);
+  // Each principal's latest ABC run (GET /sku's tier_a_periods).
+  const [tierAPeriods, setTierAPeriods] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -47,6 +50,7 @@ const SKUManagement = () => {
     return getSKUs({ principal })
       .then((res) => {
         setRawItems(res.items || []);
+        setTierAPeriods(res.tier_a_periods || {});
       })
       .catch((err) => {
         setError(err.message || 'Failed to load SKUs');
@@ -227,7 +231,10 @@ const SKUManagement = () => {
     }, {}),
     [skus]
   );
-  const isCurrentTier = (s) => s.catPeriod === latestCatPeriodByPrincipal[s.principal];
+  const isCurrentTier = (s) => s.catPeriod === currentPeriodFor(s.principal, tierAPeriods, latestCatPeriodByPrincipal[s.principal]);
+  // Carried forward and more than 6 months behind the newest run: marked stale. Display only.
+  const isStaleCat = (s) => !!s.catPeriod && !isCurrentTier(s)
+    && isStaleTier(s.catPeriod, latestPeriod(tierAPeriods, latestCatPeriodByPrincipal[s.principal]));
   // Category A's own carried-forward count — the card used to print every
   // tier's (821 of them, 20 of which are A).
   const categoryACarried = skus.filter(s => s.cat === 'A' && s.catPeriod && !isCurrentTier(s)).length;
@@ -349,7 +356,7 @@ const SKUManagement = () => {
     const when = formatMonth(sku.catPeriod);
     return isCurrentTier(sku)
       ? `Class ${sku.cat} — current run (${when})`
-      : `Class ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
+      : `Class ${sku.cat} — last classified ${when}; no sales since, so this is carried forward${isStaleCat(sku) ? ' (stale: over 6 months old)' : ''}`;
   };
 
   return (
@@ -364,6 +371,7 @@ const SKUManagement = () => {
                 ? 'Add products or edit their name and brand. This is the master product list the forecasts draw from.'
                 : "The master product list the forecasts draw from. View only — your account can't add or edit SKUs."}
             </p>
+            <TierBasisLabel periods={tierAPeriods} />
           </div>
           {canEdit && (
             <button className="add-sku-btn" onClick={() => setIsAddModalOpen(true)}>
@@ -678,6 +686,7 @@ const SKUManagement = () => {
                               }`}
                             >
                               {sku.cat}
+                              {isStaleCat(sku) && <span className="tier-chip-stale">stale</span>}
                             </span>
                           )
                           : <span className="cell-empty">—</span>}

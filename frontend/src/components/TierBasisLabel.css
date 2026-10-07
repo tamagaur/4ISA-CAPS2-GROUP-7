@@ -1,0 +1,29 @@
+/* Which ABC run the tiers come from — one line, identical on every page. */
+.tier-basis-label {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+}
+
+/* Tier letter; aged ones are faded like SKU Management's .cat-badge.cat-stale. */
+.tier-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-weight: 600;
+}
+.tier-chip-aged {
+  opacity: 0.55;
+}
+.tier-chip-age {
+  font-size: 0.68rem;
+  font-weight: 400;
+}
+.tier-chip-stale {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 0 0.3rem;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+}

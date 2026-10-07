@@ -273,3 +273,16 @@ def test_abc_period_params_keep_each_principal_on_its_own_run():
     assert abc_period_params(periods) == {"abc_p_unilever": "2026-02", "abc_p_delmonte": "2025-12"}
     assert abc_period_params({"unilever": "2026-02"})["abc_p_delmonte"] is None
     assert "CASE ac.principal" in abc_period_pred("=", "ac")
+
+
+def test_tier_a_periods_is_a_per_principal_map_by_display_name():
+    from backend.principals import tier_a_periods
+
+    assert tier_a_periods({"unilever": "2026-02", "delmonte": "2025-12"}) == {"Unilever": "2026-02", "Del Monte": "2025-12"}
+    assert tier_a_periods({"delmonte": "2025-12"}) == {"Del Monte": "2025-12"}
+    assert tier_a_periods({}) == {}
+
+
+def test_sku_list_carries_tier_a_periods_without_touching_item_tiers(client):
+    body = client.get("/sku?principal=unilever").json()
+    assert isinstance(body["tier_a_periods"], dict)
