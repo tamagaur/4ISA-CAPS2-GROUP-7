@@ -1,0 +1,4 @@
+bin,n_skus,n_bias_tested,lean_high,lean_low,neutral,not_testable,mean_error_positive,mean_error_negative,pooled_bias_pct,overfit,underfit
+long,105,103,5,0,98,2,74,31,0.07847281273135599,4,1
+medium,34,31,1,0,30,3,27,7,0.3872793864050697,3,1
+short,36,19,1,0,18,17,20,16,0.05029691650533369,0,5

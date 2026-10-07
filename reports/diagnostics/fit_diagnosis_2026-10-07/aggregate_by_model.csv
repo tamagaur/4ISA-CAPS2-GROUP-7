@@ -1,0 +1,4 @@
+served_model,n_skus,n_bias_tested,lean_high,lean_low,neutral,not_testable,mean_error_positive,mean_error_negative,pooled_bias_pct,overfit,underfit
+ma3,37,20,1,0,19,17,21,16,0.06863186722746419,0,5
+tsb,34,31,1,0,30,3,27,7,0.3872793864050697,3,1
+xgb_ma3_avg,104,102,5,0,97,2,73,31,0.07589314491467142,4,1
