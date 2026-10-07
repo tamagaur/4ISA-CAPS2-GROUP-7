@@ -306,6 +306,19 @@ table td.table-center {
   color: #fff;
 }
 
+/* The quiet action beside a row's one filled button (Dismiss): text only. */
+.table-btn-quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--color-text-muted);
+}
+
+.table-btn-quiet:hover {
+  border-color: transparent;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+
 .table-btn-group {
   display: inline-flex;
   gap: 0.4rem;

@@ -5,10 +5,10 @@
 }
 
 .reorder-content {
-  padding: 0 3rem 3rem 3rem;
+  padding: 0 var(--page-padding-x) 48px;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 /* Header */
@@ -113,7 +113,7 @@
 .reorder-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 .reorder-summary-card {
@@ -183,8 +183,77 @@
 /* The per-row severity stripe is gone (2026-09-18): with 248 of 250 rows
    CRITICAL it striped the whole table red and said nothing. Position in
    the ranked list now carries urgency; the pill keeps the LP state. */
+/* Essential columns fit a laptop; "All columns" scrolls sideways. Header
+   labels may wrap to two lines so a column is no wider than its figures. */
 .reorder-table {
-  min-width: 1180px;
+  min-width: 900px;
+}
+
+/* Outranks .data-table .col-fit's nowrap (two classes + two elements). */
+.data-table.reorder-table thead th.col-fit {
+  white-space: normal;
+  min-width: 72px;
+}
+
+.data-table.reorder-table thead th.col-product {
+  width: auto;
+  min-width: 200px;
+}
+
+/* Urgency pill with the review badge under it, not beside it; the badge's
+   words may wrap so the column stays as narrow as the pill. */
+.reorder-urgency-cell {
+  min-width: 112px;
+}
+
+.reorder-urgency-cell .pending-review-badge {
+  display: inline-flex;
+  margin-top: 4px;
+  max-width: 120px;
+  white-space: normal;
+  line-height: 1.3;
+  text-align: left;
+}
+
+.reorder-filter-bar {
+  margin-bottom: 0;
+}
+
+.reorder-filter-bar .reorder-bulk-btn {
+  margin-left: auto;
+}
+
+/* The solver's weights inside the fold. */
+.reorder-weights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 24px;
+  margin: 12px 0;
+}
+
+.reorder-weight dt {
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.reorder-weight dd {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 0;
+}
+
+.reorder-weight dd strong {
+  font-size: 1.1rem;
+  color: var(--color-text);
+}
+
+.reorder-weight dd span {
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
 }
 
 .reorder-rank {
@@ -242,8 +311,8 @@
 }
 
 .reorder-table-note {
-  margin: 0;
-  font-size: 0.75rem;
+  margin: -8px 0 0;
+  font-size: var(--text-meta);
   color: var(--color-text-muted);
 }
 
@@ -266,32 +335,9 @@
   white-space: nowrap;
 }
 
-/* Bulk accept is a primary action button — brand chrome, not a data colour. */
-.reorder-bulk-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.9rem;
-  border-radius: 8px;
-  border: 1px solid var(--color-brand-primary);
-  background-color: var(--color-brand-primary);
-  color: #fff;
-  font-family: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s;
-}
-
-.reorder-bulk-btn:hover:not(:disabled) {
-  background-color: var(--color-brand-hover);
-  border-color: var(--color-brand-hover);
-}
-
-.reorder-bulk-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+/* Bulk accept is the shared secondary button (ui.css .btn-secondary): each
+   row already carries the one coral Accept, so the bulk action stands apart
+   from them rather than as a twenty-first coral button. */
 
 /* Current stock against the target stock (rop_i): below half = critical, below
    target = low. Weight carries part of the signal so it isn't color-only. */

@@ -372,6 +372,38 @@
   flex: 1 1 auto;
 }
 
+/* A search field in a filter bar: icon, then a borderless input. */
+.filter-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text-subtle);
+}
+
+.filter-search:focus-within {
+  border-color: var(--color-brand-primary);
+}
+
+.filter-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.filter-search input::placeholder {
+  color: var(--color-text-subtle);
+}
+
 /* ── "How this works": methodology kept, folded away ─────────────────── */
 .disclosure {
   border: var(--card-border);

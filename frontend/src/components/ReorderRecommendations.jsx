@@ -1,11 +1,15 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import {
-  Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown, ChevronRight, CheckCheck,
-  AlertTriangle,
+  Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown, ChevronRight, CheckCheck, AlertTriangle, Search, Clock, Package,
 } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import InfoTip from './InfoTip';
+import KPICard from './KPICard';
+import Pagination from './Pagination';
+import PageHeader from './ui/PageHeader';
+import Disclosure from './ui/Disclosure';
+import { ClassBadge } from './ui/StatusBadge';
 import ProductName from './ProductName';
 import OverrideReasonModal from './OverrideReasonModal';
 import Modal from './Modal';
@@ -159,6 +163,15 @@ const ReorderRecommendations = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('RECOMMENDATIONS');
   const [showReviewLater, setShowReviewLater] = useState(false);
+  // The list's controls (UI pass, 2026-10-08): which group to show, a
+  // product search, which columns, and the page. Presentation only: the
+  // rows, their ranking and the "Act now" cut are unchanged.
+  const [rowFilter, setRowFilter] = useState('all');
+  const [rowSearch, setRowSearch] = useState('');
+  const [columnSet, setColumnSet] = useState('essential');
+  const [tablePage, setTablePage] = useState(1);
+  const [tablePageSize, setTablePageSize] = useState(25);
+  useEffect(() => { setTablePage(1); }, [rowFilter, rowSearch, showReviewLater]);
 
   // Pending override awaiting a reason (Dismiss only — Accept logs immediately).
   const [pendingOverride, setPendingOverride] = useState(null); // { item, action }
@@ -333,7 +346,19 @@ const ReorderRecommendations = () => {
 
   const actNowRows = rankedRows.slice(0, ACT_NOW_COUNT);
   const reviewLaterRows = rankedRows.slice(ACT_NOW_COUNT);
-  const visibleRows = showReviewLater ? rankedRows : actNowRows;
+  // The rows in view: the chosen group ("All" keeps Review later folded
+  // until it is opened), narrowed by the product search. "Accept all in
+  // view" reads this same list, so the button and the table never disagree.
+  const searchTerm = rowSearch.trim().toLowerCase();
+  const matchesSearch = (r) => !searchTerm
+    || String(r.product || '').toLowerCase().includes(searchTerm)
+    || String(r.sku || '').toLowerCase().includes(searchTerm)
+    || String(brandLookup?.get(String(r.sku)) || '').toLowerCase().includes(searchTerm);
+  const inGroup = (r) => (rowFilter === 'notInCount' ? Boolean(r.stockNotInCount) : true);
+  const shownActNow = rowFilter === 'later' ? [] : actNowRows.filter((r) => inGroup(r) && matchesSearch(r));
+  const shownLater = rowFilter === 'act' ? [] : reviewLaterRows.filter((r) => inGroup(r) && matchesSearch(r));
+  const laterFolded = rowFilter === 'all' && !searchTerm && !showReviewLater;
+  const visibleRows = laterFolded ? shownActNow : [...shownActNow, ...shownLater];
   // Rows flagged for review are left out: each is accepted from its own row.
   const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction && !r.needsReview);
 
@@ -661,7 +686,7 @@ const ReorderRecommendations = () => {
           Accept
         </button>
         <button
-          className="table-btn"
+          className="table-btn table-btn-quiet"
           onClick={() => handleAction(item, 'DISMISSED')}
           aria-label={`Dismiss reorder for ${item.product} (${item.sku})`}
           disabled={bulkRunning}
@@ -697,16 +722,21 @@ const ReorderRecommendations = () => {
           />
         </td>
         <td className={brand ? 'cell-muted' : 'cell-empty'}>{brand || '—'}</td>
-        <td className="table-num" title={`Share of ${abcLabel ?? 'the latest ABC month'} revenue, from the latest ABC classification`}>
-          {item.revenueShare != null ? `${(item.revenueShare * 100).toFixed(2)}%` : <span className="cell-empty">—</span>}
+        <td className="table-center" title={item.tier !== 'A' ? 'No longer Class A in the latest ABC run' : undefined}>
+          <ClassBadge tier={item.tier} />
         </td>
+        {showAll && (
+          <td className="table-num" title={`Share of ${abcLabel ?? 'the latest ABC month'} revenue, from the latest ABC classification`}>
+            {item.revenueShare != null ? `${(item.revenueShare * 100).toFixed(2)}%` : <span className="cell-empty">—</span>}
+          </td>
+        )}
         {/* Target stock (rop_i since the 2026-09-30 LP run: demand over
             the review + lead window + safety stock), so the buffer sits
             right before it; it used to be visible only inside the modal. */}
         {/* Pieces throughout; a hover adds the exact figure and the
             approximate case count. Only the order carries its case count
             on the face of the table — it is the figure a PO is raised from. */}
-        <td className="table-num" title={piecesTitle(item.safetyStock, item.packSize)}>{formatUnits(item.safetyStock)}</td>
+        {showAll && <td className="table-num" title={piecesTitle(item.safetyStock, item.packSize)}>{formatUnits(item.safetyStock)}</td>}
         <td className="table-num" title={piecesTitle(item.rop, item.packSize)}>{formatUnits(item.rop)}</td>
         <td
           className={`table-num reorder-stock-cell ${
@@ -727,23 +757,27 @@ const ReorderRecommendations = () => {
               </>
             : <span className="cell-empty" title={item.stockBlockedReason || 'No stock figure in pieces for this SKU'}>—</span>}
         </td>
-        {hasOnOrder && (
+        {showAll && hasOnOrder && (
           <td className="table-num" title={item.onOrderNote || 'Pieces on order (PO Qty), information only'}>
             {item.onOrderQty != null ? formatUnits(item.onOrderQty) : <span className="cell-empty">—</span>}
           </td>
         )}
-        <td className="table-num" title={item.daysOfCover != null ? coverNote : (item.coverReason || coverNote)}>
-          {item.daysOfCover != null ? item.daysOfCover.toFixed(1) : <span className="cell-empty">—</span>}
-        </td>
-        <td className="table-num" title={item.forecast != null ? exactPieces(item.forecast) : `No forecast for ${cycleMonth ?? 'this planning month'}`}>
-          {item.forecast != null ? formatUnits(item.forecast) : <span className="cell-empty">—</span>}
-        </td>
+        {showAll && (
+          <td className="table-num" title={item.daysOfCover != null ? coverNote : (item.coverReason || coverNote)}>
+            {item.daysOfCover != null ? item.daysOfCover.toFixed(1) : <span className="cell-empty">—</span>}
+          </td>
+        )}
+        {showAll && (
+          <td className="table-num" title={item.forecast != null ? exactPieces(item.forecast) : `No forecast for ${cycleMonth ?? 'this planning month'}`}>
+            {item.forecast != null ? formatUnits(item.forecast) : <span className="cell-empty">—</span>}
+          </td>
+        )}
         <td className="table-num cell-strong" title={lpQtyTitle(item)}>
           {formatUnits(item.orderQty)}
           {item.cases.order && <span className="reorder-cell-note">{item.cases.order}</span>}
           {item.shortUnits > 0 && <span className="reorder-short-note">{formatUnits(item.shortUnits)} short</span>}
         </td>
-        <td>
+        <td className="reorder-urgency-cell">
           <span className={getUrgencyBadge(item.urgency)}>
             {item.urgency}
           </span>
@@ -756,85 +790,141 @@ const ReorderRecommendations = () => {
     );
   };
 
-  const COLUMN_COUNT = 12 + (hasOnOrder ? 1 : 0);
+  // Essential columns: rank, product, brand, class, target, opening stock,
+  // suggested qty, urgency, action. "All columns" adds revenue share,
+  // safety stock, on order, cover and forecast — the detail modal has them
+  // too.
+  const showAll = columnSet === 'all';
+  const COLUMN_COUNT = 9 + (showAll ? 4 + (hasOnOrder ? 1 : 0) : 0);
+  // The page of rows in view; group headers sit before the first row of
+  // their group on the page, so paging never loses the "Act now" line.
+  const tableTotalPages = Math.max(1, Math.ceil(visibleRows.length / tablePageSize));
+  const tableSafePage = Math.min(tablePage, tableTotalPages);
+  const pagedRows = visibleRows.slice((tableSafePage - 1) * tablePageSize, tableSafePage * tablePageSize);
+  const firstActOnPage = pagedRows.find((r) => actNowRows.includes(r)) || null;
+  const firstLaterOnPage = pagedRows.find((r) => reviewLaterRows.includes(r)) || null;
+  const laterCount = rowFilter === 'all' && !searchTerm ? reviewLaterRows.length : shownLater.length;
+  const rowFilters = [
+    ['all', 'All', cycleRows.length],
+    ['act', 'Act now', actNowRows.length],
+    ['later', 'Review later', reviewLaterRows.length],
+    ['notInCount', 'Not in stock count', notInCountCount],
+  ];
+  const lpWeights = meta?.lpModel?.weights || null;
+  const weightRows = lpWeights ? [
+    ['Cost', lpWeights.cost, 'SKUs that cost more per piece are cut first when the allocation is short'],
+    ['Service level', lpWeights.service_level, 'SKUs that bring in more revenue keep their orders longest'],
+    ['Storage', lpWeights.storage, 'one flat placeholder storage cost for every SKU, so it decides nothing for now'],
+  ] : [];
+  const laterGroupRow = (collapsedToggle) => (
+    <tr className="reorder-group-row reorder-group-later">
+      <td colSpan={COLUMN_COUNT}>
+        {rowFilter === 'all' && !searchTerm ? (
+          <button
+            type="button"
+            className="reorder-group-toggle"
+            onClick={() => setShowReviewLater((v) => !v)}
+            aria-expanded={!collapsedToggle}
+          >
+            {collapsedToggle ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+            Review later — {reviewLaterRows.length} more SKUs{collapsedToggle ? ' (collapsed)' : ''}
+          </button>
+        ) : (
+          <>Review later — {laterCount} SKUs</>
+        )}
+      </td>
+    </tr>
+  );
 
   const renderRecommendationsTab = () => (
     <>
       {/* Summary Cards — coloured by the app-wide SEMANTIC rule: red = act
           now, amber = watch, slate = no data, indigo = model output. */}
-      <div className="reorder-summary-grid">
-        <div className="reorder-summary-card card-act">
-          <div className="card-content">
-            <span className="reorder-card-label">ACT NOW (SKUS)</span>
-            <span className="reorder-card-value">{actNowPending}</span>
-            <span className="reorder-card-desc">{planLabel} · top {ACT_NOW_COUNT} by revenue at risk, still pending</span>
-          </div>
-        </div>
-        <div className="reorder-summary-card card-watch">
-          <div className="card-content">
-            <span className="reorder-card-label">REVIEW LATER (SKUS)</span>
-            <span className="reorder-card-value">{reviewLaterRows.length}</span>
-            <span className="reorder-card-desc">
-              {planLabel} · {reviewLaterRows.length - reviewLaterUnranked} lower revenue at risk
-              {reviewLaterUnranked > 0 && <> · {reviewLaterUnranked} not ranked (no stock figure or revenue share)</>}
-            </span>
-          </div>
-        </div>
+      {/* The four figures as the shared KPI card (UI pass): urgency colour on
+          the icon tile only, one short line each, the rest behind the "?". */}
+      <div className="kpi-strip reorder-summary-grid">
+        <KPICard
+          title="Act now"
+          value={actNowPending.toLocaleString()}
+          unit="SKUs"
+          metricType={actNowPending > 0 ? 'danger' : undefined}
+          contextLine={`${planLabel} · top ${ACT_NOW_COUNT} by revenue at risk`}
+          tooltip="Ranked by revenue share × pieces below the target stock; the top 20 still awaiting a decision."
+          icon={<AlertTriangle size={20} />}
+        />
+        <KPICard
+          title="Review later"
+          value={reviewLaterRows.length.toLocaleString()}
+          unit="SKUs"
+          metricType={reviewLaterRows.length > 0 ? 'watch' : undefined}
+          contextLine={`${planLabel} · lower revenue at risk`}
+          tooltip={reviewLaterUnranked > 0
+            ? `${reviewLaterRows.length - reviewLaterUnranked} ranked below the top ${ACT_NOW_COUNT}; ${reviewLaterUnranked} not ranked (no stock figure or revenue share).`
+            : `Every SKU ranked below the top ${ACT_NOW_COUNT} by revenue at risk.`}
+          icon={<Clock size={20} />}
+        />
         {/* Until 2026-10-01 "NO STOCK RECORD": these rows showed no stock and
             went unranked, while the LP had planned them as 0 on hand and cut
             all three. They are now 0 like in the plan, counted here so the
             inferred 0 is never mistaken for a counted one. */}
-        <div className="reorder-summary-card card-nodata">
-          <div className="card-content">
-            <span className="reorder-card-label">NOT IN STOCK COUNT (SKUS)</span>
-            <span className="reorder-card-value">{notInCountCount}</span>
-            <span className="reorder-card-desc">
-              {countLabel} · treated as 0 on hand, as the plan does
-              {noStockFigureCount > 0 && <> · {noStockFigureCount} with no stock figure in pieces (NO DATA)</>}
-            </span>
-          </div>
-        </div>
-        <div className="reorder-summary-card card-recommendation">
-          <div className="card-content">
-            <span className="reorder-card-label">TOTAL ORDER (PIECES)</span>
-            <span className="reorder-card-value">{totalOrderQty.toLocaleString()}</span>
-            <span className="reorder-card-desc">
-              {planLabel} ·{' '}
-              {cutCount > 0
-                ? `${cutCount} of ${pendingRows.length} SKUs cut to fit the ${allocationPct != null ? `${allocationPct}% ` : ''}supplier allocation`
-                : 'suggested by the optimizer'}
-            </span>
-          </div>
-        </div>
+        <KPICard
+          title="Not in stock count"
+          value={notInCountCount.toLocaleString()}
+          unit="SKUs"
+          contextLine={`${countLabel} · treated as 0 on hand`}
+          tooltip={`Missing from the opening stock count, so the plan treats them as out of stock.${noStockFigureCount > 0
+            ? ` ${noStockFigureCount} more have no stock figure in pieces (NO DATA).` : ''}`}
+          icon={<Package size={20} />}
+        />
+        <KPICard
+          title="Total suggested order"
+          value={totalOrderQty.toLocaleString()}
+          unit="pieces"
+          metricType="recommendation"
+          contextLine={cutCount > 0
+            ? `${planLabel} · ${cutCount} of ${pendingRows.length} SKUs cut to fit the allocation`
+            : `${planLabel} · suggested by the optimizer`}
+          tooltip={allocationPct != null
+            ? `Suggested by the optimizer within the ${allocationPct}% supplier allocation.`
+            : 'Suggested by the optimizer.'}
+          icon={<ClipboardList size={20} />}
+        />
       </div>
 
-      <div className="reorder-table-toolbar">
-        {planFacts && <p className="reorder-table-note reorder-plan-facts">{planFacts}</p>}
-        <p className="reorder-table-note">
-          All quantities are in pieces, for the {planLabel}; under each order is its rough size in cases (pieces ÷
-          pieces per case). Suggested qty = the month&apos;s forecast + target stock − stock at the start of the month
-          (the stock count that opens it). A row marked &ldquo;short&rdquo; was cut to fit the supplier allocation and
-          ends the month that far below its target. A SKU missing from that stock count shows 0, &ldquo;not in
-          count&rdquo;: the plan treats it as out of stock. Ranked by revenue share × pieces below the target stock.
-          Cover is in days on a peso basis (stock at last purchase price ÷ daily sales value
-          {coverSalesLabel ? ` over ${coverSalesLabel}` : ''}).
-        </p>
-        {openingCountNote && <p className="reorder-table-note">{openingCountNote}</p>}
-        {planNotes.map((note) => <p className="reorder-table-note" key={note}>Data note: {note}</p>)}
-        {meta?.whatIf && (
-          <p className="chart-placeholder-note">
-            Preview: these recommendations are a what-if run of the LP on the five-year history, 2021–22 placeholder
-            months included. They are never saved, so they can&apos;t be accepted or dismissed.
-          </p>
-        )}
-        {!canDecide && !meta?.whatIf && (
-          <p className="reorder-view-only-note">
-            View only — your account can&apos;t accept or dismiss reorders. Ask an admin if you need to.
-          </p>
-        )}
+      {/* One row of controls: which group, a product search, which columns,
+          and the bulk action apart from the rows' own buttons. */}
+      <div className="filter-bar reorder-filter-bar">
+        <div className="segmented" role="group" aria-label="Which recommendations to show">
+          {rowFilters.map(([key, label, count]) => (
+            <button
+              key={key}
+              type="button"
+              className={`segmented-item${rowFilter === key ? ' is-active' : ''}`}
+              aria-pressed={rowFilter === key}
+              onClick={() => setRowFilter(key)}
+            >
+              {label} <span className="segmented-count">{count.toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+        <label className="filter-search filter-bar-search">
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="search"
+            value={rowSearch}
+            onChange={(e) => setRowSearch(e.target.value)}
+            placeholder="Search product, SKU or brand…"
+            aria-label="Search recommendations"
+          />
+        </label>
+        <div className="segmented" role="group" aria-label="Columns">
+          <button type="button" className={`segmented-item${!showAll ? ' is-active' : ''}`} aria-pressed={!showAll} onClick={() => setColumnSet('essential')}>Essential</button>
+          <button type="button" className={`segmented-item${showAll ? ' is-active' : ''}`} aria-pressed={showAll} onClick={() => setColumnSet('all')}>All columns</button>
+        </div>
         {canDecide && !meta?.whatIf && (
           <button
-            className="reorder-bulk-btn"
+            type="button"
+            className="btn btn-secondary reorder-bulk-btn"
             onClick={() => {
               bulkSave.reset();
               setPendingBulk({ rows: bulkTargets });
@@ -842,11 +932,23 @@ const ReorderRecommendations = () => {
             disabled={bulkTargets.length === 0 || bulkRunning}
             title={bulkTargets.length === 0 ? 'No pending rows in view' : undefined}
           >
-            {bulkRunning ? <Loader2 className="spinner-icon" size={14} /> : <CheckCheck size={14} />}
+            {bulkRunning ? <Loader2 className="spinner-icon" size={14} /> : <CheckCheck size={14} aria-hidden="true" />}
             Accept all in view ({bulkTargets.length})
           </button>
         )}
       </div>
+      {planFacts && <p className="reorder-table-note reorder-plan-facts">{planFacts}</p>}
+      {meta?.whatIf && (
+        <p className="chart-placeholder-note">
+          Preview: these recommendations are a what-if run of the LP on the five-year history, 2021–22 placeholder
+          months included. They are never saved, so they can&apos;t be accepted or dismissed.
+        </p>
+      )}
+      {!canDecide && !meta?.whatIf && (
+        <p className="reorder-view-only-note">
+          View only — your account can&apos;t accept or dismiss reorders. Ask an admin if you need to.
+        </p>
+      )}
 
       {/* Table */}
       <div className="data-table-card">
@@ -859,14 +961,22 @@ const ReorderRecommendations = () => {
               <th className="table-num col-fit">#</th>
               <th className="col-text col-product">Product</th>
               <th className="col-fit">Brand</th>
-              <th className="table-num col-fit">
-                Revenue share (%)
+              <th className="table-center col-fit">
+                Class
                 {abcLabel && <span className="reorder-th-period">{abcLabel}</span>}
               </th>
-              <th className="table-num col-fit">
-                Safety stock (pieces)
-                <span className="reorder-th-period">{planLabel}</span>
-              </th>
+              {showAll && (
+                <th className="table-num col-fit">
+                  Revenue share (%)
+                  {abcLabel && <span className="reorder-th-period">{abcLabel}</span>}
+                </th>
+              )}
+              {showAll && (
+                <th className="table-num col-fit">
+                  Safety stock (pieces)
+                  <span className="reorder-th-period">{planLabel}</span>
+                </th>
+              )}
               <th className="table-num col-fit">
                 Target stock (pieces)
                 <InfoTip label="About target stock">The stock level each order tops up to: the demand expected before the next delivery, plus safety stock.</InfoTip>
@@ -874,25 +984,30 @@ const ReorderRecommendations = () => {
               </th>
               <th className="table-num col-fit">
                 Opening stock (pieces)
+                {/* The count's reviewed note behind a "?", not a third header line. */}
+                {openingCountFlag && <InfoTip label="About this stock count">{openingCountFlag}</InfoTip>}
                 <span className="reorder-th-period">{countLabel}</span>
-                {openingCountFlag && <span className="reorder-th-period">{openingCountFlag.split(' (decided')[0]}</span>}
               </th>
-              {hasOnOrder && (
+              {showAll && hasOnOrder && (
                 <th className="table-num col-fit">
                   On order (pieces)
                   <span className="reorder-th-period">not yet arrived</span>
                 </th>
               )}
-              <th className="table-num col-fit">
-                Cover (days)
-                <InfoTip label="About cover">{coverNote}</InfoTip>
-                <span className="reorder-th-period">{coverSalesLabel ? `sales ${coverSalesLabel}` : countLabel}</span>
-              </th>
-              <th className="table-num col-fit">
-                Forecast (pieces)
-                <InfoTip label="About forecast">This SKU&apos;s forecast sales for the planning month{cycleMonth ? ` (${cycleMonth})` : ''}: what the order has to cover before it can build stock up to target.</InfoTip>
-                {cycleMonth && <span className="reorder-th-period">{cycleMonth}</span>}
-              </th>
+              {showAll && (
+                <th className="table-num col-fit">
+                  Cover (days)
+                  <InfoTip label="About cover">{coverNote}</InfoTip>
+                  <span className="reorder-th-period">{coverSalesLabel ? `sales ${coverSalesLabel}` : countLabel}</span>
+                </th>
+              )}
+              {showAll && (
+                <th className="table-num col-fit">
+                  Forecast (pieces)
+                  <InfoTip label="About forecast">This SKU&apos;s forecast sales for the planning month{cycleMonth ? ` (${cycleMonth})` : ''}: what the order has to cover before it can build stock up to target.</InfoTip>
+                  {cycleMonth && <span className="reorder-th-period">{cycleMonth}</span>}
+                </th>
+              )}
               <th className="table-num col-fit">
                 Suggested qty (pieces)
                 <InfoTip label="About suggested quantity">
@@ -907,31 +1022,23 @@ const ReorderRecommendations = () => {
             </tr>
           </thead>
           <tbody>
-            {actNowRows.length > 0 && (
-              <tr className="reorder-group-row reorder-group-act">
-                <td colSpan={COLUMN_COUNT}>
-                  Act now — top {Math.min(ACT_NOW_COUNT, actNowRows.length)} SKUs by revenue at risk
-                </td>
-              </tr>
-            )}
-            {actNowRows.map(renderRow)}
-            {reviewLaterRows.length > 0 && (
-              <tr className="reorder-group-row reorder-group-later">
-                <td colSpan={COLUMN_COUNT}>
-                  <button
-                    type="button"
-                    className="reorder-group-toggle"
-                    onClick={() => setShowReviewLater((v) => !v)}
-                    aria-expanded={showReviewLater}
-                  >
-                    {showReviewLater ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    Review later — {reviewLaterRows.length} more SKUs
-                    {showReviewLater ? '' : ' (collapsed)'}
-                  </button>
-                </td>
-              </tr>
-            )}
-            {showReviewLater && reviewLaterRows.map(renderRow)}
+            {pagedRows.map((item) => (
+              <React.Fragment key={item.id}>
+                {item === firstActOnPage && rowFilter !== 'later' && (
+                  <tr className="reorder-group-row reorder-group-act">
+                    <td colSpan={COLUMN_COUNT}>
+                      Act now — {rowFilter === 'all' && !searchTerm
+                        ? `top ${Math.min(ACT_NOW_COUNT, actNowRows.length)} SKUs by revenue at risk`
+                        : `${shownActNow.length} of the top ${ACT_NOW_COUNT} by revenue at risk`}
+                    </td>
+                  </tr>
+                )}
+                {item === firstLaterOnPage && laterGroupRow(false)}
+                {renderRow(item)}
+              </React.Fragment>
+            ))}
+            {/* Review later folded: its one line sits after the last row. */}
+            {laterFolded && reviewLaterRows.length > 0 && tableSafePage === tableTotalPages && laterGroupRow(true)}
             {cycleRows.length === 0 && (
               <tr className="table-empty-row">
                 <td colSpan={COLUMN_COUNT}>
@@ -943,9 +1050,85 @@ const ReorderRecommendations = () => {
                 </td>
               </tr>
             )}
+            {cycleRows.length > 0 && visibleRows.length === 0 && (
+              <tr className="table-empty-row">
+                <td colSpan={COLUMN_COUNT}>No recommendations match this filter.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {visibleRows.length > tablePageSize && (
+        <Pagination
+          currentPage={tableSafePage}
+          totalPages={tableTotalPages}
+          totalItems={visibleRows.length}
+          pageSize={tablePageSize}
+          onPageChange={setTablePage}
+          onPageSizeChange={(n) => { setTablePageSize(n); setTablePage(1); }}
+          pageSizeOptions={[25, 50, 100]}
+          idPrefix="reorder"
+        />
+      )}
+
+      {/* The method and the run's notes, kept but folded (UI pass): what
+          the LP does, how a quantity is read, the weights, and the data
+          caveats the run recorded. */}
+      <Disclosure title="How these recommendations were calculated">
+        <p>
+          The LP orders each SKU up to its target stock, net of what is on hand. Only when the supplier allocation
+          can&apos;t cover every SKU does it cut some orders, and then
+          {lpInputs.cover_rule === 'per-sku'
+            ? <> the LP&apos;s cost and service weights decide which SKUs come up short.</>
+            : <>
+                {' '}SSM&apos;s {lpInputs.target_weeks ?? 3}-week stock rule (counted over the SKUs in this plan, not the
+                whole warehouse) and the LP&apos;s cost and service weights decide which SKUs come up short.
+              </>}
+          {lpInputs.storage_cost_per_unit != null && (
+            <>
+              {' '}The storage weight has no say for now: the placeholder storage cost is the same
+              {' '}₱{Number(lpInputs.storage_cost_per_unit).toFixed(2)} a piece for every SKU.
+            </>
+          )}
+        </p>
+        {weightRows.length > 0 && (
+          <dl className="reorder-weights">
+            {weightRows.map(([label, value, note]) => (
+              <div className="reorder-weight" key={label}>
+                <dt>{label}</dt>
+                <dd>
+                  <strong>{typeof value === 'number' ? `${Math.round(value * 100)}%` : '—'}</strong>
+                  <span>{note}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        <p>
+          All quantities are in pieces, for the {planLabel}; under each order is its rough size in cases (pieces ÷
+          pieces per case). Suggested qty = the month&apos;s forecast + target stock − stock at the start of the month
+          (the stock count that opens it). A row marked &ldquo;short&rdquo; was cut to fit the supplier allocation and
+          ends the month that far below its target. A SKU missing from that stock count shows 0, &ldquo;not in
+          count&rdquo;: the plan treats it as out of stock. Ranked by revenue share × pieces below the target stock.
+          Cover is in days on a peso basis (stock at last purchase price ÷ daily sales value
+          {coverSalesLabel ? ` over ${coverSalesLabel}` : ''}).
+        </p>
+        {notCategoryACount > 0 && (
+          <p>
+            {notCategoryACount.toLocaleString()} of this cycle&apos;s {cycleRows.length.toLocaleString()} rows are no
+            longer Class A in the latest ABC run.
+          </p>
+        )}
+        {meta?.supersededCount > 0 && (
+          <p>
+            Showing the current cycle only — {meta.supersededCount.toLocaleString()} undecided
+            {' '}row{meta.supersededCount === 1 ? '' : 's'} from earlier runs {meta.supersededCount === 1 ? 'is' : 'are'} superseded and not listed.
+          </p>
+        )}
+        {openingCountNote && <p>{openingCountNote}</p>}
+        {planNotes.map((note) => <p key={note}>Data note: {note}</p>)}
+      </Disclosure>
     </>
   );
 
@@ -996,13 +1179,11 @@ const ReorderRecommendations = () => {
   return (
     <div className="reorder-page">
       <div className="reorder-content">
-        {/* Page Header */}
-        <div className="reorder-page-header">
-          <div className="reorder-page-title-row">
-            <h2 className="reorder-page-title">
-              Reorder <span className="page-title-accent">recommendations</span>
-            </h2>
-            {cycles.length > 0 && (
+        <PageHeader
+          title="Reorder"
+          accent="recommendations"
+          subtitle="Order quantities in pieces from the optimizer (an LP) for the Class A SKUs whose forecasts beat a naive last-month guess (MASE < 1). One run per planning cycle, for the month after the latest sales data."
+          actions={cycles.length > 0 && (
               <div className="dashboard-date-controls">
                 <span className="date-single-label">Planning cycle</span>
                 <div className="date-select-btn" style={{ position: 'relative' }}>
@@ -1024,47 +1205,11 @@ const ReorderRecommendations = () => {
                   </select>
                 </div>
               </div>
-            )}
-          </div>
-          {/* What decides a cut, as analytics/optimization/lp.py solves it
-              (2026-10-01): the target comes first and the weights only act
-              when the allocation is short — after SSM's 3-week rule, which
-              counts the planned SKUs' stock, not the whole warehouse. With
-              one flat storage cost for every SKU the storage term is the
-              same whoever is cut, so it can't decide anything; this used to
-              credit it with a say. */}
-          <p className="reorder-page-subtitle">
-            Order quantities, in pieces, suggested by the optimizer (an LP, or linear-programming model) for the Class A
-            SKUs whose forecasts beat a simple last-month guess (MASE &lt; 1).
-            The LP orders each SKU up to its target stock, net of what is on hand. Only when the supplier allocation
-            can&apos;t cover every SKU does it cut some orders, and then
-            {lpInputs.cover_rule === 'per-sku'
-              ? <> the LP&apos;s cost and service weights decide which SKUs come up short.</>
-              : <>
-                  {' '}SSM&apos;s {lpInputs.target_weeks ?? 3}-week stock rule (counted over the SKUs in this plan, not the
-                  whole warehouse) and the LP&apos;s cost and service weights decide which SKUs come up short.
-                </>}
-            {lpInputs.storage_cost_per_unit != null && (
-              <>
-                {' '}The storage weight has no say for now: the placeholder storage cost is the same
-                {' '}₱{Number(lpInputs.storage_cost_per_unit).toFixed(2)} a piece for every SKU.
-              </>
-            )}
-            {notCategoryACount > 0 && (
-              <>
-                {' '}{notCategoryACount.toLocaleString()} of this cycle&apos;s {cycleRows.length.toLocaleString()} rows
-                {' '}are no longer Class A in the latest ABC run.
-              </>
-            )}
-            {' '}Each planning cycle is one optimization run, for the month after the latest sales data.
-            {meta?.supersededCount > 0 && (
-              <>
-                {' '}Showing the current cycle only — {meta.supersededCount.toLocaleString()} undecided
-                {' '}row{meta.supersededCount === 1 ? '' : 's'} from earlier runs {meta.supersededCount === 1 ? 'is' : 'are'} superseded and not listed.
-              </>
-            )}
-          </p>
-          {/* Same freshness notice as the Dashboard's, for the page where
+          )}
+        >
+          {/* What decides a cut (analytics/optimization/lp.py, 2026-10-01)
+              is in "How these recommendations were calculated" under the
+              table. Same freshness notice as the Dashboard's, for the page where
               the affected numbers (q_i, rop_i) are actually acted on.
               Restored 2026-09-29 with the Dashboard's (see Dashboard.jsx). */}
           {meta?.freshness?.is_stale && (
@@ -1078,23 +1223,29 @@ const ReorderRecommendations = () => {
               </span>
             </div>
           )}
-        </div>
+        </PageHeader>
 
-        {/* Tab Navigation */}
-        <div className="reorder-tabs-row">
+        {/* The two views, in the shared segmented control. */}
+        <div className="segmented reorder-tabs" role="tablist" aria-label="Reorder views">
           <button
-            className={`reorder-tab-btn ${activeTab === 'RECOMMENDATIONS' ? 'active' : ''}`}
+            type="button"
+            role="tab"
+            className={`segmented-item${activeTab === 'RECOMMENDATIONS' ? ' is-active' : ''}`}
+            aria-selected={activeTab === 'RECOMMENDATIONS'}
             onClick={() => setActiveTab('RECOMMENDATIONS')}
           >
-            <ClipboardList size={14} />
-            RECOMMENDATIONS
+            <ClipboardList size={14} aria-hidden="true" />
+            Recommendations
           </button>
           <button
-            className={`reorder-tab-btn ${activeTab === 'DECISION_LOG' ? 'active' : ''}`}
+            type="button"
+            role="tab"
+            className={`segmented-item${activeTab === 'DECISION_LOG' ? ' is-active' : ''}`}
+            aria-selected={activeTab === 'DECISION_LOG'}
             onClick={() => setActiveTab('DECISION_LOG')}
           >
-            <ListChecks size={14} />
-            DECISION LOG {decisionLog.length > 0 && <span className="reorder-tab-count">{decisionLog.length}</span>}
+            <ListChecks size={14} aria-hidden="true" />
+            Decision log {decisionLog.length > 0 && <span className="segmented-count">{decisionLog.length}</span>}
           </button>
         </div>
 
@@ -1103,8 +1254,8 @@ const ReorderRecommendations = () => {
             <LoadingStatus>Loading recommendations…</LoadingStatus>
             {activeTab === 'RECOMMENDATIONS' ? (
               <>
-                <div className="reorder-summary-grid">
-                  <SkeletonStatCards count={4} cardClassName="reorder-summary-card" />
+                <div className="kpi-strip reorder-summary-grid">
+                  <SkeletonStatCards count={4} cardClassName="kpi-card" />
                 </div>
                 <div className="reorder-table-toolbar" aria-hidden="true">
                   <SkeletonLine width="58%" height="0.8rem" />
