@@ -12,7 +12,7 @@ Tier A basis (DEC-38, PENDING TA CONFIRMATION, 2026-10-05): Unilever Tier A = Cl
 ## Repo
 https://github.com/4ISA-Capstone-Group-7/SSM-DSD — remote `group7`, base branch `kelvin-etl` (NOT master — master is behind, don't trust it as source of truth). Old repo KYG07/Capstone-Project is dead, never push there.
 Each session works in its own worktree on a branch named `kelvin/<name>`.
-Migrations: 0044 (Tier A basis `t12m_new`, DEC-38, 2026-10-05) is the latest on public, after 0043 (mart stock-limited rule, DEC-36), 0042 (in-transit stock + review flag, DEC-33/34) and 0041 (data marts, schema `mart`, DEC-36), all 2026-10-04. The next free number is 0045 (0046 is taken by the planning-mart session).
+Migrations: 0046 (planning mart `mart.planning_mart`, part of DEC-36, 2026-10-05) is the latest on public, after 0044 (Tier A basis `t12m_new`, DEC-38, 2026-10-05), 0043 (mart stock-limited rule, DEC-36), 0042 (in-transit stock + review flag, DEC-33/34) and 0041 (data marts, schema `mart`, DEC-36), all 2026-10-04. 0045 was never used and is still free; the next free number after it is 0047.
 
 ## Stack
 Python/pandas ETL, FastAPI backend, Next.js/Tailwind frontend, Supabase (Postgres), Vercel (frontend host), Render (backend host).

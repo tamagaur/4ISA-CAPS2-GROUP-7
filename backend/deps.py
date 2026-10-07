@@ -140,7 +140,7 @@ def check_db_connection() -> None:
     surfacing as a confusing error on whatever request happens to be
     first. Raises (RuntimeError if unset, sqlalchemy.exc.* if unreachable)
     rather than returning a bool — startup should crash, not limp on."""
-    from backend import batch, lp_cycle, marts, permissions  # they import this module
+    from backend import batch, lp_cycle, marts, permissions, planning_mart  # they import this module
 
     _get_engine().connect().close()
     # Opens the read pool's first connection, and asks in the same round trip
@@ -148,10 +148,11 @@ def check_db_connection() -> None:
     # reads permissions and the data version with it.
     with Session(_get_read_engine()) as db:
         batch.prefetch(db, [(permissions.READY_SQL, {}), (marts.REFRESH_PRESENT_SQL, {}),
-                            (lp_cycle.LP_RUN_PRESENT_SQL, {})])
+                            (lp_cycle.LP_RUN_PRESENT_SQL, {}), (planning_mart.present_sql(), {})])
         permissions.permissions_ready(db)
         marts.present(db)
         lp_cycle.lp_run_present(db)
+        planning_mart.present(db)
 
 
 READ_METHODS = ("GET", "HEAD")
@@ -217,8 +218,9 @@ OVERRIDES_COLUMN = """,
               FROM user_permission_override o WHERE o.user_id = u.user_id) AS permission_overrides"""
 # ... and, on a read, what the cached responses were built from: the marts'
 # refresh status (every data load, fill, forecast run and LP run, and the
-# refresh itself — mart.refresh_status, migration 0041), the latest reorder
-# decision and the latest SKU added or edited through the app.
+# refresh itself — mart.refresh_status, migration 0041; since 0046 it also carries
+# the planning mart's own refresh, e.g. after a review-flag write), the latest
+# reorder decision and the latest SKU added or edited through the app.
 DATA_VERSION_COLUMN = """,
            (SELECT row_to_json(r)::text FROM mart.refresh_status r)
            || '|' || COALESCE((SELECT MAX(decided_at)::text FROM lp_recommendation), '')

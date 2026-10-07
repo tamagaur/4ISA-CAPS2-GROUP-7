@@ -252,10 +252,13 @@ def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> di
     cycle = current_cycle(db, principal, mode)
     fc_at = batch.scalar(db, *forecast_generated_query(mode))
     lp = batch.first(db, *freshness_query(cycle, fc_at, principal, mode)) or {}
-    lp_at = lp.get("t")
-    row_count = int(lp.get("row_count") or 0)
-    stale_count = int(lp.get("stale_count") or 0)
+    return freshness_from(cycle, fc_at, lp.get("t"), int(lp.get("row_count") or 0),
+                          int(lp.get("stale_count") or 0), superseded_count(db, cycle, principal, mode))
 
+
+def freshness_from(cycle, fc_at, lp_at, row_count: int, stale_count: int, superseded: int) -> dict:
+    """freshness()'s answer from its figures, however they were read (the queries above, or
+    backend/planning_mart.head_query in one statement)."""
     is_stale = None
     reason = None
     if lp_at is not None and fc_at is not None:
@@ -292,7 +295,7 @@ def freshness(db: Session, principal: str | None = None, mode: str = REAL) -> di
         "is_stale": is_stale,
         "row_count": row_count,
         "stale_row_count": stale_count,
-        "superseded_pending_count": superseded_count(db, cycle, principal, mode),
+        "superseded_pending_count": superseded,
         "reason": reason,
     }
 
