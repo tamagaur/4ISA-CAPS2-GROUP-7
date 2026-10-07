@@ -1169,13 +1169,16 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
               constants), never restated here. */}
           <p>
             {/* The definition of an "important" product, on screen, and the
-                basis of the ranking named as what it is: one month, until
-                the 12-month basis lands (3 Oct 2026 analysis). */}
+                basis of the ranking named as what it is: the selected range
+                (abc_revenue.label, data marts since 2026-10-04), else the
+                stored run's single month (3 Oct 2026 analysis). */}
             {rules
               ? `Important products (Class A) are the top sellers that together make ${Math.round(rules.tier_a_cutoff * 100)}% of revenue`
                 + `${rankedMonth ? ` in ${rankedMonth}` : ''}. `
               : 'Which products earn the most. '}
-            {rankedMonth ? `Ranked on ${rankedMonth} sales (single month)` : `${unitsTitle} are ranked by revenue`}
+            {rankedMonth
+              ? `Ranked on ${rankedMonth} sales${revenue?.label ? '' : ' (single month)'}`
+              : `${unitsTitle} are ranked by revenue`}
             {rules
               ? `: B is the next ${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, `
                 + `C the last ${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`
