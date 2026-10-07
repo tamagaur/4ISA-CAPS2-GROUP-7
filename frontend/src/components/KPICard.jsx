@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowRight, AlertTriangle } from 'lucide-react';
 import { STATUS_TIERS, SEMANTIC } from '../theme/colors';
 import InfoTip from './InfoTip';
 import './KPICard.css';
@@ -99,6 +99,10 @@ const Sparkline = ({ points, color }) => {
 // accent tier. Without it, deltaLine keeps the tier-coloured text line.
 // unit: a short muted word after the value ("SKUs"); callers leave it off
 // when the card is blocked and the value is "—".
+// note: a second muted line under contextLine — another reading of the same
+// figure (e.g. the range's total under a month's sales).
+// flag: a line the reader must see beside the figure, never behind a "?"
+// (e.g. a stock count the team judged unusual), in the watch colour.
 // action: { label, onClick } or { label, to } — the way from this figure to
 // what is behind it (a list, another page), as a quiet link in the footer.
 // The figure's detail sits one click away instead of on the card.
@@ -112,6 +116,8 @@ const KPICard = ({
   isOverTarget,
   trendDirection,
   contextLine,
+  note,
+  flag,
   deltaLine,
   deltaTone,
   tooltip,
@@ -145,6 +151,13 @@ const KPICard = ({
       </div>
       <div className="kpi-footer">
         {contextLine && <div className="kpi-context">{contextLine}</div>}
+        {note && <div className="kpi-context kpi-note">{note}</div>}
+        {flag && (
+          <div className="kpi-flag">
+            <AlertTriangle size={12} aria-hidden="true" />
+            <span>{flag}</span>
+          </div>
+        )}
         {deltaLine && deltaTone && (
           <span className={`kpi-delta-pill is-${deltaTone}`}>
             {TrendIcon && <TrendIcon size={12} className="kpi-trend-icon" aria-hidden="true" />}

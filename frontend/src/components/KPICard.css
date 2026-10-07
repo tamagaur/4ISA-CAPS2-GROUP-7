@@ -125,6 +125,30 @@
   line-height: 1.4;
 }
 
+.kpi-note {
+  margin-top: 2px;
+}
+
+/* KPICard `flag`: a caveat that belongs beside the figure (an unusual count). */
+.kpi-flag {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-warning-text);
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+}
+
+.kpi-flag svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 /* The card's way through to what is behind its figure (KPICard `action`):
    a quiet text link in the footer, a button or a router link alike. */
 .kpi-action {

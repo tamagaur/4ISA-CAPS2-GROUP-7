@@ -1,0 +1,116 @@
+/* Range cards (RangeCards.jsx): idle stock, forecast miss, Class A changes. */
+.range-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  margin-bottom: 12px;
+}
+
+.range-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.range-stat-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.range-stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.range-stat-sub {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.range-levels {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--color-text-body);
+}
+
+.range-levels strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-heading);
+}
+
+.range-note,
+.range-blocked {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--color-text-body);
+}
+
+.range-blocked {
+  color: var(--color-text-muted);
+}
+
+.range-source {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  color: var(--color-text-subtle);
+}
+
+.range-card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  cursor: pointer;
+}
+
+.range-card-action:hover {
+  text-decoration: underline;
+}
+
+.range-card-action:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.range-change-block + .range-change-block {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.range-list-status {
+  margin: 16px 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+/* Del Monte's Jan 2025 regrouping (the ABC page's .abc-principal-note look). */
+.range-regroup-note {
+  margin: 0 0 12px;
+  padding: 0.6rem 0.9rem;
+  background-color: var(--color-surface-raised);
+  border-left: 3px solid var(--color-slate-400);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
