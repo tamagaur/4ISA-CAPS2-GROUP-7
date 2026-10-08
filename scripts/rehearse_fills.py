@@ -5,8 +5,13 @@
   python -m scripts.fill_missing   --schema ssm_fills             the fill step itself (run it twice: the 2nd writes nothing)
   python -m scripts.rehearse_fills --schema ssm_fills --verify    guardrails, scratch vs public (public read-only)
 
-The clone: every public base table (views are never cloned as tables), LIKE ... INCLUDING DEFAULTS/IDENTITY/INDEXES/
-CONSTRAINTS + INSERT ... SELECT, identity sequences mirrored to public's positions. Foreign keys are not cloned.
+The clone: every base table of the stack's own schemas - `public` and, since migration 0048 (DEC-39 group 1), `app`
+(views are never cloned as tables) - LIKE ... INCLUDING DEFAULTS/IDENTITY/INDEXES/CONSTRAINTS + INSERT ... SELECT,
+identity sequences mirrored to the source's positions. Foreign keys are not cloned. Every table is cloned under its
+BARE name whatever schema it came from, because that is what the pipeline's unqualified SQL looks for: after 0048,
+`audit_log` lives in `app`, and the fill and slice loaders end with an unqualified `INSERT INTO audit_log`
+(fill_missing.py, load_slices.py) under a search_path that is the scratch schema and nothing else. Scanning `public`
+alone left that insert with nowhere to resolve and broke every scratch fill run.
 Credential rule: never clone a table that holds credentials or sessions - one whose name or any column name matches
 CREDENTIAL_PATTERN (password, secret, token, session, mfa, totp, recovery, api key ...). The rule reads the catalog, so a
 new auth table is excluded without anyone remembering to list it.
@@ -21,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 
 from sqlalchemy import Connection, create_engine, text
 
@@ -29,7 +35,17 @@ REAL_VIEWS = {"sales_fact_real": "sales_fact", "purchase_fact_real": "purchase_f
               "sellout_fact_real": "sellout_fact", "inventory_fact_real": "inventory_fact",
               "unilever_sku_demand_fact_real": "unilever_sku_demand_fact"}
 CREDENTIAL_PATTERN = r"(passw(or)?d|secret|token|credential|session|mfa|totp|otp_|recovery|api_?key|private_?key)"
+# Schemas holding the stack's own base tables. `app` arrived with migration 0048 (DEC-39 group 1); the credential
+# rule is applied across all of them identically, so moving a table between them changes nothing about whether it
+# is cloned - only `public` being the sole source would have.
+SOURCE_SCHEMAS = ("public", "app")
 OUTPUT_TABLES = ("forecast_result", "abc_classification", "lp_recommendation", "sku_traits", "sku_segment")  # models' outputs
+
+
+def _qualified(src: str, table: str) -> str:
+    """`audit_log` for a table from public, `app.audit_log` for one from anywhere else - the
+    schema is worth printing only when it is not the one the reader assumes."""
+    return table if src == "public" else f"{src}.{table}"
 
 
 def _read_only(conn: Connection) -> None:
@@ -37,16 +53,26 @@ def _read_only(conn: Connection) -> None:
 
 
 def _plan(conn: Connection):
-    """(tables to clone, {skipped table: why}, views to clone [(name, body)], {skipped view: why}) - catalog reads only."""
-    tabs = [r[0] for r in conn.execute(text("SELECT c.relname FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace "
-                                            "AND c.relkind IN ('r','p') ORDER BY 1"))]
-    hits = {r[0]: r[1] for r in conn.execute(text(
-        "SELECT t, string_agg(DISTINCT w, ', ') FROM ("
-        " SELECT c.relname t, c.relname w FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace"
-        "   AND c.relkind IN ('r','p') AND c.relname ~* :pat"
-        " UNION ALL SELECT c.relname, a.attname FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid"
-        "   WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r','p') AND a.attnum > 0"
-        "   AND NOT a.attisdropped AND a.attname ~* :pat) x GROUP BY t"), {"pat": CREDENTIAL_PATTERN})}
+    """([(source schema, table)] to clone, {"schema.table" skipped: why}, views to clone [(name, body)],
+    {skipped view: why}) - catalog reads only.
+
+    Tables carry the schema they come from because they no longer all come from one: the clone still creates
+    every one under its bare name in the scratch schema, but it has to know where to copy from."""
+    ns = list(SOURCE_SCHEMAS)
+    tabs = [(r[0], r[1]) for r in conn.execute(text(
+        "SELECT n.nspname, c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = ANY(:ns) AND c.relkind IN ('r','p') ORDER BY 2, 1"), {"ns": ns})]
+    dupes = sorted(t for t, c in Counter(t for _, t in tabs).items() if c > 1)
+    if dupes:
+        raise SystemExit(f"the same table name exists in more than one of {ns}: {', '.join(dupes)}. "
+                         f"Every table is cloned under its bare name, so two sources would collide in scratch.")
+    hits = {(r[0], r[1]): r[2] for r in conn.execute(text(
+        "SELECT n.nspname, c.relname, string_agg(DISTINCT x.w, ', ') FROM ("
+        " SELECT c.oid, c.relname AS w FROM pg_class c WHERE c.relkind IN ('r','p') AND c.relname ~* :pat"
+        " UNION ALL SELECT c.oid, a.attname FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid"
+        "   WHERE c.relkind IN ('r','p') AND a.attnum > 0 AND NOT a.attisdropped AND a.attname ~* :pat) x"
+        " JOIN pg_class c ON c.oid = x.oid JOIN pg_namespace n ON n.oid = c.relnamespace"
+        " WHERE n.nspname = ANY(:ns) GROUP BY 1, 2"), {"pat": CREDENTIAL_PATTERN, "ns": ns})}
     views = {r[0]: r[1] for r in conn.execute(text("SELECT c.relname, pg_get_viewdef(c.oid, true) FROM pg_class c "
                                                    "WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'v' ORDER BY 1"))}
     deps: dict[str, set[tuple[str, str]]] = {v: set() for v in views}   # view -> {(schema, relation)} it reads
@@ -67,7 +93,9 @@ def _plan(conn: Connection):
                 foreign[v] = {f"view {r}" for r in via}
                 changed = True
     skipped_views = {v: sorted(f) for v, f in foreign.items() if f}
-    return ([t for t in tabs if t not in hits], hits, [(v, b) for v, b in views.items() if v not in skipped_views], skipped_views)
+    return ([(ns_, t) for ns_, t in tabs if (ns_, t) not in hits],
+            {f"{ns_}.{t}": why for (ns_, t), why in hits.items()},
+            [(v, b) for v, b in views.items() if v not in skipped_views], skipped_views)
 
 
 def build(engine, schema: str, dry_run: bool = False) -> None:
@@ -85,22 +113,23 @@ def build(engine, schema: str, dry_run: bool = False) -> None:
     for v, why in skipped_views.items():
         print(f"  SKIP view {v}: depends on {', '.join(why)}")
     if dry_run:
-        print(f"[dry-run] would clone tables: {', '.join(tables)}\n[dry-run] nothing written")
+        print(f"[dry-run] would clone tables: {', '.join(_qualified(src, t) for src, t in tables)}"
+              f"\n[dry-run] nothing written")
         return
     with engine.begin() as conn:
         conn.execute(text("SET LOCAL statement_timeout = '15min'"))
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
-        for t in tables:
-            conn.execute(text(f"CREATE TABLE {schema}.{t} (LIKE public.{t} INCLUDING DEFAULTS INCLUDING IDENTITY "
+        for src, t in tables:
+            conn.execute(text(f"CREATE TABLE {schema}.{t} (LIKE {src}.{t} INCLUDING DEFAULTS INCLUDING IDENTITY "
                               f"INCLUDING INDEXES INCLUDING CONSTRAINTS)"))
-            n = conn.execute(text(f"INSERT INTO {schema}.{t} OVERRIDING SYSTEM VALUE SELECT * FROM public.{t}")).rowcount
-            for (col,) in conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' "
-                                            "AND table_name = :t AND is_identity = 'YES'"), {"t": t}):
-                seq = conn.execute(text("SELECT pg_get_serial_sequence(:t, :c)"), {"t": f"public.{t}", "c": col}).scalar()
+            n = conn.execute(text(f"INSERT INTO {schema}.{t} OVERRIDING SYSTEM VALUE SELECT * FROM {src}.{t}")).rowcount
+            for (col,) in conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_schema = :src "
+                                            "AND table_name = :t AND is_identity = 'YES'"), {"src": src, "t": t}):
+                seq = conn.execute(text("SELECT pg_get_serial_sequence(:t, :c)"), {"t": f"{src}.{t}", "c": col}).scalar()
                 last, called = conn.execute(text(f"SELECT last_value, is_called FROM {seq}")).one()
                 conn.execute(text("SELECT setval(pg_get_serial_sequence(:t, :c), :v, :called)"),
                              {"t": f"{schema}.{t}", "c": col, "v": last, "called": called})
-            print(f"  {t}: {n} rows")
+            print(f"  {_qualified(src, t)}: {n} rows")
         conn.execute(text("SET LOCAL search_path TO :s").bindparams(s=schema))
         for name, body in views:
             conn.execute(text(f"CREATE VIEW {name} AS {body}"))

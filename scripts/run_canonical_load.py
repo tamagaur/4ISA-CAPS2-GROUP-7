@@ -1532,31 +1532,75 @@ def pending_migrations(engine: Engine, schema: str) -> list[str]:
     return pending
 
 
-def _assert_fresh_build_mart_collision(engine: Engine, migrations: list[Path]) -> None:
-    """A brand-new scratch schema (no ledger yet) replays every migration,
-    including 0041, which creates schema `mart` and its tables by fixed
-    name with no `IF NOT EXISTS` on the tables (0041_data_marts.sql:48,
-    :76). `mart` is not scoped under the scratch schema being built - it
-    is a literal, database-wide name - so once anything has created it
-    (live `public`'s own cutover, or an earlier scratch build that was
-    never dropped), every subsequent fresh build collides there. Without
-    this check the failure surfaces as a bare 'relation "sales_mart"
-    already exists' with no indication which migration or why."""
-    if not any(_migration_number(f.name) == "0041" for f in migrations):
+_CREATE_SCHEMA_RE = re.compile(r"CREATE\s+SCHEMA\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w\".]+)", re.IGNORECASE)
+_CREATE_TABLE_RE = re.compile(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w\".]+)", re.IGNORECASE)
+
+# Objects a migration creates under a name that is NOT scoped under the schema
+# being built: a schema of its own, or a relation/function qualified with some
+# other schema. `CREATE OR REPLACE ...` is deliberately not matched - replacing
+# an object that already exists is the point of it, not a collision.
+_CREATE_QUALIFIED_RE = re.compile(
+    r"CREATE\s+(?:TABLE|VIEW|MATERIALIZED\s+VIEW|SEQUENCE|TYPE|FUNCTION)\s+"
+    r"(?:IF\s+NOT\s+EXISTS\s+)?\"?([\w]+)\"?\.\"?([\w]+)\"?",
+    re.IGNORECASE,
+)
+
+
+def _database_wide_objects(migrations: list[Path], target_schema: str) -> list[tuple[Path, str, str]]:
+    """[(migration file, what kind of thing, its name)] for every object a
+    migration creates outside the schema being built. Comments are stripped
+    first, so a name that only appears in a rollback note or an explanation is
+    not mistaken for a statement."""
+    found: list[tuple[Path, str, str]] = []
+    for f in migrations:
+        sql = _strip_sql_file(f.read_text(encoding="utf-8"))
+        for name in _CREATE_SCHEMA_RE.findall(sql):
+            name = name.replace('"', "")
+            if name != target_schema:
+                found.append((f, "schema", name))
+        for schema, obj in _CREATE_QUALIFIED_RE.findall(sql):
+            if schema != target_schema:
+                found.append((f, "relation", f"{schema}.{obj}"))
+    return found
+
+
+def _assert_fresh_build_no_database_wide_collision(
+    engine: Engine, migrations: list[Path], target_schema: str
+) -> None:
+    """A brand-new scratch schema (no ledger yet) replays every migration. Most
+    of them create their objects unqualified, under the search_path, so they
+    land inside the scratch schema and a fresh build is safe. Some do not:
+    0041 creates schema `mart` and its tables by fixed name, 0046 adds
+    `mart.planning_mart`, 0048 creates schema `app` and six views named
+    `public.<table>`. Those names are database-wide, not scoped under the
+    schema being built, so once anything has created them (live `public`'s own
+    cutover, or an earlier scratch build that was never dropped) every
+    subsequent fresh replay collides with it.
+
+    This used to test one hard-coded name, `mart.sales_mart`, and so would have
+    said nothing about 0048 or about the `analytics` migration the plan has
+    next (reports/SCHEMA_REORG_PLAN.md section 5 group 2). It now reads what
+    each migration actually creates and names whichever file is the problem,
+    which is also the only version that stays correct as migrations are added.
+    Without it the failure surfaces as a bare 'relation "..." already exists'
+    with no indication which migration or why."""
+    offenders = _database_wide_objects(migrations, target_schema)
+    if not offenders:
         return
     with engine.connect() as conn:
-        exists = conn.execute(text("SELECT to_regclass('mart.sales_mart')")).scalar()
-    if exists is not None:
-        raise RuntimeError(
-            "Fresh build would fail at 0041_data_marts.sql: schema 'mart' already has "
-            "table 'sales_mart'. 0041 creates mart's objects by fixed name with no "
-            "IF NOT EXISTS, and 'mart' is a database-wide schema rather than one scoped "
-            "under the scratch schema being built, so a fresh replay always collides "
-            "with whatever already created it. This script does not support replaying "
-            "0041 onward into a brand-new scratch schema; rehearse mart-affecting "
-            "migrations with scripts/rehearse_marts.py / scripts/rehearse_planning_mart.py "
-            "instead, or target a schema whose ledger already has 0041 applied."
-        )
+        for f, kind, name in offenders:
+            query = "SELECT to_regnamespace(:n)" if kind == "schema" else "SELECT to_regclass(:n)"
+            if conn.execute(text(query).bindparams(n=name)).scalar() is None:
+                continue
+            raise RuntimeError(
+                f"Fresh build would fail at {f.name}: {kind} '{name}' already exists. "
+                f"{f.name} creates it by a fixed, database-wide name rather than one scoped "
+                f"under the scratch schema being built ('{target_schema}'), so a fresh replay "
+                f"always collides with whatever created it first. This script does not support "
+                f"replaying that migration into a brand-new scratch schema: rehearse it with its "
+                f"own script (scripts/rehearse_marts.py, scripts/rehearse_planning_mart.py) or "
+                f"with --rehearse against a schema whose ledger already has it applied."
+            )
 
 
 def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_public: bool = False) -> None:
@@ -1579,7 +1623,7 @@ def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_publ
     # run yet) so every file applies and 0019's backfill seeds the other 19.
     applied = _read_ledger(engine, schema)
     if applied is None:
-        _assert_fresh_build_mart_collision(engine, migrations)
+        _assert_fresh_build_no_database_wide_collision(engine, migrations, schema)
     files = ([SCHEMA_SQL] if applied is None else []) + migrations
     if applied is not None:
         print(f"  skipped {SCHEMA_SQL.relative_to(REPO_ROOT)} — '{schema}' already has a {LEDGER_TABLE} ledger")
@@ -1629,8 +1673,6 @@ def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_publ
         print(f"  applied {f.relative_to(REPO_ROOT)}")
 
 
-_CREATE_SCHEMA_RE = re.compile(r"CREATE\s+SCHEMA\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w\".]+)", re.IGNORECASE)
-_CREATE_TABLE_RE = re.compile(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w\".]+)", re.IGNORECASE)
 
 
 def _verify_rehearsal(conn: Connection, pending: list[Path]) -> int:
@@ -1659,12 +1701,95 @@ def _verify_rehearsal(conn: Connection, pending: list[Path]) -> int:
     return checked
 
 
+def enable_server_notices() -> None:
+    """Let a migration's own RAISE NOTICE reach the operator.
+
+    SQLAlchemy's psycopg2 dialect already drains psycopg2's notice list after
+    every statement and re-emits each one through the logger
+    `sqlalchemy.dialects.postgresql` at INFO (sqlalchemy/dialects/postgresql/
+    psycopg2.py:568-585) - which also means no caller can read the list
+    afterwards, because it has already been emptied. What hides the messages
+    is sqlalchemy/log.py pinning the `sqlalchemy` logger to WARN, so those
+    INFO records are dropped. Raising this one logger to INFO makes them
+    visible. Without it a migration that checks itself and reports with NOTICE
+    (0048 does) looks exactly like a migration that checked nothing.
+    """
+    logging.getLogger("sqlalchemy.dialects.postgresql").setLevel(logging.INFO)
+
+
+def _timeout_ms(setting: str) -> int:
+    """A Postgres timeout GUC as milliseconds. Postgres normalises the unit it
+    reports ('5s' asked for comes back as '5s', '5000ms' comes back as '5s'),
+    so the strings cannot be compared directly - only the values can."""
+    setting = setting.strip()
+    for suffix, mult in (("ms", 1), ("min", 60_000), ("h", 3_600_000), ("d", 86_400_000), ("s", 1000)):
+        if setting.endswith(suffix):
+            return int(float(setting[: -len(suffix)]) * mult)
+    return int(float(setting))
+
+
+def _print_effective_timeouts(conn, lock_timeout_ms: int, statement_timeout_ms: int, when: str) -> None:
+    """Print what the command line asked for beside what the transaction is
+    actually running under, and name any override. A migration file's own
+    SET LOCAL wins over this function's caller, and that has to be visible
+    rather than inferred (asked for 2026-10-08, reviewing 0048)."""
+    print(f"  [rehearse] timeouts {when}:")
+    for name, requested in (("lock_timeout", lock_timeout_ms),
+                            ("statement_timeout", statement_timeout_ms)):
+        effective = conn.execute(text(f"SHOW {name}")).scalar()
+        note = "" if _timeout_ms(effective) == requested else "   <-- OVERRIDDEN by SQL in this transaction"
+        print(f"    {name:18} requested={requested}ms  "
+              f"effective={effective} ({_timeout_ms(effective)}ms){note}")
+
+
+def _run_check_files(conn, check_files: list[Path]) -> int:
+    """Run each check file as one statement inside the rehearsal's own
+    transaction and print what it returns. Returns the number of failures: a
+    statement that raised, or a row whose `ok` column is not true.
+
+    Each file runs inside its own SAVEPOINT. Postgres aborts the entire
+    transaction on any error, so without one the first failing check left
+    every later check reporting only "current transaction is aborted" - the
+    run would hide every result after the first problem. A savepoint cannot
+    commit anything; the unconditional ROLLBACK above still ends the
+    transaction."""
+    failures = 0
+    for path in check_files:
+        sql = _strip_sql_file(Path(path).read_text(encoding="utf-8"))
+        print(f"\n  [check] {path}")
+        savepoint = conn.begin_nested()
+        try:
+            result = conn.exec_driver_sql(sql.replace("%", "%%"))
+        except Exception as exc:  # noqa: BLE001 - a failed check is a result, not a crash
+            failures += 1
+            savepoint.rollback()
+            print(f"    FAILED to run: {type(exc).__name__}: {str(exc).splitlines()[0]}")
+            continue
+        if not result.returns_rows:
+            savepoint.close()
+            print("    ok (statement returned no rows)")
+            continue
+        rows = result.mappings().all()
+        savepoint.close()
+        if not rows:
+            print("    ok (0 rows)")
+            continue
+        has_ok = "ok" in rows[0]
+        for r in rows:
+            bad = has_ok and r["ok"] is not True
+            failures += 1 if bad else 0
+            mark = "FAIL" if bad else ("PASS" if has_ok else "    ")
+            print(f"    {mark} " + "  ".join(f"{k}={r[k]}" for k in r if k != "ok"))
+    return failures
+
+
 def rehearse_migrations(
     engine: Engine,
     schema: str,
     lock_timeout_ms: int,
     statement_timeout_ms: int,
     allow_public: bool = False,
+    check_files: list[Path] | None = None,
 ) -> int:
     """R4 (reports/SCHEMA_REORG_PLAN.md section 2): apply this schema's
     pending migrations inside ONE transaction that is ALWAYS rolled back -
@@ -1675,7 +1800,24 @@ def rehearse_migrations(
     catalog-only and millisecond-scale. lock_timeout/statement_timeout
     bound how long the transaction can hold locks on live tables: a lock it
     can't get aborts the rehearsal instead of queuing every other session
-    on those tables behind it (plan's R4 risk row)."""
+    on those tables behind it (plan's R4 risk row).
+
+    The two timeouts are REQUESTED values, not guaranteed ones: a migration
+    file may issue its own `SET LOCAL lock_timeout` (0048 does, so that
+    applying it by hand in psql is bounded too), and that silently replaces
+    what was asked for here. Both are therefore read back from the database -
+    once after they are set, once after every file has been applied - and a
+    difference is printed as an override naming the effective value, rather
+    than leaving the command line looking authoritative when it is not.
+
+    check_files: SQL files run inside this same transaction after the last
+    migration and before the ROLLBACK, each exactly ONE statement (no
+    splitting is attempted, so a `DO $$ ... $$` block is fine). A statement
+    that returns rows has them printed; one that returns none prints `ok`. A
+    returned column named `ok` that is false in any row fails the rehearsal.
+    This is the only way a reorganisation migration's verification queries
+    can see the moved objects at all: nothing outside this transaction can,
+    because it never commits."""
     _require_scratch_schema(schema, allow_public=allow_public)
     migrations = sorted(MIGRATIONS_DIR.glob("0*.sql"))
     _assert_no_new_number_collision(migrations)
@@ -1708,6 +1850,7 @@ def rehearse_migrations(
             conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
             conn.execute(text(f"SET LOCAL lock_timeout = '{int(lock_timeout_ms)}ms'"))
             conn.execute(text(f"SET LOCAL statement_timeout = '{int(statement_timeout_ms)}ms'"))
+            _print_effective_timeouts(conn, lock_timeout_ms, statement_timeout_ms, "after SET LOCAL")
             for f in pending:
                 cleaned_sql = _strip_sql_file(f.read_text(encoding="utf-8"))
                 if not cleaned_sql.strip():
@@ -1715,8 +1858,17 @@ def rehearse_migrations(
                     continue
                 conn.exec_driver_sql(cleaned_sql.replace("%", "%%"))
                 print(f"  applied (uncommitted) {f.relative_to(REPO_ROOT)}")
+            _print_effective_timeouts(conn, lock_timeout_ms, statement_timeout_ms,
+                                      "after applying every file")
             checked = _verify_rehearsal(conn, pending)
             print(f"  [rehearse] verified {checked} object(s) resolve in-transaction")
+            if check_files:
+                failures = _run_check_files(conn, check_files)
+                if failures:
+                    raise RuntimeError(
+                        f"{failures} check(s) failed in-transaction - see the rows above. "
+                        f"Rolling back (as every rehearsal does); the migration is NOT ready to apply."
+                    )
         finally:
             # Unconditional: runs whether the try block succeeded, raised, or
             # was interrupted. No code path below this function can commit.
@@ -1869,6 +2021,12 @@ def main() -> int:
         help=f"--rehearse only. Default {DEFAULT_REHEARSE_STATEMENT_TIMEOUT_MS}ms against a scratch schema; "
              f"mandatory (no default) with --schema public.",
     )
+    parser.add_argument(
+        "--rehearse-check", action="append", default=[], metavar="PATH", type=Path,
+        help="--rehearse only, repeatable. A SQL file of exactly ONE statement, run inside the "
+             "rehearsal transaction after the migrations and before the ROLLBACK, so its queries can "
+             "see the uncommitted objects. A returned column named `ok` that is false fails the run.",
+    )
     parser.add_argument("--slice", action="append", default=[], metavar="SPEC",
                         help="principal:table:YYYY-MM[:branch[:source]] - repeatable. See the module docstring.")
     parser.add_argument("--all-slices", action="store_true",
@@ -1898,6 +2056,11 @@ def main() -> int:
         parser.error("--target-public and --schema public go together (both explicit, no default path leads to public).")
     if args.rehearse and not args.schema_only:
         parser.error("--rehearse only applies to --schema-only")
+    if args.rehearse_check and not args.rehearse:
+        parser.error("--rehearse-check only applies with --rehearse")
+    for _check_path in args.rehearse_check:
+        if not _check_path.is_file():
+            parser.error(f"--rehearse-check: no such file: {_check_path}")
     if not args.rehearse and (args.lock_timeout_ms is not None or args.statement_timeout_ms is not None):
         parser.error("--lock-timeout-ms/--statement-timeout-ms only apply with --rehearse")
     if args.rehearse and args.target_public and (args.lock_timeout_ms is None or args.statement_timeout_ms is None):
@@ -1908,6 +2071,8 @@ def main() -> int:
     _require_scratch_schema(args.schema, allow_public=args.target_public)
 
     logging.basicConfig(level=logging.WARNING if args.quiet else logging.INFO, format="%(message)s")
+    if not args.quiet:
+        enable_server_notices()
     print(f"=== run_canonical_load: schema='{args.schema}'  dry_run={args.dry_run}  target_public={args.target_public} ===")
 
     cfg = get_settings()
@@ -1921,7 +2086,8 @@ def main() -> int:
                 else DEFAULT_REHEARSE_STATEMENT_TIMEOUT_MS
             )
             return rehearse_migrations(
-                engine, args.schema, lock_timeout_ms, statement_timeout_ms, allow_public=args.target_public
+                engine, args.schema, lock_timeout_ms, statement_timeout_ms,
+                allow_public=args.target_public, check_files=args.rehearse_check,
             )
         ensure_scratch_schema(engine, args.schema, dry_run=False, allow_public=args.target_public)
         print(f"\n--schema-only: '{args.schema}' is migrated. No loads. Exiting.")
