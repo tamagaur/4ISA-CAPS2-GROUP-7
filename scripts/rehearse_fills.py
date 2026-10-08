@@ -5,9 +5,16 @@
   python -m scripts.fill_missing   --schema ssm_fills             the fill step itself (run it twice: the 2nd writes nothing)
   python -m scripts.rehearse_fills --schema ssm_fills --verify    guardrails, scratch vs public (public read-only)
 
-The clone: every public base table except the auth tables and old backups (no credential is copied), LIKE ... INCLUDING
-DEFAULTS/IDENTITY/INDEXES/CONSTRAINTS + INSERT ... SELECT, identity sequences mirrored to public's positions, and
-public's views recreated against the clone (pg_get_viewdef). Foreign keys are not cloned. Public is only ever read, in
+The clone: every public base table (views are never cloned as tables), LIKE ... INCLUDING DEFAULTS/IDENTITY/INDEXES/
+CONSTRAINTS + INSERT ... SELECT, identity sequences mirrored to public's positions. Foreign keys are not cloned.
+Credential rule: never clone a table that holds credentials or sessions - one whose name or any column name matches
+CREDENTIAL_PATTERN (password, secret, token, session, mfa, totp, recovery, api key ...). The rule reads the catalog, so a
+new auth table is excluded without anyone remembering to list it.
+Views: public's views are recreated against the clone (pg_get_viewdef) only if every relation they depend on (pg_depend,
+transitively through other views) lives in public. A view that depends on another schema - e.g. a compatibility view onto
+analytics - is skipped: re-created in scratch it would be a writable window onto the LIVE table.
+  --dry-run          with --build: print what would be cloned / skipped and why, write nothing.
+  --outputs-schema   where the models' stored outputs live for the "unchanged" check (default public). Public is only ever read, in
 a BEGIN; SET TRANSACTION READ ONLY; ... ; ROLLBACK transaction - never a session-level setting (pooler leak).
 """
 from __future__ import annotations
@@ -21,7 +28,7 @@ FACT_TABLES = ("sales_fact", "purchase_fact", "salesreturn_fact", "sellout_fact"
 REAL_VIEWS = {"sales_fact_real": "sales_fact", "purchase_fact_real": "purchase_fact", "salesreturn_fact_real": "salesreturn_fact",
               "sellout_fact_real": "sellout_fact", "inventory_fact_real": "inventory_fact",
               "unilever_sku_demand_fact_real": "unilever_sku_demand_fact"}
-NOT_CLONED = {"users", "user_session", "auth_token", "user_permission_override", "product_dimension_backup_20260918"}
+CREDENTIAL_PATTERN = r"(passw(or)?d|secret|token|credential|session|mfa|totp|otp_|recovery|api_?key|private_?key)"
 OUTPUT_TABLES = ("forecast_result", "abc_classification", "lp_recommendation", "sku_traits", "sku_segment")  # models' outputs
 
 
@@ -29,19 +36,57 @@ def _read_only(conn: Connection) -> None:
     conn.execute(text("SET TRANSACTION READ ONLY"))
 
 
-def build(engine, schema: str) -> None:
+def _plan(conn: Connection):
+    """(tables to clone, {skipped table: why}, views to clone [(name, body)], {skipped view: why}) - catalog reads only."""
+    tabs = [r[0] for r in conn.execute(text("SELECT c.relname FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace "
+                                            "AND c.relkind IN ('r','p') ORDER BY 1"))]
+    hits = {r[0]: r[1] for r in conn.execute(text(
+        "SELECT t, string_agg(DISTINCT w, ', ') FROM ("
+        " SELECT c.relname t, c.relname w FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace"
+        "   AND c.relkind IN ('r','p') AND c.relname ~* :pat"
+        " UNION ALL SELECT c.relname, a.attname FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid"
+        "   WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r','p') AND a.attnum > 0"
+        "   AND NOT a.attisdropped AND a.attname ~* :pat) x GROUP BY t"), {"pat": CREDENTIAL_PATTERN})}
+    views = {r[0]: r[1] for r in conn.execute(text("SELECT c.relname, pg_get_viewdef(c.oid, true) FROM pg_class c "
+                                                   "WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'v' ORDER BY 1"))}
+    deps: dict[str, set[tuple[str, str]]] = {v: set() for v in views}   # view -> {(schema, relation)} it reads
+    for v, ns, rel in conn.execute(text(
+            "SELECT v.relname, n.nspname, d.relname FROM pg_class v JOIN pg_rewrite r ON r.ev_class = v.oid "
+            "JOIN pg_depend dep ON dep.objid = r.oid AND dep.classid = 'pg_rewrite'::regclass "
+            "AND dep.refclassid = 'pg_class'::regclass "
+            "JOIN pg_class d ON d.oid = dep.refobjid JOIN pg_namespace n ON n.oid = d.relnamespace "
+            "WHERE v.relnamespace = 'public'::regnamespace AND v.relkind = 'v' AND d.oid <> v.oid")):
+        deps[v].add((ns, rel))
+    foreign = {v: {ns for ns, _ in d if ns != "public"} for v, d in deps.items()}
+    changed = True
+    while changed:                                  # a view over a skipped view is skipped too
+        changed = False
+        for v, d in deps.items():
+            via = {rel for ns, rel in d if ns == "public" and foreign.get(rel)}
+            if via and not foreign[v]:
+                foreign[v] = {f"view {r}" for r in via}
+                changed = True
+    skipped_views = {v: sorted(f) for v, f in foreign.items() if f}
+    return ([t for t in tabs if t not in hits], hits, [(v, b) for v, b in views.items() if v not in skipped_views], skipped_views)
+
+
+def build(engine, schema: str, dry_run: bool = False) -> None:
     from scripts.run_canonical_load import _require_scratch_schema, ensure_scratch_schema
     _require_scratch_schema(schema)
     with engine.connect() as conn:
         _read_only(conn)
         if conn.execute(text("SELECT count(*) FROM information_schema.schemata WHERE schema_name = :s"), {"s": schema}).scalar():
             raise SystemExit(f"schema {schema} already exists - drop it first (this script never drops a schema)")
-        tables = [r[0] for r in conn.execute(text("SELECT c.relname FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace "
-                                                  "AND c.relkind = 'r' ORDER BY 1")) if r[0] not in NOT_CLONED]
-        views = conn.execute(text("SELECT c.relname, pg_get_viewdef(c.oid, true) FROM pg_class c "
-                                  "WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'v' ORDER BY 1")).all()
+        tables, skipped_tables, views, skipped_views = _plan(conn)
         conn.rollback()
     print(f"[build] cloning {len(tables)} tables and {len(views)} views into {schema}")
+    for t, why in skipped_tables.items():
+        print(f"  SKIP table {t}: credential rule (matches: {why})")
+    for v, why in skipped_views.items():
+        print(f"  SKIP view {v}: depends on {', '.join(why)}")
+    if dry_run:
+        print(f"[dry-run] would clone tables: {', '.join(tables)}\n[dry-run] nothing written")
+        return
     with engine.begin() as conn:
         conn.execute(text("SET LOCAL statement_timeout = '15min'"))
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
@@ -77,7 +122,7 @@ def _cols(conn: Connection, schema: str, table: str) -> list[str]:
                                             "AND table_name = :t ORDER BY ordinal_position"), {"s": schema, "t": table})]
 
 
-def verify(engine, schema: str) -> int:
+def verify(engine, schema: str, outputs_schema: str = "public") -> int:
     """Each check: (name, got, want). A want of None = report only."""
     res = []
     with engine.connect() as conn:
@@ -115,9 +160,9 @@ def verify(engine, schema: str) -> int:
                         == _fingerprint(conn, "public", t, "x.is_demo", cols), True))
         # 4. The models' stored outputs are untouched.
         for t in OUTPUT_TABLES:
-            cols = _cols(conn, "public", t)
-            res.append((f"{t}: identical to public's", _fingerprint(conn, schema, t, "TRUE", cols)
-                        == _fingerprint(conn, "public", t, "TRUE", cols), True))
+            cols = _cols(conn, outputs_schema, t)
+            res.append((f"{t}: identical to {outputs_schema}'s", _fingerprint(conn, schema, t, "TRUE", cols)
+                        == _fingerprint(conn, outputs_schema, t, "TRUE", cols), True))
         # 5. Del Monte split: totals equal the real sell-out totals; every row demo.
         res.append(("sku_demand_fill: months whose total differs from real sell-out (amount or quantity)", conn.execute(text(f"""
             SELECT count(*) FROM (SELECT _period, SUM(net_amount) a, SUM(quantity) q FROM {schema}.sellout_fact_real
@@ -156,13 +201,17 @@ def main() -> int:
     p.add_argument("--schema", required=True)
     p.add_argument("--build", action="store_true")
     p.add_argument("--verify", action="store_true")
+    p.add_argument("--dry-run", action="store_true", help="with --build: print the clone plan, write nothing")
+    p.add_argument("--outputs-schema", default="public", help="schema holding the models' stored outputs (default public)")
     args = p.parse_args()
+    if not args.outputs_schema.isidentifier():
+        raise SystemExit(f"bad --outputs-schema {args.outputs_schema!r}")
     from analytics.config import get_settings
     engine = create_engine(get_settings().supabase_db_url)
     if args.build:
-        build(engine, args.schema)
+        build(engine, args.schema, args.dry_run)
     if args.verify:
-        return verify(engine, args.schema)
+        return verify(engine, args.schema, args.outputs_schema)
     return 0
 
 
