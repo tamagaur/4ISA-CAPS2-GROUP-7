@@ -1448,6 +1448,11 @@ def _strip_sql_file(sql: str) -> str:
 
 LEDGER_TABLE = "schema_migrations"
 
+# --rehearse defaults (reports/SCHEMA_REORG_PLAN.md section 2, R4). Mandatory
+# - no default at all - when the target is public; see main()'s validation.
+DEFAULT_REHEARSE_LOCK_TIMEOUT_MS = 5000
+DEFAULT_REHEARSE_STATEMENT_TIMEOUT_MS = 30000
+
 # The ONE number that legitimately maps to two files. Both are applied, neither
 # was applied twice, and renaming either would orphan its ledger row - so they
 # are grandfathered rather than renumbered. Any NEW collision is a mistake and
@@ -1527,6 +1532,33 @@ def pending_migrations(engine: Engine, schema: str) -> list[str]:
     return pending
 
 
+def _assert_fresh_build_mart_collision(engine: Engine, migrations: list[Path]) -> None:
+    """A brand-new scratch schema (no ledger yet) replays every migration,
+    including 0041, which creates schema `mart` and its tables by fixed
+    name with no `IF NOT EXISTS` on the tables (0041_data_marts.sql:48,
+    :76). `mart` is not scoped under the scratch schema being built - it
+    is a literal, database-wide name - so once anything has created it
+    (live `public`'s own cutover, or an earlier scratch build that was
+    never dropped), every subsequent fresh build collides there. Without
+    this check the failure surfaces as a bare 'relation "sales_mart"
+    already exists' with no indication which migration or why."""
+    if not any(_migration_number(f.name) == "0041" for f in migrations):
+        return
+    with engine.connect() as conn:
+        exists = conn.execute(text("SELECT to_regclass('mart.sales_mart')")).scalar()
+    if exists is not None:
+        raise RuntimeError(
+            "Fresh build would fail at 0041_data_marts.sql: schema 'mart' already has "
+            "table 'sales_mart'. 0041 creates mart's objects by fixed name with no "
+            "IF NOT EXISTS, and 'mart' is a database-wide schema rather than one scoped "
+            "under the scratch schema being built, so a fresh replay always collides "
+            "with whatever already created it. This script does not support replaying "
+            "0041 onward into a brand-new scratch schema; rehearse mart-affecting "
+            "migrations with scripts/rehearse_marts.py / scripts/rehearse_planning_mart.py "
+            "instead, or target a schema whose ledger already has 0041 applied."
+        )
+
+
 def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_public: bool = False) -> None:
     """Brings `schema` up to date through the ledger. A brand-new schema (no
     ledger) runs schema.sql and then every migration; a ledgered schema never
@@ -1546,6 +1578,8 @@ def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_publ
     # Read ONCE, before the loop. On a fresh schema this is None (0019 has not
     # run yet) so every file applies and 0019's backfill seeds the other 19.
     applied = _read_ledger(engine, schema)
+    if applied is None:
+        _assert_fresh_build_mart_collision(engine, migrations)
     files = ([SCHEMA_SQL] if applied is None else []) + migrations
     if applied is not None:
         print(f"  skipped {SCHEMA_SQL.relative_to(REPO_ROOT)} — '{schema}' already has a {LEDGER_TABLE} ledger")
@@ -1593,6 +1627,106 @@ def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_publ
                      "applied_by": getpass.getuser(), "schema": schema},
                 )
         print(f"  applied {f.relative_to(REPO_ROOT)}")
+
+
+_CREATE_SCHEMA_RE = re.compile(r"CREATE\s+SCHEMA\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w\".]+)", re.IGNORECASE)
+_CREATE_TABLE_RE = re.compile(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w\".]+)", re.IGNORECASE)
+
+
+def _verify_rehearsal(conn: Connection, pending: list[Path]) -> int:
+    """Minimal, generic check that every CREATE SCHEMA / CREATE TABLE target
+    named in the pending migrations now resolves inside this (uncommitted)
+    transaction - catches "the SQL ran without error but didn't do what the
+    file says" (e.g. a target schema name that was silently wrong). This is
+    not a substitute for a migration's own dedicated rehearsal script (for
+    example scripts/rehearse_marts.py, scripts/rehearse_planning_mart.py)
+    when one exists for it - those compare real output, this only confirms
+    the objects exist. Raises on the first object that does not resolve;
+    returns the count checked."""
+    checked = 0
+    for f in pending:
+        sql = _strip_sql_file(f.read_text(encoding="utf-8"))
+        for name in _CREATE_SCHEMA_RE.findall(sql):
+            name = name.replace('"', "")
+            if conn.execute(text("SELECT to_regnamespace(:n)").bindparams(n=name)).scalar() is None:
+                raise RuntimeError(f"{f.name}: schema {name!r} does not resolve after apply - rehearsal failed")
+            checked += 1
+        for name in _CREATE_TABLE_RE.findall(sql):
+            name = name.replace('"', "")
+            if conn.execute(text("SELECT to_regclass(:n)").bindparams(n=name)).scalar() is None:
+                raise RuntimeError(f"{f.name}: table {name!r} does not resolve after apply - rehearsal failed")
+            checked += 1
+    return checked
+
+
+def rehearse_migrations(
+    engine: Engine,
+    schema: str,
+    lock_timeout_ms: int,
+    statement_timeout_ms: int,
+    allow_public: bool = False,
+) -> int:
+    """R4 (reports/SCHEMA_REORG_PLAN.md section 2): apply this schema's
+    pending migrations inside ONE transaction that is ALWAYS rolled back -
+    never a commit, never a schema_migrations row. Exists so a
+    reorganisation migration can be tried against live public's actual
+    catalog before it is trusted to run for real; the plan's recommendation
+    is R2 for the stack and R4 for the reorg migrations themselves, both
+    catalog-only and millisecond-scale. lock_timeout/statement_timeout
+    bound how long the transaction can hold locks on live tables: a lock it
+    can't get aborts the rehearsal instead of queuing every other session
+    on those tables behind it (plan's R4 risk row)."""
+    _require_scratch_schema(schema, allow_public=allow_public)
+    migrations = sorted(MIGRATIONS_DIR.glob("0*.sql"))
+    _assert_no_new_number_collision(migrations)
+    pending_names = set(pending_migrations(engine, schema))
+    pending = [f for f in migrations if f.name in pending_names]
+    if not pending:
+        print(f"\n[rehearse] '{schema}': nothing pending. Nothing to rehearse.")
+        return 0
+
+    banner = "!" * 70
+    print(f"\n{banner}")
+    print(f"!!! REHEARSE (never commits): {len(pending)} migration(s) against "
+          f"'{schema}'{'  <-- LIVE' if schema == 'public' else ''}")
+    print(f"!!! lock_timeout={lock_timeout_ms}ms  statement_timeout={statement_timeout_ms}ms")
+    for f in pending:
+        print(f"!!!   {f.relative_to(REPO_ROOT)}")
+    print(banner)
+
+    conn = engine.connect()
+    try:
+        # Safeguard: an autocommit connection has no transaction for ROLLBACK
+        # to undo - every statement below must share one transaction.
+        if conn.get_isolation_level() == "AUTOCOMMIT":
+            raise RuntimeError(
+                "rehearse refuses an autocommit connection: every statement must share one "
+                "transaction so ROLLBACK can undo all of it as a unit."
+            )
+        trans = conn.begin()
+        try:
+            conn.execute(text("SET LOCAL search_path TO :schema, public").bindparams(schema=schema))
+            conn.execute(text(f"SET LOCAL lock_timeout = '{int(lock_timeout_ms)}ms'"))
+            conn.execute(text(f"SET LOCAL statement_timeout = '{int(statement_timeout_ms)}ms'"))
+            for f in pending:
+                cleaned_sql = _strip_sql_file(f.read_text(encoding="utf-8"))
+                if not cleaned_sql.strip():
+                    print(f"  SKIPPED {f.relative_to(REPO_ROOT)} - nothing left after stripping comments/BEGIN/COMMIT")
+                    continue
+                conn.exec_driver_sql(cleaned_sql.replace("%", "%%"))
+                print(f"  applied (uncommitted) {f.relative_to(REPO_ROOT)}")
+            checked = _verify_rehearsal(conn, pending)
+            print(f"  [rehearse] verified {checked} object(s) resolve in-transaction")
+        finally:
+            # Unconditional: runs whether the try block succeeded, raised, or
+            # was interrupted. No code path below this function can commit.
+            trans.rollback()
+            print(f"{banner}")
+            print(f"!!! ROLLBACK complete. '{schema}' is UNCHANGED. No {LEDGER_TABLE} row written.")
+            print(f"{banner}")
+    finally:
+        conn.close()
+    return 0
 
 
 def _drop_scratch_schema(engine: Engine, schema: str) -> None:
@@ -1720,6 +1854,21 @@ def main() -> int:
     )
     parser.add_argument("--schema-only", action="store_true",
                         help="Apply pending migrations through the ledger, then exit. No loads, no data gates.")
+    parser.add_argument(
+        "--rehearse", action="store_true",
+        help="With --schema-only: apply pending migrations inside ONE transaction that always ROLLBACKs - "
+             "never commits, never writes schema_migrations. See reports/SCHEMA_REORG_PLAN.md section 2 (R4).",
+    )
+    parser.add_argument(
+        "--lock-timeout-ms", type=int, default=None, metavar="MS",
+        help=f"--rehearse only. Default {DEFAULT_REHEARSE_LOCK_TIMEOUT_MS}ms against a scratch schema; "
+             f"mandatory (no default) with --schema public.",
+    )
+    parser.add_argument(
+        "--statement-timeout-ms", type=int, default=None, metavar="MS",
+        help=f"--rehearse only. Default {DEFAULT_REHEARSE_STATEMENT_TIMEOUT_MS}ms against a scratch schema; "
+             f"mandatory (no default) with --schema public.",
+    )
     parser.add_argument("--slice", action="append", default=[], metavar="SPEC",
                         help="principal:table:YYYY-MM[:branch[:source]] - repeatable. See the module docstring.")
     parser.add_argument("--all-slices", action="store_true",
@@ -1747,6 +1896,15 @@ def main() -> int:
         parser.error("--file only applies to --slice / --all-slices")
     if args.target_public != (args.schema == "public"):
         parser.error("--target-public and --schema public go together (both explicit, no default path leads to public).")
+    if args.rehearse and not args.schema_only:
+        parser.error("--rehearse only applies to --schema-only")
+    if not args.rehearse and (args.lock_timeout_ms is not None or args.statement_timeout_ms is not None):
+        parser.error("--lock-timeout-ms/--statement-timeout-ms only apply with --rehearse")
+    if args.rehearse and args.target_public and (args.lock_timeout_ms is None or args.statement_timeout_ms is None):
+        parser.error(
+            "--rehearse --schema public requires explicit --lock-timeout-ms and --statement-timeout-ms - "
+            "no silent default against the live schema."
+        )
     _require_scratch_schema(args.schema, allow_public=args.target_public)
 
     logging.basicConfig(level=logging.WARNING if args.quiet else logging.INFO, format="%(message)s")
@@ -1756,6 +1914,15 @@ def main() -> int:
     engine = create_engine(cfg.supabase_db_url)
 
     if args.schema_only:
+        if args.rehearse:
+            lock_timeout_ms = args.lock_timeout_ms if args.lock_timeout_ms is not None else DEFAULT_REHEARSE_LOCK_TIMEOUT_MS
+            statement_timeout_ms = (
+                args.statement_timeout_ms if args.statement_timeout_ms is not None
+                else DEFAULT_REHEARSE_STATEMENT_TIMEOUT_MS
+            )
+            return rehearse_migrations(
+                engine, args.schema, lock_timeout_ms, statement_timeout_ms, allow_public=args.target_public
+            )
         ensure_scratch_schema(engine, args.schema, dry_run=False, allow_public=args.target_public)
         print(f"\n--schema-only: '{args.schema}' is migrated. No loads. Exiting.")
         return 0
