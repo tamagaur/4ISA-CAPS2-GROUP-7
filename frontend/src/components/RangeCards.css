@@ -1,9 +1,23 @@
 /* Range cards (RangeCards.jsx): idle stock, forecast miss, Class A changes. */
+/* The card's headline figures in a soft panel, a thin rule between them. */
 .range-stat-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px 32px;
-  margin-bottom: 12px;
+  gap: 12px 0;
+  margin-bottom: 14px;
+  padding: 14px 18px;
+  border: 1px solid #EDF0F4;
+  border-radius: 10px;
+  background: #F9FAFB;
+}
+
+.range-stat-row .range-stat {
+  padding-right: 24px;
+}
+
+.range-stat-row .range-stat + .range-stat {
+  padding-left: 24px;
+  border-left: 1px solid #E4E7EC;
 }
 
 .range-stat {
@@ -22,14 +36,15 @@
 }
 
 .range-stat-value {
-  font-size: 1.3rem;
+  font-size: 28px;
+  line-height: 1.2;
   font-weight: 700;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
 
 .range-stat-sub {
-  font-size: 0.75rem;
+  font-size: 11px;
   color: var(--color-text-muted);
 }
 
@@ -302,34 +317,42 @@
   color: var(--color-text);
 }
 
-.fc-miss-row {
+.fc-miss-cards {
   display: grid;
-  grid-template-columns: minmax(180px, 260px) 1fr auto;
-  align-items: center;
-  gap: 6px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
 }
 
-.fc-miss-label {
+.fc-miss-card {
   display: flex;
   flex-direction: column;
+  gap: 4px;
   min-width: 0;
+  padding: 16px;
+  border: 1px solid #EAECF0;
+  border-radius: 10px;
+  background: #F9FAFB;
 }
 
 .fc-miss-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .fc-miss-note {
-  font-size: var(--text-micro);
+  font-size: 12px;
+  line-height: 1.55;
   color: var(--color-text-muted);
 }
 
 .fc-miss-track {
-  height: 12px;
-  border-radius: 6px;
-  background-color: var(--color-surface-sunken);
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 3px;
+  background-color: #EAECF5;
   overflow: hidden;
 }
 
@@ -341,9 +364,8 @@
 }
 
 .fc-miss-value {
-  min-width: 64px;
-  text-align: right;
-  font-size: 15px;
+  font-size: 26px;
+  line-height: 1.2;
   font-weight: 700;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
@@ -385,12 +407,7 @@
     height: 200px;
   }
 
-  .fc-miss-row {
-    grid-template-columns: 1fr auto;
-  }
-
-  .fc-miss-track {
-    grid-column: 1 / -1;
-    grid-row: 2;
+  .fc-miss-value {
+    font-size: 22px;
   }
 }

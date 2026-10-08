@@ -459,9 +459,6 @@
    inside it for the 180px donut, a 28px gap and its 240px tier card. */
 .dash-row-abc         { grid-template-columns: 1fr 1fr; }
 .dash-row-even        { grid-template-columns: 1fr 1fr; }
-/* Two cards of very different lengths side by side (Class A changes beside
-   idle stock): each keeps its own height instead of the short one
-   stretching into empty space. */
 /* Class A changes beside idle stock: both cards stretch to the taller one,
    so their edges line up, without the 360px chart floor. */
 .dash-row-top .dash-slot > .chart-widget { min-height: 0; }
@@ -480,30 +477,41 @@
    it. Deliberately quiet — they label the widget for a reviewer without
    competing with the widget's own title. */
 .dash-kind-row {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.15rem 0.7rem;
-  margin: 0 0 12px;
-  padding-left: 0.75rem;
-  border-left: 3px solid var(--color-brand-primary);
+  gap: 4px 12px;
+  margin: 0 0 14px;
+  padding-left: 14px;
 }
 
-/* The question the card answers: the heading a reader sees first, in the
-   page titles' display serif (Fraunces) so it reads as a section heading
-   and not as one more line of card text. The hint follows it, quieter; the
-   analytics-type tag sits at the far end of the row. */
+/* The coral accent: a short bar beside the question, not a full-height rule. */
+.dash-kind-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 3px;
+  height: 20px;
+  border-radius: 2px;
+  background-color: var(--color-brand-primary);
+}
+
+/* The question the card answers: the heading a reader sees first, bold
+   sans (the mockups' section heading) so it reads above the card titles.
+   The hint follows it, quieter; the analytics-type tag sits at the far end
+   of the row. */
 .dash-question {
-  font-family: var(--font-serif);
-  font-size: 1.25rem;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.25;
   letter-spacing: -0.01em;
-  color: var(--color-text-heading);
+  color: var(--color-text);
 }
 
 .dash-question-hint {
-  font-size: 0.88rem;
+  font-size: 13px;
   color: var(--color-text-muted);
 }
 
@@ -514,7 +522,7 @@
 
 @media (max-width: 600px) {
   .dash-question {
-    font-size: 1.2rem;
+    font-size: 17px;
   }
 
   .dash-kind-row .dash-kind {
@@ -532,15 +540,13 @@
   letter-spacing: 0.02em;
 }
 
+/* Metadata, not a badge: small uppercase text with no fill. */
 .dash-kind {
   align-self: flex-start;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  background: var(--color-surface-sunken);
-  color: var(--color-text-muted);
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
+  color: var(--color-text-subtle);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 

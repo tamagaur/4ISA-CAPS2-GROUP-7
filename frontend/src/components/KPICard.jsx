@@ -132,7 +132,7 @@ const KPICard = ({
   accent,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
-  const accentColor = CARD_ACCENT_COLORS[tier]; // card chrome (border, icon)
+  const accentColor = accent || CARD_ACCENT_COLORS[tier]; // card chrome (top strip, icon)
   // STATUS_TIERS has no 'danger' entry of its own — it's the same "this got
   // worse" delta-text meaning as 'loss', just with different card chrome.
   const statusColor = STATUS_TIERS[tier === 'danger' ? 'loss' : tier]; // delta text only

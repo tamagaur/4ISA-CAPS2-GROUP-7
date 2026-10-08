@@ -835,6 +835,8 @@ const Dashboard = () => {
               // figure, the reviewed sentence one tap away.
               flag={sohValue.value !== '—' && kpis.soh_count_note ? { label: 'Unusual count', detail: kpis.soh_count_note } : null}
               tooltip={coverTooltip}
+              // Blue, the inventory line's colour on the chart below.
+              accent={sohValue.value !== '—' ? CHART_COLORS.stockSeries : undefined}
               icon={<Package size={20} />}
               {...(sohValue.value !== '—' ? trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries, 'count') : {})}
             />

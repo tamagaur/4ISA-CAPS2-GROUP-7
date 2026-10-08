@@ -369,25 +369,27 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList }) => {
             forecasts lean, not stock that was counted as excess or sales that were actually lost.
           </InfoTip>
         </p>
-        {[
-          { key: 'over', label: 'Forecast too high', note: 'forecast above sales — risk of too much stock', value: over, color: COLORS.forecast },
-          { key: 'under', label: 'Forecast too low', note: 'sales above forecast — risk of too little stock', value: under, color: CHART_COLORS.salesSeries },
-        ].map((b) => (
-          <div className="fc-miss-row" key={b.key}>
-            <div className="fc-miss-label">
+        <div className="fc-miss-cards">
+          {[
+            { key: 'over', label: 'Forecast too high', note: 'Forecast above sales — risk of too much stock', value: over, color: COLORS.forecast },
+            { key: 'under', label: 'Forecast too low', note: 'Sales above forecast — risk of too little stock', value: under, color: CHART_COLORS.salesSeries },
+          ].map((b) => (
+            <div className="fc-miss-card" key={b.key}>
               <span className="fc-miss-name">{b.label}</span>
+              <span className="fc-miss-value">{formatCompactPesos(b.value)}</span>
               <span className="fc-miss-note">{b.note}</span>
+              {/* The two bars share one scale (the larger total), so their
+                  lengths compare across the cards. */}
+              <div
+                className="fc-miss-track"
+                role="img"
+                aria-label={`${b.label}: ${formatCompactPesos(b.value)}, ${b.note}`}
+              >
+                <span style={{ width: `${(b.value / missMax) * 100}%`, backgroundColor: b.color }} />
+              </div>
             </div>
-            <div
-              className="fc-miss-track"
-              role="img"
-              aria-label={`${b.label}: ${formatCompactPesos(b.value)}, ${b.note}`}
-            >
-              <span style={{ width: `${(b.value / missMax) * 100}%`, backgroundColor: b.color }} />
-            </div>
-            <span className="fc-miss-value">{formatCompactPesos(b.value)}</span>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* 4. The takeaway: the products to review, with their list. */}

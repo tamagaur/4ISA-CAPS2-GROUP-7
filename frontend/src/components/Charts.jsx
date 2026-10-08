@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine, ReferenceArea
 } from 'recharts';
-import { ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Info } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
@@ -1636,7 +1636,7 @@ const formatCompactQty = (value, millionDigits = 1) => {
 // Softer bands (UI pass): the past barely tinted, the present a faint
 // coral, the future the forecast's lavender — read as regions, not blocks.
 const FORECAST_SECTION_STYLE = {
-  past: { label: 'Past', fill: 'var(--color-slate-500, #64748b)', fillOpacity: 0.025 },
+  past: { label: 'Past', fill: CHART_COLORS.stockSeries, fillOpacity: 0.025 },
   present: { label: 'Present', narrowLabel: 'Now', fill: 'var(--color-brand-primary, #c53030)', fillOpacity: 0.05 },
   future: { label: 'Future', fill: COLORS.forecast, fillOpacity: 0.06 },
 };
@@ -1898,9 +1898,6 @@ export const PortfolioForecastWidget = ({
               ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} Class A SKUs (MASE < 1)`
               : ' · planned Class A SKUs'}
           </p>
-          {/* The card's takeaway, composed by the backend from this same
-              series (portfolio_forecast.insight). */}
-          {insight?.text && <p className="chart-insight">{insight.text}</p>}
           {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
         </div>
         {/* The card follows the Topbar's principal filter like the rest of
@@ -2057,19 +2054,26 @@ export const PortfolioForecastWidget = ({
           )}
         </div>
       )}
+      {/* The card's takeaway, composed by the backend from this same series
+          (portfolio_forecast.insight): a soft strip under the chart it sums
+          up (mockup pass), where it used to sit in the header. */}
+      {insight?.text && (
+        <p className="chart-insight portfolio-insight-strip">
+          <Info size={15} aria-hidden="true" />
+          <span>{insight.text}</span>
+        </p>
+      )}
     </div>
   );
 };
 
-// One neutral pill style for every urgency tier — this card reads urgency
-// from the row's position (most-urgent first, see sortedRows below) and its
-// text, not from color, so CRITICAL/URGENT/PLANNED share the same chip look
-// instead of a red/amber/green ramp.
-const NEUTRAL_URGENCY_STYLE = { bg: 'var(--color-surface-sunken)', color: 'var(--color-text-muted)' };
+// Soft pills in the shared badge tints (ui.css): critical soft red, urgent
+// soft amber, planned neutral. The word is printed in every pill and rows
+// stay most-urgent first (sortedRows below), so colour never stands alone.
 const URGENCY_STYLES = {
-  CRITICAL: NEUTRAL_URGENCY_STYLE,
-  URGENT: NEUTRAL_URGENCY_STYLE,
-  PLANNED: NEUTRAL_URGENCY_STYLE,
+  CRITICAL: { bg: 'var(--badge-critical-bg)', color: 'var(--badge-critical-fg)' },
+  URGENT: { bg: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)' },
+  PLANNED: { bg: 'var(--badge-neutral-bg)', color: 'var(--badge-neutral-fg)' },
 };
 
 // Keys match GET /dashboard's reorder_preview.lp_weights exactly (backend/
@@ -2477,8 +2481,9 @@ export const AllocationWidget = ({ allocation }) => {
   const latestYear = a.allocation_year ?? (a.latest_month ? Number(a.latest_month.slice(0, 4)) : null);
   const latestMonthName = a.latest_month ? formatMonth(a.latest_month).split(' ')[0] : null;
   // The period in the header: "2026 so far (Jan–Feb)", or one month alone.
+  const monthSpan = a.ytd_months === 1 ? latestMonthName : `Jan–${latestMonthName}`;
   const periodText = latestYear && a.ytd_months > 0
-    ? `${latestYear} so far (${a.ytd_months === 1 ? latestMonthName : `Jan–${latestMonthName}`})`
+    ? `${latestYear} so far (${monthSpan})`
     : latestYear ? `${latestYear} — no sales loaded yet` : null;
   // `monthly` is an average month of the basis x pct (GET /dashboard, since
   // 2026-10-01): basis_months < 12 is a partial basis, said in the tooltip.
@@ -2503,12 +2508,17 @@ export const AllocationWidget = ({ allocation }) => {
   const scaleMax = Math.max(highest?.monthly || 0, avgMonthlySales || 0) * 1.06 || 1;
   const at = (v) => `${(Math.max(0, v) / scaleMax) * 100}%`;
   const shortfall = gap != null && gap > 0;
+  // Sales as a share of the minimum level, both pesos a month.
+  const achievement = minimum?.monthly > 0 && avgMonthlySales != null ? avgMonthlySales / minimum.monthly : null;
 
   return (
     <div className={`chart-widget alloc-card${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="alloc-head">
         <h4 className="alloc-title">Sales vs supplier allocation</h4>
-        {periodText && <span className="fc-period">{periodText}</span>}
+        <span className="alloc-head-tags">
+          {periodText && <span className="fc-period">{periodText}</span>}
+          {hasData && <span className="badge badge-warning">Assumption · pending SSM</span>}
+        </span>
       </div>
 
       {!hasData ? (
@@ -2525,6 +2535,24 @@ export const AllocationWidget = ({ allocation }) => {
                 nothing to compare with the {latestYear} allocation yet.
               </p>
             )}
+
+          {/* The three figures behind the sentence. */}
+          {achievement != null && (
+            <div className="alloc-metrics">
+              <div className="alloc-metric is-sales">
+                <span className="alloc-metric-label">Sales, {monthSpan} {latestYear}</span>
+                <span className="alloc-metric-value">{formatCompactPesos(avgMonthlySales)}<small>/month</small></span>
+              </div>
+              <div className="alloc-metric is-target">
+                <span className="alloc-metric-label">Minimum allocation ({minimum.pct}%)</span>
+                <span className="alloc-metric-value">{formatCompactPesos(minimum.monthly)}<small>/month</small></span>
+              </div>
+              <div className="alloc-metric is-achieved">
+                <span className="alloc-metric-label">Achievement</span>
+                <span className="alloc-metric-value">{Math.round(achievement * 100)}%<small>of the minimum</small></span>
+              </div>
+            </div>
+          )}
 
           {/* 2. One bar: average monthly sales, with each allocation level
               as a marker on the same peso scale. */}

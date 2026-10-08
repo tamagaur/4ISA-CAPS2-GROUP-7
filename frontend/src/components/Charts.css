@@ -724,9 +724,15 @@
   color: var(--color-text-subtle);
 }
 
+/* The pending-plan sentence under the bars: a pale panel, not a rule. */
 .tier-stock-body .chart-placeholder-note {
   margin: 0;
-  padding: 8px;
+  padding: 10px 12px;
+  border: 1px solid #E9EEF5;
+  border-left: 1px solid #E9EEF5;
+  border-radius: 8px;
+  background: #F6F9FC;
+  line-height: 1.55;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -749,7 +755,7 @@
    from dominating the card. */
 .tier-stock-track {
   flex: 1 1 auto;
-  height: 28px;
+  height: 16px;
   border-radius: 6px;
   overflow: hidden;
   display: flex;
@@ -846,14 +852,15 @@
 .reorder-mini-chip:nth-child(3) { background: #F1EEFC; }
 
 .reorder-mini-value {
-  font-size: 1.2rem;
+  font-size: 26px;
+  line-height: 1.15;
   font-weight: 700;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
 
 .reorder-mini-label {
-  font-size: 0.65rem;
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -893,8 +900,8 @@
 }
 
 .reorder-mini-table td {
-  padding: 0.5rem 0.4rem;
-  border-bottom: 1px solid var(--color-surface-sunken);
+  padding: 0.7rem 0.4rem;
+  border-bottom: 1px solid #EEF1F4;
   font-size: 0.78rem;
   color: var(--color-text);
   vertical-align: middle;
@@ -951,6 +958,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.reorder-mini-product .product-name-title {
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .reorder-mini-product .product-name-code {
@@ -1102,8 +1114,8 @@
 .abc-share-track {
   grid-area: track;
   display: flex;
-  height: 12px;
-  border-radius: 6px;
+  height: 8px;
+  border-radius: 4px;
   overflow: hidden;
   background: var(--color-surface-sunken);
 }
@@ -1142,17 +1154,17 @@
 }
 
 /* Unselected tiers step back so the selected one reads first. */
+/* The three plums at near full strength (deep, medium, light pink), the
+   selected class at full; the tier card beside the ring names the
+   selection, so no dark outline is drawn around it. */
 .abc-seg {
   cursor: pointer;
-  opacity: 0.45;
+  opacity: 0.8;
   transition: opacity 150ms ease-out;
 }
 
 .abc-seg.is-selected {
   opacity: 1;
-  stroke: var(--color-text);
-  stroke-width: 2;
-  stroke-linejoin: round;
 }
 
 /* One tier per line, letter then plain name ("A  Top sellers"): a row of
@@ -1238,10 +1250,10 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface-raised);
+  padding: 16px 18px;
+  border: 1px solid #EDF0F4;
+  border-radius: 10px;
+  background: #F9FAFB;
   container-type: inline-size;
 }
 
@@ -1933,5 +1945,97 @@
 
   .alloc-bar-label {
     font-size: 12px;
+  }
+}
+
+/* Header tags: the period pill and the assumption badge. */
+.alloc-head-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The three figures: soft teal (sales), slate-blue (target), purple. */
+.alloc-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+}
+
+.alloc-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 10px;
+}
+
+.alloc-metric.is-sales { background: #EAF7F8; }
+.alloc-metric.is-target { background: #EEF2F8; }
+.alloc-metric.is-achieved { background: #F1EDFF; }
+
+.alloc-metric-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.alloc-metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.alloc-metric-value small {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+/* Portfolio forecast takeaway (mockup pass): a soft teal strip under the chart. */
+.portfolio-insight-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #D5EEF0;
+  border-radius: 10px;
+  background: #EEF8F9;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text);
+}
+
+.portfolio-insight-strip svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-dispatched);
+}
+
+/* ABC tier card: SKUs and revenue side by side from a narrower card (the
+   dashboard's half-row card is ~375px), as the mockup shows. */
+@container (min-width: 330px) and (max-width: 399px) {
+  .abc-tier-card-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.1rem;
+  }
+  .abc-tier-card-stat + .abc-tier-card-stat {
+    margin-top: 0;
+    padding-left: 1.1rem;
+    border-left: 1px solid #E4E7EC;
+  }
+  .abc-tier-card-skus {
+    font-size: 1.75rem;
+  }
+  .abc-tier-card-revenue:not(.is-unavailable) {
+    font-size: 1.35rem;
   }
 }
