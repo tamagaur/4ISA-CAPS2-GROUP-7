@@ -172,6 +172,16 @@
   color: var(--badge-warning-fg);
 }
 
+/* An information tag, not a caution (e.g. "Current plan"). */
+.kpi-flag.is-info {
+  color: var(--badge-info-fg);
+  background-color: var(--badge-info-bg);
+}
+
+.kpi-flag.is-info .info-tip-btn {
+  color: var(--badge-info-fg);
+}
+
 /* The card's way through to what is behind its figure (KPICard `action`). */
 .kpi-action {
   display: inline-flex;

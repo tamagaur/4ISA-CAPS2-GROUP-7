@@ -709,6 +709,17 @@ const Dashboard = () => {
       abcCoverage,
     ].filter(Boolean).join(' · ')
   );
+  // A range ending before the plan's opening count: the card shows the
+  // current plan's figure, like the pending-reorder card, and says it does
+  // not follow the date range (safety_stock_exposure.pinned_to_plan).
+  const ssPinned = Boolean(exposure.pinned_to_plan) && exposure.below_count != null;
+  const ssPinnedFlag = ssPinned ? {
+    label: 'Current plan',
+    tone: 'info',
+    detail: `Safety stock exists only for the ${lpCycleLabel ? `${lpCycleLabel} ` : 'current '}plan, which starts from the `
+      + `${periodLabel(exposure.plan_opening_period) || 'latest'} stock count. Your date range ends before that, so this `
+      + `card shows the plan's own figure and does not follow the date range.`,
+  } : null;
   const belowSsTooltip = `Of the Class A SKUs the ${lpCycleLabel ? `${lpCycleLabel} ` : ''}plan covers that have a `
     + 'stock count, how many hold less than their safety stock — the plan\'s own figure for each SKU, in pieces.';
 
@@ -846,6 +857,7 @@ const Dashboard = () => {
               unit={belowSs.value === '—' ? undefined : exposure.comparable_count === 1 ? 'SKU' : 'SKUs'}
               metricType={belowSs.value === '—' ? undefined : ssTier}
               contextLine={belowSs.contextLine}
+              flag={ssPinnedFlag}
               tooltip={belowSs.value === '—' ? undefined : belowSsTooltip}
               action={canListAtRisk
                 ? { label: `See the ${exposure.below_count.toLocaleString()} products`, onClick: openAtRisk }
@@ -878,7 +890,7 @@ const Dashboard = () => {
                 note={placeholderNote(data.abc_revenue?.period)}
                 coverage={abcCoverage}
                 units={abcUnits}
-                atRisk={canListAtRisk
+                atRisk={canListAtRisk && !ssPinned
                   ? { below: exposure.below_count, measurable: exposure.comparable_count, onOpen: openAtRisk }
                   : null}
               />
@@ -1039,9 +1051,11 @@ const Dashboard = () => {
           plannedCount: pendingCount || null,
           measurableCount: exposure.comparable_count ?? null,
           belowCount: exposure.below_count ?? null,
-          abcMonth: periodLabel(data.abc_revenue?.period),
+          abcMonth: periodLabel(ssPinned ? exposure.tier_a_period : data.abc_revenue?.period),
           planLabel: lpCycleLabel ? `${lpCycleLabel} plan` : null,
-          countDay,
+          countDay: ssPinned
+            ? (exposure.stock_counts || []).filter((c) => c.available && c.counted_on).map((c) => dayLabel(c.counted_on))[0] ?? null
+            : countDay,
         }}
         revenueShare={exposure.below_revenue_share ?? null}
         revenueTotal={data.abc_revenue?.ranked_total ?? null}

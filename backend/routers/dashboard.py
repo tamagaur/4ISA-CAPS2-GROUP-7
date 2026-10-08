@@ -1488,6 +1488,18 @@ def get_dashboard(
     # (a range ending before the plan's opening count) is not judged against a
     # later plan's safety stock.
     lp_opening_period = opening_period(lp_cycle) if lp_cycle is not None else None
+    # A range ending before that count (Option A, Audrey 2026-10-08): the card
+    # does not go blank. Like the pending-reorder card, it reads the current
+    # plan — the plan's own opening count and the ABC run at or before it —
+    # and says so (safety_stock_exposure.pinned_to_plan), instead of
+    # comparing an earlier count with a later plan's safety stock.
+    ss_pinned_to_plan = (
+        lp_opening_period is not None and inventory_period is not None and inventory_period < lp_opening_period
+    )
+    ss_stock_period = inventory_period
+    if ss_pinned_to_plan:
+        ss_stock_period = _latest_inventory_period(db, scope, end=lp_opening_period)
+        abc_period = _nearest_abc_period_at_or_before(db, lp_opening_period, scope)
     safety_stock_rate = None
     safety_stock_rate_blocked_reason = f"ABC_Classification has no rows for {_scope_label(scope)} yet."
     ss_rows: list = []
@@ -1499,11 +1511,13 @@ def get_dashboard(
         # three-year-old pending row can't supply them.
         plan_rows = batch.rows(db, *_plan_rows_query(scope, mode, lp_cycle, abc_period))
         stock_at_count = marts.stock_pieces_by_product(
-            db, inventory_period, [int(r["product_key"]) for r in plan_rows]
+            db, ss_stock_period, [int(r["product_key"]) for r in plan_rows]
         )
         ss_rows = [{**r, "current_stock": stock_at_count.get(int(r["product_key"]))} for r in plan_rows]
+        # Only when the plan's own count is missing too (pinning found none
+        # at or after the plan opens): then nothing is compared.
         count_before_plan = (
-            lp_opening_period is not None and inventory_period is not None and inventory_period < lp_opening_period
+            lp_opening_period is not None and ss_stock_period is not None and ss_stock_period < lp_opening_period
         )
         comparable = [] if count_before_plan else [
             r for r in ss_rows
@@ -1515,7 +1529,7 @@ def get_dashboard(
             safety_stock_rate_blocked_reason = None
         elif count_before_plan:
             safety_stock_rate_blocked_reason = (
-                f"The stock at this range's end was counted for {marts.month_label(inventory_period)}, before the "
+                f"The stock at this range's end was counted for {marts.month_label(ss_stock_period)}, before the "
                 f"count the {marts.month_label(str(lp_cycle)[:7])} plan starts from "
                 f"({marts.month_label(lp_opening_period)}); its safety stock is not compared with an earlier count."
             )
@@ -1583,10 +1597,16 @@ def get_dashboard(
         }
     # The count the stock is read at (the range's end) and when it was taken,
     # the Tier A run the cohort comes from, and the count the plan opens from.
-    safety_stock_exposure["stock_period"] = inventory_period
-    safety_stock_exposure["stock_counts"] = latest_stock_counts
+    safety_stock_exposure["stock_period"] = ss_stock_period
+    safety_stock_exposure["stock_counts"] = (
+        stock_counts(db, ss_stock_period, stock_coverage or ([] if scope == "all" else [scope]))
+        if ss_pinned_to_plan else latest_stock_counts
+    )
     safety_stock_exposure["tier_a_period"] = abc_period
     safety_stock_exposure["plan_opening_period"] = lp_opening_period
+    # True when the range ends before the plan's count: the figures are the
+    # current plan's, not the range's (the card says it does not follow it).
+    safety_stock_exposure["pinned_to_plan"] = bool(ss_pinned_to_plan)
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring

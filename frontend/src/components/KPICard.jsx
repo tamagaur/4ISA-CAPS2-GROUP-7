@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUp, ArrowDown, ArrowRight, AlertTriangle } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import { STATUS_TIERS, SEMANTIC } from '../theme/colors';
 import InfoTip from './InfoTip';
 import './KPICard.css';
@@ -102,8 +102,9 @@ const Sparkline = ({ points, color }) => {
 // note: a second muted line under contextLine — another reading of the same
 // figure (e.g. the range's total under a month's sales).
 // flag: a caveat the reader must see beside the figure (e.g. a stock count
-// the team judged unusual): a string, or { label, detail } — a short amber
-// badge on the card with the full sentence one tap away.
+// the team judged unusual): a string, or { label, detail, tone } — a short
+// amber badge on the card with the full sentence one tap away; tone 'info'
+// makes it a soft blue note instead of a caution (e.g. "Current plan").
 // accent: a colour for the thin top strip, when the card stands for
 // something other than a status (an ABC class's plum).
 // The status colour (metricType) marks the icon tile only, never the whole
@@ -142,6 +143,7 @@ const KPICard = ({
   // always-visible text, behind a "?" that taps, hovers and tabs open.
   const flagLabel = flag && typeof flag === 'object' ? flag.label : flag;
   const flagDetail = flag && typeof flag === 'object' ? flag.detail : null;
+  const flagInfo = flag && typeof flag === 'object' && flag.tone === 'info';
   return (
     <div className="kpi-card" data-tier={tier} style={accent ? { '--kpi-accent': accent } : undefined}>
       <div className="kpi-header">
@@ -166,8 +168,8 @@ const KPICard = ({
         {contextLine && <div className="kpi-context">{contextLine}</div>}
         {note && <div className="kpi-context kpi-note">{note}</div>}
         {flagLabel && (
-          <div className="kpi-flag">
-            <AlertTriangle size={12} aria-hidden="true" />
+          <div className={`kpi-flag${flagInfo ? ' is-info' : ''}`}>
+            {flagInfo ? <Info size={12} aria-hidden="true" /> : <AlertTriangle size={12} aria-hidden="true" />}
             <span>{flagLabel}</span>
             {flagDetail && <InfoTip label={flagLabel} size={12}>{flagDetail}</InfoTip>}
           </div>
