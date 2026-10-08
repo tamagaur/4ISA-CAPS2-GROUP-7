@@ -141,3 +141,256 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* Idle stock: the name with a muted second line (never sold / last sold). */
+.range-list-title {
+  margin: 4px 0 2px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.range-product-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.range-product-sub {
+  font-size: var(--text-micro);
+  color: var(--color-text-muted);
+}
+
+/* ── Forecast accuracy card (2026-10-08): answer → chart → misses → action ── */
+.fc-card {
+  gap: 18px;
+}
+
+.fc-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.fc-title {
+  margin: 0;
+  font-size: var(--text-card-title);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.fc-period {
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* The answer: the most readable line on the card. */
+.fc-answer {
+  margin: 0;
+  max-width: 70ch;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-text-heading);
+}
+
+.fc-answer > strong {
+  font-size: 18px;
+  color: var(--color-text);
+}
+
+.fc-tip-line {
+  display: block;
+}
+
+.fc-tip-line + .fc-tip-line {
+  margin-top: 6px;
+}
+
+.fc-chart-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fc-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.fc-chart-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.fc-chart-sub {
+  margin: 2px 0 0;
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+.fc-chart-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.fc-legend {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-meta);
+  color: var(--color-text-body);
+}
+
+.fc-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fc-legend-line {
+  display: inline-block;
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+/* The forecast is dashed on the chart; the key says so too. */
+.fc-legend-line.is-forecast {
+  background: repeating-linear-gradient(90deg, currentColor 0 5px, transparent 5px 8px) !important;
+  color: var(--color-forecast);
+}
+
+.fc-chart {
+  width: 100%;
+  height: 240px;
+}
+
+/* Where the misses went: label | bar | value on one line, stacked on a phone. */
+.fc-misses {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.fc-misses-title {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.fc-miss-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr auto;
+  align-items: center;
+  gap: 6px 16px;
+}
+
+.fc-miss-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fc-miss-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.fc-miss-note {
+  font-size: var(--text-micro);
+  color: var(--color-text-muted);
+}
+
+.fc-miss-track {
+  height: 12px;
+  border-radius: 6px;
+  background-color: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+.fc-miss-track span {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  opacity: 0.85;
+}
+
+.fc-miss-value {
+  min-width: 64px;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The takeaway: a soft strip that opens the list. */
+.fc-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--badge-warning-bg);
+  border-radius: var(--radius-md);
+  background-color: var(--badge-warning-bg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--badge-warning-fg);
+  cursor: pointer;
+}
+
+.fc-action:hover {
+  border-color: color-mix(in srgb, var(--badge-warning-fg) 35%, transparent);
+}
+
+.fc-action:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .fc-answer {
+    font-size: 15px;
+  }
+
+  .fc-chart {
+    height: 200px;
+  }
+
+  .fc-miss-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .fc-miss-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

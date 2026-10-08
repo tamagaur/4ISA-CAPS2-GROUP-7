@@ -951,16 +951,7 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* Del Monte's product sales: estimates only, labelled as a demo. */}
-          {dmProductSales && (
-            <div className="dash-row dash-row-trend">
-              <Slot kind="Descriptive" question="Which Del Monte products sell most?" hint="Estimated">
-                <DelMonteProductSalesCard sales={dmProductSales} onOpenList={openSalesList} />
-              </Slot>
-            </div>
-          )}
-
-          {/* How far off the forecasts were over the range, in pesos first. */}
+          {/* How far off the forecasts were over the range, right under the forecast it checks. */}
           {data.forecast_accuracy && (
             <div className="dash-row dash-row-trend">
               <Slot kind="Predictive" question="How far off were the forecasts?" hint="Forecast against actual sales">
@@ -969,6 +960,15 @@ const Dashboard = () => {
                   scope={coverageNote(data.forecast_accuracy.coverage, pagePrincipal)}
                   onOpenList={() => openRangeList('over')}
                 />
+              </Slot>
+            </div>
+          )}
+
+          {/* Del Monte's product sales: estimates only, labelled as a demo. */}
+          {dmProductSales && (
+            <div className="dash-row dash-row-trend">
+              <Slot kind="Descriptive" question="Which Del Monte products sell most?" hint="Estimated">
+                <DelMonteProductSalesCard sales={dmProductSales} onOpenList={openSalesList} />
               </Slot>
             </div>
           )}

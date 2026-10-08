@@ -6,8 +6,14 @@
 // range route's) as served; nothing here recomputes one.
 import React, { useState } from 'react';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, X } from 'lucide-react';
+import {
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
 import Modal from './Modal';
 import ProductName from './ProductName';
+import InfoTip from './InfoTip';
+import { ChartTable, ChartViewToggle } from './ChartTable';
+import { CHART_COLORS, COLORS } from '../theme/colors';
 import { formatCompactPesos } from '../utils/formatters';
 import { formatUnits } from '../utils/formatNumber';
 import { formatDate, formatMonth } from '../utils/formatDate';
@@ -111,6 +117,9 @@ const CardShell = ({ title, lead, scope, children, blocked }) => (
 // Idle stock (GET /dashboard idle_stock): products in the range-end count
 // that sold nothing in the window before it. Del Monte sells by category, so
 // the backend says why no product can be shown unsold.
+// How many idle products the card names before the full list.
+const IDLE_PREVIEW = 5;
+
 export const IdleStockCard = ({ idle, scope, onOpenList }) => {
   if (!idle) return null;
   const window = idle.window_start && idle.window_end
@@ -140,9 +149,29 @@ export const IdleStockCard = ({ idle, scope, onOpenList }) => {
             ? ` · ${idle.products - idle.products_with_value} without a price, not in the sum` : ''}`}
         />
       </div>
+      {/* The largest few by value (the payload's items, already sorted
+          largest first): which products the money is in, before the list. */}
+      {idle.items?.length > 0 && (
+        <>
+          <p className="range-list-title">Largest by stock value</p>
+          <ol className="range-product-list">
+            {idle.items.slice(0, IDLE_PREVIEW).map((r) => (
+              <li key={r.product_key ?? r.sku_id}>
+                <span className="range-product-name">
+                  <ProductName name={r.product_name} code={r.sku_id} />
+                  <span className="range-product-sub">
+                    {r.never_sold ? 'Never sold' : r.last_sale_period ? `Last sold ${formatMonth(r.last_sale_period)}` : 'No sale in the window'}
+                  </span>
+                </span>
+                <span className="range-product-value">{r.pesos == null ? 'No price' : formatCompactPesos(r.pesos)}</span>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
       {idle.products > 0 && (
         <button type="button" className="range-card-action" onClick={onOpenList}>
-          See the {idle.products.toLocaleString()} products <ArrowRight size={12} aria-hidden="true" />
+          See all {idle.products.toLocaleString()} products <ArrowRight size={12} aria-hidden="true" />
         </button>
       )}
     </CardShell>
@@ -155,57 +184,223 @@ export const IDLE_COLUMNS = [
   { key: 'last', label: 'Last sale', render: (r) => (r.never_sold ? 'Never sold' : r.last_sale_period ? formatMonth(r.last_sale_period) : '—') },
 ];
 
-// Forecast against sales over the range (GET /dashboard forecast_accuracy).
-// Money first: how much the forecasts ran above and below sales, in pesos.
-// The two percentages follow, each under the backend's own label, because
-// one bare percentage hides which of the two is being quoted (3 Oct 2026).
+// Forecast against sales over the range (GET /dashboard forecast_accuracy),
+// for a client reader (2026-10-08): one plain answer, the monthly chart as
+// its evidence, where the misses went, and the products to review. Every
+// figure is the payload's; the definitions sit behind the "?".
+//   company_total.value            the miss on the company's monthly totals
+//   typical_product_weighted.value the miss product by product
+//   by_month[].actual_pesos        actual sales, pesos at selling price
+//   by_month[].net_miss_pesos      forecast − actual (backend/marts.py), so
+//                                  the forecast in pesos is actual + net miss
+//   surplus_pesos / shortage_pesos the over- and under-forecast totals
+const wholePct = (share) => `${Math.round(share * 100)}%`;
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// "Mar '25": every axis tick names its year, in two characters.
+const shortMonth = (period) => {
+  const [y, m] = String(period).split('-');
+  return `${MONTH_ABBR[Number(m) - 1] || m} '${y.slice(2)}`;
+};
+const exactPesos = (v) => `₱${Math.round(v).toLocaleString('en-PH')}`;
+
+const ForecastVsActualTooltip = ({ active, payload }) => {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  const up = row.variance >= 0;
+  return (
+    <div className="chart-tooltip">
+      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatMonth(row.period)}</p>
+      <p className="chart-tooltip-row">
+        <span className="chart-tooltip-swatch" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />
+        Actual sales: <strong>{exactPesos(row.actual)}</strong>
+      </p>
+      <p className="chart-tooltip-row">
+        <span className="chart-tooltip-swatch" style={{ backgroundColor: COLORS.forecast }} aria-hidden="true" />
+        Forecast: <strong>{exactPesos(row.forecast)}</strong>
+      </p>
+      <p className="chart-tooltip-row">
+        Forecast {up ? 'above' : 'below'} sales by <strong>{formatCompactPesos(Math.abs(row.variance))}</strong>
+        {row.actual > 0 ? ` (${up ? '+' : '−'}${Math.abs((row.variance / row.actual) * 100).toFixed(1)}%)` : ''}
+      </p>
+    </div>
+  );
+};
+
 export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList }) => {
+  const [view, setView] = useState('chart');
   if (!accuracy) return null;
   if (accuracy.blocked_reason || !accuracy.products) {
     return (
-      <CardShell title="How far off were the forecasts?" blocked>
+      <CardShell title="Forecast accuracy" blocked>
         <p className="range-blocked">{accuracy.blocked_reason || 'No forecasts were checked against sales in this range.'}</p>
       </CardShell>
     );
   }
   const runs = accuracy.over_forecast_runs || {};
-  const levels = [accuracy.company_total, accuracy.typical_product_weighted].filter((l) => l && l.value != null);
+  const company = accuracy.company_total?.value;
+  const typical = accuracy.typical_product_weighted?.value;
+  const months = [...(accuracy.by_month || [])]
+    .filter((m) => m.actual_pesos != null && m.net_miss_pesos != null)
+    .sort((a, b) => (a.period < b.period ? -1 : 1))
+    .map((m) => ({
+      period: m.period,
+      actual: m.actual_pesos,
+      forecast: m.actual_pesos + m.net_miss_pesos,
+      variance: m.net_miss_pesos,
+    }));
+  const over = accuracy.surplus_pesos ?? 0;
+  const under = accuracy.shortage_pesos ?? 0;
+  const missMax = Math.max(over, under, 1);
+  const tableColumns = [
+    { key: 'period', label: 'Month', align: 'left', format: (v) => formatMonth(v) },
+    { key: 'actual', label: 'Actual sales (₱)', format: exactPesos },
+    { key: 'forecast', label: 'Forecast (₱)', format: exactPesos },
+    { key: 'variance', label: 'Forecast − actual (₱)', format: (v) => `${v >= 0 ? '+' : '−'}${exactPesos(Math.abs(v))}` },
+  ];
+
   return (
-    <CardShell
-      title="How far off were the forecasts?"
-      scope={scope}
-      lead={`Forecasts against actual sales, ${accuracy.label}: ${accuracy.products.toLocaleString()} products, `
-        + `${accuracy.product_months.toLocaleString()} product-months. Pesos at ${accuracy.pesos_basis}.`}
-    >
-      <div className="range-stat-row">
-        <Stat label="Forecast above sales" value={formatCompactPesos(accuracy.surplus_pesos)} sub="surplus: stock bought that did not sell" />
-        <Stat label="Forecast below sales" value={formatCompactPesos(accuracy.shortage_pesos)} sub="shortage: sales the stock could miss" />
+    <div className="chart-widget fc-card">
+      <div className="fc-head">
+        <h4 className="fc-title">Forecast accuracy</h4>
+        <span className="fc-period">{accuracy.label}</span>
       </div>
-      {levels.length > 0 && (
-        <ul className="range-levels">
-          {levels.map((level) => (
-            <li key={level.label}>
-              <strong>{pct(level.value)}</strong> {level.label}
-            </li>
-          ))}
-        </ul>
+      {scope && <p className="chart-placeholder-note">{scope}</p>}
+
+      {/* 1. The answer, in plain words. */}
+      <p className="fc-answer">
+        {company != null && (
+          <>Across the whole company, forecasts were within <strong>{wholePct(company)}</strong> of actual sales.</>
+        )}
+        {typical != null && (
+          <>
+            {' '}Product by product, the typical miss is {company != null && typical > company ? 'bigger' : 'about the same'}:{' '}
+            <strong>{wholePct(typical)}</strong>.
+          </>
+        )}
+        <InfoTip label="How these two figures are measured">
+          <span className="fc-tip-line"><strong>Company total ({company != null ? pct(company) : '—'}).</strong>{' '}
+            {accuracy.company_total?.label} ({accuracy.company_total?.unit}).</span>
+          <span className="fc-tip-line"><strong>Typical product ({typical != null ? pct(typical) : '—'}).</strong>{' '}
+            {accuracy.typical_product_weighted?.label} ({accuracy.typical_product_weighted?.unit}).</span>
+          <span className="fc-tip-line">
+            Both are a weighted absolute percentage error (WAPE): the size of the misses as a share of what actually sold.
+            {' '}{accuracy.products.toLocaleString()} products, {accuracy.product_months.toLocaleString()} product-months;
+            {' '}{accuracy.forecast_source === 'backtest_recreated' ? 'forecasts as made at the time (backtest)' : 'stored forecast runs'}
+            {accuracy.run_labels?.length ? `: ${accuracy.run_labels.join('; ')}` : ''}.
+          </span>
+          {accuracy.possibly_stock_limited > 0 && (
+            <span className="fc-tip-line">
+              {accuracy.possibly_stock_limited.toLocaleString()} product-months may be stock-limited (stock may have run
+              out), so their sales may understate demand.
+            </span>
+          )}
+        </InfoTip>
+      </p>
+
+      {/* 2. The evidence: forecast against actual, month by month. */}
+      {months.length > 0 && (
+        <div className="fc-chart-block">
+          <div className="fc-chart-head">
+            <div>
+              <p className="fc-chart-title">Forecast vs. Actual Sales</p>
+              <p className="fc-chart-sub">Monthly comparison · pesos at {String(accuracy.pesos_basis || '').split(' (')[0]}</p>
+            </div>
+            <div className="fc-chart-tools">
+              <ul className="fc-legend" aria-label="Legend">
+                <li><span className="fc-legend-line" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />Actual sales</li>
+                <li><span className="fc-legend-line is-forecast" style={{ backgroundColor: COLORS.forecast }} aria-hidden="true" />Forecast</li>
+              </ul>
+              <ChartViewToggle view={view} onChange={setView} label="Forecast vs actual: chart or table" />
+            </div>
+          </div>
+          {view === 'table' ? (
+            <ChartTable columns={tableColumns} rows={months} caption="Forecast and actual sales by month, in pesos" />
+          ) : (
+            <div
+              className="fc-chart"
+              role="img"
+              aria-label={`Line chart of monthly actual sales and forecast in pesos, ${accuracy.label}. Use the Table view for the exact figures.`}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={months} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke={CHART_COLORS.gridline} />
+                  <XAxis
+                    dataKey="period"
+                    tickFormatter={shortMonth}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }}
+                    minTickGap={12}
+                    dy={6}
+                  />
+                  <YAxis
+                    tickFormatter={(v) => formatCompactPesos(v)}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }}
+                    width={56}
+                    domain={[0, 'auto']}
+                  />
+                  <Tooltip content={<ForecastVsActualTooltip />} cursor={{ stroke: CHART_COLORS.gridline }} />
+                  <Line
+                    type="monotone" dataKey="actual" name="Actual sales" stroke={CHART_COLORS.salesSeries} strokeWidth={2.5}
+                    dot={{ r: 2.5, fill: CHART_COLORS.salesSeries, strokeWidth: 0 }} activeDot={{ r: 5 }} isAnimationActive={false}
+                  />
+                  <Line
+                    type="monotone" dataKey="forecast" name="Forecast" stroke={COLORS.forecast} strokeWidth={2.5}
+                    strokeDasharray="6 4" dot={{ r: 2.5, fill: COLORS.forecast, strokeWidth: 0 }} activeDot={{ r: 5 }}
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
       )}
-      {accuracy.possibly_stock_limited > 0 && (
-        <p className="range-note">
-          {accuracy.possibly_stock_limited.toLocaleString()} of the product-months may be stock-limited (stock may
-          have run out), so their sales may understate demand.
+
+      {/* 3. Where the misses went: two bars on one scale. */}
+      <div className="fc-misses">
+        <p className="fc-misses-title">
+          Where the misses went
+          <InfoTip label="What these amounts are">
+            The forecast&apos;s differences from actual sales over {accuracy.label}, valued at{' '}
+            {accuracy.pesos_basis}. &ldquo;Forecast too high&rdquo; adds up the months a product&apos;s forecast was
+            above what it sold; &ldquo;forecast too low&rdquo; the months it was below. They show the direction the
+            forecasts lean, not stock that was counted as excess or sales that were actually lost.
+          </InfoTip>
         </p>
-      )}
+        {[
+          { key: 'over', label: 'Forecast too high', note: 'forecast above sales — risk of too much stock', value: over, color: COLORS.forecast },
+          { key: 'under', label: 'Forecast too low', note: 'sales above forecast — risk of too little stock', value: under, color: CHART_COLORS.salesSeries },
+        ].map((b) => (
+          <div className="fc-miss-row" key={b.key}>
+            <div className="fc-miss-label">
+              <span className="fc-miss-name">{b.label}</span>
+              <span className="fc-miss-note">{b.note}</span>
+            </div>
+            <div
+              className="fc-miss-track"
+              role="img"
+              aria-label={`${b.label}: ${formatCompactPesos(b.value)}, ${b.note}`}
+            >
+              <span style={{ width: `${(b.value / missMax) * 100}%`, backgroundColor: b.color }} />
+            </div>
+            <span className="fc-miss-value">{formatCompactPesos(b.value)}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 4. The takeaway: the products to review, with their list. */}
       {runs.count > 0 && (
-        <button type="button" className="range-card-action" onClick={onOpenList}>
-          {runs.count.toLocaleString()} products over-forecast {runs.run_months}+ months in a row <ArrowRight size={12} aria-hidden="true" />
+        <button type="button" className="fc-action" onClick={onOpenList}>
+          <span>
+            <strong>{runs.count.toLocaleString()} products</strong> were over-forecast for {runs.run_months} or more months
+            in a row — review them
+          </span>
+          <ArrowRight size={14} aria-hidden="true" />
         </button>
       )}
-      <p className="range-source">
-        {accuracy.forecast_source === 'backtest_recreated' ? 'Forecasts as made at the time (backtest)' : 'Stored forecast runs'}
-        {accuracy.run_labels?.length ? `: ${accuracy.run_labels.join('; ')}` : ''}.
-      </p>
-    </CardShell>
+    </div>
   );
 };
 

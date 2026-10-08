@@ -2472,120 +2472,120 @@ export const AllocationWidget = ({ allocation }) => {
   const avgMonthlySales = hasData && a.ytd_sales != null && a.ytd_months > 0
     ? a.ytd_sales / a.ytd_months
     : null;
-  const latestYear = a.latest_month ? a.latest_month.slice(0, 4) : null;
-  // The months this year's sales average covers ("Jan – Feb 2026"), so the
-  // bar's figure states its period, not just a year.
-  const ytdSpan = latestYear && a.latest_month
-    ? (a.latest_month.slice(5, 7) === '01'
-      ? formatMonth(a.latest_month)
-      : `${formatMonth(`${latestYear}-01`).split(' ')[0]} – ${formatMonth(a.latest_month)}`)
-    : latestYear;
-  const rows = hasData
-    ? [
-        ...(avgMonthlySales != null
-          ? [{ key: 'sales', label: `Sales, ${ytdSpan} (avg/month)`, value: avgMonthlySales, color: CHART_COLORS.salesSeries }]
-          : []),
-        ...a.levels.map((l) => ({
-          key: `alloc-${l.pct}`, label: `${latestYear} allocation ×${l.pct}% (avg/month)`, value: l.monthly, color: SEMANTIC.noData,
-        })),
-      ]
-    : [];
-  const max = rows.length ? Math.max(...rows.map((r) => r.value), 1) : 1;
-  // The level the headline compares against: GET /dashboard's default_pct
-  // (analytics.params.ALLOCATION_DEFAULT_PCT, 103 until SSM says which level
-  // applies), not a percentage fixed here.
-  const level = hasData ? a.levels.find((l) => l.pct === a.default_pct) || a.levels[0] : null;
+  // The allocation year (the year after the basis), and the latest month on
+  // record: the card reads that year's months whatever the date range.
+  const latestYear = a.allocation_year ?? (a.latest_month ? Number(a.latest_month.slice(0, 4)) : null);
+  const latestMonthName = a.latest_month ? formatMonth(a.latest_month).split(' ')[0] : null;
+  // The period in the header: "2026 so far (Jan–Feb)", or one month alone.
+  const periodText = latestYear && a.ytd_months > 0
+    ? `${latestYear} so far (${a.ytd_months === 1 ? latestMonthName : `Jan–${latestMonthName}`})`
+    : latestYear ? `${latestYear} — no sales loaded yet` : null;
   // `monthly` is an average month of the basis x pct (GET /dashboard, since
-  // 2026-10-01). It was basis x pct ÷ 12 whatever the basis held, which
-  // spread Del Monte's two months of 2024 over twelve: ₱1.86M/month beside
-  // ~₱10.8M/month of sales, and a "578%" headline. `annual` is null on a
-  // partial basis and is not drawn here. The headline ratio still needs a
-  // FULL prior year: two months are not a year's pace, and which two they
-  // are would decide the percentage. The bars and the footnote show what
-  // data exists.
-  const usedPct = level && level.monthly > 0 && avgMonthlySales != null && a.basis_months === 12
-    ? (avgMonthlySales / level.monthly) * 100
-    : null;
+  // 2026-10-01): basis_months < 12 is a partial basis, said in the tooltip.
+  const levels = hasData ? [...a.levels].sort((x, y) => x.pct - y.pct) : [];
+  const minimum = levels[0] || null;
+  const highest = levels[levels.length - 1] || null;
+  // The statement: average monthly sales against the minimum level (and
+  // the highest), in pesos a month — below, meeting or above.
+  const gap = minimum && avgMonthlySales != null ? minimum.monthly - avgMonthlySales : null;
+  let statement = null;
+  if (gap != null) {
+    if (gap > 0) {
+      statement = <>Sales are <strong>{formatCompactPesos(gap)} a month short</strong> of SSM&apos;s minimum allocation ({minimum.pct}%).</>;
+    } else if (highest && avgMonthlySales < highest.monthly) {
+      statement = <>Sales <strong>meet SSM&apos;s minimum allocation</strong> ({minimum.pct}%), {formatCompactPesos(highest.monthly - avgMonthlySales)} a month short of the {highest.pct}% level.</>;
+    } else {
+      statement = <>Sales are <strong>{formatCompactPesos(avgMonthlySales - highest.monthly)} a month above</strong> even the {highest.pct}% allocation level.</>;
+    }
+  }
+  // One scale for the bar and the markers, from zero to a little past the
+  // highest level, so every length is comparable.
+  const scaleMax = Math.max(highest?.monthly || 0, avgMonthlySales || 0) * 1.06 || 1;
+  const at = (v) => `${(Math.max(0, v) / scaleMax) * 100}%`;
+  const shortfall = gap != null && gap > 0;
 
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
-      <div className="chart-header">
-        <div className="chart-title-area">
-          <h4>Sales vs supplier allocation <span className="chart-unit">₱</span></h4>
-          <p>
-            This year&apos;s average monthly sales against SSM&apos;s allocation rule (last year&apos;s sales ×103%,
-            ×105% or ×108%), in pesos per month.
-          </p>
-        </div>
-        <span className="badge badge-warning" title="SSM has not shared its real allocation figures; this card applies the rule to the sales data.">
-          Assumption · pending SSM
-        </span>
+    <div className={`chart-widget alloc-card${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="alloc-head">
+        <h4 className="alloc-title">Sales vs supplier allocation</h4>
+        {periodText && <span className="fc-period">{periodText}</span>}
       </div>
 
       {!hasData ? (
         <p className="dashboard-empty-note">{a.blocked_reason || 'Allocation not available'}</p>
       ) : (
-        <div className="chart-widget-body">
-          {/* The three figures first (UI pass): the sales pace, the allocation
-              it is measured against, and how much of it sales reach. */}
-          <div className="policy-stat-row">
-            {avgMonthlySales != null && (
-              <div className="policy-stat">
-                <span className="policy-stat-label">Sales, {ytdSpan}</span>
-                <span className="policy-stat-value">{formatCompactPesos(avgMonthlySales)}<small>/month</small></span>
-                <span className="policy-stat-sub">average over {a.ytd_months} month{a.ytd_months === 1 ? '' : 's'}</span>
-              </div>
+        <>
+          {/* 1. The answer. */}
+          {statement
+            ? <p className="alloc-answer">{statement}</p>
+            : (
+              <p className="alloc-answer">
+                No {latestYear} sales are loaded yet
+                {a.latest_month ? ` (the latest month on record is ${formatMonth(a.latest_month)})` : ''}, so there is
+                nothing to compare with the {latestYear} allocation yet.
+              </p>
             )}
-            {level && (
-              <div className="policy-stat">
-                <span className="policy-stat-label">Allocation target ({level.pct}%)</span>
-                <span className="policy-stat-value">{formatCompactPesos(level.monthly)}<small>/month</small></span>
-                <span className="policy-stat-sub">{a.basis_year} sales × {level.pct}%, per month</span>
-              </div>
-            )}
-            <div className="policy-stat">
-              <span className="policy-stat-label">Achievement</span>
-              <span className="policy-stat-value">{usedPct != null ? `${usedPct.toFixed(0)}%` : '—'}</span>
-              <span className="policy-stat-sub">
-                {usedPct != null
-                  ? `of the ${level.pct}% pace`
-                  : `needs a full ${a.basis_year}: ${a.basis_months} of 12 months on record`}
-              </span>
+
+          {/* 2. One bar: average monthly sales, with each allocation level
+              as a marker on the same peso scale. */}
+          <div className="alloc-chart">
+            <div className="alloc-track" role="img" aria-label={
+              `${avgMonthlySales != null ? `Average monthly sales ${formatCompactPesos(avgMonthlySales)}` : 'No sales yet'}; `
+              + levels.map((l) => `${l.pct}% allocation ${formatCompactPesos(l.monthly)} a month`).join('; ')
+            }>
+              {avgMonthlySales != null && (
+                <span className="alloc-bar" style={{ width: at(avgMonthlySales), backgroundColor: CHART_COLORS.salesSeries }}>
+                  <span className="alloc-bar-label">{formatCompactPesos(avgMonthlySales)}/mo</span>
+                </span>
+              )}
+              {/* The shortfall to the minimum, a soft amber stretch. */}
+              {shortfall && (
+                <span className="alloc-gap" style={{ left: at(avgMonthlySales), width: `${(gap / scaleMax) * 100}%` }} aria-hidden="true" />
+              )}
+              {levels.map((l) => (
+                <span
+                  key={l.pct}
+                  className={`alloc-tick${l === minimum ? ' is-minimum' : ''}`}
+                  style={{ left: at(l.monthly) }}
+                  aria-hidden="true"
+                />
+              ))}
             </div>
-          </div>
-          {/* The bars' unit, in place of an axis title. */}
-          <p className="bar-scale-note">Pesos per month (₱){a.vat_basis ? ` · ${a.vat_basis}` : ''}</p>
-          <div className="policy-bars">
-            {rows.map((r) => (
-              <div className="policy-bar-row" key={r.key}>
-                <span className="policy-bar-label">{r.label}</span>
-                <div
-                  className="policy-bar-track"
-                  role="img"
-                  aria-label={`${r.label}: ${formatCompactPesos(r.value)} per month`}
-                  style={{ background: `color-mix(in srgb, ${r.color} 12%, var(--color-surface))` }}
-                >
-                  {/* A month's sales can net negative (returns); no negative bar width. */}
-                  <span style={{ width: `${(Math.max(0, r.value) / max) * 100}%`, backgroundColor: r.color }} />
+            {/* Marker labels as a staircase: each on its own row, ending at
+                its marker, so close levels never overlap at any width. */}
+            <div className="alloc-ticks">
+              {levels.map((l, i) => (
+                <div className="alloc-tick-row" key={l.pct} style={{ '--row': i }}>
+                  <span className="alloc-tick-lead" style={{ left: at(l.monthly) }} aria-hidden="true" />
+                  <span className={`alloc-tick-label${l === minimum ? ' is-minimum' : ''}`} style={{ right: `calc(100% - ${at(l.monthly)})` }}>
+                    {l.pct}%{l === minimum ? ' minimum' : ''} · {formatCompactPesos(l.monthly)}/mo
+                  </span>
                 </div>
-                <span className="policy-bar-value">{formatCompactPesos(r.value)}/mo</span>
-              </div>
-            ))}
+              ))}
+            </div>
+            <ul className="alloc-key">
+              <li><span className="alloc-key-swatch" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />
+                Average monthly sales{a.ytd_months > 0 ? `, ${a.ytd_months} month${a.ytd_months === 1 ? '' : 's'}` : ''}</li>
+              <li><span className="alloc-key-tick" aria-hidden="true" />Allocation levels (assumed)</li>
+              {shortfall && <li><span className="alloc-key-swatch is-gap" aria-hidden="true" />Shortfall to the minimum</li>}
+            </ul>
           </div>
-          {/* The rule, the basis and the assumption stay on the card, as the
-              small print under the bars. */}
-          <p className="dashboard-chart-footnote">
-            SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total sales
-            ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4. Basis: {a.basis_year} sales of{' '}
-            {formatCompactPesos(a.basis_sales)} ({a.vat_basis}
-            {a.basis_months < 12 ? `, ${a.basis_months} of 12 months on record — a partial basis` : ''}).
-            {a.basis_months < 12
-              ? ` Each allocation bar is an average month of those ${a.basis_months} × the percentage.`
-              : ''}{' '}
-            <strong>Not confirmed by SSM:</strong> SSM has not shared the real allocation figures, so these are the rule
-            applied to the sales data; which percentage applies in {latestYear} is a question for SSM.
+
+          {/* 3. The assumption, small, with the derivation behind the "?". */}
+          <p className="alloc-foot">
+            Assumed rule: last year&apos;s sales × {minimum?.pct}–{highest?.pct}%. Not yet confirmed by SSM.
+            <InfoTip label="How the allocation levels are worked out">
+              SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total
+              sales ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4. Each level here is {a.basis_year}
+              {' '}sales of {formatCompactPesos(a.basis_sales)} ({a.vat_basis}) × the percentage, as an average month
+              {a.basis_months < 12
+                ? ` of the ${a.basis_months} months on record — a partial basis, so the levels may change once the year is complete`
+                : ' (÷ 12)'}
+              . Sales are this year&apos;s monthly average over the same months on the same basis. SSM has not shared its
+              real allocation figures, and which percentage applies in {latestYear} is a question for SSM.
+            </InfoTip>
           </p>
-        </div>
+        </>
       )}
     </div>
   );
