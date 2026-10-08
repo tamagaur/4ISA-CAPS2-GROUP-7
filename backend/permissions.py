@@ -106,8 +106,16 @@ NOT_READY = ("Per-user permissions aren't set up on this server yet "
 # Cached: True for good once seen; a False is re-checked after a minute, so
 # applying the migration takes effect without restarting the server.
 _READY_RECHECK_SECONDS = 60
-READY_SQL = "SELECT to_regclass('public.user_permission_override') IS NOT NULL"
+# Unqualified (resolved via search_path), not 'public.user_permission_override':
+# the probe survives the table moving to another schema on the path.
+READY_SQL = "SELECT to_regclass('user_permission_override') IS NOT NULL"
 _ready_cache = {"value": False, "checked_at": 0.0}
+PROBE_FAILED = "Couldn't check permissions (database problem). Try again."
+
+
+class PermissionsProbeError(Exception):
+    """The readiness probe itself errored — a DB/connection problem, not the
+    (expected, harmless) case of the table genuinely not existing yet."""
 
 
 def permissions_ready(db: Session) -> bool:
@@ -116,7 +124,10 @@ def permissions_ready(db: Session) -> bool:
     now = time.monotonic()
     if now - _ready_cache["checked_at"] < _READY_RECHECK_SECONDS and _ready_cache["checked_at"]:
         return False
-    found = batch.scalar(db, READY_SQL)
+    try:
+        found = batch.scalar(db, READY_SQL)
+    except Exception as exc:
+        raise PermissionsProbeError(str(exc)) from exc
     _ready_cache.update(value=bool(found), checked_at=now)
     return bool(found)
 
@@ -128,7 +139,11 @@ def permissions_ready_known() -> bool:
 
 
 def require_ready(db: Session) -> None:
-    if not permissions_ready(db):
+    try:
+        ready = permissions_ready(db)
+    except PermissionsProbeError as exc:
+        raise ApiError(503, PROBE_FAILED, code="permissions_probe_failed") from exc
+    if not ready:
         raise ApiError(503, NOT_READY, code="permissions_not_ready")
 
 
@@ -181,13 +196,24 @@ def normalize(role: str, overrides: dict[str, bool]) -> dict[str, bool]:
 
 def load_overrides(db: Session, user_id: int) -> dict[str, bool]:
     """The user's stored overrides, read fresh (no cache: see CHECKED ON
-    EVERY REQUEST). Empty until migration 0034 is applied."""
-    if not permissions_ready(db):
+    EVERY REQUEST). Empty until migration 0034 is applied. A probe that
+    can't be answered, or a cached "yes" that turns out stale (the table
+    was there, now it isn't), fails closed with 503 rather than silently
+    returning {} and letting a revoked permission back in."""
+    try:
+        ready = permissions_ready(db)
+    except PermissionsProbeError as exc:
+        raise ApiError(503, PROBE_FAILED, code="permissions_probe_failed") from exc
+    if not ready:
         return {}
-    rows = db.execute(
-        text("SELECT permission_key, granted FROM user_permission_override WHERE user_id = :user_id"),
-        {"user_id": user_id},
-    ).all()
+    try:
+        rows = db.execute(
+            text("SELECT permission_key, granted FROM user_permission_override WHERE user_id = :user_id"),
+            {"user_id": user_id},
+        ).all()
+    except Exception as exc:
+        _ready_cache.update(value=False, checked_at=0.0)  # the cached "yes" was stale
+        raise ApiError(503, PROBE_FAILED, code="permissions_probe_failed") from exc
     return {key: bool(granted) for key, granted in rows}
 
 
