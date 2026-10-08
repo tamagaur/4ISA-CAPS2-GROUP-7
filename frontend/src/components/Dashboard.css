@@ -462,7 +462,8 @@
 /* Two cards of very different lengths side by side (Class A changes beside
    idle stock): each keeps its own height instead of the short one
    stretching into empty space. */
-.dash-row-top         { align-items: start; }
+/* Class A changes beside idle stock: both cards stretch to the taller one,
+   so their edges line up, without the 360px chart floor. */
 .dash-row-top .dash-slot > .chart-widget { min-height: 0; }
 .dash-row-single      { grid-template-columns: 1fr; }
 
