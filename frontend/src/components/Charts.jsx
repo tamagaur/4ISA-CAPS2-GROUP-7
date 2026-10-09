@@ -412,7 +412,12 @@ const RETURNS_METRICS = ['returns', 'retest'];
 // own metric (and with Both); returns stay in their own view.
 const ESTIMATE_VIEWS = { salesest: ['both', 'sales'], stockest: ['both', 'inventory'] };
 
-const SalesStockTooltip = ({ active, payload, label, years }) => {
+// "Nov 2025", and the metric's own name without its basis ("Sales"): the
+// legend already says the price basis, the tooltip says which month.
+const plainPeriod = (period) => formatAxisPeriod(period).replace(' · ', ' ');
+const shortMetric = (name) => String(name).split(' · ')[0].split(' (')[0];
+
+const SalesStockTooltip = ({ active, payload, label, baseLabels = {} }) => {
   if (!active || !payload || !payload.length) return null;
   // A month one year has and the other hasn't shows only the year that
   // has it, so no row is ever a mislabelled blank.
@@ -423,8 +428,10 @@ const SalesStockTooltip = ({ active, payload, label, years }) => {
   return (
     <div className="chart-tooltip">
       <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>
-        {row.month ?? label}
-        {years?.prev != null && <span className="chart-tooltip-sub"> · {years.cur} vs {years.prev}</span>}
+        {row.period ? plainPeriod(row.period) : label}
+        {row.meta_prev?.period && (
+          <span className="chart-tooltip-sub"> vs {plainPeriod(row.meta_prev.period)}</span>
+        )}
       </p>
       {/* Swatch + ink text: the mark beside the words carries identity —
           the metric's colour, drawn solid or dashed for the year, exactly
@@ -439,7 +446,10 @@ const SalesStockTooltip = ({ active, payload, label, years }) => {
               style={{ borderTopColor: p.color }}
               aria-hidden="true"
             />
-            {p.name}: <strong>{formatExactPesos(p.value)}</strong>
+            {/* The metric, then the month this value is from: the dashed
+                line's month is the comparison period's, not the range's. */}
+            {shortMetric(baseLabels[p.dataKey] ?? p.name)}{meta?.period ? `, ${plainPeriod(meta.period)}` : ''}:{' '}
+            <strong>{formatExactPesos(p.value)}</strong>
             {/* The month on this point is the one the count is filed under;
                 the day it was actually counted can be a week later. */}
             {metricOf(p.dataKey) === 'stock' && meta?.stockCountDay && ` · counted ${meta.stockCountDay}`}
@@ -522,7 +532,11 @@ const INVENTORY_LABEL = 'Inventory value (at last purchase price)';
 // It reads the same rows the date filter fetched; the two years it draws
 // are the latest in that range and the one before it.
 //
-// The x axis is a fixed Jan–Dec calendar. Colour tells the metric — sales
+// Since 2026-10-09 the x axis is the selected range's months in order and
+// the dashed line is the comparison period from the date bar's "Compare
+// with" (same months last year by default), so the chart follows both
+// filters with no calendar gaps. Before that (described below) the axis
+// was a fixed Jan–Dec calendar. Colour tells the metric — sales
 // teal, inventory navy, purchases received violet — the same colour in
 // both years; line style tells the year: the latest year in the range
 // solid, the year before it dashed. So "how does this month compare with
@@ -550,6 +564,7 @@ const INVENTORY_LABEL = 'Inventory value (at last purchase price)';
 // /dashboard's stock_on_hand_flags): marked, never dropped.
 export const SalesVsStockWidget = ({
   data = [], emptyReason, placeholder = null, insight = null, note = null, basis = null,
+  compare = null, compareNote = null, rangeLabel = null,
 }) => {
   const hasData = data.length > 0;
   // "Sales · ex-VAT" — a middle dot, not brackets: a Del Monte range holding
@@ -601,77 +616,99 @@ export const SalesVsStockWidget = ({
   const widgetRef = useRef(null);
   const wide = useElementWidth(widgetRef) >= YOY_WIDE_PX;
 
-  // The calendar rows: one per month, each year's values in that year's
-  // slot. A month the range doesn't reach (Mar–Dec of a year that ends in
-  // Feb) is null, so the line simply stops there.
-  const { rows, slotYears, slots, undrawnYears } = useMemo(() => {
-    const years = [...new Set(data.map((pt) => yearOf(pt.period)))].sort((a, b) => a - b);
-    const byYear = { cur: years[years.length - 1] ?? null, prev: years.length > 1 ? years[years.length - 2] : null };
-    const byPeriod = new Map(data.map((pt) => [pt.period, pt]));
-    const calendar = CALENDAR_MONTHS.map((month, i) => {
-      const row = { month, m: i + 1 };
-      for (const slot of YEAR_SLOTS) {
-        const year = byYear[slot];
-        const pt = year == null ? null : byPeriod.get(`${year}-${String(i + 1).padStart(2, '0')}`);
-        row[`sales_${slot}`] = pt?.sales ?? null;
-        row[`stock_${slot}`] = pt?.stockOnHand ?? null;
-        row[`received_${slot}`] = pt?.received ?? null;
-        row[`recest_${slot}`] = pt?.receivedEstimated != null ? Math.max(0, pt.receivedEstimated) : null;
-        row[`salesest_${slot}`] = pt?.salesEstimated ?? null;
-        row[`stockest_${slot}`] = pt?.stockEstimated ?? null;
-        row[`returns_${slot}`] = pt?.returns ?? null;
-        row[`retest_${slot}`] = pt?.returnsEstimated ?? null;
-        row[`meta_${slot}`] = pt
-          ? {
-              period: pt.period,
-              stockCountDay: pt.stockCountDay ?? null,
-              stockUnusual: pt.stockUnusual ?? null,
-              placeholder: isPlaceholderPeriod(pt.period, placeholder),
-              estWasNegative: pt.receivedEstimated != null && pt.receivedEstimated < 0,
-              estNegativeSkus: pt.receivedEstimatedNegativeSkus ?? null,
-              kinds: {
-                salesest: pt.salesEstimatedKind ?? null,
-                stockest: pt.stockEstimatedKind ?? null,
-                retest: pt.returnsEstimatedKind ?? null,
-              },
-            }
-          : null;
-      }
+  // One row per month of the SELECTED RANGE, in order, on one continuous
+  // axis (2026-10-09): the chart moves with the date filter and has no
+  // calendar gaps. The comparison period (the date bar's "Compare with",
+  // GET /dashboard for that period) rides on the same rows, month for
+  // month, `compare.shift` months earlier. Solid = the range, dashed = the
+  // comparison. A month with no figure is null, so its line breaks there.
+  const { rows, slots, slotLabels } = useMemo(() => {
+    const sorted = [...data].sort((a, b) => (a.period < b.period ? -1 : a.period > b.period ? 1 : 0));
+    const prevByPeriod = new Map((compare?.points || []).map((pt) => [pt.period, pt]));
+    const shiftBack = (period) => {
+      const n = yearOf(period) * 12 + monthOf(period) - 1 - (compare?.shift || 0);
+      return `${Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, '0')}`;
+    };
+    const fill = (row, slot, pt) => {
+      row[`sales_${slot}`] = pt?.sales ?? null;
+      row[`stock_${slot}`] = pt?.stockOnHand ?? null;
+      row[`received_${slot}`] = pt?.received ?? null;
+      row[`recest_${slot}`] = pt?.receivedEstimated != null ? Math.max(0, pt.receivedEstimated) : null;
+      row[`salesest_${slot}`] = pt?.salesEstimated ?? null;
+      row[`stockest_${slot}`] = pt?.stockEstimated ?? null;
+      row[`returns_${slot}`] = pt?.returns ?? null;
+      row[`retest_${slot}`] = pt?.returnsEstimated ?? null;
+      row[`meta_${slot}`] = pt
+        ? {
+            period: pt.period,
+            stockCountDay: pt.stockCountDay ?? null,
+            stockUnusual: pt.stockUnusual ?? null,
+            placeholder: isPlaceholderPeriod(pt.period, placeholder),
+            estWasNegative: pt.receivedEstimated != null && pt.receivedEstimated < 0,
+            estNegativeSkus: pt.receivedEstimatedNegativeSkus ?? null,
+            kinds: {
+              salesest: pt.salesEstimatedKind ?? null,
+              stockest: pt.stockEstimatedKind ?? null,
+              retest: pt.returnsEstimatedKind ?? null,
+            },
+          }
+        : null;
+    };
+    const built = sorted.map((pt, i) => {
+      const row = { x: i, period: pt.period, month: formatAxisPeriod(pt.period) };
+      fill(row, 'cur', pt);
+      fill(row, 'prev', compare ? prevByPeriod.get(shiftBack(pt.period)) ?? null : null);
       return row;
     });
+    const prevDrawn = compare != null && built.some((r) => ['sales', 'stock', 'received', 'returns']
+      .some((m) => r[`${m}_prev`] != null));
+    const first = sorted[0]?.period;
+    const last = sorted[sorted.length - 1]?.period;
+    const plain = (period) => formatAxisPeriod(period).replace(' · ', ' ');
     return {
-      rows: calendar,
-      slotYears: byYear,
-      slots: YEAR_SLOTS.filter((slot) => byYear[slot] != null),
-      undrawnYears: years.slice(0, -2),
+      rows: built,
+      slots: prevDrawn ? ['cur', 'prev'] : ['cur'],
+      slotLabels: { cur: rangeLabel || (first && last ? `${plain(first)} – ${plain(last)}` : ''), prev: compare?.label ?? null },
     };
-  }, [data, placeholder]);
+  }, [data, placeholder, compare, rangeLabel]);
+  // Month ticks: every month up to about a year, every other one beyond
+  // (sooner on a narrow card); the year is written on the first tick and on
+  // each January, so a range that crosses a year says where.
+  const tickStep = rows.length > (wide ? 14 : 7) ? 2 : 1;
+  const xTicks = rows.map((r) => r.x).filter((x) => x % tickStep === 0);
+  const xTickLabel = (x) => {
+    const r = rows[x];
+    if (!r) return '';
+    const [y, m] = r.period.split('-');
+    const name = CALENDAR_MONTHS[Number(m) - 1];
+    return x === 0 || m === '01' ? `${name} ${y}` : name;
+  };
 
   // Every series the data could draw, then the ones the control shows.
   // Legend and lines share these descriptions, so the pairing the legend
   // promises (colour = metric, dash = year) is the one that is drawn.
   const series = useMemo(() => [
-    ...slots.map((slot) => ({ key: `sales_${slot}`, slot, metric: 'sales', name: `${salesLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroSales })),
-    ...slots.map((slot) => ({ key: `stock_${slot}`, slot, metric: 'stock', name: `${INVENTORY_LABEL} · ${slotYears[slot]}`, color: CHART_COLORS.heroInventory })),
+    ...slots.map((slot) => ({ key: `sales_${slot}`, slot, metric: 'sales', name: `${salesLabel} · ${slotLabels[slot]}`, base: salesLabel, color: CHART_COLORS.heroSales })),
+    ...slots.map((slot) => ({ key: `stock_${slot}`, slot, metric: 'stock', name: `${INVENTORY_LABEL} · ${slotLabels[slot]}`, base: INVENTORY_LABEL, color: CHART_COLORS.heroInventory })),
     ...(hasReceived
-      ? slots.map((slot) => ({ key: `received_${slot}`, slot, metric: 'received', name: `${receivedLabel} · ${slotYears[slot]}`, color: COLORS.forecast }))
+      ? slots.map((slot) => ({ key: `received_${slot}`, slot, metric: 'received', name: `${receivedLabel} · ${slotLabels[slot]}`, base: receivedLabel, color: COLORS.forecast }))
       : []),
     ...(hasEstimated
-      ? slots.map((slot) => ({ key: `recest_${slot}`, slot, metric: 'recest', estimated: true, name: `${ESTIMATED_LABEL} · ${slotYears[slot]}`, color: COLORS.forecast }))
+      ? slots.map((slot) => ({ key: `recest_${slot}`, slot, metric: 'recest', estimated: true, name: `${ESTIMATED_LABEL} · ${slotLabels[slot]}`, base: ESTIMATED_LABEL, color: COLORS.forecast }))
       : []),
     ...(hasSalesEst
-      ? slots.map((slot) => ({ key: `salesest_${slot}`, slot, metric: 'salesest', estimated: true, name: `${salesEstLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroSales }))
+      ? slots.map((slot) => ({ key: `salesest_${slot}`, slot, metric: 'salesest', estimated: true, name: `${salesEstLabel} · ${slotLabels[slot]}`, base: salesEstLabel, color: CHART_COLORS.heroSales }))
       : []),
     ...(hasStockEst
-      ? slots.map((slot) => ({ key: `stockest_${slot}`, slot, metric: 'stockest', estimated: true, name: `${stockEstLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroInventory }))
+      ? slots.map((slot) => ({ key: `stockest_${slot}`, slot, metric: 'stockest', estimated: true, name: `${stockEstLabel} · ${slotLabels[slot]}`, base: stockEstLabel, color: CHART_COLORS.heroInventory }))
       : []),
     ...(hasReturns
-      ? slots.map((slot) => ({ key: `returns_${slot}`, slot, metric: 'returns', name: `${returnsLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroReturns }))
+      ? slots.map((slot) => ({ key: `returns_${slot}`, slot, metric: 'returns', name: `${returnsLabel} · ${slotLabels[slot]}`, base: returnsLabel, color: CHART_COLORS.heroReturns }))
       : []),
     ...(hasReturnsEst
-      ? slots.map((slot) => ({ key: `retest_${slot}`, slot, metric: 'retest', estimated: true, name: `${returnsEstLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroReturns }))
+      ? slots.map((slot) => ({ key: `retest_${slot}`, slot, metric: 'retest', estimated: true, name: `${returnsEstLabel} · ${slotLabels[slot]}`, base: returnsEstLabel, color: CHART_COLORS.heroReturns }))
       : []),
-  ], [slots, slotYears, salesLabel, receivedLabel, hasReceived, hasEstimated, hasSalesEst, hasStockEst, hasReturns,
+  ], [slots, slotLabels, salesLabel, receivedLabel, hasReceived, hasEstimated, hasSalesEst, hasStockEst, hasReturns,
     hasReturnsEst, salesEstLabel, stockEstLabel, returnsLabel, returnsEstLabel]);
   // Purchases received ride with "Both": they are neither metric the
   // control names, and a sales-only or inventory-only view is for a
@@ -701,16 +738,11 @@ export const SalesVsStockWidget = ({
     () => pesoTicks(rows.flatMap((r) => visible.map((sr) => r[sr.key]))),
     [rows, visible],
   );
-  // Which years the lines are, said outright — the legend shows it, but a
-  // range holding one year only, or three, needs the words.
-  // The legend keys the two years' line styles, so the sentence stays only
-  // where it adds something: one year alone, or years the range holds but
-  // the chart doesn't draw.
-  const yearsLine = slotYears.cur == null
-    ? null
-    : slotYears.prev == null
-      ? `One calendar year per line: only ${slotYears.cur} is in the selected range — widen it to overlay ${slotYears.cur - 1}.`
-      : undrawnYears.length ? `Earlier years in the range (${undrawnYears.join(', ')}) aren't drawn.` : null;
+  // Why no dashed line is drawn when a comparison was asked for (the data
+  // starts too late, it is still loading, or that period has no figures).
+  const compareLine = compareNote
+    || (compare && slots.length === 1 ? `No figures on record in ${compare.label} to draw as the comparison.` : null);
+  const baseLabels = useMemo(() => Object.fromEntries(series.map((sr) => [sr.key, sr.base])), [series]);
 
   // Direct labels: the current year's latest sales and inventory values at
   // their line ends, plus the backend's peak/low sales months on whichever
@@ -737,12 +769,12 @@ export const SalesVsStockWidget = ({
     if (visibleKeys.has('sales_cur')) {
       for (const mark of [insight?.peak, insight?.low]) {
         if (!mark) continue;
-        const slot = YEAR_SLOTS.find((s) => slotYears[s] === yearOf(mark.period));
-        if (!slot) continue;
-        const month = CALENDAR_MONTHS[monthOf(mark.period) - 1];
-        // Skipped at the current line's end, where the end label has it.
-        if (slot === 'cur' && lastSales && month === lastSales.month) continue;
-        entries[`sales_${slot}`].push({ period: month, text: mark.label, below: mark === insight?.low });
+        // The backend's peak and low are months of the selected range.
+        const markRow = rows.find((r) => r.period === mark.period);
+        if (!markRow) continue;
+        // Skipped at the line's end, where the end label has it.
+        if (lastSales && markRow.month === lastSales.month) continue;
+        entries.sales_cur.push({ period: markRow.month, text: mark.label, below: mark === insight?.low });
       }
     }
     // A flagged count keeps its end label, but says it is unusual — the
@@ -760,7 +792,7 @@ export const SalesVsStockWidget = ({
       sales_prev: pointLabels(rows, entries.sales_prev, byMonth),
       stock_cur: pointLabels(rows, entries.stock_cur, byMonth),
     };
-  }, [rows, visible, visibleKeys, slotYears, insight]);
+  }, [rows, visible, visibleKeys, insight]);
 
   // The table keeps the months in order, one row each, with both metrics
   // whatever the control shows — every column names its unit (₱), and the
@@ -813,7 +845,7 @@ export const SalesVsStockWidget = ({
           {/* The backend's takeaway sentence, from the same rows this
               chart plots (sales_vs_stock_insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
-          {hasData && yearsLine && view === 'chart' && <p className="chart-insight">{yearsLine}</p>}
+          {hasData && compareLine && view === 'chart' && <p className="chart-insight">{compareLine}</p>}
         </div>
         {hasData && (
           <div className="chart-header-controls">
@@ -862,7 +894,7 @@ export const SalesVsStockWidget = ({
             {slots.map((slot) => (
               <li key={slot} className="legend-item" {...focusHandlers('slot', slot)}>
                 <span className={`legend-line legend-line-year${slot === 'prev' ? ' legend-line-dashed' : ''}`} aria-hidden="true" />
-                {slotYears[slot]}{slots.length > 1 ? (slot === 'prev' ? ' (dashed)' : ' (solid)') : ''}
+                {slotLabels[slot]}{slots.length > 1 ? (slot === 'prev' ? ' (dashed)' : ' (solid)') : ''}
               </li>
             ))}
             {hasUnusual && (
@@ -887,14 +919,13 @@ export const SalesVsStockWidget = ({
                 {/* Horizontal gridlines only (GRID_PROPS): a value is read
                     across, a month is read down from its label. */}
                 <CartesianGrid {...GRID_PROPS} />
-                {/* Twelve fixed slots, Jan at the left edge and Dec at the
-                    right, every one labelled by its name. */}
+                {/* The range's months in order, the first at the left edge. */}
                 <XAxis
-                  dataKey="m"
+                  dataKey="x"
                   type="number"
-                  domain={[1, 12]}
-                  ticks={CALENDAR_MONTHS.map((_, i) => i + 1)}
-                  tickFormatter={(v) => CALENDAR_MONTHS[v - 1] ?? ''}
+                  domain={[0, Math.max(rows.length - 1, 1)]}
+                  ticks={xTicks}
+                  tickFormatter={xTickLabel}
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: wide ? 10 : 8.5, fill: CHART_COLORS.axisLabel }}
@@ -912,7 +943,7 @@ export const SalesVsStockWidget = ({
                   domain={yTicks ? [yTicks[0], yTicks[yTicks.length - 1]] : [0, 'auto']}
                   ticks={yTicks ?? undefined}
                 />
-                <Tooltip content={<SalesStockTooltip years={slotYears} />} />
+                <Tooltip content={<SalesStockTooltip baseLabels={baseLabels} />} />
                 {/* Smooth (monotone: the curve passes through every month's
                     value and never overshoots it), no dot per month, a
                     light shade of the line's colour beneath it. A null

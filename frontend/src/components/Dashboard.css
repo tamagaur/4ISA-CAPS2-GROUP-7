@@ -94,19 +94,15 @@
   }
 }
 
-/* On a phone the toolbar would pin the chips AND the two-line date picker —
-   about a fifth of the screen over the content. There it scrolls with the
-   page; the chips still jump. */
 @media (max-width: 768px) {
+  /* The filters are one compact row now (RangePicker), so the toolbar stays
+     pinned on a phone too: the chips, then the range and the comparison. */
   .dash-toolbar {
-    position: static;
     flex-direction: column;
     align-items: stretch;
-    margin: -0.75rem 0 0;
-    padding: 0;
-  }
-  .dash-toolbar.is-stuck {
-    box-shadow: none;
+    gap: 0.5rem;
+    margin: -0.75rem -1rem 0;
+    padding: 0.5rem 1rem;
   }
   .dash-section-anchor {
     scroll-margin-top: 1rem;
@@ -766,11 +762,4 @@
 .dash-gap-note svg {
   flex: none;
   margin-top: 2px;
-}
-
-/* Pinned while scrolling, the toolbar keeps to the month pickers: the quick
-   ranges and the comparison sit with the header at rest, so the pinned strip
-   stays one row. */
-.dash-toolbar.is-stuck .date-quick-row {
-  display: none;
 }

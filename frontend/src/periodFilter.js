@@ -59,6 +59,7 @@ export function comparisonRange(range, compare, floor = { month: 'Jan', year: St
   const out = { startMonth: start.month, startYear: start.year, endMonth: end.month, endYear: end.year };
   return {
     ...out,
+    shift,
     startPeriod: periodToParam(out.startMonth, out.startYear),
     endPeriod: periodToParam(out.endMonth, out.endYear),
     label: rangeText(out),

@@ -8,7 +8,7 @@ import {
   ClassChanges, DelMonteProductSalesCard, ForecastErrorSummaryCard, IdleStockCard, ProductListModal,
   CATEGORY_MISS_COLUMNS, DEMO_PRODUCT_SALES_LABEL, IDLE_COLUMNS, OVER_RUN_COLUMNS, PRODUCT_SALES_COLUMNS,
 } from './RangeCards';
-import DateFilter from './DateFilter';
+import RangePicker from './RangePicker';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
@@ -202,6 +202,39 @@ const safetyStockMetricType = (rate) => {
 // of those two figures yet, so they can't be shown side by side from data.
 // The widget and its props are untouched; set this to true to bring it back.
 const SHOW_POLICY_CARD = false;
+
+// GET /dashboard's sales_vs_stock as the hero chart's rows. Used for the
+// page's own range and for the comparison period's, so both lines are read
+// the same way (count days only where the counts record one; flagged counts
+// keep their reason).
+const chartPoints = (payload) => {
+  if (!payload) return [];
+  const counts = (payload.kpis?.stock_counts || []).filter((c) => c.available);
+  const dayKnown = counts.length === 0 || counts.every((c) => c.counted_on);
+  const flags = new Map((payload.stock_on_hand_flags || []).map((f) => [f.period, f.reason]));
+  return (payload.sales_vs_stock || []).map((pt) => ({
+    period: pt.period,
+    sales: pt.sales,
+    stockOnHand: pt.stock_on_hand,
+    stockCountDay: dayKnown ? dayLabel(pt.stock_count_date) : null,
+    received: pt.received,
+    // Purchases estimated from stock counts and sales (Unilever has no
+    // purchase records): the chart's Purchases view only, never a KPI.
+    receivedEstimated: pt.received_estimated ?? null,
+    receivedEstimatedNegativeSkus: pt.received_estimated_negative_skus ?? null,
+    // The marts' estimates for months with no real figure, and returns
+    // (DEC-31; 'filled' in real mode, 'generated' in preview): the chart and
+    // its table only, labelled by kind, never a KPI.
+    salesEstimated: pt.sales_estimated ?? null,
+    salesEstimatedKind: pt.sales_estimated_kind ?? null,
+    stockEstimated: pt.stock_on_hand_estimated ?? null,
+    stockEstimatedKind: pt.stock_on_hand_estimated_kind ?? null,
+    returns: pt.returns ?? null,
+    returnsEstimated: pt.returns_estimated ?? null,
+    returnsEstimatedKind: pt.returns_estimated_kind ?? null,
+    stockUnusual: flags.get(pt.period) || null,
+  }));
+};
 
 // The shared comparison (src/periodFilter.js) as a KPI pill: the change from
 // the comparison period's figure, coloured by direction, with what it was
@@ -522,7 +555,7 @@ const Dashboard = () => {
       <PageHeader title="Inventory" accent="pulse" subtitle="Inventory and ordering overview — SSM Urdaneta warehouse" />
       <div className={`dash-toolbar${toolbarStuck ? ' is-stuck' : ''}`} ref={toolbarRef}>
         <DashSectionNav active={activeSection} enabled={sectionsReady} />
-        <DateFilter />
+        <RangePicker />
       </div>
     </>
   );
@@ -661,32 +694,16 @@ const Dashboard = () => {
     ? `${Math.round(sohPieces).toLocaleString()} pieces in the same count`
     : null;
 
-  // stock_on_hand_flags: counts the team reviewed and judged unusual — the
-  // chart marks those points and gives the reason, it never drops them.
-  const stockFlags = new Map((data.stock_on_hand_flags || []).map((f) => [f.period, f.reason]));
-  const salesVsStock = (data.sales_vs_stock || []).map((pt) => ({
-    period: pt.period,
-    sales: pt.sales,
-    stockOnHand: pt.stock_on_hand,
-    // No count day for a principal whose counts don't record one.
-    stockCountDay: countDayKnown ? dayLabel(pt.stock_count_date) : null,
-    received: pt.received,
-    // Purchases estimated from stock counts and sales (Unilever has no
-    // purchase records): the chart's Purchases view only, never a KPI.
-    receivedEstimated: pt.received_estimated ?? null,
-    receivedEstimatedNegativeSkus: pt.received_estimated_negative_skus ?? null,
-    // The marts' estimates for months with no real figure, and returns
-    // (DEC-31; 'filled' in real mode, 'generated' in preview): the chart and
-    // its table only, labelled by kind, never a KPI.
-    salesEstimated: pt.sales_estimated ?? null,
-    salesEstimatedKind: pt.sales_estimated_kind ?? null,
-    stockEstimated: pt.stock_on_hand_estimated ?? null,
-    stockEstimatedKind: pt.stock_on_hand_estimated_kind ?? null,
-    returns: pt.returns ?? null,
-    returnsEstimated: pt.returns_estimated ?? null,
-    returnsEstimatedKind: pt.returns_estimated_kind ?? null,
-    stockUnusual: stockFlags.get(pt.period) || null,
-  }));
+  // The hero chart's rows (chartPoints), and the comparison period's when one
+  // is chosen, with the reason when it can't be drawn.
+  const salesVsStock = chartPoints(data);
+  const chartCompare = versus && !versus.beforeData && prior?.data
+    ? { points: chartPoints(prior.data), label: versus.label, shift: versus.shift }
+    : null;
+  const chartCompareNote = !versus ? null
+    : versus.beforeData ? `No comparison line: the data starts Jan ${preview ? PLACEHOLDER_START.year : FIRST_DATA_YEAR}.`
+      : prior?.failed ? `Could not load ${versus.label} to compare.`
+        : !prior ? `Loading ${versus.label} to compare…` : null;
 
   const abcMix = (data.abc_mix || []).map((d) => ({
     tier: d.tier,
@@ -876,7 +893,10 @@ const Dashboard = () => {
       detail: `${FOLLOWS_RANGE} It is the stock count at the end of the selected range, not a total over the range.`,
     },
     plan: planBasis,
-    chart: { ...rangeBasis, detail: `${FOLLOWS_RANGE} The year before is drawn dashed on the same months.` },
+    chart: {
+      ...rangeBasis,
+      detail: `${FOLLOWS_RANGE} The comparison period from "Compare with" is drawn dashed on the same months.`,
+    },
     abc: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Classes are ranked on sales over the whole range.` },
     tierStock: {
       label: 'Latest stock count',
@@ -1063,7 +1083,7 @@ const Dashboard = () => {
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
           <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time" basis={BASIS.chart}><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} /></Slot>
+            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time" basis={BASIS.chart}><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} compareNote={chartCompareNote} /></Slot>
           </div>
 
           <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">

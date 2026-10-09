@@ -1,0 +1,237 @@
+/* The dashboard's filter row: one line, fixed height (no flicker when the
+   toolbar pins), with the range panel floating over the page. */
+.range-picker {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.range-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid #E7EBF0;
+  border-radius: 999px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 13px;
+  color: #182230;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.range-picker-btn:hover,
+.range-picker-btn.is-open {
+  border-color: #CBD2DC;
+}
+
+.range-picker-btn:focus-visible,
+.range-compare select:focus-visible,
+.range-quick-btn:focus-visible,
+.range-reset-btn:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+}
+
+.range-picker-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.range-picker-range {
+  font-weight: 600;
+}
+
+.range-picker-short {
+  display: none;
+}
+
+.range-picker-quick {
+  font-size: 11.5px;
+  color: #667085;
+}
+
+.range-picker-pending {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #FFF4DD;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #B56E14;
+}
+
+.range-compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 4px 0 12px;
+  border: 1px solid #E7EBF0;
+  border-radius: 999px;
+  background: #FFFFFF;
+  font-size: 12px;
+  color: #667085;
+  white-space: nowrap;
+}
+
+.range-compare select {
+  height: 30px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #182230;
+  cursor: pointer;
+}
+
+/* The panel: anchored under the button, on top of everything below. */
+.range-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: min(480px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid #E7EBF0;
+  border-radius: 14px;
+  background: #FFFFFF;
+  box-shadow: 0 16px 40px -12px rgba(15, 23, 42, 0.25);
+}
+
+.range-panel-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #667085;
+}
+
+.range-panel-title + .dashboard-date-controls-wrapper {
+  margin-bottom: 4px;
+}
+
+.range-panel-quick {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.range-quick-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid #E7EBF0;
+  border-radius: 10px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #182230;
+  text-align: left;
+  cursor: pointer;
+}
+
+.range-quick-btn:hover {
+  border-color: #CBD2DC;
+}
+
+.range-quick-btn.is-active {
+  border-color: color-mix(in srgb, #E85C4A 45%, transparent);
+  background: #FDECEA;
+  color: #C8432F;
+}
+
+.range-quick-sub {
+  font-size: 11px;
+  font-weight: 400;
+  color: #667085;
+}
+
+.range-panel .dashboard-date-controls {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.range-panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #EDF0F4;
+}
+
+.range-panel-default {
+  font-size: 12px;
+  color: #667085;
+}
+
+.range-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #E7EBF0;
+  border-radius: 999px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #182230;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .range-picker {
+    width: 100%;
+  }
+  .range-picker-btn {
+    flex: 0 0 auto;
+  }
+  .range-picker-long,
+  .range-picker-quick,
+  .range-compare-label {
+    display: none;
+  }
+  .range-picker-short {
+    display: inline;
+  }
+  .range-compare {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .range-compare {
+    padding-left: 8px;
+  }
+  .range-compare select {
+    width: 100%;
+    min-width: 0;
+    font-size: 12px;
+  }
+  .range-panel {
+    left: 0;
+    right: auto;
+    width: 100%;
+  }
+  .range-panel-quick {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

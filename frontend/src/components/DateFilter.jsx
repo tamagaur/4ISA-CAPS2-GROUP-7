@@ -3,7 +3,6 @@ import { useOutletContext } from 'react-router-dom';
 import { Calendar, ChevronDown, Check, RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react';
 import { LATEST_DATA_PERIOD, FIRST_DATA_YEAR } from '../dataCoverage';
 import { PLACEHOLDER_START, isPreviewMode } from '../dataMode';
-import { COMPARE_OPTIONS, quickRanges, sameRange } from '../periodFilter';
 import './DateFilter.css';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -92,6 +91,7 @@ const noop = () => {};
 // trend minimum.
 const DateFilter = ({
   onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS, singleMonth = false, realOnly = false,
+  showToday = true,
 }) => {
   const outlet = useOutletContext() || {};
   const years = yearsFrom(
@@ -301,7 +301,7 @@ const DateFilter = ({
         </button>
       )}
 
-      {!isLocal && (
+      {!isLocal && showToday && (
         <button className="date-today-btn" onClick={outlet.handleResetToToday || noop}>
           <Calendar size={14} />
           Today
@@ -351,40 +351,6 @@ const DateFilter = ({
       </p>
     )}
 
-    {/* Shared mode only: quick ranges that apply at once (no Save), and the
-        one comparison the whole app makes (src/periodFilter.js). Preview
-        keeps the month pickers only: its range is the placeholder span. */}
-    {!isLocal && outlet.applyPreset && !isPreviewMode(outlet.dataMode) && (
-      <div className="date-quick-row">
-        <div className="date-quick-ranges" role="group" aria-label="Quick date ranges">
-          {quickRanges().map((q) => {
-            const active = sameRange(q.range, {
-              startMonth: outlet.startMonth, startYear: outlet.startYear,
-              endMonth: outlet.endMonth, endYear: outlet.endYear,
-            });
-            return (
-              <button
-                key={q.key}
-                type="button"
-                className={`date-quick-btn${active ? ' is-active' : ''}`}
-                aria-pressed={active}
-                onClick={() => outlet.applyPreset(q.range)}
-              >
-                {q.label}
-              </button>
-            );
-          })}
-        </div>
-        {outlet.setCompare && (
-          <label className="date-compare">
-            <span>Compare with</span>
-            <select value={outlet.compare} onChange={(e) => outlet.setCompare(e.target.value)}>
-              {COMPARE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </label>
-        )}
-      </div>
-    )}
     </div>
   );
 };

@@ -107,49 +107,15 @@ const getDefaultDateRange = (mode = DATA_MODES.REAL) => {
   return { startMonth: start.month, startYear: start.year, endMonth: today.month, endYear: today.year };
 };
 
-// The range someone last saved, kept across reloads — per data mode, since
-// preview reaches back to 2021 and real mode can't. Until 2026-09-29 the
-// range was written to four san2_start_/san2_end_ keys that nothing ever
-// read, so every reload reset it. The key is new on purpose: a range saved
-// under the old seven-month default must not mask the twelve-month one.
-// A saved range is dropped, and the default comes back, when:
-//   - "today" has moved since it was saved (new data loaded, and the
-//     default is what ends on the newest month);
-//   - it no longer fits what the picker offers (before the mode's first
-//     month, after today, backwards, or under MIN_RANGE_MONTHS).
-// Storage can be unavailable (blocked, private mode), so every access is
-// guarded and falls back to the default.
+// Ranges and comparisons once kept in the browser (until 2026-10-09; the
+// four san2_start_/san2_end_ keys before 2026-09-29). Nothing reads them now:
+// the address carries the filters. They are removed once, at mount.
 const RANGE_STORAGE_KEY = 'san2_date_range_v2';
 const LEGACY_RANGE_KEYS = ['san2_start_month', 'san2_start_year', 'san2_end_month', 'san2_end_year'];
-const todayStamp = () => {
-  const today = getCurrentRealWorldPeriod();
-  return `${today.month} ${today.year}`;
-};
-
-const loadSavedRange = (mode) => {
-  let saved;
-  try {
-    saved = JSON.parse(localStorage.getItem(`${RANGE_STORAGE_KEY}:${mode}`) || 'null');
-  } catch {
-    return null;
-  }
-  if (!saved || typeof saved !== 'object' || saved.today !== todayStamp()) return null;
-  const { startMonth, startYear, endMonth, endYear } = saved;
-  const monthsOk = MONTHS.includes(startMonth) && MONTHS.includes(endMonth);
-  const yearsOk = [startYear, endYear].every((y) => /^\d{4}$/.test(String(y)));
-  if (!monthsOk || !yearsOk) return null;
-  const today = getCurrentRealWorldPeriod();
-  const first = isPreviewMode(mode) ? PLACEHOLDER_START : { month: 'Jan', year: String(FIRST_DATA_YEAR) };
-  const start = periodValue(startMonth, startYear);
-  const end = periodValue(endMonth, endYear);
-  const fits = start >= periodValue(first.month, first.year)
-    && end <= periodValue(today.month, today.year)
-    && end - start + 1 >= MIN_RANGE_MONTHS;
-  return fits ? { startMonth, startYear: String(startYear), endMonth, endYear: String(endYear) } : null;
-};
 
 // A range in the address (?from=2025-03&to=2026-02), so a link or a reload
-// shows the same view. Checked by the same rules as a saved range.
+// shows the same view. Checked against what the picker offers: inside the
+// data, not backwards, and at least MIN_RANGE_MONTHS long.
 const loadUrlRange = (mode) => {
   const params = new URLSearchParams(window.location.search);
   const from = periodFromParam(params.get('from'));
@@ -165,33 +131,14 @@ const loadUrlRange = (mode) => {
   return fits ? { startMonth: from.month, startYear: from.year, endMonth: to.month, endYear: to.year } : null;
 };
 
+// The comparison in the address, else the default: the same months a year
+// earlier, the like-for-like one for seasonal FMCG sales and the Technical
+// Adviser's own question ("2025 vs 2024?").
 const loadCompare = () => {
   const fromUrl = new URLSearchParams(window.location.search).get('compare');
-  if (isValidCompare(fromUrl)) return fromUrl;
-  try {
-    const stored = localStorage.getItem(COMPARE_STORAGE_KEY);
-    if (isValidCompare(stored)) return stored;
-  } catch {
-    // Storage unavailable: the default applies.
-  }
-  return COMPARE_MODES.YEAR;
+  return isValidCompare(fromUrl) ? fromUrl : COMPARE_MODES.YEAR;
 };
 
-const saveRange = (mode, range) => {
-  try {
-    localStorage.setItem(`${RANGE_STORAGE_KEY}:${mode}`, JSON.stringify({ ...range, today: todayStamp() }));
-  } catch {
-    // Not remembered this time; the range still applies.
-  }
-};
-
-const clearSavedRange = (mode) => {
-  try {
-    localStorage.removeItem(`${RANGE_STORAGE_KEY}:${mode}`);
-  } catch {
-    // Nothing stored to clear.
-  }
-};
 
 // "Open" means two things by width (Sidebar.css):
 // - desktop: pinned at full width. Closed is the icon rail, which stretches
@@ -231,22 +178,19 @@ const DashboardLayout = () => {
   // Held here as state so the Topbar, the banner and every page re-render
   // on a flip; the module copy is what apiFetch reads.
   const [dataMode, setDataModeState] = useState(getDataMode);
-  // Where the page opens: the range last saved for this mode, if it still
-  // fits (loadSavedRange), else the default. Read once, at mount.
-  const [initialRange] = useState(() => loadUrlRange(dataMode) || loadSavedRange(dataMode) || getDefaultDateRange(dataMode));
+  // Where the page opens (2026-10-09): the filters in the address when there
+  // are any (a reload, a shared link), else the default view — the last 12
+  // months, compared with the same months a year earlier. A range picked on
+  // an earlier visit is no longer carried over, so every new visit starts on
+  // the full-year, like-for-like view the Technical Adviser reads first.
+  const [initialRange] = useState(() => loadUrlRange(dataMode) || getDefaultDateRange(dataMode));
 
   // What every comparison on the page is against (src/periodFilter.js):
   // the same months a year earlier (default), the period just before, or
   // none. Shared like the range, remembered per browser, kept in the address.
   const [compare, setCompareState] = useState(loadCompare);
   const setCompare = (next) => {
-    if (!isValidCompare(next)) return;
-    setCompareState(next);
-    try {
-      localStorage.setItem(COMPARE_STORAGE_KEY, next);
-    } catch {
-      // Not remembered; it still applies.
-    }
+    if (isValidCompare(next)) setCompareState(next);
   };
 
   // What preview means right now (GET /data-mode): the placeholder window
@@ -265,7 +209,8 @@ const DashboardLayout = () => {
   // once, so they don't linger in anyone's browser.
   useEffect(() => {
     try {
-      LEGACY_RANGE_KEYS.forEach((key) => localStorage.removeItem(key));
+      [...LEGACY_RANGE_KEYS, `${RANGE_STORAGE_KEY}:real`, `${RANGE_STORAGE_KEY}:preview`, COMPARE_STORAGE_KEY]
+        .forEach((key) => localStorage.removeItem(key));
     } catch {
       // Storage unavailable: nothing to tidy.
     }
@@ -370,17 +315,13 @@ const DashboardLayout = () => {
     setStartYear(pendingStartYear);
     setEndMonth(pendingEndMonth);
     setEndYear(pendingEndYear);
-    saveRange(dataMode, {
-      startMonth: pendingStartMonth, startYear: pendingStartYear, endMonth: pendingEndMonth, endYear: pendingEndYear,
-    });
   };
 
   // A quick range (Last 12 months, 2025, ...) applies at once, with no Save
   // step: the Technical Adviser changes the filter first and expects the
-  // screen to answer. Remembered like a saved range.
+  // screen to answer.
   const applyPreset = (range) => {
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
-    saveRange(dataMode, range);
   };
 
   // The filters live in the address too (?from=&to=&compare=&principal=),
@@ -420,7 +361,7 @@ const DashboardLayout = () => {
   const handleResetToToday = () => {
     const range = getDefaultDateRange(dataMode);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
-    clearSavedRange(dataMode);
+    setCompareState(COMPARE_MODES.YEAR);
   };
 
   // Flipping the mode switches to that mode's own range: the one saved for
@@ -434,7 +375,7 @@ const DashboardLayout = () => {
     if (next === dataMode) return;
     const mode = storeDataMode(next);
     setDataModeState(mode);
-    const range = loadSavedRange(mode) || getDefaultDateRange(mode);
+    const range = getDefaultDateRange(mode);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
     if (isPreviewMode(mode)) setPrincipal(PLACEHOLDER_PRINCIPAL);
     invalidateCache();
