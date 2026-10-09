@@ -1337,17 +1337,19 @@ def get_dashboard(
     elif latest_by_principal.get(scope) is None:
         allocation["blocked_reason"] = f"No sales rows for {_scope_label(scope)} at all."
     else:
-        latest_month = latest_by_principal[scope]
-        planning_month = planning_month_after(latest_month)
-        allocation_year = int(planning_month[:4])
-        basis_year = allocation_basis_year(planning_month)
+        latest_sales_month = latest_by_principal[scope]
+        planning_month = planning_month_after(latest_sales_month)
+        # The card follows the date range (2026-10-09): the year is the one
+        # the selected range ends in, never past the latest month with sales,
+        # and its sales run Jan to that month. With the default range (ending
+        # on the latest month) this is the year being planned, as before; a
+        # range ending Dec 2025 compares 2025's sales with 2025's allocation
+        # (2024 sales x 103/105/108%) instead of showing 2026 with no sales.
+        latest_month = min(latest_sales_month, periods[-1]) if periods else latest_sales_month
+        allocation_year = int(latest_month[:4])
+        basis_year = allocation_basis_year(latest_month)
         basis_periods = [f"{basis_year:04d}-{m:02d}" for m in range(1, 13)]
-        # Sales so far in the allocation year. A January plan (latest data
-        # in December) has none yet: the card shows the allocation alone.
-        ytd_periods = (
-            [f"{allocation_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
-            if int(latest_month[:4]) == allocation_year else []
-        )
+        ytd_periods = [f"{allocation_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
         # Reuse the months the page already summed (same scope, same mode),
         # and fetch only the rest in ONE call — basis and YTD are disjoint.
         missing = [p for p in basis_periods + ytd_periods if p not in sales_by_period]

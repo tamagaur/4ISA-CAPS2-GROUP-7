@@ -1801,6 +1801,9 @@ export const PortfolioForecastWidget = ({
   // Since 2026-09-29 the gate is MASE < 1 (the LP's own), which passes 73.
   gatedSkuCount = null,
   reliability = null,
+  // Why the forecast point is not drawn (a range ending before the latest
+  // month: the one forecast is for the month after the latest sales).
+  forecastNote = null,
 }) => {
   const hasData = series.length > 0;
   const tierACount = reliability?.total_count ?? null;
@@ -1867,7 +1870,9 @@ export const PortfolioForecastWidget = ({
     const span = (key, first, lastIdx, x1, x2) => ({
       key, x1, x2, from: plotRows[first].period, to: plotRows[lastIdx].period, ...FORECAST_SECTION_STYLE[key],
     });
-    if (present === -1) return { sections: [span('past', 0, last, 0, last)], xMax: last };
+    // A range ending before the latest month (forecastNote set) has no
+    // present in it: its last month is history, not "latest with sales".
+    if (present === -1 || forecastNote) return { sections: [span('past', 0, last, 0, last)], xMax: last };
     const hasFuture = present < last;
     const max = hasFuture ? last + 0.5 : last;
     return {
@@ -1878,7 +1883,7 @@ export const PortfolioForecastWidget = ({
         hasFuture ? span('future', present + 1, last, present + 0.5, max) : null,
       ].filter(Boolean),
     };
-  }, [plotRows, chartData]);
+  }, [plotRows, chartData, forecastNote]);
   // Width of one month on the plot: the container (ResponsiveContainer
   // takes 99% of it) less the y axis and the right margin, over the axis's
   // span. Infinity until the plot is measured.
@@ -1940,6 +1945,7 @@ export const PortfolioForecastWidget = ({
               : ' · planned Class A SKUs'}
           </p>
           {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
+          {hasData && forecastNote && <p className="chart-insight">{forecastNote}</p>}
         </div>
         {/* The card follows the Topbar's principal filter like the rest of
             the page (2026-09-30). Its own All / Del Monte / Unilever + Reset
@@ -1984,14 +1990,20 @@ export const PortfolioForecastWidget = ({
                   <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
                   Actual demand (past and present)
                 </li>
-                <li className="legend-item">
-                  <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
-                  Forecast (future)
-                </li>
-                <li className="legend-item">
-                  <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
-                  Approx. 90% range (if SKUs miss independently)
-                </li>
+                {/* Only when a forecast is drawn: a range ending before the
+                    latest month shows history alone (forecastNote). */}
+                {!forecastNote && (
+                  <>
+                    <li className="legend-item">
+                      <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
+                      Forecast (future)
+                    </li>
+                    <li className="legend-item">
+                      <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
+                      Approx. 90% range (if SKUs miss independently)
+                    </li>
+                  </>
+                )}
               </ul>
               <div className="chart-container" ref={plotRef}>
                 <ResponsiveContainer width="99%" height="100%">
@@ -2517,14 +2529,15 @@ export const AllocationWidget = ({ allocation }) => {
   const avgMonthlySales = hasData && a.ytd_sales != null && a.ytd_months > 0
     ? a.ytd_sales / a.ytd_months
     : null;
-  // The allocation year (the year after the basis), and the latest month on
-  // record: the card reads that year's months whatever the date range.
+  // The allocation year (the year after the basis): the year the selected
+  // range ends in (GET /dashboard, 2026-10-09), its sales Jan to that month.
   const latestYear = a.allocation_year ?? (a.latest_month ? Number(a.latest_month.slice(0, 4)) : null);
   const latestMonthName = a.latest_month ? formatMonth(a.latest_month).split(' ')[0] : null;
-  // The period in the header: "2026 so far (Jan–Feb)", or one month alone.
+  // The period in the header: "Jan–Feb 2026", or one month alone. A past
+  // year reads in full ("Jan–Dec 2025"), so "so far" is not claimed for it.
   const monthSpan = a.ytd_months === 1 ? latestMonthName : `Jan–${latestMonthName}`;
   const periodText = latestYear && a.ytd_months > 0
-    ? `${latestYear} so far (${monthSpan})`
+    ? `${monthSpan} ${latestYear}`
     : latestYear ? `${latestYear} — no sales loaded yet` : null;
   // `monthly` is an average month of the basis x pct (GET /dashboard, since
   // 2026-10-01): basis_months < 12 is a partial basis, said in the tooltip.

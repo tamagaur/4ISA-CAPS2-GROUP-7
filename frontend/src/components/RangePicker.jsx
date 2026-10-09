@@ -87,7 +87,10 @@ const RangePicker = () => {
                     type="button"
                     className={`range-quick-btn${activeQuick?.key === q.key ? ' is-active' : ''}`}
                     aria-pressed={activeQuick?.key === q.key}
-                    onClick={() => outlet.applyPreset(q.range)}
+                    // Close on every pick, the active one included: it
+                    // changes nothing, so the close-on-change effect below
+                    // would leave the panel open over the page.
+                    onClick={() => { outlet.applyPreset(q.range); setOpen(false); }}
                   >
                     {q.label}
                     <span className="range-quick-sub">{rangeText(q.range)}</span>

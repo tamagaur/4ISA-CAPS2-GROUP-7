@@ -1708,23 +1708,50 @@ def test_allocation_and_combined_pesos_are_withheld_under_all_principals():
     )
 
 
-def test_allocation_basis_is_the_year_before_the_planning_month():
-    """Item 7: one rule with the LP (analytics/allocation.py). Data through
-    December plans January, so the basis is that December's own year and the
-    allocation year has no sales yet; the Del Monte card still renders (pesos,
-    since Del Monte has no pieces)."""
+def test_allocation_reads_the_year_the_range_ends_in():
+    """Item 7, one rule with the LP (analytics/allocation.py): the basis is the
+    year before the allocation year. Since 2026-10-09 the allocation year is
+    the one the selected range ends in, never past the latest sales month:
+    with Del Monte's data through December 2025, the card compares 2025's
+    sales with 2025's allocation (2024 x 103/105/108%) instead of showing an
+    empty 2026. The planning month is still the one after the latest sales.
+    The Del Monte card renders in pesos (no pieces)."""
     session = FakeSession(latest_sales_period=None)
-    session.delmonte_sales = {f"2025-{m:02d}": 1_000.0 for m in range(1, 13)}
+    session.delmonte_sales = {
+        **{f"2024-{m:02d}": 1_000.0 for m in range(1, 13)},
+        **{f"2025-{m:02d}": 1_200.0 for m in range(1, 13)},
+    }
     session.delmonte_latest_sales_period = "2025-12"
     with make_client(session) as c:
         a = c.get("/dashboard?principal=delmonte", headers={"Authorization": f"Bearer {user_token()}"}).json()["allocation"]
     assert a["blocked_reason"] is None
-    assert (a["planning_month"], a["allocation_year"], a["basis_year"]) == ("2026-01", 2026, 2025)
+    assert (a["planning_month"], a["allocation_year"], a["basis_year"]) == ("2026-01", 2025, 2024)
+    assert a["latest_month"] == "2025-12"
     assert a["basis_sales"] == pytest.approx(12_000.0) and a["basis_months"] == 12
-    assert a["ytd_months"] == 0 and a["ytd_sales"] is None
+    assert a["ytd_months"] == 12 and a["ytd_sales"] == pytest.approx(14_400.0)
     assert a["unit"] == "pesos" and a["default_pct"] == 103
     assert [level["pct"] for level in a["levels"]] == [103, 105, 108]
     assert a["levels"][0]["monthly"] == pytest.approx(12_000.0 * 1.03 / 12)
+
+
+def test_allocation_follows_a_range_ending_mid_year():
+    """A range ending June 2025 reads 2025's sales January to June against
+    2025's allocation (2024's sales), whatever the latest month on record."""
+    sales = {
+        **{f"2024-{m:02d}": 100.0 for m in range(1, 13)},
+        **{f"2025-{m:02d}": 110.0 for m in range(1, 13)},
+        "2026-01": 120.0, "2026-02": 130.0,
+    }
+    session = FakeSession(latest_sales_period="2026-02", sales=sales)
+    with make_client(session) as c:
+        a = c.get(
+            "/dashboard?principal=unilever&start_period=2025-01&period=2025-06",
+            headers={"Authorization": f"Bearer {user_token()}"},
+        ).json()["allocation"]
+    assert a["blocked_reason"] is None
+    assert (a["allocation_year"], a["basis_year"], a["latest_month"]) == (2025, 2024, "2025-06")
+    assert a["basis_sales"] == pytest.approx(1_200.0)
+    assert a["ytd_months"] == 6 and a["ytd_sales"] == pytest.approx(660.0)
 
 
 def test_allocation_is_withheld_when_the_prior_year_nets_to_zero():

@@ -736,7 +736,24 @@ const Dashboard = () => {
   const forecastReliability = data.forecast || null;
   // A real-only forecast card in preview has nothing in the placeholder
   // months by construction — dropped rather than drawn as a blank run.
+  // The one stored forecast is for the month after the latest sales month
+  // (Mar 2026). It is drawn only when the range ends on that latest month;
+  // an earlier range would put Mar 2026 right after its last month, as if
+  // the next month (2024 then Mar 2026). The card says where to look then.
+  const forecastPeriod = portfolioForecast.insight?.forecast_period ?? null;
+  const monthAfter = (p) => {
+    const y = Number(p.slice(0, 4));
+    const m = Number(p.slice(5, 7));
+    return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  };
+  const forecastBeyondRange = Boolean(forecastPeriod && period && monthAfter(period) < forecastPeriod);
+  const forecastNote = forecastBeyondRange
+    ? `The forecast is for ${periodLabel(forecastPeriod)}, the month after the latest sales, so it is drawn only `
+      + `when the range ends there. How forecasts did in ${periodLabel(startPeriod)} – ${periodLabel(period)}: `
+      + '"How far off were the forecasts?" below.'
+    : null;
   const portfolioSeries = (portfolioForecast.series || [])
+    .filter((pt) => !(forecastBeyondRange && pt.period > period))
     .filter((pt) => !(portfolioRealOnly && isPlaceholderPeriod(pt.period, placeholder)))
     .map((pt) => ({
     period: pt.period,
@@ -918,12 +935,17 @@ const Dashboard = () => {
       follows: true,
       detail: `${FOLLOWS_RANGE} It reads the stock count at the range's end and the months with no sales before it.`,
     },
-    forecast: { ...rangeBasis, detail: `${FOLLOWS_RANGE} The forecast is the month after the range's last month.` },
+    forecast: {
+      ...rangeBasis,
+      detail: `${FOLLOWS_RANGE} The past months follow the range; the forecast month is the one after the latest `
+        + 'sales, drawn when the range ends there.',
+    },
     accuracy: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Forecasts are checked against sales in the range's months.` },
     allocation: {
-      label: data.allocation?.allocation_year ? `Plan year ${data.allocation.allocation_year}` : 'Plan year',
-      follows: false,
-      detail: 'Does not change with the date filter: it follows the plan’s year, the way SSM’s allocation is set.',
+      label: data.allocation?.allocation_year ? `Year ${data.allocation.allocation_year}` : 'Range’s end year',
+      follows: true,
+      detail: `${FOLLOWS_RANGE} It reads the year the range ends in: that year’s sales so far against its `
+        + 'allocation, set from the year before (SSM’s rule).',
     },
   };
 
@@ -1157,7 +1179,8 @@ const Dashboard = () => {
                       : undefined)
                 }
                 reliability={forecastReliability}
-                insight={portfolioForecast.insight}
+                insight={forecastBeyondRange ? null : portfolioForecast.insight}
+                forecastNote={forecastNote}
               />
             </Slot>
             {!lpHidden && (
