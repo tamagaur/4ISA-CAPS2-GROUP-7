@@ -252,13 +252,17 @@ const SKUForecast = () => {
       ? { ...shared, ...floorStart }
       : { ...floorStart, endMonth: LATEST_DATA_PERIOD.month, endYear: LATEST_DATA_PERIOD.year };
   })();
-  const [localRange, setLocalRange] = useState(() => seedRange);
-  // GET /data-mode answers after this page first renders, so a preview seed
-  // taken before it lands is the real-floor one; re-seed once the what-if
-  // outputs are known to exist, so the five-year range shows without a Clear.
+  // The page follows the dashboard's range LIVE (Technical Adviser, 2 Oct
+  // 2026: change the filter and the screen answers; one range across the
+  // pages). A pick on this page's own picker is an override, kept until
+  // "Clear"; with none, the range is the shared one as it is now, so a
+  // change on the dashboard (or a preset) reaches this page too.
+  const [rangeOverride, setLocalRange] = useState(null);
+  const localRange = rangeOverride ?? seedRange;
+  // GET /data-mode answers after this page first renders; once the what-if
+  // outputs are known to exist, drop any override so the five-year range shows.
   useEffect(() => {
-    if (whatIf) setLocalRange(seedRange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (whatIf) setLocalRange(null);
   }, [whatIf]);
   const rangeStartPeriod = toPeriod(localRange.startMonth, localRange.startYear);
   const rangeEndPeriod = toPeriod(localRange.endMonth, localRange.endYear);
@@ -269,12 +273,12 @@ const SKUForecast = () => {
   // comparing localRange against the LIVE dashboardRange is equivalent to
   // comparing against the original seed — only shown once the user has
   // actually picked something different, never just because the page loaded.
-  const resetToDashboardRange = () => setLocalRange(seedRange);
-  const isCustomRange =
+  const resetToDashboardRange = () => setLocalRange(null);
+  const isCustomRange = rangeOverride != null && (
     localRange.startMonth !== seedRange.startMonth ||
     localRange.startYear !== seedRange.startYear ||
     localRange.endMonth !== seedRange.endMonth ||
-    localRange.endYear !== seedRange.endYear;
+    localRange.endYear !== seedRange.endYear);
 
   const [rawItems, setRawItems] = useState([]);
   const [listLoading, setListLoading] = useState(true);

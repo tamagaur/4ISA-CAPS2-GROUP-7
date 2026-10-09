@@ -1,4 +1,5 @@
 import React from 'react';
+import BasisTag from './BasisTag';
 import { Link } from 'react-router-dom';
 import { ArrowUp, ArrowDown, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import { STATUS_TIERS, SEMANTIC } from '../theme/colors';
@@ -131,6 +132,7 @@ const KPICard = ({
   trend,
   action,
   accent,
+  basis,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
   const accentColor = accent || CARD_ACCENT_COLORS[tier]; // card chrome (top strip, icon)
@@ -156,6 +158,8 @@ const KPICard = ({
           {title}
           {tooltip && <InfoTip label={`About ${title}`}>{tooltip}</InfoTip>}
         </h3>
+        {/* Whether this figure moves with the date filter (BasisTag). */}
+        {basis && <span className="kpi-basis"><BasisTag {...basis} /></span>}
       </div>
       <div className="kpi-value-row">
         <div className="kpi-value">

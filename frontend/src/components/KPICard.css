@@ -32,8 +32,16 @@
 
 .kpi-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+}
+
+/* The period basis tag sits at the header's right, and drops under the
+   title when the card is too narrow for both. */
+.kpi-basis {
+  margin-left: auto;
+  max-width: 100%;
 }
 
 .kpi-title {

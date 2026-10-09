@@ -737,3 +737,40 @@
     animation: none;
   }
 }
+
+/* A card's period basis, just before its analytics tag. */
+.dash-kind-row .dash-basis {
+  align-self: center;
+  margin-left: auto;
+}
+
+.dash-kind-row .dash-basis + .dash-kind {
+  margin-left: 0;
+}
+
+/* The selected range has months with no sales on record. */
+.dash-gap-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid #F6E1B8;
+  border-radius: 10px;
+  background: #FFF8EB;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #7A4B0B;
+}
+
+.dash-gap-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* Pinned while scrolling, the toolbar keeps to the month pickers: the quick
+   ranges and the comparison sit with the header at rest, so the pinned strip
+   stays one row. */
+.dash-toolbar.is-stuck .date-quick-row {
+  display: none;
+}

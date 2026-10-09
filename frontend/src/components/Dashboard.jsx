@@ -18,10 +18,13 @@ import {
   getClassChanges, getDashboardData, getForecastAccuracy, getIdleStock, getProductSales, peekDashboardData,
 } from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
-import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL } from '../principals';
+import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
 import { staleCoverageNotice } from '../dataCoverage';
 import { usePermissions } from '../permissions/context';
-import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
+import { PLACEHOLDER_START, isPlaceholderPeriod, isPreviewMode } from '../dataMode';
+import { FIRST_DATA_YEAR } from '../dataCoverage';
+import { COMPARE_MODES, comparisonRange } from '../periodFilter';
+import BasisTag, { FOLLOWS_RANGE } from './BasisTag';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
@@ -200,11 +203,31 @@ const safetyStockMetricType = (rate) => {
 // The widget and its props are untouched; set this to true to bring it back.
 const SHOW_POLICY_CARD = false;
 
-const Slot = ({ kind, question, hint, realOnly = false, children }) => (
+// The shared comparison (src/periodFilter.js) as a KPI pill: the change from
+// the comparison period's figure, coloured by direction, with what it was
+// compared with spelled out ("range total vs Mar 2024 – Feb 2025"). Null when
+// there is no earlier figure to divide by.
+const comparePill = (now, then, label) => {
+  if (now == null || then == null || !(Number(then) > 0)) return null;
+  const pct = ((Number(now) - Number(then)) / Number(then)) * 100;
+  return {
+    deltaLine: `${Math.abs(pct).toFixed(1)}% ${label}`,
+    trendDirection: pct > 0 ? 'up' : pct < 0 ? 'down' : undefined,
+    deltaTone: pct > 0 ? 'positive' : pct < 0 ? 'negative' : 'neutral',
+  };
+};
+// The sparkline from a trend, without its month-on-month pill: the pill is
+// the shared comparison now, so the card never mixes two comparisons.
+const sparklineOnly = (extras) => (extras.trend ? { trend: extras.trend } : {});
+
+const Slot = ({ kind, question, hint, realOnly = false, basis = null, children }) => (
   <div className="dash-slot" data-kind={kind}>
     <span className="dash-kind-row">
       {question && <span className="dash-question">{question}</span>}
       {hint && <span className="dash-question-hint">{hint}</span>}
+      {/* Whether this card moves with the date filter, and if not, what it
+          is pinned to (BasisTag). */}
+      {basis && <span className="dash-basis"><BasisTag {...basis} /></span>}
       <span className="dash-kind">{kind}</span>
       {realOnly && (
         <span className="dash-real-only" title="Preview adds placeholder months to the descriptive views only. This card reads real data.">
@@ -345,7 +368,7 @@ const DashSectionNav = ({ active, enabled }) => {
 
 const Dashboard = () => {
   const isAdmin = usePermissions().role === 'admin';
-  const { startMonth, startYear, endMonth, endYear, principal, dataMode } = useOutletContext() || {};
+  const { startMonth, startYear, endMonth, endYear, principal, dataMode, compare = COMPARE_MODES.YEAR } = useOutletContext() || {};
   const preview = isPreviewMode(dataMode);
   const period = toPeriod(endMonth, endYear);
   const startPeriod = toPeriod(startMonth, startYear);
@@ -358,6 +381,17 @@ const Dashboard = () => {
   // either — DashboardLayout's <Outlet key={refreshKey}> only changes on
   // the Topbar's Refresh.
   const requestKey = `${period ?? ''}|${startPeriod ?? ''}|${principal ?? ''}`;
+
+  // The comparison period (Same months last year / Previous period / none,
+  // chosen beside the date picker) and its own GET /dashboard, so every
+  // compared figure is measured exactly like the one beside it. Fetched
+  // after the page's own answer lands, so it never slows the first view; a
+  // comparison that would start before the data does is not fetched.
+  const versus = comparisonRange(
+    { startMonth, startYear, endMonth, endYear }, compare, preview ? PLACEHOLDER_START : undefined,
+  );
+  const versusKey = versus && !versus.beforeData ? `${versus.endPeriod}|${versus.startPeriod}|${principal ?? ''}` : null;
+  const [versusLoaded, setVersusLoaded] = useState({ key: null, data: null, failed: false });
 
   // `loaded` remembers WHICH range its data belongs to. When the range
   // changes, the previous range's view stays on screen (dimmed, labeled
@@ -405,6 +439,18 @@ const Dashboard = () => {
       cancelled = true;
     };
   }, [requestKey, loadedKey, period, startPeriod, principal]);
+
+  useEffect(() => {
+    if (!versusKey || loadedKey !== requestKey) return undefined;
+    let cancelled = false;
+    getDashboardData({ period: versus.endPeriod, startPeriod: versus.startPeriod, principal })
+      .then((res) => { if (!cancelled) setVersusLoaded({ key: versusKey, data: res, failed: false }); })
+      .catch(() => { if (!cancelled) setVersusLoaded({ key: versusKey, data: null, failed: true }); });
+    return () => { cancelled = true; };
+    // versus' periods are read through versusKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versusKey, loadedKey, requestKey, principal]);
+  const prior = versusKey && versusLoaded.key === versusKey ? versusLoaded : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -763,6 +809,109 @@ const Dashboard = () => {
   const rangeChanges = classChanges?.key === loaded.key ? classChanges.data : null;
   const dmProductSales = pagePrincipal === 'delmonte' && productSales?.key === loaded.key ? productSales.data : null;
   const openForecast = (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`);
+
+  // ── The shared comparison on the two value cards ─────────────────────
+  // Sales compares RANGE TOTALS (a flow: the range against the comparison
+  // range, on the same months with sales); stock compares the COUNT at each
+  // range's end (a snapshot). Each pill says what it compared, and a gap
+  // says so instead of a percentage (Del Monte has no sales on record from
+  // Mar 2024 to Feb 2025).
+  const noEarlierData = { deltaLine: `No comparison: the data starts Jan ${preview ? PLACEHOLDER_START.year : FIRST_DATA_YEAR}` };
+  const salesCompare = (() => {
+    if (!versus || kpis.sales_blocked_reason) return {};
+    if (versus.beforeData) return noEarlierData;
+    if (!prior) return {};
+    if (prior.failed) return { deltaLine: `Could not load ${versus.label} to compare` };
+    const nowTotal = kpis.sales_cumulative;
+    const thenTotal = prior.data?.kpis?.sales_cumulative;
+    if (nowTotal?.value == null) return {};
+    if (thenTotal?.value == null || !thenTotal.months_with_data) {
+      return { deltaLine: `No sales on record in ${versus.label} to compare` };
+    }
+    if (thenTotal.months_with_data !== nowTotal.months_with_data) {
+      return {
+        deltaLine: `Not like-for-like: ${nowTotal.months_with_data} months on record now, `
+          + `${thenTotal.months_with_data} in ${versus.label}`,
+      };
+    }
+    return comparePill(nowTotal.value, thenTotal.value, `range total vs ${versus.label}`) || {};
+  })();
+  const stockCompare = (() => {
+    if (!versus || kpis.soh_value == null) return {};
+    if (versus.beforeData) return noEarlierData;
+    if (!prior) return {};
+    if (prior.failed) return { deltaLine: `Could not load ${versus.label} to compare` };
+    const then = prior.data?.kpis || {};
+    // The backend falls back to the latest count on or before the range's
+    // end; one from before the comparison period even starts is not that
+    // period's stock (Del Monte has no count from Mar 2024 to Feb 2025).
+    if (then.soh_value == null || (then.soh_period && then.soh_period < versus.startPeriod)) {
+      return { deltaLine: `No stock count in ${versus.label} to compare` };
+    }
+    const thenCounts = (then.stock_counts || []).filter((c) => c.available);
+    const thenDayKnown = thenCounts.length === 0 || thenCounts.every((c) => c.counted_on);
+    const thenLabel = (thenDayKnown && then.soh_count_date
+      ? `vs count of ${dayLabel(then.soh_count_date)}`
+      : then.soh_period ? `vs ${periodLabel(then.soh_period)} count` : `vs the end of ${versus.label}`)
+      + (then.soh_period && then.soh_period !== versus.endPeriod ? ' (nearest earlier count)' : '')
+      + (then.soh_count_note ? ' (a count marked unusual)' : '');
+    return comparePill(kpis.soh_value, then.soh_value, thenLabel) || {};
+  })();
+
+  // ── Period basis of every card (BasisTag) ─────────────────────────────
+  // Which cards move with the date filter, and what the others are pinned
+  // to, so a filter change never looks like a card that failed to update.
+  const planBasis = {
+    label: lpCycleLabel ? `${lpCycleLabel} plan` : 'Current plan',
+    follows: false,
+    detail: 'Does not change with the date filter: it reads the current order plan, its opening stock count '
+      + 'and its Class A list.',
+  };
+  const rangeBasis = { label: 'Selected range', follows: true, detail: FOLLOWS_RANGE };
+  const BASIS = {
+    sales: { ...rangeBasis, detail: `${FOLLOWS_RANGE} The big figure is the range's last month; the range total is under it.` },
+    stock: {
+      label: 'Range-end count',
+      follows: true,
+      detail: `${FOLLOWS_RANGE} It is the stock count at the end of the selected range, not a total over the range.`,
+    },
+    plan: planBasis,
+    chart: { ...rangeBasis, detail: `${FOLLOWS_RANGE} The year before is drawn dashed on the same months.` },
+    abc: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Classes are ranked on sales over the whole range.` },
+    tierStock: {
+      label: 'Latest stock count',
+      follows: false,
+      detail: 'Does not change with the date filter: it reads the warehouse status flags in the latest stock count'
+        + `${data.tier_stock_count_date ? ` (counted ${dayLabel(data.tier_stock_count_date)})` : ''}.`,
+    },
+    classChanges: {
+      label: 'Range vs a year earlier',
+      follows: true,
+      detail: `${FOLLOWS_RANGE} It always compares the selected range with the same months a year earlier.`,
+    },
+    idle: {
+      label: 'Range-end count',
+      follows: true,
+      detail: `${FOLLOWS_RANGE} It reads the stock count at the range's end and the months with no sales before it.`,
+    },
+    forecast: { ...rangeBasis, detail: `${FOLLOWS_RANGE} The forecast is the month after the range's last month.` },
+    accuracy: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Forecasts are checked against sales in the range's months.` },
+    allocation: {
+      label: data.allocation?.allocation_year ? `Plan year ${data.allocation.allocation_year}` : 'Plan year',
+      follows: false,
+      detail: 'Does not change with the date filter: it follows the plan’s year, the way SSM’s allocation is set.',
+    },
+  };
+
+  // Months in the range with no sales on record (Del Monte has many). Said
+  // once, under the filters, so a short total is never read as a low year.
+  const salesTotal = kpis.sales_cumulative;
+  const gapMonths = salesTotal?.missing_months || [];
+  const rangeGapNote = salesTotal && salesTotal.months_in_range > 1 && gapMonths.length > 0
+    ? `${pagePrincipal === ALL_PRINCIPALS ? 'Both principals have' : `${labelForPrincipal(pagePrincipal)} has`} sales on record for `
+      + `${salesTotal.months_with_data} of the ${salesTotal.months_in_range} months in this range. `
+      + `No sales on record in ${gapMonths.map(periodLabel).join(', ')}: totals and comparisons cover the other months only.`
+    : null;
   const idle = data.idle_stock || {};
   const idleSubtitle = [
     idle.count_date ? `Stock counted ${dayLabel(idle.count_date)}` : idle.count_period ? `${periodLabel(idle.count_period)} count` : null,
@@ -838,6 +987,12 @@ const Dashboard = () => {
           {/* Hero strip — the four figures that answer "what is happening
               right now": money in, money parked, service risk, and work
               waiting. */}
+          {rangeGapNote && (
+            <p className="dash-gap-note" role="note">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>{rangeGapNote}</span>
+            </p>
+          )}
           <div className="kpi-strip kpi-strip-hero dash-section-anchor" id="dash-summary">
             <KPICard
               title="Sales"
@@ -849,7 +1004,10 @@ const Dashboard = () => {
               contextLine={sales.contextLine}
               tooltip={sales.value === '—' ? undefined : salesTooltip}
               icon={<Wallet size={20} />}
-              {...(sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {})}
+              basis={BASIS.sales}
+              {...(sales.value !== '—'
+                ? { ...sparklineOnly(trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries)), ...salesCompare }
+                : {})}
             />
             <KPICard
               title="Inventory value"
@@ -871,7 +1029,10 @@ const Dashboard = () => {
               // Blue, the inventory line's colour on the chart below.
               accent={sohValue.value !== '—' ? CHART_COLORS.stockSeries : undefined}
               icon={<Package size={20} />}
-              {...(sohValue.value !== '—' ? trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries, 'count') : {})}
+              basis={BASIS.stock}
+              {...(sohValue.value !== '—'
+                ? { ...sparklineOnly(trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries, 'count')), ...stockCompare }
+                : {})}
             />
             <KPICard
               title="Below safety stock"
@@ -880,6 +1041,7 @@ const Dashboard = () => {
               metricType={belowSs.value === '—' ? undefined : ssTier}
               contextLine={belowSs.contextLine}
               flag={ssPinnedFlag}
+              basis={BASIS.plan}
               tooltip={belowSs.value === '—' ? undefined : belowSsTooltip}
               action={canListAtRisk
                 ? { label: `See the ${exposure.below_count.toLocaleString()} products`, onClick: openAtRisk }
@@ -893,6 +1055,7 @@ const Dashboard = () => {
               metricType={lpHidden ? undefined : 'recommendation'}
               contextLine={lpHidden ? LP_HIDDEN_NOTE : pendingContext}
               action={!lpHidden && pendingCount > 0 ? { label: 'Open the order plan', to: '/reorder' } : undefined}
+              basis={BASIS.plan}
               icon={<ClipboardList size={20} />}
             />
           </div>
@@ -900,11 +1063,11 @@ const Dashboard = () => {
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
           <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time"><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} /></Slot>
+            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time" basis={BASIS.chart}><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} /></Slot>
           </div>
 
           <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
-            <Slot kind="Descriptive" question="Which products matter most?">
+            <Slot kind="Descriptive" question="Which products matter most?" basis={BASIS.abc}>
               <ABCDonutWidget
                 data={abcMix}
                 revenue={data.abc_revenue}
@@ -918,7 +1081,7 @@ const Dashboard = () => {
                 onOpenClass={setListedClass}
               />
             </Slot>
-            <Slot kind="Descriptive" question="Is any of our stock dead?">
+            <Slot kind="Descriptive" question="Is any of our stock dead?" basis={BASIS.tierStock}>
               <CategoryStockBarWidget
                 data={tierStock}
                 note={placeholderNote(data.abc_revenue?.period)}
@@ -936,12 +1099,12 @@ const Dashboard = () => {
           {(rangeChanges || data.idle_stock) && (
             <div className={`dash-row dash-row-top ${rangeChanges && data.idle_stock ? 'dash-row-even' : 'dash-row-trend'}`}>
               {rangeChanges && (
-                <Slot kind="Descriptive" question="Which products entered or left the top sellers?">
+                <Slot kind="Descriptive" question="Which products entered or left the top sellers?" basis={BASIS.classChanges}>
                   <ClassChanges changes={rangeChanges} onOpen={openForecast} />
                 </Slot>
               )}
               {data.idle_stock && (
-                <Slot kind="Descriptive" question="Is any stock sitting idle?">
+                <Slot kind="Descriptive" question="Is any stock sitting idle?" basis={BASIS.idle}>
                   <IdleStockCard
                     idle={data.idle_stock}
                     scope={coverageNote(data.idle_stock.coverage, pagePrincipal)}
@@ -954,7 +1117,7 @@ const Dashboard = () => {
 
           {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
           <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-forecast">
-            <Slot kind="Predictive" question="What will happen next?" hint="Demand forecast" realOnly={portfolioRealOnly}>
+            <Slot kind="Predictive" question="What will happen next?" hint="Demand forecast" realOnly={portfolioRealOnly} basis={BASIS.forecast}>
               <PortfolioForecastWidget
                 series={portfolioSeries}
                 gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
@@ -974,7 +1137,7 @@ const Dashboard = () => {
               />
             </Slot>
             {!lpHidden && (
-              <Slot kind="Prescriptive" question="What should we do?" hint="What to order, and how much" realOnly={preview && realOnly.has('reorder_preview')}>
+              <Slot kind="Prescriptive" question="What should we do?" hint="What to order, and how much" realOnly={preview && realOnly.has('reorder_preview')} basis={BASIS.plan}>
                 <ReorderRecommendationWidget
                   rows={reorderRows}
                   criticalCount={reorderPreview.critical_count ?? 0}
@@ -991,7 +1154,7 @@ const Dashboard = () => {
           {/* How far off the forecasts were over the range, right under the forecast it checks. */}
           {data.forecast_accuracy && (
             <div className="dash-row dash-row-trend">
-              <Slot kind="Predictive" question="How far off were the forecasts?" hint="Forecast against actual sales">
+              <Slot kind="Predictive" question="How far off were the forecasts?" hint="Forecast against actual sales" basis={BASIS.accuracy}>
                 <ForecastErrorSummaryCard
                   accuracy={data.forecast_accuracy}
                   scope={coverageNote(data.forecast_accuracy.coverage, pagePrincipal)}
@@ -1005,7 +1168,7 @@ const Dashboard = () => {
           {/* Del Monte's product sales: estimates only, labelled as a demo. */}
           {dmProductSales && (
             <div className="dash-row dash-row-trend">
-              <Slot kind="Descriptive" question="Which Del Monte products sell most?" hint="Estimated">
+              <Slot kind="Descriptive" question="Which Del Monte products sell most?" hint="Estimated" basis={rangeBasis}>
                 <DelMonteProductSalesCard sales={dmProductSales} onOpenList={openSalesList} />
               </Slot>
             </div>
@@ -1019,7 +1182,7 @@ const Dashboard = () => {
                 <PolicyComparisonWidget comparison={data.policy_comparison} />
               </Slot>
             )}
-            <Slot kind="Descriptive" question="Are sales keeping pace with the allocation?">
+            <Slot kind="Descriptive" question="Are sales keeping pace with the allocation?" basis={BASIS.allocation}>
               <AllocationWidget allocation={data.allocation} />
             </Slot>
           </div>

@@ -155,3 +155,74 @@
   background-color: var(--color-surface-raised);
   border-color: var(--color-border-strong);
 }
+
+/* Quick ranges (apply at once) and the shared comparison. */
+.date-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 16px;
+  margin-top: 8px;
+}
+
+.date-quick-ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.date-quick-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid #E7EBF0;
+  border-radius: 999px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475467;
+  cursor: pointer;
+}
+
+.date-quick-btn:hover {
+  border-color: #CBD2DC;
+}
+
+.date-quick-btn.is-active {
+  border-color: color-mix(in srgb, #E85C4A 40%, transparent);
+  background: #FDECEA;
+  color: #C8432F;
+}
+
+.date-quick-btn:focus-visible,
+.date-compare select:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+}
+
+.date-compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #475467;
+}
+
+.date-compare select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #E7EBF0;
+  border-radius: 999px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  color: #182230;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .date-quick-row {
+    justify-content: flex-start;
+  }
+}

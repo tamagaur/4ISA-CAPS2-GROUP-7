@@ -1,4 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
+import PeriodContextStrip from './PeriodContextStrip';
+import { COMPARE_MODES, COMPARE_STORAGE_KEY, isValidCompare, periodFromParam, periodToParam } from '../periodFilter';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, FlaskConical } from 'lucide-react';
 import Sidebar from './Sidebar';
@@ -146,6 +148,35 @@ const loadSavedRange = (mode) => {
   return fits ? { startMonth, startYear: String(startYear), endMonth, endYear: String(endYear) } : null;
 };
 
+// A range in the address (?from=2025-03&to=2026-02), so a link or a reload
+// shows the same view. Checked by the same rules as a saved range.
+const loadUrlRange = (mode) => {
+  const params = new URLSearchParams(window.location.search);
+  const from = periodFromParam(params.get('from'));
+  const to = periodFromParam(params.get('to'));
+  if (!from || !to) return null;
+  const today = getCurrentRealWorldPeriod();
+  const first = isPreviewMode(mode) ? PLACEHOLDER_START : { month: 'Jan', year: String(FIRST_DATA_YEAR) };
+  const start = periodValue(from.month, from.year);
+  const end = periodValue(to.month, to.year);
+  const fits = start >= periodValue(first.month, first.year)
+    && end <= periodValue(today.month, today.year)
+    && end - start + 1 >= MIN_RANGE_MONTHS;
+  return fits ? { startMonth: from.month, startYear: from.year, endMonth: to.month, endYear: to.year } : null;
+};
+
+const loadCompare = () => {
+  const fromUrl = new URLSearchParams(window.location.search).get('compare');
+  if (isValidCompare(fromUrl)) return fromUrl;
+  try {
+    const stored = localStorage.getItem(COMPARE_STORAGE_KEY);
+    if (isValidCompare(stored)) return stored;
+  } catch {
+    // Storage unavailable: the default applies.
+  }
+  return COMPARE_MODES.YEAR;
+};
+
 const saveRange = (mode, range) => {
   try {
     localStorage.setItem(`${RANGE_STORAGE_KEY}:${mode}`, JSON.stringify({ ...range, today: todayStamp() }));
@@ -202,7 +233,21 @@ const DashboardLayout = () => {
   const [dataMode, setDataModeState] = useState(getDataMode);
   // Where the page opens: the range last saved for this mode, if it still
   // fits (loadSavedRange), else the default. Read once, at mount.
-  const [initialRange] = useState(() => loadSavedRange(dataMode) || getDefaultDateRange(dataMode));
+  const [initialRange] = useState(() => loadUrlRange(dataMode) || loadSavedRange(dataMode) || getDefaultDateRange(dataMode));
+
+  // What every comparison on the page is against (src/periodFilter.js):
+  // the same months a year earlier (default), the period just before, or
+  // none. Shared like the range, remembered per browser, kept in the address.
+  const [compare, setCompareState] = useState(loadCompare);
+  const setCompare = (next) => {
+    if (!isValidCompare(next)) return;
+    setCompareState(next);
+    try {
+      localStorage.setItem(COMPARE_STORAGE_KEY, next);
+    } catch {
+      // Not remembered; it still applies.
+    }
+  };
 
   // What preview means right now (GET /data-mode): the placeholder window
   // and, when scripts/build_preview_outputs.py has run, `outputs` — the
@@ -238,6 +283,8 @@ const DashboardLayout = () => {
   // otherwise be sent straight to the backend, which 400s on anything
   // outside its allowlist.
   const [principal, setPrincipalState] = useState(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('principal');
+    if (isValidPrincipal(fromUrl)) return fromUrl;
     const stored = localStorage.getItem(PRINCIPAL_STORAGE_KEY);
     return isValidPrincipal(stored) ? stored : DEFAULT_PRINCIPAL;
   });
@@ -327,6 +374,36 @@ const DashboardLayout = () => {
       startMonth: pendingStartMonth, startYear: pendingStartYear, endMonth: pendingEndMonth, endYear: pendingEndYear,
     });
   };
+
+  // A quick range (Last 12 months, 2025, ...) applies at once, with no Save
+  // step: the Technical Adviser changes the filter first and expects the
+  // screen to answer. Remembered like a saved range.
+  const applyPreset = (range) => {
+    updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
+    saveRange(dataMode, range);
+  };
+
+  // The filters live in the address too (?from=&to=&compare=&principal=),
+  // merged into whatever the page keeps there (?sku=, ?class=), so a copied
+  // link or a reload opens the same view. Replaced, never pushed: Back still
+  // leaves the page rather than stepping through filter changes.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const wanted = {
+      from: periodToParam(startMonth, startYear),
+      to: periodToParam(endMonth, endYear),
+      compare,
+      principal,
+    };
+    let changed = false;
+    Object.entries(wanted).forEach(([key, value]) => {
+      if (value && params.get(key) !== value) {
+        params.set(key, value);
+        changed = true;
+      }
+    });
+    if (changed) navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
+  }, [startMonth, startYear, endMonth, endYear, compare, principal, location.pathname, location.search, navigate]);
 
   const handleDiscardPeriod = () => {
     setPendingStartMonth(startMonth);
@@ -470,6 +547,14 @@ const DashboardLayout = () => {
             </button>
           </div>
         )}
+        {/* Off the dashboard, which has the full filter bar: what the shared
+            filters are set to, and whether this page follows them. */}
+        <PeriodContextStrip
+          pathname={location.pathname}
+          principal={principal}
+          range={{ startMonth, startYear, endMonth, endYear }}
+          compare={compare}
+        />
         <ErrorBoundary resetKey={`${location.pathname}:${refreshKey}`}>
           <Suspense fallback={<PageLoadingFallback />}>
             <Outlet key={refreshKey} context={{
@@ -480,7 +565,8 @@ const DashboardLayout = () => {
               pendingEndYear, setPendingEndYear,
               isPending, isPendingRangeValid, isPendingRangeLongEnough, canApplyPendingPeriod,
               handleApplyPeriod, handleResetToToday,
-              updatePeriodImmediately, realWorldPeriod,
+              updatePeriodImmediately, realWorldPeriod, applyPreset,
+              compare, setCompare,
               principal, setPrincipal,
               dataMode, previewInfo,
             }} />
