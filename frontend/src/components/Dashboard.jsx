@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useNavigate, Link } from 'react-router-dom';
-import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
 import AtRiskProductsModal from './AtRiskProductsModal';
 import ClassProductsModal from './ClassProductsModal';
@@ -9,6 +8,7 @@ import {
   CATEGORY_MISS_COLUMNS, DEMO_PRODUCT_SALES_LABEL, IDLE_COLUMNS, OVER_RUN_COLUMNS, PRODUCT_SALES_COLUMNS,
 } from './RangeCards';
 import RangePicker from './RangePicker';
+import { ActionCard, AnnualSalesCard, InventoryCard } from './HeroKpis';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
@@ -30,7 +30,7 @@ import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
-import { Package, Wallet, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
+import { ArrowRight, AlertTriangle } from 'lucide-react';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -249,9 +249,6 @@ const comparePill = (now, then, label) => {
     deltaTone: pct > 0 ? 'positive' : pct < 0 ? 'negative' : 'neutral',
   };
 };
-// The sparkline from a trend, without its month-on-month pill: the pill is
-// the shared comparison now, so the card never mixes two comparisons.
-const sparklineOnly = (extras) => (extras.trend ? { trend: extras.trend } : {});
 
 const Slot = ({ kind, question, hint, realOnly = false, basis = null, children }) => (
   <div className="dash-slot" data-kind={kind}>
@@ -290,8 +287,8 @@ const DASHBOARD_SKELETON_ROWS = [
 
 const DashboardSkeleton = () => (
   <div className="dashboard-body" aria-hidden="true">
-    <div className="kpi-strip kpi-strip-hero">
-      <SkeletonStatCards count={4} cardClassName="kpi-card" />
+    <div className="hero-kpis">
+      <SkeletonStatCards count={4} cardClassName="hero-card" />
     </div>
     {DASHBOARD_SKELETON_ROWS.map(([rowClass, cards], i) => (
       <div className={`dash-row ${rowClass}`} key={i}>
@@ -484,6 +481,36 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [versusKey, loadedKey, requestKey, principal]);
   const prior = versusKey && versusLoaded.key === versusKey ? versusLoaded : null;
+
+  // The annual card's year-over-year (HeroKpis.jsx): a part year (Jan–Feb
+  // 2026) against the SAME months a year earlier, read from GET /dashboard's
+  // allocation block for a range ending on that month, so both sides are
+  // summed the same way. A whole year needs no request: its basis_sales is
+  // the year before. With the default range this is the comparison's own
+  // request (Mar 2024 – Feb 2025), so it comes from the cache.
+  const allocNow = loadedKey === requestKey ? loaded?.data?.allocation : null;
+  const ytdPriorPeriod = allocNow?.latest_month && allocNow.ytd_sales != null && allocNow.ytd_months < 12
+    ? `${Number(allocNow.latest_month.slice(0, 4)) - 1}${allocNow.latest_month.slice(4)}`
+    : null;
+  const ytdFloorYear = preview ? Number(PLACEHOLDER_START.year) : FIRST_DATA_YEAR;
+  const ytdPriorKey = ytdPriorPeriod && Number(ytdPriorPeriod.slice(0, 4)) >= ytdFloorYear
+    ? `${ytdPriorPeriod}|${principal ?? ''}`
+    : null;
+  const [ytdPriorLoaded, setYtdPriorLoaded] = useState({ key: null, data: null, failed: false });
+  useEffect(() => {
+    if (!ytdPriorKey) return undefined;
+    let cancelled = false;
+    const [y, m] = ytdPriorPeriod.split('-').map(Number);
+    const startOrdinal = y * 12 + (m - 1) - 11;
+    const start = `${Math.floor(startOrdinal / 12)}-${String((startOrdinal % 12) + 1).padStart(2, '0')}`;
+    getDashboardData({ period: ytdPriorPeriod, startPeriod: start, principal })
+      .then((res) => { if (!cancelled) setYtdPriorLoaded({ key: ytdPriorKey, data: res, failed: false }); })
+      .catch(() => { if (!cancelled) setYtdPriorLoaded({ key: ytdPriorKey, data: null, failed: true }); });
+    return () => { cancelled = true; };
+    // ytdPriorPeriod is read through ytdPriorKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ytdPriorKey, principal]);
+  const ytdPrior = ytdPriorKey && ytdPriorLoaded.key === ytdPriorKey ? ytdPriorLoaded : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -838,6 +865,7 @@ const Dashboard = () => {
   const canListAtRisk = !lpHidden && (exposure.below_count ?? 0) > 0 && belowItems.length > 0;
   const openAtRisk = () => setShowAtRisk(true);
 
+
   // The range cards (RangeCards.jsx). Class A changes arrive on their own
   // request; only the answer for the range on screen is shown.
   const rangeChanges = classChanges?.key === loaded.key ? classChanges.data : null;
@@ -949,6 +977,74 @@ const Dashboard = () => {
     },
   };
 
+  // ── The top row (HeroKpis.jsx): the figures above, side by side ─────────
+  const allocation = data.allocation || {};
+  const allocMonthName = allocation.latest_month ? periodLabel(allocation.latest_month).split(' ')[0] : null;
+  const yoy = (() => {
+    if (allocation.ytd_sales == null || !allocation.latest_month) return null;
+    const y = Number(allocation.latest_month.slice(0, 4));
+    // A whole year against the whole year before (the allocation's basis).
+    if (allocation.ytd_months === 12) {
+      return allocation.basis_months === 12 && allocation.basis_sales > 0
+        ? { pct: ((allocation.ytd_sales - allocation.basis_sales) / allocation.basis_sales) * 100, label: String(y - 1) }
+        : { note: `${y - 1} has ${allocation.basis_months} months on record, so no like-for-like year-over-year.` };
+    }
+    const label = `${allocation.ytd_months === 1 ? allocMonthName : `Jan–${allocMonthName}`} ${y - 1}`;
+    if (!ytdPriorKey) return { note: `No ${label} sales on record to compare with.` };
+    if (!ytdPrior) return null; // loading
+    if (ytdPrior.failed) return { note: `Could not load ${label} to compare with.` };
+    const p = ytdPrior.data?.allocation || {};
+    if (p.ytd_sales == null || p.latest_month !== ytdPriorPeriod) {
+      return { note: `No like-for-like year-over-year: ${label} has no allocation basis on record.` };
+    }
+    if (p.ytd_months !== allocation.ytd_months) {
+      return { note: `Not like-for-like: ${allocation.ytd_months} months on record now, ${p.ytd_months} in ${label}.` };
+    }
+    return p.ytd_sales > 0 ? { pct: ((allocation.ytd_sales - p.ytd_sales) / p.ytd_sales) * 100, label } : null;
+  })();
+  const salesMonthTrend = sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {};
+  const rangeSales = kpis.sales_cumulative || {};
+  const annualCard = {
+    allocation,
+    yoy,
+    latest: {
+      month: salesMonth,
+      value: sales.value,
+      trend: salesMonthTrend.trend || null,
+      change: salesMonthTrend.deltaLine ? salesMonthTrend : null,
+      blockedReason: sales.value === '—' ? sales.contextLine : null,
+    },
+    range: {
+      short: salesRange?.short ?? null,
+      change: salesCompare,
+      label: rangeSales.label ? `Sales, ${rangeSales.label}` : 'Sales',
+      value: rangeSales.value != null && !kpis.sales_blocked_reason ? formatCompactPesos(rangeSales.value) : '—',
+    },
+    basis: {
+      label: allocation.allocation_year ? `FY ${allocation.allocation_year}` : 'Selected range',
+      follows: true,
+      detail: `${FOLLOWS_RANGE} The year is the one the range ends in, Jan to the range\u2019s last month; the latest `
+        + 'month is the range\u2019s last month; "Selected range" is the whole range against "Compare with".',
+    },
+    tooltip: [salesTooltip, salesRange?.detail].filter(Boolean).join(' '),
+  };
+  const inventoryLines = sohValue.value === '—'
+    ? [sohValue.contextLine]
+    : ['At last purchase price', countLabel ? countLabel.charAt(0).toUpperCase() + countLabel.slice(1) : null,
+      sohCoverage, piecesLine, coverLine];
+  const belowLines = belowSs.value === '—'
+    ? [belowSs.contextLine]
+    : [
+      ['Class A SKUs with a stock count', abcCoverage].filter(Boolean).join(' · '),
+      [lpCycleLabel ? `${lpCycleLabel} plan` : null, stockCountedLine(exposure.stock_counts)].filter(Boolean).join(' · '),
+    ];
+  const belowBadge = belowSs.value === '—' ? null : ssPinnedFlag || {
+    label: 'Current plan',
+    tone: 'info',
+    detail: `The ${lpCycleLabel ? `${lpCycleLabel} ` : ''}order plan, the latest one. This card does not change with `
+      + 'the date filter: safety stock exists only for the current plan.',
+  };
+
   // Months in the range with no sales on record (Del Monte has many). Said
   // once, under the filters, so a short total is never read as a low year.
   const salesTotal = kpis.sales_cumulative;
@@ -1039,70 +1135,41 @@ const Dashboard = () => {
               <span>{rangeGapNote}</span>
             </p>
           )}
-          <div className="kpi-strip kpi-strip-hero dash-section-anchor" id="dash-summary">
-            <KPICard
-              title="Sales"
-              value={sales.value}
-              // Green accent (top bar + icon) for money coming in — card
-              // chrome only; the pill below carries the month's direction.
-              // Slate, like every blocked card, when there is no figure.
-              metricType={sales.value === '—' ? undefined : 'healthy'}
-              contextLine={sales.contextLine}
-              tooltip={sales.value === '—' ? undefined : salesTooltip}
-              icon={<Wallet size={20} />}
-              basis={BASIS.sales}
-              {...(sales.value !== '—'
-                ? { ...sparklineOnly(trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries)), ...salesCompare }
-                : {})}
-            />
-            <KPICard
-              title="Inventory value"
+          {/* The top row (HeroKpis.jsx): performance first — annual sales and
+              the allocation, inventory value — then the two operational
+              cards, tinted, with the way to act on them. */}
+          <div className="hero-kpis dash-section-anchor" id="dash-summary">
+            <AnnualSalesCard {...annualCard} />
+            <InventoryCard
               value={sohValue.value}
-              contextLine={sohValue.contextLine}
-              note={sohValue.value !== '—' && (piecesLine || coverLine)
-                ? (
-                  <>
-                    {piecesLine && <span className="kpi-note-line">{piecesLine}</span>}
-                    {coverLine && <span className="kpi-note-line">{coverLine}</span>}
-                  </>
-                )
-                : null}
+              lines={inventoryLines}
               // A count the team judged unusual is kept and says so
-              // (kpis.soh_count_note, Yuan 2026-10-04): a badge beside the
-              // figure, the reviewed sentence one tap away.
+              // (kpis.soh_count_note, Yuan 2026-10-04).
               flag={sohValue.value !== '—' && kpis.soh_count_note ? { label: 'Unusual count', detail: kpis.soh_count_note } : null}
+              change={sohValue.value !== '—' ? stockCompare : null}
               tooltip={coverTooltip}
-              // Blue, the inventory line's colour on the chart below.
-              accent={sohValue.value !== '—' ? CHART_COLORS.stockSeries : undefined}
-              icon={<Package size={20} />}
               basis={BASIS.stock}
-              {...(sohValue.value !== '—'
-                ? { ...sparklineOnly(trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries, 'count')), ...stockCompare }
-                : {})}
             />
-            <KPICard
+            <ActionCard
+              tone="orange"
               title="Below safety stock"
               value={belowSs.value}
               unit={belowSs.value === '—' ? undefined : exposure.comparable_count === 1 ? 'SKU' : 'SKUs'}
-              metricType={belowSs.value === '—' ? undefined : ssTier}
-              contextLine={belowSs.contextLine}
-              flag={ssPinnedFlag}
-              basis={BASIS.plan}
+              severity={belowSs.value === '—' || ssTier === 'healthy' ? null : ssTier === 'danger' ? 'danger' : 'watch'}
+              lines={belowLines}
+              badge={belowBadge}
               tooltip={belowSs.value === '—' ? undefined : belowSsTooltip}
-              action={canListAtRisk
+              link={canListAtRisk
                 ? { label: `See the ${exposure.below_count.toLocaleString()} products`, onClick: openAtRisk }
-                : undefined}
-              icon={<AlertTriangle size={20} />}
+                : null}
             />
-            <KPICard
+            <ActionCard
+              tone="purple"
               title="Pending reorder actions"
               value={lpHidden ? '—' : pendingCount.toLocaleString()}
               unit={lpHidden ? undefined : pendingCount === 1 ? 'SKU' : 'SKUs'}
-              metricType={lpHidden ? undefined : 'recommendation'}
-              contextLine={lpHidden ? LP_HIDDEN_NOTE : pendingContext}
-              action={!lpHidden && pendingCount > 0 ? { label: 'Open the order plan', to: '/reorder' } : undefined}
-              basis={BASIS.plan}
-              icon={<ClipboardList size={20} />}
+              lines={lpHidden ? [LP_HIDDEN_NOTE] : ['Awaiting a decision', lpCycleLabel ? `${lpCycleLabel} plan` : null]}
+              link={!lpHidden && pendingCount > 0 ? { label: 'Open the order plan', to: '/reorder' } : null}
             />
           </div>
 

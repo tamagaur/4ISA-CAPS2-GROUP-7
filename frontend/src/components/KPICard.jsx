@@ -63,7 +63,7 @@ const CARD_ACCENT_COLORS = {
 const SPARK_W = 76;
 const SPARK_H = 26;
 
-const Sparkline = ({ points, color }) => {
+export const Sparkline = ({ points, color }) => {
   if (!points || points.length < 2) return null;
   const recent = points.slice(-12);
   const values = recent.map((p) => p.value);

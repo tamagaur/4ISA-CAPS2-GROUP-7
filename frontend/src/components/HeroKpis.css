@@ -1,0 +1,406 @@
+/* The dashboard's top row (HeroKpis.jsx): four cards, the first twice as
+   wide; white cards with a light border, large radius and a thin accent on
+   top; the two operational cards tinted so they read as things to act on. */
+
+.hero-kpis {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 28px;
+}
+
+.hero-card {
+  --hero-accent: #16A34A;
+  --hero-dot: #16A34A;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 20px 22px 18px;
+  border: 1px solid #E7EBF0;
+  border-radius: 18px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  overflow: hidden;
+}
+
+/* The thin accent along the top. */
+.hero-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--hero-accent);
+}
+
+.hero-card.is-green { --hero-accent: #16A34A; --hero-dot: #16A34A; }
+.hero-card.is-blue { --hero-accent: #2563EB; --hero-dot: #2563EB; }
+.hero-card.is-orange { --hero-accent: #F59E0B; --hero-dot: #F59E0B; }
+.hero-card.is-purple { --hero-accent: #8B5CF6; --hero-dot: #8B5CF6; }
+
+/* Operational cards: a faint tint of their accent, so "act on this" stands
+   apart from the performance figures beside them. */
+.hero-card.is-action.is-orange { background: #FFFBF4; border-color: #F6E7CC; }
+.hero-card.is-action.is-purple { background: #FAF8FF; border-color: #E9E2FB; }
+
+.hero-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-bottom: 12px;
+}
+
+/* The dot and the title stay together; the title wraps beside the dot. */
+.hero-card-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hero-card-name .hero-dot {
+  position: relative;
+  top: -1px;
+}
+
+.hero-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--hero-dot);
+}
+
+.hero-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #475467;
+}
+
+.hero-card-basis {
+  margin-left: auto;
+  max-width: 100%;
+}
+
+/* Text */
+.hero-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: #667085;
+}
+
+.hero-label.is-caps {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.hero-value {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: #182230;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.hero-value.is-danger { color: #B42318; }
+.hero-value.is-watch { color: #B54708; }
+
+.hero-unit {
+  margin-left: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #667085;
+}
+
+.hero-value-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hero-lines {
+  margin-top: 8px;
+}
+
+.hero-line {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475467;
+}
+
+.hero-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #667085;
+}
+
+/* Pills (soft pastel) */
+.hero-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.hero-pills-foot {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.hero-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.hero-pill.is-positive { background: #E8F7EE; color: #1E7A47; }
+.hero-pill.is-negative { background: #FDECEC; color: #B42318; }
+.hero-pill.is-warning { background: #FFF4DD; color: #B54708; }
+.hero-pill.is-neutral { background: #EEF1F5; color: #475467; }
+.hero-pill.is-info { background: #E8F0FE; color: #1D4ED8; }
+
+/* Card 1 */
+.hero-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+
+.hero-split-col {
+  min-width: 0;
+}
+
+.hero-range-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #EDF0F4;
+  font-size: 13px;
+  color: #475467;
+}
+
+.hero-range-row .hero-pill {
+  font-size: 12px;
+}
+
+.hero-progress {
+  margin-top: 14px;
+}
+
+.hero-progress-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: #EEF1F5;
+}
+
+.hero-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: #7F9CC9;
+}
+
+.hero-progress-fill.is-short {
+  background: #94A9CF;
+}
+
+/* Where sales would be by now at an even pace. */
+.hero-progress-pace {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: #182230;
+}
+
+.hero-progress-labels {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: #475467;
+}
+
+.hero-alloc {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #EDF0F4;
+}
+
+.hero-alloc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.hero-alloc-range {
+  font-size: 12.5px;
+  color: #475467;
+}
+
+.hero-alloc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 4px;
+}
+
+.hero-alloc-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #182230;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-alloc-basis {
+  font-size: 13px;
+  font-weight: 400;
+  color: #667085;
+}
+
+.hero-alloc-levels {
+  display: flex;
+  gap: 6px;
+}
+
+.hero-level {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #DDE2EA;
+  border-radius: 999px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475467;
+  cursor: pointer;
+}
+
+.hero-level:hover {
+  border-color: #B9C3D3;
+}
+
+.hero-level.is-active {
+  border-color: #BFD4FB;
+  background: #E8F0FE;
+  color: #1D4ED8;
+}
+
+.hero-level:focus-visible,
+.hero-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+}
+
+/* Operational links */
+.hero-link-row {
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.hero-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1D4ED8;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.hero-link:hover {
+  text-decoration: underline;
+}
+
+/* Tablet: the wide card on its own row, the three others beneath it. */
+@media (max-width: 1280px) {
+  .hero-kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .hero-card {
+    grid-column: span 2;
+  }
+  .hero-kpis > :first-child {
+    grid-column: span 6;
+  }
+}
+
+/* Small tablet: two columns. */
+@media (max-width: 900px) {
+  .hero-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hero-kpis > * {
+    grid-column: span 1;
+  }
+  .hero-kpis > :first-child,
+  .hero-kpis > :nth-child(2) {
+    grid-column: span 2;
+  }
+}
+
+/* Phone: one column. */
+@media (max-width: 640px) {
+  .hero-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-kpis > *,
+  .hero-kpis > :first-child,
+  .hero-kpis > :nth-child(2) {
+    grid-column: span 1;
+  }
+  .hero-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-value {
+    font-size: 28px;
+  }
+}
