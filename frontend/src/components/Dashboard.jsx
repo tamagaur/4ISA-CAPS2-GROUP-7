@@ -898,11 +898,15 @@ const Dashboard = () => {
       detail: `${FOLLOWS_RANGE} The comparison period from "Compare with" is drawn dashed on the same months.`,
     },
     abc: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Classes are ranked on sales over the whole range.` },
+    // Checked live 2026-10-09: the bars read the count at the range's end
+    // (tier_stock_period), like the Inventory card; only the pending-reorder
+    // figures inside them come from the current plan.
     tierStock: {
-      label: 'Latest stock count',
-      follows: false,
-      detail: 'Does not change with the date filter: it reads the warehouse status flags in the latest stock count'
-        + `${data.tier_stock_count_date ? ` (counted ${dayLabel(data.tier_stock_count_date)})` : ''}.`,
+      label: 'Range-end count',
+      follows: true,
+      detail: `${FOLLOWS_RANGE} It reads the warehouse status flags in the stock count at the end of the range`
+        + `${data.tier_stock_count_date ? ` (counted ${dayLabel(data.tier_stock_count_date)})` : ''}; `
+        + 'the pending-reorder figures in it are from the current plan.',
     },
     classChanges: {
       label: 'Range vs a year earlier',
