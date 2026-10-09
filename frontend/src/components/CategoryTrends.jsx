@@ -23,6 +23,7 @@ import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import RefreshingNote from './RefreshingNote';
 import InfoTip from './InfoTip';
+import PageHeader from './ui/PageHeader';
 import { LoadingStatus, SkeletonChart, SkeletonLine, SkeletonTable } from './Skeleton';
 import './CategoryTrends.css';
 
@@ -42,10 +43,13 @@ const formatRevenue = (value) => (value < 0 ? `−${formatCompactPesos(value)}` 
 // heading and how fast", not "what will next month be" — that is the SKU
 // forecast's job.
 
+// The shared soft badges (ui.css): growing green, declining amber, no clear
+// trend neutral — revenue direction has a valence, and the words carry it
+// so colour is never the only signal.
 const DIRECTION = {
-  growing: { label: 'Growing', Icon: ArrowUpRight, className: 'ct-dir-up' },
-  declining: { label: 'Declining', Icon: ArrowDownRight, className: 'ct-dir-down' },
-  flat: { label: 'No clear trend', Icon: Minus, className: 'ct-dir-flat' },
+  growing: { label: 'Growing', Icon: ArrowUpRight, className: 'badge-success' },
+  declining: { label: 'Declining', Icon: ArrowDownRight, className: 'badge-warning' },
+  flat: { label: 'No clear trend', Icon: Minus, className: 'badge-neutral' },
 };
 const signed = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`);
 const titleCase = (name) => (name || '').toLowerCase().replace(/(^|[\s/&-])\S/g, (c) => c.toUpperCase());
@@ -174,7 +178,7 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
         />
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={340}>
             <ComposedChart data={data} margin={{ top: 10, right: 16, left: 4, bottom: 8 }}>
               <CartesianGrid {...GRID_PROPS} />
               {renderPlaceholderBand(bandSpan)}
@@ -343,11 +347,11 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
                     <td className="table-num">{formatRevenue(c.revenue_last_12)}</td>
                     <td>
                       {c.available ? (
-                        <span className={`ct-dir ${dir.className}`}>{DirIcon && <DirIcon size={14} aria-hidden="true" />}{dir.label}</span>
+                        <span className={`badge ${dir.className}`}>{DirIcon && <DirIcon size={12} aria-hidden="true" />}{dir.label}</span>
                       ) : (
                         // The backend's own short status: "Not enough
                         // months" or "No recent sales".
-                        <span className="ct-dir ct-dir-none" title={c.reason}>{c.label}</span>
+                        <span className="badge badge-neutral" title={c.reason}>{c.label}</span>
                       )}
                     </td>
                     <td className="table-num">
@@ -413,15 +417,11 @@ const CategoryTrends = () => {
   return (
     <div className="ct-page">
       <div className="ct-content">
-        <div className="ct-header">
-          <h2 className="ct-title">
-            Category <span className="page-title-accent">trends</span>
-          </h2>
-          <p className="ct-subtitle">
-            Monthly revenue by product category, and where its trend points
-            {data?.method ? ` over the next ${data.method.projection_months} months.` : '.'}
-          </p>
-        </div>
+        <PageHeader
+          title="Category"
+          accent="trends"
+          subtitle={`Monthly revenue by product category, and where its trend points${data?.method ? ` over the next ${data.method.projection_months} months.` : '.'}`}
+        />
 
         {/* One principal card in the loaded order: header, the 5-column
             category table, then the selected category's 300px chart. */}

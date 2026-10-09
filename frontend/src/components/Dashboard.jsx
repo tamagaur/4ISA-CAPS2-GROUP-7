@@ -1,17 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import KPICard from './KPICard';
+import PageHeader from './ui/PageHeader';
 import AtRiskProductsModal from './AtRiskProductsModal';
-import ClassProductsModal from './ClassProductsModal';
-import IdleStockWidget from './IdleStockWidget';
-import { ClassChanges } from './PendingCards';
+import {
+  ClassChanges, DelMonteProductSalesCard, ForecastErrorSummaryCard, IdleStockCard, ProductListModal,
+  DEMO_PRODUCT_SALES_LABEL, IDLE_COLUMNS, OVER_RUN_COLUMNS, PRODUCT_SALES_COLUMNS,
+} from './RangeCards';
 import DateFilter from './DateFilter';
 import {
-  SalesVsStockWidget, ABCDonutWidget,
+  SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
   AllocationWidget, formatCompactPesos,
 } from './Charts';
-import { getDashboardData, peekDashboardData } from '../api/dashboard';
+import {
+  getClassChanges, getDashboardData, getForecastAccuracy, getIdleStock, getProductSales, peekDashboardData,
+} from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
 import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL } from '../principals';
 import { staleCoverageNotice } from '../dataCoverage';
@@ -21,7 +25,6 @@ import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
 import { formatDate, formatMonth } from '../utils/formatDate';
-import { formatUnits } from '../utils/formatNumber';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
 import { Package, Wallet, ArrowRight, AlertTriangle, ClipboardList } from 'lucide-react';
 import './Dashboard.css';
@@ -58,7 +61,7 @@ function stockCountedLine(counts) {
 // only applies to callers that omit the start; before startPeriod was
 // sent, a range wider than 12 months (e.g. Apr 2023 - Mar 2026) silently
 // clipped to its last 12, which read as "the start date does nothing."
-// Weeks of cover is the exception: it never follows the picker.
+// Weeks of cover follows the range's end (its count), not its start.
 const MONTH_TO_NUM = {
   Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
   Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
@@ -100,6 +103,27 @@ const coverageNote = (coverage, pagePrincipal) => {
   if (coverage.length > 1) return null;
   return `${PRINCIPAL_NAMES[coverage[0]] || coverage[0]} only`;
 };
+
+// The selected range's own sales total (kpis.sales_cumulative, data marts
+// since 2026-10-04) under the Sales card's month: "₱391.1M over Mar 2025 –
+// Feb 2026 (all 12 months)". Under All principals a month counts only when
+// both principals have sales, so a part-year total names the months left out
+// rather than passing for the year. Nothing for a one-month range, where the
+// total is the card's own figure.
+function rangeTotal(total, pagePrincipal) {
+  if (!total) return null;
+  if (total.value == null) return total.blocked_reason ? { short: null, detail: total.blocked_reason } : null;
+  if ((total.months_in_range || 0) <= 1) return null;
+  const partial = total.months_with_data !== total.months_in_range;
+  const missing = total.missing_months || [];
+  const short = `${formatCompactPesos(total.value)} over `
+    + `${partial ? `${total.months_with_data} of ${total.months_in_range} months, ` : ''}${total.label}`;
+  const detail = partial && missing.length
+    ? `No ${pagePrincipal === ALL_PRINCIPALS ? 'figure for both principals' : 'sales on record'} in `
+      + `${missing.map(periodLabel).join(', ')}; the range total covers the other months.`
+    : `All ${total.months_in_range} months of the range have sales on record.`;
+  return { short, detail };
+}
 
 // Sparkline + "vs last month" extras for a value card, from GET
 // /dashboard's kpis.sales_trend / kpis.soh_trend (backend/chart_insights
@@ -297,14 +321,14 @@ const DashSectionNav = ({ active, enabled }) => {
     });
   };
   return (
-    <nav className="dash-section-nav" aria-label="Dashboard sections">
+    <nav className="segmented dash-section-nav" aria-label="Dashboard sections">
       {DASH_SECTIONS.map((s) => {
         const current = enabled && active === s.id;
         return (
           <button
             key={s.id}
             type="button"
-            className={`dash-section-chip${current ? ' is-active' : ''}`}
+            className={`segmented-item${current ? ' is-active' : ''}`}
             aria-current={current ? 'true' : undefined}
             title={s.hint}
             disabled={!enabled}
@@ -346,8 +370,14 @@ const Dashboard = () => {
   const [error, setError] = useState(null); // { key, message }
   // The list behind "N below safety stock" (AtRiskProductsModal).
   const [showAtRisk, setShowAtRisk] = useState(false);
-  // The class whose products are listed (ClassProductsModal), or null.
-  const [listedClass, setListedClass] = useState(null);
+  // Class A changes for the same range and principal (GET /dashboard/
+  // class-changes), keyed like `loaded` so a stale range never shows.
+  const [classChanges, setClassChanges] = useState(null); // { key, data }
+  // The list behind a range card's figure: { kind, rows, loading, error }.
+  const [rangeList, setRangeList] = useState(null);
+  // Del Monte's estimated product sales (GET /dashboard/product-sales), on
+  // the Del Monte view only.
+  const [productSales, setProductSales] = useState(null); // { key, data }
   const navigate = useNavigate();
   const loadedKey = loaded?.key;
 
@@ -372,6 +402,39 @@ const Dashboard = () => {
       cancelled = true;
     };
   }, [requestKey, loadedKey, period, startPeriod, principal]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getClassChanges({ period, startPeriod, principal })
+      .then((res) => { if (!cancelled) setClassChanges({ key: requestKey, data: res }); })
+      // The card is extra to the page: on a failure it is left out, and the
+      // rest of the dashboard stands.
+      .catch(() => { if (!cancelled) setClassChanges({ key: requestKey, data: null }); });
+    return () => { cancelled = true; };
+  }, [requestKey, period, startPeriod, principal]);
+
+  useEffect(() => {
+    if (principal !== 'delmonte') return undefined;
+    let cancelled = false;
+    getProductSales({ period, startPeriod, principal })
+      .then((res) => { if (!cancelled) setProductSales({ key: requestKey, data: res }); })
+      .catch(() => { if (!cancelled) setProductSales({ key: requestKey, data: null }); });
+    return () => { cancelled = true; };
+  }, [requestKey, period, startPeriod, principal]);
+
+  // Opens a range card's product list, fetched on demand for the same range.
+  // 'sales' arrives with its rows (the card already holds them).
+  const openSalesList = (rows) => setRangeList({ kind: 'sales', rows, loading: false, error: null });
+  const openRangeList = (kind) => {
+    setRangeList({ kind, rows: [], loading: true, error: null });
+    const request = kind === 'idle'
+      ? getIdleStock({ period, principal }).then((res) => res.items || [])
+      : getForecastAccuracy({ period, startPeriod, principal }).then((res) => res.over_forecast_runs?.items || []);
+    request
+      .then((rows) => setRangeList((prev) => (prev?.kind === kind ? { kind, rows, loading: false, error: null } : prev)))
+      .catch((err) => setRangeList((prev) => (prev?.kind === kind
+        ? { kind, rows: [], loading: false, error: err.message || 'Failed to load the list' } : prev)));
+  };
 
   const isRefreshing = Boolean(loaded) && loaded.key !== requestKey;
 
@@ -403,12 +466,7 @@ const Dashboard = () => {
   // scrolls.
   const header = (
     <>
-      <div className="dashboard-header">
-        <div className="dashboard-title-row">
-          <h2>Inventory <span className="page-title-accent">pulse</span></h2>
-        </div>
-        <p>Inventory and ordering overview — SSM Urdaneta warehouse</p>
-      </div>
+      <PageHeader title="Inventory" accent="pulse" subtitle="Inventory and ordering overview — SSM Urdaneta warehouse" />
       <div className={`dash-toolbar${toolbarStuck ? ' is-stuck' : ''}`} ref={toolbarRef}>
         <DashSectionNav active={activeSection} enabled={sectionsReady} />
         <DateFilter />
@@ -475,70 +533,56 @@ const Dashboard = () => {
   const salesBasis = !salesBasisRaw ? null
     : salesMonth && salesBasisRaw.includes(salesMonth) ? 'selling price, VAT-inclusive (recorded with tax)'
       : salesBasisRaw.split(' (')[0];
-  // Cumulative AND snapshot, each named (Technical Adviser, 2 Oct 2026:
-  // "snapshot or cumulative? as of when?"). The headline is the total for
-  // the selected range (kpis.sales_cumulative); the latest month sits under
-  // it with its own change. A range missing months says how many it has.
-  // Without a range total (an older payload, or blocked) the card is the
-  // latest month alone, as before.
-  const salesTotal = kpis.sales_cumulative && kpis.sales_cumulative.value != null && !kpis.sales_cumulative.blocked_reason
-    ? kpis.sales_cumulative : null;
-  const salesMonthsNote = salesTotal && salesTotal.months_with_data < salesTotal.months_in_range
-    ? `${salesTotal.months_with_data} of ${salesTotal.months_in_range} months have sales on record` : null;
-  const sales = salesTotal
-    ? kpiDisplay(
-        salesTotal.value, null, formatCompactPesos,
-        [`Total for ${salesTotal.label}`, salesMonthsNote, salesBasis, vatNote].filter(Boolean).join(' · '),
-      )
-    : kpiDisplay(
-        kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
-        [salesMonth ? `Total sales · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : 'Total sales', salesBasis, vatNote]
-          .filter(Boolean).join(' · '),
-      );
-  const salesLatest = salesTotal && kpis.sales != null && salesMonth
-    ? { label: `Latest month · ${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}`, value: formatCompactPesos(kpis.sales) }
-    : undefined;
-  // The pill compares months, so under a range total it says which.
-  const salesTrendExtras = sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {};
-  if (salesTotal && salesTrendExtras.deltaLine && salesMonth) {
-    salesTrendExtras.deltaLine = `${salesMonth}: ${salesTrendExtras.deltaLine}`;
-  }
+  // One context line (UI pass): the month and the range's own total, both
+  // periods stated. The price basis and the months behind the total sit in
+  // the card's "?".
+  const salesRange = kpis.sales_blocked_reason ? null : rangeTotal(kpis.sales_cumulative, pagePrincipal);
+  const sales = kpiDisplay(
+    kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
+    [salesMonth ? `${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : null, salesRange?.short]
+      .filter(Boolean).join(' · ') || 'Total sales',
+  );
+  const salesTooltip = [
+    `Total sales for ${salesMonth || 'the latest month with data'}${salesBasis ? `, at ${salesBasis}` : ''}.`,
+    vatNote ? `${vatNote}.` : null,
+    salesRange?.detail,
+  ].filter(Boolean).join(' ');
   // The stock card also answers SSM's own rule (client meeting, Sep 2026:
   // keep three weeks of sales in stock) with the backend's weeks_of_cover,
-  // so the target and the actual sit on one line. The figure deliberately
-  // ignores the date picker (always the 12 months of sales up to the stock
-  // count), and the card's tooltip names that year so nobody expects it to
-  // move with the range.
+  // so the target and the actual sit on one line. Since the data marts
+  // (DEC-36, 2026-10-04) it reads the card's own count, the one at the
+  // range's end, against the 12 months of sales up to that count; the
+  // tooltip names that year.
   const cover = kpis.weeks_of_cover || {};
   const policyWeeks = data.inventory?.policy_weeks ?? 3;
   const coverWindow = cover.sales_window
     ? `${periodLabel(cover.sales_window.start)} – ${periodLabel(cover.sales_window.end)}`
     : null;
-  // The weeks figure names the sales it is measured in, so "3.0 weeks"
-  // never reads as weeks of the range on screen (it ignores the picker).
-  // Not a final figure for Unilever yet (3 Oct 2026 analysis): its stock
-  // counts are the Ilocos Sur warehouse's and its product sales La Union's,
-  // a match SSM has not confirmed, so the weeks could be overstated. The
-  // card says "provisional" and the tooltip says why.
-  const coverProvisional = (cover.coverage || []).includes('unilever');
+  // The weeks figure names the sales it is measured in, so "6.2 weeks"
+  // never reads as weeks of the range on screen. Not a final figure while
+  // the backend serves a caveat (Unilever: stock is the Ilocos Sur
+  // warehouse's, product sales La Union's, a match SSM has not confirmed):
+  // the card says "provisional" and the tooltip gives the caveat as served.
+  const coverProvisional = Boolean(cover.caveat);
   const coverLine = cover.value != null
-    ? `≈ ${Number(cover.value).toFixed(1)} weeks of ${coverWindow ? `${coverWindow} ` : ''}sales`
-      + `${coverProvisional ? ' (provisional)' : ''} · SSM policy: ${policyWeeks} weeks`
+    ? `≈ ${Number(cover.value).toFixed(1)} weeks of cover${coverProvisional ? ' (provisional)' : ''}`
+      + ` · SSM policy: ${policyWeeks} weeks`
     : null;
   // Del Monte's year has sales in only some months (6 of 12 in 2025); the
   // average is over those, and the tooltip says so rather than imply a year.
   const coverMonthsNote = cover.months_used != null && cover.months_used < 12
     ? ` Only ${cover.months_used} of those months have sales on record; the average is over those.`
     : '';
+  // Del Monte's stock files carry no pack size, so its stock can't be
+  // turned into pieces: the card says why it is in pesos only.
+  const pesosOnlyNote = pagePrincipal === 'delmonte' ? 'pesos only, since Del Monte files have no pack size' : null;
   const priceBasisNote = 'Stock is valued at each product\'s last purchase price, which is not SSM\'s true cost.';
   const coverTooltip = cover.value != null && coverWindow
-    ? `${priceBasisNote} Weeks of cover = this stock ÷ average weekly sales over ${coverWindow}, the 12 months up to `
-      + `the stock count — it does not change with the date range.${coverMonthsNote} SSM's policy is `
+    ? `${priceBasisNote}${pesosOnlyNote ? ` Pesos only: ${pesosOnlyNote.replace('pesos only, since ', '')}.` : ''}`
+      + ` Weeks of cover = this stock ÷ average weekly sales over ${coverWindow}, the 12 months up to `
+      + `the stock count at the end of the selected range.${coverMonthsNote} SSM's policy is `
       + `to keep ${policyWeeks} weeks of sales in stock.`
-      + (coverProvisional
-        ? ' Provisional: the stock counts are from the Ilocos Sur warehouse and product sales are La Union only; '
-          + 'the match is unverified with SSM, so the weeks may be overstated.'
-        : '')
+      + (coverProvisional ? ` Provisional: ${cover.caveat}.` : '')
     : priceBasisNote;
   // Stock is valued at the SOH file's own extended cost — each product's
   // last purchase price (Inventory_Fact.valuation) — and dated by the day it
@@ -551,24 +595,10 @@ const Dashboard = () => {
   const countDay = countDayKnown ? dayLabel(kpis.soh_count_date) : null;
   const countLabel = stockCountedLine(kpis.stock_counts)
     || (countDay ? `counted ${countDay}` : sohMonth ? `${sohMonth} count` : null);
-  // Del Monte's stock files carry no pack size, so its stock can't be
-  // turned into pieces: the card says why it is in pesos only.
-  // kpis.soh_snapshot: the same count in pieces (Unilever), or the reason
-  // there are none (Del Monte: pieces_note).
-  const sohSnapshot = kpis.soh_snapshot || {};
-  const pesosOnlyNote = sohSnapshot.pieces_note
-    || (pagePrincipal === 'delmonte' ? 'pesos only, since Del Monte files have no pack size' : null);
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
-    // "Snapshot": one count, not a total for the range. kpis.soh_count_note
-    // is set when this count is one the team flagged as unusual — the card
-    // keeps the figure and says so beside it.
-    ['Snapshot at last purchase price', countLabel, kpis.soh_count_note, pesosOnlyNote, sohCoverage, coverLine]
-      .filter(Boolean).join(' · '),
+    ['At last purchase price', countLabel, sohCoverage].filter(Boolean).join(' · '),
   );
-  const sohPieces = sohValue.value !== '—' && sohSnapshot.pieces != null
-    ? { label: 'The same count in pieces', value: formatUnits(sohSnapshot.pieces) }
-    : undefined;
 
   // stock_on_hand_flags: counts the team reviewed and judged unusual — the
   // chart marks those points and gives the reason, it never drops them.
@@ -584,10 +614,16 @@ const Dashboard = () => {
     // purchase records): the chart's Purchases view only, never a KPI.
     receivedEstimated: pt.received_estimated ?? null,
     receivedEstimatedNegativeSkus: pt.received_estimated_negative_skus ?? null,
-    // A gap month the backend filled in (sales_estimated /
-    // stock_on_hand_estimated): drawn dotted on the chart, never in a KPI.
+    // The marts' estimates for months with no real figure, and returns
+    // (DEC-31; 'filled' in real mode, 'generated' in preview): the chart and
+    // its table only, labelled by kind, never a KPI.
     salesEstimated: pt.sales_estimated ?? null,
+    salesEstimatedKind: pt.sales_estimated_kind ?? null,
     stockEstimated: pt.stock_on_hand_estimated ?? null,
+    stockEstimatedKind: pt.stock_on_hand_estimated_kind ?? null,
+    returns: pt.returns ?? null,
+    returnsEstimated: pt.returns_estimated ?? null,
+    returnsEstimatedKind: pt.returns_estimated_kind ?? null,
     stockUnusual: stockFlags.get(pt.period) || null,
   }));
 
@@ -607,6 +643,14 @@ const Dashboard = () => {
   const abcUnits = abcCovered.length === 1 && abcCovered[0] === 'delmonte'
     ? 'categories'
     : abcCovered.includes('delmonte') ? 'items' : 'SKUs';
+
+  const tierStock = (data.tier_stock || []).map((t) => ({
+    tier: t.tier,
+    inStock: t.in_stock,
+    deadStock: t.dead_stock,
+    noData: t.no_data,
+    pendingReorderCount: t.pending_reorder_count,
+  }));
 
   // The page's own payload, so the card and the MASE reliability count
   // (GET /dashboard's forecast block) describe the page's principal.
@@ -659,12 +703,25 @@ const Dashboard = () => {
     // stock count it is checked against (the latest count, stock_counts) —
     // so both are named.
     [
-      'Measurable Class A SKUs below safety stock',
+      'Class A SKUs with a stock count',
       lpCycleLabel ? `${lpCycleLabel} plan` : null,
       stockCountedLine(exposure.stock_counts),
       abcCoverage,
     ].filter(Boolean).join(' · ')
   );
+  // A range ending before the plan's opening count: the card shows the
+  // current plan's figure, like the pending-reorder card, and says it does
+  // not follow the date range (safety_stock_exposure.pinned_to_plan).
+  const ssPinned = Boolean(exposure.pinned_to_plan) && exposure.below_count != null;
+  const ssPinnedFlag = ssPinned ? {
+    label: 'Current plan',
+    tone: 'info',
+    detail: `Safety stock exists only for the ${lpCycleLabel ? `${lpCycleLabel} ` : 'current '}plan, which starts from the `
+      + `${periodLabel(exposure.plan_opening_period) || 'latest'} stock count. Your date range ends before that, so this `
+      + `card shows the plan's own figure and does not follow the date range.`,
+  } : null;
+  const belowSsTooltip = `Of the Class A SKUs the ${lpCycleLabel ? `${lpCycleLabel} ` : ''}plan covers that have a `
+    + 'stock count, how many hold less than their safety stock — the plan\'s own figure for each SKU, in pieces.';
 
   // Pending action count — the "what to do" figure in the hero strip. Now
   // the CURRENT LP cycle only: it counted every undecided row ever written,
@@ -674,7 +731,7 @@ const Dashboard = () => {
   // Non-null only when the live data has moved past the hardcoded ceiling.
   const coverageStale = staleCoverageNotice(data.latest_data_period);
   const pendingContext = [
-    'Reorder suggestions awaiting a decision',
+    'Awaiting a decision',
     lpCycleLabel ? `${lpCycleLabel} plan` : null,
   ].filter(Boolean).join(' · ');
   // The cards connected (Technical Adviser, 2 Oct 2026): which products
@@ -685,6 +742,21 @@ const Dashboard = () => {
   const belowItems = exposure.below_items || [];
   const canListAtRisk = !lpHidden && (exposure.below_count ?? 0) > 0 && belowItems.length > 0;
   const openAtRisk = () => setShowAtRisk(true);
+
+  // The range cards (RangeCards.jsx). Class A changes arrive on their own
+  // request; only the answer for the range on screen is shown.
+  const rangeChanges = classChanges?.key === loaded.key ? classChanges.data : null;
+  const dmProductSales = pagePrincipal === 'delmonte' && productSales?.key === loaded.key ? productSales.data : null;
+  const openForecast = (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`);
+  const idle = data.idle_stock || {};
+  const idleSubtitle = [
+    idle.count_date ? `Stock counted ${dayLabel(idle.count_date)}` : idle.count_period ? `${periodLabel(idle.count_period)} count` : null,
+    idle.window_start && idle.window_end
+      ? `no sale ${periodLabel(idle.window_start)} – ${periodLabel(idle.window_end)}` : null,
+    idle.pesos_basis ? `value ${idle.pesos_basis}` : null,
+  ].filter(Boolean).join(' · ');
+  const overRuns = data.forecast_accuracy?.over_forecast_runs || {};
+  const overRunSubtitle = [data.forecast_accuracy?.label, overRuns.rule].filter(Boolean).join(' · ');
 
   return (
     <div className="dashboard">
@@ -760,16 +832,22 @@ const Dashboard = () => {
               // Slate, like every blocked card, when there is no figure.
               metricType={sales.value === '—' ? undefined : 'healthy'}
               contextLine={sales.contextLine}
-              secondary={salesLatest}
+              tooltip={sales.value === '—' ? undefined : salesTooltip}
               icon={<Wallet size={20} />}
-              {...salesTrendExtras}
+              {...(sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {})}
             />
             <KPICard
               title="Inventory value"
               value={sohValue.value}
               contextLine={sohValue.contextLine}
-              secondary={sohPieces}
+              note={sohValue.value !== '—' ? coverLine : null}
+              // A count the team judged unusual is kept and says so
+              // (kpis.soh_count_note, Yuan 2026-10-04): a badge beside the
+              // figure, the reviewed sentence one tap away.
+              flag={sohValue.value !== '—' && kpis.soh_count_note ? { label: 'Unusual count', detail: kpis.soh_count_note } : null}
               tooltip={coverTooltip}
+              // Blue, the inventory line's colour on the chart below.
+              accent={sohValue.value !== '—' ? CHART_COLORS.stockSeries : undefined}
               icon={<Package size={20} />}
               {...(sohValue.value !== '—' ? trendExtras(kpis.soh_trend, CHART_COLORS.stockSeries, 'count') : {})}
             />
@@ -779,6 +857,8 @@ const Dashboard = () => {
               unit={belowSs.value === '—' ? undefined : exposure.comparable_count === 1 ? 'SKU' : 'SKUs'}
               metricType={belowSs.value === '—' ? undefined : ssTier}
               contextLine={belowSs.contextLine}
+              flag={ssPinnedFlag}
+              tooltip={belowSs.value === '—' ? undefined : belowSsTooltip}
               action={canListAtRisk
                 ? { label: `See the ${exposure.below_count.toLocaleString()} products`, onClick: openAtRisk }
                 : undefined}
@@ -810,27 +890,42 @@ const Dashboard = () => {
                 note={placeholderNote(data.abc_revenue?.period)}
                 coverage={abcCoverage}
                 units={abcUnits}
-                atRisk={canListAtRisk
+                atRisk={canListAtRisk && !ssPinned
                   ? { below: exposure.below_count, measurable: exposure.comparable_count, onOpen: openAtRisk }
                   : null}
-                onOpenClass={setListedClass}
               />
             </Slot>
-            {/* Idle stock from actual sales (GET /dashboard's idle_stock). It
-                took the place of CategoryStockBarWidget, which read the
-                warehouse's Active/Inactive flag (still in Charts.jsx). */}
             <Slot kind="Descriptive" question="Is any of our stock dead?">
-              <IdleStockWidget idle={data.idle_stock} />
+              <CategoryStockBarWidget
+                data={tierStock}
+                note={placeholderNote(data.abc_revenue?.period)}
+                period={data.tier_stock_period}
+                countDay={countDayKnown ? dayLabel(data.tier_stock_count_date) : null}
+                cycleLabel={lpCycleLabel}
+                coverage={abcCoverage}
+              />
             </Slot>
           </div>
 
-          {/* Entered / left Class A — shown once GET /dashboard serves
-              abc_changes (PendingCards.jsx names the fields). */}
-          {data.abc_changes && (
-            <div className="dash-row dash-row-trend">
-              <Slot kind="Descriptive" question="Which products entered or left the top sellers?">
-                <ClassChanges changes={data.abc_changes} onOpen={() => navigate('/abc')} />
-              </Slot>
+          {/* Which products entered or left Class A against the same months a
+              year before, and the stock that has not moved: both answer for
+              the selected range (data marts, 2026-10-04/05). */}
+          {(rangeChanges || data.idle_stock) && (
+            <div className={`dash-row dash-row-top ${rangeChanges && data.idle_stock ? 'dash-row-even' : 'dash-row-trend'}`}>
+              {rangeChanges && (
+                <Slot kind="Descriptive" question="Which products entered or left the top sellers?">
+                  <ClassChanges changes={rangeChanges} onOpen={openForecast} />
+                </Slot>
+              )}
+              {data.idle_stock && (
+                <Slot kind="Descriptive" question="Is any stock sitting idle?">
+                  <IdleStockCard
+                    idle={data.idle_stock}
+                    scope={coverageNote(data.idle_stock.coverage, pagePrincipal)}
+                    onOpenList={() => openRangeList('idle')}
+                  />
+                </Slot>
+              )}
             </div>
           )}
 
@@ -870,6 +965,28 @@ const Dashboard = () => {
             )}
           </div>
 
+          {/* How far off the forecasts were over the range, right under the forecast it checks. */}
+          {data.forecast_accuracy && (
+            <div className="dash-row dash-row-trend">
+              <Slot kind="Predictive" question="How far off were the forecasts?" hint="Forecast against actual sales">
+                <ForecastErrorSummaryCard
+                  accuracy={data.forecast_accuracy}
+                  scope={coverageNote(data.forecast_accuracy.coverage, pagePrincipal)}
+                  onOpenList={() => openRangeList('over')}
+                />
+              </Slot>
+            </div>
+          )}
+
+          {/* Del Monte's product sales: estimates only, labelled as a demo. */}
+          {dmProductSales && (
+            <div className="dash-row dash-row-trend">
+              <Slot kind="Descriptive" question="Which Del Monte products sell most?" hint="Estimated">
+                <DelMonteProductSalesCard sales={dmProductSales} onOpenList={openSalesList} />
+              </Slot>
+            </div>
+          )}
+
           {/* PRESCRIPTIVE — the policy question this project exists to answer,
               beside SSM's own allocation rule applied to the sales data */}
           <div className={`dash-row ${lpHidden || !SHOW_POLICY_CARD ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-policy">
@@ -900,12 +1017,30 @@ const Dashboard = () => {
           )}
         </div>
       </div>
-      <ClassProductsModal
-        isOpen={listedClass != null}
-        onClose={() => setListedClass(null)}
-        tier={listedClass}
-        args={{ period, startPeriod, principal }}
-        onOpenAbcPage={() => navigate(`/abc?class=${listedClass}`)}
+      <ProductListModal
+        isOpen={Boolean(rangeList)}
+        onClose={() => setRangeList(null)}
+        loading={rangeList?.loading}
+        error={rangeList?.error}
+        rows={rangeList?.rows || []}
+        {...(rangeList?.kind === 'idle' ? {
+          title: 'Idle stock',
+          subtitle: idleSubtitle,
+          columns: IDLE_COLUMNS,
+          footnote: 'Most stock value first.',
+        } : rangeList?.kind === 'sales' ? {
+          title: 'Del Monte product sales (demo)',
+          subtitle: [dmProductSales?.label, DEMO_PRODUCT_SALES_LABEL].filter(Boolean).join(' · '),
+          columns: PRODUCT_SALES_COLUMNS,
+          footnote: 'Highest estimated sales first. Every figure here is an estimate, not a sale on record.',
+        } : {
+          title: 'Products over-forecast several months in a row',
+          subtitle: overRunSubtitle,
+          columns: OVER_RUN_COLUMNS,
+          footnote: 'Largest surplus first. Click a product to open its forecast.',
+          onOpenProduct: openForecast,
+          openLabel: 'Open its forecast',
+        })}
       />
       <AtRiskProductsModal
         isOpen={showAtRisk && canListAtRisk}
@@ -916,9 +1051,11 @@ const Dashboard = () => {
           plannedCount: pendingCount || null,
           measurableCount: exposure.comparable_count ?? null,
           belowCount: exposure.below_count ?? null,
-          abcMonth: periodLabel(data.abc_revenue?.period),
+          abcMonth: periodLabel(ssPinned ? exposure.tier_a_period : data.abc_revenue?.period),
           planLabel: lpCycleLabel ? `${lpCycleLabel} plan` : null,
-          countDay,
+          countDay: ssPinned
+            ? (exposure.stock_counts || []).filter((c) => c.available && c.counted_on).map((c) => dayLabel(c.counted_on))[0] ?? null
+            : countDay,
         }}
         revenueShare={exposure.below_revenue_share ?? null}
         revenueTotal={data.abc_revenue?.ranked_total ?? null}

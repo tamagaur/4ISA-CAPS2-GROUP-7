@@ -1,26 +1,19 @@
-// Cards and markers from the 3 Oct 2026 analysis (section B) whose data the
-// backend does not serve yet. Each is built against the field names below
-// and renders nothing until its field arrives, so wiring an endpoint later
-// is a backend change only. /preview (PendingPreview.jsx) shows them all on
-// labelled sample data.
+// Cards and markers from the 3 Oct 2026 analysis (section B). Since the
+// kelvin-etl merge (2026-10-06) the backend serves their data:
+//   ForecastErrorCard, StockLimitedNote  SKU Forecast, from GET /dashboard/
+//                      accuracy?level=product (that product's rows)
+//   ReviewBadge        Reorder Recs, from GET /recommendations needs_review +
+//                      review_reasons
+// Class A changes moved to RangeCards.jsx with its endpoint. AccuracyLevels
+// stays held back (SHOW_ACCURACY_PCT, SKUForecast.jsx): no bare percentage
+// on screen. /preview (PendingPreview.jsx) shows it on labelled sample data.
 //
-// Field names these read — to be confirmed in the API contract:
-//   GET /forecast (one SKU)
-//     error_summary  { pieces_per_month, pesos_per_month, direction:
-//                      'surplus' | 'shortage' | 'mixed', direction_months,
-//                      months_scored, window_start, window_end }
-//     accuracy       { product_pct, category_pct, total_pct }
-//     actuals[].stock_limited   true where stock may have run out
-//   GET /recommendations items[]
-//     review_flag    why the row needs a look before ordering, else null
-//     on_order_qty   pieces ordered and not yet arrived, else null
-//   GET /dashboard
-//     abc_changes    { period, previous_period,
-//                      entered: [{ sku_id, product_name, revenue, previous_revenue }],
-//                      left:    [{ … same … }] }
+// ForecastErrorCard's `error` (SKUForecast.jsx productAccuracy):
+//   { pieces_per_month, pesos_per_month, pesos_basis, direction: 'surplus' |
+//   'shortage' | 'mixed' (the net miss's sign), over_months, under_months,
+//   months_scored, window_start, window_end, source }
 import React from 'react';
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Eye } from 'lucide-react';
-import ProductName from './ProductName';
+import { AlertTriangle, Eye } from 'lucide-react';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
 import './PendingCards.css';
@@ -30,17 +23,19 @@ const pesos = (value) => `₱${Math.round(value).toLocaleString('en-PH')}`;
 
 // How far off the forecast is, in the units a buyer orders in and in money,
 // with its direction — never as a bare percentage (no "WAPE" on screen).
+// Direction is the sign of the net miss over the months scored, the
+// backend's own rule; the months that ran each way are said beside it.
 const DIRECTION_TEXT = {
-  surplus: 'Mostly surplus (the forecast ran above sales)',
-  shortage: 'Mostly shortage (the forecast ran below sales)',
-  mixed: 'No steady direction (above some months, below others)',
+  surplus: 'Overall above sales (a net surplus)',
+  shortage: 'Overall below sales (a net shortage)',
+  mixed: 'Above and below sales cancel out',
 };
 export const ForecastErrorCard = ({ error }) => {
   if (!error || error.pieces_per_month == null) return null;
   const perMonth = error.pieces_per_month;
-  const window = error.window_start && error.window_end
-    ? `${formatMonth(error.window_start)} – ${formatMonth(error.window_end)}`
-    : null;
+  const window = !error.window_start || !error.window_end ? null
+    : error.window_start === error.window_end ? formatMonth(error.window_start)
+      : `${formatMonth(error.window_start)} – ${formatMonth(error.window_end)}`;
   return (
     <div className="pending-error-card">
       <span className="pending-card-label">Typical forecast miss</span>
@@ -52,9 +47,13 @@ export const ForecastErrorCard = ({ error }) => {
       {DIRECTION_TEXT[error.direction] && (
         <p className="pending-error-direction">
           {DIRECTION_TEXT[error.direction]}
-          {error.direction !== 'mixed' && error.direction_months != null && error.months_scored != null
-            ? ` for ${error.direction_months} of ${error.months_scored} months` : ''}
-          {window ? ` · tested on ${window}` : ''}.
+          {error.months_scored != null && error.over_months != null
+            ? `: above sales in ${error.over_months} and below in ${error.under_months} of ${error.months_scored} `
+              + `month${error.months_scored === 1 ? '' : 's'}`
+            : ''}
+          {window ? ` · ${window}` : ''}
+          {error.source ? ` · ${error.source}` : ''}
+          {error.pesos_per_month != null && error.pesos_basis ? ` · pesos at ${error.pesos_basis}` : ''}.
         </p>
       )}
     </div>
@@ -119,57 +118,5 @@ export const StockLimitedNote = ({ periods = [] }) => {
         <strong>Possibly stock-limited: {periods.map((p) => formatMonth(p)).join(', ')}</strong> — {STOCK_LIMITED_TEXT}.
       </span>
     </p>
-  );
-};
-
-// Which products entered or left Class A between two ABC runs, with the
-// change in each one's revenue.
-const ChangeList = ({ title, icon, items, onOpen }) => (
-  <div className="pending-change-list">
-    <span className="pending-card-label">{icon} {title} ({items.length})</span>
-    {items.length === 0 ? <p className="pending-change-empty">None</p> : (
-      <ul>
-        {items.map((item) => {
-          const delta = item.revenue != null && item.previous_revenue != null ? item.revenue - item.previous_revenue : null;
-          return (
-            <li key={item.sku_id || item.product_name}>
-              <ProductName
-                name={item.product_name}
-                code={item.sku_id}
-                onOpen={item.sku_id && onOpen ? () => onOpen(item.sku_id) : undefined}
-              />
-              {delta != null && (
-                <span className={`pending-change-delta ${delta >= 0 ? 'is-up' : 'is-down'}`}>
-                  {delta >= 0 ? '+' : '−'}{pesos(Math.abs(delta))}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    )}
-  </div>
-);
-export const ClassChanges = ({ changes, onOpen }) => {
-  if (!changes || (!changes.entered && !changes.left)) return null;
-  const span = changes.previous_period && changes.period
-    ? `${formatMonth(changes.previous_period)} to ${formatMonth(changes.period)}`
-    : null;
-  return (
-    <div className="chart-widget pending-class-changes">
-      <div className="chart-header">
-        <div className="chart-title-area">
-          <h4>Class A changes</h4>
-          <p>
-            Products that entered or left the top sellers{span ? `, ${span}` : ''}, with the change in each
-            one&apos;s monthly revenue (₱).
-          </p>
-        </div>
-      </div>
-      <div className="pending-change-grid">
-        <ChangeList title="Entered Class A" icon={<ArrowUpRight size={12} aria-hidden="true" />} items={changes.entered || []} onOpen={onOpen} />
-        <ChangeList title="Left Class A" icon={<ArrowDownRight size={12} aria-hidden="true" />} items={changes.left || []} onOpen={onOpen} />
-      </div>
-    </div>
   );
 };

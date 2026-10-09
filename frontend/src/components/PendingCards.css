@@ -138,8 +138,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--color-border);
+  padding: 9px 0;
+  border-bottom: 1px solid #EEF1F4;
   font-size: 0.8rem;
 }
 
@@ -155,12 +155,23 @@
 
 .pending-change-delta {
   flex-shrink: 0;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.pending-change-delta.is-up { color: #1f6f40; }
-.pending-change-delta.is-down { color: var(--color-danger-text, #a52a2e); }
+.pending-change-delta.is-up { color: #2A8551; }
+.pending-change-delta.is-down { color: #D54848; }
+
+/* Product name over its code: the name readable, the code quiet. */
+.pending-change-list .product-name-title {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pending-change-list .product-name-code {
+  font-size: 11px;
+}
 
 /* /preview */
 .pending-preview {
@@ -228,4 +239,11 @@
   flex-direction: column;
   gap: 10px;
   margin-top: 14px;
+}
+
+/* SKU Forecast: a product with no scored forecast in the page's range. */
+.forecast-accuracy-none {
+  margin: 14px 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }

@@ -29,25 +29,33 @@ const getInitials = (name) => {
   return (first + last).toUpperCase();
 };
 
+// Grouped by what a person comes to do (UI pass, 2026-10-08): the overview,
+// the analysis pages, the inventory pages, then administration. Routes and
+// the permission each one needs are unchanged.
 const navSections = [
+  {
+    label: 'Overview',
+    items: [
+      { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
+    ],
+  },
   {
     label: 'Analytics',
     items: [
-      { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
       { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
       { name: 'Category Trends', icon: ChartLine, path: '/category-trends' },
     ],
   },
   {
-    label: 'Management',
+    label: 'Inventory',
     items: [
       { name: 'SKU Management', icon: List, path: '/sku-management' },
       { name: 'ABC Classification', icon: Layers, path: '/abc' },
-      { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
+      { name: 'Reorder Recommendations', icon: RotateCcw, path: '/reorder' },
     ],
   },
   {
-    label: 'Admin',
+    label: 'Administration',
     items: [
       { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
       { name: 'Data Management', icon: Upload, path: '/upload' },

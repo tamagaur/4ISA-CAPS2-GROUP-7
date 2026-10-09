@@ -34,9 +34,11 @@ class FakeCursor:
 
 
 def _rows(demo_months=(), skip=("2023-07",)):
-    """(product_key, sku_code, calendar_month, SUM(quantity_sold), bool_or(is_demo)) as psycopg2 returns them: one
-    SKU, a gap month (zero-filled by build_series), NUMERIC as Decimal."""
-    return [(101, "SKU101", m, Decimal(80 + i), m in demo_months) for i, m in enumerate(MONTHS) if m not in skip]
+    """(product_key, sku_code, calendar_month, SUM(quantity_sold), bool_or(is_demo), bool_or(quantity_sold IS NULL),
+    SUM(net_amount)) as psycopg2 returns them: one SKU, a gap month (zero-filled by build_series), NUMERIC as
+    Decimal, no blank quantity (blank quantities: tests/forecasting/test_blank_quantity.py)."""
+    return [(101, "SKU101", m, Decimal(80 + i), m in demo_months, False, Decimal(1000 + i))
+            for i, m in enumerate(MONTHS) if m not in skip]
 
 
 def _old_build_series(sku_df: pd.DataFrame) -> pd.Series:
@@ -55,7 +57,8 @@ def test_fetch_demand_reads_the_real_view_and_returns_is_demo():
     df = runner.fetch_demand(cur)
     assert "Unilever_SKU_Demand_Fact_Real" in cur.sql and "bool_or(is_demo) AS is_demo" in cur.sql
     assert "GROUP BY product_key, sku_code, calendar_month" in cur.sql      # grain unchanged
-    assert list(df.columns) == ["product_key", "sku_code", "calendar_month", "quantity", "is_demo"]
+    assert list(df.columns) == ["product_key", "sku_code", "calendar_month", "quantity", "is_demo",
+                                "quantity_blank", "net_amount"]
 
 
 def test_a_demo_row_from_fetch_demand_trips_assert_real_rows():

@@ -39,8 +39,9 @@ ALLOWLIST = {
 # The real query sites, with the predicate each must carry. Keeps the test from
 # passing on an incidental 'method' appearing somewhere else in the file.
 EXPECTED_PREDICATE = {
-    "scripts/run_baseline_forecast.py": ("abc.method = 'single'", "method = 'single'"),
-    "scripts/run_lp.py": ("ac.method = 'single'", "WHERE method = 'single'"),
+    # Tier A readers pin the basis setting (analytics.params, migration 0044)
+    "scripts/run_baseline_forecast.py": ("abc.method = %s", "AND method = %s"),
+    "scripts/run_lp.py": ("AND {ac_basis}", "WHERE {basis}"),
     "scripts/model_bakeoff.py": ("AND method = 'single'",),
     "scripts/arima_bakeoff.py": ("AND method = 'single'",),
     "scripts/xgboost_bakeoff.py": ("AND method='single'",),

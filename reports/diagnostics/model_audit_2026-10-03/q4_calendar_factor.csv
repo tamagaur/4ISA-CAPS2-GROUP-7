@@ -1,0 +1,7 @@
+window,forecast,plain_rows,plain_products,plain_median_product_wape,plain_pooled_wape,plain_bias_pct,x_factor_median_product_wape,x_factor_pooled_wape,x_factor_bias_pct,median_wape_change,ci_low,ci_high,products_better,products_worse
+all rows with a factor (2024-04..2026-02),MA3,2049,107,0.2802,0.2970,5.6650,0.2959,0.2989,6.2790,0.0158,-0.0106,0.0275,46,61
+all rows with a factor (2024-04..2026-02),served,2049,107,0.2796,0.2921,6.7864,0.2964,0.2997,7.7488,0.0168,-0.0029,0.0382,43,64
+2024-04..2025-02 (1 year back),MA3,866,89,0.2536,0.2624,5.7202,0.3038,0.2836,7.2751,0.0502,0.0243,0.0780,23,66
+2024-04..2025-02 (1 year back),served,866,89,0.2454,0.2622,8.1160,0.3133,0.2907,9.9280,0.0678,0.0323,0.0860,22,67
+2025-03..2026-02 (1-2 years back),MA3,1183,107,0.2911,0.3305,5.6114,0.2771,0.3137,5.3118,-0.0140,-0.0369,0.0092,71,36
+2025-03..2026-02 (1-2 years back),served,1183,107,0.2795,0.3211,5.4951,0.2725,0.3084,5.6326,-0.0070,-0.0254,0.0120,64,43

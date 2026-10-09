@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine, ReferenceArea
 } from 'recharts';
-import { ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Info } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
@@ -20,10 +20,12 @@ import ProductName from './ProductName';
 import './Charts.css';
 
 // Legend entry for the placeholder band (utils/placeholderBand.jsx).
+// "Synthetic — SSM data not received": the label the data plan gives every
+// synthetic point (PROJECT_STATE §18.6), for preview's placeholder months.
 const PlaceholderLegendItem = () => (
   <li className="legend-item">
     <span className="legend-placeholder" aria-hidden="true" />
-    Placeholder months — not SSM&apos;s data
+    Synthetic — SSM data not received
   </li>
 );
 
@@ -388,6 +390,27 @@ const PURCHASES_METRICS = ['sales', 'received', 'recest'];
 const ESTIMATED_LABEL = 'Purchases (estimated from stock counts and sales)';
 const ESTIMATED_DASH = '2 5';
 const ESTIMATED_OPACITY = 0.75;
+// Mart estimates for a month with no real figure (GET /dashboard
+// *_estimated, DEC-31): 'filled' rows are worked out from SSM's own data
+// (real mode); 'generated' rows are synthetic and come in preview only.
+// Drawn like the purchases estimate, in the chart and its table only.
+const ESTIMATE_KIND_TEXT = {
+  filled: 'estimated (filled gap)',
+  generated: 'Synthetic — SSM data not received',
+};
+const estimateLabel = (base, kinds) => {
+  const set = [...new Set(kinds.filter(Boolean))];
+  if (set.length === 1 && set[0] === 'generated') return `${base} — ${ESTIMATE_KIND_TEXT.generated}`;
+  if (set.length === 1 && set[0] === 'filled') return `${base} — ${ESTIMATE_KIND_TEXT.filled}`;
+  return `${base} — estimated (filled gap or synthetic)`;
+};
+// Returns get a view of their own: they run at a few percent of sales, so on
+// the sales axis they would lie flat along zero.
+const RETURNS_VIEW = ['returns', 'Returns'];
+const RETURNS_METRICS = ['returns', 'retest'];
+// Which views draw each estimate: a sales or stock estimate rides with its
+// own metric (and with Both); returns stay in their own view.
+const ESTIMATE_VIEWS = { salesest: ['both', 'sales'], stockest: ['both', 'inventory'] };
 
 const SalesStockTooltip = ({ active, payload, label, years }) => {
   if (!active || !payload || !payload.length) return null;
@@ -420,7 +443,9 @@ const SalesStockTooltip = ({ active, payload, label, years }) => {
             {/* The month on this point is the one the count is filed under;
                 the day it was actually counted can be a week later. */}
             {metricOf(p.dataKey) === 'stock' && meta?.stockCountDay && ` · counted ${meta.stockCountDay}`}
-            {['recest', 'salesest', 'stockest'].includes(metricOf(p.dataKey)) && ' · estimated'}
+            {metricOf(p.dataKey) === 'recest' && ' · estimated'}
+            {['salesest', 'stockest', 'retest'].includes(metricOf(p.dataKey)) && meta?.kinds?.[metricOf(p.dataKey)]
+              && ` · ${ESTIMATE_KIND_TEXT[meta.kinds[metricOf(p.dataKey)]] || 'estimated'}`}
             {metricOf(p.dataKey) === 'recest' && meta?.estWasNegative && ' · negative estimate, shown as 0'}
             {metricOf(p.dataKey) === 'recest' && meta?.estNegativeSkus > 0
               && ` · ${meta.estNegativeSkus.toLocaleString()} products had a negative estimate`}
@@ -436,7 +461,7 @@ const SalesStockTooltip = ({ active, payload, label, years }) => {
         </p>
       ))}
       {metas.some((m) => m.placeholder) && (
-        <p className="chart-tooltip-placeholder">Placeholder month — not SSM&apos;s data</p>
+        <p className="chart-tooltip-placeholder">Synthetic — SSM data not received</p>
       )}
     </div>
   );
@@ -557,10 +582,22 @@ export const SalesVsStockWidget = ({
   const hasReceived = data.some((pt) => pt.received != null);
   // Unilever has no purchase records, only this estimate (see ESTIMATED_LABEL).
   const hasEstimated = data.some((pt) => pt.receivedEstimated != null);
-  // Gap months the backend filled in for sales or stock: the same colour as
-  // the metric, dotted, with a hollow marker — an estimate, never a record.
-  const hasFilled = data.some((pt) => pt.salesEstimated != null || pt.stockEstimated != null);
-  const metricViews = hasReceived || hasEstimated ? [...METRIC_VIEWS, PURCHASES_VIEW] : METRIC_VIEWS;
+  // Mart estimates and returns (GET /dashboard, data marts): each series and
+  // its legend entry appear only when at least one point carries it.
+  const hasSalesEst = data.some((pt) => pt.salesEstimated != null);
+  const hasStockEst = data.some((pt) => pt.stockEstimated != null);
+  const hasReturns = data.some((pt) => pt.returns != null);
+  const hasReturnsEst = data.some((pt) => pt.returnsEstimated != null);
+  const metricViews = [
+    ...METRIC_VIEWS,
+    ...(hasReceived || hasEstimated ? [PURCHASES_VIEW] : []),
+    ...(hasReturns || hasReturnsEst ? [RETURNS_VIEW] : []),
+  ];
+  const kindsOf = (key) => data.map((pt) => pt[key]);
+  const salesEstLabel = estimateLabel('Sales', kindsOf('salesEstimatedKind'));
+  const stockEstLabel = estimateLabel('Inventory value', kindsOf('stockEstimatedKind'));
+  const returnsLabel = withBasis('Returns', 'returns');
+  const returnsEstLabel = estimateLabel('Returns', kindsOf('returnsEstimatedKind'));
   const widgetRef = useRef(null);
   const wide = useElementWidth(widgetRef) >= YOY_WIDE_PX;
 
@@ -582,6 +619,8 @@ export const SalesVsStockWidget = ({
         row[`recest_${slot}`] = pt?.receivedEstimated != null ? Math.max(0, pt.receivedEstimated) : null;
         row[`salesest_${slot}`] = pt?.salesEstimated ?? null;
         row[`stockest_${slot}`] = pt?.stockEstimated ?? null;
+        row[`returns_${slot}`] = pt?.returns ?? null;
+        row[`retest_${slot}`] = pt?.returnsEstimated ?? null;
         row[`meta_${slot}`] = pt
           ? {
               period: pt.period,
@@ -590,6 +629,11 @@ export const SalesVsStockWidget = ({
               placeholder: isPlaceholderPeriod(pt.period, placeholder),
               estWasNegative: pt.receivedEstimated != null && pt.receivedEstimated < 0,
               estNegativeSkus: pt.receivedEstimatedNegativeSkus ?? null,
+              kinds: {
+                salesest: pt.salesEstimatedKind ?? null,
+                stockest: pt.stockEstimatedKind ?? null,
+                retest: pt.returnsEstimatedKind ?? null,
+              },
             }
           : null;
       }
@@ -615,24 +659,35 @@ export const SalesVsStockWidget = ({
     ...(hasEstimated
       ? slots.map((slot) => ({ key: `recest_${slot}`, slot, metric: 'recest', estimated: true, name: `${ESTIMATED_LABEL} · ${slotYears[slot]}`, color: COLORS.forecast }))
       : []),
-    ...(hasFilled
-      ? slots.flatMap((slot) => [
-          { key: `salesest_${slot}`, slot, metric: 'sales', estimated: true, filled: true, name: `${salesLabel}, estimated · ${slotYears[slot]}`, color: CHART_COLORS.heroSales },
-          { key: `stockest_${slot}`, slot, metric: 'stock', estimated: true, filled: true, name: `${INVENTORY_LABEL}, estimated · ${slotYears[slot]}`, color: CHART_COLORS.heroInventory },
-        ])
+    ...(hasSalesEst
+      ? slots.map((slot) => ({ key: `salesest_${slot}`, slot, metric: 'salesest', estimated: true, name: `${salesEstLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroSales }))
       : []),
-  ], [slots, slotYears, salesLabel, receivedLabel, hasReceived, hasEstimated, hasFilled]);
+    ...(hasStockEst
+      ? slots.map((slot) => ({ key: `stockest_${slot}`, slot, metric: 'stockest', estimated: true, name: `${stockEstLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroInventory }))
+      : []),
+    ...(hasReturns
+      ? slots.map((slot) => ({ key: `returns_${slot}`, slot, metric: 'returns', name: `${returnsLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroReturns }))
+      : []),
+    ...(hasReturnsEst
+      ? slots.map((slot) => ({ key: `retest_${slot}`, slot, metric: 'retest', estimated: true, name: `${returnsEstLabel} · ${slotYears[slot]}`, color: CHART_COLORS.heroReturns }))
+      : []),
+  ], [slots, slotYears, salesLabel, receivedLabel, hasReceived, hasEstimated, hasSalesEst, hasStockEst, hasReturns,
+    hasReturnsEst, salesEstLabel, stockEstLabel, returnsLabel, returnsEstLabel]);
   // Purchases received ride with "Both": they are neither metric the
   // control names, and a sales-only or inventory-only view is for a
   // single comparison.
   const { visible, visibleKeys } = useMemo(() => {
-    // "Both" keeps to recorded figures; the estimate is drawn only in the
-    // Purchases view, beside sales.
-    const shown = series.filter((sr) => (
-      metricView === 'both' ? sr.metric !== 'recest'
+    // "Both" keeps to recorded figures plus the mart's sales and stock
+    // estimates for months with no record; the purchases estimate is drawn
+    // only in the Purchases view, beside sales, and returns in their own.
+    const shown = series.filter((sr) => {
+      if (ESTIMATE_VIEWS[sr.metric]) return ESTIMATE_VIEWS[sr.metric].includes(metricView);
+      if (metricView === 'returns') return RETURNS_METRICS.includes(sr.metric);
+      if (RETURNS_METRICS.includes(sr.metric)) return false;
+      return metricView === 'both' ? !sr.estimated
         : metricView === 'purchases' ? PURCHASES_METRICS.includes(sr.metric)
-          : sr.metric === METRIC_PREFIX[metricView]
-    ));
+          : sr.metric === METRIC_PREFIX[metricView];
+    });
     return { visible: shown, visibleKeys: new Set(shown.map((sr) => sr.key)) };
   }, [series, metricView]);
 
@@ -648,12 +703,14 @@ export const SalesVsStockWidget = ({
   );
   // Which years the lines are, said outright — the legend shows it, but a
   // range holding one year only, or three, needs the words.
+  // The legend keys the two years' line styles, so the sentence stays only
+  // where it adds something: one year alone, or years the range holds but
+  // the chart doesn't draw.
   const yearsLine = slotYears.cur == null
     ? null
     : slotYears.prev == null
       ? `One calendar year per line: only ${slotYears.cur} is in the selected range — widen it to overlay ${slotYears.cur - 1}.`
-      : `${slotYears.cur} is the solid line, ${slotYears.prev} the dashed one; the colour tells the metric.`
-        + (undrawnYears.length ? ` Earlier years in the range (${undrawnYears.join(', ')}) aren't drawn.` : '');
+      : undrawnYears.length ? `Earlier years in the range (${undrawnYears.join(', ')}) aren't drawn.` : null;
 
   // Direct labels: the current year's latest sales and inventory values at
   // their line ends, plus the backend's peak/low sales months on whichever
@@ -724,6 +781,10 @@ export const SalesVsStockWidget = ({
           format: (v) => (v < 0 ? '₱0 (negative estimate)' : formatCompactPesos(v)),
         }]
       : []),
+    ...(hasSalesEst ? [{ key: 'salesEstimated', label: `${salesEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasStockEst ? [{ key: 'stockEstimated', label: `${stockEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasReturns ? [{ key: 'returns', label: `${returnsLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasReturnsEst ? [{ key: 'returnsEstimated', label: `${returnsEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
     ...(data.some((pt) => pt.stockUnusual && pt.stockOnHand != null)
       ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Unusual count: ${v}`, align: 'left' }]
       : []),
@@ -734,6 +795,10 @@ export const SalesVsStockWidget = ({
     { metric: 'stock', label: INVENTORY_LABEL, color: CHART_COLORS.heroInventory },
     ...(hasReceived ? [{ metric: 'received', label: receivedLabel, color: COLORS.forecast }] : []),
     ...(hasEstimated ? [{ metric: 'recest', label: ESTIMATED_LABEL, color: COLORS.forecast, estimated: true }] : []),
+    ...(hasSalesEst ? [{ metric: 'salesest', label: salesEstLabel, color: CHART_COLORS.heroSales, estimated: true }] : []),
+    ...(hasStockEst ? [{ metric: 'stockest', label: stockEstLabel, color: CHART_COLORS.heroInventory, estimated: true }] : []),
+    ...(hasReturns ? [{ metric: 'returns', label: returnsLabel, color: CHART_COLORS.heroReturns }] : []),
+    ...(hasReturnsEst ? [{ metric: 'retest', label: returnsEstLabel, color: CHART_COLORS.heroReturns, estimated: true }] : []),
   ].filter((entry) => visible.some((sr) => sr.metric === entry.metric));
 
   return (
@@ -806,12 +871,6 @@ export const SalesVsStockWidget = ({
                 Unusual stock count — hover or tap it for why
               </li>
             )}
-            {visible.some((sr) => sr.filled) && (
-              <li className="legend-item">
-                <span className="legend-line legend-line-dotted" aria-hidden="true" />
-                Estimated month (dotted)
-              </li>
-            )}
             {hasPlaceholder && <PlaceholderLegendItem />}
           </ul>
           <div className="chart-container chart-container-yoy">
@@ -875,9 +934,7 @@ export const SalesVsStockWidget = ({
                       strokeOpacity={dimmable(sr.key) * (prev ? PREV_YEAR_OPACITY : 1) * (sr.estimated ? ESTIMATED_OPACITY : 1)}
                       fill={sr.estimated ? 'none' : `url(#svs-fill-${sr.key})`}
                       fillOpacity={dimmable(sr.key)}
-                      dot={sr.filled
-                        ? { r: 3, fill: 'var(--color-surface, #fff)', stroke: sr.color, strokeWidth: 1.5 }
-                        : sr.metric === 'stock' ? unusualStockDot(sr.slot) : false}
+                      dot={sr.metric === 'stock' ? unusualStockDot(sr.slot) : false}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                       label={labels[sr.key] ?? false}
                       connectNulls={false}
@@ -966,10 +1023,8 @@ const abcSegments = (data) => {
 // can't be trusted (no total, or shares that don't add up to ~100%) reads
 // "Revenue not available", and the sentence is left out rather than stated
 // on numbers that aren't real.
-const AbcTierCard = ({ facts, atRisk = null, onOpenClass = null }) => {
+const AbcTierCard = ({ facts, atRisk = null }) => {
   const x = facts.skuPct.toFixed(0);
-  const y = facts.revenuePct != null ? facts.revenuePct.toFixed(0) : null;
-  const revenueKnown = facts.amount != null && y != null;
   const role = ABC_TIER_ROLE[facts.tier];
   const roleText = facts.units === 'categories' ? DEL_MONTE_TIER_ROLE : role?.role;
   return (
@@ -991,22 +1046,12 @@ const AbcTierCard = ({ facts, atRisk = null, onOpenClass = null }) => {
         </div>
         <div className="abc-tier-card-stat">
           <p className={`abc-tier-card-revenue${facts.amount == null ? ' is-unavailable' : ''}`}>
-            {facts.amount != null ? `${formatCompactPesos(facts.amount)} revenue` : 'Revenue not available'}
+            {facts.amount != null ? formatCompactPesos(facts.amount) : 'Revenue not available'}
           </p>
-          {/* The month the class's pesos were earned in (abc_revenue.period). */}
-          {y != null && <p className="abc-tier-card-note">{y}% of {facts.month ? `${facts.month} ` : 'total '}revenue</p>}
+          {/* The period the class's pesos were earned in (abc_revenue); its
+              share of revenue is the figure in the ring's centre. */}
+          {facts.amount != null && <p className="abc-tier-card-note">revenue{facts.month ? `, ${facts.month}` : ''}</p>}
         </div>
-        {revenueKnown && (
-          <p className="abc-tier-card-insight">
-            <span>
-              {Number(y) > Number(x) ? (
-                <>Class {facts.tier} is only <strong>{x}%</strong> of {facts.units} but brings in <strong>{y}%</strong> of revenue.</>
-              ) : (
-                <>Class {facts.tier} is <strong>{x}%</strong> of {facts.units} but brings in only <strong>{y}%</strong> of revenue.</>
-              )}
-            </span>
-          </p>
-        )}
       </div>
       {/* The next step of the story, on the class it is about: of these
           important products, how many are below safety stock — and the
@@ -1020,25 +1065,9 @@ const AbcTierCard = ({ facts, atRisk = null, onOpenClass = null }) => {
         </button>
       )}
       {/* "Which ones?" — the products behind this class's count, one click
-          away. While the ring ranks a range, the list opens here on the
-          dashboard from the same ranking (ClassProductsModal), so its count
-          is this card's; the ABC page, which ranks one month, is the link
-          under it. */}
-      {facts.rangeBased && onOpenClass && (
-        <button type="button" className="abc-tier-card-link abc-tier-card-atrisk" onClick={() => onOpenClass(facts.tier)}>
-          See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units}{' '}
-          <span className="abc-tier-card-nowrap">in this range <ArrowRight size={12} aria-hidden="true" /></span>
-        </button>
-      )}
+          away: the ABC page opens on the class picked here (?class=). */}
       <Link to={`/abc?class=${facts.tier}`} className="abc-tier-card-link">
-        {/* The count is this card's only while both rank the same period.
-            Since 2026-10-04 the ring ranks the selected range and the ABC
-            page still ranks one month, so its Class A is a different list
-            and the link doesn't promise this card's number. */}
-        {facts.rangeBased
-          ? `See Class ${facts.tier} ${facts.units}, ranked month by month`
-          : `See the ${facts.count.toLocaleString()} Class ${facts.tier} ${facts.units}`}{' '}
-        <ArrowRight size={12} aria-hidden="true" />
+        See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
       </Link>
     </div>
   );
@@ -1134,7 +1163,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 // page's filter ("Unilever only", Dashboard.jsx's coverageNote). `units` is
 // what a row is: 'SKUs', or 'categories' for Del Monte, which is ranked by
 // product category.
-export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null }) => {
+export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null }) => {
   const [selectedTier, setSelectedTier] = useState('A');
   const [hover, setHover] = useState(null);
   const ringRef = useRef(null);
@@ -1167,8 +1196,6 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
   const rankedMonth = revenue?.label || (revenue?.period ? formatMonth(revenue.period) : null);
   const factsFor = (d) => ({
     tier: d.tier,
-    // The ring ranks a range; the ABC page ranks one month (see the link).
-    rangeBased: revenue?.basis === 'range',
     count: d.count,
     units,
     month: rankedMonth,
@@ -1201,30 +1228,31 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>ABC classification</h4>
-          {/* The cutoffs are GET /dashboard's abc_rules (the ABC run's own
-              constants), never restated here. */}
+          <h4>
+            ABC classification
+            {/* The cut-offs are GET /dashboard's abc_rules (the ABC run's own
+                constants), never restated here. How a class is decided sits
+                behind the "?" (UI pass, 2026-10-08); the line below keeps the
+                definition of an important product and the ranking's period
+                (3 Oct 2026 analysis). */}
+            {rules && (
+              <InfoTip label="How classes are decided">
+                {`${unitsTitle} are ranked by revenue${rankedMonth ? ` over ${rankedMonth}` : ''}`
+                  + `${revenue?.label || !rankedMonth ? '' : ' (a single month)'}. Class A is the top sellers that `
+                  + `together make the first ${Math.round(rules.tier_a_cutoff * 100)}% of revenue, B the next `
+                  + `${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, C the last `
+                  + `${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`}
+                {/* With only a handful of categories a tier can't land on its
+                    cut-off (Del Monte 2025-12: A 71%, B 18%, C 11%). */}
+                {units === 'categories' && ' With only a few categories, a class cannot land exactly on its cut-off.'}
+              </InfoTip>
+            )}
+          </h4>
           <p>
-            {/* The definition of an "important" product, on screen, and the
-                basis of the ranking named as what it is: one month, until
-                the 12-month basis lands (3 Oct 2026 analysis). */}
             {rules
-              ? `Important products (Class A) are the top sellers that together make ${Math.round(rules.tier_a_cutoff * 100)}% of revenue`
-                + `${rankedMonth ? ` in ${rankedMonth}` : ''}. `
-              : 'Which products earn the most. '}
-            {/* "(single month)" only while the ranking is one month; a range
-                names itself (abc_revenue.label). */}
-            {rankedMonth
-              ? `Ranked on ${rankedMonth} sales${revenue?.label ? '' : ' (single month)'}`
-              : `${unitsTitle} are ranked by revenue`}
-            {rules
-              ? `: B is the next ${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, `
-                + `C the last ${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`
-              : '.'}
-            {/* With only a handful of categories a tier can't land on its
-                cut-off (Del Monte 2025-12: A 71%, B 18%, C 11%). */}
-            {units === 'categories' && ' With only a few categories, a class cannot land exactly on its cut-off.'}
-            {' '}Click a class for details.
+              ? `Class A = the top sellers that together make ${Math.round(rules.tier_a_cutoff * 100)}% of revenue`
+                + `${rankedMonth ? `, ${rankedMonth}` : ''}. Click a class for details.`
+              : `${unitsTitle} are ranked by revenue${rankedMonth ? `, ${rankedMonth}` : ''}. Click a class for details.`}
           </p>
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
           {!sharesAddUp && revenue?.blocked_reason && <p className="chart-placeholder-note">{revenue.blocked_reason}</p>}
@@ -1301,7 +1329,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                 ))}
               </ul>
             </div>
-            <AbcTierCard facts={factsFor(selected)} atRisk={atRisk} onOpenClass={onOpenClass} />
+            <AbcTierCard facts={factsFor(selected)} atRisk={atRisk} />
           </div>
           <div
             className="abc-share-pair"
@@ -1412,12 +1440,14 @@ export const CategoryStockBarWidget = ({
     <div className={`chart-widget tier-stock-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Active / dead stock by ABC class (warehouse status) <span className="chart-unit">products</span></h4>
-          <p>
-            Counts each class&apos;s products by the warehouse&apos;s own Active/Inactive flag on {countPhrase} —
-            not by whether stock covers the LP&apos;s target stock (that is the ABC page&apos;s
-            &ldquo;Cover vs target stock&rdquo;).
-          </p>
+          <h4>
+            Active / dead stock by ABC class <span className="chart-unit">products</span>
+            <InfoTip label="What this measures">
+              The warehouse&apos;s own Active / Inactive flag on each product in {countPhrase} — not whether its
+              stock covers the plan&apos;s target (that is the ABC page&apos;s &ldquo;Cover vs target stock&rdquo;).
+            </InfoTip>
+          </h4>
+          <p>Each class&apos;s products by warehouse status, {countPhrase}.</p>
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
           {note && <p className="chart-placeholder-note">{note}</p>}
         </div>
@@ -1603,10 +1633,12 @@ const formatCompactQty = (value, millionDigits = 1) => {
 // would be "past" whenever the data lags, and the forecast — the reason
 // for the card — would sit under the wrong name.) A boundary falls halfway
 // between two months.
+// Softer bands (UI pass): the past barely tinted, the present a faint
+// coral, the future the forecast's lavender — read as regions, not blocks.
 const FORECAST_SECTION_STYLE = {
-  past: { label: 'Past', fill: 'var(--color-slate-500, #64748b)', fillOpacity: 0.06 },
-  present: { label: 'Present', narrowLabel: 'Now', fill: 'var(--color-brand-primary, #c53030)', fillOpacity: 0.09 },
-  future: { label: 'Future', fill: COLORS.forecast, fillOpacity: 0.05 },
+  past: { label: 'Past', fill: CHART_COLORS.stockSeries, fillOpacity: 0.025 },
+  present: { label: 'Present', narrowLabel: 'Now', fill: 'var(--color-brand-primary, #c53030)', fillOpacity: 0.05 },
+  future: { label: 'Future', fill: COLORS.forecast, fillOpacity: 0.06 },
 };
 // Every month is labelled while a month name fits its slot; only below this
 // width per month (a phone) are labels thinned, to every 2nd or 3rd month.
@@ -1850,18 +1882,22 @@ export const PortfolioForecastWidget = ({
         <div className="chart-title-area">
           {/* The unit is PIECES here and pesos on the chart above it; the
               y-axis reads "120k" in both, so it is named in the heading. */}
-          <h4>Portfolio-level aggregate forecast <span className="chart-unit">pieces</span></h4>
+          <h4>
+            Portfolio demand forecast <span className="chart-unit">pieces</span>
+            {gatedSkuCount != null && tierACount ? (
+              <InfoTip label="Which SKUs are summed">
+                {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} Class A SKUs: `
+                  + 'those whose forecasts beat a naive baseline (MASE < 1), the same gate the reorder plan uses. '
+                  + 'The rest are left out rather than summed on forecasts that failed the check.'}
+              </InfoTip>
+            ) : null}
+          </h4>
           <p>
-            {seriesSpan ? `Pieces per month, ${seriesSpan}: ` : 'Pieces per month: '}
+            {seriesSpan ? `Pieces per month, ${seriesSpan}` : 'Pieces per month'}
             {gatedSkuCount != null && tierACount
-              ? `summed demand across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} `
-                + 'Class A SKUs (those whose forecasts beat a naive baseline — MASE < 1, '
-                + 'the same gate the reorder plan uses) vs. forecast'
-              : 'summed demand across gated Class A SKUs vs. forecast'}
+              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} Class A SKUs (MASE < 1)`
+              : ' · planned Class A SKUs'}
           </p>
-          {/* The card's takeaway, composed by the backend from this same
-              series (portfolio_forecast.insight). */}
-          {insight?.text && <p className="chart-insight">{insight.text}</p>}
           {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
         </div>
         {/* The card follows the Topbar's principal filter like the rest of
@@ -1883,12 +1919,16 @@ export const PortfolioForecastWidget = ({
               (Audrey, 2026-09-29); the subtitle still says how many SKUs the
               card sums. Dashboard still passes their props; restore from git
               history. */}
-          <div className="portfolio-stat-row">
-            <div className="portfolio-stat">
-              <span className="portfolio-stat-label">Scope</span>
-              <span className="portfolio-stat-value portfolio-stat-scope">{scopeLabel}</span>
+          {/* The scope sentence only when the subtitle could not state the
+              SKU count itself (UI pass); otherwise it said the same twice. */}
+          {!(gatedSkuCount != null && tierACount) && scopeLabel && (
+            <div className="portfolio-stat-row">
+              <div className="portfolio-stat">
+                <span className="portfolio-stat-label">Scope</span>
+                <span className="portfolio-stat-value portfolio-stat-scope">{scopeLabel}</span>
+              </div>
             </div>
-          </div>
+          )}
 
           {view === 'table' ? (
             <ChartTable
@@ -2014,19 +2054,26 @@ export const PortfolioForecastWidget = ({
           )}
         </div>
       )}
+      {/* The card's takeaway, composed by the backend from this same series
+          (portfolio_forecast.insight): a soft strip under the chart it sums
+          up (mockup pass), where it used to sit in the header. */}
+      {insight?.text && (
+        <p className="chart-insight portfolio-insight-strip">
+          <Info size={15} aria-hidden="true" />
+          <span>{insight.text}</span>
+        </p>
+      )}
     </div>
   );
 };
 
-// One neutral pill style for every urgency tier — this card reads urgency
-// from the row's position (most-urgent first, see sortedRows below) and its
-// text, not from color, so CRITICAL/URGENT/PLANNED share the same chip look
-// instead of a red/amber/green ramp.
-const NEUTRAL_URGENCY_STYLE = { bg: 'var(--color-surface-sunken)', color: 'var(--color-text-muted)' };
+// Soft pills in the shared badge tints (ui.css): critical soft red, urgent
+// soft amber, planned neutral. The word is printed in every pill and rows
+// stay most-urgent first (sortedRows below), so colour never stands alone.
 const URGENCY_STYLES = {
-  CRITICAL: NEUTRAL_URGENCY_STYLE,
-  URGENT: NEUTRAL_URGENCY_STYLE,
-  PLANNED: NEUTRAL_URGENCY_STYLE,
+  CRITICAL: { bg: 'var(--badge-critical-bg)', color: 'var(--badge-critical-fg)' },
+  URGENT: { bg: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)' },
+  PLANNED: { bg: 'var(--badge-neutral-bg)', color: 'var(--badge-neutral-fg)' },
 };
 
 // Keys match GET /dashboard's reorder_preview.lp_weights exactly (backend/
@@ -2136,9 +2183,8 @@ export const ReorderRecommendationWidget = ({
               current cycle since 2026-09-23 (backend/lp_cycle.py), the same
               rows Reorder Recs lists by default. */}
           <p>
-            LP-optimized order quantities, in pieces, for the SKUs the LP planned as Class A ·{' '}
-            {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
-            {countLabel ? ` · urgency against the ${/^stock /.test(countLabel) ? '' : 'stock '}${countLabel}` : ''}
+            Order quantities in pieces from the optimizer (LP) · {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
+            {countLabel ? ` · ${countLabel}` : ''}
           </p>
         </div>
       </div>
@@ -2168,22 +2214,19 @@ export const ReorderRecommendationWidget = ({
             </div>
           </div>
 
-          <div className="reorder-priorities">
+          {/* The solver's weights, compact: a subheading, one line and three
+              thin bars — kept on the card, under the figures, above the list.
+              Read-only: GET /dashboard's reorder_preview.lp_weights docstring
+              is explicit that this is "read-only display... not an adjustable
+              control" (backend/routers/dashboard.py). */}
+          <div className="reorder-priorities reorder-priorities-compact">
             <div className="reorder-priorities-header">
               <span className="reorder-priorities-title">How this was optimized</span>
               <span className="reorder-priorities-caption">
-                The LP orders each SKU up to its target stock. These weights only matter when the supplier
-                allocation can&apos;t cover every order: together with SSM&apos;s 3-week stock rule, they decide
-                which SKUs come up short.
+                Each SKU is ordered up to its target stock; these weights only decide which SKUs come up short when the
+                supplier allocation can&apos;t cover every order.
               </span>
             </div>
-
-            {/* Read-only bar per weight — was a draggable slider, but
-                GET /dashboard's reorder_preview.lp_weights docstring is
-                explicit that this value is "read-only display... not an
-                adjustable control" (see backend/routers/dashboard.py),
-                so this now matches what the data actually is: a fact
-                about how the solver ran, not a live control. */}
             {LP_PRIORITY_ROWS.map((p) => (
               <div className="reorder-priority-row" key={p.key}>
                 <div className="reorder-priority-row-top">
@@ -2433,96 +2476,144 @@ export const AllocationWidget = ({ allocation }) => {
   const avgMonthlySales = hasData && a.ytd_sales != null && a.ytd_months > 0
     ? a.ytd_sales / a.ytd_months
     : null;
-  const latestYear = a.latest_month ? a.latest_month.slice(0, 4) : null;
-  // The months this year's sales average covers ("Jan – Feb 2026"), so the
-  // bar's figure states its period, not just a year.
-  const ytdSpan = latestYear && a.latest_month
-    ? (a.latest_month.slice(5, 7) === '01'
-      ? formatMonth(a.latest_month)
-      : `${formatMonth(`${latestYear}-01`).split(' ')[0]} – ${formatMonth(a.latest_month)}`)
-    : latestYear;
-  const rows = hasData
-    ? [
-        ...(avgMonthlySales != null
-          ? [{ key: 'sales', label: `Sales, ${ytdSpan} (avg/month)`, value: avgMonthlySales, color: CHART_COLORS.salesSeries }]
-          : []),
-        ...a.levels.map((l) => ({
-          key: `alloc-${l.pct}`, label: `${latestYear} allocation ×${l.pct}% (avg/month)`, value: l.monthly, color: SEMANTIC.noData,
-        })),
-      ]
-    : [];
-  const max = rows.length ? Math.max(...rows.map((r) => r.value), 1) : 1;
-  // The level the headline compares against: GET /dashboard's default_pct
-  // (analytics.params.ALLOCATION_DEFAULT_PCT, 103 until SSM says which level
-  // applies), not a percentage fixed here.
-  const level = hasData ? a.levels.find((l) => l.pct === a.default_pct) || a.levels[0] : null;
+  // The allocation year (the year after the basis), and the latest month on
+  // record: the card reads that year's months whatever the date range.
+  const latestYear = a.allocation_year ?? (a.latest_month ? Number(a.latest_month.slice(0, 4)) : null);
+  const latestMonthName = a.latest_month ? formatMonth(a.latest_month).split(' ')[0] : null;
+  // The period in the header: "2026 so far (Jan–Feb)", or one month alone.
+  const monthSpan = a.ytd_months === 1 ? latestMonthName : `Jan–${latestMonthName}`;
+  const periodText = latestYear && a.ytd_months > 0
+    ? `${latestYear} so far (${monthSpan})`
+    : latestYear ? `${latestYear} — no sales loaded yet` : null;
   // `monthly` is an average month of the basis x pct (GET /dashboard, since
-  // 2026-10-01). It was basis x pct ÷ 12 whatever the basis held, which
-  // spread Del Monte's two months of 2024 over twelve: ₱1.86M/month beside
-  // ~₱10.8M/month of sales, and a "578%" headline. `annual` is null on a
-  // partial basis and is not drawn here. The headline ratio still needs a
-  // FULL prior year: two months are not a year's pace, and which two they
-  // are would decide the percentage. The bars and the footnote show what
-  // data exists.
-  const usedPct = level && level.monthly > 0 && avgMonthlySales != null && a.basis_months === 12
-    ? (avgMonthlySales / level.monthly) * 100
-    : null;
+  // 2026-10-01): basis_months < 12 is a partial basis, said in the tooltip.
+  const levels = hasData ? [...a.levels].sort((x, y) => x.pct - y.pct) : [];
+  const minimum = levels[0] || null;
+  const highest = levels[levels.length - 1] || null;
+  // The statement: average monthly sales against the minimum level (and
+  // the highest), in pesos a month — below, meeting or above.
+  const gap = minimum && avgMonthlySales != null ? minimum.monthly - avgMonthlySales : null;
+  let statement = null;
+  if (gap != null) {
+    if (gap > 0) {
+      statement = <>Sales are <strong>{formatCompactPesos(gap)} a month short</strong> of SSM&apos;s minimum allocation ({minimum.pct}%).</>;
+    } else if (highest && avgMonthlySales < highest.monthly) {
+      statement = <>Sales <strong>meet SSM&apos;s minimum allocation</strong> ({minimum.pct}%), {formatCompactPesos(highest.monthly - avgMonthlySales)} a month short of the {highest.pct}% level.</>;
+    } else {
+      statement = <>Sales are <strong>{formatCompactPesos(avgMonthlySales - highest.monthly)} a month above</strong> even the {highest.pct}% allocation level.</>;
+    }
+  }
+  // One scale for the bar and the markers, from zero to a little past the
+  // highest level, so every length is comparable.
+  const scaleMax = Math.max(highest?.monthly || 0, avgMonthlySales || 0) * 1.06 || 1;
+  const at = (v) => `${(Math.max(0, v) / scaleMax) * 100}%`;
+  const shortfall = gap != null && gap > 0;
+  // Sales as a share of the minimum level, both pesos a month.
+  const achievement = minimum?.monthly > 0 && avgMonthlySales != null ? avgMonthlySales / minimum.monthly : null;
 
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
-      <div className="chart-header">
-        <div className="chart-title-area">
-          <h4>Sales vs supplier allocation <span className="chart-unit">₱</span></h4>
-          <p>
-            SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total
-            sales ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4. Shown as average pesos
-            per month beside this year&apos;s actual monthly sales.
-          </p>
-        </div>
+    <div className={`chart-widget alloc-card${hasData ? '' : ' chart-widget-empty'}`}>
+      <div className="alloc-head">
+        <h4 className="alloc-title">Sales vs supplier allocation</h4>
+        <span className="alloc-head-tags">
+          {periodText && <span className="fc-period">{periodText}</span>}
+          {hasData && <span className="badge badge-warning">Assumption · pending SSM</span>}
+        </span>
       </div>
 
       {!hasData ? (
         <p className="dashboard-empty-note">{a.blocked_reason || 'Allocation not available'}</p>
       ) : (
-        <div className="chart-widget-body">
-          {usedPct != null && (
-            <p className="policy-headline">
-              <span className="policy-headline-number">{usedPct.toFixed(0)}%</span>
-              <span className="policy-headline-text">
-                of the {level.pct}% allocation pace — {latestYear} sales average {formatCompactPesos(avgMonthlySales)}/month
-                over {a.ytd_months} month{a.ytd_months === 1 ? '' : 's'}, vs {formatCompactPesos(level.monthly)}/month allocated
-              </span>
-            </p>
-          )}
-          {/* The bars' unit, in place of an axis title. */}
-          <p className="bar-scale-note">Pesos per month (₱){a.vat_basis ? ` · ${a.vat_basis}` : ''}</p>
-          <div className="policy-bars">
-            {rows.map((r) => (
-              <div className="policy-bar-row" key={r.key}>
-                <span className="policy-bar-label">{r.label}</span>
-                <div
-                  className="policy-bar-track"
-                  role="img"
-                  aria-label={`${r.label}: ${formatCompactPesos(r.value)} per month`}
-                  style={{ background: `color-mix(in srgb, ${r.color} 12%, var(--color-surface))` }}
-                >
-                  {/* A month's sales can net negative (returns); no negative bar width. */}
-                  <span style={{ width: `${(Math.max(0, r.value) / max) * 100}%`, backgroundColor: r.color }} />
-                </div>
-                <span className="policy-bar-value">{formatCompactPesos(r.value)}/mo</span>
+        <>
+          {/* 1. The answer. */}
+          {statement
+            ? <p className="alloc-answer">{statement}</p>
+            : (
+              <p className="alloc-answer">
+                No {latestYear} sales are loaded yet
+                {a.latest_month ? ` (the latest month on record is ${formatMonth(a.latest_month)})` : ''}, so there is
+                nothing to compare with the {latestYear} allocation yet.
+              </p>
+            )}
+
+          {/* The three figures behind the sentence. */}
+          {achievement != null && (
+            <div className="alloc-metrics">
+              <div className="alloc-metric is-sales">
+                <span className="alloc-metric-label">Sales, {monthSpan} {latestYear}</span>
+                <span className="alloc-metric-value">{formatCompactPesos(avgMonthlySales)}<small>/month</small></span>
               </div>
-            ))}
+              <div className="alloc-metric is-target">
+                <span className="alloc-metric-label">Minimum allocation ({minimum.pct}%)</span>
+                <span className="alloc-metric-value">{formatCompactPesos(minimum.monthly)}<small>/month</small></span>
+              </div>
+              <div className="alloc-metric is-achieved">
+                <span className="alloc-metric-label">Achievement</span>
+                <span className="alloc-metric-value">{Math.round(achievement * 100)}%<small>of the minimum</small></span>
+              </div>
+            </div>
+          )}
+
+          {/* 2. One bar: average monthly sales, with each allocation level
+              as a marker on the same peso scale. */}
+          <div className="alloc-chart">
+            <div className="alloc-track" role="img" aria-label={
+              `${avgMonthlySales != null ? `Average monthly sales ${formatCompactPesos(avgMonthlySales)}` : 'No sales yet'}; `
+              + levels.map((l) => `${l.pct}% allocation ${formatCompactPesos(l.monthly)} a month`).join('; ')
+            }>
+              {avgMonthlySales != null && (
+                <span className="alloc-bar" style={{ width: at(avgMonthlySales), backgroundColor: CHART_COLORS.salesSeries }}>
+                  <span className="alloc-bar-label">{formatCompactPesos(avgMonthlySales)}/mo</span>
+                </span>
+              )}
+              {/* The shortfall to the minimum, a soft amber stretch. */}
+              {shortfall && (
+                <span className="alloc-gap" style={{ left: at(avgMonthlySales), width: `${(gap / scaleMax) * 100}%` }} aria-hidden="true" />
+              )}
+              {levels.map((l) => (
+                <span
+                  key={l.pct}
+                  className={`alloc-tick${l === minimum ? ' is-minimum' : ''}`}
+                  style={{ left: at(l.monthly) }}
+                  aria-hidden="true"
+                />
+              ))}
+            </div>
+            {/* Marker labels as a staircase: each on its own row, ending at
+                its marker, so close levels never overlap at any width. */}
+            <div className="alloc-ticks">
+              {levels.map((l, i) => (
+                <div className="alloc-tick-row" key={l.pct} style={{ '--row': i }}>
+                  <span className="alloc-tick-lead" style={{ left: at(l.monthly) }} aria-hidden="true" />
+                  <span className={`alloc-tick-label${l === minimum ? ' is-minimum' : ''}`} style={{ right: `calc(100% - ${at(l.monthly)})` }}>
+                    {l.pct}%{l === minimum ? ' minimum' : ''} · {formatCompactPesos(l.monthly)}/mo
+                  </span>
+                </div>
+              ))}
+            </div>
+            <ul className="alloc-key">
+              <li><span className="alloc-key-swatch" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />
+                Average monthly sales{a.ytd_months > 0 ? `, ${a.ytd_months} month${a.ytd_months === 1 ? '' : 's'}` : ''}</li>
+              <li><span className="alloc-key-tick" aria-hidden="true" />Allocation levels (assumed)</li>
+              {shortfall && <li><span className="alloc-key-swatch is-gap" aria-hidden="true" />Shortfall to the minimum</li>}
+            </ul>
           </div>
-          <p className="dashboard-chart-footnote">
-            Basis: {a.basis_year} sales of {formatCompactPesos(a.basis_sales)} ({a.vat_basis}
-            {a.basis_months < 12 ? `, ${a.basis_months} of 12 months on record — a partial basis` : ''}).
-            {a.basis_months < 12
-              ? ` Each allocation bar is an average month of those ${a.basis_months} × the percentage.`
-              : ''}{' '}
-            SSM has not shared the real allocation figures, so these are the rule applied to the sales data;
-            which percentage applies in {latestYear} is a question for SSM.
+
+          {/* 3. The assumption, small, with the derivation behind the "?". */}
+          <p className="alloc-foot">
+            Assumed rule: last year&apos;s sales × {minimum?.pct}–{highest?.pct}%. Not yet confirmed by SSM.
+            <InfoTip label="How the allocation levels are worked out">
+              SSM&apos;s rule (client meeting, Sep 2026): the year&apos;s allocation is the previous year&apos;s total
+              sales ×103% (minimum), ×105% (mid) or ×108% (maximum), revised each Q4. Each level here is {a.basis_year}
+              {' '}sales of {formatCompactPesos(a.basis_sales)} ({a.vat_basis}) × the percentage, as an average month
+              {a.basis_months < 12
+                ? ` of the ${a.basis_months} months on record — a partial basis, so the levels may change once the year is complete`
+                : ' (÷ 12)'}
+              . Sales are this year&apos;s monthly average over the same months on the same basis. SSM has not shared its
+              real allocation figures, and which percentage applies in {latestYear} is a question for SSM.
+            </InfoTip>
           </p>
-        </div>
+        </>
       )}
     </div>
   );

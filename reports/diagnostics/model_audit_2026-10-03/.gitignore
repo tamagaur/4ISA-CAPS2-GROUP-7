@@ -1,0 +1,5 @@
+# Client data, never committed (Yuan, 2026-10-03): raw database pulls and the full-detail tables
+# (per-product monthly sales and forecasts). The scripts recreate both; see README.md "Files".
+inputs/
+local/
+__pycache__/

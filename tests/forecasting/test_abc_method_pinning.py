@@ -26,16 +26,21 @@ import os
 import pytest
 from dotenv import load_dotenv
 
+from analytics.params import abc_method
 from scripts.run_baseline_forecast import fetch_tier_a, resolve_abc_period
 
 load_dotenv()
 
-DEPLOYED_METHOD = "single"
-# The cohort as of 2026-02, measured 2026-09-20. Named per CLAUDE.md standing
-# rule 8 — never a bare "Tier A". If ABC is legitimately re-run this number
-# moves, and this test SHOULD fail so the change is noticed rather than assumed.
+# The Tier A basis in use (analytics.params.TIER_A_BASIS, DEC-38): 'single'
+# until 2026-10-05, 't12m_new' since.
+DEPLOYED_METHOD = abc_method("unilever")
+# The cohort as of 2026-02 on the t12m_new basis: 189, measured 2026-10-05
+# (kelvin/tier-a-basis f753f4e README section 7; 132 on 'single', 2026-09-20).
+# Named per CLAUDE.md standing rule 8 — never a bare "Tier A". If ABC is
+# legitimately re-run this number moves, and this test SHOULD fail so the
+# change is noticed rather than assumed.
 COHORT_PERIOD = "2026-02"
-EXPECTED_TIER_A = 132
+EXPECTED_TIER_A = 189
 
 psycopg2 = pytest.importorskip("psycopg2")
 
@@ -69,8 +74,8 @@ def _keys_for_method(cur, method: str) -> set[int]:
     return {r[0] for r in cur.fetchall()}
 
 
-def test_fetch_tier_a_returns_only_single_method(cur):
-    """The gate must equal the 'single' cohort exactly — not the union."""
+def test_fetch_tier_a_returns_only_the_basis_method(cur):
+    """The gate must equal the basis's cohort exactly — not the union."""
     got = fetch_tier_a(cur, COHORT_PERIOD)
     single = _keys_for_method(cur, DEPLOYED_METHOD)
 

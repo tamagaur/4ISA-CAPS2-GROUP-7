@@ -41,56 +41,58 @@ table td.table-center {
      and widen the whole page on a phone. */
   position: relative;
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border: var(--card-border);
+  border-radius: var(--radius-card);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  box-shadow: var(--shadow-card);
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   color: var(--color-text-body);
 }
 
+/* Muted header: small caps-height labels, no fill competing with the rows. */
 .data-table thead th {
-  background-color: #FAFAF8;
+  background-color: #F8FAFC;
   border-bottom: 1px solid var(--color-border);
-  padding: 0.7rem 1rem;
-  font-size: 0.68rem;
+  padding: 10px 16px;
+  font-size: var(--text-micro);
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-subtle);
   white-space: nowrap;
-  vertical-align: middle;
+  vertical-align: bottom;
 }
 
+/* Rows about 48px tall at 13.5px text; a separator, no vertical rules. */
 .data-table tbody td {
-  padding: 0.65rem 1rem;
-  border-bottom: 1px solid #EEF0F2;
+  padding: 12px 16px;
+  border-bottom: 1px solid #EDF0F4;
   vertical-align: middle;
 }
 
-/* Column alignment in the three data tables (SKU Management, ABC, Reorder).
-   Every column is centered — header label and cell content share one
-   axis — except long free text (product names, decision reasons), which
-   stays left so wrapped lines read naturally. The earlier scheme mixed
-   left (text), right (numbers) and center (badges) in one header row;
-   each column was technically consistent (measured: 0px header-to-cell
-   offset), but the header row read as ragged and values looked detached
-   from their labels. Numbers keep tabular digits, so centered values of
-   similar magnitude still stack evenly.
-
-   `.data-table th.table-num` (two classes + element) is needed to beat the
-   global `table td.table-num { text-align: right }` above, which other,
-   non-data tables still rely on. */
+/* Column alignment (UI pass, 2026-10-08): labels left, numbers right with
+   tabular digits so place values line up, badges and actions centred —
+   the convention a reader scanning a column expects. (Until now every
+   column was centred so header and cell shared one axis; the design spec
+   for the presentation asks for the standard alignment instead.) The
+   header of each column follows its cells. */
 .data-table th,
-.data-table td,
+.data-table td {
+  text-align: left;
+}
+
 .data-table th.table-num,
-.data-table td.table-num,
+.data-table td.table-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .data-table th.table-center,
 .data-table td.table-center {
   text-align: center;
@@ -125,7 +127,7 @@ table td.table-center {
 }
 
 .data-table tbody tr:hover {
-  background-color: #FAFAF8;
+  background-color: #FAFBFC;
 }
 
 /* Short columns never wrap. (They used to also carry `width: 1%` to
@@ -140,10 +142,10 @@ table td.table-center {
    more of each row on screen before scrolling kicks in. */
 @media (max-width: 768px) {
   .data-table thead th {
-    padding: 0.6rem 0.65rem;
+    padding: 8px 10px;
   }
   .data-table tbody td {
-    padding: 0.55rem 0.65rem;
+    padding: 10px;
   }
   .data-table th.col-product {
     min-width: 180px;
@@ -191,7 +193,7 @@ table td.table-center {
    break under title-casing), but set slightly smaller with a touch of
    tracking so a column of capitals doesn't shout. */
 .data-table .cell-product {
-  font-size: 0.8rem;
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.01em;
   color: var(--color-text);
@@ -227,16 +229,17 @@ table td.table-center {
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.68rem;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-micro);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
   text-transform: uppercase;
   white-space: nowrap;
-  background-color: var(--color-surface-sunken);
-  color: var(--color-text-muted);
+  background-color: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
 }
 
 .pill::before {
@@ -248,11 +251,11 @@ table td.table-center {
   flex-shrink: 0;
 }
 
-.pill-critical { background-color: var(--color-severity-critical-bg); color: var(--color-severity-critical); }
-.pill-warning  { background-color: var(--color-severity-urgent-bg);   color: var(--color-severity-urgent); }
-.pill-success  { background-color: #E7F5EC;                            color: #1E7A45; } /* healthy / above threshold only */
-.pill-planned  { background-color: var(--color-severity-planned-bg);  color: var(--color-severity-planned); }
-.pill-neutral  { background-color: var(--color-surface-sunken);       color: var(--color-text-muted); }
+.pill-critical { background-color: var(--badge-critical-bg); color: var(--badge-critical-fg); }
+.pill-warning  { background-color: var(--badge-warning-bg);  color: var(--badge-warning-fg); }
+.pill-success  { background-color: var(--badge-success-bg);  color: var(--badge-success-fg); } /* healthy / above threshold only */
+.pill-planned  { background-color: var(--badge-neutral-bg);  color: var(--badge-neutral-fg); }
+.pill-neutral  { background-color: var(--badge-neutral-bg);  color: var(--badge-neutral-fg); }
 
 /* Row actions. Quiet by default so a long list of rows doesn't turn
    into a grid of colored buttons; the affirmative action gets the one
@@ -262,8 +265,9 @@ table td.table-center {
   align-items: center;
   justify-content: center;
   gap: 0.3rem;
-  padding: 0.3rem 0.7rem;
-  border-radius: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   background-color: var(--color-surface);
   color: var(--color-text-body);
@@ -300,6 +304,19 @@ table td.table-center {
   background-color: var(--color-brand-hover);
   border-color: var(--color-brand-hover);
   color: #fff;
+}
+
+/* The quiet action beside a row's one filled button (Dismiss): text only. */
+.table-btn-quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--color-text-muted);
+}
+
+.table-btn-quiet:hover {
+  border-color: transparent;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text);
 }
 
 .table-btn-group {
@@ -514,42 +531,42 @@ table td.table-center {
   --font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
 
   /* Data Visualization Color Tokens */
-  --color-critical: #E5484D;
-  --color-warning: #F5A623;
-  --color-success: #2E9E5B;
+  --color-critical: #D9534F;
+  --color-warning: #E9A23B;
+  --color-success: #36A66B;
   --color-sales-trend: #5B5FEF;
-  --color-dispatched: #0E96A1; /* mirrors COLORS.dispatched — see theme/colors.js */
-  --color-forecast: #A855F7;
-  --color-forecast-bg: #F3E8FF;
+  --color-dispatched: #18A6B5; /* mirrors COLORS.dispatched — see theme/colors.js */
+  --color-forecast: #8866E8;
+  --color-forecast-bg: #EEE9FC;
   /* Placeholder months in preview mode (src/dataMode.js): a neutral tint
      whose one meaning is "not SSM's data", never a status. Mirrors
      CHART_COLORS.placeholder. */
   --color-placeholder: #94A3B8;
 
   /* ABC Single-Hue Plum Ramp */
-  --color-abc-a: #6B2C5F;
-  --color-abc-b: #B565A0;
-  --color-abc-c: #D6A0C8; /* was #EBC9E1 — 1.5:1 on white; this passes 2:1 */
+  --color-abc-a: #76295E;
+  --color-abc-b: #A9579A;
+  --color-abc-c: #D7AFCC; /* was #EBC9E1 — 1.5:1 on white; this passes 2:1 */
 
   /* Brand Chrome — sampled directly from public/logo.png (the swoosh is
      #C74E3D), replacing the cooler #c53030 the UI drifted to. Accent/hover
      are that same hue moved along one consistent lightness ramp rather
      than picked independently, so brand chrome always reads as one family. */
-  --color-brand-primary: #C74E3D;
-  --color-brand-accent: #E75C4B;
+  --color-brand-primary: #E85C4A;
+  --color-brand-accent: #F07A6B;
 
   /* Sidebar — ink navy, lifted from Login.css's dark panel (#1C2230) so
      the sidebar and the login screen read as the same product instead of
      the login screen being the only place the "other half" of the brand
      pairing appears. Additive: these are new tokens, nothing existing
      was renamed, so this can't silently change an unrelated component. */
-  --color-nav-bg: #1C2230;
+  --color-nav-bg: #111D32;
   /* The sidebar's ombre: the same navy, a shade lighter at the top (behind
      the logo) and a shade deeper at the bottom. --color-nav-bg stays the
      middle stop and the flat fallback (Login.css's panel uses it too). */
-  --color-nav-bg-top: #262F42;
-  --color-nav-bg-bottom: #131823;
-  --color-nav-border: #2C3444;
+  --color-nav-bg-top: #16233B;
+  --color-nav-bg-bottom: #0D1729;
+  --color-nav-border: #22314B;
   /* Text brightened for the gradient's lightest stop (#262F42), 2026-10-01:
      labels 3.6:1 -> 5.9:1, items 7.3:1 -> 10.3:1, sub-headings 4.4:1 ->
      6.5:1, and all still >= 4.9:1 on the hover wash. */
@@ -560,9 +577,9 @@ table td.table-center {
      of it (5.1:1 or more on every stop). */
   --color-nav-danger-text: #EE8070;
   --color-nav-item-hover-bg: rgba(255, 255, 255, 0.06);
-  --color-nav-item-active-bg: rgba(199, 78, 61, 0.16);
+  --color-nav-item-active-bg: rgba(232, 92, 74, 0.15);
   --color-nav-item-active-text: #F5F1EE;
-  --color-nav-item-active-rail: #C74E3D;
+  --color-nav-item-active-rail: #E85C4A;
   --color-nav-heading: #F5F1EE;
   --color-nav-subheading: #AEB5C2;
 
@@ -573,11 +590,11 @@ table td.table-center {
      deliberately DARKER than --color-brand-primary/critical above — an
      alert must not have the same visual weight as brand chrome or a
      data-viz negative delta; it needs to be its own, heavier thing.  */
-  --color-severity-critical: #8E1C1C;
-  --color-severity-critical-bg: #FDEDEC;
+  --color-severity-critical: #C84040;
+  --color-severity-critical-bg: #FDECEC;
   --color-severity-critical-border: #F3C6C2;
-  --color-severity-urgent: #B45309;
-  --color-severity-urgent-bg: #FDF3E3;
+  --color-severity-urgent: #B56E14;
+  --color-severity-urgent-bg: #FFF4DD;
   --color-severity-urgent-border: #F0D8AE;
   --color-severity-planned: #0F766E;
   --color-severity-planned-bg: #E6F2F0;
@@ -600,20 +617,20 @@ table td.table-center {
      content cards stay pure --color-surface white, so nothing sitting on
      them loses contrast; only the page ground behind those cards shifts. */
   --color-surface: #ffffff;
-  --color-surface-raised: #F7F7F4;
+  --color-surface-raised: #F7F8FA;
   --color-surface-sunken: #f1f5f9;
   --color-surface-muted: #edf2f7;
 
   /* Borders */
-  --color-border: #e2e8f0;
+  --color-border: #E7EBF0;
   --color-border-strong: #cbd5e1;     /* merged: was #cbd5e0 (18x) + #cbd5e1 (22x), 1/255 apart */
 
   /* Text — primary ramp */
-  --color-text: #1a202c;
-  --color-text-heading: #2d3748;
-  --color-text-body: #4a5568;         /* merged: was #4a5568 (58x) + #475569 (10x), 3/255 apart */
-  --color-text-muted: #556070;       /* was #718096 (3.7:1 on the page background, below WCAG AA 4.5:1); now 5.9:1 */
-  --color-text-subtle: #667085;      /* was #a0aec0 (2.1:1); now 4.6:1 — still the lighter of the two */
+  --color-text: #182230;
+  --color-text-heading: #1F2A3A;
+  --color-text-body: #475467;
+  --color-text-muted: #5F6B7D;       /* 5.3:1 on white */
+  --color-text-subtle: #667085;      /* 4.9:1 on white; the spec's #98A2B3 is below AA for small text, so it is kept for decoration only (slate-400) */
 
   /* Text — slate ramp. Genuinely distinct from the ramp above (12-15/255
      apart), so kept rather than merged; a future design pass could
@@ -622,10 +639,10 @@ table td.table-center {
   --color-slate-800: #1e293b;
   --color-slate-700: #334155;
   --color-slate-500: #64748b;
-  --color-slate-400: #94a3b8;
+  --color-slate-400: #98A2B3;
 
   /* Brand */
-  --color-brand-hover: #9E3628;
+  --color-brand-hover: #D14B39;
 
   /* Feedback — danger */
   --color-danger-bg: #fff5f5;

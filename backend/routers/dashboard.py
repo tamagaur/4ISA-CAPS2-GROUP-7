@@ -65,7 +65,8 @@ Fixed 2026-09-17: migration 0017 added ABC_Classification.method
 this file (safety_stock_rate, abc_mix, tier_stock) had no method filter,
 so each product_key was double-counted the moment t3m rows landed in
 public (abc_mix's revenue_share summing past 100% was the visible
-symptom). All three now filter to method = 'single', the deployed basis.
+symptom). All three now pin the method; since migration 0044 to each
+principal's Tier A basis (analytics.params.abc_method_sql).
 
 Honest-null policy (matches the frontend's null-handling contract — a null
 value means "cannot honestly compute this", never a guess or a fabricated
@@ -198,6 +199,13 @@ zero):
     matching each of the 12 calendar months. If
     UNILEVER_SOH_UNIT_CONFIRMED is ever flipped to False, every point in
     this series is null, per the note on kpis.soh_value above.
+  sales_vs_stock[].stock_count_date / kpis.soh_count_date /
+  tier_stock_count_date
+    — display only: the day the snapshot behind each stock figure was
+    counted (MAX(Inventory_Fact_Real.snapshot_date) for that `_period`,
+    when the scope's rows share one count day — _stock_count_dates). A
+    `_period` is not a count date: "2026-03" is Unilever's 2026-04-06
+    count. No figure is computed from these.
   sales_vs_stock[].received
     — SUPPLIER-ALLOCATION PROXY, not a fabricated fixed_allocation
     constant: no supplier allocation schedule exists anywhere in the
@@ -324,12 +332,16 @@ zero):
     both-sides-real rule), or when no ABC run exists.
   safety_stock_exposure
     — {tier_a_count, comparable_count, below_count, below_revenue_share,
-    blocked_reason}. Same rows and same "both figures or excluded" rule as
+    below_items, blocked_reason}. Same rows and same "both figures or excluded" rule as
     kpis.safety_stock_rate, plus each product's revenue_share, so "N of M
     measurable Category A SKUs are below safety stock, X% of revenue" is
     one query, not two that could disagree. below_revenue_share is the sum
     of revenue_share over the below-SS products (a share of the WHOLE
-    period's revenue, not of Tier A's).
+    period's revenue, not of Tier A's). below_items is those same below-SS
+    products, most revenue first — [{sku_id, product_name, current_stock,
+    ss_i, short_by, target_stock, order_qty, revenue_share}], pieces
+    throughout — the list behind the count, built from the rows the count
+    was taken from so the two can never disagree (2026-10-03).
   policy_comparison
     — {cycle_date, sku_count, lp_target_stock_units, lp_safety_stock_units,
     rule_stock_units, target_vs_rule_pct, lp_target_weeks, skus_above_rule,
@@ -376,6 +388,7 @@ from backend.data_mode import (
 )
 from analytics.allocation import allocation_levels, basis_year as allocation_basis_year, planning_month_after
 from analytics.classification.abc import abc_rules
+from analytics.params import abc_method_sql
 from analytics.params import (
     ALLOCATION_DEFAULT_PCT,
     COVER_KPI_HISTORY_MONTHS,
@@ -816,15 +829,16 @@ def _latest_abc_period(db: Session, principal: str = "unilever") -> str | None:
     scope. ABC_Classification carries both principals, so an unfiltered MAX
     could resolve to a period the selected principal has no rows for.
 
-    method='single' is REQUIRED (migration 0017): a 't3m' run is live
-    alongside 'single', and an unpinned MAX can resolve to a period only
-    t3m produced — which would then read back zero 'single' rows."""
+    The method pin is REQUIRED (migration 0017): several bases are live,
+    and an unpinned MAX can resolve to a period only another basis produced
+    — which would then read back zero rows. Pinned to each principal's Tier A
+    basis (analytics.params.abc_method_sql, migration 0044)."""
     row = batch.first(db, *_latest_abc_period_query(principal))
     return row["p"] if row else None
 
 
 def _latest_abc_period_query(principal: str = "unilever") -> tuple[str, dict]:
-    sql = "SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE method = 'single'"
+    sql = f"SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE {abc_method_sql()}"
     params: dict = {}
     if principal != "all":
         sql += " AND principal = :principal"
@@ -854,7 +868,7 @@ def _nearest_abc_period_at_or_before(
 def _nearest_abc_period_query(period: str, principal: str = "unilever") -> tuple[str, dict]:
     sql = (
         "SELECT MAX(classification_period) AS p FROM ABC_Classification "
-        "WHERE method = 'single' AND classification_period <= :period"
+        f"WHERE {abc_method_sql()} AND classification_period <= :period"
     )
     params: dict = {"period": period}
     if principal != "all":
@@ -939,8 +953,8 @@ def _forecast_counts_query(scope: str, mode: str) -> tuple[str, dict]:
 def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_period: str) -> tuple[str, dict]:
     lp_src, lp_params = lp_source(mode)
     # Same scope against ABC_Classification's own alias. Paired with
-    # method='single' at every ABC read: migration 0017 put a live 't3m' run
-    # alongside 'single', so an unpinned query returns each SKU TWICE.
+    # the Tier A basis at every ABC read: migration 0017 put a live 't3m' run
+    # alongside 'single', so an unpinned query returns each SKU once per basis.
     abc_scope = "" if scope == "all" else f"AND ac.principal = '{scope}'"
     return f"""
                 SELECT
@@ -960,7 +974,7 @@ def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_period: str) -> tuple[
                     ORDER BY lr.product_key, lr.planning_cycle_date DESC
                 ) rop ON rop.product_key = ac.product_key
                 WHERE ac.classification_period = :period AND ac.tier = 'A'
-                      AND ac.method = 'single' {abc_scope}
+                      AND {abc_method_sql("ac")} {abc_scope}
             """, {"period": abc_period, "current_cycle": lp_cycle, **lp_params}
 
 
@@ -1474,6 +1488,18 @@ def get_dashboard(
     # (a range ending before the plan's opening count) is not judged against a
     # later plan's safety stock.
     lp_opening_period = opening_period(lp_cycle) if lp_cycle is not None else None
+    # A range ending before that count (Option A, Audrey 2026-10-08): the card
+    # does not go blank. Like the pending-reorder card, it reads the current
+    # plan — the plan's own opening count and the ABC run at or before it —
+    # and says so (safety_stock_exposure.pinned_to_plan), instead of
+    # comparing an earlier count with a later plan's safety stock.
+    ss_pinned_to_plan = (
+        lp_opening_period is not None and inventory_period is not None and inventory_period < lp_opening_period
+    )
+    ss_stock_period = inventory_period
+    if ss_pinned_to_plan:
+        ss_stock_period = _latest_inventory_period(db, scope, end=lp_opening_period)
+        abc_period = _nearest_abc_period_at_or_before(db, lp_opening_period, scope)
     safety_stock_rate = None
     safety_stock_rate_blocked_reason = f"ABC_Classification has no rows for {_scope_label(scope)} yet."
     ss_rows: list = []
@@ -1485,11 +1511,13 @@ def get_dashboard(
         # three-year-old pending row can't supply them.
         plan_rows = batch.rows(db, *_plan_rows_query(scope, mode, lp_cycle, abc_period))
         stock_at_count = marts.stock_pieces_by_product(
-            db, inventory_period, [int(r["product_key"]) for r in plan_rows]
+            db, ss_stock_period, [int(r["product_key"]) for r in plan_rows]
         )
         ss_rows = [{**r, "current_stock": stock_at_count.get(int(r["product_key"]))} for r in plan_rows]
+        # Only when the plan's own count is missing too (pinning found none
+        # at or after the plan opens): then nothing is compared.
         count_before_plan = (
-            lp_opening_period is not None and inventory_period is not None and inventory_period < lp_opening_period
+            lp_opening_period is not None and ss_stock_period is not None and ss_stock_period < lp_opening_period
         )
         comparable = [] if count_before_plan else [
             r for r in ss_rows
@@ -1501,7 +1529,7 @@ def get_dashboard(
             safety_stock_rate_blocked_reason = None
         elif count_before_plan:
             safety_stock_rate_blocked_reason = (
-                f"The stock at this range's end was counted for {marts.month_label(inventory_period)}, before the "
+                f"The stock at this range's end was counted for {marts.month_label(ss_stock_period)}, before the "
                 f"count the {marts.month_label(str(lp_cycle)[:7])} plan starts from "
                 f"({marts.month_label(lp_opening_period)}); its safety stock is not compared with an earlier count."
             )
@@ -1569,10 +1597,16 @@ def get_dashboard(
         }
     # The count the stock is read at (the range's end) and when it was taken,
     # the Tier A run the cohort comes from, and the count the plan opens from.
-    safety_stock_exposure["stock_period"] = inventory_period
-    safety_stock_exposure["stock_counts"] = latest_stock_counts
+    safety_stock_exposure["stock_period"] = ss_stock_period
+    safety_stock_exposure["stock_counts"] = (
+        stock_counts(db, ss_stock_period, stock_coverage or ([] if scope == "all" else [scope]))
+        if ss_pinned_to_plan else latest_stock_counts
+    )
     safety_stock_exposure["tier_a_period"] = abc_period
     safety_stock_exposure["plan_opening_period"] = lp_opening_period
+    # True when the range ends before the plan's count: the figures are the
+    # current plan's, not the range's (the card says it does not follow it).
+    safety_stock_exposure["pinned_to_plan"] = bool(ss_pinned_to_plan)
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring

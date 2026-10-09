@@ -9,6 +9,7 @@ later merged into kelvin-etl at 5f635a7) on 2026-10-04 and adapted for the round
   - `serve` counts statements on both pools (transactional and the GET read pool),
     and adds POST /__speed/invalidate (this harness only) to empty the cache.
   - `cache` times each page cold (cache emptied first) and warm (straight after).
+    `--page reorder` (2026-10-05, planning mart) times one page only.
 
 Nothing here writes to the database: every request is a GET, the local
 server's auth check runs the same SELECT the real one does but never opens or
@@ -383,16 +384,24 @@ def cache_cmd(args) -> None:
         if r.status_code != 404:
             r.raise_for_status()
 
-    t0 = time.perf_counter()
-    get(f"/dashboard?period={LATEST}&start_period={START_12}&principal=unilever", f"{args.label}-first|0")
-    first_ms = 1000 * (time.perf_counter() - t0)
-    print(f"first request after start (dashboard 12m unilever): {first_ms:.0f} ms")
-    rows.append({"label": args.label, "principal": "unilever", "page": "dashboard (12m default)",
-                 "state": "first request", "run": 0, "calls": 1, "waves": 1, "ms": round(first_ms, 1)})
-    skus = _resolve_skus(client)
+    if args.page and args.page != "forecast":
+        # One page that needs no sample SKU: only /auth/me first (opens the pools), so the
+        # run does not start with the dashboard and both /abc lists.
+        get("/auth/me", f"{args.label}-first|0")
+        skus = {p: "" for p in PRINCIPALS}
+    else:
+        t0 = time.perf_counter()
+        get(f"/dashboard?period={LATEST}&start_period={START_12}&principal=unilever", f"{args.label}-first|0")
+        first_ms = 1000 * (time.perf_counter() - t0)
+        print(f"first request after start (dashboard 12m unilever): {first_ms:.0f} ms")
+        rows.append({"label": args.label, "principal": "unilever", "page": "dashboard (12m default)",
+                     "state": "first request", "run": 0, "calls": 1, "waves": 1, "ms": round(first_ms, 1)})
+        skus = _resolve_skus(client)
     with ThreadPoolExecutor(max_workers=8) as pool:
         for p in PRINCIPALS:
             for page, waves in page_waves(p, _fill(f"{{sku_{p}}}", skus)).items():
+                if args.page and args.page != page:
+                    continue
                 for run in range(1, args.runs + 1):
                     client.post("/__speed/invalidate")
                     for state in ("cold", "warm"):
@@ -692,6 +701,7 @@ def main() -> None:
         t.add_argument("--token-env", default=None, help="env var holding a real bearer token (Render)")
         t.add_argument("--runs", type=int, default=3)
         t.add_argument("--only", default=None, help="time: only paths containing this substring")
+        t.add_argument("--page", default=None, help="cache: only this page (a page_waves name, e.g. reorder)")
     rd = sub.add_parser("render", help="token-free Render probes")
     rd.add_argument("--base", default="https://logincred.onrender.com")
     rd.add_argument("--runs", type=int, default=10)

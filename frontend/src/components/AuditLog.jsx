@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { getAuditLog, getAuditUserSummary } from '../api/auditLog';
 import { formatDate, formatDateTime } from '../utils/formatDate';
 import { LoadingStatus, SkeletonTable } from './Skeleton';
+import PageHeader from './ui/PageHeader';
 import './AuditLog.css';
+
+// Events out of the ordinary get the one badge on the page; the rest are
+// plain text, so a badge still means something.
+const EXCEPTIONAL_ACTIONS = new Set(['Sign-in Failed', 'Sign-in Locked', 'Delete User']);
 
 const RECENT_CHANGES_LIMIT = 10;
 // Sign-ins are summarised per user above, so they are left out of the
@@ -24,14 +29,9 @@ const getInitials = (name) => {
   return (first + last).toUpperCase();
 };
 
-const getAvatarColor = (name) => {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const colors = ['#f56565', '#4299e1', '#48bb78', '#ed8936', '#9f7aea', '#ed64a6'];
-  return colors[Math.abs(hash) % colors.length];
-};
+// One neutral tile for every avatar (UI pass): a column of six strong
+// colours competed with the one badge on the page that means something.
+const getAvatarColor = () => 'var(--badge-neutral-bg)';
 
 // A span of days as the page states periods: "Aug 23, 2026 – Oct 2, 2026", or
 // one day when both ends fall on it. Every count on this page says the span
@@ -138,12 +138,7 @@ const AuditLog = () => {
   return (
     <div className="audit-page">
       <div className="audit-content">
-        <div className="audit-page-header">
-          <div className="audit-header-left">
-            <h2 className="audit-page-title">Audit <span className="page-title-accent">log</span></h2>
-            <p className="audit-page-subtitle">Who signs in, and what they change. Visible to people with Audit Log access.</p>
-          </div>
-        </div>
+        <PageHeader title="Audit" accent="log" subtitle="Who signs in, and what they change. Visible to people with Audit Log access." />
 
         <section className="audit-section" aria-labelledby="audit-users-heading">
           <div className="audit-section-header">
@@ -246,7 +241,11 @@ const AuditLog = () => {
                   {changes.items.length > 0 ? (
                     changes.items.map((log) => (
                       <tr key={log.audit_log_key}>
-                        <td className="audit-stack-head audit-action-cell">{ACTION_LABELS[log.action] || log.action}</td>
+                        <td className="audit-stack-head audit-action-cell">
+                          {EXCEPTIONAL_ACTIONS.has(log.action)
+                            ? <span className="badge badge-warning">{ACTION_LABELS[log.action] || log.action}</span>
+                            : (ACTION_LABELS[log.action] || log.action)}
+                        </td>
                         <td data-label="By"><UserBadge name={log.user_name || log.user_email} /></td>
                         <td data-label="When" className="audit-timestamp-cell">{formatDateTime(log.created_at)}</td>
                         <td data-label="Details" className="audit-desc-cell">{log.details || '—'}</td>

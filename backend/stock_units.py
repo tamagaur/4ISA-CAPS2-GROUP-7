@@ -118,6 +118,31 @@ STOCK_AT_LATEST_SQL = f"""
     GROUP BY inv.product_key, pd_pack.pack_size
 """
 
+# A product's last purchase price per piece: the stock file's unit cost per
+# case (Unilever: "Last Purchase Price", GSV per case, no VAT) from its latest
+# real count that carries one, divided by pack size. NULL when it has no such
+# row or no usable pack size, never a default. The same rule as
+# scripts/run_lp.py STOCK_AND_COST_QUERY's cost_per_piece (keep them in step);
+# SSM has not confirmed it as their purchase cost, so every peso figure built
+# on it is labelled pending SSM confirmation. `alias` is the query's
+# Product_Dimension alias.
+def last_purchase_price_sql(alias: str) -> tuple[str, str]:
+    """(select expression, LATERAL join) for the price per piece of `alias`'s product."""
+    pack_ok = PACK_SIZE_NUMERIC.replace("pd_pack.", f"{alias}.")
+    expr = f"CASE WHEN {pack_ok} THEN last_price.cost_per_case / {alias}.pack_size::numeric END"
+    join = f"""
+        LEFT JOIN LATERAL (
+            SELECT AVG(inv.unit_cost_per_case) AS cost_per_case
+            FROM inventory_fact_real inv
+            WHERE inv.product_key = {alias}.product_key AND inv.unit_cost_per_case > 0
+            GROUP BY inv._period
+            ORDER BY inv._period DESC
+            LIMIT 1
+        ) last_price ON true
+    """
+    return expr, join
+
+
 # The count's "PO Qty" at :inv_period, in pieces (migration 0042,
 # Inventory_Fact.po_qty_cases/po_qty_pieces), converted with the same pack
 # size rule as stock on hand. Its meaning is UNVERIFIED (pending SSM; DEC-34):

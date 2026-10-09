@@ -52,13 +52,14 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 import pandas as pd
-from sqlalchemy import Engine, MetaData, Table, create_engine, select
+from sqlalchemy import Engine, MetaData, Table, create_engine, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from analytics.classification.abc import classify_abc
 from analytics.config import get_settings
+from analytics.params import TIER_A_BASIS_WINDOW_MONTHS, TIER_A_NEW_PRODUCT_WINDOW_MONTHS
 
-METHODS = ("single", "t3m")
+METHODS = ("single", "t3m", "t12m_new")
 T3M_WINDOW_MONTHS = 3  # ROWS BETWEEN 2 PRECEDING AND CURRENT ROW in the recovered source
 
 
@@ -73,6 +74,7 @@ class AbcRunReport:
     tier_counts: dict = field(default_factory=dict)   # {'A': n, 'B': n, 'C': n}
     near_boundary_count: int = 0    # backlog #43: SKUs flagged as close to a tier cutoff
     rows_upserted: int = 0
+    added_as_new: int = 0           # t12m_new only: products made Class A by the new-product rule
     error: str | None = None        # set (input_rows/tier_counts/etc. left at defaults) if this principal's run raised
 
 
@@ -222,6 +224,79 @@ def _fetch_unilever_sku_revenue_t3m(engine: Engine, period: str) -> tuple[pd.Dat
     return df, null_count
 
 
+def _calendar_window(period: str, months: int) -> list[str]:
+    """The `months` calendar months ending at `period`, oldest first."""
+    end = pd.Period(period, freq="M")
+    return [str(end - k) for k in range(months - 1, -1, -1)]
+
+
+def _window_revenue(rows: pd.DataFrame, months: list[str]) -> tuple[pd.DataFrame, set]:
+    """Positive revenue per product over `months`, by t3m's rules: a negative
+    month counts as 0 before the window is summed, and a blank (NULL) month
+    anywhere in the window leaves the product out of that window. Returns
+    ([sku_id, total_revenue] for revenue > 0, product_keys left out as blank)."""
+    sub = rows[rows["calendar_month"].isin(months)]
+    blank = set(sub.loc[sub["net_amount"].isna(), "product_key"])
+    sub = sub[~sub["product_key"].isin(blank)]
+    rev = sub["net_amount"].clip(lower=0).groupby(sub["product_key"]).sum()
+    rev = rev[rev > 0]
+    return pd.DataFrame({"sku_id": rev.index.astype(int), "total_revenue": rev.to_numpy(dtype=float)}), blank
+
+
+def classify_unilever_t12m_new(engine: Engine, period: str) -> tuple[pd.DataFrame, int]:
+    """The 't12m_new' Tier A basis (analytics.params.TIER_A_BASIS) for `period`.
+
+    Class A, B, C are ranked on the last 12 calendar months' revenue ending at
+    `period`. Then every product whose first sale (first month with pieces
+    sold > 0, the forecast runner's definition) falls inside those 12 months
+    and that is Class A on the last 3 months is made Class A too, with
+    added_as_new = true; its revenue shares stay the 12-month ones. Rule and
+    measured result: kelvin/tier-a-basis f753f4e README section 7 (189
+    products as of 2026-02). Window revenue follows t3m's rules
+    (_window_revenue). A period without all 12 months of real sales is not
+    classified (empty result), as t3m skips a partial window.
+
+    Returns (classified rows with an added_as_new column, products left out
+    of the 12-month window for a blank peso amount)."""
+    months12 = _calendar_window(period, TIER_A_BASIS_WINDOW_MONTHS)
+    months3 = months12[-TIER_A_NEW_PRODUCT_WINDOW_MONTHS:]
+    metadata = MetaData()
+    demand = Table("unilever_sku_demand_fact_real", metadata, autoload_with=engine)
+    with engine.connect() as conn:
+        present = {r[0] for r in conn.execute(
+            select(demand.c.calendar_month).where(demand.c.calendar_month.in_(months12)).distinct())}
+        if len(present) < len(months12):
+            return pd.DataFrame(), 0
+        rows = pd.DataFrame(conn.execute(
+            select(demand.c.product_key, demand.c.calendar_month, demand.c.net_amount)
+            .where(demand.c.calendar_month.in_(months12))
+        ).fetchall(), columns=["product_key", "calendar_month", "net_amount"])
+        first_sale = dict(conn.execute(
+            select(demand.c.product_key, func.min(demand.c.calendar_month))
+            .where(demand.c.quantity_sold > 0, demand.c.calendar_month <= period)
+            .group_by(demand.c.product_key)
+        ).fetchall())
+    rows["net_amount"] = rows["net_amount"].astype(float)  # NUMERIC -> Decimal, see _fetch_unilever_sku_revenue
+
+    rev12, blank12 = _window_revenue(rows, months12)
+    rev3, _ = _window_revenue(rows, months3)
+    tiered = classify_abc(rev12) if not rev12.empty else pd.DataFrame(columns=["sku_id", "tier"])
+    a12 = set(tiered.loc[tiered["tier"] == "A", "sku_id"])
+    a3 = set(classify_abc(rev3).query("tier == 'A'")["sku_id"]) if not rev3.empty else set()
+    added = {k for k in a3 - a12 if months12[0] <= first_sale.get(k, "9999-99") <= period}
+
+    tiered["added_as_new"] = tiered["sku_id"].isin(added)
+    tiered.loc[tiered["added_as_new"], "tier"] = "A"
+    # A product left out of the 12-month window for a blank month can still be
+    # Class A on the 3 months: it is added with no 12-month share to show.
+    missing = sorted(added - set(tiered["sku_id"]))
+    if missing:
+        extra = pd.DataFrame({"sku_id": missing, "total_revenue": None, "revenue_share": None,
+                              "cumulative_share": None, "tier": "A", "boundary_flag": False, "added_as_new": True})
+        tiered = pd.concat([tiered, extra], ignore_index=True)
+    return tiered, len(blank12)
+
+
 def _fetch_delmonte_category_revenue(engine: Engine, period: str) -> tuple[pd.DataFrame, int]:
     """SellOut_Fact carries a row per (category_path, region, period) —
     Product_Dimension has no region column for grain='category' rows, so
@@ -321,6 +396,8 @@ def _upsert_abc_classification(
             "revenue_share": None if pd.isna(row.revenue_share) else float(row.revenue_share),
             "cumulative_share": None if pd.isna(row.cumulative_share) else float(row.cumulative_share),
             "boundary_flag": bool(row.boundary_flag),
+            # migration 0044: only the t12m_new basis has added-as-new rows
+            **({"added_as_new": bool(row.added_as_new)} if "added_as_new" in tiered_df else {}),
         }
         for row in tiered_df.itertuples()
     ]
@@ -334,6 +411,7 @@ def _upsert_abc_classification(
                 "revenue_share": stmt.excluded.revenue_share,
                 "cumulative_share": stmt.excluded.cumulative_share,
                 "boundary_flag": stmt.excluded.boundary_flag,
+                **({"added_as_new": stmt.excluded.added_as_new} if "added_as_new" in tiered_df else {}),
                 "computed_at": stmt.excluded.computed_at,  # refreshed on re-run — EXCLUDED includes DEFAULT now() since computed_at isn't in `records`
             },
         )
@@ -347,6 +425,29 @@ def run_abc_for_principal(
 ) -> AbcRunReport:
     if method not in METHODS:
         raise ValueError(f"Unknown method '{method}' — expected one of {METHODS}.")
+
+    if method == "t12m_new":
+        if principal != "unilever":
+            raise ValueError(
+                "method='t12m_new' is defined for unilever only - Del Monte's tiers stay on "
+                "'single' (category grain, DEC-03; analytics.params.abc_method)."
+            )
+        tiered, blank_count = classify_unilever_t12m_new(engine, classification_period)
+        if tiered.empty:
+            return AbcRunReport(principal=principal, classification_period=classification_period, input_rows=0,
+                                excluded_null_revenue=0, excluded_negative_revenue=[],
+                                error=f"no full {TIER_A_BASIS_WINDOW_MONTHS}-month window of real sales ends at "
+                                      f"{classification_period}; not classified")
+        rows_upserted = _upsert_abc_classification(
+            engine, tiered, principal, classification_period, method, run_id, schema,
+        )
+        return AbcRunReport(
+            principal=principal, classification_period=classification_period,
+            input_rows=int(tiered["total_revenue"].notna().sum()), excluded_null_revenue=blank_count,
+            excluded_negative_revenue=[], tier_counts=tiered["tier"].value_counts().to_dict(),
+            near_boundary_count=int(tiered["boundary_flag"].sum()), rows_upserted=rows_upserted,
+            added_as_new=int(tiered["added_as_new"].sum()),
+        )
 
     if principal == "unilever":
         if method == "t3m":
@@ -447,6 +548,9 @@ def _print_report(report: AbcRunReport) -> None:
     print(f"  Tier breakdown:      {report.tier_counts or '(none)'}")
     print(f"  Near tier boundary:  {report.near_boundary_count} (backlog #43, margin unconfirmed vs manuscript Sec.3.6)")
     print(f"  Rows upserted:       {report.rows_upserted}")
+    if report.added_as_new:
+        print(f"  Added as new (Class A on {TIER_A_NEW_PRODUCT_WINDOW_MONTHS} months, first sold in the window): "
+              f"{report.added_as_new}")
     if report.excluded_null_revenue:
         print(f"  Excluded (NULL revenue, not zeroed): {report.excluded_null_revenue}")
     if report.excluded_negative_revenue:
@@ -457,7 +561,8 @@ def _print_report(report: AbcRunReport) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run ABC/Pareto classification for one period.")
-    parser.add_argument("--period", required=True, help="Classification period, 'YYYY-MM' (e.g. 2024-02).")
+    parser.add_argument("--period", required=True, nargs="+",
+                        help="Classification period(s), 'YYYY-MM' (e.g. 2024-02), or FIRST..LAST for every month between.")
     parser.add_argument(
         "--schema", required=True,
         help="Schema to WRITE results into. REQUIRED and deliberately has no default — "
@@ -467,18 +572,27 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--method", choices=METHODS, default="single",
-        help="'single' = that month's revenue (deployed). 't3m' = trailing 3 months "
-             "including it; see _fetch_unilever_sku_revenue_t3m()'s docstring for the "
-             "negative-revenue inconsistency between the two.",
+        help="'single' = that month's revenue. 't3m' = trailing 3 months including it; "
+             "see _fetch_unilever_sku_revenue_t3m()'s docstring for the negative-revenue "
+             "inconsistency between the two. 't12m_new' = 12 months plus new products "
+             "(Unilever only, classify_unilever_t12m_new); analytics.params.TIER_A_BASIS "
+             "says which one is Tier A.",
     )
     parser.add_argument("--run-id", default=None, help="Stamp a specific run_id (default: generated).")
     parser.add_argument(
         "--principal", choices=("unilever", "delmonte", "both"), default="both",
-        help="t3m is Unilever-only.",
+        help="t3m and t12m_new are Unilever-only.",
     )
     args = parser.parse_args()
 
     principals = ("unilever", "delmonte") if args.principal == "both" else (args.principal,)
-    reports = run_abc(args.period, args.method, args.schema, args.run_id, principals)
-    for r in reports:
-        _print_report(r)
+    periods = []
+    for p in args.period:
+        first, _, last = p.partition("..")
+        periods += [str(m) for m in pd.period_range(first, last or first, freq="M")]
+    failed = 0
+    for period in periods:
+        for r in run_abc(period, args.method, args.schema, args.run_id, principals):
+            _print_report(r)
+            failed += r.error is not None
+    raise SystemExit(1 if failed else 0)

@@ -1,0 +1,133 @@
+product_key,product_name,sku_code,months_from_first_sale,dashboard_label,stl_seasonal_strength,stl_peak_month,stl_trough_month,acf_lag12,acf_bound,acf_lag12_significant,stl_shuffle_p,stl_shuffle_share_strong,agreement
+19,SURF HS STD PWDR BLOSSOMFRESH 12X1100G,21051980,38,Weak seasonality,0.1160,May,Sep,0.0223,0.3180,False,0.9801,0.1700,agree: not seasonal
+38,CREAM SILK RO ULTREBORN STRT 288X13ML,62687204,30,Not enough history (< 36 months),,,,0.0945,0.3578,False,,,agree: not seasonal
+39,CREAM SILK ULT REBORN STRT 24(11+1)13ML,62687212,26,Not enough history (< 36 months),,,,0.0349,0.3844,False,,,agree: not seasonal
+52,CREAM SILK RO ULTREBORN HFALL 288X22ML,62718193,29,Not enough history (< 36 months),,,,-0.2052,0.3640,False,,,agree: not seasonal
+53,CREAM SILK RO ULTREBORN STRT 288X22ML,62718199,28,Not enough history (< 36 months),,,,-0.1448,0.3704,False,,,agree: not seasonal
+70,DOVE SH RESTORATIVEOIL NOURCARE 288X12ML,64315064,23,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+129,KNORR CUBES CHICKEN DUO 48X6X20G,64784421,20,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+138,REX WMN DLN POWDER DRY + BRGHT 360X3ML,64824382,17,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+140,KNORR SOUP CRAB & CORN 60X55G,64830409,16,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+147,SURF FABCON MAGIC BLOOM STR SAC 360X25ML,64856586,8,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+150,SURF POWDER KALAMANSI L 40(6+1)57G,64861486,12,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+151,SURF POWDER TAWAS L 40(6+1)57G,64861490,12,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+159,CREAM SILK TRI-KRTN SCD REP SHN 288X14ML,64900602,10,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+168,CLOSEUP RED HOT PROMO HL 36X2X173G,64953872,5,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+169,CLOSEUP RED HOT PROMO HL 48X2X120G,64953874,7,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+171,LADY'S CHOICE REAL MAYO DOY 24X130ML,64961947,8,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+174,KNORR SIN ORIG+SINORIG 48(6+1)X11G,64971078,10,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+182,AXE DEO AP RLN DARKTEMP 24X25ML,65003211,38,Strong seasonality,0.7260,Jun,Feb,0.3260,0.3180,True,0.0348,0.1800,agree: seasonal
+189,BESTFOODS RGLR MYNS MAYO MAGIC 72X80ML,65004477,38,Strong seasonality,0.6770,Sep,Jan,0.3145,0.3180,False,0.1045,0.2350,"DISAGREE: dashboard Strong, lag-12 test not significant"
+196,BESTFOODS RGLR MYNS MAYOMAGICDOY24X220ML,65004662,38,Strong seasonality,0.9710,Dec,Feb,0.4630,0.3180,True,0.0050,0.2450,agree: seasonal
+202,BESTFOODS SNDWCH SPRDSLDMATEDOY24X220ML,65004685,38,Weak seasonality,0.2330,Oct,Aug,0.0967,0.3180,False,0.8955,0.2150,agree: not seasonal
+215,KNORR SINGLES SHMP + SHMP 48(12+2)X10G,65247613,2,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+243,DOVE BS BAR REGLR FBX 48X135G,67311414,38,Strong seasonality,0.7680,Jun,Apr,0.2088,0.3180,False,0.0249,0.1850,"DISAGREE: dashboard Strong, lag-12 test not significant"
+260,REXONA MEN RO ICE COOL IN 24X25ML,67404149,38,Strong seasonality,0.6800,Jan,Dec,0.1865,0.3180,False,0.0398,0.1750,"DISAGREE: dashboard Strong, lag-12 test not significant"
+261,REXONA MEN DL ICE COOL IN 360X3ML,67404155,38,Weak seasonality,0.2990,May,Feb,-0.1090,0.3180,False,0.7562,0.1400,agree: not seasonal
+271,REXONA DLN QUANTUM 360X3ML,67633586,38,Moderate seasonality,0.4510,May,Aug,0.0517,0.3180,False,0.4378,0.1550,agree: not seasonal
+272,REXONA DLN PASSION 360X3ML,67633590,38,Strong seasonality,0.7770,Jan,Feb,0.1541,0.3180,False,0.0199,0.1850,"DISAGREE: dashboard Strong, lag-12 test not significant"
+273,REXONA DLN SHOWER CLEAN 360X3ML,67633600,38,Strong seasonality,0.7740,May,Apr,0.2042,0.3180,False,0.0149,0.1350,"DISAGREE: dashboard Strong, lag-12 test not significant"
+283,KNORR SINIGANG SAM ORIG 12X12X22G,67749041,38,Moderate seasonality,0.5260,Sep,Nov,0.0549,0.3180,False,0.2836,0.1400,agree: not seasonal
+284,KNORR SINIGANG SAM ORIG 24X12X11G,67749043,38,Moderate seasonality,0.4320,Oct,Feb,-0.1913,0.3180,False,0.5970,0.3450,agree: not seasonal
+286,KNORR SINIGANG NA GABI 24X12X11G,67749045,38,Strong seasonality,0.7180,Oct,May,0.2215,0.3180,False,0.0647,0.1850,"DISAGREE: dashboard Strong, lag-12 test not significant"
+287,KNORR SINIGANG ISDA 24X12X11G,67749046,38,Strong seasonality,0.6520,Oct,Dec,0.1937,0.3180,False,0.1144,0.1650,"DISAGREE: dashboard Strong, lag-12 test not significant"
+288,KNORR SINIGANG NA GABI 12X12X22G,67749047,38,Moderate seasonality,0.3720,Aug,Apr,0.0371,0.3180,False,0.6368,0.1550,agree: not seasonal
+291,SURF HS STD PWDR BLOSSOM FRESH 144X74G,67762749,38,Moderate seasonality,0.4680,Mar,Jul,0.1495,0.3180,False,0.3881,0.1650,agree: not seasonal
+327,KNORR SOUP CHICKEN&CORN 60X60G,67975949,38,Strong seasonality,0.6120,Jun,Nov,0.2752,0.3180,False,0.2289,0.2400,"DISAGREE: dashboard Strong, lag-12 test not significant"
+345,SURF POWDER TAWAS S 288X57G,68178533,38,Strong seasonality,0.7620,Jan,Mar,0.1122,0.3180,False,0.0149,0.1550,"DISAGREE: dashboard Strong, lag-12 test not significant"
+346,SURF POWDER KALAMANSI S 288X57G,68178534,38,Moderate seasonality,0.4960,Jan,Feb,-0.0041,0.3180,False,0.3731,0.2000,agree: not seasonal
+357,CLOSEUP RED HOT NEW 12(11+1)X(2X10G),68200184,38,Weak seasonality,0.1650,Mar,Feb,-0.2359,0.3180,False,0.9154,0.1700,agree: not seasonal
+388,KNORR LIQUID SEASONING ORIGINAL 24X130ML,68394707,38,Moderate seasonality,0.4500,Aug,Dec,0.2088,0.3180,False,0.5224,0.2000,agree: not seasonal
+389,KNORR LIQUID SEASONING ORIGINAL 24X250ML,68394708,38,Strong seasonality,0.6040,Jan,May,0.0817,0.3180,False,0.2239,0.2200,"DISAGREE: dashboard Strong, lag-12 test not significant"
+400,KNORR BN CUBES BEEF SAVERS 36X120G,68438405,38,Strong seasonality,0.6260,Aug,Dec,0.0237,0.3180,False,0.1244,0.1600,"DISAGREE: dashboard Strong, lag-12 test not significant"
+401,KNORR BN CUBES SHRIMP SINGLES 48X12X10G,68438406,38,Moderate seasonality,0.4030,Mar,Jan,-0.1306,0.3180,False,0.5274,0.1500,agree: not seasonal
+403,KNORR BN CUBES CHICKEN SINGLES 48X12X10G,68438409,38,Moderate seasonality,0.4350,Sep,Oct,-0.0997,0.3180,False,0.4627,0.1800,agree: not seasonal
+405,KNORR BN CUBES CHICKEN SAVERS 36X120G,68438412,38,Moderate seasonality,0.4700,Mar,Feb,-0.0629,0.3180,False,0.4527,0.1300,agree: not seasonal
+406,KNORR BN CUBES PORK SINGLES 48X12X10G,68438413,38,Moderate seasonality,0.4730,Mar,Jan,-0.0564,0.3180,False,0.4478,0.2000,agree: not seasonal
+407,KNORR BN CUBES PORK PANTRY 72X60G,68438416,38,Moderate seasonality,0.5330,Nov,Jul,-0.0408,0.3180,False,0.3284,0.2200,agree: not seasonal
+408,KNORR BN CUBES PORK SAVERS 36X120G,68438417,38,Moderate seasonality,0.5360,Feb,Jul,-0.0386,0.3180,False,0.2488,0.1050,agree: not seasonal
+409,KNORR BN CUBES BEEF SINGLES 48X12X10G,68438418,38,Weak seasonality,0.2300,Mar,Oct,-0.2093,0.3180,False,0.8856,0.1800,agree: not seasonal
+460,CREAM SILK HC ULTREBORN STRT 24X180ML,68565204,38,Strong seasonality,0.6150,Jan,May,0.1383,0.3180,False,0.1841,0.2050,"DISAGREE: dashboard Strong, lag-12 test not significant"
+461,CREAM SILK HC ULTREBORN HFALL 24X180ML,68565205,38,Strong seasonality,0.7870,Jan,Oct,0.3437,0.3180,True,0.0149,0.2100,agree: seasonal
+492,SUNSILK SH SMTH&MNGBLE (11+1)24X15ML,68690506,38,Weak seasonality,0.0390,May,Dec,-0.1565,0.3180,False,0.9701,0.1800,agree: not seasonal
+493,SUNSILK SH STRONG&LONG (11+1)24X15ML,68690509,38,Moderate seasonality,0.3600,May,Jul,-0.1704,0.3180,False,0.6418,0.1300,agree: not seasonal
+494,SUNSILK SH SMTH&MNGBLE 288X15ML,68690510,38,Moderate seasonality,0.5900,Dec,Oct,0.0501,0.3180,False,0.1741,0.1600,agree: not seasonal
+495,SUNSILK SH STRONG&LONG 288X15ML,68690511,38,Moderate seasonality,0.4770,May,Aug,0.0077,0.3180,False,0.4378,0.1500,agree: not seasonal
+511,AXE DEO RO RLN DARKTEMP 24X40ML,68736096,35,Not enough history (< 36 months),,,,0.0790,0.3313,False,,,agree: not seasonal
+517,LADY'S CHOICE SS CHICKEN JAR 24X220ML,68763996,20,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+522,LADY'S CHOICE SS HAM DOY 24X220ML,68764004,21,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+530,LADY'S CHOICE SS PLAIN DOY 24X220ML,68764017,20,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+542,KNORR SOUP CRM OF MUSHROOM 60X62G,68830455,38,Weak seasonality,0.1460,Jun,Nov,-0.2087,0.3180,False,0.9353,0.1250,agree: not seasonal
+558,DOVE BAR REGULAR 48X90G,68864117,38,Moderate seasonality,0.5810,Jun,Nov,0.1088,0.3180,False,0.2438,0.2100,agree: not seasonal
+562,DOVE BAR PINK 48X90G,68864121,38,Strong seasonality,0.6100,Jun,Dec,0.1659,0.3180,False,0.1194,0.1200,"DISAGREE: dashboard Strong, lag-12 test not significant"
+594,REXONA MEN RO QUANTUM 72H 24X45ML,69642633,34,Not enough history (< 36 months),,,,0.1576,0.3361,False,,,agree: not seasonal
+611,SURF POWDER ANTIBAC L 288X60G,69668130,32,Not enough history (< 36 months),,,,0.0597,0.3465,False,,,agree: not seasonal
+613,SURF POWDER CHERRY BLOSSOM L 288X65G,69668140,32,Not enough history (< 36 months),,,,0.0333,0.3465,False,,,agree: not seasonal
+615,SURF POWDER CHERRY BLOSSOM L 6X2200G,69668143,32,Not enough history (< 36 months),,,,0.1353,0.3465,False,,,agree: not seasonal
+616,SURF POWDER PURPLE BLOOMS L 288X65G,69668145,32,Not enough history (< 36 months),,,,0.1973,0.3465,False,,,agree: not seasonal
+618,SURF POWDER ROSE FRESH L 288X65G,69668148,32,Not enough history (< 36 months),,,,0.0826,0.3465,False,,,agree: not seasonal
+619,SURF POWDER SUN FRESH L 12X1100G,69668150,32,Not enough history (< 36 months),,,,0.0784,0.3465,False,,,agree: not seasonal
+628,LADY'S CHOICE REAL MAYO 4X3.5L,69695564,24,Not enough history (< 36 months),,,,-0.0918,0.4001,False,,,agree: not seasonal
+630,SURF BAR CHERRY BLOSSOM SXFL 96X120G,69725979,34,Not enough history (< 36 months),,,,0.0283,0.3361,False,,,agree: not seasonal
+631,SURF BAR BLOSSOM FRESH SXFL 96X120G,69725987,34,Not enough history (< 36 months),,,,0.0355,0.3361,False,,,agree: not seasonal
+634,SURF BAR SUN FRESH SXFL 96X120G,69726539,34,Not enough history (< 36 months),,,,0.1294,0.3361,False,,,agree: not seasonal
+637,SURF BAR BLOSSOM FRESH SXFL 36X360G,69731876,34,Not enough history (< 36 months),,,,-0.0089,0.3361,False,,,agree: not seasonal
+638,SURF BAR CHERRY BLOSSOM SXFL 36X360G,69731878,34,Not enough history (< 36 months),,,,-0.0463,0.3361,False,,,agree: not seasonal
+640,SURF BAR KALAMANSI SXFL 36X360G,69731884,34,Not enough history (< 36 months),,,,0.0476,0.3361,False,,,agree: not seasonal
+641,SURF BAR SUN FRESH SXFL 36X360G,69731886,35,Not enough history (< 36 months),,,,0.0947,0.3313,False,,,agree: not seasonal
+642,SURF POWDER CHERRY BLOSSM L 40(6+1)65G,69767334,31,Not enough history (< 36 months),,,,0.0681,0.3520,False,,,agree: not seasonal
+643,SURF POWDER ROSE FRSH L 40(6+1)65G,69767335,31,Not enough history (< 36 months),,,,-0.0017,0.3520,False,,,agree: not seasonal
+644,SURF POWDER SUNFRESH L 40(6+1)65G,69767336,31,Not enough history (< 36 months),,,,0.1399,0.3520,False,,,agree: not seasonal
+666,SUNSILK SH AD HEALTHY&STRONG 288X13.5ML,62681003,29,Not enough history (< 36 months),,,,0.0988,0.3640,False,,,agree: not seasonal
+667,CREAM SILK RO ULTREBORN HFALL 288X13ML,62687200,31,Not enough history (< 36 months),,,,0.1325,0.3520,False,,,agree: not seasonal
+674,DOVE SH KERATIN STRT&SILKY 288X13.5ML,64314335,23,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+675,DOVE SH CERAMIDE INTENSE REP 288X13.5ML,64314343,23,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+711,BESTFOODS ALL PURPOSE DRSG 4X3.5L,64401259,10,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+720,KNORR CUBES PORK DUO 48X6X20G,64784425,21,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+721,CREAM SILK RO ULTREBORN HF 24(11+1)X22ML,64788596,20,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+722,CREAM SILK RO ULTREBORN ST 24(11+1)X22ML,64788598,20,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+737,CREAM SILK TMT DAMAGE REP 288X18ML,64900492,9,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+738,CREAM SILK TMT DAMAGE REP24(11+1)X18ML,64900508,7,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+739,CREAM SILK TRI-KRTN SCD STRT 288X14ML,64900598,10,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+741,CREAMSILK TRI-KRTN SCD R&S 24(11+1)X14ML,64900614,9,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+747,VITAKERATIN TMT BRZLN STRAIGHT 288X22ML,64926066,9,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+775,CLEAR SH COMPLETE SOFT CARE 3C 288X13ML,65244857,4,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+832,LADY'S CHOICE SS CHICKEN JAR 12X470ML,68763994,20,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+833,LADY'S CHOICE SS CHICKEN 72X27ML,68763997,20,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+851,SURF POWDER PURPLE BLOOMS L 12X1100G,69668144,32,Not enough history (< 36 months),,,,0.3146,0.3465,False,,,agree: not seasonal
+853,SURF POWDER SUN FRESH L 288X65G,69668149,32,Not enough history (< 36 months),,,,0.1716,0.3465,False,,,agree: not seasonal
+854,LADY'S CHOICE REAL MAYO 72X80ML,69695555,24,Not enough history (< 36 months),,,,-0.0181,0.4001,False,,,agree: not seasonal
+855,LADY'S CHOICE REAL MAYO DOY 12X470ML,69695556,24,Not enough history (< 36 months),,,,0.2734,0.4001,False,,,agree: not seasonal
+857,LADY'S CHOICE RAL MAYO DOY 24X220ML,69695560,24,Not enough history (< 36 months),,,,0.2608,0.4001,False,,,agree: not seasonal
+858,LADY'S CHOICE REAL MAYO 72X27ML,69695566,24,Not enough history (< 36 months),,,,-0.1557,0.4001,False,,,agree: not seasonal
+913,CREAM SILK TMT RBOND STRT 24(11+1)X18ML,64900506,7,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+921,KNORR LIQUID SSONING ORIG TPR 12X500ML,64985753,6,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+985,LADY'S CHOICE SS CHICKEN 72X80ML,68764000,20,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+988,LADY'S CHOICE SS PLAIN JAR 24X220ML,68764014,20,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1037,SURF PWDR PURPLE BLOOMS L 40(6+1)65G,64861488,12,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1043,CREAM SILK TMT REBOND STRT 288X18ML,64900488,9,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1054,SURF FABCON BF STR 60(5+1)28ML,65071335,7,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1107,CREAM SILK ULT REBORN HF 24(11+1)13ML,62687208,27,Not enough history (< 36 months),,,,0.0486,0.3772,False,,,agree: not seasonal
+1119,SURF FABCON LUXE PERFUME STR 360X25ML,64856638,8,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1120,SURF FABCON CHARCOAL FRESH STR 360X25ML,64860720,8,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1139,KNORR SIN ORIG+SINORIG 48(6+1)X11G,65247615,2,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1181,REX W MRO PWDR DRY + BRGHTENING 24X25ML,64824378,17,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1201,CLEAR CP SH CLSPRT MNTHL 3C 24(11+1)12ML,65494416,2,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1239,KNORR SINGLES CHKN + CHKN 48(12+2)X10G,65247609,2,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1280,BREEZE PWD ROSEGOLD ATL 24(6+1)(64G+64G),65086431,5,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1340,SURF FABCON BLOSSOM FRESH STR 360X28ML,64856620,8,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1341,CREAMSILK TR-KRTN SCD STRT 24(11+1)X14ML,64900613,9,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1351,SURF FABCON LP STR 60(5+1)25ML,65071340,6,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1396,KNORR LIQUID SSONING ORIG TPR 6X1L,64985759,6,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1397,KNORR SINGLES PORK + PORK 48(12+2)X10G,65247611,2,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1438,KNORR SINIGANG ORIG+KOPIKOTP 24(6+1)22G,65459780,2,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1509,KNORR SINGLES BEEF + BEEF 48(12+2)X10G,65247607,2,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1545,LADY'S CHOICE SS BACON DOY 24X220ML,64967994,8,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1547,CLOSEUP GRN MNTL FRSH PROMO HL 48X2X120G,64997200,5,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1775,CLEAR SH COOL SPRT MNTHL MEN3C 288X12ML,65244853,4,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1787,KNORR SIN GABI+SINGABI 48(6+1)X11G,65247617,2,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1790,KNORR SINIGANG GABI+KOPIKOTP 24(6+1)22G,65459782,2,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1791,SURF PWD CB+SRF LQ CB 16(6+1)X(65G+64ML),64861460,1,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1792,SURF PWD RF+SRF LQ RF 16(6+1)X(65G+64ML),64861462,1,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1801,REXONA POWDER DRY+BRGHT DLN 30(10+2)X3ML,65452345,1,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)
+1803,LADYS CHOICE MAYO+MILK 12(3+2)80ML,65455331,1,Not enough history (< 36 months),,,,,,,,,lag-12 test not run (< 24 months)

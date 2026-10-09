@@ -18,6 +18,7 @@ import datetime
 import pytest
 from fastapi.testclient import TestClient
 
+from analytics.params import abc_method_sql
 from backend import auth_utils, data_notes
 from backend.deps import get_current_user, get_db
 from backend.main import app
@@ -230,7 +231,7 @@ def test_abc_join_is_pinned_to_one_period(client, session):
         if "FROM lp_recommendation lr" in s and "abc_classification" in s.lower()
     )
     assert "classification_period = :abc_period" in row_query
-    assert "method = 'single'" in row_query
+    assert abc_method_sql() in row_query   # each principal's Tier A basis (migration 0044)
 
 
 # ─── LP cycle scoping and stock units (2026-09-23) ───────────────────────

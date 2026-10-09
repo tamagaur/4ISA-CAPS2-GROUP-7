@@ -283,9 +283,13 @@ export const AbcFsnMatrix = ({
   // before any number is read. Sequential = single hue, light -> dark;
   // zero cells stay unshaded (a blank is a fact here, not a low value).
   const maxCount = Math.max(1, ...['A', 'B', 'C'].flatMap((t) => ['F', 'S', 'N'].map((f) => matrix[t][f])));
-  const heat = (count) =>
+  // Soft cells (UI pass): fast in a pale slate-blue, slow in neutral grey,
+  // each a little deeper where the count is larger; non-moving in a soft
+  // coral, the one risk the matrix is there to show.
+  const CELL_HUE = { F: '#5B7BA8', S: '#8792A2', N: '#E85C4A' };
+  const heat = (count, f) =>
     count > 0
-      ? { backgroundColor: `color-mix(in srgb, #475569 ${Math.round((count / maxCount) * 26) + 4}%, var(--color-surface))` }
+      ? { backgroundColor: `color-mix(in srgb, ${CELL_HUE[f]} ${Math.round((count / maxCount) * 18) + (f === 'N' ? 10 : 5)}%, var(--color-surface))` }
       : undefined;
 
   return (
@@ -323,7 +327,7 @@ export const AbcFsnMatrix = ({
                 <tr key={t}>
                   <th scope="row"><span className={`abcb-class-dot abcb-class-${t}`} />Class {t}</th>
                   {['F', 'S', 'N'].map((f) => (
-                    <td key={f} className={matrix[t][f] === 0 ? 'is-zero' : `fsn-cell-${f}`} style={heat(matrix[t][f])}>
+                    <td key={f} className={matrix[t][f] === 0 ? 'is-zero' : `fsn-cell-${f}`} style={heat(matrix[t][f], f)}>
                       {matrix[t][f].toLocaleString()}
                     </td>
                   ))}

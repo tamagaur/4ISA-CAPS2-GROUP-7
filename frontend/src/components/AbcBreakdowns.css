@@ -10,9 +10,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 1.2rem 1.4rem;
-  border-radius: 12px;
-  border: 1px solid var(--color-border);
+  padding: var(--card-padding);
+  border-radius: var(--radius-card);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
   background-color: var(--color-surface);
   min-width: 0;
 }
@@ -27,8 +28,8 @@
 
 .abcb-card-title {
   margin: 0 0 0.25rem;
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: var(--text-card-title);
+  font-weight: 600;
   color: var(--color-text);
 }
 
@@ -174,11 +175,20 @@
   font-variant-numeric: tabular-nums;
 }
 
+.abcb-matrix-table {
+  border-collapse: separate;
+  border-spacing: 3px;
+}
+
 .abcb-matrix-table th,
 .abcb-matrix-table td {
-  padding: 0.5rem 0.6rem;
+  padding: 10px 12px;
   text-align: right;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: none;
+}
+
+.abcb-matrix-table td {
+  border-radius: 6px;
 }
 
 .abcb-matrix-table thead th {
@@ -207,7 +217,7 @@
 }
 
 .abcb-matrix-table td.fsn-cell-N {
-  color: var(--color-critical);
+  color: #B4392B;
 }
 
 .abcb-matrix-total th,

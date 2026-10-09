@@ -1,9 +1,10 @@
+/* The card frame (ui.css): a card sits on the page, it does not float. */
 .chart-widget {
   background-color: var(--color-surface);
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid var(--color-border);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-card);
+  padding: var(--card-padding);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
 }
@@ -23,8 +24,11 @@
 }
 
 .chart-header h4 {
-  margin: 0 0 0.2rem 0;
-  font-size: 0.95rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0 0 4px;
+  font-size: var(--text-card-title);
   color: var(--color-text);
   font-weight: 600;
 }
@@ -38,8 +42,10 @@
 
 .chart-header p {
   margin: 0;
-  font-size: 0.75rem;
-  color: var(--color-text-subtle);
+  max-width: 78ch;
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  color: var(--color-text-muted);
 }
 
 /* The unit a chart's y-axis is in, beside its title. The axes are compacted
@@ -718,9 +724,15 @@
   color: var(--color-text-subtle);
 }
 
+/* The pending-plan sentence under the bars: a pale panel, not a rule. */
 .tier-stock-body .chart-placeholder-note {
   margin: 0;
-  padding: 8px;
+  padding: 10px 12px;
+  border: 1px solid #E9EEF5;
+  border-left: 1px solid #E9EEF5;
+  border-radius: 8px;
+  background: #F6F9FC;
+  line-height: 1.55;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -743,8 +755,8 @@
    from dominating the card. */
 .tier-stock-track {
   flex: 1 1 auto;
-  height: 24px;
-  border-radius: 4px;
+  height: 16px;
+  border-radius: 6px;
   overflow: hidden;
   display: flex;
   background: var(--color-surface-sunken);
@@ -826,22 +838,29 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.6rem 0.5rem;
-  border-radius: 8px;
-  background: var(--color-surface-sunken);
+  gap: 4px;
+  padding: 14px 10px;
+  border-radius: 10px;
+  background: var(--color-surface-raised);
   min-width: 0;
 }
 
+/* The three figures tinted by meaning: critical soft red, urgent soft
+   amber, pieces soft purple. */
+.reorder-mini-chip:nth-child(1) { background: var(--badge-critical-bg); }
+.reorder-mini-chip:nth-child(2) { background: var(--badge-warning-bg); }
+.reorder-mini-chip:nth-child(3) { background: #F1EEFC; }
+
 .reorder-mini-value {
-  font-size: 1.2rem;
+  font-size: 26px;
+  line-height: 1.15;
   font-weight: 700;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
 
 .reorder-mini-label {
-  font-size: 0.65rem;
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -881,8 +900,8 @@
 }
 
 .reorder-mini-table td {
-  padding: 0.5rem 0.4rem;
-  border-bottom: 1px solid var(--color-surface-sunken);
+  padding: 0.7rem 0.4rem;
+  border-bottom: 1px solid #EEF1F4;
   font-size: 0.78rem;
   color: var(--color-text);
   vertical-align: middle;
@@ -939,6 +958,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.reorder-mini-product .product-name-title {
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .reorder-mini-product .product-name-code {
@@ -1090,8 +1114,8 @@
 .abc-share-track {
   grid-area: track;
   display: flex;
-  height: 12px;
-  border-radius: 6px;
+  height: 8px;
+  border-radius: 4px;
   overflow: hidden;
   background: var(--color-surface-sunken);
 }
@@ -1130,17 +1154,17 @@
 }
 
 /* Unselected tiers step back so the selected one reads first. */
+/* The three plums at near full strength (deep, medium, light pink), the
+   selected class at full; the tier card beside the ring names the
+   selection, so no dark outline is drawn around it. */
 .abc-seg {
   cursor: pointer;
-  opacity: 0.45;
+  opacity: 0.8;
   transition: opacity 150ms ease-out;
 }
 
 .abc-seg.is-selected {
   opacity: 1;
-  stroke: var(--color-text);
-  stroke-width: 2;
-  stroke-linejoin: round;
 }
 
 /* One tier per line, letter then plain name ("A  Top sellers"): a row of
@@ -1226,10 +1250,10 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface-raised);
+  padding: 16px 18px;
+  border: 1px solid #EDF0F4;
+  border-radius: 10px;
+  background: #F9FAFB;
   container-type: inline-size;
 }
 
@@ -1683,4 +1707,335 @@
 /* An estimated series' legend swatch: dotted, as its line is drawn. */
 .legend-line-dotted {
   border-top-style: dotted;
+}
+
+/* ── Allocation card: the three figures above the bars (UI pass) ───────── */
+.policy-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 36px;
+  margin-bottom: 16px;
+}
+
+.policy-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.policy-stat-label {
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.policy-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.policy-stat-value small {
+  margin-left: 2px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.policy-stat-sub {
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+/* The reorder card's weights, under the list. */
+.reorder-priorities-disclosure {
+  margin-top: 12px;
+}
+
+.reorder-priorities-disclosure .reorder-priorities {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.reorder-priorities-disclosure .reorder-priorities-caption {
+  display: block;
+  margin: 0 0 10px;
+}
+
+/* The reorder card's weights, compact: thin bars, a quiet caption. */
+.reorder-priorities-compact {
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+}
+
+.reorder-priorities-compact .reorder-priorities-caption {
+  display: block;
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+.reorder-priorities-compact .reorder-priority-bar {
+  height: 6px;
+}
+
+/* ── Allocation card (2026-10-08): one answer, one bar with markers ────── */
+.alloc-card {
+  gap: 16px;
+}
+
+.alloc-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.alloc-title {
+  margin: 0;
+  font-size: var(--text-card-title);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.alloc-answer {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-text-heading);
+}
+
+.alloc-answer > strong {
+  font-size: 18px;
+  color: var(--color-text);
+}
+
+.alloc-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alloc-track {
+  position: relative;
+  height: 30px;
+  border-radius: 8px;
+  background-color: var(--color-surface-sunken);
+}
+
+.alloc-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+}
+
+.alloc-bar-label {
+  padding-left: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.alloc-gap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(135deg, #F8D9A6 0 4px, #FFF4DD 4px 8px);
+}
+
+.alloc-tick {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 0;
+  border-left: 2px dashed var(--color-slate-500);
+}
+
+.alloc-tick.is-minimum {
+  border-left: 2px solid var(--color-text);
+}
+
+/* Staircase labels: one row per level, right-aligned to its marker, with a
+   thin lead line down from the bar. */
+.alloc-ticks {
+  position: relative;
+}
+
+.alloc-tick-row {
+  position: relative;
+  height: 20px;
+}
+
+.alloc-tick-lead {
+  position: absolute;
+  top: calc(-20px * var(--row) - 6px);
+  bottom: 50%;
+  border-left: 1px solid var(--color-border-strong);
+}
+
+.alloc-tick-label {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  padding-right: 6px;
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.alloc-tick-label.is-minimum {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.alloc-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-micro);
+  color: var(--color-text-muted);
+}
+
+.alloc-key li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.alloc-key-swatch {
+  width: 12px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.alloc-key-swatch.is-gap {
+  background: repeating-linear-gradient(135deg, #F8D9A6 0 3px, #FFF4DD 3px 6px);
+}
+
+.alloc-key-tick {
+  width: 0;
+  height: 12px;
+  border-left: 2px dashed var(--color-slate-500);
+}
+
+.alloc-foot {
+  margin: 0;
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .alloc-answer {
+    font-size: 15px;
+  }
+
+  .alloc-bar-label {
+    font-size: 12px;
+  }
+}
+
+/* Header tags: the period pill and the assumption badge. */
+.alloc-head-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The three figures: soft teal (sales), slate-blue (target), purple. */
+.alloc-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+}
+
+.alloc-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 10px;
+}
+
+.alloc-metric.is-sales { background: #EAF7F8; }
+.alloc-metric.is-target { background: #EEF2F8; }
+.alloc-metric.is-achieved { background: #F1EDFF; }
+
+.alloc-metric-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.alloc-metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.alloc-metric-value small {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+/* Portfolio forecast takeaway (mockup pass): a soft teal strip under the chart. */
+.portfolio-insight-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #D5EEF0;
+  border-radius: 10px;
+  background: #EEF8F9;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text);
+}
+
+.portfolio-insight-strip svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-dispatched);
+}
+
+/* ABC tier card: SKUs and revenue side by side from a narrower card (the
+   dashboard's half-row card is ~375px), as the mockup shows. */
+@container (min-width: 330px) and (max-width: 399px) {
+  .abc-tier-card-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.1rem;
+  }
+  .abc-tier-card-stat + .abc-tier-card-stat {
+    margin-top: 0;
+    padding-left: 1.1rem;
+    border-left: 1px solid #E4E7EC;
+  }
+  .abc-tier-card-skus {
+    font-size: 1.75rem;
+  }
+  .abc-tier-card-revenue:not(.is-unavailable) {
+    font-size: 1.35rem;
+  }
 }

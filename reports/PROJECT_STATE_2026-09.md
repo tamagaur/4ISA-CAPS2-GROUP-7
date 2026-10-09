@@ -1209,3 +1209,143 @@ Suite before the fixes: 1,324 passed, 26 skipped (raw files not in the worktree;
 | Forecast model sign-off (DEC-25/26) | Sir Catubag |
 | Render not re-timed after the cache; /recommendations still 7–11 statements cold; the preview dashboard is never cached | next speed pass |
 | Del Monte preview pipeline (§18.5) not built | Yuan |
+
+## 21. Remaining endpoints + housekeeping — 2026-10-05 (branch `kelvin/endpoints-housekeeping`)
+
+No migration, no database write, no forecast, segmentation or LP run. Everything below was read from live in
+read-only transactions on 2026-10-05.
+
+### 21.1 Report branches merged (kelvin-etl 6cd014c, pushed)
+
+| Branch | Merged as | Note |
+|---|---|---|
+| `kelvin/tier-a-basis` | `kelvin/tier-a-basis-clean` de93b6e | 7 tables: per-product revenue, price and peso columns moved to git-ignored `local/` |
+| `kelvin/lp-logic-check` | `kelvin/lp-logic-check-clean` 5964deb | 2 tables: per-product price and peso columns moved to `local/` (hard rule 9) |
+| `kelvin/forecast-error-business` | b4f6b77 | as is |
+| `kelvin/surplus-bias-experiment` | 3226cc4 | as is |
+| `kelvin/model-audit` | 36a5548 | as is |
+
+The two original branches still hold the per-product columns in their history: keep them local, never push them.
+
+### 21.2 Endpoints (for the frontend)
+
+| Endpoint | What changed | Live check |
+|---|---|---|
+| `GET /policy-comparison` | new `pesos` block, `status: "pending_ssm_confirmation"`: per-product targets against the 3-week rule at last purchase price; headline `average`, `peak` alongside; per-item peso fields | cycle 2026-03, 73 products: rule ₱8,211,106.33; average ₱5,906,831.95 (−28.1%); peak ₱8,917,570.23 (+₱706,463.89, +8.6%) = `lp_logic_check_2026-10-03` §4 |
+| `GET /dashboard/class-changes` (new) | products that entered or left Class A between two ranges, with both ranges' revenue, class and rank | 2025 against 2024, Unilever: 44 entered (₱8.59M → ₱39.62M), 38 left (₱38.03M → ₱4.71M), 123 stayed = `tier_a_basis_2026-10-03` §4 |
+| `GET /dashboard/accuracy`, `GET /dashboard` `forecast_accuracy` | two labelled figures, always both: `company_total` and `typical_product_weighted`; `level=summary` replaces `level=total` (still accepted) | default backtest 2023-10..2026-02, 337 products: company total 9.8% (0.098194), typical product weighted 29.6% (0.296344) |
+
+Decisions made here (Yuan ruled on the first two the same day, see the rows):
+
+| Item | What was done | Why |
+|---|---|---|
+| Class-changes revenue rule | a month where returns exceeded sales counts as 0 (the ABC runner's rule for several months, `analytics/classification/orchestrate_abc.py:208`) | it is the rule the tier-a-basis report used. **Yuan, 2026-10-05: one revenue rule everywhere** — `GET /dashboard/pareto` and the dashboard's ABC ring now use it too (they netted returns over the range before and gave 43 / 37 on the same years); live check after the change in §21.5. |
+| Company total reads 9.8%, not 9.9% | reported as measured | traced: 3 product-months whose quantity is blank. The model audit counted them as 0 sold (9.87%); the mart counts them as missing (9.82%). Same forecasts, same price basis (§19). |
+| A product with no last purchase price | left out of the peso sums and counted (`skus_without_price`) | hard rule 3: the plan's ₱25 placeholder is never shown as a measured price. Cycle 2026-03 has none. |
+
+### 21.3 Recorded and reported
+
+| Item | Where |
+|---|---|
+| DEC-37: PO Qty is not treated as in-transit stock (scale check), information only, pending SSM | `ARCHITECTURE.md`; no code change |
+| Safety-stock source comparison: current method ₱8.01M against forecast-error ₱7.90M (−1.4%) on 174 comparable products; Class A as of 2026-02 −2.8%, B +5.8%, C +3.5%; current stays the default | `reports/diagnostics/safety_stock_source_2026-10-05/README.md` |
+
+### 21.4 Tests
+
+`tests/backend/test_policy_comparison.py`, `tests/backend/test_dashboard_range.py`, `tests/backend/test_dashboard.py`,
+`tests/test_marts.py`, `tests/test_dec_references.py`, `tests/backend/test_stock_timing.py`: 158 passed, 3 skipped (the live-database tests in `test_marts.py`,
+which need `SUPABASE_DB_URL`). The full suite was not run.
+
+
+### 21.5 Follow-up decisions (Yuan, 2026-10-05)
+
+| Decision | Done | Check |
+|---|---|---|
+| Delete the original `kelvin/tier-a-basis` and `kelvin/lp-logic-check` | both local branches and their worktrees removed; neither was ever on `group7` | `git ls-remote --heads group7`: 0 matches; the LP check's offline pull kept in git-ignored `scratch/lp_logic_check_2026-10-03/` |
+| One revenue rule everywhere | `backend/marts.PARETO_SQL` counts a month where returns exceeded sales as 0 (`analytics/classification/orchestrate_abc.py:208`); `GET /dashboard/pareto`, the dashboard ABC ring and `GET /dashboard/class-changes` all rank with it | live, read-only: reproduces every stored `single` ABC run (`tests/test_marts.py`, 1 passed); Unilever 2025 against 2024: Class A 167 and 161, 44 entered, 38 left |
+| Company-total gap traced | one line in `reports/diagnostics/model_audit_2026-10-03/README.md` | 3 blank-quantity product-months: 0 sold in the audit (9.87%), missing in the mart (9.82%) |
+
+Tests after the change: `tests/backend/test_dashboard_range.py`, `tests/backend/test_dashboard.py`, `tests/test_marts.py`,
+`tests/test_dec_references.py`: 132 passed, 3 skipped (live tests), plus the live ABC reproduction test run on its own.
+
+## 22. Tier A on the 12-month basis + full refresh — LIVE on `public` 2026-10-05 (DEC-38, PENDING TA CONFIRMATION)
+
+Full write-up: `reports/diagnostics/tier_a_refresh_2026-10-05/README.md`. Branch `kelvin/tier-a-12m` (also merges `kelvin/blank-qty-fix` e78748c). Backup `full_backup_20261005T061733Z`. Migration 0044.
+
+| item | before | after |
+|---|---|---|
+| Unilever Tier A as of 2026-02 | 132 (Feb 2026 alone, `single`) | **189** (12 months + new, `t12m_new`: 175 + 14); setting `analytics.params.TIER_A_BASIS` |
+| Revenue covered, Mar 2025 – Feb 2026 | 67.7% | 81.0% |
+| Forecasts, cycle 2026-03 | run 1: 119 ok / 13 insufficient | run 4: 175 ok / 9 insufficient / 5 dead; run 1 kept |
+| Segmentation cohort 2026-02 | 132 (`single`, kept) | 189 (`t12m_new`) |
+| March plan at 103% | `lp_run` 1: 73 products, 325,468 pcs, ₱6,964,217 at cost, 0 short | `lp_run` 2: 97 products, 356,254 pcs, ₱7,017,551 at cost, 0 short |
+| Review flags, cycle 2026-03 | 15 flagged of 132 | 51 flagged of 189 (17 in the plan) |
+| At-the-time accuracy, Jan 2024 – Feb 2026 | old list: median product WAPE 36.3%, company total 9.5% (pesos) | new list: 39.0%, 10.7% |
+
+Open: TA confirmation; forecast runs 2-3 (stored backtests, read by the accuracy card) are still on the single-month list and pre-date the blank-quantity fix; `stability_v1` reads "churn" for all 189 (cut-offs count out of 38 monthly runs, the new basis has 27). Next free migration: 0045 (0046 is taken by the planning-mart session).
+
+## 23. Planning mart — LIVE on `public` 2026-10-05 (migration 0046, part of DEC-36; branch `kelvin/planning-mart`)
+
+`mart.planning_mart`: one row per product x LP cycle with everything the Reorder page shows already joined. `GET /recommendations`
+reads it in one statement; the response fields are unchanged. Applied after Claude Code 1's push (kelvin-etl 87edd5e, `lp_run` 2).
+
+| item | value | source |
+|---|---|---|
+| Rows | 277 = `lp_recommendation` rows (34 cycles; 97 pending of `lp_run` 2 + 1 accepted in cycle 2026-03) | `scripts/rehearse_planning_mart.py --check-only` |
+| Size | 176 kB (table + indexes + TOAST) | same |
+| Same answer as the joins | 0 differences in 17 scope x cycle x status cases: all 277 rows, all 97 rows of `lp_run` 2, every field, plus freshness, LP model and stock counts. Checked on a scratch build before the apply and on live after it | same |
+| Stored `stock_status` / `urgency` against the endpoint's | 0 of 277 differ; 0 NaN | same |
+| Refresh | `mart.refresh_planning()`: 1.2 s at 253 rows, 2.8 s at 277 (scratch builds) | `refresh_log.duration_ms` |
+| Backup before the apply | `backups/mart_backup_before_0046_20261005T080301Z`: the `mart` schema only (8 tables, 112,511 rows, structure SQL; re-read and checked). The full backup was started first and lost its connection after 26 minutes; 0046 writes nothing outside `mart` | scratch log |
+
+**What each row holds.** Product name + SKU, principal, pack size; tier, revenue share, its basis (`t12m_new` for Unilever, `single` for
+Del Monte) and month; the cycle's forecast in pieces with its range and the `mart.forecast_run` that keeps it; safety stock; target stock;
+the opening count's stock (pieces, cases, pesos) and count date; `on_order` (PO Qty: information only, never subtracted, DEC-34/37);
+the order in pieces and in pesos at the last purchase price (unit cost per case of the product's latest real count on or before the
+opening count / pack size; in the mart only, not in the response); status (IN STOCK / LOW / CRITICAL / NO DATA; NO ROP cannot occur on a
+planned row) and urgency; `needs_review` + reasons; `lp_run_key` and its allocation %; decision status (pending / accepted / dismissed).
+
+**Kept in step.**
+
+| change | what refreshes the mart |
+|---|---|
+| Data load, fill, forecast run, LP run, backtest | every full `mart.refresh()` now also runs the planning refresh, same transaction (`analytics/marts.refresh_marts_cursor`) |
+| Review-flag write | `scripts/compute_review_flags.py --write` runs the planning refresh after its commit |
+| Reorder decision | `PATCH /recommendations/{id}` updates the mart's own row in the decision's transaction |
+| Product edited through the app | `PATCH /sku` runs the planning refresh in its transaction (about 1-3 s added to the edit) |
+| ABC run on its own | NOT wired. The mart then reads as stale and the endpoint uses the joins until the next forecast or LP run refreshes it |
+
+**Never served out of step.** `mart.refresh_status` gained `planning_refreshed_at` and `planning_stale` (a source changed after the last
+planning refresh); `refreshed_at` / `stale` still mean the last FULL refresh. The endpoint falls back to the per-request joins when the
+mart is missing, `planning_stale`, or its row count / pending count / latest decision differ from `lp_recommendation`'s, and in preview
+mode. The response cache needs no change: its data version already reads `refresh_status`, so a planning refresh clears it.
+
+**Queries per request** (`reports/diagnostics/speed_cache_2026-10-04/results/planning_mart_statements_per_request.txt`; session check included):
+
+| request | before (87edd5e) | after, cache cold | after, cache warm |
+|---|---:|---:|---:|
+| `/recommendations?status=pending&principal=unilever` | 11 | **2** | **1** |
+| `/recommendations?status=pending&principal=delmonte` | 7 | **2** | **1** |
+| `/sku` (the Reorder page's other call, not changed) | 4 | 4 | 1 |
+
+On the database the mart statement runs in about 25 ms (EXPLAIN ANALYZE: head 22 ms, rows 2 ms). It returns 26 kB for the 97 pending
+Unilever rows (rows sent as JSON arrays; 78 kB as objects before that change) against about 16 kB of values for the joins' row query.
+
+**Timings: NOT a clean measurement.** Local server on a laptop against live, 2026-10-05. The laptop's link to Supabase was unstable all
+session: a bare 78 kB value took 0.3-0.9 s at its best and 5-15 s at its worst, a full backup lost its connection, and one `/sku` call
+failed on a dropped connection. Time followed bytes, not statements, so the page's wall clock is mostly `/sku` (about 0.8 MB).
+
+| measure (cold, interleaved before/after passes, link at 5-7 s per 78 kB) | before | after |
+|---|---:|---:|
+| `/recommendations` Unilever, server time, median | 4,433 ms (n=6) | 2,910 ms (n=6) |
+| `/recommendations` Del Monte, server time, median | 883 ms (n=6) | 655 ms (n=3) |
+| Reorder page Unilever (both calls), wall clock, 3 runs | 45.6 / 28.2 / 26.8 s | 40.9 / 38.5 / 27.5 s |
+| Reorder page Del Monte, wall clock, 3 runs | 15.9 / 16.0 / 7.0 s | 6.4 / 9.1 / 7.4 s |
+| Warm (cached), either endpoint, server time, median | 190-200 ms | 190-200 ms |
+
+One earlier pass on a better link gave the unchanged page 2.1 / 3.6 / 1.5 / 2.6 / 2.2 s cold (Unilever); the mart's pass that followed
+ran after the link had dropped again, so there is no matching "after" for it. Re-time on a stable connection before quoting a speed-up.
+Render was not timed.
+
+Tests (touched files only): `tests/test_planning_mart.py`, `tests/backend/test_recommendations.py`, `test_lp_cycle.py`, `test_sku.py`,
+`test_response_cache.py`, `test_stock_timing.py`. Open: the ABC run's refresh hook; a clean re-timing; the full backup to rerun on a stable link.

@@ -1,26 +1,26 @@
 // SAN2 Inventory DSS Design Tokens
 export const COLORS = {
   // Data Visualization Color System
-  critical: '#E5484D',       // Red: KPI negative deltas, critical reorders
-  warning: '#F5A623',        // Amber: Warnings, under investigation, low stock
-  success: '#2E9E5B',        // Green: Good, resolved, positive trends, received units
+  critical: '#D9534F',       // Red: KPI negative deltas, critical reorders
+  warning: '#E9A23B',        // Amber: Warnings, under investigation, low stock
+  success: '#36A66B',        // Green: Good, resolved, positive trends, received units
   salesTrend: '#5B5FEF',     // Indigo: Sales trend / primary metric lines
   // Teal: sales / actual-demand lines. Was #14919B, which measured just
   // under the palette validator's saturation floor (chroma 0.099 < 0.10)
   // and read slightly gray on the white card; #0E96A1 passes every check
   // against both #2563EB (stock) and #A855F7 (forecast) — see
   // reports/CHART_DESIGN_PLAN_2026-09.md's appendix.
-  dispatched: '#0E96A1',
-  forecast: '#A855F7',       // Violet: Forecast / projected values
-  forecastBg: '#F3E8FF',     // Light Violet tint: 90% CI uncertainty band
+  dispatched: '#18A6B5',
+  forecast: '#8866E8',       // Violet: Forecast / projected values
+  forecastBg: '#EEE9FC',     // Light Violet tint: 90% CI uncertainty band
 
   // ABC Classification Single-Hue Plum Ramp (Ordinal by value)
-  abcA: '#6B2C5F',          // Category A - Top 20% / 80% revenue (darkest plum)
-  abcB: '#B565A0',          // Category B - Middle tier (medium plum)
+  abcA: '#76295E',          // Category A - Top 20% / 80% revenue (darkest plum)
+  abcB: '#A9579A',          // Category B - Middle tier (medium plum)
   // Category C - Long tail (lightest plum). Was #EBC9E1: 1.5:1 contrast on
   // the white card, so the C slice/segment barely registered. #D6A0C8
   // measures 2.16:1 and keeps the ramp's light-to-dark order.
-  abcC: '#D6A0C8',
+  abcC: '#D7AFCC',
 
 };
 
@@ -95,12 +95,16 @@ export const CHART_COLORS = {
   // before). Scoped to that chart so the app-wide salesSeries teal on the
   // forecast charts stays as it is. Both pass the hue-pair rule above
   // (teal beside one blue) and read at ≥ 3.5:1 on the white card.
-  heroSales: '#159BA6',
-  heroInventory: '#3455A4',
+  heroSales: '#18A6B5',
+  heroInventory: '#3B5BA9',
+  // Returns, the same chart's own view (2026-10-08): a deep amber, apart
+  // from teal and navy, and >= 4.5:1 on the white card where the warning
+  // amber (#F5A623) is too faint for a line.
+  heroReturns: '#B45309',
   abcRamp: [COLORS.abcA, COLORS.abcB, COLORS.abcC], // Class A, B, C — sequential
   cumulativeCurve: '#475569',
-  gridline: '#E2E8F0',
-  axisLabel: '#64748B',
+  gridline: '#EEF1F5',
+  axisLabel: '#8792A2',
   // Tint behind placeholder months in preview mode (src/dataMode.js). Its
   // one meaning is "not SSM's data"; mirrors --color-placeholder.
   placeholder: '#94A3B8',

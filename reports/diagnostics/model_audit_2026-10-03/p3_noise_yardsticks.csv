@@ -1,0 +1,3 @@
+yardstick,product_months,pooled_wape,median_product_wape,same_rows_pooled_wape_served,same_rows_median_product_wape_served,same_rows_median_product_wape_ma3,products,median_noise_sd_over_level,median_level_shift_sd_over_level,median_best_possible_over_ma3_error_sd,median_ma3_mse_actual_over_model,median_product_wape_floor_estimate,median_product_wape_ma3,median_product_wape_served
+two-sided: average of the month before and the month after (uses the future),2312,0.3006,0.2950,0.2845,0.2634,0.2723,,,,,,,,
+"local-level model (level that drifts + month noise), best possible one-month forecast",2304,,,,,,89.0000,0.3220,0.0000,0.8660,0.7801,0.2352,0.2684,0.2521

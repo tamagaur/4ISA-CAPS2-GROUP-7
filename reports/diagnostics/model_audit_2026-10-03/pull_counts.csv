@@ -1,0 +1,13 @@
+measure,value
+real view rows,24906
+base table is_demo = false rows,24906
+base table is_demo = false rows with a fill_source tag,0
+base table is_demo = true rows (excluded),12243
+is_demo = true fill_source tags,synthetic_v2
+is_demo = true first month,2021-01
+is_demo = true last month,2026-08
+real rows first month,2023-01
+real rows last month,2026-02
+pulled at (UTC),2026-10-03 07:33:26.243144+00:00
+transaction_read_only,on
+"Tier A as of 2026-02 (ABC single; the served XGBoost pool), products",132

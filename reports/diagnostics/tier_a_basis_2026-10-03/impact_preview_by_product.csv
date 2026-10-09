@@ -1,0 +1,199 @@
+product_key,product_name,sku_code,in_latest month (today),in_12m,in_12m+new,sales_months_to_2026_02,months_span,runner_status,router_bin,served_model,in_stock_file_2026_03,stock_above_zero_2026_03,forecast_today_status,forecast_today_bin,forecast_today_sales_months,first_month_with_sales,last_month_with_sales
+14,AXE RO APOLLO 24X25ML,21015692,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+19,SURF HS STD PWDR BLOSSOMFRESH 12X1100G,21051980,True,True,True,37,38,ok,long,xgb_ma3_avg,True,True,ok,long,37.0,2023-01,2026-02
+21,SURF HS STD PWDR BLOSSOMFRESH 6X2200G,21051988,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+33,SUNSILK SH AD HTHY&STRNG (11+1)24X13.5ML,62681009,False,True,True,27,28,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-11,2026-01
+38,CREAM SILK RO ULTREBORN STRT 288X13ML,62687204,True,True,True,30,30,ok,long,xgb_ma3_avg,True,True,ok,long,30.0,2023-09,2026-02
+39,CREAM SILK ULT REBORN STRT 24(11+1)13ML,62687212,True,True,True,25,26,ok,long,xgb_ma3_avg,True,True,ok,long,25.0,2024-01,2026-02
+52,CREAM SILK RO ULTREBORN HFALL 288X22ML,62718193,True,True,True,29,29,ok,long,xgb_ma3_avg,True,True,ok,long,29.0,2023-10,2026-02
+53,CREAM SILK RO ULTREBORN STRT 288X22ML,62718199,True,True,True,28,28,ok,long,xgb_ma3_avg,True,True,ok,long,28.0,2023-11,2026-02
+54,LADYS CHOICE MAYO DY+SLDMAC 12(1+1)470ML,62720543,False,True,True,11,26,ok,short,ma3,False,False,no forecast row,-,,2023-10,2025-10
+55,LADYS CHOICE MAYO DY+TDBITS 24(1+1)220ML,62720545,False,True,True,10,26,ok,short,ma3,True,True,no forecast row,-,,2023-10,2025-10
+67,DOVE SH CRMD INTNS REP 24(11+1)X13.5ML,64314344,False,True,True,21,22,ok,medium,tsb,True,True,no forecast row,-,,2024-05,2026-02
+70,DOVE SH RESTORATIVEOIL NOURCARE 288X12ML,64315064,True,True,True,23,23,ok,medium,tsb,True,True,ok,medium,23.0,2024-04,2026-02
+71,DOVE SH BIOTIN HFALL RESCUE 288X12ML,64315335,False,True,True,23,23,ok,medium,tsb,True,True,no forecast row,-,,2024-04,2026-02
+73,DOVE S-CON KERATIN STRT&SILKY 288X12ML,64315834,False,True,True,23,23,ok,medium,tsb,True,True,no forecast row,-,,2024-04,2026-02
+96,CREAM SILK TRI-KRTN SCD STRT 288X15ML,64356034,False,True,True,12,17,dead_sku,-,-,False,False,no forecast row,-,,2024-06,2025-05
+109,SURF FABCON BLOSSOM FRESH SOL 360X28ML,64373260,False,True,True,14,19,ok,medium,tsb,False,False,no forecast row,-,,2024-08,2025-10
+129,KNORR CUBES CHICKEN DUO 48X6X20G,64784421,True,True,True,20,20,ok,medium,tsb,True,True,ok,medium,20.0,2024-07,2026-02
+138,REX WMN DLN POWDER DRY + BRGHT 360X3ML,64824382,True,True,True,17,17,ok,medium,tsb,False,False,ok,medium,17.0,2024-10,2026-02
+140,KNORR SOUP CRAB & CORN 60X55G,64830409,True,True,True,16,16,ok,medium,tsb,True,True,ok,medium,16.0,2024-11,2026-02
+147,SURF FABCON MAGIC BLOOM STR SAC 360X25ML,64856586,True,True,True,8,8,ok,short,ma3,True,True,ok,short,8.0,2025-07,2026-02
+150,SURF POWDER KALAMANSI L 40(6+1)57G,64861486,True,False,False,10,12,ok,short,ma3,False,False,ok,short,10.0,2025-03,2026-02
+151,SURF POWDER TAWAS L 40(6+1)57G,64861490,True,False,False,10,12,ok,short,ma3,False,False,ok,short,10.0,2025-03,2026-02
+159,CREAM SILK TRI-KRTN SCD REP SHN 288X14ML,64900602,True,True,True,10,10,ok,short,ma3,True,True,ok,short,10.0,2025-05,2026-02
+168,CLOSEUP RED HOT PROMO HL 36X2X173G,64953872,True,False,True,5,5,ok,short,ma3,True,True,ok,short,5.0,2025-10,2026-02
+169,CLOSEUP RED HOT PROMO HL 48X2X120G,64953874,True,True,True,7,7,ok,short,ma3,True,True,ok,short,7.0,2025-08,2026-02
+171,LADY'S CHOICE REAL MAYO DOY 24X130ML,64961947,True,False,True,8,8,ok,short,ma3,True,True,ok,short,8.0,2025-07,2026-02
+173,KNORR SIN GABI+SINGABI 48(6+1)X11G,64971076,False,True,True,10,10,ok,short,ma3,False,False,no forecast row,-,,2025-05,2026-02
+174,KNORR SIN ORIG+SINORIG 48(6+1)X11G,64971078,True,True,True,9,10,ok,short,ma3,False,False,ok,short,9.0,2025-05,2026-02
+182,AXE DEO AP RLN DARKTEMP 24X25ML,65003211,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+189,BESTFOODS RGLR MYNS MAYO MAGIC 72X80ML,65004477,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+195,BESTFOODS RGLR MYNS MAYO MGC DOY12X470ML,65004623,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+196,BESTFOODS RGLR MYNS MAYOMAGICDOY24X220ML,65004662,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+198,BESTFOODS RGLR MYNS MAYO MAGIC 4X3.5L,65004666,False,True,True,37,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+202,BESTFOODS SNDWCH SPRDSLDMATEDOY24X220ML,65004685,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+215,KNORR SINGLES SHMP + SHMP 48(12+2)X10G,65247613,True,False,True,2,2,insufficient_data,insufficient,-,True,True,insufficient_data,-,2.0,2026-01,2026-02
+219,SUNSILK SH DAMAGE RCONSTRUCTION 288X13ML,67022557,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+220,SUNSILK SH PERFECT STRAIGHT 288X13ML,67022565,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+243,DOVE BS BAR REGLR FBX 48X135G,67311414,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+244,DOVE BS BAR PINK FBX 48X135G,67311419,False,True,True,36,37,ok,long,xgb_ma3_avg,False,False,no forecast row,-,,2023-01,2026-01
+246,REXONA MEN MRO MS QUANTUM 24X25ML,67321283,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+260,REXONA MEN RO ICE COOL IN 24X25ML,67404149,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+261,REXONA MEN DL ICE COOL IN 360X3ML,67404155,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+264,SUNSILK SH SMOOTH&MNGBLE 24X180ML,67469128,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+265,SUNSILK SH SMOOTH&MNGBLE 12X350ML,67469129,False,True,True,38,38,ok,long,xgb_ma3_avg,False,False,no forecast row,-,,2023-01,2026-02
+271,REXONA DLN QUANTUM 360X3ML,67633586,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+272,REXONA DLN PASSION 360X3ML,67633590,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+273,REXONA DLN SHOWER CLEAN 360X3ML,67633600,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+275,SUNSILK SH STRONG&LONG 24X180ML,67655817,False,True,True,38,38,ok,long,xgb_ma3_avg,False,False,no forecast row,-,,2023-01,2026-02
+283,KNORR SINIGANG SAM ORIG 12X12X22G,67749041,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+284,KNORR SINIGANG SAM ORIG 24X12X11G,67749043,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+286,KNORR SINIGANG NA GABI 24X12X11G,67749045,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+287,KNORR SINIGANG ISDA 24X12X11G,67749046,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+288,KNORR SINIGANG NA GABI 12X12X22G,67749047,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+289,KNORR SINIGANG SAM ORIG 144X44G,67749048,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+291,SURF HS STD PWDR BLOSSOM FRESH 144X74G,67762749,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+307,CLEAR SH COOL SPRT MENTHOL MEN 288X12ML,67834798,False,True,True,37,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-01
+310,CLEAR SH COOL SPRT MENTHOL MEN 24X170ML,67834801,False,True,True,38,38,ok,long,xgb_ma3_avg,False,False,no forecast row,-,,2023-01,2026-02
+312,CLEAR SH COMPLETE SOFT CARE 288X13ML,67834803,False,True,True,35,38,ok,long,xgb_ma3_avg,False,False,no forecast row,-,,2023-01,2025-11
+318,SURF FABCON LUXE PERFUME SACH 360X25ML,67882539,False,True,True,32,37,dead_sku,-,-,False,False,no forecast row,-,,2023-01,2025-08
+321,CLOSEUP RED HOT ULP RL 144X(2X10G),67940679,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+327,KNORR SOUP CHICKEN&CORN 60X60G,67975949,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+345,SURF POWDER TAWAS S 288X57G,68178533,True,True,True,37,38,ok,long,xgb_ma3_avg,True,True,ok,long,37.0,2023-01,2026-02
+346,SURF POWDER KALAMANSI S 288X57G,68178534,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+347,SURF POWDER KALAMANSI S 12X1100G,68178539,False,True,True,37,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+357,CLOSEUP RED HOT NEW 12(11+1)X(2X10G),68200184,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+388,KNORR LIQUID SEASONING ORIGINAL 24X130ML,68394707,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+389,KNORR LIQUID SEASONING ORIGINAL 24X250ML,68394708,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+391,KNORR LIQUID SEASONING ORIGINAL 12X500ML,68395710,False,True,True,34,36,ok,long,xgb_ma3_avg,False,False,no forecast row,-,,2023-01,2025-10
+392,KNORR LIQUID SEASONING ORIGINAL 6X1L,68395711,False,True,True,35,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2025-11
+399,KNORR BN CUBES BEEF PANTRY 72X60G,68438404,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+400,KNORR BN CUBES BEEF SAVERS 36X120G,68438405,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+401,KNORR BN CUBES SHRIMP SINGLES 48X12X10G,68438406,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+403,KNORR BN CUBES CHICKEN SINGLES 48X12X10G,68438409,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+404,KNORR BN CUBES CHICKEN PANTRY 72X60G,68438411,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+405,KNORR BN CUBES CHICKEN SAVERS 36X120G,68438412,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+406,KNORR BN CUBES PORK SINGLES 48X12X10G,68438413,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+407,KNORR BN CUBES PORK PANTRY 72X60G,68438416,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+408,KNORR BN CUBES PORK SAVERS 36X120G,68438417,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+409,KNORR BN CUBES BEEF SINGLES 48X12X10G,68438418,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+460,CREAM SILK HC ULTREBORN STRT 24X180ML,68565204,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+461,CREAM SILK HC ULTREBORN HFALL 24X180ML,68565205,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+492,SUNSILK SH SMTH&MNGBLE (11+1)24X15ML,68690506,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+493,SUNSILK SH STRONG&LONG (11+1)24X15ML,68690509,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+494,SUNSILK SH SMTH&MNGBLE 288X15ML,68690510,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+495,SUNSILK SH STRONG&LONG 288X15ML,68690511,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+511,AXE DEO RO RLN DARKTEMP 24X40ML,68736096,True,True,True,35,35,ok,long,xgb_ma3_avg,True,True,ok,long,35.0,2023-04,2026-02
+515,AXE DEO RO APOLLO 24X40ML,68736102,False,True,True,35,35,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-04,2026-02
+517,LADY'S CHOICE SS CHICKEN JAR 24X220ML,68763996,True,True,True,20,20,ok,medium,tsb,True,True,ok,medium,20.0,2024-07,2026-02
+519,LADY'S CHOICE SS CHICKEN DOY 24X220ML,68763999,False,True,True,19,20,ok,medium,tsb,True,True,no forecast row,-,,2024-07,2026-02
+522,LADY'S CHOICE SS HAM DOY 24X220ML,68764004,True,True,True,21,21,ok,medium,tsb,True,True,ok,medium,21.0,2024-06,2026-02
+525,LADY'S CHOICE SS BACON JAR 24X220ML,68764010,False,True,True,21,21,ok,medium,tsb,True,True,no forecast row,-,,2024-06,2026-02
+526,LADY'S CHOICE SS BACON 72X80ML,68764011,False,True,True,20,21,ok,medium,tsb,True,True,no forecast row,-,,2024-07,2026-02
+530,LADY'S CHOICE SS PLAIN DOY 24X220ML,68764017,True,True,True,20,20,ok,medium,tsb,True,True,ok,medium,20.0,2024-07,2026-02
+534,KNORR LIQUID SEASONING 288X12ML,68774338,False,True,True,37,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+542,KNORR SOUP CRM OF MUSHROOM 60X62G,68830455,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+554,CREAM SILK TMT REBOND STRAIGHT 288X18ML,68854475,False,True,True,31,37,dead_sku,-,-,True,True,no forecast row,-,,2023-01,2025-07
+558,DOVE BAR REGULAR 48X90G,68864117,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+561,DOVE BAR WHITE TRIPLES MP 16X3X90G,68864120,False,True,True,38,38,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-01,2026-02
+562,DOVE BAR PINK 48X90G,68864121,True,True,True,38,38,ok,long,xgb_ma3_avg,True,True,ok,long,38.0,2023-01,2026-02
+588,KNORR SINIGANG ORIG+KOPIKOTP 24(6+1)X22G,69617844,False,True,True,26,33,ok,long,xgb_ma3_avg,False,False,no forecast row,-,,2023-06,2026-02
+589,KNORR SINIGANG GABI+KOPIKOTP 24(6+1)X22G,69617845,False,True,True,25,33,ok,long,xgb_ma3_avg,False,False,no forecast row,-,,2023-06,2026-02
+593,REXONA MEN RO ICE COOL 72H 24X45ML,69642632,False,True,True,34,34,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-05,2026-02
+594,REXONA MEN RO QUANTUM 72H 24X45ML,69642633,True,True,True,34,34,ok,long,xgb_ma3_avg,True,True,ok,long,34.0,2023-05,2026-02
+611,SURF POWDER ANTIBAC L 288X60G,69668130,True,True,True,32,32,ok,long,xgb_ma3_avg,True,True,ok,long,32.0,2023-07,2026-02
+613,SURF POWDER CHERRY BLOSSOM L 288X65G,69668140,True,True,True,32,32,ok,long,xgb_ma3_avg,True,True,ok,long,32.0,2023-07,2026-02
+614,SURF POWDER CHERRY BLOSSOM L 12X1100G,69668142,False,True,True,32,32,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-07,2026-02
+615,SURF POWDER CHERRY BLOSSOM L 6X2200G,69668143,True,True,True,32,32,ok,long,xgb_ma3_avg,True,True,ok,long,32.0,2023-07,2026-02
+616,SURF POWDER PURPLE BLOOMS L 288X65G,69668145,True,True,True,32,32,ok,long,xgb_ma3_avg,True,True,ok,long,32.0,2023-07,2026-02
+617,SURF POWDER ROSE FRESH L 144X130G,69668147,False,True,True,32,32,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-07,2026-02
+618,SURF POWDER ROSE FRESH L 288X65G,69668148,True,True,True,32,32,ok,long,xgb_ma3_avg,True,True,ok,long,32.0,2023-07,2026-02
+619,SURF POWDER SUN FRESH L 12X1100G,69668150,True,True,True,32,32,ok,long,xgb_ma3_avg,True,True,ok,long,32.0,2023-07,2026-02
+620,SURF POWDER SUN FRESH L 6X2200G,69668151,False,True,True,32,32,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2023-07,2026-02
+627,LADY'S CHOICE RAL MAYO JAR 12X470ML,69695561,False,True,True,24,24,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2024-03,2026-02
+628,LADY'S CHOICE REAL MAYO 4X3.5L,69695564,True,True,True,24,24,ok,long,xgb_ma3_avg,True,True,ok,long,24.0,2024-03,2026-02
+630,SURF BAR CHERRY BLOSSOM SXFL 96X120G,69725979,True,True,True,34,34,ok,long,xgb_ma3_avg,True,True,ok,long,34.0,2023-05,2026-02
+631,SURF BAR BLOSSOM FRESH SXFL 96X120G,69725987,True,True,True,34,34,ok,long,xgb_ma3_avg,True,True,ok,long,34.0,2023-05,2026-02
+634,SURF BAR SUN FRESH SXFL 96X120G,69726539,True,True,True,34,34,ok,long,xgb_ma3_avg,True,True,ok,long,34.0,2023-05,2026-02
+637,SURF BAR BLOSSOM FRESH SXFL 36X360G,69731876,True,True,True,34,34,ok,long,xgb_ma3_avg,True,True,ok,long,34.0,2023-05,2026-02
+638,SURF BAR CHERRY BLOSSOM SXFL 36X360G,69731878,True,True,True,34,34,ok,long,xgb_ma3_avg,True,True,ok,long,34.0,2023-05,2026-02
+640,SURF BAR KALAMANSI SXFL 36X360G,69731884,True,False,False,34,34,ok,long,xgb_ma3_avg,False,False,ok,long,34.0,2023-05,2026-02
+641,SURF BAR SUN FRESH SXFL 36X360G,69731886,True,True,True,35,35,ok,long,xgb_ma3_avg,True,True,ok,long,35.0,2023-04,2026-02
+642,SURF POWDER CHERRY BLOSSM L 40(6+1)65G,69767334,True,True,True,31,31,ok,long,xgb_ma3_avg,True,True,ok,long,31.0,2023-08,2026-02
+643,SURF POWDER ROSE FRSH L 40(6+1)65G,69767335,True,True,True,31,31,ok,long,xgb_ma3_avg,True,True,ok,long,31.0,2023-08,2026-02
+644,SURF POWDER SUNFRESH L 40(6+1)65G,69767336,True,True,True,26,31,ok,long,xgb_ma3_avg,True,True,ok,long,26.0,2023-08,2026-02
+666,SUNSILK SH AD HEALTHY&STRONG 288X13.5ML,62681003,True,True,True,28,29,ok,long,xgb_ma3_avg,True,True,ok,long,28.0,2023-10,2026-02
+667,CREAM SILK RO ULTREBORN HFALL 288X13ML,62687200,True,True,True,31,31,ok,long,xgb_ma3_avg,True,True,ok,long,31.0,2023-08,2026-02
+674,DOVE SH KERATIN STRT&SILKY 288X13.5ML,64314335,True,True,True,22,23,ok,medium,tsb,True,True,ok,medium,22.0,2024-04,2026-02
+675,DOVE SH CERAMIDE INTENSE REP 288X13.5ML,64314343,True,True,True,23,23,ok,medium,tsb,True,True,ok,medium,23.0,2024-04,2026-02
+694,KNORR SOUP CHICKEN NOODLE PH 57X63G,64351369,False,True,True,19,19,ok,medium,tsb,True,True,no forecast row,-,,2024-08,2026-02
+708,CLOSE UP RED HOT BYC PRM DUA2 48X2X120G,64395913,False,True,True,15,15,dead_sku,-,-,False,False,no forecast row,-,,2024-06,2025-08
+709,CLOSE UP RED HOT PRMO DUA2 36X2X175G,64395926,False,True,True,16,18,ok,medium,tsb,False,False,no forecast row,-,,2024-07,2025-10
+711,BESTFOODS ALL PURPOSE DRSG 4X3.5L,64401259,True,True,True,10,10,ok,short,ma3,True,True,ok,short,10.0,2025-05,2026-02
+720,KNORR CUBES PORK DUO 48X6X20G,64784425,True,True,True,21,21,ok,medium,tsb,True,True,ok,medium,21.0,2024-06,2026-02
+721,CREAM SILK RO ULTREBORN HF 24(11+1)X22ML,64788596,True,True,True,20,20,ok,medium,tsb,False,False,ok,medium,20.0,2024-07,2026-02
+722,CREAM SILK RO ULTREBORN ST 24(11+1)X22ML,64788598,True,True,True,20,20,ok,medium,tsb,True,True,ok,medium,20.0,2024-07,2026-02
+727,REX WMN RO POWDER DRY BRIGHT 72H 24X45ML,64824374,False,True,True,17,17,ok,medium,tsb,True,True,no forecast row,-,,2024-10,2026-02
+736,REX PD+IC+Q HANG 20(12+3+3)(3ML+3ML+3ML),64895400,False,True,True,9,12,ok,short,ma3,False,False,no forecast row,-,,2025-03,2026-02
+737,CREAM SILK TMT DAMAGE REP 288X18ML,64900492,True,True,True,9,9,ok,short,ma3,True,True,ok,short,9.0,2025-06,2026-02
+738,CREAM SILK TMT DAMAGE REP24(11+1)X18ML,64900508,True,True,True,7,7,ok,short,ma3,True,True,ok,short,7.0,2025-08,2026-02
+739,CREAM SILK TRI-KRTN SCD STRT 288X14ML,64900598,True,True,True,10,10,ok,short,ma3,True,True,ok,short,10.0,2025-05,2026-02
+741,CREAMSILK TRI-KRTN SCD R&S 24(11+1)X14ML,64900614,True,False,True,9,9,ok,short,ma3,True,True,ok,short,9.0,2025-06,2026-02
+747,VITAKERATIN TMT BRZLN STRAIGHT 288X22ML,64926066,True,True,True,9,9,ok,short,ma3,True,True,ok,short,9.0,2025-06,2026-02
+755,KNORR SINGLES CHKN + CHKN 48(12+2)X10G,64957373,False,True,True,10,12,ok,short,ma3,False,False,no forecast row,-,,2025-03,2026-02
+775,CLEAR SH COMPLETE SOFT CARE 3C 288X13ML,65244857,True,False,True,4,4,ok,short,ma3,True,True,ok,short,4.0,2025-11,2026-02
+799,CLEAR CP SH CL SPRT MNTHL 24(11+1)12ML,68176942,False,True,True,25,37,ok,long,xgb_ma3_avg,False,False,no forecast row,-,,2023-02,2026-01
+832,LADY'S CHOICE SS CHICKEN JAR 12X470ML,68763994,True,True,True,19,20,ok,medium,tsb,True,True,ok,medium,19.0,2024-07,2026-02
+833,LADY'S CHOICE SS CHICKEN 72X27ML,68763997,True,True,True,20,20,ok,medium,tsb,True,True,ok,medium,20.0,2024-07,2026-02
+834,LADY'S CHOICE SS HAM 72X80ML,68764005,False,True,True,20,20,ok,medium,tsb,True,True,no forecast row,-,,2024-07,2026-02
+836,LADY'S CHOICE SS PLAIN 72X80ML,68764018,False,True,True,21,21,ok,medium,tsb,True,True,no forecast row,-,,2024-06,2026-02
+840,CREAM SILK TMT DAMAGE REPAIR 288X18ML,68854478,False,True,True,30,33,dead_sku,-,-,False,False,no forecast row,-,,2023-01,2025-06
+851,SURF POWDER PURPLE BLOOMS L 12X1100G,69668144,True,True,True,32,32,ok,long,xgb_ma3_avg,True,True,ok,long,32.0,2023-07,2026-02
+853,SURF POWDER SUN FRESH L 288X65G,69668149,True,True,True,32,32,ok,long,xgb_ma3_avg,True,True,ok,long,32.0,2023-07,2026-02
+854,LADY'S CHOICE REAL MAYO 72X80ML,69695555,True,True,True,24,24,ok,long,xgb_ma3_avg,True,True,ok,long,24.0,2024-03,2026-02
+855,LADY'S CHOICE REAL MAYO DOY 12X470ML,69695556,True,True,True,24,24,ok,long,xgb_ma3_avg,True,True,ok,long,24.0,2024-03,2026-02
+856,LADY'S CHOICE REAL MAYO 6X1KG,69695559,False,True,True,22,22,ok,medium,tsb,True,True,no forecast row,-,,2024-05,2026-02
+857,LADY'S CHOICE RAL MAYO DOY 24X220ML,69695560,True,True,True,24,24,ok,long,xgb_ma3_avg,True,True,ok,long,24.0,2024-03,2026-02
+858,LADY'S CHOICE REAL MAYO 72X27ML,69695566,True,True,True,24,24,ok,long,xgb_ma3_avg,True,True,ok,long,24.0,2024-03,2026-02
+877,DOVE SH KRTN STRT&SILKY 24(11+1)X13.5ML,64314336,False,True,True,20,22,ok,medium,tsb,False,False,no forecast row,-,,2024-05,2026-02
+913,CREAM SILK TMT RBOND STRT 24(11+1)X18ML,64900506,True,True,True,7,7,ok,short,ma3,True,True,ok,short,7.0,2025-08,2026-02
+921,KNORR LIQUID SSONING ORIG TPR 12X500ML,64985753,True,False,True,6,6,ok,short,ma3,True,True,ok,short,6.0,2025-09,2026-02
+954,KNORR SNGNG ORIG+ PATIS 24(6+1)X22G,68212522,False,True,True,5,6,ok,short,ma3,False,False,no forecast row,-,,2025-06,2025-10
+985,LADY'S CHOICE SS CHICKEN 72X80ML,68764000,True,True,True,20,20,ok,medium,tsb,True,True,ok,medium,20.0,2024-07,2026-02
+986,LADY'S CHOICE SS HAM JAR 24X220ML,68764002,False,True,True,20,20,ok,medium,tsb,True,True,no forecast row,-,,2024-07,2026-02
+988,LADY'S CHOICE SS PLAIN JAR 24X220ML,68764014,True,True,True,20,20,ok,medium,tsb,True,True,ok,medium,20.0,2024-07,2026-02
+1005,LADY'S CHOICE RAL MAYO JAR 24X220ML,69695563,False,True,True,24,24,ok,long,xgb_ma3_avg,True,True,no forecast row,-,,2024-03,2026-02
+1036,SURF FABCON ANTIBAC W MINT STR 360X25ML,64856504,False,False,True,8,8,ok,short,ma3,True,True,no forecast row,-,,2025-07,2026-02
+1037,SURF PWDR PURPLE BLOOMS L 40(6+1)65G,64861488,True,True,True,10,12,ok,short,ma3,True,True,ok,short,10.0,2025-03,2026-02
+1043,CREAM SILK TMT REBOND STRT 288X18ML,64900488,True,True,True,9,9,ok,short,ma3,True,True,ok,short,9.0,2025-06,2026-02
+1045,KNORR SINGLES PORK + PORK 48(12+2)X10G,64957375,False,True,True,10,11,ok,short,ma3,False,False,no forecast row,-,,2025-03,2026-01
+1054,SURF FABCON BF STR 60(5+1)28ML,65071335,True,True,True,7,7,ok,short,ma3,False,False,ok,short,7.0,2025-08,2026-02
+1107,CREAM SILK ULT REBORN HF 24(11+1)13ML,62687208,True,True,True,25,27,ok,long,xgb_ma3_avg,True,True,ok,long,25.0,2023-12,2026-02
+1119,SURF FABCON LUXE PERFUME STR 360X25ML,64856638,True,True,True,8,8,ok,short,ma3,True,True,ok,short,8.0,2025-07,2026-02
+1120,SURF FABCON CHARCOAL FRESH STR 360X25ML,64860720,True,True,True,8,8,ok,short,ma3,True,True,ok,short,8.0,2025-07,2026-02
+1139,KNORR SIN ORIG+SINORIG 48(6+1)X11G,65247615,True,True,True,2,2,insufficient_data,insufficient,-,True,True,insufficient_data,-,2.0,2026-01,2026-02
+1181,REX W MRO PWDR DRY + BRGHTENING 24X25ML,64824378,True,True,True,17,17,ok,medium,tsb,True,True,ok,medium,17.0,2024-10,2026-02
+1201,CLEAR CP SH CLSPRT MNTHL 3C 24(11+1)12ML,65494416,True,False,False,2,2,insufficient_data,insufficient,-,True,True,insufficient_data,-,2.0,2026-01,2026-02
+1239,KNORR SINGLES CHKN + CHKN 48(12+2)X10G,65247609,True,True,True,2,2,insufficient_data,insufficient,-,True,True,insufficient_data,-,2.0,2026-01,2026-02
+1254,LADY'S CHOICE SS PLAIN JAR 12X470ML,68764013,False,True,True,20,21,ok,medium,tsb,True,True,no forecast row,-,,2024-06,2026-02
+1274,KNORR SINGLES BEEF + BEEF 48(12+2)X10G,64957377,False,True,True,7,10,ok,short,ma3,False,False,no forecast row,-,,2025-03,2025-11
+1280,BREEZE PWD ROSEGOLD ATL 24(6+1)(64G+64G),65086431,True,False,False,5,5,ok,short,ma3,True,True,ok,short,5.0,2025-10,2026-02
+1318,SURF FABCON F&B STR 60(5+1)28ML,65071345,False,False,True,6,6,ok,short,ma3,True,True,no forecast row,-,,2025-09,2026-02
+1338,BREEZE PWD ROSE GOLD 24X(6+1)X(64G+64G),64387300,False,True,True,16,18,ok,medium,tsb,False,False,no forecast row,-,,2024-08,2026-01
+1340,SURF FABCON BLOSSOM FRESH STR 360X28ML,64856620,True,True,True,8,8,ok,short,ma3,True,True,ok,short,8.0,2025-07,2026-02
+1341,CREAMSILK TR-KRTN SCD STRT 24(11+1)X14ML,64900613,True,True,True,9,9,ok,short,ma3,True,True,ok,short,9.0,2025-06,2026-02
+1351,SURF FABCON LP STR 60(5+1)25ML,65071340,True,False,True,6,6,ok,short,ma3,True,True,ok,short,6.0,2025-09,2026-02
+1396,KNORR LIQUID SSONING ORIG TPR 6X1L,64985759,True,True,True,6,6,ok,short,ma3,True,True,ok,short,6.0,2025-09,2026-02
+1397,KNORR SINGLES PORK + PORK 48(12+2)X10G,65247611,True,True,True,2,2,insufficient_data,insufficient,-,True,True,insufficient_data,-,2.0,2026-01,2026-02
+1438,KNORR SINIGANG ORIG+KOPIKOTP 24(6+1)22G,65459780,True,True,True,2,2,insufficient_data,insufficient,-,True,True,insufficient_data,-,2.0,2026-01,2026-02
+1509,KNORR SINGLES BEEF + BEEF 48(12+2)X10G,65247607,True,True,True,2,2,insufficient_data,insufficient,-,True,True,insufficient_data,-,2.0,2026-01,2026-02
+1545,LADY'S CHOICE SS BACON DOY 24X220ML,64967994,True,False,True,8,8,ok,short,ma3,False,False,ok,short,8.0,2025-07,2026-02
+1547,CLOSEUP GRN MNTL FRSH PROMO HL 48X2X120G,64997200,True,False,False,5,5,ok,short,ma3,True,True,ok,short,5.0,2025-10,2026-02
+1775,CLEAR SH COOL SPRT MNTHL MEN3C 288X12ML,65244853,True,False,True,4,4,ok,short,ma3,True,True,ok,short,4.0,2025-11,2026-02
+1787,KNORR SIN GABI+SINGABI 48(6+1)X11G,65247617,True,False,True,2,2,insufficient_data,insufficient,-,False,False,insufficient_data,-,2.0,2026-01,2026-02
+1790,KNORR SINIGANG GABI+KOPIKOTP 24(6+1)22G,65459782,True,False,True,2,2,insufficient_data,insufficient,-,False,False,insufficient_data,-,2.0,2026-01,2026-02
+1791,SURF PWD CB+SRF LQ CB 16(6+1)X(65G+64ML),64861460,True,False,False,1,1,insufficient_data,insufficient,-,True,True,insufficient_data,-,1.0,2026-02,2026-02
+1792,SURF PWD RF+SRF LQ RF 16(6+1)X(65G+64ML),64861462,True,False,False,1,1,insufficient_data,insufficient,-,False,False,insufficient_data,-,1.0,2026-02,2026-02
+1801,REXONA POWDER DRY+BRGHT DLN 30(10+2)X3ML,65452345,True,False,False,1,1,insufficient_data,insufficient,-,False,False,insufficient_data,-,1.0,2026-02,2026-02
+1803,LADYS CHOICE MAYO+MILK 12(3+2)80ML,65455331,True,False,True,1,1,insufficient_data,insufficient,-,True,True,insufficient_data,-,1.0,2026-02,2026-02

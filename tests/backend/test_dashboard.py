@@ -128,6 +128,10 @@ class FakeSession:
         # DEC-31 derived Unilever receipts: None = no derived_receipt_fact table
         # (public before migration 0038); a dict = the table, {period: (value, negative_skus, skus)}.
         derived: dict | None = None,
+        # Inventory_Fact_Real.snapshot_date per _period (_stock_count_dates):
+        # {period: date} for one count day, or {period: (first, last)} for a
+        # period whose rows in scope were counted on two different days.
+        count_dates: dict | None = None,
         # backend/stock_units.STOCK_COUNTS_SQL: {(principal, period): (row_count,
         # first_date, last_date)}. Empty = no principal counted at any period.
         stock_counts: dict | None = None,
@@ -208,6 +212,7 @@ class FakeSession:
         self.abc_product_revenue = abc_product_revenue or {}
         self.received_tax = received_tax or {}
         self.derived = derived
+        self.count_dates = count_dates or {}
         # Every (sql, params) issued, so a test can assert on the query text
         # itself — the only way to check scope/unit handling that lives in
         # SQL rather than in Python (see this module's docstring).
@@ -1196,7 +1201,34 @@ def test_safety_stock_exposure_blocked_when_nothing_measurable():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     exp = resp.json()["safety_stock_exposure"]
     assert exp["below_count"] is None
+    assert exp["below_items"] == []
     assert exp["blocked_reason"]
+
+
+def test_safety_stock_exposure_lists_the_products_behind_the_count():
+    """The list a reader opens from "N below safety stock" is the rows the
+    count was taken from: most revenue first, named, with the shortfall in
+    pieces — and never a product that is at or above its safety stock, or
+    one with no stock count (2026-10-03)."""
+    rows = [
+        _abc_row(1, "A", "2024-02", 0.10, current_stock=10, ss_i=50),    # below, smaller share
+        _abc_row(2, "A", "2024-02", 0.30, current_stock=0, ss_i=40.5),   # below, biggest share
+        _abc_row(3, "A", "2024-02", 0.20, current_stock=80, ss_i=50),    # at/above
+        _abc_row(4, "A", "2024-02", 0.25, current_stock=None, ss_i=50),  # not measurable
+    ]
+    rows[1].update(rop_i=120.0, q_i=300.0)
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    exp = resp.json()["safety_stock_exposure"]
+    items = exp["below_items"]
+    assert len(items) == exp["below_count"] == 2
+    assert [i["sku_id"] for i in items] == ["SKU2", "SKU1"]
+    assert items[0] == {
+        "sku_id": "SKU2", "product_name": "Product 2", "current_stock": 0.0, "ss_i": 40.5,
+        "short_by": 40.5, "target_stock": 120.0, "order_qty": 300.0, "revenue_share": 0.30,
+    }
+    assert items[1]["short_by"] == 40.0 and items[1]["order_qty"] is None
 
 
 def test_policy_comparison_sums_lp_ss_against_three_week_rule():
@@ -2090,3 +2122,31 @@ def test_a_flagged_count_without_a_ruling_gives_its_reviewed_reason():
     assert note == ("Counted for Feb 2023 (exact date not recorded): "
                     + UNUSUAL_STOCK_SNAPSHOTS[("delmonte", "2023-02")])
     assert flagged_count_note("unilever", "2026-01", 24_339_386.24, [46_576_778.51], "2026-02-03") is None
+
+
+# ---- stock count dates (2026-10-02) -------------------------------------------
+# The Technical Adviser's rule: every number states its period. A stock
+# snapshot's _period is not the day it was counted — Unilever's "2026-03" is
+# the 2026-04-06 count — so GET /dashboard exposes the count day, read-only.
+
+def test_insight_sentence_names_inventory_at_cost_and_its_count_day():
+    from backend.chart_insights import sales_vs_stock_insight
+
+    series = [
+        {"period": "2026-01", "sales": 30_000_000.0, "stock_on_hand": 24_339_386.24, "stock_count_date": "2026-02-03"},
+        {"period": "2026-02", "sales": 27_900_000.0, "stock_on_hand": None, "stock_count_date": None},
+    ]
+    text = sales_vs_stock_insight(series)["text"]
+    assert "inventory at last purchase price stood at ₱24.3M in Jan 2026 (counted Feb 3, 2026)" in text
+    # Without a count day the month alone is stated, never a raw string.
+    series[0]["stock_count_date"] = None
+    text = sales_vs_stock_insight(series)["text"]
+    assert "stood at ₱24.3M in Jan 2026." in text and "counted" not in text
+
+
+def test_day_label():
+    from backend.chart_insights import day_label
+
+    assert day_label("2026-04-06") == "Apr 6, 2026"
+    assert day_label(None) is None
+    assert day_label("not a date") is None

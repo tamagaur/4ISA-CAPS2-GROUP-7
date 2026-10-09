@@ -7,10 +7,12 @@ Problem: SSM's blanket 3-week safety stock rule causes trapped capital + spoilag
 
 Pipeline: ETL → ABC/Pareto classification → forecasting (deployed: MA3, 3-month moving average — see run_baseline_forecast.py:748; SARIMA was bake-off'd against 16 other models and retired, never deployed) → safety stock/ROP → multi-objective LP optimization (PuLP, w1=0.45, w2=0.35, w3=0.20) → dashboard.
 
+Tier A basis (DEC-38, PENDING TA CONFIRMATION, 2026-10-05): Unilever Tier A = Class A on the last 12 months + products first sold within 12 months that are Class A on the last 3 (ABC method `t12m_new`; 189 products as of 2026-02). The setting is `analytics.params.TIER_A_BASIS`; read it through `abc_method()` / `abc_method_sql()`, never a literal `method = 'single'`. Del Monte stays on `single`.
+
 ## Repo
 https://github.com/4ISA-Capstone-Group-7/SSM-DSD — remote `group7`, base branch `kelvin-etl` (NOT master — master is behind, don't trust it as source of truth). Old repo KYG07/Capstone-Project is dead, never push there.
 Each session works in its own worktree on a branch named `kelvin/<name>`.
-Migrations: 0043 (mart stock-limited rule, DEC-36) is the latest on public, after 0042 (in-transit stock + review flag, DEC-33/34) and 0041 (data marts, schema `mart`, DEC-36), all 2026-10-04. The next free number is 0044.
+Migrations: 0046 (planning mart `mart.planning_mart`, part of DEC-36, 2026-10-05) is the latest on public, after 0044 (Tier A basis `t12m_new`, DEC-38, 2026-10-05), 0043 (mart stock-limited rule, DEC-36), 0042 (in-transit stock + review flag, DEC-33/34) and 0041 (data marts, schema `mart`, DEC-36), all 2026-10-04. 0045 was never used and is still free; the next free number after it is 0047.
 
 ## Stack
 Python/pandas ETL, FastAPI backend, Next.js/Tailwind frontend, Supabase (Postgres), Vercel (frontend host), Render (backend host).

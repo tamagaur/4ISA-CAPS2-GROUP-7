@@ -1,0 +1,104 @@
+{
+  "reproduction": {
+    "rows": 2419,
+    "rows_only_in_eebd741": 0,
+    "rows_only_here": 0,
+    "max_abs_forecast_gap_vs_eebd741_csv": 4.999739758204669e-05,
+    "bin_mismatches": 0
+  },
+  "leakage_perturbation": {
+    "max_abs_change_any_forecast": 0.0,
+    "bin_changes": 0,
+    "seconds": 4.3
+  },
+  "cohort_lookahead": {
+    "share_scored_rows_tier_a_as_of_previous_month": 0.8139727159983464,
+    "bias_pct_served_2026_02": 16.958237517825168,
+    "bias_pct_ma3_2026_02": 12.428489117259794,
+    "bias_pct_served_other_months": 2.909973466095324,
+    "bias_pct_ma3_other_months": 2.2023924841768063
+  },
+  "router": {
+    "bin_mismatch_vs_independent": 0,
+    "rows": 2419,
+    "rows_where_calendar_months_bin_differs": 19,
+    "products_where_calendar_bin_differs": 5,
+    "insufficient_rows_dropped": 103,
+    "first_long_month": "2025-01",
+    "backups_fired": {
+      "none": 2419
+    }
+  },
+  "null_quantity": {
+    "product_months_real_view": 71,
+    "with_peso_amount": 69,
+    "in_tier_a_pool": 1,
+    "in_scored_cohort": [
+      {
+        "product_name": "SURF POWDER KALAMANSI L 40(6+1)57G",
+        "sku_code": "64861486",
+        "product_key": 150,
+        "month": "2025-12"
+      }
+    ]
+  },
+  "mase_29m": {
+    "products_with_scale": 61,
+    "median_served": 0.7604711984145534,
+    "median_ma3": 0.7561300456782136,
+    "share_served_below_1": 0.6885245901639344,
+    "share_ma3_below_1": 0.6721311475409836
+  },
+  "calendar_month": {
+    "kruskal_p_rowlevel_overstated_served": 1.1917497844090277e-46,
+    "kruskal_p_rowlevel_overstated_ma3": 2.0415774105864876e-57
+  },
+  "portfolio_month_effect_repeats_next_year": {
+    "company_total": {
+      "pairs": 23,
+      "first": "2024-04",
+      "last": "2026-02",
+      "corr": 0.5706478659531644,
+      "p_value": 0.004461753545361384,
+      "same_sign": 16
+    },
+    "cohort_107": {
+      "pairs": 17,
+      "first": "2024-10",
+      "last": "2026-02",
+      "corr": 0.4472781894782318,
+      "p_value": 0.07183357949531662,
+      "same_sign": 12
+    }
+  },
+  "dec_jan": {
+    "pooled_wape_served_dec_jan": 0.33685547374476404,
+    "pooled_wape_served_other": 0.2712681470395219,
+    "mean_z_served_dec": 0.1886907460534624,
+    "mean_z_served_jan": -0.17505914513637988,
+    "mean_z_served_other": 0.003432481140252012
+  },
+  "product_674": {
+    "name": "DOVE SH KERATIN STRT&SILKY 288X13.5ML",
+    "events": [
+      [
+        "2025-11",
+        "collapse"
+      ],
+      [
+        "2025-12",
+        "collapse"
+      ]
+    ]
+  },
+  "headline": {
+    "products": 107,
+    "product_months": 2419,
+    "median_product_wape_served": 0.2686016900572908,
+    "median_product_wape_ma3": 0.279632609278627,
+    "median_product_wape_naive": 0.3457578629495111,
+    "pooled_wape_served": 0.2850451501057628,
+    "pooled_wape_ma3": 0.2908373282945192
+  },
+  "seconds": 163.4
+}

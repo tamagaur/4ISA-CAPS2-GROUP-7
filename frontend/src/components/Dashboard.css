@@ -8,10 +8,10 @@
 }
 
 .dashboard-content {
-  padding: 0 2.5rem 3rem 2.5rem;
+  padding: 0 var(--page-padding-x) 48px;
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
+  gap: 28px;
 }
 
 .dashboard-header {
@@ -63,10 +63,12 @@
 
 /* The chips give up space before the date picker does, scrolling sideways
    instead of wrapping — a second row would double the pinned strip. */
+/* The section chips (ui.css .segmented): they jump to a section and mark
+   the one being read. They scroll sideways before the date picker gives up
+   space, so the pinned strip stays one row. */
 .dash-section-nav {
-  display: flex;
-  gap: 0.35rem;
-  min-width: 0;
+  flex: none;
+  max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -75,39 +77,9 @@
   display: none;
 }
 
-.dash-section-chip {
-  flex: none;
-  padding: 0.35rem 0.8rem;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-body);
-  cursor: pointer;
-  transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out;
-}
-
-.dash-section-chip:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
-  color: var(--color-text);
-}
-
-.dash-section-chip.is-active {
-  background: var(--color-brand-primary);
-  border-color: var(--color-brand-primary);
-  color: #fff;
-}
-
-.dash-section-chip:disabled {
+.dash-section-nav .segmented-item:disabled {
   cursor: default;
   opacity: 0.55;
-}
-
-.dash-section-chip:focus-visible {
-  outline: 2px solid var(--color-brand-primary);
-  outline-offset: 2px;
 }
 
 /* A jump lands the section just below the pinned toolbar, not under it. */
@@ -462,7 +434,7 @@
 .kpi-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem;
+  gap: var(--card-gap);
   align-items: stretch;
 }
 
@@ -476,7 +448,7 @@
 
 .dash-row {
   display: grid;
-  gap: 1.25rem;
+  gap: var(--card-gap);
   align-items: stretch;
   min-width: 0;
 }
@@ -487,6 +459,9 @@
    inside it for the 180px donut, a 28px gap and its 240px tier card. */
 .dash-row-abc         { grid-template-columns: 1fr 1fr; }
 .dash-row-even        { grid-template-columns: 1fr 1fr; }
+/* Class A changes beside idle stock: both cards stretch to the taller one,
+   so their edges line up, without the 360px chart floor. */
+.dash-row-top .dash-slot > .chart-widget { min-height: 0; }
 .dash-row-single      { grid-template-columns: 1fr; }
 
 /* The slot owns the type tag; the widget inside keeps its own card chrome,
@@ -502,30 +477,41 @@
    it. Deliberately quiet — they label the widget for a reviewer without
    competing with the widget's own title. */
 .dash-kind-row {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.15rem 0.7rem;
-  margin: 0.35rem 0 0.65rem;
-  padding-left: 0.75rem;
-  border-left: 3px solid var(--color-brand-primary);
+  gap: 4px 12px;
+  margin: 0 0 14px;
+  padding-left: 14px;
 }
 
-/* The question the card answers: the heading a reader sees first, in the
-   page titles' display serif (Fraunces) so it reads as a section heading
-   and not as one more line of card text. The hint follows it, quieter; the
-   analytics-type tag sits at the far end of the row. */
+/* The coral accent: a short bar beside the question, not a full-height rule. */
+.dash-kind-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 3px;
+  height: 20px;
+  border-radius: 2px;
+  background-color: var(--color-brand-primary);
+}
+
+/* The question the card answers: the heading a reader sees first, bold
+   sans (the mockups' section heading) so it reads above the card titles.
+   The hint follows it, quieter; the analytics-type tag sits at the far end
+   of the row. */
 .dash-question {
-  font-family: var(--font-serif);
-  font-size: 1.45rem;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.25;
   letter-spacing: -0.01em;
-  color: var(--color-text-heading);
+  color: var(--color-text);
 }
 
 .dash-question-hint {
-  font-size: 0.88rem;
+  font-size: 13px;
   color: var(--color-text-muted);
 }
 
@@ -536,7 +522,7 @@
 
 @media (max-width: 600px) {
   .dash-question {
-    font-size: 1.2rem;
+    font-size: 17px;
   }
 
   .dash-kind-row .dash-kind {
@@ -554,15 +540,13 @@
   letter-spacing: 0.02em;
 }
 
+/* Metadata, not a badge: small uppercase text with no fill. */
 .dash-kind {
   align-self: flex-start;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  background: var(--color-surface-sunken);
-  color: var(--color-text-muted);
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
+  color: var(--color-text-subtle);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -588,6 +572,12 @@
 
 .dash-row-single .dash-slot > .chart-widget {
   height: auto;
+  min-height: 0;
+}
+
+/* A card alone on its row has no neighbour to match: it takes its own
+   height (the idle-stock and forecast-error cards). */
+.dash-row-trend .dash-slot > .chart-widget {
   min-height: 0;
 }
 

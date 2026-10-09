@@ -6,8 +6,11 @@ the `mart` schema (migration 0041, backend/marts.py).
                                   share, cumulative share; the product list per class
     GET /dashboard/yoy            per product, the range's real sales against the same months
                                   a year earlier
-    GET /dashboard/accuracy       forecast vs actual per product, category or total, with the
-                                  signed miss in pieces and pesos
+    GET /dashboard/accuracy       forecast vs actual per product or category, with the signed
+                                  miss in pieces and pesos; two labelled headline figures,
+                                  company_total and typical_product_weighted
+    GET /dashboard/class-changes  products that entered or left Class A between two ranges,
+                                  with their revenue change
     GET /dashboard/idle-stock     products in the count at the range's end with no sale in the
                                   6 sales months up to it
     GET /dashboard/product-sales  product x month sales, real and filled, each labelled (Del
@@ -22,7 +25,7 @@ it needs lp.view.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF, pareto_check
@@ -65,7 +68,8 @@ def get_range_pareto(
     current_user: TokenPayload = Depends(require_permission("dashboard.view")),
 ) -> dict:
     """Each principal ranked against its own revenue: Unilever by SKU, Del Monte by product
-    category (DEC-03), with the ABC run's rules applied to the range's total."""
+    category (DEC-03), with the ABC run's rules applied to the range: a month where returns
+    exceeded sales counts as 0, so ranked_revenue can sit above net_sales."""
     scope = normalize_principal(principal) or "all"
     start, end = resolve_range(db, period, start_period, scope)
     out = []
@@ -134,6 +138,49 @@ def get_range_yoy(
             "prior_label": marts.range_label(prior_start, prior_end), "principals": out}
 
 
+@router.get("/class-changes")
+def get_class_changes(
+    period: str | None = PeriodQuery,
+    start_period: str | None = StartQuery,
+    compare_period: str | None = Query(None, pattern=PERIOD, description="'YYYY-MM': the earlier range's end month. "
+                                       "Default: the same months a year before the range."),
+    compare_start_period: str | None = Query(None, pattern=PERIOD, description="'YYYY-MM': the earlier range's first "
+                                             "month. Default: as many months as the range, ending at compare_period."),
+    principal: str | None = PrincipalQuery,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
+) -> dict:
+    """Products that entered or left Class A between two ranges (Del Monte: product
+    categories), each range ranked on its own real sales exactly as GET /dashboard/pareto
+    ranks it: a month where returns exceeded sales counts as 0 (revenue_rule).
+    'entered' = Class A in the range, not in the compare range;
+    'left' = the reverse. Each row has both ranges' revenue, class and rank; a side where the
+    product was not ranked has class null and says why in class_note / compare_class_note."""
+    scope = normalize_principal(principal) or "all"
+    start, end = resolve_range(db, period, start_period, scope)
+    if compare_period is None:
+        if compare_start_period is not None:
+            raise HTTPException(status_code=422, detail="compare_start_period needs compare_period (the earlier range's end month).")
+        compare_start, compare_end = marts.month_add(start, -12), marts.month_add(end, -12)
+    else:
+        compare_end = compare_period
+        compare_start = compare_start_period or marts.month_add(compare_end, 1 - len(_month_range(start, end)))
+        if compare_start > compare_end:
+            raise HTTPException(status_code=422, detail="compare_start_period is after compare_period.")
+    out = []
+    for who in _principals(scope):
+        block = marts.class_changes(db, start, end, compare_start, compare_end, who)
+        block["pesos_basis"] = marts.PESOS_BASIS_LABEL["ex_vat" if who == "delmonte" else "vat_inclusive"]
+        block["blocked_reason"] = None if block["class_a_count"] or block["compare_class_a_count"] else (
+            f"No {who} product is ranked in {marts.range_label(start, end)} or "
+            f"{marts.range_label(compare_start, compare_end)}.")
+        out.append(block)
+    return {"start_period": start, "end_period": end, "label": marts.range_label(start, end),
+            "compare_start_period": compare_start, "compare_end_period": compare_end,
+            "compare_label": marts.range_label(compare_start, compare_end),
+            "cutoffs": {"A": TIER_A_CUTOFF, "B": TIER_B_CUTOFF}, "principals": out}
+
+
 @router.get("/accuracy")
 def get_range_accuracy(
     period: str | None = PeriodQuery,
@@ -141,13 +188,20 @@ def get_range_accuracy(
     principal: str | None = PrincipalQuery,
     run_id: int | None = Query(None, ge=1, description="A forecast run (GET /dashboard/forecast-runs); "
                                                        "default: the at-the-time backtest, then stored runs."),
-    level: str = Query("total", pattern="^(product|category|total)$"),
+    level: str = Query("summary", pattern="^(product|category|summary|total)$",
+                       description="Detail rows: per product, per category, or none ('summary'; "
+                                   "'total' is its old name and still accepted)."),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(require_permission("dashboard.view")),
 ) -> dict:
     """forecast_source says where each forecast came from: 'backtest_recreated' (the 29-month
     backtest regenerated from the production router, scripts/backtest_forecast_run.py) or
-    'stored_run' (a forecast_result run kept in the history)."""
+    'stored_run' (a forecast_result run kept in the history).
+
+    Two headline figures, always both, each with its plain label (marts.ACCURACY_LABELS):
+    company_total (all products summed first) and typical_product_weighted (sales-weighted
+    per-product miss). Show the label with the number; neither is 'the total'."""
+    level = "summary" if level == "total" else level
     scope = normalize_principal(principal) or "all"
     start, end = resolve_range(db, period, start_period, scope if scope != "delmonte" else "unilever")
     if scope == "delmonte":
