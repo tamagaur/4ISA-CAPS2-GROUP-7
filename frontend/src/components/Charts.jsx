@@ -1023,7 +1023,7 @@ const abcSegments = (data) => {
 // can't be trusted (no total, or shares that don't add up to ~100%) reads
 // "Revenue not available", and the sentence is left out rather than stated
 // on numbers that aren't real.
-const AbcTierCard = ({ facts, atRisk = null }) => {
+const AbcTierCard = ({ facts, atRisk = null, onOpenClass = null }) => {
   const x = facts.skuPct.toFixed(0);
   const role = ABC_TIER_ROLE[facts.tier];
   const roleText = facts.units === 'categories' ? DEL_MONTE_TIER_ROLE : role?.role;
@@ -1065,10 +1065,19 @@ const AbcTierCard = ({ facts, atRisk = null }) => {
         </button>
       )}
       {/* "Which ones?" — the products behind this class's count, one click
-          away: the ABC page opens on the class picked here (?class=). */}
-      <Link to={`/abc?class=${facts.tier}`} className="abc-tier-card-link">
-        See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
-      </Link>
+          away. When the ring ranks the selected range, the list opens on the
+          dashboard from that same ranking (ClassProductsModal), so its count
+          is this count. A payload ranked on one month keeps the ABC page
+          link, which ranks one month too. */}
+      {facts.rangeBased && onOpenClass ? (
+        <button type="button" className="abc-tier-card-link" onClick={() => onOpenClass(facts.tier)}>
+          See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
+        </button>
+      ) : (
+        <Link to={`/abc?class=${facts.tier}`} className="abc-tier-card-link">
+          See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
+        </Link>
+      )}
     </div>
   );
 };
@@ -1163,7 +1172,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 // page's filter ("Unilever only", Dashboard.jsx's coverageNote). `units` is
 // what a row is: 'SKUs', or 'categories' for Del Monte, which is ranked by
 // product category.
-export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null }) => {
+export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null }) => {
   const [selectedTier, setSelectedTier] = useState('A');
   const [hover, setHover] = useState(null);
   const ringRef = useRef(null);
@@ -1199,6 +1208,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     count: d.count,
     units,
     month: rankedMonth,
+    rangeBased: Boolean(revenue?.label),
     skuPct: skuSharePct(d),
     revenuePct: sharesAddUp ? d.sharePct : null,
     amount: !sharesAddUp ? null
@@ -1329,7 +1339,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                 ))}
               </ul>
             </div>
-            <AbcTierCard facts={factsFor(selected)} atRisk={atRisk} />
+            <AbcTierCard facts={factsFor(selected)} atRisk={atRisk} onOpenClass={onOpenClass} />
           </div>
           <div
             className="abc-share-pair"
@@ -1887,7 +1897,7 @@ export const PortfolioForecastWidget = ({
             {gatedSkuCount != null && tierACount ? (
               <InfoTip label="Which SKUs are summed">
                 {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} Class A SKUs: `
-                  + 'those whose forecasts beat a naive baseline (MASE < 1), the same gate the reorder plan uses. '
+                  + 'those whose forecasts beat a simple last-month guess (MASE below 1), the same check the reorder plan uses. '
                   + 'The rest are left out rather than summed on forecasts that failed the check.'}
               </InfoTip>
             ) : null}
@@ -1895,7 +1905,7 @@ export const PortfolioForecastWidget = ({
           <p>
             {seriesSpan ? `Pieces per month, ${seriesSpan}` : 'Pieces per month'}
             {gatedSkuCount != null && tierACount
-              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} Class A SKUs (MASE < 1)`
+              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} Class A SKUs that beat a simple last-month guess`
               : ' · planned Class A SKUs'}
           </p>
           {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}

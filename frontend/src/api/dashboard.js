@@ -78,3 +78,15 @@ export function getForecastAccuracy(args = {}) {
 export function getProductSales(args = {}) {
   return getRange('product-sales', args, 'Failed to load product sales');
 }
+
+// The selected range ranked into classes A/B/C, with each class's products
+// (the same ranking the dashboard's ABC ring draws, so counts match).
+export function getRangePareto(args = {}) {
+  return getRange('pareto', args, 'Failed to load the class list');
+}
+
+// Per product (Del Monte: category), the range's real sales against the same
+// months a year earlier.
+export function getRangeYoy(args = {}) {
+  return getRange('yoy', args, 'Failed to load the year-over-year figures');
+}

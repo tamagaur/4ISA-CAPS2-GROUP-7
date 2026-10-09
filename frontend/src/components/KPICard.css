@@ -209,3 +209,9 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* A note with more than one reading of the figure (stock in pieces, then
+   weeks of cover): one per line. */
+.kpi-note-line {
+  display: block;
+}

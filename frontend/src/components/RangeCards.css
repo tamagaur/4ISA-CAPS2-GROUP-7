@@ -398,6 +398,19 @@
   outline-offset: 2px;
 }
 
+/* The category breakdown: a neutral link-row under the amber review action,
+   since it is a closer look rather than something to act on. */
+.fc-action.fc-action-quiet {
+  margin-top: 8px;
+  border-color: var(--color-border, #E7EBF0);
+  background-color: var(--color-surface, #FFFFFF);
+  color: var(--color-text, #182230);
+}
+
+.fc-action.fc-action-quiet:hover {
+  border-color: color-mix(in srgb, var(--color-brand-primary) 35%, transparent);
+}
+
 @media (max-width: 640px) {
   .fc-answer {
     font-size: 15px;

@@ -1311,6 +1311,16 @@
   text-decoration: underline;
 }
 
+/* The class link as a button (opens the range's class list): no button
+   chrome, same look as the link. */
+button.abc-tier-card-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
 /* The same link, as a button: opens the below-safety-stock list. Two links
    stack with a smaller gap than the first one's top margin. */
 .abc-tier-card-atrisk {

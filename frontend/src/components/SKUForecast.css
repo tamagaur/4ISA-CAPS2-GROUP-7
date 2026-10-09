@@ -979,3 +979,12 @@
     animation: none;
   }
 }
+
+/* The forecast band in plain words, under the tooltip's figures. */
+.forecast-tooltip .tooltip-band-note {
+  margin: 6px 0 0;
+  max-width: 240px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-muted, #5B6474);
+}

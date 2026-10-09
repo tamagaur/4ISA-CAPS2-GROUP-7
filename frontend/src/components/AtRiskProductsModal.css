@@ -274,3 +274,7 @@
     justify-content: center;
   }
 }
+
+/* The class list's year-over-year column: up green, down red (soft tones). */
+.at-risk-table .class-yoy-up { color: #278552; }
+.at-risk-table .class-yoy-down { color: #C84040; }

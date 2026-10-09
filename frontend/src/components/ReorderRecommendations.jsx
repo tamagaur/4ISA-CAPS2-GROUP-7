@@ -1063,7 +1063,7 @@ const ReorderRecommendations = () => {
         <PageHeader
           title="Reorder"
           accent="recommendations"
-          subtitle="Order quantities in pieces from the optimizer (an LP) for the Class A SKUs whose forecasts beat a naive last-month guess (MASE < 1). One run per planning cycle, for the month after the latest sales data."
+          subtitle="Order quantities in pieces from the optimizer (an LP) for the Class A SKUs whose forecasts beat a simple last-month guess. One run per planning cycle, for the month after the latest sales data."
           actions={cycles.length > 0 && (
               <div className="dashboard-date-controls">
                 <span className="date-single-label">Planning cycle</span>

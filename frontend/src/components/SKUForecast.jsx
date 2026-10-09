@@ -105,6 +105,12 @@ const latestForecastRow = (result) => {
 // window ending at `period`. Used by the too-short fix button to widen a
 // range by pulling the start back, keeping the end (what the user actually
 // picked) untouched.
+// The same month a year earlier: "2026-02" -> "2025-02".
+const yearEarlier = (period) => {
+  const [y, m] = period.split('-');
+  return `${parseInt(y, 10) - 1}-${m}`;
+};
+
 const periodMinusMonths = (period, count) => {
   const [y, m] = period.split('-').map(Number);
   const total = y * 12 + (m - 1) - (count - 1);
@@ -147,17 +153,20 @@ const formatAxisQty = (value) => {
   return `${Math.round(value)}`;
 };
 
-const CustomTooltip = ({ active, payload, label, bandLabel = 'Likely range' }) => {
+const CustomTooltip = ({ active, payload, label, bandLabel = 'Likely range', bandLevel = null }) => {
   if (active && payload && payload.length) {
     // Each line is drawn twice — the Line, plus the Area shading under it —
     // so the raw payload carries every value twice over. The fills declare
     // tooltipType="none", which Recharts passes through as `type`; dropping
     // those leaves one entry per real series.
-    const series = payload.filter(p => p.type !== 'none');
+    const series = payload.filter(p => p.type !== 'none' && p.value != null);
     const hasActual = series.some(p => p.dataKey === 'actual');
-    const displayPayload = hasActual
+    // Last year reads after this month's own figures.
+    const displayPayload = (hasActual
       ? series.filter(p => p.dataKey !== 'forecast')
-      : series;
+      : series)
+      .slice()
+      .sort((a, b) => (a.dataKey === 'lastYear') - (b.dataKey === 'lastYear'));
 
     const qty = (v) => Math.round(v).toLocaleString();
 
@@ -183,6 +192,17 @@ const CustomTooltip = ({ active, payload, label, bandLabel = 'Likely range' }) =
             </p>
           );
         })}
+        {/* The band in plain words (Technical Adviser, 2 Oct 2026: "what is
+            the range around the forecast?"). The level is GET /forecast's
+            own interval.level_pct, so "9 times in 10" is that figure. */}
+        {displayPayload.some((e) => e.dataKey === 'ci' && Array.isArray(e.value) && e.value[0] !== e.value[1]) && (
+          <p className="tooltip-band-note">
+            {bandLevel != null
+              ? `Sales should land in this band about ${Math.round(bandLevel / 10)} times in 10.`
+              : 'Sales usually land in this band.'}
+            {' '}Safety stock is the buffer for months near the top of it.
+          </p>
+        )}
       </div>
     );
   }
@@ -816,6 +836,20 @@ const SKUForecast = () => {
       .filter((a) => (!rangeStartPeriod || a.period >= rangeStartPeriod) && (!rangeEndPeriod || a.period <= rangeEndPeriod))
       .sort((a, b) => a.period.localeCompare(b.period));
 
+    // Same month last year (Technical Adviser, 2 Oct 2026: "2025 vs 2024,
+    // per product?"), read from the product's whole history, not just the
+    // range. A month before the product's first record has no comparison
+    // and stays empty; a month inside its history with no row counts as 0,
+    // the same rule this chart uses for its own gaps.
+    const allActuals = forecastResult.actuals || [];
+    const qtyAll = new Map(allActuals.map((a) => [a.period, a.quantity]));
+    const firstRecord = allActuals.reduce((min, a) => (min == null || a.period < min ? a.period : min), null);
+    const lastYearOf = (period) => {
+      const prior = yearEarlier(period);
+      if (firstRecord == null || prior < firstRecord) return null;
+      return qtyAll.get(prior) ?? 0;
+    };
+
     const actualPoints = [];
     if (sortedActuals.length > 0) {
       let currentPeriod = sortedActuals[0].period;
@@ -827,12 +861,14 @@ const SKUForecast = () => {
           actualPoints.push({
             label: currentPeriod,
             actual: sortedActuals[actualIndex].quantity,
+            lastYear: lastYearOf(currentPeriod),
           });
           actualIndex++;
         } else {
           actualPoints.push({
             label: currentPeriod,
             actual: 0,
+            lastYear: lastYearOf(currentPeriod),
           });
         }
 
@@ -874,6 +910,7 @@ const SKUForecast = () => {
       ? [{
         label: derivedForecast.period,
         forecast: derivedForecast.value,
+        lastYear: lastYearOf(derivedForecast.period),
         ci: derivedForecast.confidenceLower != null && derivedForecast.confidenceUpper != null
           ? [derivedForecast.confidenceLower, derivedForecast.confidenceUpper]
           : undefined,
@@ -1679,8 +1716,10 @@ const SKUForecast = () => {
                               {/* Three decimals near 1, where two would round
                                   0.996 up to "1.00" beside "beats a naive
                                   forecast" (the verdict uses the stored value). */}
-                              MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)} ·{' '}
-                              {storedForecast.mase < 1 ? 'beats a naive forecast' : 'no better than a naive forecast'}
+                              {/* The verdict in plain words first; the score
+                                  stays beside it for the adviser. */}
+                              {storedForecast.mase < 1 ? 'Beats a simple last-month guess' : 'No better than a simple last-month guess'}
+                              {' '}· MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)}
                               {holdoutWindow ? ` · tested on ${holdoutWindow}` : ''}
                             </dd>
                           </div>
@@ -1783,12 +1822,14 @@ const SKUForecast = () => {
                         },
                         { key: 'actualV', label: 'Actual (pieces)', format: (v) => Math.round(v).toLocaleString() },
                         { key: 'forecastV', label: 'Forecast (pieces)', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'lastYearV', label: 'Same month last year (pieces)', format: (v) => Math.round(v).toLocaleString() },
                         { key: 'ciLow', label: `${bandLabel} low (pieces)`, format: (v) => Math.round(v).toLocaleString() },
                         { key: 'ciHigh', label: `${bandLabel} high (pieces)`, format: (v) => Math.round(v).toLocaleString() },
                       ]}
                       rows={chartData.map((pt) => ({
                         period: pt.label,
                         actualV: pt.actual ?? null,
+                        lastYearV: pt.lastYear ?? null,
                         // The bridge point borrows the last actual purely so
                         // the lines join — the table stays honest and shows
                         // the forecast only for its own month.
@@ -1806,6 +1847,14 @@ const SKUForecast = () => {
                           <line x1="1" y1="6" x2="27" y2="6" stroke={CHART_COLORS.salesSeries} strokeWidth="2.5" strokeLinecap="round" />
                         </svg>
                         <span className="legend-label">Actual Sales</span>
+                      </div>
+                    )}
+                    {chartData.some((pt) => pt.lastYear != null) && (
+                      <div className="legend-item">
+                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={CHART_COLORS.salesSeries} strokeWidth="1.5" strokeOpacity="0.55" strokeLinecap="round" strokeDasharray="3 3" />
+                        </svg>
+                        <span className="legend-label">Same month last year</span>
                       </div>
                     )}
                     {/* Forecast and band entries follow what is actually
@@ -1889,7 +1938,7 @@ const SKUForecast = () => {
                           tickMargin={8}
                           label={{ value: 'Pieces', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
                         />
-                        <Tooltip content={<CustomTooltip bandLabel={bandLabel} />} />
+                        <Tooltip content={<CustomTooltip bandLabel={bandLabel} bandLevel={bandLevel} />} />
 
                         {/* Where actuals hand over to the forecast — the
                             divider the dashed style is read against. Only
@@ -1932,6 +1981,21 @@ const SKUForecast = () => {
                             the Dashboard's portfolio forecast already
                             separates actual from forecast, so the two pages
                             now agree. */}
+                        {/* Last year: the actual line's colour, thinner,
+                            dotted and faded (the dashboard hero chart's rule:
+                            colour = metric, line style = year). */}
+                        <Line
+                          type="linear"
+                          dataKey="lastYear"
+                          stroke={CHART_COLORS.salesSeries}
+                          strokeWidth={1.5}
+                          strokeOpacity={0.55}
+                          strokeDasharray="3 3"
+                          dot={false}
+                          activeDot={{ r: 4 }}
+                          name="Same month last year"
+                          {...zoom.zoomAnim(1)}
+                        />
                         <Line
                           type="linear"
                           dataKey="actual"

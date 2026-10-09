@@ -3,9 +3,10 @@ import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
 import AtRiskProductsModal from './AtRiskProductsModal';
+import ClassProductsModal from './ClassProductsModal';
 import {
   ClassChanges, DelMonteProductSalesCard, ForecastErrorSummaryCard, IdleStockCard, ProductListModal,
-  DEMO_PRODUCT_SALES_LABEL, IDLE_COLUMNS, OVER_RUN_COLUMNS, PRODUCT_SALES_COLUMNS,
+  CATEGORY_MISS_COLUMNS, DEMO_PRODUCT_SALES_LABEL, IDLE_COLUMNS, OVER_RUN_COLUMNS, PRODUCT_SALES_COLUMNS,
 } from './RangeCards';
 import DateFilter from './DateFilter';
 import {
@@ -370,6 +371,8 @@ const Dashboard = () => {
   const [error, setError] = useState(null); // { key, message }
   // The list behind "N below safety stock" (AtRiskProductsModal).
   const [showAtRisk, setShowAtRisk] = useState(false);
+  // The class whose products are listed for the range (ClassProductsModal), or null.
+  const [listedClass, setListedClass] = useState(null);
   // Class A changes for the same range and principal (GET /dashboard/
   // class-changes), keyed like `loaded` so a stale range never shows.
   const [classChanges, setClassChanges] = useState(null); // { key, data }
@@ -429,7 +432,11 @@ const Dashboard = () => {
     setRangeList({ kind, rows: [], loading: true, error: null });
     const request = kind === 'idle'
       ? getIdleStock({ period, principal }).then((res) => res.items || [])
-      : getForecastAccuracy({ period, startPeriod, principal }).then((res) => res.over_forecast_runs?.items || []);
+      : kind === 'category'
+        // Category rows carry no product: the category is the row's name.
+        ? getForecastAccuracy({ level: 'category', period, startPeriod, principal })
+          .then((res) => (res.rows || []).map((r) => ({ ...r, product_name: r.category_path })))
+        : getForecastAccuracy({ period, startPeriod, principal }).then((res) => res.over_forecast_runs?.items || []);
     request
       .then((rows) => setRangeList((prev) => (prev?.kind === kind ? { kind, rows, loading: false, error: null } : prev)))
       .catch((err) => setRangeList((prev) => (prev?.kind === kind
@@ -599,6 +606,14 @@ const Dashboard = () => {
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
     ['At last purchase price', countLabel, sohCoverage].filter(Boolean).join(' · '),
   );
+  // The same count in pieces (kpis.soh_snapshot.pieces: cases x pack size
+  // + loose pieces). Unilever only: Del Monte's files carry no pack size, so
+  // the backend sends null there and under All principals, and no line is
+  // drawn rather than a partial total.
+  const sohPieces = kpis.soh_snapshot?.pieces ?? null;
+  const piecesLine = sohValue.value !== '—' && sohPieces != null
+    ? `${Math.round(sohPieces).toLocaleString()} pieces in the same count`
+    : null;
 
   // stock_on_hand_flags: counts the team reviewed and judged unusual — the
   // chart marks those points and gives the reason, it never drops them.
@@ -840,7 +855,14 @@ const Dashboard = () => {
               title="Inventory value"
               value={sohValue.value}
               contextLine={sohValue.contextLine}
-              note={sohValue.value !== '—' ? coverLine : null}
+              note={sohValue.value !== '—' && (piecesLine || coverLine)
+                ? (
+                  <>
+                    {piecesLine && <span className="kpi-note-line">{piecesLine}</span>}
+                    {coverLine && <span className="kpi-note-line">{coverLine}</span>}
+                  </>
+                )
+                : null}
               // A count the team judged unusual is kept and says so
               // (kpis.soh_count_note, Yuan 2026-10-04): a badge beside the
               // figure, the reviewed sentence one tap away.
@@ -893,6 +915,7 @@ const Dashboard = () => {
                 atRisk={canListAtRisk && !ssPinned
                   ? { below: exposure.below_count, measurable: exposure.comparable_count, onOpen: openAtRisk }
                   : null}
+                onOpenClass={setListedClass}
               />
             </Slot>
             <Slot kind="Descriptive" question="Is any of our stock dead?">
@@ -973,6 +996,7 @@ const Dashboard = () => {
                   accuracy={data.forecast_accuracy}
                   scope={coverageNote(data.forecast_accuracy.coverage, pagePrincipal)}
                   onOpenList={() => openRangeList('over')}
+                  onOpenCategories={() => openRangeList('category')}
                 />
               </Slot>
             </div>
@@ -1028,6 +1052,15 @@ const Dashboard = () => {
           subtitle: idleSubtitle,
           columns: IDLE_COLUMNS,
           footnote: 'Most stock value first.',
+        } : rangeList?.kind === 'category' ? {
+          title: 'Forecast misses by category',
+          subtitle: [data.forecast_accuracy?.label, 'Unilever products with a scored forecast',
+            data.forecast_accuracy?.pesos_basis ? `pesos at ${String(data.forecast_accuracy.pesos_basis).split(' (')[0]}` : null]
+            .filter(Boolean).join(' · '),
+          columns: CATEGORY_MISS_COLUMNS,
+          firstColumnLabel: 'Category',
+          footnote: 'Largest misses in pesos first. A category can be too high in some months and too low in others; '
+            + 'the net miss in pieces says which way it leaned overall.',
         } : rangeList?.kind === 'sales' ? {
           title: 'Del Monte product sales (demo)',
           subtitle: [dmProductSales?.label, DEMO_PRODUCT_SALES_LABEL].filter(Boolean).join(' · '),
@@ -1041,6 +1074,14 @@ const Dashboard = () => {
           onOpenProduct: openForecast,
           openLabel: 'Open its forecast',
         })}
+      />
+      <ClassProductsModal
+        isOpen={listedClass != null}
+        onClose={() => setListedClass(null)}
+        tier={listedClass}
+        args={{ period, startPeriod, principal }}
+        onOpenProduct={openForecast}
+        onOpenAbcPage={() => navigate(`/abc?class=${listedClass}&basis=range`)}
       />
       <AtRiskProductsModal
         isOpen={showAtRisk && canListAtRisk}

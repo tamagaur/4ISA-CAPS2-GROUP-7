@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
+import AbcRangeView from './AbcRangeView';
 import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info, Layers } from 'lucide-react';
 import {
   BarChart,
@@ -322,8 +323,23 @@ const ABCClassification = () => {
   // on that class — the table filtered to it and narrowed to this run's
   // ranking, so its row count is the count the dashboard card showed — and
   // scrolls to the table.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const linkedClass = ['A', 'B', 'C'].includes(searchParams.get('class')) ? searchParams.get('class') : null;
+  // Ranking basis: one month's ABC run (the default, with stock status and
+  // movement classes), or the dashboard's selected range (AbcRangeView, the
+  // ranking the dashboard's ABC card draws). ?basis=range opens the range,
+  // which is where the dashboard's class list sends people, so counts match.
+  const basis = searchParams.get('basis') === 'range' ? 'range' : 'month';
+  const setBasis = (next) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'range') params.set('basis', 'range'); else params.delete('basis');
+    setSearchParams(params, { replace: true });
+  };
+  const rangeStartPeriod = toClassificationPeriod(dashboardRange.startMonth, dashboardRange.startYear);
+  const rangeEndPeriod = toClassificationPeriod(dashboardRange.endMonth, dashboardRange.endYear);
+  const rangeLabel = dashboardRange.startMonth && dashboardRange.endMonth
+    ? `${dashboardRange.startMonth} ${dashboardRange.startYear} – ${dashboardRange.endMonth} ${dashboardRange.endYear}`
+    : 'the selected range';
   const classTableRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState(linkedClass || 'ALL');
@@ -820,15 +836,36 @@ const ABCClassification = () => {
       </span>
     </p>
   );
+  const basisSwitch = (
+    <div className="segmented abc-basis-switch" role="tablist" aria-label="Rank by">
+      {[['month', 'One month'], ['range', 'Selected range']].map(([value, text]) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          aria-selected={basis === value}
+          className={`segmented-item${basis === value ? ' is-active' : ''}`}
+          onClick={() => setBasis(value)}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
   const header = (
     <div className="abc-page-header">
       <PageHeader
         title="ABC"
         accent="Classification"
-        subtitle={`${isDelMonte ? 'Product categories' : 'Products'} ranked by sales value`
+        subtitle={basis === 'range'
+          ? `${isDelMonte ? 'Product categories' : 'Products'} ranked by sales value over ${rangeLabel} (the dashboard's range).`
+            + `${rules ? ` ${tierRuleText(rules)}` : ''}`
+          : `${isDelMonte ? 'Product categories' : 'Products'} ranked by sales value`
           + `${classificationPeriod ? `, ${formatMonth(classificationPeriod)}${periodPlaceholderNote}` : ''}.`
           + `${rules ? ` ${tierRuleText(rules)}` : ''}`}
-        actions={(
+        actions={basis === 'range' ? basisSwitch : (
+          <div className="abc-header-actions">
+          {basisSwitch}
           <DateFilter
             singleMonth
             localValue={{
@@ -840,6 +877,7 @@ const ABCClassification = () => {
               ? () => setSelectedMonth({ month: dashboardRange.endMonth, year: dashboardRange.endYear })
               : undefined}
           />
+          </div>
         )}
       />
       {/* Del Monte's rows are product categories, not SKUs. Said once, up
@@ -872,6 +910,23 @@ const ABCClassification = () => {
   // that unmount WAS the blank page, so keeping the view means driving the
   // replay explicitly, the same way the dashboard does.
   const enterCycle = useEntranceReplay(loadedKey ?? '');
+
+  if (basis === 'range') {
+    return (
+      <div className="abc-page">
+        <div className="abc-content">
+          {header}
+          <AbcRangeView
+            startPeriod={rangeStartPeriod}
+            endPeriod={rangeEndPeriod}
+            principal={principal}
+            initialClass={linkedClass}
+            onShowMonth={() => setBasis('month')}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (isColdLoad) {
     return (

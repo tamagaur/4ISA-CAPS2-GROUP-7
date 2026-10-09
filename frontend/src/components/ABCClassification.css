@@ -1009,3 +1009,63 @@
 .abc-cat-toggle-group {
   scroll-margin-top: 150px;
 }
+
+/* Ranking basis: One month / Selected range, beside the month picker. */
+.abc-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Range view (AbcRangeView). */
+.abc-range-inline-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.abc-range-principal {
+  margin: 16px 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.abc-range-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 640px) {
+  .abc-range-kpis { grid-template-columns: 1fr; }
+}
+.abc-range-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.abc-range-filters .abc-search-wrapper {
+  flex: 1 1 260px;
+  position: relative;
+}
+.abc-range-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--color-text-muted, #5B6474);
+  cursor: pointer;
+}
+.abc-table .abc-yoy-up { color: #278552; }
+.abc-table .abc-yoy-down { color: #C84040; }
+.abc-range-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-muted, #5B6474);
+}

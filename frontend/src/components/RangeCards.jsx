@@ -28,6 +28,7 @@ const signedPesos = (value) => `${value >= 0 ? '+' : '−'}${formatCompactPesos(
 // columns: [{ key, label, sub, render(row) }]; the first column is the product.
 export const ProductListModal = ({
   isOpen, onClose, title, subtitle, columns, rows, loading, error, footnote, onOpenProduct, openLabel,
+  firstColumnLabel = 'Product',
 }) => {
   if (!isOpen) return null;
   return (
@@ -54,7 +55,7 @@ export const ProductListModal = ({
           <table className="at-risk-table">
             <thead>
               <tr>
-                <th scope="col" className="at-risk-col-product">Product</th>
+                <th scope="col" className="at-risk-col-product">{firstColumnLabel}</th>
                 {columns.map((col) => (
                   <th scope="col" key={col.key}>
                     {col.label}
@@ -226,7 +227,7 @@ const ForecastVsActualTooltip = ({ active, payload }) => {
   );
 };
 
-export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList }) => {
+export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCategories }) => {
   const [view, setView] = useState('chart');
   if (!accuracy) return null;
   if (accuracy.blocked_reason || !accuracy.products) {
@@ -402,9 +403,31 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList }) => {
           <ArrowRight size={14} aria-hidden="true" />
         </button>
       )}
+      {/* Accuracy one level up (Technical Adviser, 2 Oct 2026: "at category
+          and total level"): the same scored rows summed per category, in
+          pieces and pesos (GET /dashboard/accuracy?level=category). */}
+      {onOpenCategories && (
+        <button type="button" className="fc-action fc-action-quiet" onClick={onOpenCategories}>
+          <span>See where the misses went, <strong>category by category</strong></span>
+          <ArrowRight size={14} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 };
+
+// One row per product category: the forecast against what sold, in pieces,
+// and the misses in pesos split by direction. Pieces and pesos only; the
+// accuracy percentages stay on the card's two headline figures.
+const signedPieces = (v) => (v == null ? '—' : `${v >= 0 ? '+' : '−'}${formatUnits(Math.abs(v))}`);
+export const CATEGORY_MISS_COLUMNS = [
+  { key: 'products', label: 'Products', render: (r) => (r.products ?? 0).toLocaleString() },
+  { key: 'forecast', label: 'Forecast (pieces)', sub: 'summed over the range', render: (r) => formatUnits(r.forecast_pieces) },
+  { key: 'actual', label: 'Sold (pieces)', sub: 'summed over the range', render: (r) => formatUnits(r.actual_pieces) },
+  { key: 'net', label: 'Net miss (pieces)', sub: '+ forecast too high, − too low', render: (r) => signedPieces(r.net_miss_pieces) },
+  { key: 'over', label: 'Forecast too high (₱)', render: (r) => formatCompactPesos(r.surplus_pesos) },
+  { key: 'under', label: 'Forecast too low (₱)', render: (r) => formatCompactPesos(r.shortage_pesos) },
+];
 
 export const OVER_RUN_COLUMNS = [
   { key: 'run', label: 'Months in a row', sub: 'forecast above sales', render: (r) => r.run_length },
