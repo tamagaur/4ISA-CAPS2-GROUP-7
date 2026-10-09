@@ -482,35 +482,6 @@ const Dashboard = () => {
   }, [versusKey, loadedKey, requestKey, principal]);
   const prior = versusKey && versusLoaded.key === versusKey ? versusLoaded : null;
 
-  // The annual card's year-over-year (HeroKpis.jsx): a part year (Jan–Feb
-  // 2026) against the SAME months a year earlier, read from GET /dashboard's
-  // allocation block for a range ending on that month, so both sides are
-  // summed the same way. A whole year needs no request: its basis_sales is
-  // the year before. With the default range this is the comparison's own
-  // request (Mar 2024 – Feb 2025), so it comes from the cache.
-  const allocNow = loadedKey === requestKey ? loaded?.data?.allocation : null;
-  const ytdPriorPeriod = allocNow?.latest_month && allocNow.ytd_sales != null && allocNow.ytd_months < 12
-    ? `${Number(allocNow.latest_month.slice(0, 4)) - 1}${allocNow.latest_month.slice(4)}`
-    : null;
-  const ytdFloorYear = preview ? Number(PLACEHOLDER_START.year) : FIRST_DATA_YEAR;
-  const ytdPriorKey = ytdPriorPeriod && Number(ytdPriorPeriod.slice(0, 4)) >= ytdFloorYear
-    ? `${ytdPriorPeriod}|${principal ?? ''}`
-    : null;
-  const [ytdPriorLoaded, setYtdPriorLoaded] = useState({ key: null, data: null, failed: false });
-  useEffect(() => {
-    if (!ytdPriorKey) return undefined;
-    let cancelled = false;
-    const [y, m] = ytdPriorPeriod.split('-').map(Number);
-    const startOrdinal = y * 12 + (m - 1) - 11;
-    const start = `${Math.floor(startOrdinal / 12)}-${String((startOrdinal % 12) + 1).padStart(2, '0')}`;
-    getDashboardData({ period: ytdPriorPeriod, startPeriod: start, principal })
-      .then((res) => { if (!cancelled) setYtdPriorLoaded({ key: ytdPriorKey, data: res, failed: false }); })
-      .catch(() => { if (!cancelled) setYtdPriorLoaded({ key: ytdPriorKey, data: null, failed: true }); });
-    return () => { cancelled = true; };
-    // ytdPriorPeriod is read through ytdPriorKey.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ytdPriorKey, principal]);
-  const ytdPrior = ytdPriorKey && ytdPriorLoaded.key === ytdPriorKey ? ytdPriorLoaded : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -632,7 +603,6 @@ const Dashboard = () => {
   const salesMonth = periodLabel(kpis.sales_period);
   const sohMonth = periodLabel(kpis.soh_period);
   const sohCoverage = coverageNote(kpis.soh_coverage, pagePrincipal);
-  const salesIsPlaceholder = isPlaceholderPeriod(kpis.sales_period, placeholder);
   // Only under All principals (GET /dashboard's vat_note): the combined
   // pesos mix Unilever's VAT-inclusive amounts with Del Monte's
   // VAT-exclusive ones, and the card must say so rather than imply one basis.
@@ -650,13 +620,10 @@ const Dashboard = () => {
   // periods stated. The price basis and the months behind the total sit in
   // the card's "?".
   const salesRange = kpis.sales_blocked_reason ? null : rangeTotal(kpis.sales_cumulative, pagePrincipal);
-  const sales = kpiDisplay(
-    kpis.sales, kpis.sales_blocked_reason, formatCompactPesos,
-    [salesMonth ? `${salesMonth}${salesIsPlaceholder ? ' (placeholder)' : ''}` : null, salesRange?.short]
-      .filter(Boolean).join(' · ') || 'Total sales',
-  );
+  // The annual card's "?" (its latest month is the latest with sales, not
+  // the range's end): the price basis, the VAT note, the range's months.
   const salesTooltip = [
-    `Total sales for ${salesMonth || 'the latest month with data'}${salesBasis ? `, at ${salesBasis}` : ''}.`,
+    salesBasis ? `Sales at ${salesBasis}.` : null,
     vatNote ? `${vatNote}.` : null,
     salesRange?.detail,
   ].filter(Boolean).join(' ');
@@ -980,39 +947,37 @@ const Dashboard = () => {
   // ── The top row (HeroKpis.jsx): the figures above, side by side ─────────
   const allocation = data.allocation || {};
   const allocMonthName = allocation.latest_month ? periodLabel(allocation.latest_month).split(' ')[0] : null;
+  // The annual card does not follow the date range (Audrey, 2026-10-09):
+  // the year being planned, its sales so far against the same months of
+  // the previous year (allocation.prior_ytd_sales), and the latest month
+  // with sales — all from GET /dashboard's allocation block, which reads
+  // the same whatever the range.
   const yoy = (() => {
     if (allocation.ytd_sales == null || !allocation.latest_month) return null;
     const y = Number(allocation.latest_month.slice(0, 4));
-    // A whole year against the whole year before (the allocation's basis).
-    if (allocation.ytd_months === 12) {
-      return allocation.basis_months === 12 && allocation.basis_sales > 0
-        ? { pct: ((allocation.ytd_sales - allocation.basis_sales) / allocation.basis_sales) * 100, label: String(y - 1) }
-        : { note: `${y - 1} has ${allocation.basis_months} months on record, so no like-for-like year-over-year.` };
+    const label = allocation.ytd_months === 12
+      ? String(y - 1)
+      : `${allocation.ytd_months === 1 ? allocMonthName : `Jan–${allocMonthName}`} ${y - 1}`;
+    if (allocation.prior_ytd_sales == null) return { note: `No ${label} sales on record to compare with.` };
+    if (allocation.prior_ytd_months !== allocation.ytd_months) {
+      return { note: `Not like-for-like: ${allocation.ytd_months} months on record now, ${allocation.prior_ytd_months} in ${label}.` };
     }
-    const label = `${allocation.ytd_months === 1 ? allocMonthName : `Jan–${allocMonthName}`} ${y - 1}`;
-    if (!ytdPriorKey) return { note: `No ${label} sales on record to compare with.` };
-    if (!ytdPrior) return null; // loading
-    if (ytdPrior.failed) return { note: `Could not load ${label} to compare with.` };
-    const p = ytdPrior.data?.allocation || {};
-    if (p.ytd_sales == null || p.latest_month !== ytdPriorPeriod) {
-      return { note: `No like-for-like year-over-year: ${label} has no allocation basis on record.` };
-    }
-    if (p.ytd_months !== allocation.ytd_months) {
-      return { note: `Not like-for-like: ${allocation.ytd_months} months on record now, ${p.ytd_months} in ${label}.` };
-    }
-    return p.ytd_sales > 0 ? { pct: ((allocation.ytd_sales - p.ytd_sales) / p.ytd_sales) * 100, label } : null;
+    return allocation.prior_ytd_sales > 0
+      ? { pct: ((allocation.ytd_sales - allocation.prior_ytd_sales) / allocation.prior_ytd_sales) * 100, label }
+      : null;
   })();
-  const salesMonthTrend = sales.value !== '—' ? trendExtras(kpis.sales_trend, CHART_COLORS.salesSeries) : {};
+  const annualLatestMonth = periodLabel(allocation.latest_month);
+  const annualTrend = allocation.latest_sales != null ? trendExtras(allocation.trend, CHART_COLORS.salesSeries) : {};
   const rangeSales = kpis.sales_cumulative || {};
   const annualCard = {
     allocation,
     yoy,
     latest: {
-      month: salesMonth,
-      value: sales.value,
-      trend: salesMonthTrend.trend || null,
-      change: salesMonthTrend.deltaLine ? salesMonthTrend : null,
-      blockedReason: sales.value === '—' ? sales.contextLine : null,
+      month: annualLatestMonth,
+      value: allocation.latest_sales != null ? formatCompactPesos(allocation.latest_sales) : '—',
+      trend: annualTrend.trend || null,
+      change: annualTrend.deltaLine ? annualTrend : null,
+      blockedReason: allocation.latest_sales == null ? allocation.blocked_reason || null : null,
     },
     range: {
       short: salesRange?.short ?? null,
@@ -1021,12 +986,13 @@ const Dashboard = () => {
       value: rangeSales.value != null && !kpis.sales_blocked_reason ? formatCompactPesos(rangeSales.value) : '—',
     },
     basis: {
-      label: allocation.allocation_year ? `FY ${allocation.allocation_year}` : 'Selected range',
-      follows: true,
-      detail: `${FOLLOWS_RANGE} The year is the one the range ends in, Jan to the range\u2019s last month; the latest `
-        + 'month is the range\u2019s last month; "Selected range" is the whole range against "Compare with".',
+      label: allocation.allocation_year ? `FY ${allocation.allocation_year}` : 'Current year',
+      follows: false,
+      detail: 'Does not change with the date filter: the year being planned, its sales so far against the same '
+        + 'months a year earlier, and the latest month with sales. The allocation is the previous year\u2019s sales '
+        + '\u00d7 103/105/108%, one year only, whatever the range. Only the "Selected range" line follows the filter.',
     },
-    tooltip: [salesTooltip, salesRange?.detail].filter(Boolean).join(' '),
+    tooltip: salesTooltip,
   };
   const inventoryLines = sohValue.value === '—'
     ? [sohValue.contextLine]

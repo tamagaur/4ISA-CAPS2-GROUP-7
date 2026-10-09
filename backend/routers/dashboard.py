@@ -1322,6 +1322,12 @@ def get_dashboard(
     allocation: dict = {
         "basis_year": None, "basis_sales": None, "basis_months": 0,
         "latest_month": None, "ytd_sales": None, "ytd_months": 0,
+        # The basis year's sales over the same calendar months as ytd (Jan-Feb
+        # 2025 against Jan-Feb 2026): the card's like-for-like year-over-year.
+        "prior_ytd_sales": None, "prior_ytd_months": 0,
+        # The latest month with sales and the 12 months up to it (kpi_trend's
+        # shape): the annual card's "latest month", fixed like the rest of it.
+        "latest_sales": None, "trend": None,
         "levels": [], "vat_basis": None, "blocked_reason": None,
         # analytics/allocation.py: the basis is the calendar year before the
         # planning month (the month after the latest sales month), in pesos
@@ -1337,25 +1343,34 @@ def get_dashboard(
     elif latest_by_principal.get(scope) is None:
         allocation["blocked_reason"] = f"No sales rows for {_scope_label(scope)} at all."
     else:
-        latest_sales_month = latest_by_principal[scope]
-        planning_month = planning_month_after(latest_sales_month)
-        # The card follows the date range (2026-10-09): the year is the one
-        # the selected range ends in, never past the latest month with sales,
-        # and its sales run Jan to that month. With the default range (ending
-        # on the latest month) this is the year being planned, as before; a
-        # range ending Dec 2025 compares 2025's sales with 2025's allocation
-        # (2024 sales x 103/105/108%) instead of showing 2026 with no sales.
-        latest_month = min(latest_sales_month, periods[-1]) if periods else latest_sales_month
-        allocation_year = int(latest_month[:4])
-        basis_year = allocation_basis_year(latest_month)
+        # The card does NOT follow the date range (Audrey, 2026-10-09): the
+        # allocation is the year being planned — the planning month is the
+        # one after the latest sales month — and its basis is ONE previous
+        # calendar year, whatever the range's length (a 2-5 year range still
+        # reads only the year before). It reverses 0a0756f, which moved the
+        # year with the range's end. Sales so far run Jan to the latest month
+        # in the allocation year; a January plan (latest data in December)
+        # has none yet, and the card shows the allocation alone.
+        latest_month = latest_by_principal[scope]
+        planning_month = planning_month_after(latest_month)
+        allocation_year = int(planning_month[:4])
+        basis_year = allocation_basis_year(planning_month)
         basis_periods = [f"{basis_year:04d}-{m:02d}" for m in range(1, 13)]
-        ytd_periods = [f"{allocation_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
+        ytd_periods = (
+            [f"{allocation_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
+            if int(latest_month[:4]) == allocation_year else []
+        )
         # Reuse the months the page already summed (same scope, same mode),
         # and fetch only the rest in ONE call — basis and YTD are disjoint.
         missing = [p for p in basis_periods + ytd_periods if p not in sales_by_period]
         by_period = {**sales_by_period, **(_sales_by_period(db, missing, scope, mode) if missing else {})}
         basis_values = [by_period[p] for p in basis_periods if by_period.get(p) is not None]
         ytd_values = [by_period[p] for p in ytd_periods if by_period.get(p) is not None]
+        # The same calendar months a year earlier, from the basis year's own
+        # months (already fetched): Jan-Feb 2025 for Jan-Feb 2026.
+        prior_values = [
+            by_period[p] for p in basis_periods[:len(ytd_periods)] if by_period.get(p) is not None
+        ]
         basis_sales = sum(basis_values) if basis_values else None
         allocation["basis_year"] = basis_year
         allocation["latest_month"] = latest_month
@@ -1381,6 +1396,18 @@ def get_dashboard(
                 "basis_months": basis_months,
                 "ytd_sales": round(ytd_sales, 2) if ytd_sales is not None else None,
                 "ytd_months": len(ytd_values),
+                "prior_ytd_sales": round(sum(prior_values), 2) if prior_values else None,
+                "prior_ytd_months": len(prior_values),
+                "latest_sales": (
+                    round(by_period[latest_month], 2) if by_period.get(latest_month) is not None else None
+                ),
+                "trend": kpi_trend(
+                    {
+                        p: by_period.get(p)
+                        for p in sorted(q for q in set(basis_periods + ytd_periods) if q <= latest_month)[-12:]
+                    },
+                    latest_month,
+                ),
                 # monthly = an average month of the basis x pct, and annual
                 # only when the basis IS a year (null otherwise; the footnote
                 # already calls the basis partial) — analytics/allocation.py's
