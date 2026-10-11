@@ -132,9 +132,12 @@ from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import current_cycle
 from backend.principals import (
     PrincipalQuery,
-    latest_abc_period,
+    abc_period_params,
+    abc_period_pred,
+    latest_abc_periods,
     normalize_principal,
     principal_clause,
+    tier_a_periods,
 )
 from backend.stock_status import CRITICAL, NO_DATA, stock_status
 from backend.stock_units import STOCK_AT_LATEST_SQL
@@ -283,18 +286,23 @@ def _pareto(current: list[ABCItem]) -> ParetoCheck | None:
     return ParetoCheck(**check, status="pass" if check["passes"] else "fail", min_items=PARETO_MIN_ITEMS)
 
 
-def _summarize(items: list[ABCItem], period: str | None) -> tuple[list[TierSummary], ParetoCheck | None]:
+def _summarize(items: list[ABCItem], periods: dict[str, str]) -> tuple[list[TierSummary], ParetoCheck | None]:
     """tier_summary plus the run's Pareto check (manuscript §3.4.4.2.2).
     Only CURRENT-run rows feed shares: a carried-forward row's revenue_share
     is a fraction of another month's revenue. The shares and the check need
     one principal — two principals' shares are fractions of two different
     totals, and their running totals interleave."""
     summary: dict[str, TierSummary] = {}
-    current = [i for i in items if i.tier_period == period]
+    # "Current" is each row's OWN principal's run: under 'all' the two
+    # principals' latest runs differ (Unilever 2026-02, Del Monte 2025-12).
+    def is_current(i: ABCItem) -> bool:
+        return i.tier_period == periods.get(i.principal)
+
+    current = [i for i in items if is_current(i)]
     for item in items:
         entry = summary.setdefault(item.tier, TierSummary(tier=item.tier, sku_count=0, revenue_share_total=0.0))
         entry.sku_count += 1
-        if item.tier_period == period:
+        if is_current(item):
             entry.revenue_share_total += item.revenue_share or 0.0
         else:
             entry.carried_forward_count += 1
@@ -465,7 +473,8 @@ def _get_abc_period(
     # at 2026-02. Resolve to the latest classified period AT OR BEFORE the
     # request instead — the same helper view=last_known already uses; with
     # no month given it is the plain latest period, as before.
-    period = latest_abc_period(db, principal, at_or_before=classification_period)
+    periods = latest_abc_periods(db, principal, at_or_before=classification_period)
+    period = max(periods.values()) if periods else None  # the response field / gate only
     abc_source, source_params = "abc_classification", {}
     # Preview: no stored run at or before a placeholder month, so that
     # month's run is computed now (backend/data_mode.abc_single).
@@ -474,6 +483,7 @@ def _get_abc_period(
         computed = abc_single(db, [month], PREVIEW)
         if not computed.empty:
             period = month
+            periods = {"unilever": month}
             abc_source, source_params = abc_relation(computed, with_stored=False)
     if period is None:
         return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[], rules=ABCRules(**abc_rules()))
@@ -511,7 +521,7 @@ def _get_abc_period(
             WHERE status = 'pending' AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
         {_plan_pool_joins(fc_src)}
-        WHERE ac.classification_period = :period AND {abc_method_sql("ac")}
+        WHERE {abc_period_pred("=", "ac")} AND {abc_method_sql("ac")}
     """
     query += principal_clause(principal, "ac.principal")[0]
     # product_key last: equal shares otherwise come back in whatever order the
@@ -519,7 +529,7 @@ def _get_abc_period(
     query += " ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST, ac.product_key"
 
     params: dict = {
-        "period": period,
+        **abc_period_params(periods),
         "current_cycle": cycle,
         **scope_params,
         **source_params,
@@ -528,13 +538,14 @@ def _get_abc_period(
     }
 
     rows = db.execute(text(query), params).mappings().all()
-    items = [_item(r, period, lp_visible=lp_visible, has_cycle=cycle is not None) for r in rows]
+    items = [_item(r, periods.get(r["principal"]), lp_visible=lp_visible, has_cycle=cycle is not None) for r in rows]
 
-    tier_summary, check = _summarize(items, period)
+    tier_summary, check = _summarize(items, periods)
     return ABCResponse(
         items=items,
         count=len(items),
         classification_period=period,
+        tier_a_periods=tier_a_periods(periods),
         tier_summary=tier_summary,
         rules=ABCRules(**abc_rules()),
         pareto_check=check,
@@ -556,7 +567,8 @@ def _get_abc_last_known(
     the nearest real run instead of an empty page. It stays an upper bound:
     no tier from a later run can appear.
     """
-    period = latest_abc_period(db, principal, at_or_before=classification_period)
+    periods = latest_abc_periods(db, principal, at_or_before=classification_period)
+    period = max(periods.values()) if periods else None  # the response field / gate only
     abc_source, source_params = "abc_classification", {}
     # Preview: every product's newest placeholder tier joins the stored runs.
     # Stored runs are all later than the placeholder, so a product with a
@@ -568,6 +580,7 @@ def _get_abc_last_known(
             abc_source, source_params = abc_relation(computed, with_stored=True)
             if period is None:
                 period = computed["classification_period"].max()
+                periods = {"unilever": period}
 
     pd_scope_sql, pd_scope_params = principal_clause(principal, "pd.principal")
     # Never-ranked products: counted, not listed. Listing them would add
@@ -577,11 +590,11 @@ def _get_abc_last_known(
         "SELECT COUNT(*) AS n FROM product_dimension pd WHERE NOT EXISTS ("
         f" SELECT 1 FROM {abc_source} a WHERE a.product_key = pd.product_key"
         f" AND {abc_method_sql('a')}"
-        " AND (CAST(:period AS TEXT) IS NULL OR a.classification_period <= CAST(:period AS TEXT)))"
+        f" AND (CAST(:period AS TEXT) IS NULL OR {abc_period_pred('<=', 'a')}))"
         + pd_scope_sql
     )
     unclassified = db.execute(
-        text(unclassified_sql), {"period": period, **pd_scope_params, **source_params}
+        text(unclassified_sql), {"period": period, **abc_period_params(periods), **pd_scope_params, **source_params}
     ).mappings().first()
     unclassified_count = int(unclassified["n"]) if unclassified else 0
 
@@ -604,7 +617,7 @@ def _get_abc_last_known(
                    product_key, principal, tier, revenue_share,
                    cumulative_share, boundary_flag, classification_period
             FROM {abc_source}
-            WHERE {abc_method_sql()} AND classification_period <= :period{ac_scope_sql}
+            WHERE {abc_method_sql()} AND {abc_period_pred("<=")}{ac_scope_sql}
             ORDER BY product_key, classification_period DESC
         )
         SELECT
@@ -633,13 +646,13 @@ def _get_abc_last_known(
         ) rop ON rop.product_key = ac.product_key
         {_plan_pool_joins(fc_src)}
         ORDER BY ac.tier,
-                 (ac.classification_period = :period) DESC,
+                 ({abc_period_pred("=", "ac")}) DESC,
                  ac.classification_period DESC,
                  ac.revenue_share DESC NULLS LAST,
                  ac.product_key
     """
     params: dict = {
-        "period": period,
+        **abc_period_params(periods),
         "current_cycle": cycle,
         **ac_scope_params,
         **source_params,
@@ -650,11 +663,12 @@ def _get_abc_last_known(
 
     items = [_item(r, r["tier_period"], lp_visible=lp_visible, has_cycle=cycle is not None) for r in rows]
 
-    tier_summary, check = _summarize(items, period)
+    tier_summary, check = _summarize(items, periods)
     return ABCResponse(
         items=items,
         count=len(items),
         classification_period=period,
+        tier_a_periods=tier_a_periods(periods),
         tier_summary=tier_summary,
         unclassified_count=unclassified_count,
         rules=ABCRules(**abc_rules()),

@@ -141,9 +141,10 @@ def test_a_fake_session_or_preview_mode_never_reads_the_mart():
 
 @pytest.mark.parametrize("head", [
     None,
-    {"planning_stale": True, "in_step": True},
-    {"planning_stale": None, "in_step": True},
-    {"planning_stale": False, "in_step": False},
+    {"planning_stale": True, "in_step": True, "basis_current": True},
+    {"planning_stale": None, "in_step": True, "basis_current": True},
+    {"planning_stale": False, "in_step": False, "basis_current": True},
+    {"planning_stale": False, "in_step": True, "basis_current": False},  # built on another Tier A basis
 ])
 def test_a_missing_or_out_of_step_mart_is_not_served(monkeypatch, head):
     monkeypatch.setattr(planning_mart.batch, "prefetch", lambda db, queries: 0)
@@ -158,9 +159,12 @@ def test_queries_bind_the_scope_and_filters_and_never_interpolate_them():
     assert sql.count("pm.principal = :principal") == 2  # the rows and the current-cycle subquery
     all_sql, all_params = planning_mart.rows_query(None, None, "all", None, None)
     assert all_params == {} and ":principal" not in all_sql and "MAX(pm.planning_cycle_date)" not in all_sql
-    for query in (planning_mart.head_query("delmonte"), planning_mart.run_query("delmonte"),
+    for query in (planning_mart.run_query("delmonte"),
                   planning_mart.counts_query("delmonte", None, "current", None, None)):
         assert query[1] == {"principal": "delmonte"} and "delmonte" not in query[0]
+    head_sql, head_params = planning_mart.head_query("delmonte")
+    assert head_params == {"principal": "delmonte", "tier_a_basis": TIER_A_BASIS} and "delmonte" not in head_sql
+    assert TIER_A_BASIS not in head_sql and ":tier_a_basis" in head_sql
 
 
 def test_packed_rows_unpack_under_the_names_the_endpoint_reads():
@@ -201,7 +205,7 @@ def _count(**overrides) -> dict:
 
 def _head(**overrides) -> dict:
     return {"cycle": CYCLE, "fc_at": GENERATED, "lp_at": GENERATED, "row_count": 2, "stale_count": 0,
-            "superseded": 5, "planning_stale": False, "in_step": True, **overrides}
+            "superseded": 5, "planning_stale": False, "in_step": True, "basis_current": True, **overrides}
 
 
 def test_mart_rows_become_the_same_items_the_joined_rows_do(monkeypatch):

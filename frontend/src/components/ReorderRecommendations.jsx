@@ -28,6 +28,7 @@ import './DateFilter.css';
 // .dash-stale-note — the LP freshness notice, defined once with the
 // Dashboard's styles and reused here so both pages warn identically.
 import './Dashboard.css';
+import TierBasisLabel, { TierChip } from './TierBasisLabel';
 import './ReorderRecommendations.css';
 
 // Helper to format SKU to 5 digits (SKU-#####)
@@ -194,6 +195,7 @@ const ReorderRecommendations = () => {
         })));
         setMeta({
           cycleDate: res.planning_cycle_date || null,
+          tierAPeriods: res.tier_a_periods || {},
           supersededCount: res.superseded_count || 0,
           freshness: res.freshness || null,
           // The solver's own weights and service level (backend/lp_cycle.py),
@@ -265,7 +267,9 @@ const ReorderRecommendations = () => {
         urgency: item.urgency,
         planningCycleDate: item.planning_cycle_date,
         revenueShare: item.revenue_share,
-        tier: item.tier, // latest ABC run's tier; null = not ranked in that run
+        tier: item.tier, // last-known tier at or before the cycle month; carried forward when tierIsCurrent is false
+        tierPeriod: item.tier_period,
+        tierIsCurrent: item.tier_is_current,
         priorityScore: item.priority_score,
         stockoutGap: item.stockout_gap,
         daysOfCover: item.days_of_cover,
@@ -374,7 +378,8 @@ const ReorderRecommendations = () => {
   const noStockFigureCount = cycleRows.filter((r) => r.stock == null).length;
   // The LP plans Category A, but a cycle outlives the ABC run it was solved
   // against; GET /recommendations sends each row's tier in the latest run.
-  const notCategoryACount = cycleRows.filter((r) => r.tier !== 'A').length;
+  // An aged tier (tierIsCurrent false) is display only: a carried-forward A is not Class A here.
+  const notCategoryACount = cycleRows.filter((r) => r.tier !== 'A' || r.tierIsCurrent === false).length;
   // Summed in whole pieces, so the card equals the sum of the table's rows.
   const totalOrderQty = cycleRows.reduce((sum, item) => sum + (wholeUnits(item.orderQty) || 0), 0);
   // Rows the allocation couldn't fully fund (short_units > 0) — the
@@ -706,6 +711,9 @@ const ReorderRecommendations = () => {
           />
         </td>
         <td className={brand ? 'cell-muted' : 'cell-empty'}>{brand || '—'}</td>
+        <td className="table-center">
+          <TierChip tier={item.tier} tierPeriod={item.tierPeriod} isCurrent={item.tierIsCurrent} anchor={String(item.planningCycleDate || '').slice(0, 7)} />
+        </td>
         <td className="table-num" title={`Share of ${abcLabel ?? 'the latest ABC month'} revenue, from the latest ABC classification`}>
           {item.revenueShare != null ? `${(item.revenueShare * 100).toFixed(2)}%` : <span className="cell-empty">—</span>}
         </td>
@@ -765,7 +773,7 @@ const ReorderRecommendations = () => {
     );
   };
 
-  const COLUMN_COUNT = 12 + (hasOnOrder ? 1 : 0);
+  const COLUMN_COUNT = 13 + (hasOnOrder ? 1 : 0);
 
   const renderRecommendationsTab = () => (
     <>
@@ -922,6 +930,7 @@ const ReorderRecommendations = () => {
               <th className="table-num col-fit">#</th>
               <th className="col-text col-product">Product</th>
               <th className="col-fit">Brand</th>
+              <th className="table-center col-fit">Tier</th>
               <th className="table-num col-fit">
                 Revenue share (%)
                 {abcLabel && <span className="reorder-th-period">{abcLabel}</span>}
@@ -1030,7 +1039,7 @@ const ReorderRecommendations = () => {
         <tbody>
           {decisionLog.length === 0 ? (
             <tr className="table-empty-row">
-              <td colSpan="6">
+              <td colSpan="5">
                 No decisions recorded yet this session. Accept or dismiss a recommendation to see it logged here.
               </td>
             </tr>
@@ -1088,6 +1097,7 @@ const ReorderRecommendations = () => {
               </div>
           )}
         >
+          <TierBasisLabel periods={meta?.tierAPeriods} />
           {/* What decides a cut (analytics/optimization/lp.py, 2026-10-01)
               is in "How this was optimized" above the table. Same freshness
               notice as the Dashboard's, for the page where

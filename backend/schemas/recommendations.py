@@ -85,6 +85,10 @@ class RecommendationItem(BaseModel):
     # rank it). The LP plans Category A, but a cycle outlives the ABC run it
     # was solved against, so a row can be for a SKU that is no longer A.
     tier: str | None = None
+    # The run `tier` comes from. Older than the cycle's own ABC period = carried
+    # forward: shown labelled, never ranked (no share, no priority, no cohort).
+    tier_period: str | None = None
+    tier_is_current: bool | None = None
     stockout_gap: float | None = None
     priority_score: float | None = None
     days_of_cover: float | None = None
@@ -154,6 +158,8 @@ class RecommendationsResponse(BaseModel):
     # counted_on_note, row_count, flag, reason}. available False with reason
     # "no opening stock count for <month>" when the plan can't be made from it.
     stock_counts: list[dict] = []
+    # {principal display name: 'YYYY-MM'} — each principal's ABC run at or before the cycle month.
+    tier_a_periods: dict[str, str] = {}
 
 
 class RecommendationDecision(BaseModel):

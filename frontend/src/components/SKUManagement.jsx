@@ -17,6 +17,7 @@ import { labelForPrincipal } from '../principals';
 import Pagination from './Pagination';
 import ProductName from './ProductName';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
+import TierBasisLabel, { currentPeriodFor, isStaleTier, latestPeriod } from './TierBasisLabel';
 import './SKUManagement.css';
 
 // Product names render verbatim. A helper used to pull a pack size out onto
@@ -55,6 +56,8 @@ const SKUManagement = () => {
   // 2026" was counted on 6 Apr 2026. planCycle is null without lp.view.
   const [stockCountDates, setStockCountDates] = useState({});
   const [planCycle, setPlanCycle] = useState(null);
+  // Each principal's latest ABC run (GET /sku's tier_a_periods).
+  const [tierAPeriods, setTierAPeriods] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -66,6 +69,7 @@ const SKUManagement = () => {
         setRawItems(res.items || []);
         setStockCountDates(res.stock_count_dates || {});
         setPlanCycle(res.planning_cycle_date ?? null);
+        setTierAPeriods(res.tier_a_periods || {});
       })
       .catch((err) => {
         setError(err.message || 'Failed to load SKUs');
@@ -118,6 +122,7 @@ const SKUManagement = () => {
         // The LP cycle the target stock comes from (same for every row).
         planCycle,
         unitPrice: item.unit_price,
+        unitCost: item.unit_cost,
         notes: item.notes,
       })),
     [rawItems, planCycle]
@@ -252,7 +257,10 @@ const SKUManagement = () => {
     }, {}),
     [skus]
   );
-  const isCurrentTier = (s) => s.catPeriod === latestCatPeriodByPrincipal[s.principal];
+  const isCurrentTier = (s) => s.catPeriod === currentPeriodFor(s.principal, tierAPeriods, latestCatPeriodByPrincipal[s.principal]);
+  // Carried forward and more than 6 months behind the newest run: marked stale. Display only.
+  const isStaleCat = (s) => !!s.catPeriod && !isCurrentTier(s)
+    && isStaleTier(s.catPeriod, latestPeriod(tierAPeriods, latestCatPeriodByPrincipal[s.principal]));
   // Category A's own carried-forward count — the card used to print every
   // tier's (821 of them, 20 of which are A).
   const categoryACarried = skus.filter(s => s.cat === 'A' && s.catPeriod && !isCurrentTier(s)).length;
@@ -396,7 +404,7 @@ const SKUManagement = () => {
     const when = formatMonth(sku.catPeriod);
     return isCurrentTier(sku)
       ? `Class ${sku.cat} — current run (${when})`
-      : `Class ${sku.cat} — last classified ${when}; no sales since, so this is carried forward`;
+      : `Class ${sku.cat} — last classified ${when}; no sales since, so this is carried forward${isStaleCat(sku) ? ' (stale: over 6 months old)' : ''}`;
   };
 
   // Hover text for a stock cell: the figure with both units and its count.
@@ -428,6 +436,7 @@ const SKUManagement = () => {
             </button>
           )}
         />
+        <TierBasisLabel periods={tierAPeriods} />
 
         {/* Summary Cards — skeletons until the list lands: the counts are
             derived from it, so before then they would read 0, a number
@@ -741,6 +750,7 @@ const SKUManagement = () => {
                           faded={Boolean(sku.catPeriod && !isCurrentTier(sku))}
                           title={catTitle(sku)}
                         />
+                        {isStaleCat(sku) && <span className="tier-chip-stale">stale</span>}
                       </td>
                       {/* Pieces when the pack size converts the warehouse's
                           case count; the cases alone, labelled, when it can't
@@ -774,7 +784,7 @@ const SKUManagement = () => {
                   ))}
                   {filteredSKUs.length === 0 && (
                     <tr className="table-empty-row">
-                      <td colSpan="7">No data for this selection.</td>
+                      <td colSpan="6">No data for this selection.</td>
                     </tr>
                   )}
                 </tbody>

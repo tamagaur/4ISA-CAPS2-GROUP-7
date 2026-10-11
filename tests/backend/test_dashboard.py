@@ -390,17 +390,17 @@ class FakeSession:
 
         # ---- the stored ABC run (the safety-stock cohort) ------------
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql and "<=" not in sql:
-            return FakeResult([{"p": self.latest_abc_period}])
+            return FakeResult([{"principal": "unilever", "p": self.latest_abc_period}])
 
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql and "<=" in sql:
             # _nearest_abc_period_at_or_before: latest fixture period at or
             # before the requested one, mirroring the real MAX(...) <= :period.
-            target = params["period"]
+            target = params["at_or_before"]
             candidates = sorted({r["period"] for r in self.abc_rows if r["period"] <= target})
-            return FakeResult([{"p": candidates[-1] if candidates else None}])
+            return FakeResult([{"principal": "unilever", "p": candidates[-1] if candidates else None}])
 
         if "rop.ss_i AS ss_i" in sql:
-            period = params["period"]
+            period = params["abc_p_unilever"]
             rows = [r for r in self.abc_rows if r["period"] == period and r["tier"] == "A"]
             return FakeResult([
                 {"product_key": r["product_key"], "sku_id": f"SKU{r['product_key']}",
@@ -2137,6 +2137,7 @@ def test_below_safety_stock_list_is_the_rows_behind_the_count():
     assert exp["below_count"] == 2
     assert [(i["sku_id"], i["short_by"]) for i in exp["below_items"]] == [("SKU2", 15.0), ("SKU1", 40.0)]
     assert exp["tier_a_period"] == "2024-02"
+    assert exp["tier_a_periods"] == {"Unilever": "2024-02"}  # the per-principal view; tier_a_period is unchanged
 
 
 def test_idle_stock_is_unilever_only_and_says_so_for_del_monte():

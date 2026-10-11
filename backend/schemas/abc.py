@@ -115,6 +115,8 @@ class ABCResponse(BaseModel):
     items: list[ABCItem]
     count: int
     classification_period: str | None = None  # 'YYYY-MM'
+    # {principal display name: 'YYYY-MM'} — each principal's own run (they differ).
+    tier_a_periods: dict[str, str] = {}
     tier_summary: list[TierSummary] = []
     rules: ABCRules | None = None
     # None when nothing was ranked, or when the rows span both principals —

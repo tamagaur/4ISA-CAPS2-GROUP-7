@@ -411,7 +411,15 @@ from backend.lp_cycle import (
     stored_run_query, superseded_count_query,
 )
 from backend.lp_cycle import freshness as lp_freshness
-from backend.principals import PrincipalQuery, latest_abc_period, latest_abc_period_query, normalize_principal
+from backend.principals import (
+    PrincipalQuery,
+    abc_period_params,
+    abc_period_pred,
+    abc_periods_from_rows,
+    latest_abc_period_query,
+    tier_a_periods,
+    normalize_principal,
+)
 from backend.routers.recommendations import select_one as _recommendation_select_one
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 from backend.routers.recommendations import whole_units
@@ -824,33 +832,29 @@ def _stock_valuation_coverage(db: Session, period: str | None, principal: str = 
     return marts.stock_coverage(db, period, principal)
 
 
-def _latest_abc_period(db: Session, principal: str = "unilever") -> str | None:
-    """Latest ABC_Classification.classification_period within the selected
-    scope. ABC_Classification carries both principals, so an unfiltered MAX
-    could resolve to a period the selected principal has no rows for.
+def _latest_abc_periods(db: Session, principal: str = "unilever") -> dict[str, str]:
+    """Latest ABC_Classification.classification_period PER PRINCIPAL in the
+    selected scope ({principal: period}). ABC_Classification carries both
+    principals with different latest runs (Unilever 2026-02, Del Monte
+    2025-12), so under 'all' one MAX across both would leave Del Monte on a
+    period it has no rows for.
 
     The method pin is REQUIRED (migration 0017): several bases are live,
     and an unpinned MAX can resolve to a period only another basis produced
     — which would then read back zero rows. Pinned to each principal's Tier A
     basis (analytics.params.abc_method_sql, migration 0044)."""
-    row = batch.first(db, *_latest_abc_period_query(principal))
-    return row["p"] if row else None
+    return abc_periods_from_rows(batch.rows(db, *_latest_abc_period_query(principal)))
 
 
 def _latest_abc_period_query(principal: str = "unilever") -> tuple[str, dict]:
-    sql = f"SELECT MAX(classification_period) AS p FROM ABC_Classification WHERE {abc_method_sql()}"
-    params: dict = {}
-    if principal != "all":
-        sql += " AND principal = :principal"
-        params["principal"] = principal
-    return sql, params
+    return latest_abc_period_query(principal)
 
 
-def _nearest_abc_period_at_or_before(
+def _nearest_abc_periods_at_or_before(
     db: Session, period: str, principal: str = "unilever"
-) -> str | None:
-    """Latest UNILEVER classification_period <= `period`, or None if the
-    ETL hasn't produced any ABC run that old yet. The classification batch
+) -> dict[str, str]:
+    """Each in-scope principal's latest classification_period <= `period`
+    (a principal with no ABC run that old is absent). The classification batch
     runs roughly monthly and lags the sales data it's derived from, and
     each principal's data ends in a different month, so the date-range
     picker's applied end month (DashboardLayout's "today", the latest month
@@ -861,20 +865,28 @@ def _nearest_abc_period_at_or_before(
     replaced) keeps kpis.safety_stock_rate/abc_mix/tier_stock populated
     for that common case, while still going genuinely blocked if `period`
     predates every ABC run that exists."""
-    row = batch.first(db, *_nearest_abc_period_query(period, principal))
-    return row["p"] if row else None
+    return abc_periods_from_rows(batch.rows(db, *_nearest_abc_period_query(period, principal)))
 
 
 def _nearest_abc_period_query(period: str, principal: str = "unilever") -> tuple[str, dict]:
-    sql = (
-        "SELECT MAX(classification_period) AS p FROM ABC_Classification "
-        f"WHERE {abc_method_sql()} AND classification_period <= :period"
-    )
-    params: dict = {"period": period}
-    if principal != "all":
-        sql += " AND principal = :principal"
-        params["principal"] = principal
-    return sql, params
+    return latest_abc_period_query(principal, period)
+
+
+def _cycle_abc_periods(db: Session, scope: str, lp_cycle) -> dict[str, str]:
+    """The Reorder page's anchor: each principal's latest run at or before the
+    LP cycle's month. The prefetched latest run IS that run unless one postdates
+    the cycle month, so the capped query is asked only then."""
+    latest = _latest_abc_periods(db, scope)
+    if lp_cycle is None:
+        return latest
+    month = str(lp_cycle)[:7]
+    if all(v <= month for v in latest.values()):
+        return latest
+    return _nearest_abc_periods_at_or_before(db, month, scope)
+
+
+def _abc_periods_for(db: Session, period: str | None, scope: str) -> dict[str, str]:
+    return _nearest_abc_periods_at_or_before(db, period, scope) if period is not None else _latest_abc_periods(db, scope)
 
 
 def _range_pareto(db: Session, start: str, end: str, scope: str, mode: str = REAL) -> dict[str, list[dict]]:
@@ -950,7 +962,7 @@ def _forecast_counts_query(scope: str, mode: str) -> tuple[str, dict]:
         """, {"mase_gate": MASE_GATE, **fc_params}
 
 
-def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_period: str) -> tuple[str, dict]:
+def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_periods: dict[str, str]) -> tuple[str, dict]:
     lp_src, lp_params = lp_source(mode)
     # Same scope against ABC_Classification's own alias. Paired with
     # the Tier A basis at every ABC read: migration 0017 put a live 't3m' run
@@ -973,9 +985,9 @@ def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_period: str) -> tuple[
                     WHERE lr.status = 'pending' {_lp_cycle_filter(lp_cycle)}
                     ORDER BY lr.product_key, lr.planning_cycle_date DESC
                 ) rop ON rop.product_key = ac.product_key
-                WHERE ac.classification_period = :period AND ac.tier = 'A'
+                WHERE {abc_period_pred("=", "ac")} AND ac.tier = 'A'
                       AND {abc_method_sql("ac")} {abc_scope}
-            """, {"period": abc_period, "current_cycle": lp_cycle, **lp_params}
+            """, {**abc_period_params(abc_periods), "current_cycle": lp_cycle, **lp_params}
 
 
 def _pending_keys_query(mode: str, lp_cycle) -> tuple[str, dict]:
@@ -1033,11 +1045,11 @@ def _portfolio_actuals_query(mode: str, keys: list) -> tuple[str, dict]:
     return actual_sql, {"keys": keys}
 
 
-def _reorder_preview_query(scope: str, mode: str, lp_cycle, stock_period, abc_period) -> tuple[str, dict]:
+def _reorder_preview_query(scope: str, mode: str, lp_cycle, stock_period, abc_periods: dict[str, str]) -> tuple[str, dict]:
     rp_select, rp_select_params = _recommendation_select_one(mode)
     return rp_select + f" WHERE lr.status = 'pending' {_principal_filter(scope)} {_lp_cycle_filter(lp_cycle)}", {
         "inv_period": stock_period,
-        "abc_period": abc_period,
+        **abc_period_params(abc_periods),
         "current_cycle": lp_cycle,
         **rp_select_params,
     }
@@ -1081,7 +1093,7 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
         _forecast_counts_query(scope, mode),
         _latest_forecast_date_query(mode),
         _nearest_abc_period_query(period, scope) if period is not None else _latest_abc_period_query(scope),
-        latest_abc_period_query(scope),
+        _latest_abc_period_query(scope),
     ]
     # Whether 0041's marts and 0037's lp_run exist is remembered after the first
     # request; until then it is asked here, and the refresh status follows in wave 2.
@@ -1095,10 +1107,8 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
     periods = _range_periods(db, period, start_period, scope)
     range_start, range_end = periods[0], periods[-1]
     inventory_period = _latest_inventory_period(db, scope, end=range_end)
-    abc_period = (
-        _nearest_abc_period_at_or_before(db, period, scope) if period is not None
-        else _latest_abc_period(db, scope)
-    )
+    abc_periods = _abc_periods_for(db, period, scope)
+    abc_period = max(abc_periods.values()) if abc_periods else None  # the response field / gate only
     latest_forecast = batch.first(db, *_latest_forecast_date_query(mode))
     forecast_date = latest_forecast["d"] if latest_forecast else None
     rp_stock_period = opening_period(lp_cycle) if lp_cycle is not None else None
@@ -1108,7 +1118,7 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
         freshness_query(lp_cycle, fc_at, scope, mode),
         _product_count_query(scope, mode, lp_cycle),
         _pending_keys_query(mode, lp_cycle),
-        _reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, latest_abc_period(db, scope)),
+        _reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _cycle_abc_periods(db, scope, lp_cycle)),
         _policy_rows_query(scope, mode, lp_cycle),
     ]
     wave2 += [marts.pareto_query(range_start, range_end, who, mode)
@@ -1119,7 +1129,7 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
             wave2.append(stored_run_query(lp_cycle, scope))
     wave2 += [(STOCK_COUNTS_SQL, {"count_period": p}) for p in {inventory_period, rp_stock_period} if p]
     if abc_period is not None:
-        wave2.append(_plan_rows_query(scope, mode, lp_cycle, abc_period))
+        wave2.append(_plan_rows_query(scope, mode, lp_cycle, abc_periods))
     if forecast_date is not None:
         wave2 += [_gated_rows_query(scope, mode, forecast_date),
                   _scoped_forecast_count_query(scope, mode, forecast_date)]
@@ -1133,7 +1143,7 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
 
     wave3 = []
     if abc_period is not None and inventory_period is not None:
-        plan = batch.rows(db, *_plan_rows_query(scope, mode, lp_cycle, abc_period))
+        plan = batch.rows(db, *_plan_rows_query(scope, mode, lp_cycle, abc_periods))
         keys = [int(r["product_key"]) for r in plan]
         if keys:
             wave3.append(marts.stock_pieces_query(inventory_period, keys))
@@ -1508,10 +1518,8 @@ def get_dashboard(
     # AT OR BEFORE the range's end month (_nearest_abc_period_at_or_before) —
     # the Tier A the LP plans — named on the card (safety_stock_exposure.
     # tier_a_period). The ABC ring above it ranks the range itself.
-    abc_period = (
-        _nearest_abc_period_at_or_before(db, period, scope) if period is not None
-        else _latest_abc_period(db, scope)
-    )
+    abc_periods = _abc_periods_for(db, period, scope)
+    abc_period = max(abc_periods.values()) if abc_periods else None  # the response field / gate only
     # The LP's safety stock belongs to its current cycle; it is compared only
     # with counts from the one that opens that cycle onward. An earlier count
     # (a range ending before the plan's opening count) is not judged against a
@@ -1528,7 +1536,8 @@ def get_dashboard(
     ss_stock_period = inventory_period
     if ss_pinned_to_plan:
         ss_stock_period = _latest_inventory_period(db, scope, end=lp_opening_period)
-        abc_period = _nearest_abc_period_at_or_before(db, lp_opening_period, scope)
+        abc_periods = _nearest_abc_periods_at_or_before(db, lp_opening_period, scope)
+        abc_period = max(abc_periods.values()) if abc_periods else None
     safety_stock_rate = None
     safety_stock_rate_blocked_reason = f"ABC_Classification has no rows for {_scope_label(scope)} yet."
     ss_rows: list = []
@@ -1538,7 +1547,7 @@ def get_dashboard(
         # size + loose rule as backend/stock_units.py), the unit of ss_i. ss_i,
         # rop_i and q_i are pinned to the LP's current cycle, so a
         # three-year-old pending row can't supply them.
-        plan_rows = batch.rows(db, *_plan_rows_query(scope, mode, lp_cycle, abc_period))
+        plan_rows = batch.rows(db, *_plan_rows_query(scope, mode, lp_cycle, abc_periods))
         stock_at_count = marts.stock_pieces_by_product(
             db, ss_stock_period, [int(r["product_key"]) for r in plan_rows]
         )
@@ -1632,6 +1641,8 @@ def get_dashboard(
         if ss_pinned_to_plan else latest_stock_counts
     )
     safety_stock_exposure["tier_a_period"] = abc_period
+    # Per principal ({display name: 'YYYY-MM'}); tier_a_period above is unchanged.
+    safety_stock_exposure["tier_a_periods"] = tier_a_periods(abc_periods)
     safety_stock_exposure["plan_opening_period"] = lp_opening_period
     # True when the range ends before the plan's count: the figures are the
     # current plan's, not the range's (the card says it does not follow it).
@@ -2045,12 +2056,12 @@ def get_dashboard(
     # under the SAME scope as the rows it shows. The stock anchor is the
     # count that opens the LP's cycle (2026-10-03), the one the plan was made
     # from and GET /recommendations shows, not the stock card's latest. The
-    # ABC anchor is the scoped LATEST, deliberately not the page's
-    # `abc_period` — that one is rewound to the picker's applied end month,
-    # and reorder_preview answers "order now".
+    # ABC anchor is the LP cycle's month (the Reorder page's rule), deliberately
+    # not the page's `abc_period` — that one is rewound to the picker's applied
+    # end month, and reorder_preview answers "order now".
     rp_stock_period = opening_period(lp_cycle) if lp_cycle is not None else None
     rp_rows = batch.rows(
-        db, *_reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, latest_abc_period(db, scope))
+        db, *_reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _cycle_abc_periods(db, scope, lp_cycle))
     )
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
     rp_stock_counts = (

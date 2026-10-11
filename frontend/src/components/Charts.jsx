@@ -514,7 +514,6 @@ const unusualStockDot = (slot) => {
 // whatever `name` each Line declares, so this constant is the only place
 // the label lives.
 const RECEIVED_LABEL = 'Purchases received';
-
 // "At last purchase price", not "at cost" (3 Oct 2026 analysis): the SOH
 // file's extended cost prices each product at what it was last bought for,
 // which is above SSM's true cost, so "at cost" claimed more than it knows.
@@ -570,7 +569,7 @@ export const SalesVsStockWidget = ({
   // "Sales · ex-VAT" — a middle dot, not brackets: a Del Monte range holding
   // Aug 2023 brings its own "(except Aug 2023, recorded with tax)".
   const withBasis = (label, key) => (basis?.[key] ? `${label} · ${basis[key]}` : label);
-  const salesLabel = withBasis('Sales', 'sales');
+  const salesLabel = withBasis('Monthly sales', 'sales');
   const receivedLabel = withBasis(RECEIVED_LABEL, 'received');
   const [view, setView] = useState('chart');
   const [metricView, setMetricView] = useState('both');
@@ -937,6 +936,7 @@ export const SalesVsStockWidget = ({
                 <YAxis
                   axisLine={false}
                   tickLine={false}
+                  width={64}
                   tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                   tickFormatter={(v) => formatCompactPesos(v)}
                   label={yAxisTitle('Pesos (₱)')}

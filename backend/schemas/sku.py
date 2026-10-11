@@ -29,6 +29,9 @@ class SKUItem(BaseModel):
     pack_size: str | None = None
     brand: str | None = None
     unit_price: float | None = None
+    # Cost per piece in pesos (what SSM pays), migration 0045; None without a
+    # cost row and a numeric pack size. Read-only: not in SKUCreate/SKUUpdate.
+    unit_cost: float | None = None
     lead_time_days: int | None = None
     status: str  # 'ACTIVE' | 'DISABLED'
     notes: str | None = None
@@ -60,6 +63,8 @@ class SKUListResponse(BaseModel):
     # The LP cycle reorder_point comes from (a month's first day). None
     # without lp.view, like reorder_point itself, or when there is no cycle.
     planning_cycle_date: datetime.date | None = None
+    # {principal display name: 'YYYY-MM'} — each principal's latest ABC run.
+    tier_a_periods: dict[str, str] = {}
 
 
 class SKUCreate(BaseModel):

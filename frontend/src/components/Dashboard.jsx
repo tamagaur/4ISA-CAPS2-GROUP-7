@@ -32,6 +32,7 @@ import RefreshingNote from './RefreshingNote';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
 import { ArrowRight, AlertTriangle } from 'lucide-react';
+import TierBasisLabel from './TierBasisLabel';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -1146,6 +1147,7 @@ const Dashboard = () => {
           {/* Hero strip — the four figures that answer "what is happening
               right now": money in, money parked, service risk, and work
               waiting. */}
+          <TierBasisLabel periods={exposure.tier_a_periods} period={exposure.tier_a_period} />
           {rangeGapNote && (
             <p className="dash-gap-note" role="note">
               <AlertTriangle size={14} aria-hidden="true" />
@@ -1291,6 +1293,7 @@ const Dashboard = () => {
               <Slot kind="Prescriptive" question="What should we do?" hint="What to order, and how much" realOnly={preview && realOnly.has('reorder_preview')} basis={BASIS.plan}>
                 <ReorderRecommendationWidget
                   rows={reorderRows}
+                  cycle={lpCycleLabel}
                   criticalCount={reorderPreview.critical_count ?? 0}
                   urgentCount={reorderPreview.urgent_count ?? 0}
                   totalOrderQty={reorderPreview.total_order_qty ?? 0}

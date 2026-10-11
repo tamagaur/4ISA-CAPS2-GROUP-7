@@ -100,10 +100,11 @@ def latest_inventory_period(db: Session, principal: str | None) -> str | None:
     return row["p"] if row else None
 
 
-def latest_abc_period(
+def latest_abc_periods(
     db: Session, principal: str | None, at_or_before: str | None = None
-) -> str | None:
-    """Latest ABC_Classification.classification_period within scope.
+) -> dict[str, str]:
+    """Latest ABC_Classification.classification_period PER PRINCIPAL in scope
+    ({principal: period}; a principal with no run is absent).
 
     The method is REQUIRED (migration 0017): several bases are live side by
     side, so an unpinned MAX can resolve to a period only another basis
@@ -111,23 +112,73 @@ def latest_abc_period(
     out one tier row per basis per product_key. Each principal reads its
     own Tier A basis (analytics.params.abc_method_sql, migration 0044).
 
+    Resolved per principal, never as one MAX across both: under 'all' a
+    single MAX lands on Unilever's 2026-02 and every Del Monte row (whose
+    latest run is 2025-12) then matches nothing.
+
     `at_or_before` supports the dashboard's date picker, whose applied end
     month routinely runs ahead of the latest ABC run; without it that
     common case dead-ends instead of falling back to the nearest real run.
     """
-    row = batch.first(db, *latest_abc_period_query(principal, at_or_before))
-    return row["p"] if row else None
+    return abc_periods_from_rows(batch.rows(db, *latest_abc_period_query(principal, at_or_before)))
+
+
+def latest_abc_period(
+    db: Session, principal: str | None, at_or_before: str | None = None
+) -> str | None:
+    """ONE period for a response field or a "has any run" gate: the principal's
+    own, or under 'all' the newest of the two. Never a row filter — filter
+    with abc_period_params / ABC_PERIOD_PRED, which keep each principal on
+    its own run."""
+    periods = latest_abc_periods(db, principal, at_or_before)
+    return max(periods.values()) if periods else None
+
+
+def abc_periods_from_rows(rows) -> dict[str, str]:
+    """{principal: period} from latest_abc_period_query's rows."""
+    return {r["principal"]: r["p"] for r in rows if r["p"] is not None}
+
+
+_PRINCIPAL_LABELS = {"unilever": "Unilever", "delmonte": "Del Monte"}
+
+
+def tier_a_periods(periods: dict[str, str]) -> dict[str, str]:
+    """The response field `tier_a_periods`: {display name: period}, one entry
+    per principal that has a run in scope. `tier_a_period` (the single value)
+    stays as it was; this is the per-principal view of it."""
+    return {_PRINCIPAL_LABELS[k]: v for k, v in periods.items() if k in _PRINCIPAL_LABELS}
+
+
+def abc_period_params(periods: dict[str, str]) -> dict[str, str | None]:
+    """Bind params for ABC_PERIOD_PRED: one per principal, None where that
+    principal has no run (so it matches no row, rather than another
+    principal's period)."""
+    return {"abc_p_unilever": periods.get("unilever"), "abc_p_delmonte": periods.get("delmonte")}
+
+
+def abc_period_pred(op: str = "=", alias: str = "") -> str:
+    """Predicate comparing classification_period with the row's OWN principal's
+    resolved period (params from abc_period_params). `op` is a checked literal."""
+    assert op in ("=", "<="), op
+    col = f"{alias}." if alias else ""
+    return (
+        f"{col}classification_period {op} CASE {col}principal "
+        "WHEN 'unilever' THEN CAST(:abc_p_unilever AS TEXT) "
+        "WHEN 'delmonte' THEN CAST(:abc_p_delmonte AS TEXT) END"
+    )
 
 
 def latest_abc_period_query(principal: str | None, at_or_before: str | None = None) -> tuple[str, dict]:
+    """One row per principal in scope: (principal, p). Under a single scope that
+    is one row; under 'all' each principal gets its own period."""
     scope_sql, scope_params = principal_clause(principal, "principal")
     sql = (
-        "SELECT MAX(classification_period) AS p FROM ABC_Classification "
+        "SELECT principal, MAX(classification_period) AS p FROM ABC_Classification "
         f"WHERE {abc_method_sql()}"
     )
     params: dict = {**scope_params}
     if at_or_before is not None:
         sql += " AND classification_period <= :at_or_before"
         params["at_or_before"] = at_or_before
-    sql += scope_sql
+    sql += scope_sql + " GROUP BY principal"
     return sql, params

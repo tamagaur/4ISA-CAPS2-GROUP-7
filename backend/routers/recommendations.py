@@ -185,7 +185,11 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import (
     PrincipalQuery,
+    abc_period_params,
+    abc_period_pred,
     latest_abc_period,
+    latest_abc_periods,
+    tier_a_periods,
     principal_clause,
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
@@ -252,7 +256,9 @@ _SELECT_ONE = f"""
              WHEN counted.principal IS NOT NULL THEN FALSE
         END AS in_stock_count,
         abc.revenue_share AS revenue_share,
-        abc.tier AS tier,
+        abc_last.tier AS tier,
+        abc_last.classification_period AS tier_period,
+        (abc.product_key IS NOT NULL) AS tier_is_current,
         sales.avg_monthly_sales_pesos AS avg_monthly_sales_pesos,
         fr.forecast_value AS forecast_units,
         oo.on_order_pieces AS on_order_pieces,
@@ -275,9 +281,18 @@ _SELECT_ONE = f"""
     LEFT JOIN (
         SELECT DISTINCT ON (product_key) product_key, revenue_share, tier
         FROM abc_classification
-        WHERE {abc_method_sql()} AND classification_period = :abc_period
+        WHERE {abc_method_sql()} AND {abc_period_pred()}
         ORDER BY product_key, classification_period DESC
     ) abc ON abc.product_key = lr.product_key
+    LEFT JOIN (
+        -- DISPLAY ONLY: each SKU's last-known tier at or before the cycle month,
+        -- carried forward and labelled with its period. Shares, priority and
+        -- every cohort read `abc` above (the exact period), never this.
+        SELECT DISTINCT ON (ac.product_key) ac.product_key, ac.tier, ac.classification_period
+        FROM abc_classification ac
+        WHERE {abc_method_sql()} AND {abc_period_pred("<=", "ac")}
+        ORDER BY ac.product_key, ac.classification_period DESC
+    ) abc_last ON abc_last.product_key = lr.product_key
     LEFT JOIN (
         SELECT recent.product_key, SUM(recent.month_total) / MAX(sales_window.months) AS avg_monthly_sales_pesos
         FROM (
@@ -426,6 +441,10 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
         urgency = URGENCY[stock_status(stock, float(r["ss_i"]), rop)]
 
     revenue_share = _opt_float(r, "revenue_share")
+    tier_is_current = r.get("tier_is_current") if hasattr(r, "get") else None
+    # A carried-forward tier (tier_period before the cycle's own ABC period) is
+    # display only: it has no share, so it has no priority score and no cohort.
+    assert tier_is_current is not False or revenue_share is None, "aged tier leaked into a calculation"
     stockout_gap = None if stock is None else max(0.0, rop - stock)
     priority_score = (
         round(revenue_share * stockout_gap, 4)
@@ -469,6 +488,8 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
         urgency=urgency,
         revenue_share=revenue_share,
         tier=r.get("tier"),
+        tier_period=r.get("tier_period") if hasattr(r, "get") else None,
+        tier_is_current=tier_is_current,
         stockout_gap=stockout_gap,
         priority_score=priority_score,
         days_of_cover=days_of_cover,
@@ -602,7 +623,6 @@ def get_recommendations(
     # None — already null-guarded below. The stock anchor (:inv_period) is
     # set per cycle below: the count that opens it.
     params: dict = {
-        "abc_period": latest_abc_period(db, principal),
         **scope_params,
         **lp_params,
     }
@@ -625,7 +645,7 @@ def get_recommendations(
     freshness = lp_freshness(db, principal, mode)
     # Period labels for the page. No stock period until a cycle is known:
     # the rows are read at their cycle's opening count (set below).
-    labels = label_context(db, None, params["abc_period"], principal)
+    labels = label_context(db, None, latest_abc_period(db, principal), principal)
     if cycle == "current":
         current = current_cycle(db, principal, mode)
         if current is None:
@@ -653,12 +673,20 @@ def get_recommendations(
     # The page's period labels follow the count the rows are read at: the
     # newest listed cycle's opening count (below), not the latest count.
     if cycles:
-        labels = label_context(db, opening_period(cycles[0]), params["abc_period"], principal)
+        # ABC label = the run the newest cycle's rows are read at (its own month's, below).
+        labels = label_context(db, opening_period(cycles[0]),
+                               latest_abc_period(db, principal, str(cycles[0])[:7]), principal)
 
     rows: list = []
     counts: list[dict] = []
+    abc_periods_shown: dict[str, str] = {}
     for planning_cycle in cycles:
-        cycle_params = {**params, "inv_period": opening_period(planning_cycle),
+        # ABC anchor = this cycle's own month: the latest run at or before it.
+        cycle_abc = latest_abc_periods(db, principal, str(planning_cycle)[:7])
+        if not abc_periods_shown:
+            abc_periods_shown = cycle_abc  # the newest cycle's, the one the page leads with
+        cycle_params = {**params, **abc_period_params(cycle_abc),
+                        "inv_period": opening_period(planning_cycle),
                         "current_cycle": planning_cycle, "listed_cycle": planning_cycle}
         cycle_rows = db.execute(
             text(select_sql + " WHERE 1=1" + filters + cycle_clause + " ORDER BY lr.rop_i DESC"), cycle_params,
@@ -679,6 +707,7 @@ def get_recommendations(
         lp_model=lp_model_info(stored_run(db, freshness["cycle_date"], principal, mode)),
         stock_counts=counts,
         **labels,
+        tier_a_periods=tier_a_periods(abc_periods_shown),
     ), db, mode)
 
 
@@ -790,7 +819,7 @@ def update_recommendation(
         {
             "key": recommendation_key,
             "inv_period": opening_period(decided["planning_cycle_date"]),
-            "abc_period": latest_abc_period(db, None),
+            **abc_period_params(latest_abc_periods(db, None, str(decided["planning_cycle_date"])[:7])),
         },
     ).mappings().first()
     return _to_item(row, present)

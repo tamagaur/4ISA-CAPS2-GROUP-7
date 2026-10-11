@@ -31,7 +31,10 @@ from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import current_cycle
 from backend.principals import (
     PrincipalQuery,
-    latest_abc_period,
+    abc_period_params,
+    abc_period_pred,
+    latest_abc_periods,
+    tier_a_periods,
     principal_clause,
 )
 from backend.schemas.sku import SKUCreate, SKUItem, SKUListResponse, SKUUpdate
@@ -87,6 +90,7 @@ _SELECT_ONE = f"""
         pd.pack_size,
         pd.brand,
         pd.unit_price AS unit_price,
+        pd.unit_cost AS unit_cost,
         pd.lead_time_days AS lead_time_days,
         pd.status AS status,
         pd.notes AS notes,
@@ -109,8 +113,8 @@ _SELECT_ONE = f"""
                product_key, tier, classification_period
         FROM abc_classification
         WHERE {abc_method_sql()}
-          AND (CAST(:abc_period AS TEXT) IS NULL
-               OR classification_period <= CAST(:abc_period AS TEXT))
+          AND (CAST(:abc_p_unilever AS TEXT) IS NULL AND CAST(:abc_p_delmonte AS TEXT) IS NULL
+               OR {abc_period_pred("<=")})
         ORDER BY product_key, classification_period DESC
     ) abc ON abc.product_key = pd.product_key
 """
@@ -151,6 +155,7 @@ def _to_item(r) -> SKUItem:
         pack_size=r.get("pack_size"),
         brand=r.get("brand"),
         unit_price=float(r["unit_price"]) if r.get("unit_price") is not None else None,
+        unit_cost=float(r["unit_cost"]) if r.get("unit_cost") is not None else None,
         lead_time_days=r.get("lead_time_days"),
         status=r.get("status") or "ACTIVE",
         notes=r.get("notes"),
@@ -176,7 +181,7 @@ def _one_row_params(db: Session, product_key: int) -> dict:
     return {
         "key": product_key,
         "current_cycle": current_cycle(db),
-        "abc_period": latest_abc_period(db, None),
+        **abc_period_params(latest_abc_periods(db, None)),
     }
 
 
@@ -213,7 +218,7 @@ def get_skus(
     cycle = current_cycle(db, principal)
     params: dict = {
         "current_cycle": cycle,
-        "abc_period": latest_abc_period(db, principal),
+        **abc_period_params(latest_abc_periods(db, principal)),
         **scope_params,
     }
     if status:
@@ -234,6 +239,8 @@ def get_skus(
         # The cycle the target stock comes from ("Mar 2026 plan"); an LP
         # fact, so it follows lp.view like reorder_point.
         planning_cycle_date=cycle if lp_visible else None,
+        # Anchor None = the latest run, per principal.
+        tier_a_periods=tier_a_periods(latest_abc_periods(db, principal)),
     )
 
 
@@ -284,7 +291,7 @@ def create_sku(
         {
             "key": row["product_key"],
             "current_cycle": current_cycle(db, "unilever"),
-            "abc_period": latest_abc_period(db, "unilever"),
+            **abc_period_params(latest_abc_periods(db, "unilever")),
         },
     ).mappings().first()
     return _to_item(result)

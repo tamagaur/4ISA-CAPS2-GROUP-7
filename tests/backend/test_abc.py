@@ -64,14 +64,15 @@ class FakeSession:
         if "MAX(lr.planning_cycle_date)" in sql:
             return FakeResult([{"d": None}])
         if "MAX(classification_period)" in sql:
-            return FakeResult([{"p": self.latest_period}])
+            return FakeResult([{"principal": params.get("principal") or "unilever", "p": self.latest_period}])
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult(
                 [{"p": self.inventory_period_by_scope.get(params.get("principal"))}]
             )
         if "FROM abc_classification ac" in sql:
-            period = params["period"]
-            matched = [r for r in self.rows if r["_period"] == period]
+            # Each row is current against ITS principal's resolved run (abc_period_pred).
+            per = {"unilever": params.get("abc_p_unilever"), "delmonte": params.get("abc_p_delmonte")}
+            matched = [r for r in self.rows if r["_period"] == per.get(r["principal"])]
             return FakeResult(matched)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -202,8 +203,11 @@ class LastKnownFakeSession:
         if "MAX(classification_period)" in sql:
             rows = self._scoped(self.abc_rows, params)
             cap = params.get("at_or_before")
-            periods = [r["classification_period"] for r in rows if cap is None or r["classification_period"] <= cap]
-            return FakeResult([{"p": max(periods) if periods else None}])
+            by_principal: dict[str, str] = {}
+            for r in rows:
+                if (cap is None or r["classification_period"] <= cap) and r["classification_period"] > by_principal.get(r["principal"], ""):
+                    by_principal[r["principal"]] = r["classification_period"]
+            return FakeResult([{"principal": k, "p": v} for k, v in by_principal.items()])
         if "MAX(_period) AS p FROM Inventory_Fact_Real" in sql:
             return FakeResult([{"p": "2026-03"}])
         if "SELECT COUNT(*) AS n FROM product_dimension" in sql:
@@ -215,10 +219,10 @@ class LastKnownFakeSession:
             n = sum(1 for p in self._scoped(self.products, params) if p["product_key"] not in ranked)
             return FakeResult([{"n": n}])
         if "WITH latest AS" in sql:
-            period = params["period"]
+            per = {"unilever": params.get("abc_p_unilever"), "delmonte": params.get("abc_p_delmonte")}
             latest: dict[int, dict] = {}
             for r in self._scoped(self.abc_rows, params):
-                if r["classification_period"] > period:
+                if per.get(r["principal"]) is None or r["classification_period"] > per[r["principal"]]:
                     continue
                 cur = latest.get(r["product_key"])
                 if cur is None or r["classification_period"] > cur["classification_period"]:
@@ -343,9 +347,11 @@ class PeriodResolvingFakeSession(FakeSession):
         if "MAX(classification_period)" in sql:
             self.calls.append((sql, dict(params)))
             scope, cap = params.get("principal"), params.get("at_or_before")
-            periods = [r["_period"] for r in self.rows
-                       if (scope is None or r["principal"] == scope) and (cap is None or r["_period"] <= cap)]
-            return FakeResult([{"p": max(periods) if periods else None}])
+            by_principal: dict[str, str] = {}
+            for r in self.rows:
+                if (scope is None or r["principal"] == scope) and (cap is None or r["_period"] <= cap)                         and r["_period"] > by_principal.get(r["principal"], ""):
+                    by_principal[r["principal"]] = r["_period"]
+            return FakeResult([{"principal": k, "p": v} for k, v in by_principal.items()])
         return super().execute(stmt, params)
 
 
@@ -541,7 +547,7 @@ def test_class_shares_come_from_the_running_total_not_rounded_row_shares():
             items.append(ABCItem(sku_id="x", principal="unilever", tier=tier, tier_period="2026-02",
                                  revenue_share=round(share / n, 4), cumulative_share=round(cumulative, 4),
                                  stock_status="NO DATA"))
-    summary = {t.tier: t.revenue_share_total for t in _summarize(items, "2026-02")[0]}
+    summary = {t.tier: t.revenue_share_total for t in _summarize(items, {"unilever": "2026-02"})[0]}
     for tier, (n, share) in true.items():
         assert summary[tier] == pytest.approx(share, abs=1e-4)
         assert abs(n * round(share / n, 4) - share) > 0.005  # what the old sum read
@@ -671,3 +677,19 @@ def test_response_states_the_stock_count_date_and_plan_cycle(monkeypatch):
     hidden = _get(CountDateFakeSession(_reason_rows(), latest_period="2024-02"), "principal=unilever")
     assert hidden["planning_cycle_date"] is None
     assert hidden["stock_count_dates"] == {"unilever": "2026-04-06"}
+
+
+def test_scope_all_reports_each_principals_own_run_and_marks_both_current():
+    """Unilever's latest run is 2026-02, Del Monte's 2025-12. Under 'all' the
+    page needs both: tier_a_periods carries each, and neither principal's rows
+    read as carried-forward against the other's period."""
+    def row(pk, principal, period):
+        return {"product_key": pk, "sku_id": f"S{pk}", "product_name": f"P{pk}", "principal": principal, "tier": "A",
+                "revenue_share": 0.5, "cumulative_share": 0.5, "boundary_flag": False, "current_stock": None,
+                "has_stock_row": False, "reorder_point": None, "safety_stock": None, "_period": period}
+    rows = [row(1, "unilever", "2026-02"), row(10, "delmonte", "2025-12"), row(11, "delmonte", "2025-11")]
+    body = _get(PeriodResolvingFakeSession(rows, latest_period=None), "classification_period=2026-02")
+
+    assert body["tier_a_periods"] == {"Unilever": "2026-02", "Del Monte": "2025-12"}
+    assert body["classification_period"] == "2026-02"  # the scalar is unchanged
+    assert {i["product_key"]: i["tier_period"] for i in body["items"]} == {1: "2026-02", 10: "2025-12"}
