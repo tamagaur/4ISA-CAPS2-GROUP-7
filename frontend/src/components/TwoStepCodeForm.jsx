@@ -8,15 +8,21 @@ import './TwoStep.css';
 //
 // variant="login" borrows the sign-in page's own field and button styles
 // (Login.css), so the second step looks like the first.
+//
+// rememberLabel (sign-in only) adds a "Remember me" checkbox under the box;
+// onSubmit then gets { remember } as its second argument.
 const TwoStepCodeForm = ({
   onSubmit,
   submitLabel = 'Verify',
   busyLabel = 'Checking…',
   allowRecovery = false,
+  rememberLabel = null,
+  rememberHint = null,
   variant,
 }) => {
   const inputId = useId();
   const [code, setCode] = useState('');
+  const [remember, setRemember] = useState(false);
   const [useRecovery, setUseRecovery] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,7 +39,7 @@ const TwoStepCodeForm = ({
     setError('');
     setBusy(true);
     try {
-      await onSubmit(code.trim());
+      await onSubmit(code.trim(), { remember: Boolean(rememberLabel) && remember });
     } catch (err) {
       setError(err.message || "That code didn't work. Please try again.");
       setCode('');
@@ -71,6 +77,15 @@ const TwoStepCodeForm = ({
     <form className={isLogin ? 'login-form' : 'twostep-code-form'} onSubmit={handleSubmit}>
       {error && <div className={isLogin ? 'error-message' : 'twostep-error'} role="alert">{error}</div>}
       {isLogin ? <div className="input-group">{input}</div> : input}
+      {rememberLabel && (
+        <label className="twostep-remember">
+          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+          <span>
+            {rememberLabel}
+            {rememberHint && <span className="twostep-remember-hint">{rememberHint}</span>}
+          </span>
+        </label>
+      )}
       <button
         type="submit"
         className={isLogin ? `submit-btn ${busy ? 'submitting' : ''}` : 'twostep-btn twostep-btn-primary'}

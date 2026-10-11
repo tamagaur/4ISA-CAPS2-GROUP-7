@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  confirmLoginMfaSetup, login, SESSION_EXPIRED_KEY, startLoginMfaSetup, verifyLoginCode,
+  confirmLoginMfaSetup, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup, verifyLoginCode,
 } from './auth';
 import TwoStepCodeForm from './components/TwoStepCodeForm';
 import TwoStepSetup from './components/TwoStepSetup';
@@ -78,9 +78,9 @@ const Login = () => {
   };
 
   // Thrown errors are shown by the code form itself, except an expired step.
-  const withExpiry = (action) => async (code) => {
+  const withExpiry = (action) => async (code, options) => {
     try {
-      await action(code);
+      await action(code, options);
     } catch (err) {
       if (err.code === 'mfa_expired') {
         backToPassword(err.message);
@@ -90,8 +90,10 @@ const Login = () => {
     }
   };
 
-  const handleVerify = withExpiry(async (code) => {
-    await verifyLoginCode(mfa.token, code);
+  // "Remember me" ticked: this browser isn't asked for the code again for
+  // REMEMBER_DAYS (the password still is).
+  const handleVerify = withExpiry(async (code, { remember = false } = {}) => {
+    await verifyLoginCode(mfa.token, code, { email, remember });
     navigate('/');
   });
 
@@ -126,7 +128,14 @@ const Login = () => {
         {isSetup ? (
           <TwoStepSetup setup={mfa.setup} onConfirm={handleSetupConfirm} variant="login" />
         ) : (
-          <TwoStepCodeForm onSubmit={handleVerify} submitLabel="Verify" allowRecovery variant="login" />
+          <TwoStepCodeForm
+            onSubmit={handleVerify}
+            submitLabel="Verify"
+            allowRecovery
+            variant="login"
+            rememberLabel="Remember me"
+            rememberHint={`Don't ask for a code on this device for ${REMEMBER_DAYS / 7} weeks. Your password is still needed. Leave unticked on a shared computer.`}
+          />
         )}
         <div className="auth-links">
           <button type="button" className="auth-link twostep-link" onClick={() => backToPassword()}>

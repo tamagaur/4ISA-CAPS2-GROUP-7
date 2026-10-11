@@ -47,6 +47,12 @@ gets mfa_step 'setup' and sets it up on the spot. Wrong codes count toward
 the same lock as wrong passwords, and the email's count is only cleared once
 the whole sign-in succeeds: clearing it at the password would let someone
 who knows the password guess codes forever, 4 at a time.
+
+REMEMBER ME (2026-10-11, backend/mfa.py): /auth/login/verify with
+remember_device also returns a remember_token. The browser keeps it and
+sends it with later sign-ins; for mfa.REMEMBER_DAYS (14) a right password
+plus that token skips the code. A new password or a new authenticator setup
+ends it. Both the remembering and each skipped code go to the audit log.
 """
 from __future__ import annotations
 
@@ -93,6 +99,7 @@ from backend.schemas.auth import (
     MfaPendingRequest,
     MfaSetupDoneResponse,
     MfaSetupResponse,
+    MfaVerifyRequest,
     RegisterRequest,
     SetPasswordRequest,
     TokenRequest,
@@ -315,6 +322,15 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
         logger.error("Account %s has two-step sign-in on but the server can't check codes "
                      "(MFA_ENCRYPTION_KEY).", row["user_id"])
         raise MFA_UNAVAILABLE from None
+    # "Remember me": a browser that passed the code step in the last
+    # mfa.REMEMBER_DAYS days, for this password and this authenticator
+    # setup, is not asked again. Only 'verify' can be skipped, never 'setup'.
+    if step == "verify" and mfa.device_remembered(
+        db, row["user_id"], row["password_hash"], body.remember_token
+    ):
+        audit.record(db, "Two-Step Code Skipped", f"Remembered device, from {client_ip}",
+                     email=body.email, name=row["full_name"], role=row["role"])
+        step = None
     if step is not None:
         return LoginResponse(mfa_step=step, mfa_token=mfa.issue_pending_token(row["user_id"], step))
 
@@ -368,8 +384,10 @@ def _wrong_code(db: Session, email: str, client_ip: str) -> HTTPException:
 
 
 @router.post("/login/verify", response_model=LoginResponse, response_model_exclude_none=True)
-def login_verify(body: MfaLoginRequest, request: Request, db: Session = Depends(get_db)) -> LoginResponse:
-    """The code from the authenticator app, or one recovery code."""
+def login_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(get_db)) -> LoginResponse:
+    """The code from the authenticator app, or one recovery code. With
+    remember_device, also a remember_token for this browser to send with
+    its next sign-ins (mfa.REMEMBER_DAYS)."""
     account = _pending_account(db, body.mfa_token, "verify")
     client_ip = request.client.host if request.client else "unknown"
     _check_not_locked(account["email"], client_ip)
@@ -385,9 +403,18 @@ def login_verify(body: MfaLoginRequest, request: Request, db: Session = Depends(
         left = mfa.status(db, account["user_id"])["recovery_left"]
         audit.record(db, "Recovery Code Used", f"{left} recovery code{'' if left == 1 else 's'} left",
                      email=account["email"], name=account["full_name"], role=account["role"])
+    remember_token = None
+    if body.remember_device:
+        password_hash = db.execute(
+            text("SELECT password_hash FROM users WHERE user_id = :user_id"), {"user_id": account["user_id"]}
+        ).scalar()
+        remember_token = mfa.issue_remember_token(db, account["user_id"], password_hash)
+        if remember_token is not None:
+            audit.record(db, "Device Remembered", f"No code asked on it for {mfa.REMEMBER_DAYS} days, from {client_ip}",
+                         email=account["email"], name=account["full_name"], role=account["role"])
     db.commit()
     login_limiter.record_success(account["email"])
-    return LoginResponse(**_complete_sign_in(
+    return LoginResponse(remember_token=remember_token, **_complete_sign_in(
         db, user_id=account["user_id"], email=account["email"],
         full_name=account["full_name"], role=account["role"],
     ))

@@ -271,6 +271,62 @@ def _row(db: Session, user_id: int):
     ).mappings().first()
 
 
+# ── "Remember me" on a device (Audrey, 2026-10-11) ────────────────────────
+# After a right code the person may tick "Remember me": the browser keeps a
+# token, and for REMEMBER_DAYS a sign-in from it with the right password
+# skips the code. The password is always asked.
+#
+# The token is signed with its own key derived from JWT_SECRET_KEY, like the
+# pending token, so it can't pass as a sign-in or pending token, nor they as
+# it. It names the account and carries a fingerprint of the password hash
+# and the authenticator setup it was issued under, so a new password, or
+# two-step sign-in turned off, reset or set up again, makes every remembered
+# device ask for the code again.
+#
+# Nothing is stored on the server (no table, no migration). The cost: one
+# device can't be forgotten from the server on its own, only all of an
+# account's at once, by the changes above.
+REMEMBER_DAYS = 14
+
+
+def _remember_key() -> str:
+    return hashlib.sha256(f"mfa-remember:{_get_secret_key()}".encode("utf-8")).hexdigest()
+
+
+def _remember_fingerprint(password_hash: str, row) -> str:
+    material = f"{password_hash}|{row['secret_encrypted']}|{row['enabled_at'].isoformat()}"
+    return hmac.new(_remember_key().encode("utf-8"), material.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def issue_remember_token(db: Session, user_id: int, password_hash: str | None) -> str | None:
+    """A token that lets this account skip the code for REMEMBER_DAYS, or
+    None if it has no password or no two-step sign-in to skip."""
+    row = _row(db, user_id)
+    if not password_hash or row is None or row["enabled_at"] is None:
+        return None
+    expire = datetime.now(timezone.utc) + timedelta(days=REMEMBER_DAYS)
+    payload = {"sub": str(user_id), "fp": _remember_fingerprint(password_hash, row), "exp": expire}
+    return jwt.encode(payload, _remember_key(), algorithm="HS256")
+
+
+def device_remembered(db: Session, user_id: int, password_hash: str | None, token: str | None) -> bool:
+    """True if `token` is this account's, unexpired, and from its current
+    password and authenticator setup. Anything else is simply not
+    remembered: the sign-in asks for the code as usual."""
+    if not token or not password_hash:
+        return False
+    try:
+        payload = jwt.decode(token, _remember_key(), algorithms=["HS256"], options={"require": ["exp"]})
+    except JWTError:
+        return False
+    if payload.get("sub") != str(user_id):
+        return False
+    row = _row(db, user_id)
+    if row is None or row["enabled_at"] is None:
+        return False
+    return hmac.compare_digest(str(payload.get("fp", "")), _remember_fingerprint(password_hash, row))
+
+
 def status(db: Session, user_id: int) -> dict:
     """{'enabled': bool, 'recovery_left': int | None}; not enabled before 0035."""
     row = _row(db, user_id) if mfa_ready(db) else None

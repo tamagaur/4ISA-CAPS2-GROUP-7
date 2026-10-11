@@ -96,6 +96,9 @@ class FakeSession:
         if sql.startswith("SELECT user_id, email, full_name, role FROM users WHERE user_id"):
             user = self.users.get(p["user_id"])
             return FakeResult(None if user is None else {k: user[k] for k in ("user_id", "email", "full_name", "role")})
+        if sql.startswith("SELECT password_hash FROM users WHERE user_id"):
+            user = self.users.get(p["user_id"])
+            return FakeResult(scalar=None if user is None else user["password_hash"])
         if "CASE WHEN password_hash IS NULL" in sql:
             rows = [self._user_out(u) for u in self.users.values()]
             if "WHERE user_id = :user_id" in sql:
@@ -362,6 +365,103 @@ def test_an_account_with_it_cannot_sign_in_without_the_key(client, db, monkeypat
     res = password_step(client)
     assert res.status_code == 503
     assert db.sessions == []
+
+
+# ── "Remember me" on a device ─────────────────────────────────────────────
+def remember_device(client, db, user_id=1, email="admin@ssmcapstone.com") -> str:
+    """Turns two-step sign-in on, passes the code step with "Remember me"
+    ticked and returns the remember_token the browser would keep."""
+    secret, _ = turn_on(db, user_id)
+    token = password_step(client, email).json()["mfa_token"]
+    res = client.post("/auth/login/verify",
+                      json={"mfa_token": token, "code": now_code(secret), "remember_device": True})
+    assert res.status_code == 200
+    return res.json()["remember_token"]
+
+
+def sign_in_remembered(client, remember_token, email="admin@ssmcapstone.com", password=PASSWORD):
+    return client.post("/auth/login", json={"email": email, "password": password, "remember_token": remember_token})
+
+
+def test_a_remembered_device_skips_the_code_but_not_the_password(client, db):
+    remember_token = remember_device(client, db)
+    assert any(a["action"] == "Device Remembered" for a in db.audit)
+
+    res = sign_in_remembered(client, remember_token)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["access_token"] and "mfa_step" not in body and "remember_token" not in body
+    assert len(db.sessions) == 2
+    assert any(a["action"] == "Two-Step Code Skipped" for a in db.audit)
+
+    wrong = sign_in_remembered(client, remember_token, password="not-the-password")
+    assert wrong.status_code == 401
+    assert len(db.sessions) == 2
+
+
+def test_without_the_tick_nothing_is_remembered(client, db):
+    secret, _ = turn_on(db, 1)
+    token = password_step(client).json()["mfa_token"]
+    res = client.post("/auth/login/verify", json={"mfa_token": token, "code": now_code(secret)})
+    assert res.status_code == 200 and "remember_token" not in res.json()
+    assert not any(a["action"] == "Device Remembered" for a in db.audit)
+    assert password_step(client).json()["mfa_step"] == "verify"
+
+
+def test_a_remember_token_only_works_for_its_own_account(client, db):
+    remember_token = remember_device(client, db)
+    turn_on(db, 2)
+    for token in (remember_token, "not-a-token", "x" * 300):
+        res = sign_in_remembered(client, token, email="staff@ssmcapstone.com")
+        assert res.status_code == 200 and res.json()["mfa_step"] == "verify"
+    assert len(db.sessions) == 1
+
+
+def test_a_new_password_or_a_new_setup_ends_remembering(client, db):
+    remember_token = remember_device(client, db)
+    old_hash = db.users[1]["password_hash"]
+    db.users[1]["password_hash"] = auth_utils.hash_password(PASSWORD)  # set again: a new hash
+    assert sign_in_remembered(client, remember_token).json()["mfa_step"] == "verify"
+
+    db.users[1]["password_hash"] = old_hash
+    assert sign_in_remembered(client, remember_token).json().get("access_token")
+    turn_on(db, 1)  # reset and set up again: a new secret
+    assert sign_in_remembered(client, remember_token).json()["mfa_step"] == "verify"
+
+    del db.mfa[1]  # turned off: nothing to skip, and nothing to remember
+    assert mfa.issue_remember_token(db, 1, old_hash) is None
+
+
+def test_remembering_ends_after_two_weeks(client, db):
+    remember_token = remember_device(client, db)
+    claims = jwt.decode(remember_token, mfa._remember_key(), algorithms=["HS256"])
+    left = datetime.fromtimestamp(claims["exp"], timezone.utc) - datetime.now(timezone.utc)
+    assert timedelta(days=13, hours=23) < left <= timedelta(days=14)
+
+    expired = jwt.encode({**claims, "exp": datetime.now(timezone.utc) - timedelta(seconds=1)},
+                         mfa._remember_key(), algorithm="HS256")
+    assert sign_in_remembered(client, expired).json()["mfa_step"] == "verify"
+    no_expiry = jwt.encode({k: v for k, v in claims.items() if k != "exp"}, mfa._remember_key(), algorithm="HS256")
+    assert sign_in_remembered(client, no_expiry).json()["mfa_step"] == "verify"
+
+
+def test_a_remember_token_is_no_other_kind_of_token(client, db):
+    remember_token = remember_device(client, db)
+    with pytest.raises(JWTError):
+        auth_utils.decode_access_token(remember_token)
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {remember_token}"}).status_code == 401
+    assert mfa.read_pending_token(remember_token, "verify") is None
+    # Nor do the other two pass as one.
+    access = auth_utils.create_access_token(user_id=1, email="a@b.c", role="admin", full_name="A", session_id="s")
+    for other in (access, mfa.issue_pending_token(1, "verify")):
+        assert sign_in_remembered(client, other).json()["mfa_step"] == "verify"
+
+
+def test_a_required_role_still_sets_it_up_whatever_the_browser_sends(client, db, monkeypatch):
+    remember_token = remember_device(client, db)
+    del db.mfa[1]
+    monkeypatch.setenv("MFA_REQUIRED_ROLES", "admin")
+    assert sign_in_remembered(client, remember_token).json()["mfa_step"] == "setup"
 
 
 # ── A role that must use it ────────────────────────────────────────────────

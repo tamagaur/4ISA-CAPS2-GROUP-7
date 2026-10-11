@@ -14,7 +14,7 @@ Change Access (a user's role and permission boxes, PUT
 Password Reset, Sign-in Locked, Sign-in Failed, Sign-in Failure Logging
 Paused, Add SKU, Edit SKU, Reorder Recommendation Accepted / Dismissed,
 Two-Step Sign-In On / Off / Reset, Recovery Codes Replaced, Recovery Code
-Used (backend/mfa.py).
+Used, Device Remembered, Two-Step Code Skipped (backend/mfa.py).
 """
 from __future__ import annotations
 
