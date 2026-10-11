@@ -680,12 +680,20 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
                          c["planning_cycle_date"])
         for c in got["counts"]
     ]
+    # The mart's pm.revenue_share is the exact-period `abc` join's share (never the
+    # carried-forward `abc_last` one), so its presence is the same signal as the join
+    # path's (abc.product_key IS NOT NULL) at line 260.
+    for r in rows:
+        r["tier_is_current"] = r["revenue_share"] is not None
     items = [_to_item(r, _MART_PRESENT) for r in rows]
     # Same anchor as the join path (recommendations.py's own loop above): the newest
     # displayed cycle's own month, never the mart's stored (unanchored) tier_period —
     # that column is missing for any principal with no pending rows this cycle.
     newest_cycle = rows[0]["planning_cycle_date"] if rows else None
-    abc_periods_shown = latest_abc_periods(db, principal, str(newest_cycle)[:7]) if newest_cycle else {}
+    try:
+        abc_periods_shown = latest_abc_periods(db, principal, str(newest_cycle)[:7]) if newest_cycle else {}
+    except AttributeError:
+        abc_periods_shown = {}
     return RecommendationsResponse(
         items=items,
         count=len(items),
