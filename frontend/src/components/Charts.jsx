@@ -467,7 +467,7 @@ const SalesStockTooltip = ({ active, payload, label, baseLabels = {} }) => {
           named by its year since two years share the slot. */}
       {rows.some((p) => metricOf(p.dataKey) === 'stock') && metas.filter((m) => m.stockUnusual).map((m) => (
         <p key={m.period} className="chart-tooltip-placeholder chart-tooltip-note">
-          Unusual count, {formatAxisPeriod(m.period)}: {m.stockUnusual}
+          Needs checking, {formatAxisPeriod(m.period)}: {m.stockUnusual}
         </p>
       ))}
       {metas.some((m) => m.placeholder) && (
@@ -776,12 +776,13 @@ export const SalesVsStockWidget = ({
         entries.sales_cur.push({ period: markRow.month, text: mark.label, below: mark === insight?.low });
       }
     }
-    // A flagged count keeps its end label, but says it is unusual — the
-    // label is where the eye lands first.
+    // A flagged count keeps its end label, but says it needs checking — the
+    // label is where the eye lands first. Plain words, for the client
+    // (Audrey, 2026-10-11): "unusual" alone did not say what to do with it.
     if (lastStock && !collide) {
       entries.stock_cur.push({
         period: lastStock.month,
-        text: `Inventory ${formatCompactPesos(lastStock.stock_cur)}${lastStock.meta_cur?.stockUnusual ? ' (unusual)' : ''}`,
+        text: `Inventory ${formatCompactPesos(lastStock.stock_cur)}${lastStock.meta_cur?.stockUnusual ? ' (needs checking)' : ''}`,
         below: !(lastSales && lastSales.sales_cur < (lastStock.stock_cur ?? -Infinity)),
       });
     }
@@ -817,7 +818,7 @@ export const SalesVsStockWidget = ({
     ...(hasReturns ? [{ key: 'returns', label: `${returnsLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
     ...(hasReturnsEst ? [{ key: 'returnsEstimated', label: `${returnsEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
     ...(data.some((pt) => pt.stockUnusual && pt.stockOnHand != null)
-      ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Unusual count: ${v}`, align: 'left' }]
+      ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Needs checking: ${v}`, align: 'left' }]
       : []),
   ];
 
@@ -899,7 +900,7 @@ export const SalesVsStockWidget = ({
             {hasUnusual && (
               <li className="legend-item">
                 <span className="legend-unusual" aria-hidden="true" />
-                Unusual stock count — hover or tap it for why
+                Stock count that needs checking — hover or tap it for why
               </li>
             )}
             {hasPlaceholder && <PlaceholderLegendItem />}

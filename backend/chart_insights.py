@@ -175,7 +175,7 @@ def sales_vs_stock_insight(series: list[dict], unusual_stock: dict[str, str] | N
         s = stock_pts[-1]
         passed = [r["period"] for r in all_stock_pts if r["period"] > s["period"]]
         aside = (
-            f" ({' and '.join(month_label(p) for p in passed)}'s count is marked as unusual on the chart)"
+            f" ({' and '.join(month_label(p) for p in passed)}'s count needs checking and is marked on the chart)"
             if passed else ""
         )
         # Named as what the line measures — inventory value at cost — and,

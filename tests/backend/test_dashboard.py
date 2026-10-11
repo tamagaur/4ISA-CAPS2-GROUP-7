@@ -1889,7 +1889,7 @@ def test_stock_card_compares_with_the_last_count_not_flagged_as_unusual():
     text = _get(session, "principal=unilever&period=2026-02&start_period=2025-03")["sales_vs_stock_insight"]["text"]
     assert "stood at ₱24.3M in Jan 2026" in text
     assert "₱46.6M" not in text
-    assert "Feb 2026's count is marked as unusual" in text
+    assert "Feb 2026's count needs checking" in text
 
 
 def test_kpi_trend_gives_no_delta_from_an_unusual_latest_month():
