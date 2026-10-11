@@ -205,13 +205,99 @@ export const AnnualSalesCard = ({
   );
 };
 
+// ── Small visuals that fill the three narrow cards (2026-10-09) ───────────
+// Each draws figures the card already receives from GET /dashboard; none
+// computes anything new beyond a share of a whole the card already states.
+
+// Weeks of cover against SSM's policy: a bar to the cover, a tick at the
+// policy. The scale runs a little past the larger of the two, so neither
+// end sits on the card's edge.
+export const CoverMeter = ({ weeks, policy, provisional = false }) => {
+  if (weeks == null || policy == null) return null;
+  const max = Math.max(weeks, policy) * 1.15 || 1;
+  const times = policy > 0 ? weeks / policy : null;
+  const policyAt = (policy / max) * 100;
+  // The policy label hangs off its tick, kept inside the card at either end.
+  const policyAlign = policyAt > 60 ? 'is-end' : policyAt < 25 ? 'is-start' : '';
+  return (
+    <div className="hero-meter">
+      <div className="hero-meter-head">
+        <span>≈ <strong>{weeks.toFixed(1)} weeks</strong> of cover{provisional ? ' (provisional)' : ''}</span>
+        {times != null && <span className="hero-meter-times">{times.toFixed(1)}× policy</span>}
+      </div>
+      <div
+        className="hero-meter-track"
+        role="img"
+        aria-label={`About ${weeks.toFixed(1)} weeks of cover against SSM's policy of ${policy} weeks`}
+      >
+        <span className="hero-meter-fill" style={{ width: `${(weeks / max) * 100}%` }} />
+        <span className="hero-meter-tick" style={{ left: `${policyAt}%` }} />
+      </div>
+      <div className="hero-meter-scale">
+        <span className={`hero-meter-policy ${policyAlign}`} style={{ left: `${policyAt}%` }}>
+          SSM policy: {policy} wk
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// One whole split into parts (each { key, label, value }), with a legend.
+// Zero parts stay in the legend (a "0 critical" is worth reading) but draw
+// no segment.
+export const ShareBar = ({ parts, label, inline = false }) => {
+  const total = parts.reduce((sum, p) => sum + (p.value || 0), 0);
+  if (!total) return null;
+  return (
+    <div className="hero-share">
+      <div className="hero-share-track" role="img" aria-label={label}>
+        {parts.filter((p) => p.value > 0).map((p) => (
+          <span key={p.key} className={`hero-share-seg is-${p.key}`} style={{ flexGrow: p.value }} />
+        ))}
+      </div>
+      <ul className={`hero-share-legend${inline ? ' is-inline' : ''}`}>
+        {parts.map((p) => (
+          <li key={p.key}>
+            <span className={`hero-share-swatch is-${p.key}`} aria-hidden="true" />
+            <span className="hero-share-label">{p.label}</span>
+            <strong>{(p.value || 0).toLocaleString()}</strong>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+// A few named rows with one figure each (the products furthest below
+// safety stock), names cut to one line with the full name on hover.
+export const MiniList = ({ title, figureLabel, rows }) => {
+  if (!rows?.length) return null;
+  return (
+    <div className="hero-mini">
+      <div className="hero-mini-head">
+        <span>{title}</span>
+        <span>{figureLabel}</span>
+      </div>
+      <ul>
+        {rows.map((r) => (
+          <li key={r.key}>
+            <span className="hero-mini-name" title={r.name}>{r.name}</span>
+            <span className="hero-mini-figure">{r.figure}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
 // ── Card 2: inventory value ───────────────────────────────────────────────
-export const InventoryCard = ({ value, lines = [], flag = null, change = null, tooltip, basis }) => (
+export const InventoryCard = ({ value, lines = [], flag = null, change = null, cover = null, tooltip, basis }) => (
   <HeroCard tone="blue" title="Inventory value" tooltip={tooltip} basis={basis}>
     <p className="hero-value">{value}</p>
     <div className="hero-lines">
       {lines.filter(Boolean).map((line) => <p key={line} className="hero-line">{line}</p>)}
     </div>
+    {cover && <CoverMeter {...cover} />}
     <div className="hero-pills hero-pills-foot">
       {flag && (
         <span className="hero-pill is-warning">
@@ -227,7 +313,7 @@ export const InventoryCard = ({ value, lines = [], flag = null, change = null, t
 
 // ── Cards 3 and 4: the operational cards ──────────────────────────────────
 export const ActionCard = ({
-  tone, title, value, unit, lines = [], badge = null, link = null, tooltip, basis, severity = null,
+  tone, title, value, unit, lines = [], badge = null, link = null, tooltip, basis, severity = null, children = null,
 }) => (
   <HeroCard tone={tone} title={title} tooltip={tooltip} basis={basis} action>
     <p className={`hero-value${severity ? ` is-${severity}` : ''}`}>
@@ -237,6 +323,7 @@ export const ActionCard = ({
     <div className="hero-lines">
       {lines.filter(Boolean).map((line) => <p key={line} className="hero-line">{line}</p>)}
     </div>
+    {children}
     {badge && (
       <div className="hero-pills">
         <span className={`hero-pill is-${badge.tone || 'info'}`}>

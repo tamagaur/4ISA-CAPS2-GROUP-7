@@ -8,7 +8,8 @@ import {
   CATEGORY_MISS_COLUMNS, DEMO_PRODUCT_SALES_LABEL, IDLE_COLUMNS, OVER_RUN_COLUMNS, PRODUCT_SALES_COLUMNS,
 } from './RangeCards';
 import RangePicker from './RangePicker';
-import { ActionCard, AnnualSalesCard, InventoryCard } from './HeroKpis';
+import { ActionCard, AnnualSalesCard, InventoryCard, MiniList, ShareBar } from './HeroKpis';
+import { formatUnits } from '../utils/formatNumber';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
@@ -994,10 +995,60 @@ const Dashboard = () => {
     },
     tooltip: salesTooltip,
   };
+  // Weeks of cover is drawn as a bar against the policy (CoverMeter) when
+  // there is a figure; the text line stays only as the fallback.
+  const coverMeter = sohValue.value !== '—' && cover.value != null
+    ? { weeks: Number(cover.value), policy: policyWeeks, provisional: coverProvisional }
+    : null;
   const inventoryLines = sohValue.value === '—'
     ? [sohValue.contextLine]
     : ['At last purchase price', countLabel ? countLabel.charAt(0).toUpperCase() + countLabel.slice(1) : null,
-      sohCoverage, piecesLine, coverLine];
+      sohCoverage, piecesLine, coverMeter ? null : coverLine];
+  // The two operational cards' visuals (HeroKpis.jsx). Below safety stock:
+  // the count as a share of the SKUs it was checked on, and the first three
+  // of below_items (already ordered by revenue share, the list the link
+  // opens). Pending reorders: the same pending rows by urgency, from
+  // reorder_preview's counts; "Planned" is what is left of the card's count.
+  const belowShare = belowSs.value !== '—' && exposure.comparable_count > 0 ? [
+    { key: 'below', label: 'Below', value: exposure.below_count },
+    { key: 'above', label: 'At or above', value: exposure.comparable_count - exposure.below_count },
+  ] : null;
+  const belowTop = belowSs.value !== '—'
+    ? belowItems.slice(0, 3).map((it) => ({
+      key: it.sku_id || it.product_name,
+      name: it.product_name || it.sku_id,
+      figure: `${formatUnits(it.short_by)} pcs`,
+    }))
+    : [];
+  const pendingParts = (() => {
+    if (lpHidden || pendingCount <= 0) return null;
+    const critical = reorderPreview.critical_count ?? 0;
+    const urgent = reorderPreview.urgent_count ?? 0;
+    const noData = reorderPreview.no_data_count ?? 0;
+    const planned = pendingCount - critical - urgent - noData;
+    // The counts come from a separate read of the same pending rows; if they
+    // ever disagree with the card's count, draw nothing rather than a bar
+    // that doesn't add up.
+    if (planned < 0) return null;
+    return [
+      { key: 'critical', label: 'Critical', value: critical },
+      { key: 'urgent', label: 'Urgent', value: urgent },
+      planned > 0 ? { key: 'planned', label: 'Planned', value: planned } : null,
+      noData > 0 ? { key: 'nodata', label: 'No stock data', value: noData } : null,
+    ].filter(Boolean);
+  })();
+  const pendingQtyLine = pendingParts && reorderPreview.total_order_qty > 0
+    ? `${reorderPreview.total_order_qty.toLocaleString()} pieces to order in all`
+    : null;
+  // The first two of reorder_preview.rows: already most urgent first, then
+  // by the Reorder page's own priority, so they match the top of that page.
+  const pendingTop = pendingParts
+    ? reorderRows.slice(0, 2).map((r) => ({
+      key: r.sku || r.product,
+      name: r.product || r.sku,
+      figure: `${formatUnits(r.orderQty)} pcs`,
+    }))
+    : [];
   const belowLines = belowSs.value === '—'
     ? [belowSs.contextLine]
     : [
@@ -1113,6 +1164,7 @@ const Dashboard = () => {
               // (kpis.soh_count_note, Yuan 2026-10-04).
               flag={sohValue.value !== '—' && kpis.soh_count_note ? { label: 'Unusual count', detail: kpis.soh_count_note } : null}
               change={sohValue.value !== '—' ? stockCompare : null}
+              cover={coverMeter}
               tooltip={coverTooltip}
               basis={BASIS.stock}
             />
@@ -1128,7 +1180,16 @@ const Dashboard = () => {
               link={canListAtRisk
                 ? { label: `See the ${exposure.below_count.toLocaleString()} products`, onClick: openAtRisk }
                 : null}
-            />
+            >
+              {belowShare && (
+                <ShareBar
+                  inline
+                  parts={belowShare}
+                  label={`${exposure.below_count} of ${exposure.comparable_count} Class A SKUs below safety stock`}
+                />
+              )}
+              <MiniList title="Top sellers among them" figureLabel="Short by" rows={belowTop} />
+            </ActionCard>
             <ActionCard
               tone="purple"
               title="Pending reorder actions"
@@ -1136,7 +1197,17 @@ const Dashboard = () => {
               unit={lpHidden ? undefined : pendingCount === 1 ? 'SKU' : 'SKUs'}
               lines={lpHidden ? [LP_HIDDEN_NOTE] : ['Awaiting a decision', lpCycleLabel ? `${lpCycleLabel} plan` : null]}
               link={!lpHidden && pendingCount > 0 ? { label: 'Open the order plan', to: '/reorder' } : null}
-            />
+            >
+              {pendingParts && (
+                <ShareBar
+                  parts={pendingParts}
+                  label={`${pendingCount} pending SKUs by urgency: `
+                    + pendingParts.map((p) => `${p.value} ${p.label.toLowerCase()}`).join(', ')}
+                />
+              )}
+              {pendingQtyLine && <p className="hero-note">{pendingQtyLine}</p>}
+              <MiniList title="First in line" figureLabel="Order" rows={pendingTop} />
+            </ActionCard>
           </div>
 
           {/* DESCRIPTIVE — what happened: the sales trend across the full
