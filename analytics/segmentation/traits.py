@@ -181,13 +181,25 @@ def has_restart(qty: np.ndarray, gap_months: int = RESTART_GAP_MONTHS) -> bool:
     return restarted
 
 
+NEAR_PERMANENT_RATIO = 30 / 38  # the "near-permanent" boundary found on the 38-period
+# (abc_method='single') basis (reports/archive/TIERA_STABILITY_2026-09.md: 21 products
+# Tier A in all 38 periods, 28 more in 30-37, then a drop to a 366-product churning pool
+# median 7 periods). Carried forward as a ratio so a shorter basis (t12m_new: 27 periods,
+# no month before 12 trailing months of history) gets a rescaled, still-reachable cut-off
+# instead of an unreachable literal 30.
+
+
 def stability_group(tier_a_periods: int, total_periods: int) -> str:
     """Absolute-count stability groups (not membership frequency — see
     reports/ABC_PHASE2_2026-09.md's core/pool discussion for why a
     frequency ratio was set aside there in favor of this simpler,
-    already-reported grouping)."""
+    already-reported grouping). total_periods must be the periods actually
+    classified under this product's abc_method, not a fixed constant — a
+    method with fewer periods than the cut-off was tuned on would otherwise
+    make every product "churn"."""
     if tier_a_periods == total_periods:
-        return "all_38"
-    if tier_a_periods >= 30:
-        return "at_least_30"
+        return f"all_{total_periods}"
+    near_permanent = round(total_periods * NEAR_PERMANENT_RATIO)
+    if tier_a_periods >= near_permanent:
+        return f"at_least_{near_permanent}"
     return "churn"

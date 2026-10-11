@@ -18,13 +18,17 @@ is scored when it is in the product's series after its first month and the route
 model (an 'insufficient' month is dropped).
 
 TWO COHORTS, two runs:
-  at_the_time  Tier A the month before each test month (ABC 'single'), XGBoost trained on that
-               month's Tier A only: no look-ahead. The figure to quote (decision 2026-10-03,
-               kelvin/model-audit): 337 products, 3,503 product-months.
+  at_the_time  Tier A the month before each test month, on the current Tier A basis
+               (analytics.params.abc_method('unilever') / TIER_A_BASIS — t12m_new since DEC-38/0044,
+               189 products as of 2026-02; was ABC 'single', 132, before this was rewritten
+               2026-10-11), XGBoost trained on that month's Tier A only: no look-ahead. The
+               figure to quote (decision 2026-10-03, kelvin/model-audit, re-based 2026-10-11).
   tier_a_2026_02  the fixed 107 products of the first report (Tier A as of 2026-02 and scored
                on 2025-09..2026-02; config/forecast_cohorts/tier_a_2026-02_scored_107.csv, copied
                from kelvin/model-audit cohort_107.csv), XGBoost trained on Tier A as of 2026-02.
-               Survivor cohort: kept so its 26.9% can be reproduced and labelled, never quoted alone.
+               Survivor cohort: deliberately PINNED to ABC 'single' (the basis the 2026-10-03
+               report scored), never re-based — kept so its 26.9% can be reproduced and
+               labelled, never quoted alone.
 
 VERIFIED BEFORE ANY WRITE. Each run's rows are compared with the report's own rows when its
 git-ignored output is on this machine (--reference-dir), and its headline metrics, recomputed
@@ -71,15 +75,17 @@ TOL_CSV = 1e-4     # the first report's CSV carries 4 decimals
 RUNS = {
     "at_the_time": {
         "label": "backtest 2023-10..2026-02, Tier A the month before each month",
-        "cohort": "Tier A (ABC single) as of the month before each test month; XGBoost pool the same",
+        "cohort": "Tier A (current basis) as of the month before each test month; XGBoost pool the same",
         "headline_column": "at-the-time cohort (Tier A the month before each test month)",
         "reference": REF_AT_THE_TIME, "ref_value": "value", "tol": TOL_EXACT,
+        "abc_method": None,  # None = analytics.params.abc_method('unilever'), i.e. TIER_A_BASIS
     },
     "tier_a_2026_02": {
         "label": "backtest 2023-10..2026-02, Tier A as of 2026-02 (107, survivor cohort)",
         "cohort": "the 107 products Tier A as of 2026-02 and scored 2025-09..2026-02; XGBoost pool Tier A as of 2026-02",
         "headline_column": "today's Tier A (Tier A as of 2026-02, the ~27% figure)",
         "reference": REF_107, "ref_value": "forecast", "tol": TOL_CSV,
+        "abc_method": "single",  # pinned: this cohort IS the ABC-single 107, never re-based
     },
 }
 
@@ -88,10 +94,9 @@ def ym(ts) -> str:
     return pd.Timestamp(ts).strftime("%Y-%m")
 
 
-def read_inputs(db_url: str, abc_method: str = "single"):
-    """Real demand (as the runner reads it), each product's pesos and raw pieces (for the
-    report's price rule), and Tier A by ABC period on `abc_method`. One read-only transaction.
-    'single' by default: the stored at-the-time and fixed-107 runs are defined on it."""
+def read_demand_and_money(db_url: str):
+    """Real demand (as the runner reads it) and each product's pesos and raw pieces (for the
+    report's price rule). One read-only transaction. Independent of ABC method/basis."""
     conn = psycopg2.connect(db_url)
     try:
         cur = conn.cursor()
@@ -102,6 +107,23 @@ def read_inputs(db_url: str, abc_method: str = "single"):
             FROM Unilever_SKU_Demand_Fact_Real GROUP BY product_key, calendar_month
         """)
         money = pd.DataFrame(cur.fetchall(), columns=["product_key", "month", "net_amount", "quantity_raw"])
+        conn.rollback()
+    finally:
+        conn.close()
+    money["net_amount"] = pd.to_numeric(money.net_amount, errors="coerce").astype(float)
+    money["quantity_raw"] = pd.to_numeric(money.quantity_raw, errors="coerce").astype(float)
+    series = {int(k): build_series(g) for k, g in demand.groupby("product_key")}
+    return series, money
+
+
+def read_tier_a(db_url: str, abc_method: str) -> dict[str, set[int]]:
+    """Tier A product_keys by classification_period, on `abc_method`. One read-only
+    transaction. No default: the two stored runs no longer share one basis (at_the_time
+    follows analytics.params.abc_method('unilever'); tier_a_2026_02 is pinned to 'single')."""
+    conn = psycopg2.connect(db_url)
+    try:
+        cur = conn.cursor()
+        cur.execute("SET TRANSACTION READ ONLY")
         cur.execute("""
             SELECT product_key, classification_period FROM abc_classification
             WHERE principal = 'unilever' AND method = %s AND tier = 'A'
@@ -110,11 +132,13 @@ def read_inputs(db_url: str, abc_method: str = "single"):
         conn.rollback()
     finally:
         conn.close()
-    money["net_amount"] = pd.to_numeric(money.net_amount, errors="coerce").astype(float)
-    money["quantity_raw"] = pd.to_numeric(money.quantity_raw, errors="coerce").astype(float)
-    series = {int(k): build_series(g) for k, g in demand.groupby("product_key")}
-    tier_by = {p: set(g.product_key.astype(int)) for p, g in tier_a.groupby("period")}
-    return series, money, tier_by
+    return {p: set(g.product_key.astype(int)) for p, g in tier_a.groupby("period")}
+
+
+def read_inputs(db_url: str, abc_method: str):
+    """Back-compat wrapper: read_demand_and_money() + read_tier_a() in one call."""
+    series, money = read_demand_and_money(db_url)
+    return series, money, read_tier_a(db_url, abc_method)
 
 
 def backtest(series: dict, products, months, forecaster) -> list[dict]:
@@ -185,9 +209,12 @@ def reference_headline(column: str) -> dict | None:
     return {k: float(v) for k, v in ref.items()}
 
 
-def verify(name: str, spec: dict, bt: pd.DataFrame, money: pd.DataFrame) -> dict:
+def verify(name: str, spec: dict, bt: pd.DataFrame, money: pd.DataFrame, expect_committed_headline: bool = True) -> dict:
     """Row-level check against the report's own output (when present) and headline check
-    against the committed table. Raises SystemExit on any mismatch."""
+    against the committed table. Raises SystemExit on any mismatch.
+    expect_committed_headline=False: the committed headline_two_cohorts.csv is pinned to
+    ABC 'single'; a run on a different basis (at_the_time since 2026-10-11, t12m_new) is
+    EXPECTED to differ, so the mismatch is only reported, never raised."""
     result = {"rows": len(bt), "products": int(bt.product_key.nunique())}
     ref_path = spec["reference"]
     if os.path.exists(ref_path):
@@ -210,8 +237,11 @@ def verify(name: str, spec: dict, bt: pd.DataFrame, money: pd.DataFrame) -> dict
     if ref_head is not None:
         bad = {k: (v, ref_head[k]) for k, v in got.items() if k in ref_head and abs(v - ref_head[k]) > 1e-6}
         result["headline_matches_committed"] = not bad
-        if bad:
+        if bad and expect_committed_headline:
             raise SystemExit(f"[{name}] headline differs from {HEADLINE_REF}: {bad}")
+        elif bad:
+            print(f"[{name}] headline differs from the ABC-single-pinned {HEADLINE_REF} as expected "
+                  f"(this run is on a different Tier A basis): {bad}")
     else:
         result["headline_matches_committed"] = "reference not reachable"
     return result
@@ -271,17 +301,34 @@ def main() -> int:
     from analytics.config import get_settings
     db_url = get_settings().supabase_db_url
 
+    from analytics.params import abc_method as current_abc_method
+
     t0 = time.time()
-    series, money, tier_by = read_inputs(db_url)
-    print(f"[inputs] {len(series)} real Unilever products, Tier A periods {min(tier_by)}..{max(tier_by)} ({time.time() - t0:.1f}s)")
+    series, money = read_demand_and_money(db_url)
+    print(f"[inputs] {len(series)} real Unilever products ({time.time() - t0:.1f}s)")
+    tier_by_cache: dict[str, dict] = {}
+
+    def tier_by_for(method: str | None) -> dict:
+        method = method or current_abc_method("unilever")
+        if method not in tier_by_cache:
+            t0 = time.time()
+            tier_by_cache[method] = read_tier_a(db_url, method)
+            tb = tier_by_cache[method]
+            print(f"[inputs] Tier A ({method}): periods {min(tb)}..{max(tb)}, "
+                  f"{len(tb[max(tb)])} products as of {max(tb)} ({time.time() - t0:.1f}s)")
+        return tier_by_cache[method]
+
     builders = {"at_the_time": run_at_the_time, "tier_a_2026_02": run_tier_a_2026_02}
     runs = {}
     for name, spec in RUNS.items():
         if args.only and name != args.only:
             continue
+        method = spec["abc_method"]
+        tier_by = tier_by_for(method)
         t0 = time.time()
         bt = builders[name](series, tier_by)
-        check = verify(name, spec, bt, money)
+        resolved_method = method or current_abc_method("unilever")
+        check = verify(name, spec, bt, money, expect_committed_headline=(resolved_method == "single"))
         print(f"[{name}] {check['rows']} rows, {check['products']} products in {time.time() - t0:.0f}s; "
               f"reference: {check.get('reference_rows')} rows, max |diff| {check.get('max_abs_forecast_diff')}; "
               f"headline matches committed: {check['headline_matches_committed']}")
