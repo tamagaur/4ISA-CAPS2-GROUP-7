@@ -20,6 +20,8 @@ Email also counts as set up (mailer.is_configured), whatever this machine's
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from backend import deps, mailer, permissions
@@ -60,6 +62,16 @@ def outbox(monkeypatch):
     )
     monkeypatch.setattr(mailer, "is_configured", lambda: True)
     return sent
+
+
+@pytest.fixture(autouse=True)
+def _jwt_secret(monkeypatch):
+    """create_access_token/decode_access_token (backend/auth_utils.py) refuse
+    to run with no JWT_SECRET_KEY set. Worktrees don't all carry a .env, so
+    tests supply a throwaway secret rather than depending on one being
+    present; a real .env's value (if loaded) is left alone."""
+    if not os.environ.get("JWT_SECRET_KEY"):
+        monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret-not-for-production")
 
 
 @pytest.fixture(autouse=True)

@@ -314,9 +314,10 @@ def _routes():
 
 # Method/path pairs the app serves: 37 = what a flat app.routes walk found under
 # fastapi 0.115.5 at the UIFixes_Audrey merge (2026-10-02); 43 since the data marts
-# added six GET /dashboard/* range routes (2026-10-04). Change it when a route
+# added six GET /dashboard/* range routes (2026-10-04); 44 since GET
+# /dashboard/class-changes (2026-10-05, DEC-37). Change it when a route
 # is added or removed.
-ROUTE_COUNT = 43
+ROUTE_COUNT = 44
 
 
 def test_the_walk_finds_every_route():
