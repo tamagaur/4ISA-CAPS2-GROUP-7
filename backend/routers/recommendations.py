@@ -610,6 +610,11 @@ def get_recommendations(
             newest = max((c["cycle"] for c in served.stock_counts if c.get("cycle")), default=None)
             labels = label_context(db, opening_period(newest) if newest else None,
                                    latest_abc_period(db, principal), principal)
+            # Which ABC run the tiers are from, as the join path states it (the
+            # newest listed cycle's own month). The mart does not carry it.
+            labels["tier_a_periods"] = tier_a_periods(
+                latest_abc_periods(db, principal, str(newest)[:7]) if newest else {}
+            )
             return served.model_copy(update=labels)
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     present = _present(db)

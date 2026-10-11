@@ -24,6 +24,22 @@ const METHOD_LABELS = {
   xgb_ma3_avg: 'XGBoost + MA3 average',
 };
 
+// What each model does, for a reader who doesn't know its name (the
+// Technical Adviser, 2 Oct 2026). `short` goes under the forecast number,
+// `long` beside the model's name in "How this forecast was made". Each says
+// what the model computes and nothing about how accurate it is.
+const METHOD_PLAIN = {
+  ma3: { short: 'average of the last 3 months', long: 'the average of the last 3 months\u2019 sales' },
+  tsb: {
+    short: 'average for on-and-off sales',
+    long: 'an average that tracks both how often the product sells and how much when it does',
+  },
+  xgb_ma3_avg: {
+    short: 'average of two methods',
+    long: 'a model trained on every product\u2019s sales history (XGBoost), averaged with the last 3 months\u2019 average (MA3)',
+  },
+};
+
 // kind:          'forecast' — a real model forecast (MA3, TSB, the XGBoost +
 //                MA3 average, or MA3 as a fallback); 'provisional' — under 3
 //                sales months, a trailing average kept as a placeholder, NOT
@@ -32,6 +48,8 @@ const METHOD_LABELS = {
 // label:         the display name, or null for a method this file doesn't
 //                know. Never guessed as MA3: before 2026-09-21 every forecast
 //                was MA3, and a guess would bring that falsehood back.
+// plain:         { short, long } from METHOD_PLAIN, or null where the label
+//                is already plain words (provisional, no order) or unknown.
 // recomputable:  the browser can reproduce the model for an earlier cutoff.
 //                Only a served MA3: TSB and XGBoost run in the pipeline only,
 //                and whether a fallback's guard would fire at an earlier
@@ -47,17 +65,24 @@ export function describeServedModel(modelParams, status) {
   const { method } = params;
 
   if (status === 'insufficient_data' || params.provisional === true || method === 'trailing_average') {
-    return { kind: 'provisional', label: 'Provisional average', recomputable: false, fallback: false };
+    return { kind: 'provisional', label: 'Provisional average', plain: null, recomputable: false, fallback: false };
   }
   if (status === 'dead_sku' || method === 'zero_no_order') {
-    return { kind: 'no_order', label: 'No order (no recent sales)', recomputable: false, fallback: false };
+    return { kind: 'no_order', label: 'No order (no recent sales)', plain: null, recomputable: false, fallback: false };
   }
   if (method === 'ma3' && params.backup_fired === true) {
-    return { kind: 'forecast', label: `${METHOD_LABELS.ma3} (fallback)`, recomputable: false, fallback: true };
+    return {
+      kind: 'forecast',
+      label: `${METHOD_LABELS.ma3} (fallback)`,
+      plain: { short: `${METHOD_PLAIN.ma3.short} (fallback)`, long: METHOD_PLAIN.ma3.long },
+      recomputable: false,
+      fallback: true,
+    };
   }
   return {
     kind: 'forecast',
     label: METHOD_LABELS[method] ?? null,
+    plain: METHOD_PLAIN[method] ?? null,
     recomputable: method === 'ma3',
     fallback: false,
   };

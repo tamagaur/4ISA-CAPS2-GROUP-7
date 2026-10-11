@@ -194,6 +194,9 @@ const STOCK_STATUS_COLORS = {
 // The statuses GET /abc can send, in drill-down order: with the LP's target
 // stock, or without it (no lp.view).
 const STATUSES_WITH_ROP = ['CRITICAL', 'LOW', 'IN STOCK', 'NO ROP', 'NO DATA'];
+
+// The movement class as the table prints it; the badge's hover says why (fsnTitle).
+const FSN_LABEL = { F: 'Fast', S: 'Slow', N: 'Non-moving' };
 const STATUSES_WITHOUT_ROP = ['CRITICAL', 'ON HAND', 'NO DATA'];
 
 const ClassAggregateTooltip = ({ active, payload, lpHidden, periodLabel, unit }) => {
@@ -1485,7 +1488,7 @@ const ABCClassification = () => {
               <div className="abc-filter-select-wrapper">
                 <span className="abc-filter-icon-label"><Activity size={12} /> Movement:</span>
                 <select value={fsnFilter} onChange={(e) => setFsnFilter(e.target.value)} disabled={!fsnLoaded}>
-                  <option value="ALL">All (FSN)</option>
+                  <option value="ALL">All</option>
                   <option value="F">Fast-moving</option>
                   <option value="S">Slow-moving</option>
                   <option value="N">Non-moving</option>
@@ -1588,7 +1591,7 @@ const ABCClassification = () => {
                   <th className="col-fit">Brand</th>
                   <th className="table-center col-fit">Class</th>
                   <th className="table-center col-fit" title={`Fast / Slow / Non-moving over ${fsnWindowText || 'the 12 months with data up to this run'}`}>
-                    FSN
+                    Movement
                     {fsnWindowText && <span className="abc-th-sub">{fsnWindowText}</span>}
                   </th>
                   {/* A carried-forward row's share is of its own month's
@@ -1638,7 +1641,7 @@ const ABCClassification = () => {
                       {(() => {
                         const f = fsnOf(item);
                         return f
-                          ? <span className={`fsn-badge fsn-${f.fsn}`} title={fsnTitle(f)}>{f.fsn}</span>
+                          ? <span className={`fsn-badge fsn-${f.fsn}`} title={fsnTitle(f)}>{FSN_LABEL[f.fsn] ?? f.fsn}</span>
                           : <span className="fsn-badge fsn-pending" title="Loading movement class">…</span>;
                       })()}
                     </td>

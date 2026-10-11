@@ -256,6 +256,25 @@ def test_all_cycles_list_each_cycles_own_count_newest_first_and_withhold_nothing
     assert out.superseded_count == 0 and out.count == 2
 
 
+def test_a_served_mart_response_names_the_abc_run_its_tiers_are_from(monkeypatch):
+    """The mart has no tier_a_periods; the endpoint adds it with the other period
+    labels, anchored on the newest listed cycle's month as the join path is."""
+    from backend.data_mode import REAL
+
+    monkeypatch.setattr(planning_mart, "read",
+                        lambda *a: {"head": _head(), "rows": [_mart_row()], "counts": [_count()], "run": None})
+    monkeypatch.setattr(planning_mart, "usable", lambda db, mode: True)
+    monkeypatch.setattr(rec, "label_context", lambda db, inv_period, abc_period, principal: {"stock_period": inv_period})
+    monkeypatch.setattr(rec, "latest_abc_period", lambda db, principal, at=None: "2026-02")
+    anchors = []
+    monkeypatch.setattr(rec, "latest_abc_periods",
+                        lambda db, principal, at=None: anchors.append(at) or {"unilever": "2026-02"})
+    out = rec.get_recommendations(status="pending", cycle="current", from_date=None, to_date=None,
+                                  principal="unilever", mode=REAL, db=object(), current_user=None)
+    assert out.tier_a_periods == {"Unilever": "2026-02"} and anchors == ["2026-03"]
+    assert out.stock_period == "2026-02" and out.count == 1
+
+
 def test_a_refused_mart_falls_back_to_the_joins(monkeypatch):
     monkeypatch.setattr(planning_mart, "read", lambda *a: None)
     assert rec._from_mart(object(), None, "current", None, None, None) is None

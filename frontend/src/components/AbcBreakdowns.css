@@ -249,6 +249,7 @@
   border-radius: 5px;
   font-size: 0.7rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .fsn-badge.fsn-F { background-color: #DCFCE7; color: #166534; }

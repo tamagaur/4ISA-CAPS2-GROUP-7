@@ -16,7 +16,8 @@ import './SkuDemandPatternPanel.css';
 // Forecast page and inside the Reorder detail modal, the two places a
 // planner looks at one SKU. Everything here is printed from a real column;
 // the only labels this component adds are the volatility band (from the
-// backend's cv_band, with the raw cv always beside it), the plain-
+// backend's cv_band, with the cv under it as a percentage of an average
+// month and the raw figure behind the "?"), the plain-
 // language gloss on each stability_group code, the plain name of the
 // SKU's bin (both codes stay in the tooltip), and the seasonality band
 // over STL's measured strength (GET /decomposition). bin_reason is printed
@@ -35,11 +36,12 @@ const CV_BAND_META = {
 
 // Mann-Kendall trend (p < 0.05). Direction only — a rising or falling
 // series isn't good or bad on its own, so these stay neutral ink, never
-// green/red.
+// green/red. `plain` is the tile's own line (the Technical Adviser, 2 Oct
+// 2026: no score without its meaning); the test's name sits behind the "?".
 const TREND_META = {
-  up: { label: 'Rising', Icon: ArrowUpRight, gloss: 'statistically significant upward trend' },
-  down: { label: 'Falling', Icon: ArrowDownRight, gloss: 'statistically significant downward trend' },
-  none: { label: 'No clear trend', Icon: Minus, gloss: 'no significant direction either way' },
+  up: { label: 'Rising', Icon: ArrowUpRight, gloss: 'statistically significant upward trend', plain: 'a consistent rise, unlikely to be chance' },
+  down: { label: 'Falling', Icon: ArrowDownRight, gloss: 'statistically significant downward trend', plain: 'a consistent fall, unlikely to be chance' },
+  none: { label: 'No clear trend', Icon: Minus, gloss: 'no significant direction either way', plain: 'no consistent rise or fall' },
 };
 
 // stability_group codes from reports/BINNING_ROUND1_2026-09.md (38-period
@@ -81,27 +83,40 @@ const BIN_LABELS = {
 // as strong at our lengths. Peak and trough months are named only for a
 // product that repeats yearly; STL strength stays as a measured number.
 const SEASONALITY_TOOLTIP =
-  'Does a month sell like the same month a year earlier? Lag-12 autocorrelation of monthly '
-  + 'demand from the first sale, against the 95% bound 1.96/√months; needs 24 months.';
+  'Does a month sell like the same month a year earlier? Measured as the correlation between each '
+  + 'month and the same month a year before (lag-12 autocorrelation), from the first sale; it counts '
+  + 'as a yearly pattern above the 95% bound 1.96/√months, and needs 24 months.';
 
-// The tile's one line: the peak and trough months for a product that
-// repeats yearly, else the test's own figures. The full description sits
-// behind the tile's "?" (UI pass, 2026-10-08).
+// The STL figures, each with its scale, for the "?" only.
+const stlStrength = (stl) => (stl.available
+  ? `seasonal strength ${stl.seasonal_strength.toFixed(2)} and trend strength ${stl.trend_strength.toFixed(2)}, each on a scale of 0 to 1 (STL decomposition)`
+  : null);
+
+// The tile's one line, in plain words: the peak and trough months for a
+// product that repeats yearly, else what the test found. The figures sit
+// behind the tile's "?" (the Technical Adviser, 2 Oct 2026: a score means
+// nothing to the reader without its meaning).
 const shortSeasonality = (stl) => {
   const yp = stl.yearly_pattern;
-  if (yp?.repeats_yearly && stl.available) return `peaks ${stl.peak_month}, lowest ${stl.trough_month}`;
-  if (yp && yp.repeats_yearly != null) return `ACF(12) ${yp.acf_lag12 == null ? 'n/a' : yp.acf_lag12.toFixed(2)} vs bound ${yp.acf_bound.toFixed(2)}`;
-  return yearlyDescription(stl);
+  if (!yp) return stl.available ? `seasonal strength ${stl.seasonal_strength.toFixed(2)} on a scale of 0 to 1` : stl.reason;
+  if (yp.repeats_yearly == null) return `${yp.months} month${yp.months === 1 ? '' : 's'} from the first sale`;
+  if (!yp.repeats_yearly) return 'months do not repeat last year\u2019s ups and downs';
+  return stl.available ? `peaks ${stl.peak_month}, lowest ${stl.trough_month}` : 'months repeat last year\u2019s ups and downs';
 };
 
+// The same finding with its figures, for the "?".
 const yearlyDescription = (stl) => {
   const yp = stl.yearly_pattern;
-  if (!yp) return stl.available ? `STL seasonal strength ${stl.seasonal_strength.toFixed(2)}` : stl.reason;
+  if (!yp) return stl.available ? stlStrength(stl) : stl.reason;
   if (yp.repeats_yearly == null) return `${yp.months} month${yp.months === 1 ? '' : 's'} from the first sale`;
-  const acf = `ACF(12) ${yp.acf_lag12 == null ? 'n/a' : yp.acf_lag12.toFixed(2)} vs bound ${yp.acf_bound.toFixed(2)}`;
-  const peaks = yp.repeats_yearly && stl.available ? `peaks in ${stl.peak_month}, lowest in ${stl.trough_month} · ` : '';
-  const strength = stl.available ? ` · STL seasonal strength ${stl.seasonal_strength.toFixed(2)}, trend ${stl.trend_strength.toFixed(2)}` : '';
-  return `${peaks}${acf}${strength}`;
+  const verdict = yp.repeats_yearly
+    ? `it does${stl.available ? `, peaking in ${stl.peak_month} and lowest in ${stl.trough_month}` : ''}`
+    : 'it does not';
+  const measured = yp.acf_lag12 == null
+    ? 'sales never varied, so there is nothing to correlate'
+    : `correlation with a year earlier ${yp.acf_lag12.toFixed(2)}, against a bound of ${yp.acf_bound.toFixed(2)}`;
+  const strength = stlStrength(stl);
+  return `${verdict} (${measured})${strength ? `; ${strength}` : ''}`;
 };
 
 const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
@@ -133,7 +148,7 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
     setStl(null);
     getDecomposition(skuId, { principal })
       .then((res) => { if (!cancelled) setStl(res ?? { available: false, reason: 'No SKU-level series for this product.' }); })
-      .catch(() => { if (!cancelled) setStl({ available: false, reason: 'Could not load the STL decomposition.' }); });
+      .catch(() => { if (!cancelled) setStl({ available: false, reason: 'Could not load the seasonality check.' }); });
     return () => { cancelled = true; };
   }, [skuId, principal]);
 
@@ -235,12 +250,18 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
               Volatility
               <InfoTip label="About volatility" size={12}>
                 Coefficient of variation (CV) of monthly pieces: how far a month&apos;s sales swing around the
-                average. Under 0.5 reads low, under 1.0 medium, else high{band ? ` — this product: ${band.gloss}` : ''}.
+                average. Under 0.5 reads low, under 1.0 medium, else high
+                {t.cv != null || band
+                  ? ` — this product: ${[t.cv != null ? `CV ${t.cv.toFixed(2)}` : null, band?.gloss].filter(Boolean).join(', ')}`
+                  : ''}.
               </InfoTip>
             </span>
             <span className="sku-pattern-tile-value">{band ? band.label : 'Not measured'}</span>
+            {/* The cv as a share of an average month: 0.43 reads "about 43%". */}
             <span className="sku-pattern-tile-desc">
-              {t.cv != null ? `CV ${t.cv.toFixed(2)}` : 'no coefficient of variation stored'}
+              {t.cv != null
+                ? `a typical month swings about ${Math.round(t.cv * 100)}% around the average`
+                : 'the month-to-month swing was not measured'}
             </span>
           </div>
 
@@ -256,7 +277,7 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
               {TrendIcon && <TrendIcon size={18} aria-hidden="true" className="sku-pattern-trend-icon" />}
               {trend ? trend.label : '—'}
             </span>
-            <span className="sku-pattern-tile-desc">{trend ? 'Mann–Kendall, p < 0.05' : ''}</span>
+            <span className="sku-pattern-tile-desc">{trend ? trend.plain : ''}</span>
           </div>
 
           <div className="sku-pattern-tile">
@@ -277,14 +298,14 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
             </span>
           </div>
 
-          {/* Seasonality: STL decomposition of the SKU's monthly demand. */}
+          {/* Seasonality: the yearly-pattern test on the SKU's monthly demand. */}
           {principal !== 'delmonte' && (
             <div className="sku-pattern-tile">
               <span className="sku-pattern-tile-label">
                 <Waves size={11} aria-hidden="true" /> Seasonality
                 <InfoTip label="About seasonality" size={12}>
                   {SEASONALITY_TOOLTIP}
-                  {stl ? ` This product: ${yearlyDescription(stl)}${stl.periods?.length ? `, ${formatMonth(stl.periods[0])} – ${formatMonth(stl.periods[stl.periods.length - 1])}` : ''}.` : ''}
+                  {stl ? ` This product${stl.periods?.length ? `, ${formatMonth(stl.periods[0])} – ${formatMonth(stl.periods[stl.periods.length - 1])}` : ''}: ${yearlyDescription(stl)}.` : ''}
                 </InfoTip>
               </span>
               <span className="sku-pattern-tile-value">

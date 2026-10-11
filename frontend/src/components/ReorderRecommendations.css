@@ -183,7 +183,7 @@
 /* The per-row severity stripe is gone (2026-09-18): with 248 of 250 rows
    CRITICAL it striped the whole table red and said nothing. Position in
    the ranked list now carries urgency; the pill keeps the LP state. */
-/* All twelve columns: the table keeps its own width and scrolls sideways
+/* All thirteen columns: the table keeps its own width and scrolls sideways
    inside its card on a narrow screen rather than squeezing every header
    into a tower. Headers may wrap to two lines; the product column gets
    the room a two-line name needs. */
@@ -196,12 +196,17 @@
   min-width: 74px;
 }
 
-/* Twelve columns in one laptop-wide card: a little less side padding
-   per cell than the shared table. */
+/* Thirteen columns in one laptop-wide card: less side padding per cell
+   than the shared table. */
 .data-table.reorder-table th,
 .data-table.reorder-table td {
-  padding-left: 10px;
-  padding-right: 10px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* The class column holds one letter, so it takes its content's width. */
+.data-table.reorder-table thead th.reorder-th-class {
+  min-width: 0;
 }
 
 /* The rank column is a short "#12". */

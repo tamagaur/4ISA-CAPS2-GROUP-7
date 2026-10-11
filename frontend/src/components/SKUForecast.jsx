@@ -1526,9 +1526,10 @@ const SKUForecast = () => {
                     {/* Each value is tinted to match the chart series it
                         refers to (violet = forecast line, indigo = actual
                         line, pale violet = confidence band), so the numbers
-                        and the graph read as one thing. The model name sits
-                        under the number: which model made it varies per SKU
-                        (utils/forecastModel.js). */}
+                        and the graph read as one thing. What the model does
+                        sits under the number, in plain words: which model
+                        made it varies per SKU (utils/forecastModel.js); its
+                        name is in "How this forecast was made". */}
                     <div className="forecast-stat-block">
                       <span className="forecast-stat-label">
                         {derivedForecast && !derivedForecast.plotted ? 'Stored forecast' : 'Forecast'}
@@ -1549,7 +1550,7 @@ const SKUForecast = () => {
                       </span>
                       <span className="forecast-stat-desc">
                         {derivedForecast
-                          ? (servedModel?.label ?? '')
+                          ? (servedModel?.plain?.short ?? servedModel?.label ?? '')
                           : storedForecast
                             ? 'no sales in the selected range'
                             : selectedSKU.cat === 'A' ? 'no forecast yet' : 'Class A SKUs only'}
@@ -1684,7 +1685,10 @@ const SKUForecast = () => {
                       <dl className="forecast-howmade-list">
                         <div className="forecast-howmade-item">
                           <dt>Model</dt>
-                          <dd>{servedModel.label ?? storedParams.method ?? '—'}</dd>
+                          <dd>
+                            {servedModel.label ?? storedParams.method ?? '—'}
+                            {servedModel.plain ? `: ${servedModel.plain.long}` : ''}
+                          </dd>
                         </div>
                         {storedParams.bin && (
                           <div className="forecast-howmade-item">
@@ -1714,16 +1718,17 @@ const SKUForecast = () => {
                               <InfoTip label="About reliability">
                                 MASE compares this model&apos;s errors with simply repeating last month&apos;s sales.
                                 Below 1 means the model does better than that; 1 or more means it doesn&apos;t.
+                                {/* Three decimals near 1, where two would round
+                                    0.996 up to "1.00" beside "beats a simple
+                                    last-month guess" (the verdict uses the
+                                    stored value). */}
+                                {' '}This product: MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)}.
                               </InfoTip>
                             </dt>
                             <dd className={storedForecast.mase < 1 ? '' : 'forecast-howmade-warn'}>
-                              {/* Three decimals near 1, where two would round
-                                  0.996 up to "1.00" beside "beats a naive
-                                  forecast" (the verdict uses the stored value). */}
-                              {/* The verdict in plain words first; the score
-                                  stays beside it for the adviser. */}
+                              {/* The verdict in plain words; the score is
+                                  behind the "?" for the adviser. */}
                               {storedForecast.mase < 1 ? 'Beats a simple last-month guess' : 'No better than a simple last-month guess'}
-                              {' '}· MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)}
                               {holdoutWindow ? ` · tested on ${holdoutWindow}` : ''}
                             </dd>
                           </div>

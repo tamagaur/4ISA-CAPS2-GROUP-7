@@ -296,7 +296,7 @@ export const AbcFsnMatrix = ({
     <section className="abcb-card abcb-matrix">
       <div className="abcb-card-header">
         <div>
-          <h3 className="abcb-card-title">Movement × value (ABC × FSN)</h3>
+          <h3 className="abcb-card-title">Movement × value (fast, slow or non-moving, by ABC class)</h3>
           <p className="abcb-card-subtitle">
             How often each class actually sells, over{' '}
             {windowText

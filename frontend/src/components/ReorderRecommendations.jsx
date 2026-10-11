@@ -930,7 +930,7 @@ const ReorderRecommendations = () => {
               <th className="table-num col-fit">#</th>
               <th className="col-text col-product">Product</th>
               <th className="col-fit">Brand</th>
-              <th className="table-center col-fit">Tier</th>
+              <th className="table-center col-fit reorder-th-class">Class</th>
               <th className="table-num col-fit">
                 Revenue share (%)
                 {abcLabel && <span className="reorder-th-period">{abcLabel}</span>}
