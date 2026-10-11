@@ -682,25 +682,45 @@ def accuracy_rows(db: Session, start: str, end: str, run_id: int | None = None) 
 
 def accuracy_rows_query(start: str, end: str, run_id: int | None = None) -> tuple[str, dict]:
     if run_id is not None:
-        where, params = "a.run_id = :run_id", {"run_id": run_id}
-    else:
-        where = """a.run_id = (
-                SELECT CASE WHEN EXISTS (SELECT 1 FROM mart.accuracy_mart b
-                                         JOIN mart.forecast_run r ON r.run_id = b.run_id
-                                         WHERE r.label = :default_label AND b.month = a.month)
-                            THEN (SELECT run_id FROM mart.forecast_run WHERE label = :default_label)
-                            ELSE (SELECT MAX(s.run_id) FROM mart.accuracy_mart s
-                                  WHERE s.forecast_source = 'stored_run' AND s.month = a.month
-                                    AND s.actual_pieces IS NOT NULL)
-                       END)"""
-        params = {"default_label": DEFAULT_BACKTEST_LABEL}
+        return f"""
+            SELECT a.*, pd.sku_code, pd.product_name
+            FROM mart.accuracy_mart a LEFT JOIN product_dimension pd ON pd.product_key = a.product_key
+            WHERE a.run_id = :run_id AND a.month BETWEEN :start AND :end AND a.actual_pieces IS NOT NULL
+                  AND a.forecast_pieces IS NOT NULL
+            ORDER BY a.product_key, a.month
+        """, {"run_id": run_id, "start": start, "end": end}
+    # The run_id each month resolves to (the default backtest when it covers the month,
+    # else the newest stored run that forecast it) is the SAME for every row of that
+    # month, so it is resolved ONCE per DISTINCT month in range here, not re-evaluated as
+    # a correlated subplan per row of accuracy_mart (2026-10-11 recon: that subplan cost
+    # ~90,500 of this query's ~91,000 total planner cost, re-running across every stored
+    # run's rows in the month range because accuracy_mart_month's index is (run_id, month)
+    # and the old WHERE had no run_id to seek on). month_run is bounded by the number of
+    # months in the range (at most a few dozen), not by accuracy_mart's row count.
     return f"""
+        WITH months AS (
+            SELECT DISTINCT month FROM mart.accuracy_mart WHERE month BETWEEN :start AND :end
+        ),
+        month_run AS (
+            SELECT m.month,
+                   CASE WHEN EXISTS (SELECT 1 FROM mart.accuracy_mart b
+                                     JOIN mart.forecast_run r ON r.run_id = b.run_id
+                                     WHERE r.label = :default_label AND b.month = m.month)
+                        THEN (SELECT run_id FROM mart.forecast_run WHERE label = :default_label)
+                        ELSE (SELECT MAX(s.run_id) FROM mart.accuracy_mart s
+                              WHERE s.forecast_source = 'stored_run' AND s.month = m.month
+                                AND s.actual_pieces IS NOT NULL)
+                   END AS run_id
+            FROM months m
+        )
         SELECT a.*, pd.sku_code, pd.product_name
-        FROM mart.accuracy_mart a LEFT JOIN product_dimension pd ON pd.product_key = a.product_key
-        WHERE {where} AND a.month BETWEEN :start AND :end AND a.actual_pieces IS NOT NULL
+        FROM mart.accuracy_mart a
+        JOIN month_run mr ON mr.month = a.month AND mr.run_id = a.run_id
+        LEFT JOIN product_dimension pd ON pd.product_key = a.product_key
+        WHERE a.month BETWEEN :start AND :end AND a.actual_pieces IS NOT NULL
               AND a.forecast_pieces IS NOT NULL
         ORDER BY a.product_key, a.month
-    """, {**params, "start": start, "end": end}
+    """, {"default_label": DEFAULT_BACKTEST_LABEL, "start": start, "end": end}
 
 
 def _wape(abs_miss: float, actual: float) -> float | None:
