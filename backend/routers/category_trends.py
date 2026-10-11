@@ -21,7 +21,7 @@ months). A category with no revenue in an observed month gets a zero there.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -69,11 +69,20 @@ def _next_month(period: str) -> str:
     return f"{y + 1:04d}-01" if m == 12 else f"{y:04d}-{m + 1:02d}"
 
 
-def trends_for(db: Session, principal: str, mode: str = REAL) -> dict:
+def trends_for(
+    db: Session, principal: str, mode: str = REAL,
+    start_period: str | None = None, period: str | None = None,
+) -> dict:
     rows = db.execute(text(_QUERIES[principal].format(demand=unilever_demand(mode)))).mappings().all()
-    observed = sorted({r["period"] for r in rows})
+    observed = sorted({
+        r["period"] for r in rows
+        if (start_period is None or r["period"] >= start_period) and (period is None or r["period"] <= period)
+    })
     if not observed:
-        return {"principal": principal, "observed_months": [], "categories": [], "series_start": _series_start(principal)}
+        return {
+            "principal": principal, "observed_months": [], "categories": [],
+            "series_start": _series_start(principal), "start_period": start_period, "end_period": period,
+        }
     series: dict[str, dict[str, float]] = {}
     for r in rows:
         series.setdefault(r["category"], {})[r["period"]] = float(r["revenue"] or 0)
@@ -99,12 +108,30 @@ def trends_for(db: Session, principal: str, mode: str = REAL) -> dict:
         })
     categories.sort(key=lambda c: c["revenue_last_12"], reverse=True)
     return {"principal": principal, "observed_months": observed, "categories": categories,
-            "series_start": _series_start(principal)}
+            "series_start": _series_start(principal), "start_period": observed[0], "end_period": observed[-1]}
 
 
 @router.get("")
 @cached("GET /category-trends")
 def get_category_trends(
+    period: str | None = Query(
+        None,
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        description=(
+            "'YYYY-MM'. The shared date-range picker's applied end month/year. "
+            "Restricts the observed history to months at or before it. Omit to "
+            "use every observed month, unbounded (current behaviour)."
+        ),
+    ),
+    start_period: str | None = Query(
+        None,
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        description=(
+            "'YYYY-MM'. The shared date-range picker's applied START month/year. "
+            "Restricts the observed history to months at or after it. Omit to "
+            "use every observed month, unbounded (current behaviour)."
+        ),
+    ),
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
@@ -117,7 +144,9 @@ def get_category_trends(
             **method_constants(),
             "note": "A trend projection, not a validated forecast.",
         },
-        "principals": [trends_for(db, p, mode) for p in ([scope] if scope else ["unilever", "delmonte"])],
+        "principals": [
+            trends_for(db, p, mode, start_period, period) for p in ([scope] if scope else ["unilever", "delmonte"])
+        ],
     }
     # The projection fits the last TREND_WINDOW_MONTHS (24) observed months,
     # all real, so preview lengthens the history without moving a projection.
