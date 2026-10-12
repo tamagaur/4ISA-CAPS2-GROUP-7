@@ -171,7 +171,7 @@ def test_packed_rows_unpack_under_the_names_the_endpoint_reads():
     sql, _ = planning_mart.rows_query(None, None, "all", None, None)
     assert "json_build_array(" in sql and " AS r" in sql
     values = [1, "S1", "Product 1", "unilever", 12, "2026-03-01", 100, 300, 120, "pending", 240, 20, 2400, True,
-              0.02, "A", 3000, 40, None, None, 1, True, ["collapse"], 0, 0.4]
+              0.02, "A", "2026-02", 3000, 40, None, None, 1, True, ["collapse"], 0, 0.4]
     (row,) = planning_mart.unpack([{"r": values}])
     assert list(row) == [name for name, _ in planning_mart.ROW_COLUMNS] and len(values) == len(row)
     assert row["planning_cycle_date"] == datetime.date(2026, 3, 1) and row["q_i"] == 100
@@ -190,7 +190,8 @@ def _mart_row(**overrides) -> dict:
         "recommendation_key": 1, "sku_id": "S1", "product_name": "Product 1", "principal": "unilever",
         "pack_size": 12, "planning_cycle_date": CYCLE, "q_i": 100.0, "rop_i": 300.0, "ss_i": 120.0,
         "status": "pending", "current_stock": 240.0, "current_stock_cases": 20.0, "stock_value_pesos": 2400.0,
-        "in_stock_count": True, "revenue_share": 0.02, "tier": "A", "avg_monthly_sales_pesos": 3000.0,
+        "in_stock_count": True, "revenue_share": 0.02, "tier": "A", "tier_period": "2026-02",
+        "avg_monthly_sales_pesos": 3000.0,
         "forecast_units": 40.0, "on_order_pieces": None, "on_order_cases": None, "on_order_unparsed": 1,
         "needs_review": True, "review_reasons": ["collapse"], "review_over_run_months": 0,
         "review_collapse_ratio": 0.4,
@@ -257,8 +258,9 @@ def test_all_cycles_list_each_cycles_own_count_newest_first_and_withhold_nothing
 
 
 def test_a_served_mart_response_names_the_abc_run_its_tiers_are_from(monkeypatch):
-    """The mart has no tier_a_periods; the endpoint adds it with the other period
-    labels, anchored on the newest listed cycle's month as the join path is."""
+    """The mart has no tier_a_periods; _from_mart reads it, anchored on the newest
+    listed cycle's month as the join path is, and the endpoint's period labels are
+    added beside it without replacing it."""
     from backend.data_mode import REAL
 
     monkeypatch.setattr(planning_mart, "read",

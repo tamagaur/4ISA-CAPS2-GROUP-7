@@ -114,11 +114,12 @@ class FakeStore:
     check (the endpoint behind it may then 200, 404, 422 or 500 on the empty
     data, which is not what they test)."""
 
-    def __init__(self, users, overrides=None, *, table_exists=True, strict=True):
+    def __init__(self, users, overrides=None, *, table_exists=True, strict=True, probe_fails=False):
         self.users = {u["user_id"]: dict(u) for u in users}
         self.overrides = {uid: dict(o) for uid, o in (overrides or {}).items()}
         self.table_exists = table_exists
         self.strict = strict
+        self.probe_fails = probe_fails
         self.queries: list[str] = []
         self.audit: list[dict] = []
         self.revoked: list[int] = []
@@ -128,7 +129,9 @@ class FakeStore:
         sql = " ".join(str(stmt).split())
         p = dict(params or {})
         self.queries.append(sql)
-        if sql == "SELECT to_regclass('public.user_permission_override') IS NOT NULL":
+        if sql == "SELECT to_regclass('user_permission_override') IS NOT NULL":
+            if self.probe_fails:
+                raise RuntimeError("connection problem (simulated)")
             return Result(scalar=self.table_exists)
         if sql.startswith("SELECT permission_key, granted FROM user_permission_override"):
             assert self.table_exists, "read user_permission_override before migration 0034 created it"
@@ -784,6 +787,25 @@ def test_the_readiness_check_is_cached_and_notices_the_migration():
     store.table_exists = False
     assert permissions.permissions_ready(store) is True  # a "yes" is kept for good
     assert lookups() == 2
+
+
+@pytest.mark.real_permission_store
+def test_a_failed_probe_denies_rather_than_grants():
+    """A probe that can't be answered (DB/connection problem) must not be
+    mistaken for "table doesn't exist yet": it fails closed with 503, never
+    {} (which would silently restore a revoked permission)."""
+    store = FakeStore(team(), table_exists=True, probe_fails=True, strict=False)
+    with pytest.raises(permissions.PermissionsProbeError):
+        permissions.permissions_ready(store)
+    with pytest.raises(ApiError) as exc:
+        permissions.load_overrides(store, 2)
+    assert exc.value.status_code == 503
+    assert exc.value.code == "permissions_probe_failed"
+
+    with client_for(store, raise_errors=False) as c:
+        resp = c.get("/audit-log", headers=auth(2, "staff"))
+    assert resp.status_code == 503
+    assert resp.json()["code"] == "permissions_probe_failed"
 
 
 # ═══ PAGE SMOKE TEST ═════════════════════════════════════════════════════════

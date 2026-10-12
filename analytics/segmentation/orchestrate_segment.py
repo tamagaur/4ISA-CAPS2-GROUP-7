@@ -49,7 +49,21 @@ TRAIT_TABLE_COLUMNS = [
     "adi", "trend_pvalue", "trend_slope",  # migration 0022
 ]
 
-TOTAL_PERIODS = 38  # 2023-01 .. 2026-02 inclusive, the only fully-real Unilever span (CLAUDE.md Data realities)
+def _fetch_total_periods(engine: Engine, principal: str, abc_method: str) -> int:
+    """Periods actually classified under this abc_method (e.g. 38 for 'single',
+    27 for 't12m_new' — t12m_new needs 12 trailing months before it can score
+    one, so it has fewer periods than the full 2023-01..2026-02 calendar span).
+    stability_group's denominator must be this, not a method-agnostic constant,
+    or its cut-offs (tuned on 38) silently become unreachable on a shorter basis."""
+    from sqlalchemy import func
+    metadata = MetaData()
+    abc = Table("abc_classification", metadata, autoload_with=engine)
+    with engine.connect() as conn:
+        n = conn.execute(
+            select(func.count(func.distinct(abc.c.classification_period)))
+            .where(and_(abc.c.principal == principal, abc.c.method == abc_method))
+        ).scalar()
+    return int(n)
 
 
 @dataclass
@@ -201,6 +215,7 @@ def build_traits(
     observed_periods = _fetch_observed_periods(engine, principal, demand_start, demand_end)
     observed = np.array([p in observed_periods for p in periods], dtype=bool)
     a_periods, revenue = _fetch_stability_and_revenue(engine, principal, product_keys, cohort_period, abc_method)
+    total_periods = _fetch_total_periods(engine, principal, abc_method)
 
     records = []
     for pk in product_keys:  # already product_key ASC from _fetch_cohort
@@ -222,8 +237,9 @@ def build_traits(
             cv=coefficient_of_variation(qty),
             adi=average_demand_interval(qty, observed),
             tier_a_periods=a_periods.get(pk, 0),
+            total_periods=total_periods,
             restart_flag=has_restart(qty),
-            stability_group=stability_group(a_periods.get(pk, 0), TOTAL_PERIODS),
+            stability_group=stability_group(a_periods.get(pk, 0), total_periods),
             revenue_share_2026_02=revenue.get(pk),
             # the flag; not a sku_traits column (the upsert selects TRAIT_TABLE_COLUMNS)
             missing_quantity_periods=[periods[i] for i in missing_month_indices(qty)],
@@ -250,7 +266,7 @@ SCHEME_BUILDERS = {
     "length_v2": lambda r: bin_schemes.length_v2(r.history_months),
     "trend_v1": lambda r: bin_schemes.trend_v1(r.history_months, r.trend, _opt(r.trend_pvalue), _opt(r.trend_slope)),
     "volatility_v1": lambda r: bin_schemes.volatility_v1(r.history_months, _opt(r.cv)),
-    "stability_v1": lambda r: bin_schemes.stability_v1(r.stability_group, r.tier_a_periods, TOTAL_PERIODS),
+    "stability_v1": lambda r: bin_schemes.stability_v1(r.stability_group, r.tier_a_periods, r.total_periods),
     "combined_v1": lambda r: bin_schemes.combined_v1(r.history_months, r.trend, _opt(r.trend_pvalue), _opt(r.trend_slope)),
 }
 

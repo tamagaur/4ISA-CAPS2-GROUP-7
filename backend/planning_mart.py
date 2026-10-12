@@ -81,7 +81,7 @@ ROW_COLUMNS = (
     ("rop_i", "pm.target_stock"), ("ss_i", "pm.safety_stock"), ("status", "pm.decision_status"),
     ("current_stock", "pm.stock_pieces"), ("current_stock_cases", "pm.stock_cases"),
     ("stock_value_pesos", "pm.stock_pesos"), ("in_stock_count", "pm.in_stock_count"),
-    ("revenue_share", "pm.revenue_share"), ("tier", "pm.tier"),
+    ("revenue_share", "pm.revenue_share"), ("tier", "pm.tier"), ("tier_period", "pm.tier_period"),
     ("avg_monthly_sales_pesos", "pm.avg_monthly_sales_pesos"), ("forecast_units", "pm.forecast_pieces"),
     ("on_order_pieces", "pm.on_order_pieces"), ("on_order_cases", "pm.on_order_cases"),
     ("on_order_unparsed", "pm.on_order_unparsed"),
