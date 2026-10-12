@@ -253,9 +253,9 @@
   justify-content: flex-end;
 }
 
-/* The hero chart's two-part legend: a thin rule between the metric
-   colours and the year line styles, and a neutral line swatch for the
-   years (the colour belongs to the metric, so the year key has none). */
+/* The hero chart's two-part legend: the years' colours, a thin rule, then
+   the metrics' line styles on a neutral line swatch (the colour belongs to
+   the year, so the metric key has none). */
 .legend-divider {
   width: 1px;
   align-self: stretch;
@@ -266,11 +266,16 @@
   border-top-color: var(--color-text-muted);
 }
 
-/* A year's line style in the legend (Sales vs Inventory Value): the stroke
-   is drawn in SVG with the line's own dash, in the muted ink. */
-.legend-year-line {
+/* A metric's line style in the legend (Sales vs Inventory Value): the
+   stroke is drawn in SVG with the line's own dash, in the muted ink. */
+.legend-metric-line {
   flex: none;
   color: var(--color-text-muted);
+}
+
+/* The same swatch in the tooltip, in the year's colour. */
+.chart-tooltip-swatch-svg {
+  flex: none;
 }
 
 /* Tooltip swatch for a line series: drawn solid or dashed, as the line is. */

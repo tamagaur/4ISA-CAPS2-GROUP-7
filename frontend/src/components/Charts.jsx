@@ -319,21 +319,38 @@ const monthOf = (period) => Number(String(period).slice(5, 7));
 const slotOf = (dataKey) => String(dataKey).split('_')[1];
 const metricOf = (dataKey) => String(dataKey).split('_')[0];
 
-// Colour tells the METRIC (the same teal or navy in every year); line style
-// tells the YEAR, by how recent it is: the latest year solid, each earlier
-// one its own dash, a touch lighter as it goes back. A year the selected
-// range reaches is drawn at full weight; one that is on the chart only for
-// the comparison is thinner. No marker on every month (Audrey, 2026-10-03):
-// the smooth line carries the shape, the hovered month gets a dot, and the
-// tooltip gives its exact pesos.
+// Colour tells the YEAR (Audrey, 2026-10-12: with one colour per metric and
+// the years told apart by dash alone, eight lines were hard to follow).
+// Every calendar year has its own colour, the same for all of its lines
+// and whatever the range (CHART_COLORS.yearLines). Line style tells the
+// METRIC, the same in every year (METRIC_DASH below): sales solid,
+// inventory dashed, purchases dash-dot, an estimate dotted. The latest
+// year is the heaviest line; a year the selected range reaches is drawn at
+// full weight; one that is on the chart only for the comparison is
+// thinner. No marker on every month (Audrey, 2026-10-03): the smooth line
+// carries the shape, the hovered month gets a dot, and the tooltip gives
+// its exact pesos.
 const MAX_YEAR_LINES = 4;
-const YEAR_DASH = [undefined, '6 4', '10 3 2 3', '14 5'];
-const YEAR_OPACITY = [1, 0.8, 0.65, 0.5];
+const YEAR_COLORS = CHART_COLORS.yearLines;
+// {year: colour} for the years drawn, latest first. A year's own colour is
+// year % 4; two years four or more apart would share one (a custom
+// comparison far back), so the later-listed year takes the next free one.
+const yearColors = (years) => {
+  const used = new Set();
+  const out = {};
+  for (const year of years) {
+    const own = YEAR_COLORS[((year % YEAR_COLORS.length) + YEAR_COLORS.length) % YEAR_COLORS.length];
+    const color = used.has(own) ? YEAR_COLORS.find((c) => !used.has(c)) ?? own : own;
+    used.add(color);
+    out[year] = color;
+  }
+  return out;
+};
 const yearLineWidth = (rank, inRange) => (rank === 0 ? 2.5 : inRange ? 2 : 1.5);
-// The shade under each line: the line's own colour, much lighter than the
-// line, fading to nothing at the floor. Fainter for the year before, and
-// none for older years, so the shades on one plot don't turn to mud.
-const FILL_TOP_OPACITY = [0.26, 0.1, 0, 0];
+// The shade under a line: the line's own colour, much lighter than the
+// line, fading to nothing at the floor. Under the latest year only: two
+// years' shades in two colours on one plot turn to mud.
+const FILL_TOP_OPACITY = [0.18, 0, 0, 0];
 const FILL_BOTTOM_OPACITY = 0.02;
 // The figures a point can carry onto the chart.
 const PLOTTED_FIELDS = [
@@ -404,6 +421,76 @@ const PURCHASES_METRICS = ['sales', 'received', 'recest'];
 const ESTIMATED_LABEL = 'Purchases (estimated from stock counts and sales)';
 const ESTIMATED_DASH = '2 5';
 const ESTIMATED_OPACITY = 0.75;
+// The METRIC's line style, the same in every year (the colour is the
+// year's). Lines have round caps, so the gaps are drawn wide enough to
+// stay open. A stock estimate is dotted wider apart than a sales estimate,
+// so the two read apart if a view ever holds both in one year's colour.
+const METRIC_DASH = {
+  sales: undefined,
+  returns: undefined,
+  stock: '6 6',
+  received: '10 5 1 5',
+  salesest: ESTIMATED_DASH,
+  recest: ESTIMATED_DASH,
+  retest: ESTIMATED_DASH,
+  stockest: '2 9',
+};
+const ESTIMATED_METRICS = ['salesest', 'stockest', 'recest', 'retest'];
+// The tooltip lists a year's figures together, in this order.
+const METRIC_ORDER = ['sales', 'salesest', 'stock', 'stockest', 'received', 'recest', 'returns', 'retest'];
+// A month with no neighbour on its line has no line to carry its style, so
+// the marker's shape says the metric instead: a filled dot for sales and
+// returns, a ring for inventory, a diamond for purchases.
+const METRIC_MARKER = {
+  sales: 'dot', salesest: 'dot', returns: 'dot', retest: 'dot',
+  stock: 'ring', stockest: 'ring',
+  received: 'diamond', recest: 'diamond',
+};
+const loneMarker = (metric, cx, cy, color, opacity, key) => {
+  const shape = METRIC_MARKER[metric];
+  if (shape === 'diamond') {
+    return (
+      <rect
+        key={key}
+        x={cx - 3.5}
+        y={cy - 3.5}
+        width={7}
+        height={7}
+        transform={`rotate(45 ${cx} ${cy})`}
+        fill={color}
+        fillOpacity={opacity}
+      />
+    );
+  }
+  if (shape === 'ring') {
+    return (
+      <circle key={key} cx={cx} cy={cy} r={3.5} fill="var(--color-surface, #fff)" stroke={color} strokeWidth={2} strokeOpacity={opacity} />
+    );
+  }
+  return <circle key={key} cx={cx} cy={cy} r={3.5} fill={color} fillOpacity={opacity} />;
+};
+// A metric's line as a swatch, drawn with the line's own dash: in the muted
+// ink in the legend (the colour belongs to the year), in the year's colour
+// in the tooltip. Purchases carry their diamond, since Del Monte's mostly
+// show as single months.
+const MetricLineSwatch = ({ metric, color = 'currentColor', width = 28, className = 'legend-metric-line' }) => (
+  <svg className={className} width={width} height="8" aria-hidden="true">
+    <line
+      x1="2"
+      x2={width - 2}
+      y1="4"
+      y2="4"
+      stroke={color}
+      strokeWidth="2"
+      strokeDasharray={METRIC_DASH[metric]}
+      strokeLinecap="round"
+      strokeOpacity={ESTIMATED_METRICS.includes(metric) ? ESTIMATED_OPACITY : 1}
+    />
+    {METRIC_MARKER[metric] === 'diamond' && (
+      <rect x={width / 2 - 2.5} y="1.5" width="5" height="5" transform={`rotate(45 ${width / 2} 4)`} fill={color} />
+    )}
+  </svg>
+);
 // Mart estimates for a month with no real figure (GET /dashboard
 // *_estimated, DEC-31): 'filled' rows are worked out from SSM's own data
 // (real mode); 'generated' rows are synthetic and come in preview only.
@@ -435,7 +522,11 @@ const SalesStockTooltip = ({ active, payload, label, baseLabels = {}, yearRank =
   if (!active || !payload || !payload.length) return null;
   // A month one year has and the other hasn't shows only the year that
   // has it, so no row is ever a mislabelled blank.
-  const rows = payload.filter((p) => p.type !== 'none' && p.value != null);
+  // The latest year first, and each year's figures together.
+  const rows = payload
+    .filter((p) => p.type !== 'none' && p.value != null)
+    .sort((a, b) => Number(slotOf(b.dataKey)) - Number(slotOf(a.dataKey))
+      || METRIC_ORDER.indexOf(metricOf(a.dataKey)) - METRIC_ORDER.indexOf(metricOf(b.dataKey)));
   if (!rows.length) return null;
   const row = rows[0].payload || {};
   const metas = Object.keys(yearRank).map((slot) => row[`meta_${slot}`]).filter(Boolean);
@@ -445,18 +536,14 @@ const SalesStockTooltip = ({ active, payload, label, baseLabels = {}, yearRank =
         {row.month ?? label}
       </p>
       {/* Swatch + ink text: the mark beside the words carries identity —
-          the metric's colour, drawn solid or dashed for the year, exactly
-          as the line is — and the text never wears the series colour. */}
+          the year's colour, drawn in the metric's line style, exactly as
+          the line is — and the text never wears the series colour. */}
       {rows.map((p) => {
         const slot = slotOf(p.dataKey);
         const meta = row[`meta_${slot}`];
         return (
           <p key={p.dataKey} className="chart-tooltip-row">
-            <span
-              className={`chart-tooltip-swatch-line${yearRank[slot] > 0 ? ' is-dashed' : ''}`}
-              style={{ borderTopColor: p.color }}
-              aria-hidden="true"
-            />
+            <MetricLineSwatch metric={metricOf(p.dataKey)} color={p.color} width={24} className="chart-tooltip-swatch-svg" />
             {/* The metric, then the month and year this value is from:
                 several years share one calendar slot. */}
             {shortMetric(baseLabels[p.dataKey] ?? p.name)}{meta?.period ? `, ${plainPeriod(meta.period)}` : ''}:{' '}
@@ -544,11 +631,13 @@ const INVENTORY_LABEL = 'Inventory value (at last purchase price)';
 //
 // The x axis is a fixed Jan–Dec calendar (2026-10-03; a range-ordered axis
 // from 2026-10-09 to 2026-10-11, then brought back at Audrey's request).
-// Colour tells the metric — sales teal, inventory navy, purchases received
-// violet — the same colour in every year; line style tells the year: the
-// latest solid, each earlier one its own dash. So "how does this month
-// compare with the same month last year" is read straight down the chart —
-// the Technical Adviser's "story in the changes".
+// Colour tells the year — one colour per calendar year, the same for all of
+// that year's lines (2026-10-12; until then colour told the metric and a
+// dash told the year, which was hard to follow with four years on screen).
+// Line style tells the metric: sales solid, inventory dashed, purchases
+// dash-dot, an estimate dotted. So "how does this month compare with the
+// same month last year" is read straight down the chart — the Technical
+// Adviser's "story in the changes".
 //
 // The chart follows both date filters. It draws every month of the selected
 // range, and every month of the comparison period from the date bar's
@@ -643,7 +732,7 @@ export const SalesVsStockWidget = ({
   // ends in Feb) is null, so its line simply stops there. `slots` are the
   // years drawn, latest first (at most MAX_YEAR_LINES; earlier ones are
   // named under the title rather than drawn).
-  const { rows, slots, slotLabels, slotInfo, undrawnYears } = useMemo(() => {
+  const { rows, slots, slotLabels, slotInfo, slotColors, undrawnYears } = useMemo(() => {
     // A year is drawn, and named in the legend, only for the months that
     // have a figure: GET /dashboard sends a row for every month of the
     // range, empty or not (Del Monte has sales in 6 months of 2025).
@@ -692,34 +781,37 @@ export const SalesVsStockWidget = ({
       slots: drawn.map(String),
       slotLabels: names,
       slotInfo: info,
+      // From every year with a figure, not only the visible lines, so a
+      // year keeps its colour when the metric control changes.
+      slotColors: yearColors(drawn),
       undrawnYears: allYears.slice(MAX_YEAR_LINES).sort((a, b) => a - b),
     };
   }, [points, placeholder]);
   // Every series the data could draw, then the ones the control shows.
   // Legend and lines share these descriptions, so the pairing the legend
-  // promises (colour = metric, dash = year) is the one that is drawn.
+  // promises (colour = year, line style = metric) is the one that is drawn.
   const series = useMemo(() => [
-    ...slots.map((slot) => ({ key: `sales_${slot}`, slot, metric: 'sales', name: `${salesLabel} · ${slotLabels[slot]}`, base: salesLabel, color: CHART_COLORS.heroSales })),
-    ...slots.map((slot) => ({ key: `stock_${slot}`, slot, metric: 'stock', name: `${INVENTORY_LABEL} · ${slotLabels[slot]}`, base: INVENTORY_LABEL, color: CHART_COLORS.heroInventory })),
+    ...slots.map((slot) => ({ key: `sales_${slot}`, slot, metric: 'sales', name: `${salesLabel} · ${slotLabels[slot]}`, base: salesLabel, color: slotColors[slot] })),
+    ...slots.map((slot) => ({ key: `stock_${slot}`, slot, metric: 'stock', name: `${INVENTORY_LABEL} · ${slotLabels[slot]}`, base: INVENTORY_LABEL, color: slotColors[slot] })),
     ...(hasReceived
-      ? slots.map((slot) => ({ key: `received_${slot}`, slot, metric: 'received', name: `${receivedLabel} · ${slotLabels[slot]}`, base: receivedLabel, color: COLORS.forecast }))
+      ? slots.map((slot) => ({ key: `received_${slot}`, slot, metric: 'received', name: `${receivedLabel} · ${slotLabels[slot]}`, base: receivedLabel, color: slotColors[slot] }))
       : []),
     ...(hasEstimated
-      ? slots.map((slot) => ({ key: `recest_${slot}`, slot, metric: 'recest', estimated: true, name: `${ESTIMATED_LABEL} · ${slotLabels[slot]}`, base: ESTIMATED_LABEL, color: COLORS.forecast }))
+      ? slots.map((slot) => ({ key: `recest_${slot}`, slot, metric: 'recest', estimated: true, name: `${ESTIMATED_LABEL} · ${slotLabels[slot]}`, base: ESTIMATED_LABEL, color: slotColors[slot] }))
       : []),
     ...(hasSalesEst
-      ? slots.map((slot) => ({ key: `salesest_${slot}`, slot, metric: 'salesest', estimated: true, name: `${salesEstLabel} · ${slotLabels[slot]}`, base: salesEstLabel, color: CHART_COLORS.heroSales }))
+      ? slots.map((slot) => ({ key: `salesest_${slot}`, slot, metric: 'salesest', estimated: true, name: `${salesEstLabel} · ${slotLabels[slot]}`, base: salesEstLabel, color: slotColors[slot] }))
       : []),
     ...(hasStockEst
-      ? slots.map((slot) => ({ key: `stockest_${slot}`, slot, metric: 'stockest', estimated: true, name: `${stockEstLabel} · ${slotLabels[slot]}`, base: stockEstLabel, color: CHART_COLORS.heroInventory }))
+      ? slots.map((slot) => ({ key: `stockest_${slot}`, slot, metric: 'stockest', estimated: true, name: `${stockEstLabel} · ${slotLabels[slot]}`, base: stockEstLabel, color: slotColors[slot] }))
       : []),
     ...(hasReturns
-      ? slots.map((slot) => ({ key: `returns_${slot}`, slot, metric: 'returns', name: `${returnsLabel} · ${slotLabels[slot]}`, base: returnsLabel, color: CHART_COLORS.heroReturns }))
+      ? slots.map((slot) => ({ key: `returns_${slot}`, slot, metric: 'returns', name: `${returnsLabel} · ${slotLabels[slot]}`, base: returnsLabel, color: slotColors[slot] }))
       : []),
     ...(hasReturnsEst
-      ? slots.map((slot) => ({ key: `retest_${slot}`, slot, metric: 'retest', estimated: true, name: `${returnsEstLabel} · ${slotLabels[slot]}`, base: returnsEstLabel, color: CHART_COLORS.heroReturns }))
+      ? slots.map((slot) => ({ key: `retest_${slot}`, slot, metric: 'retest', estimated: true, name: `${returnsEstLabel} · ${slotLabels[slot]}`, base: returnsEstLabel, color: slotColors[slot] }))
       : []),
-  ], [slots, slotLabels, salesLabel, receivedLabel, hasReceived, hasEstimated, hasSalesEst, hasStockEst, hasReturns,
+  ], [slots, slotLabels, slotColors, salesLabel, receivedLabel, hasReceived, hasEstimated, hasSalesEst, hasStockEst, hasReturns,
     hasReturnsEst, salesEstLabel, stockEstLabel, returnsLabel, returnsEstLabel]);
   // Purchases received ride with "Both": they are neither metric the
   // control names, and a sales-only or inventory-only view is for a
@@ -741,9 +833,9 @@ export const SalesVsStockWidget = ({
 
   // The years on screen: those with a figure on a line the control shows,
   // latest first (Del Monte's range can hold a year with returns only, which
-  // the Returns view draws and the others don't). A year's line style goes by
-  // its place among these, so the latest year drawn is always the solid one;
-  // the legend names each with the months it has ("2026 (Jan–Feb)").
+  // the Returns view draws and the others don't). A year's line weight goes
+  // by its place among these, so the latest year drawn is always the
+  // heaviest; the legend names each with the months it has ("2026 (Jan–Feb)").
   const { shownSlots, slotStyle, shownLabels, yearRank } = useMemo(() => {
     const monthsOf = (slot) => rows
       .filter((r) => visible.some((sr) => sr.slot === slot && r[sr.key] != null))
@@ -770,8 +862,8 @@ export const SalesVsStockWidget = ({
     () => pesoTicks(rows.flatMap((r) => visible.map((sr) => r[sr.key]))),
     [rows, visible],
   );
-  // What the lines are, said outright: the legend keys each year's line
-  // style, and this names the two periods those years come from. Then why
+  // What the lines are, said outright: the legend keys each year's
+  // colour, and this names the two periods those years come from. Then why
   // nothing of the comparison is drawn when one was asked for (the data
   // starts too late, it is still loading, or that period has no figures),
   // and any year the range holds that the chart leaves out.
@@ -780,7 +872,7 @@ export const SalesVsStockWidget = ({
       + `${plainPeriod(data.reduce((a, b) => (a.period > b.period ? a : b)).period)}` : '');
   const compareDrawn = points.some((pt) => !pt.inRange
     && [pt.sales, pt.stockOnHand, pt.received, pt.returns].some((v) => v != null));
-  const yearsLine = `One line per calendar year: ${rangeText}`
+  const yearsLine = `One colour per calendar year: ${rangeText}`
     + `${compareDrawn && compare?.label ? `, with ${compare.label} to compare` : ''}.`
     + `${undrawnYears.length ? ` Earlier years (${undrawnYears.join(', ')}) aren't drawn.` : ''}`;
   const compareLine = compareNote
@@ -869,14 +961,14 @@ export const SalesVsStockWidget = ({
   ];
 
   const metricEntries = [
-    { metric: 'sales', label: salesLabel, color: CHART_COLORS.heroSales },
-    { metric: 'stock', label: INVENTORY_LABEL, color: CHART_COLORS.heroInventory },
-    ...(hasReceived ? [{ metric: 'received', label: receivedLabel, color: COLORS.forecast }] : []),
-    ...(hasEstimated ? [{ metric: 'recest', label: ESTIMATED_LABEL, color: COLORS.forecast, estimated: true }] : []),
-    ...(hasSalesEst ? [{ metric: 'salesest', label: salesEstLabel, color: CHART_COLORS.heroSales, estimated: true }] : []),
-    ...(hasStockEst ? [{ metric: 'stockest', label: stockEstLabel, color: CHART_COLORS.heroInventory, estimated: true }] : []),
-    ...(hasReturns ? [{ metric: 'returns', label: returnsLabel, color: CHART_COLORS.heroReturns }] : []),
-    ...(hasReturnsEst ? [{ metric: 'retest', label: returnsEstLabel, color: CHART_COLORS.heroReturns, estimated: true }] : []),
+    { metric: 'sales', label: salesLabel },
+    { metric: 'stock', label: INVENTORY_LABEL },
+    ...(hasReceived ? [{ metric: 'received', label: receivedLabel }] : []),
+    ...(hasEstimated ? [{ metric: 'recest', label: ESTIMATED_LABEL }] : []),
+    ...(hasSalesEst ? [{ metric: 'salesest', label: salesEstLabel }] : []),
+    ...(hasStockEst ? [{ metric: 'stockest', label: stockEstLabel }] : []),
+    ...(hasReturns ? [{ metric: 'returns', label: returnsLabel }] : []),
+    ...(hasReturnsEst ? [{ metric: 'retest', label: returnsEstLabel }] : []),
   ].filter((entry) => visible.some((sr) => sr.metric === entry.metric));
 
   return (
@@ -927,34 +1019,21 @@ export const SalesVsStockWidget = ({
         />
       ) : (
         <>
-          {/* Two keys, not four: the metric's colour, then the year's line
+          {/* Two keys, not eight: the year's colour, then the metric's line
               style. Together they name every line without listing each. */}
           <ul className="custom-legend custom-legend-top">
-            {metricEntries.map((entry) => (
-              <li key={entry.metric} className="legend-item" {...focusHandlers('metric', entry.metric)}>
-                {entry.estimated
-                  ? <span className="legend-line legend-line-dotted" style={{ borderTopColor: entry.color }} aria-hidden="true" />
-                  : <span className="legend-color" style={{ backgroundColor: entry.color }} aria-hidden="true" />}
-                {entry.label}
-              </li>
-            ))}
-            {shownSlots.length > 0 && <li className="legend-divider" aria-hidden="true" />}
             {shownSlots.map((slot) => (
               <li key={slot} className="legend-item" {...focusHandlers('slot', slot)}>
-                {/* The year's own line style, drawn as the line is. */}
-                <svg className="legend-year-line" width="26" height="8" aria-hidden="true">
-                  <line
-                    x1="1"
-                    x2="25"
-                    y1="4"
-                    y2="4"
-                    stroke="currentColor"
-                    strokeWidth={slotStyle[slot].rank === 0 ? 2.5 : 2}
-                    strokeDasharray={YEAR_DASH[slotStyle[slot].rank]}
-                    strokeLinecap="round"
-                  />
-                </svg>
+                <span className="legend-color" style={{ backgroundColor: slotColors[slot] }} aria-hidden="true" />
                 {shownLabels[slot]}
+              </li>
+            ))}
+            {shownSlots.length > 0 && metricEntries.length > 0 && <li className="legend-divider" aria-hidden="true" />}
+            {metricEntries.map((entry) => (
+              <li key={entry.metric} className="legend-item" {...focusHandlers('metric', entry.metric)}>
+                {/* The metric's own line style, drawn as the line is. */}
+                <MetricLineSwatch metric={entry.metric} />
+                {entry.label}
               </li>
             ))}
             {hasUnusual && (
@@ -1025,15 +1104,10 @@ export const SalesVsStockWidget = ({
                     const flagged = flaggedDot ? flaggedDot(props) : null;
                     if (flagged) return flagged;
                     if (rows[index - 1]?.[sr.key] != null || rows[index + 1]?.[sr.key] != null) return null;
-                    return (
-                      <circle
-                        key={`lone-${sr.key}-${index}`}
-                        cx={cx}
-                        cy={cy}
-                        r={3.5}
-                        fill={sr.color}
-                        fillOpacity={dimmable(sr.key) * YEAR_OPACITY[rank]}
-                      />
+                    return loneMarker(
+                      sr.metric, cx, cy, sr.color,
+                      dimmable(sr.key) * (sr.estimated ? ESTIMATED_OPACITY : 1),
+                      `lone-${sr.key}-${index}`,
                     );
                   };
                   return (
@@ -1045,8 +1119,8 @@ export const SalesVsStockWidget = ({
                       stroke={sr.color}
                       strokeWidth={yearLineWidth(rank, inRange)}
                       strokeLinecap="round"
-                      strokeDasharray={sr.estimated ? ESTIMATED_DASH : YEAR_DASH[rank]}
-                      strokeOpacity={dimmable(sr.key) * YEAR_OPACITY[rank] * (sr.estimated ? ESTIMATED_OPACITY : 1)}
+                      strokeDasharray={METRIC_DASH[sr.metric]}
+                      strokeOpacity={dimmable(sr.key) * (sr.estimated ? ESTIMATED_OPACITY : 1)}
                       fill={sr.estimated || !FILL_TOP_OPACITY[rank] ? 'none' : `url(#svs-fill-${sr.key})`}
                       fillOpacity={dimmable(sr.key)}
                       dot={lineDot}
