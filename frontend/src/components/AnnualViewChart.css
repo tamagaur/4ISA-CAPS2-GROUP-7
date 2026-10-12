@@ -39,13 +39,22 @@
   border-top: 1px dashed #C2410C;
 }
 
-/* The same plot height as the chart beside it (.chart-container-yoy), so
-   the two cards' plots line up when side by side. */
-.annual-view-plot {
-  flex: none;
-  height: 340px;
+/* The plot takes whatever height the card has left under its header and
+   legend: side by side, the card stretches to the taller chart beside it
+   (the row's align-items: stretch) and the bars fill it, with no blank
+   band under them. Stacked, the card is only as tall as its content, so
+   the floor keeps the bars a readable height. */
+.annual-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-slot .annual-view .annual-view-plot,
+.dash-slot .annual-view-plot {
+  flex: 1 1 auto;
+  min-height: 300px;
 }
 
 @media (max-width: 600px) {
-  .annual-view-plot { height: 260px; }
+  .dash-slot .annual-view .annual-view-plot { min-height: 240px; }
 }
