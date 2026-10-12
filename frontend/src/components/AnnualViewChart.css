@@ -1,0 +1,51 @@
+/* The Annual View bar card (AnnualViewChart.jsx), left of the Sales vs
+   Inventory chart in the dashboard's "What happened?" row. */
+.annual-view .chart-header {
+  margin-bottom: 8px;
+}
+
+.annual-view-mock {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  background: #FFF4DD;
+  color: #B54708;
+  font-size: var(--text-micro, 11px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.annual-view-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 0 6px;
+  font-size: var(--text-micro, 11px);
+  color: var(--color-text-muted);
+}
+
+.annual-view-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.annual-view-legend-band {
+  background: rgba(242, 140, 40, 0.18);
+  border-top: 1px dashed #C2410C;
+}
+
+/* The same plot height as the chart beside it (.chart-container-yoy), so
+   the two cards' plots line up when side by side. */
+.annual-view-plot {
+  flex: none;
+  height: 340px;
+}
+
+@media (max-width: 600px) {
+  .annual-view-plot { height: 260px; }
+}

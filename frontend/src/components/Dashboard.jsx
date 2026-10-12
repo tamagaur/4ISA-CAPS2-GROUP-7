@@ -33,6 +33,7 @@ import { formatDate, formatMonth } from '../utils/formatDate';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
 import { ArrowRight, AlertTriangle } from 'lucide-react';
 import TierBasisLabel from './TierBasisLabel';
+import AnnualViewChart from './AnnualViewChart';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -1247,7 +1248,21 @@ const Dashboard = () => {
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
           <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time" basis={BASIS.chart}><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} syntheticNote={chartSyntheticNote} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} compareNote={chartCompareNote} /></Slot>
+            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time" basis={BASIS.chart}>
+              {/* Two cards in one row (layout pass, 2026-10-12): the Annual
+                  View bars at about 40% and the Sales vs Inventory chart at
+                  about 60%, stacked where the row is too narrow (.dash-split,
+                  a container query, so the menu opening narrows it too). The
+                  Annual View shows MOCK figures until its fiscal-year
+                  totals, FY26 pace and target band are specified; the chart
+                  on the right is unchanged. */}
+              <div className="dash-split-host">
+                <div className="dash-split">
+                  <AnnualViewChart />
+                  <SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} syntheticNote={chartSyntheticNote} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} compareNote={chartCompareNote} />
+                </div>
+              </div>
+            </Slot>
           </div>
 
           <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
