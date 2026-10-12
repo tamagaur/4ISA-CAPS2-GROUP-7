@@ -10,6 +10,7 @@ import Modal from './Modal';
 import ProductName from './ProductName';
 import { formatCompactPesos } from './Charts';
 import { getRangePareto, getRangeYoy } from '../api/dashboard';
+import ParetoCurve from './ParetoCurve';
 import { labelForPrincipal } from '../principals';
 import './AtRiskProductsModal.css';
 
@@ -95,6 +96,8 @@ const ClassProductsModal = ({ isOpen, onClose, tier, args, onOpenProduct, onOpen
               <strong>{pct(block.cls.share)}</strong> of {pareto.label} revenue
               {block.cls.revenue != null && <> (about <strong>{formatCompactPesos(block.cls.revenue)}</strong>)</>}.
             </p>
+            {/* The whole ranking as a curve, above this class's list. */}
+            <ParetoCurve block={block} cutoffs={pareto?.cutoffs} label={pareto.label} height={170} />
             <div className="at-risk-table-wrap" tabIndex={0}>
               <table className="at-risk-table">
                 <thead>

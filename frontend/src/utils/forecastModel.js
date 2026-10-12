@@ -28,15 +28,26 @@ const METHOD_LABELS = {
 // Technical Adviser, 2 Oct 2026). `short` goes under the forecast number,
 // `long` beside the model's name in "How this forecast was made". Each says
 // what the model computes and nothing about how accurate it is.
+//
+// `season` answers the Technical Adviser's "the product is seasonal: does
+// the forecast use it?" (2 Oct 2026). The trained model takes the calendar
+// month as an input (FEATURE_NAMES' month_of_year, analytics/forecasting/
+// global_model.py); the 3-month average and TSB have no such term.
 const METHOD_PLAIN = {
-  ma3: { short: 'average of the last 3 months', long: 'the average of the last 3 months\u2019 sales' },
+  ma3: {
+    short: 'average of the last 3 months',
+    long: 'the average of the last 3 months\u2019 sales',
+    season: 'Not used: an average of the last 3 months does not look at the same month a year earlier',
+  },
   tsb: {
     short: 'average for on-and-off sales',
     long: 'an average that tracks both how often the product sells and how much when it does',
+    season: 'Not used: it follows how often and how much the product sells, not the time of year',
   },
   xgb_ma3_avg: {
     short: 'average of two methods',
     long: 'a model trained on every product\u2019s sales history (XGBoost), averaged with the last 3 months\u2019 average (MA3)',
+    season: 'Used by half of it: the trained model takes the calendar month as an input; the 3-month average does not',
   },
 };
 
@@ -74,7 +85,7 @@ export function describeServedModel(modelParams, status) {
     return {
       kind: 'forecast',
       label: `${METHOD_LABELS.ma3} (fallback)`,
-      plain: { short: `${METHOD_PLAIN.ma3.short} (fallback)`, long: METHOD_PLAIN.ma3.long },
+      plain: { ...METHOD_PLAIN.ma3, short: `${METHOD_PLAIN.ma3.short} (fallback)` },
       recomputable: false,
       fallback: true,
     };

@@ -2056,3 +2056,9 @@ button.abc-tier-card-link {
     font-size: 1.35rem;
   }
 }
+
+/* The line that says which months of the chart's sentence are synthetic. */
+.chart-widget .chart-title-area p.chart-insight-synthetic {
+  font-weight: 600;
+  color: #B54708;
+}

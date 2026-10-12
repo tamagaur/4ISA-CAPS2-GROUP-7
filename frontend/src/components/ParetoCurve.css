@@ -1,0 +1,32 @@
+/* The Pareto curve of a range ranking (ParetoCurve.jsx). */
+.pareto-curve {
+  margin: 0 0 16px;
+  padding: 14px 16px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 10px);
+  background-color: var(--color-surface);
+}
+
+.pareto-curve-caption {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-heading);
+}
+
+.pareto-curve-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 2px;
+  font-size: var(--text-micro, 11px);
+  color: var(--color-text-muted);
+}
+
+.pareto-curve-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}

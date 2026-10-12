@@ -984,6 +984,36 @@ const Dashboard = () => {
   const annualLatestMonth = periodLabel(allocation.latest_month);
   const annualTrend = allocation.latest_sales != null ? trendExtras(allocation.trend, CHART_COLORS.salesSeries) : {};
   const rangeSales = kpis.sales_cumulative || {};
+  // No sales yet in the year being planned (Del Monte: latest sales Dec 2025,
+  // planning 2026): the card's headline falls back to the selected range.
+  const annualHasYtd = allocation.ytd_sales != null && allocation.ytd_months > 0;
+  // Synthetic months (generated to complete the range, not SSM's files) are
+  // named in the banner above the cards. Each figure built on them says so
+  // on its own card too (the Technical Adviser: what is real and what is
+  // generated must be visible where the number is). Only the selected
+  // range's months are known here (kpis.sales_cumulative.synthetic_months).
+  const syntheticInRange = rangeSales.synthetic_months || [];
+  const syntheticSet = new Set(syntheticInRange);
+  const monthsText = (list) => list.map(periodLabel).join(', ');
+  const rangeSyntheticMark = syntheticInRange.length > 0
+    ? `Includes ${syntheticInRange.length} synthetic month${syntheticInRange.length === 1 ? '' : 's'}`
+    : null;
+  const latestPrev = allocation.trend?.prev_period;
+  const latestSyntheticMark = syntheticSet.has(allocation.latest_month)
+    ? `${annualLatestMonth} is a synthetic month`
+    : latestPrev && syntheticSet.has(latestPrev) ? `${periodLabel(latestPrev)} is a synthetic month` : null;
+  const basisSynthetic = allocation.basis_year
+    ? syntheticInRange.filter((m) => m.startsWith(`${allocation.basis_year}-`))
+    : [];
+  const allocSyntheticMark = basisSynthetic.length > 0
+    ? `FY ${allocation.basis_year} sales include synthetic months: ${monthsText(basisSynthetic)}`
+    : null;
+  // The chart's sentence quotes two months; say so when either is synthetic.
+  const insightSynthetic = syntheticInRange.filter((m) => (data.sales_vs_stock_insight?.text || '').includes(periodLabel(m)));
+  const chartSyntheticNote = insightSynthetic.length > 0
+    ? `${monthsText(insightSynthetic)} ${insightSynthetic.length === 1 ? 'is a synthetic month' : 'are synthetic months'}, `
+      + 'not SSM\u2019s own figures.'
+    : null;
   const annualCard = {
     allocation,
     yoy,
@@ -993,17 +1023,26 @@ const Dashboard = () => {
       trend: annualTrend.trend || null,
       change: annualTrend.deltaLine ? annualTrend : null,
       blockedReason: allocation.latest_sales == null ? allocation.blocked_reason || null : null,
+      synthetic: latestSyntheticMark,
     },
+    allocSynthetic: allocSyntheticMark,
     range: {
       short: salesRange?.short ?? null,
       change: salesCompare,
       label: rangeSales.label ? `Sales, ${rangeSales.label}` : 'Sales',
       value: rangeSales.value != null && !kpis.sales_blocked_reason ? formatCompactPesos(rangeSales.value) : '—',
+      synthetic: rangeSyntheticMark,
     },
     basis: {
-      label: allocation.allocation_year ? `FY ${allocation.allocation_year}` : 'Current year',
+      // Without sales in the planned year the tag names the target's year,
+      // rather than labelling the range's figures as that year's.
+      label: allocation.allocation_year
+        ? `FY ${allocation.allocation_year}${annualHasYtd ? '' : ' target'}`
+        : 'Current year',
       follows: false,
-      detail: 'Does not change with the date filter: the year being planned, its sales so far against the same '
+      detail: (annualHasYtd ? '' : `No FY ${allocation.allocation_year ?? ''} sales are on record yet, so the headline `
+        + 'shows the selected range\u2019s sales instead; the allocation target is for that year. ')
+        + 'Does not change with the date filter: the year being planned, its sales so far against the same '
         + 'months a year earlier, and the latest month with sales. The allocation is the previous year\u2019s sales '
         + '\u00d7 103/105/108%, one year only, whatever the range. Only the "Selected range" line follows the filter.',
     },
@@ -1208,7 +1247,7 @@ const Dashboard = () => {
           {/* DESCRIPTIVE — what happened: the sales trend across the full
               row, then the ABC mix beside each tier's warehouse status. */}
           <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time" basis={BASIS.chart}><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} compareNote={chartCompareNote} /></Slot>
+            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time" basis={BASIS.chart}><SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} syntheticNote={chartSyntheticNote} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} compareNote={chartCompareNote} /></Slot>
           </div>
 
           <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
@@ -1218,6 +1257,9 @@ const Dashboard = () => {
                 revenue={data.abc_revenue}
                 rules={data.abc_rules}
                 note={placeholderNote(data.abc_revenue?.period)}
+                syntheticNote={rangeSyntheticMark
+                  ? `The revenue ranked here includes ${syntheticInRange.length} synthetic month${syntheticInRange.length === 1 ? '' : 's'}: ${monthsText(syntheticInRange)}.`
+                  : null}
                 coverage={abcCoverage}
                 units={abcUnits}
                 atRisk={canListAtRisk && !ssPinned
@@ -1255,6 +1297,7 @@ const Dashboard = () => {
                 <Slot kind="Descriptive" question="Is any stock sitting idle?" basis={BASIS.idle}>
                   <IdleStockCard
                     idle={data.idle_stock}
+                    prior={prior?.data?.idle_stock ?? null}
                     scope={coverageNote(data.idle_stock.coverage, pagePrincipal)}
                     onOpenList={() => openRangeList('idle')}
                   />

@@ -665,3 +665,25 @@
     font-size: 28px;
   }
 }
+
+/* A figure that includes synthetic months (generated, not SSM's files). */
+.hero-synthetic {
+  font-size: 12px;
+  font-weight: 600;
+  color: #B54708;
+}
+
+/* A figure beside its sparkline never breaks mid-number ("₱27.9 / M" on a
+   narrow card, seen 2026-10-12): the number keeps its line and the
+   sparkline gives up width instead. */
+.hero-value-row .hero-value {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.hero-value-row > :not(.hero-value) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}

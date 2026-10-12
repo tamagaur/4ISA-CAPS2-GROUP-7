@@ -122,8 +122,22 @@ const CardShell = ({ title, lead, scope, children, blocked }) => (
 // How many idle products the card names before the full list.
 const IDLE_PREVIEW = 5;
 
-export const IdleStockCard = ({ idle, scope, onOpenList }) => {
+export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
   if (!idle) return null;
+  // The same measure at the comparison period's count ("how long has this
+  // been happening?", the Technical Adviser, 2 Oct 2026). `prior` is the
+  // idle_stock block of GET /dashboard for the date bar's "Compare with"
+  // period; left out when that count is missing or is this same count.
+  const priorUsable = prior && !prior.blocked_reason && prior.products != null
+    && (prior.count_date || prior.count_period)
+    && (prior.count_date !== idle.count_date || prior.count_period !== idle.count_period);
+  const priorChange = priorUsable ? idle.products - prior.products : 0;
+  const priorLine = priorUsable
+    ? `At the stock ${prior.count_date ? `counted ${formatDate(prior.count_date)}` : `${formatMonth(prior.count_period)} count`}: `
+      + `${prior.products.toLocaleString()} products${prior.pesos != null ? `, ${formatCompactPesos(prior.pesos)}` : ''}. `
+      + (priorChange === 0 ? 'The same number now.'
+        : `${Math.abs(priorChange).toLocaleString()} ${priorChange > 0 ? 'more' : 'fewer'} now.`)
+    : null;
   const window = idle.window_start && idle.window_end
     ? `${formatMonth(idle.window_start)} – ${formatMonth(idle.window_end)}`
     : `the last ${idle.window_rule_months} months`;
@@ -151,6 +165,7 @@ export const IdleStockCard = ({ idle, scope, onOpenList }) => {
             ? ` · ${idle.products - idle.products_with_value} without a price, not in the sum` : ''}`}
         />
       </div>
+      {priorLine && <p className="range-stat-sub">{priorLine}</p>}
       {/* The largest few by value (the payload's items, already sorted
           largest first): which products the money is in, before the list. */}
       {idle.items?.length > 0 && (

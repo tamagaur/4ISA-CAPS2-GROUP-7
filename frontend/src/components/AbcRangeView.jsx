@@ -12,6 +12,7 @@ import { AlertTriangle, CheckCircle2, Info, Search, X } from 'lucide-react';
 import KPICard from './KPICard';
 import ProductName from './ProductName';
 import Pagination from './Pagination';
+import ParetoCurve from './ParetoCurve';
 import { ClassBadge } from './ui/StatusBadge';
 import { formatCompactPesos } from './Charts';
 import { yoyText } from './ClassProductsModal';
@@ -159,6 +160,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
                 </span>
               </p>
             )}
+            <ParetoCurve block={block} cutoffs={pareto?.cutoffs} label={label} />
           </React.Fragment>
         );
       })}

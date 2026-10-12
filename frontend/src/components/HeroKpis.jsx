@@ -69,6 +69,8 @@ export const HeroCard = ({ tone, title, tooltip, basis, action = false, classNam
 // ── Card 1: annual sales and the supplier allocation ──────────────────────
 export const AnnualSalesCard = ({
   allocation, yoy = null, latest = null, range = null, basis = null, tooltip = null,
+  // "FY 2025 sales include synthetic months: …" when the target's basis does.
+  allocSynthetic = null,
 }) => {
   const a = allocation || {};
   const levels = [...(a.levels || [])].sort((x, y) => x.pct - y.pct);
@@ -109,6 +111,8 @@ export const AnnualSalesCard = ({
         <div className="hero-split-col">
           <p className="hero-label">{hasYtd ? ytdLabel : range?.label || 'Sales'}</p>
           <p className="hero-value">{hasYtd ? formatCompactPesos(a.ytd_sales) : range?.value ?? '—'}</p>
+          {/* A figure built on synthetic months says so beside itself. */}
+          {!hasYtd && range?.synthetic && <p className="hero-note hero-synthetic">{range.synthetic}</p>}
           <div className="hero-pills">
             {statusText && (
               <Pill
@@ -128,6 +132,7 @@ export const AnnualSalesCard = ({
             {latest?.trend && <Sparkline points={latest.trend.points} color={latest.trend.color} />}
           </div>
           <div className="hero-pills"><ComparePill extras={latest?.change} /></div>
+          {latest?.synthetic && <p className="hero-note hero-synthetic">{latest.synthetic}</p>}
           {latest?.blockedReason && <p className="hero-note">{latest.blockedReason}</p>}
         </div>
       </div>
@@ -137,6 +142,7 @@ export const AnnualSalesCard = ({
         <div className="hero-range-row">
           <span className="hero-range-text">Selected range: <strong>{range.short}</strong></span>
           <ComparePill extras={range.change} />
+          {range.synthetic && <span className="hero-synthetic">{range.synthetic}</span>}
         </div>
       )}
 
@@ -176,6 +182,7 @@ export const AnnualSalesCard = ({
             </span>
           )}
         </div>
+        {allocSynthetic && <p className="hero-note hero-synthetic">{allocSynthetic}</p>}
         {level ? (
           <div className="hero-alloc-row">
             <p className="hero-alloc-value">

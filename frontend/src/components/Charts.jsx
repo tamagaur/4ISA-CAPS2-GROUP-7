@@ -577,6 +577,8 @@ const INVENTORY_LABEL = 'Inventory value (at last purchase price)';
 // /dashboard's stock_on_hand_flags): marked, never dropped.
 export const SalesVsStockWidget = ({
   data = [], emptyReason, placeholder = null, insight = null, note = null, basis = null,
+  // Which of the months the sentence quotes are synthetic, if any.
+  syntheticNote = null,
   compare = null, compareNote = null, rangeLabel = null,
 }) => {
   const hasData = data.length > 0;
@@ -889,6 +891,7 @@ export const SalesVsStockWidget = ({
           {/* The backend's takeaway sentence, from the same rows this
               chart plots (sales_vs_stock_insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
+          {insight?.text && syntheticNote && <p className="chart-insight chart-insight-synthetic">{syntheticNote}</p>}
           {hasData && view === 'chart' && <p className="chart-insight">{yearsLine}</p>}
           {hasData && compareLine && view === 'chart' && <p className="chart-insight">{compareLine}</p>}
         </div>
@@ -1284,7 +1287,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 // page's filter ("Unilever only", Dashboard.jsx's coverageNote). `units` is
 // what a row is: 'SKUs', or 'categories' for Del Monte, which is ranked by
 // product category.
-export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null }) => {
+export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null, syntheticNote = null }) => {
   const [selectedTier, setSelectedTier] = useState('A');
   const [hover, setHover] = useState(null);
   const ringRef = useRef(null);
@@ -1379,6 +1382,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
           {coverage && <p className="chart-placeholder-note">{coverage}</p>}
           {!sharesAddUp && revenue?.blocked_reason && <p className="chart-placeholder-note">{revenue.blocked_reason}</p>}
           {note && <p className="chart-placeholder-note">{note}</p>}
+          {syntheticNote && <p className="chart-placeholder-note">{syntheticNote}</p>}
         </div>
       </div>
 

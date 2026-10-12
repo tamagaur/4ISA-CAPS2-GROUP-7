@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { getCategoryTrends } from '../api/analytics';
+import { periodToParam } from '../periodFilter';
 import { labelForPrincipal } from '../principals';
 import { formatMonth } from '../utils/formatDate';
 import { formatCompactPesos } from '../utils/formatters';
@@ -414,17 +415,24 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
 };
 
 const CategoryTrends = () => {
-  const { principal } = useOutletContext() || {};
+  const { principal, endMonth, endYear } = useOutletContext() || {};
+  // The page follows the END of the shared date range (2026-10-12): trends
+  // are fitted as of that month, on the months of sales up to it, and the
+  // revenue column is the 12 months ending there. The range's START is
+  // deliberately not sent: the fit needs up to 24 months and at least 12, so
+  // a 6-month range would leave every category with too few points, and a
+  // 12-month one would halve the history behind each trend.
+  const period = periodToParam(endMonth, endYear) || undefined;
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
 
   useEffect(() => {
     let cancelled = false;
     setState((prev) => ({ ...prev, status: 'loading', error: null }));
-    getCategoryTrends({ principal })
+    getCategoryTrends({ principal, period })
       .then((data) => { if (!cancelled) setState({ status: 'loaded', data, error: null }); })
       .catch((err) => { if (!cancelled) setState((prev) => ({ ...prev, status: 'error', error: err.message })); });
     return () => { cancelled = true; };
-  }, [principal]);
+  }, [principal, period]);
 
   const data = state.data;
   return (

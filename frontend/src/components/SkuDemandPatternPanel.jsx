@@ -55,10 +55,18 @@ const TREND_META = {
 // a SKU with history_months = 31 rendered "31 selling months" beside
 // "Fewer than 30 selling months". history_months is a separate trait and is
 // shown in its own tile.
-const STABILITY_GLOSS = {
-  all_38: 'Class A in all 38 periods observed',
-  at_least_30: 'Class A in at least 30 of the 38 periods',
-  churn: 'Moves in and out of Class A — fewer than 30 of the 38 periods',
+//
+// The number in a code is the run's own period count: 38 on the single-month
+// Tier A basis, 27 on the 12-month one (all_27 and at_least_21 are live since
+// 2026-10-11, Kelvin's 930792a and migration 0051). It is read from the code,
+// so another basis needs no change here.
+const stabilityGloss = (group) => {
+  const all = /^all_(\d+)$/.exec(group || '');
+  if (all) return `Class A in all ${all[1]} periods observed`;
+  const atLeast = /^at_least_(\d+)$/.exec(group || '');
+  if (atLeast) return `Class A in at least ${atLeast[1]} of the periods observed, but not all`;
+  if (group === 'churn') return 'Moves in and out of Class A';
+  return group;
 };
 
 // Bins of the combined_v1 scheme (sales-month length, with the long bin
@@ -284,7 +292,7 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
             <span className="sku-pattern-tile-label">
               <CalendarRange size={11} aria-hidden="true" /> History
               <InfoTip label="About the history" size={12}>
-                {STABILITY_GLOSS[t.stability_group] || t.stability_group}
+                {stabilityGloss(t.stability_group)}
                 {t.restart_flag ? '; sales restarted after a gap of 3 or more months' : ''}
                 {` (stability group: ${t.stability_group}).`}
               </InfoTip>

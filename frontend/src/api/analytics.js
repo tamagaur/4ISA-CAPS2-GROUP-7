@@ -40,8 +40,12 @@ export function getDecomposition(sku, { principal } = {}) {
   return getJson(`/decomposition?${query.toString()}`, 'STL decomposition');
 }
 
-export function getCategoryTrends({ principal } = {}) {
+// `period` ('YYYY-MM') is the shared date range's END: history up to that
+// month (GET /category-trends, since kelvin-etl 6a2cd6d). The range's start
+// is not sent; see CategoryTrends.jsx.
+export function getCategoryTrends({ principal, period } = {}) {
   const query = new URLSearchParams();
+  if (period) query.append('period', period);
   appendPrincipal(query, principal);
   const qs = query.toString();
   return getJson(`/category-trends${qs ? `?${qs}` : ''}`, 'category trends');

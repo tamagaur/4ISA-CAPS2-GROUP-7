@@ -235,3 +235,27 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* The range must always be readable. On a tight toolbar the chip used to be
+   cut from the right, down to "Mar 2025 – Feb 202" at 1366px with the menu
+   open (seen 2026-10-12). The quick-range name goes first, then the long
+   form gives way to the short one ("Mar 25 – Feb 26"). */
+.range-picker-range {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 1600px) {
+  .range-picker-quick {
+    display: none;
+  }
+}
+
+@media (max-width: 1420px) {
+  .range-picker-long {
+    display: none;
+  }
+  .range-picker-short {
+    display: inline;
+  }
+}

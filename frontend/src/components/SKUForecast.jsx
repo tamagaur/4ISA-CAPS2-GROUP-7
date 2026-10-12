@@ -25,6 +25,7 @@ import { useBrandLookup } from '../utils/useBrandLookup';
 import { describeServedModel, describeFallbackReason } from '../utils/forecastModel';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
+import TierBasisLabel from './TierBasisLabel';
 import DateFilter from './DateFilter';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
@@ -285,6 +286,9 @@ const SKUForecast = () => {
     localRange.endYear !== seedRange.endYear);
 
   const [rawItems, setRawItems] = useState([]);
+  // Which ABC run the classes on this page are from (GET /abc's tier_a_periods),
+  // stated as the Dashboard, ABC, Reorder and SKU Management pages state it.
+  const [tierAPeriods, setTierAPeriods] = useState({});
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState(null);
 
@@ -304,6 +308,7 @@ const SKUForecast = () => {
       .then((res) => {
         if (cancelled) return;
         setRawItems(res.items || []);
+        setTierAPeriods(res.tier_a_periods || {});
       })
       .catch((err) => {
         if (cancelled) return;
@@ -1029,6 +1034,7 @@ const SKUForecast = () => {
             </>
           )}
         >
+            <TierBasisLabel periods={tierAPeriods} />
             {whatIf && (
               <p className="chart-placeholder-note">
                 Preview: this forecast is a what-if run of the same models on the five-year history, 2021–22
@@ -1709,6 +1715,13 @@ const SKUForecast = () => {
                             {servedModel.plain ? `: ${servedModel.plain.long}` : ''}
                           </dd>
                         </div>
+                        {/* Whether the forecast knows what time of year it is. */}
+                        {servedModel.plain?.season && (
+                          <div className="forecast-howmade-item">
+                            <dt>Time of year</dt>
+                            <dd>{servedModel.plain.season}</dd>
+                          </div>
+                        )}
                         {storedParams.bin && (
                           <div className="forecast-howmade-item">
                             <dt>History</dt>

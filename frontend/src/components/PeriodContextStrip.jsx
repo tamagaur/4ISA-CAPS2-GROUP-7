@@ -20,8 +20,8 @@ const PAGE_RULES = {
     text: 'The chart follows the date range unless you set its own range on the page; Clear goes back to this one.',
   },
   '/category-trends': {
-    follows: false,
-    text: 'Each trend is fitted on the category’s last 24 months of sales, so the date range does not change this page.',
+    follows: 'partly',
+    text: 'Trends are fitted as of the end of the date range, on the 24 months of sales up to it. The start of the range does not shorten that history.',
   },
   '/reorder': {
     follows: false,
