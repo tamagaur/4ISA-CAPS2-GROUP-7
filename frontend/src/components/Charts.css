@@ -2067,3 +2067,53 @@ button.abc-tier-card-link {
   font-weight: 600;
   color: #B54708;
 }
+
+/* Sales vs Inventory Value, "Both" view: sales above inventory in two
+   panels on the same months. The plot area is the same height in each;
+   the lower one is taller by its month axis. */
+.chart-container-yoy.is-upper {
+  height: 200px;
+}
+
+.chart-container-yoy.is-lower {
+  height: 244px;
+}
+
+/* What a panel shows, above it. */
+.yoy-panel-caption {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.yoy-panel-empty {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+/* A legend entry that hides or shows its lines when clicked: a plain
+   button wearing .legend-item, struck through while its lines are off. */
+.legend-toggle {
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.legend-toggle:hover {
+  color: var(--color-text);
+}
+
+.legend-toggle:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.legend-toggle.is-off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
