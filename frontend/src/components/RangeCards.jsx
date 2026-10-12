@@ -12,6 +12,7 @@ import {
 import Modal from './Modal';
 import ProductName from './ProductName';
 import InfoTip from './InfoTip';
+import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { CHART_COLORS, COLORS } from '../theme/colors';
 import { formatCompactPesos } from '../utils/formatters';
@@ -196,12 +197,6 @@ export const IDLE_COLUMNS = [
 //                                  the forecast in pesos is actual + net miss
 //   surplus_pesos / shortage_pesos the over- and under-forecast totals
 const wholePct = (share) => `${Math.round(share * 100)}%`;
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-// "Mar '25": every axis tick names its year, in two characters.
-const shortMonth = (period) => {
-  const [y, m] = String(period).split('-');
-  return `${MONTH_ABBR[Number(m) - 1] || m} '${y.slice(2)}`;
-};
 const exactPesos = (v) => `₱${Math.round(v).toLocaleString('en-PH')}`;
 
 const ForecastVsActualTooltip = ({ active, payload }) => {
@@ -327,12 +322,12 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
                   <CartesianGrid vertical={false} stroke={CHART_COLORS.gridline} />
                   <XAxis
                     dataKey="period"
-                    tickFormatter={shortMonth}
+                    tickFormatter={monthName}
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }}
+                    tick={<MonthTick fontSize={11} fill={CHART_COLORS.axisLabel} />}
                     minTickGap={12}
-                    dy={6}
+                    height={30 + MONTH_TICK_EXTRA_HEIGHT}
                   />
                   <YAxis
                     tickFormatter={(v) => formatCompactPesos(v)}

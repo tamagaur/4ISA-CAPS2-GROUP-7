@@ -23,7 +23,7 @@ import datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import auth_utils
+from backend import auth_utils, marts
 from backend.deps import get_current_user, get_db
 from backend.main import app
 from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, _last_12_periods
@@ -1986,7 +1986,43 @@ def test_abc_class_shares_and_revenue_come_from_the_products_own_revenue():
     assert body["abc_revenue"]["ranked_total"] == pytest.approx(10_000.0)
 
 
-def test_abc_ranking_reads_real_rows_only():
+@pytest.fixture
+def real_rows_only(monkeypatch):
+    """marts.COUNT_FILLED_AND_GENERATED off: the rule before 2026-10-11, kept
+    tested so it can be switched back on a decision."""
+    monkeypatch.setattr(marts, "COUNT_FILLED_AND_GENERATED", False)
+
+
+def test_complete_months_count_filled_and_generated_sales_and_say_so():
+    """2026-10-11 (Audrey; approved by Kelvin for the frontend): a month SSM
+    sent no file for shows the database's filled or generated figure as its
+    sales, in the line and the range total, and is named as not SSM's data.
+    A month with real sales is never topped up."""
+    periods = _periods()
+    session = FakeSession(
+        sales={periods[-1]: 500.0},
+        estimated_sales={"unilever": {periods[-2]: ("generated", 450.0), periods[-1]: ("filled", 999.0)}},
+    )
+    body = _get(session, "principal=unilever")
+    pts = {pt["period"]: pt for pt in body["sales_vs_stock"]}
+    gap, real = pts[periods[-2]], pts[periods[-1]]
+    assert gap["sales"] == 450.0 and gap["sales_estimated"] is None
+    assert gap["provenance"]["sales"] == "synthetic"
+    assert real["sales"] == 500.0 and real["provenance"]["sales"] == "real"
+    total = body["kpis"]["sales_cumulative"]
+    assert total["value"] == 950.0 and total["months_with_data"] == 2
+    assert total["synthetic_months"] == [periods[-2]]
+
+    sql, _ = _sql_for(session, "WITH rev AS")
+    assert "s.data_kind IN ('filled', 'generated')" in sql
+    # Nothing after the last month with real sales: those months are what the
+    # forecasts are for, not gaps in SSM's history.
+    assert "s.period <= (SELECT MAX(period) FROM mart.sales_month WHERE data_kind = 'real')" in sql
+    assert marts._kinds("real", {"data_kind": "generated", "period": "2026-03"}, "2026-02") is False
+    assert marts._kinds("real", {"data_kind": "generated", "period": "2026-02"}, "2026-02") is True
+
+
+def test_abc_ranking_reads_real_rows_only(real_rows_only):
     """KPIs, the Pareto and accuracy read data_kind = 'real' (preview adds
     Unilever's placeholder months): a filled or generated row never ranks."""
     session = FakeSession(range_revenue={"unilever": {1: 10.0}})
@@ -2025,7 +2061,7 @@ def test_sales_range_total_has_no_pieces_for_del_monte():
     assert cum["pieces"] is None
 
 
-def test_chart_draws_filled_months_as_estimates_never_as_sales():
+def test_chart_draws_filled_months_as_estimates_never_as_sales(real_rows_only):
     """Coverage hole H1: a month the database holds only as a fill is drawn
     as an estimate with its kind; the real line and the KPI ignore it, and a
     month with real sales gets no estimate."""
@@ -2047,7 +2083,7 @@ def test_chart_draws_filled_months_as_estimates_never_as_sales():
     assert pts[periods[-3]]["sales_estimated"] is None, "real mode draws filled rows only, never generated ones"
 
 
-def test_estimate_under_all_needs_both_principals_covered():
+def test_estimate_under_all_needs_both_principals_covered(real_rows_only):
     """Under 'all' an estimated point still covers both principals: one side
     real and the other estimated adds up; one side missing gives no point."""
     periods = _periods()

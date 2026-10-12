@@ -8,8 +8,8 @@ import {
   CATEGORY_MISS_COLUMNS, DEMO_PRODUCT_SALES_LABEL, IDLE_COLUMNS, OVER_RUN_COLUMNS, PRODUCT_SALES_COLUMNS,
 } from './RangeCards';
 import RangePicker from './RangePicker';
-import { ActionCard, AnnualSalesCard, InventoryCard, MiniList, ShareBar } from './HeroKpis';
-import { formatUnits } from '../utils/formatNumber';
+import { AnnualSalesCard, BelowSafetyCard, InventoryCard, PendingReordersCard, StockCoverCard } from './HeroKpis';
+import { formatCompactCount, urgencyParts } from '../utils/kpiMath';
 import {
   SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
@@ -235,6 +235,9 @@ const chartPoints = (payload) => {
     returnsEstimated: pt.returns_estimated ?? null,
     returnsEstimatedKind: pt.returns_estimated_kind ?? null,
     stockUnusual: flags.get(pt.period) || null,
+    // The month's sales are not SSM's own figure: a filled or generated row
+    // counted so the month isn't a gap (backend/marts.py, COMPLETE MONTHS).
+    salesSynthetic: pt.provenance?.sales === 'synthetic',
   }));
 };
 
@@ -290,7 +293,7 @@ const DASHBOARD_SKELETON_ROWS = [
 const DashboardSkeleton = () => (
   <div className="dashboard-body" aria-hidden="true">
     <div className="hero-kpis">
-      <SkeletonStatCards count={4} cardClassName="hero-card" />
+      <SkeletonStatCards count={5} cardClassName="hero-card" />
     </div>
     {DASHBOARD_SKELETON_ROWS.map(([rowClass, cards], i) => (
       <div className={`dash-row ${rowClass}`} key={i}>
@@ -314,7 +317,10 @@ const DASH_SECTIONS = [
   { id: 'dash-sales', label: 'Sales & inventory', hint: 'What happened: monthly sales against inventory value (₱, at last purchase price)' },
   { id: 'dash-abc', label: 'ABC classes', hint: 'What happened: which products earn the most, and their stock status' },
   { id: 'dash-forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast and the reorder list" },
-  { id: 'dash-policy', label: 'Client policy', hint: "What to do: the LP safety stock against SSM's 3-week policy, and sales against the supplier allocation" },
+  // The 3-week comparison is named only while its card is shown.
+  { id: 'dash-policy', label: 'Client policy', hint: SHOW_POLICY_CARD
+    ? "What to do: the LP safety stock against SSM's 3-week policy, and sales against the supplier allocation"
+    : 'Sales against the supplier allocation' },
 ];
 const DASH_SECTION_IDS = DASH_SECTIONS.map((s) => s.id);
 
@@ -646,26 +652,31 @@ const Dashboard = () => {
   // warehouse's, product sales La Union's, a match SSM has not confirmed):
   // the card says "provisional" and the tooltip gives the caveat as served.
   const coverProvisional = Boolean(cover.caveat);
-  const coverLine = cover.value != null
-    ? `≈ ${Number(cover.value).toFixed(1)} weeks of cover${coverProvisional ? ' (provisional)' : ''}`
-      + ` · SSM policy: ${policyWeeks} weeks`
-    : null;
   // Del Monte's year has sales in only some months (6 of 12 in 2025); the
   // average is over those, and the tooltip says so rather than imply a year.
   const coverMonthsNote = cover.months_used != null && cover.months_used < 12
     ? ` Only ${cover.months_used} of those months have sales on record; the average is over those.`
     : '';
-  // Del Monte's stock files carry no pack size, so its stock can't be
-  // turned into pieces: the card says why it is in pesos only.
-  const pesosOnlyNote = pagePrincipal === 'delmonte' ? 'pesos only, since Del Monte files have no pack size' : null;
-  const priceBasisNote = 'Stock is valued at each product\'s last purchase price, which is not SSM\'s true cost.';
-  const coverTooltip = cover.value != null && coverWindow
-    ? `${priceBasisNote}${pesosOnlyNote ? ` Pesos only: ${pesosOnlyNote.replace('pesos only, since ', '')}.` : ''}`
-      + ` Weeks of cover = this stock ÷ average weekly sales over ${coverWindow}, the 12 months up to `
-      + `the stock count at the end of the selected range.${coverMonthsNote} SSM's policy is `
-      + `to keep ${policyWeeks} weeks of sales in stock.`
-      + (coverProvisional ? ` Provisional: ${cover.caveat}.` : '')
-    : priceBasisNote;
+  // The inventory and stock-cover cards' "?" (2026-10-11): what the card
+  // used to spell out in lines of text, one short paragraph each.
+  const inventoryTooltip = [
+    'Stock on hand at each product\'s last purchase price, which is not SSM\'s true cost. It is the stock count '
+      + 'at the end of the selected range, not a total over the range, so it changes with the date filter.',
+  ];
+  const coverTooltip = [
+    cover.value != null && coverWindow
+      ? `Stock cover = this stock ÷ average weekly sales over ${coverWindow}, the 12 months up to the count.`
+        + `${coverMonthsNote} SSM's policy is to keep ${policyWeeks} weeks of sales in stock; "× policy" is `
+        + 'the cover divided by that.'
+      : null,
+    // Stock is at last purchase price, sales at selling price: two price
+    // bases in one ratio, which the "?" now states.
+    cover.value != null
+      ? 'Stock is valued at last purchase price and sales at selling price, so cover reads lower than it would on '
+        + 'one price basis.'
+      : null,
+    coverProvisional ? `Provisional: ${cover.caveat}.` : null,
+  ];
   // Stock is valued at the SOH file's own extended cost — each product's
   // last purchase price (Inventory_Fact.valuation) — and dated by the day it
   // was counted, not by the month it is filed under: "At last purchase
@@ -682,13 +693,18 @@ const Dashboard = () => {
     ['At last purchase price', countLabel, sohCoverage].filter(Boolean).join(' · '),
   );
   // The same count in pieces (kpis.soh_snapshot.pieces: cases x pack size
-  // + loose pieces). Unilever only: Del Monte's files carry no pack size, so
-  // the backend sends null there and under All principals, and no line is
-  // drawn rather than a partial total.
+  // + loose pieces), short on the card with the exact figure on hover.
+  // Unilever only: Del Monte's files carry no pack size, so the backend
+  // sends null there with the reason (pieces_note), and the card says it
+  // is in pesos only rather than drawing a partial total.
   const sohPieces = kpis.soh_snapshot?.pieces ?? null;
-  const piecesLine = sohValue.value !== '—' && sohPieces != null
-    ? `${Math.round(sohPieces).toLocaleString()} pieces in the same count`
-    : null;
+  const piecesNote = kpis.soh_snapshot?.pieces_note || null;
+  const inventorySubtitle = sohValue.value === '—' ? sohValue.contextLine
+    : sohPieces != null ? `${formatCompactCount(sohPieces)} pieces in stock`
+      : piecesNote ? 'Pesos only (no pack size on file)' : 'At last purchase price';
+  const inventorySubtitleTitle = sohValue.value === '—' ? undefined
+    : sohPieces != null ? `${Math.round(sohPieces).toLocaleString()} pieces (cases × pack size + loose pieces)`
+      : piecesNote || undefined;
 
   // The hero chart's rows (chartPoints), and the comparison period's when one
   // is chosen, with the reason when it can't be drawn.
@@ -821,10 +837,6 @@ const Dashboard = () => {
   const pendingCount = data.recommendations?.product_count ?? 0;
   // Non-null only when the live data has moved past the hardcoded ceiling.
   const coverageStale = staleCoverageNotice(data.latest_data_period);
-  const pendingContext = [
-    'Awaiting a decision',
-    lpCycleLabel ? `${lpCycleLabel} plan` : null,
-  ].filter(Boolean).join(' · ');
   // The cards connected (Technical Adviser, 2 Oct 2026): which products
   // matter (ABC card) -> which are at risk (the count below, and the list
   // behind it) -> what to order (Reorder Recs). The list is GET
@@ -909,7 +921,8 @@ const Dashboard = () => {
     plan: planBasis,
     chart: {
       ...rangeBasis,
-      detail: `${FOLLOWS_RANGE} The comparison period from "Compare with" is drawn dashed on the same months.`,
+      detail: `${FOLLOWS_RANGE} Jan to Dec across, one line per calendar year: the range's months, and the `
+        + '"Compare with" period\'s months on their own years\' lines.',
     },
     abc: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Classes are ranked on sales over the whole range.` },
     // Checked live 2026-10-09: the bars read the count at the range's end
@@ -996,72 +1009,51 @@ const Dashboard = () => {
     },
     tooltip: salesTooltip,
   };
-  // Weeks of cover is drawn as a bar against the policy (CoverMeter) when
-  // there is a figure; the text line stays only as the fallback.
-  const coverMeter = sohValue.value !== '—' && cover.value != null
-    ? { weeks: Number(cover.value), policy: policyWeeks, provisional: coverProvisional }
+  // ── The three KPI cards (HeroKpis.jsx, 2026-10-11) ───────────────────
+  // Each shows a figure, one supporting line and the date it is for; how a
+  // figure is formed, and what moves with the date filter, is in its "?".
+  const capitalise = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : null);
+  const hasStock = sohValue.value !== '—';
+  const inventoryCover = hasStock && cover.value != null
+    ? { weeks: Number(cover.value), provisional: coverProvisional }
     : null;
-  const inventoryLines = sohValue.value === '—'
-    ? [sohValue.contextLine]
-    : ['At last purchase price', countLabel ? countLabel.charAt(0).toUpperCase() + countLabel.slice(1) : null,
-      sohCoverage, piecesLine, coverMeter ? null : coverLine];
-  // The two operational cards' visuals (HeroKpis.jsx). Below safety stock:
-  // the count as a share of the SKUs it was checked on, and the first three
-  // of below_items (already ordered by revenue share, the list the link
-  // opens). Pending reorders: the same pending rows by urgency, from
-  // reorder_preview's counts; "Planned" is what is left of the card's count.
-  const belowShare = belowSs.value !== '—' && exposure.comparable_count > 0 ? [
-    { key: 'below', label: 'Below', value: exposure.below_count },
-    { key: 'above', label: 'At or above', value: exposure.comparable_count - exposure.below_count },
-  ] : null;
-  const belowTop = belowSs.value !== '—'
-    ? belowItems.slice(0, 3).map((it) => ({
-      key: it.sku_id || it.product_name,
-      name: it.product_name || it.sku_id,
-      figure: `${formatUnits(it.short_by)} pcs`,
-    }))
-    : [];
-  const pendingParts = (() => {
-    if (lpHidden || pendingCount <= 0) return null;
-    const critical = reorderPreview.critical_count ?? 0;
-    const urgent = reorderPreview.urgent_count ?? 0;
-    const noData = reorderPreview.no_data_count ?? 0;
-    const planned = pendingCount - critical - urgent - noData;
-    // The counts come from a separate read of the same pending rows; if they
-    // ever disagree with the card's count, draw nothing rather than a bar
-    // that doesn't add up.
-    if (planned < 0) return null;
-    return [
-      { key: 'critical', label: 'Critical', value: critical },
-      { key: 'urgent', label: 'Urgent', value: urgent },
-      planned > 0 ? { key: 'planned', label: 'Planned', value: planned } : null,
-      noData > 0 ? { key: 'nodata', label: 'No stock data', value: noData } : null,
-    ].filter(Boolean);
-  })();
-  const pendingQtyLine = pendingParts && reorderPreview.total_order_qty > 0
-    ? `${reorderPreview.total_order_qty.toLocaleString()} pieces to order in all`
-    : null;
-  // The first two of reorder_preview.rows: already most urgent first, then
-  // by the Reorder page's own priority, so they match the top of that page.
-  const pendingTop = pendingParts
-    ? reorderRows.slice(0, 2).map((r) => ({
-      key: r.sku || r.product,
-      name: r.product || r.sku,
-      figure: `${formatUnits(r.orderQty)} pcs`,
-    }))
-    : [];
-  const belowLines = belowSs.value === '—'
-    ? [belowSs.contextLine]
-    : [
-      ['Class A SKUs with a stock count', abcCoverage].filter(Boolean).join(' · '),
-      [lpCycleLabel ? `${lpCycleLabel} plan` : null, stockCountedLine(exposure.stock_counts)].filter(Boolean).join(' · '),
-    ];
-  const belowBadge = belowSs.value === '—' ? null : ssPinnedFlag || {
-    label: 'Current plan',
-    tone: 'info',
-    detail: `The ${lpCycleLabel ? `${lpCycleLabel} ` : ''}order plan, the latest one. This card does not change with `
-      + 'the date filter: safety stock exists only for the current plan.',
-  };
+  const planLabel = lpCycleLabel ? `${lpCycleLabel} plan` : null;
+  // Below safety stock: the count, the SKUs it was checked on, and the two
+  // dates that meet in it (the plan's safety stock, the stock count).
+  const belowBlocked = belowSs.value === '—';
+  const tierAPeriods = Object.keys(exposure.tier_a_periods || {});
+  const belowTooltip = belowBlocked ? null : [
+    belowSsTooltip,
+    `${(exposure.comparable_count ?? 0).toLocaleString()} of the ${(exposure.tier_a_count ?? 0).toLocaleString()} `
+      + `Class A ${abcUnits}${tierAPeriods.length === 1 && exposure.tier_a_period ? ` (as of ${periodLabel(exposure.tier_a_period)})` : ''} `
+      + 'have both a safety stock in the plan and a stock count. The others can\'t be checked and are left out of both numbers.',
+    'A planned SKU missing from the stock count is left out here; the pending-reorders card reads it as 0 on hand, '
+      + 'so its Critical count can be higher.',
+    'The ABC page judges the same plan on the latest stock count, so its below-safety-stock number can differ.',
+    ssPinnedFlag ? ssPinnedFlag.detail
+      : `The ${lpCycleLabel ? `${lpCycleLabel} ` : ''}order plan, the latest one. This card does not change with `
+        + 'the date filter: safety stock exists only for the current plan.',
+  ];
+  // Pending reorders: the same pending rows by urgency, from
+  // reorder_preview's counts (backend/stock_status.py's rule); "Planned" is
+  // what is left of the card's count, so the parts add up to it or no bar is
+  // drawn (utils/kpiMath.urgencyParts).
+  const pendingParts = lpHidden ? null : urgencyParts({
+    pending: pendingCount,
+    critical: reorderPreview.critical_count,
+    urgent: reorderPreview.urgent_count,
+    noData: reorderPreview.no_data_count,
+  });
+  const openingCount = stockCountedLine(reorderPreview.stock_counts);
+  const pendingTooltip = lpHidden ? null : [
+    `Order recommendations in the ${planLabel || 'current plan'} that nobody has accepted or dismissed yet. `
+      + 'Rows already decided, and undecided rows from earlier plans, are not counted.',
+    'Critical: stock below safety stock. Urgent: below the target stock. Planned: at or above the target stock. '
+      + `Stock is the count that opens the plan${openingCount ? ` (${openingCount})` : ''}; a SKU missing from that `
+      + 'count is read as 0 on hand.',
+    'Pieces to order: each pending row\'s order quantity, rounded up to a whole piece, added together.',
+    planBasis.detail,
+  ];
 
   // Months in the range with no sales on record (Del Monte has many). Said
   // once, under the filters, so a short total is never read as a low year.
@@ -1071,6 +1063,15 @@ const Dashboard = () => {
     ? `${pagePrincipal === ALL_PRINCIPALS ? 'Both principals have' : `${labelForPrincipal(pagePrincipal)} has`} sales on record for `
       + `${salesTotal.months_with_data} of the ${salesTotal.months_in_range} months in this range. `
       + `No sales on record in ${gapMonths.map(periodLabel).join(', ')}: totals and comparisons cover the other months only.`
+    : null;
+  // Months whose sales are generated or filled, not SSM's files (counted
+  // since 2026-10-11 so the months are complete). Said once, here, so no
+  // total on the page passes as SSM's own figure.
+  const syntheticMonths = salesTotal?.synthetic_months || [];
+  const syntheticNote = syntheticMonths.length > 0
+    ? `${syntheticMonths.length} of the ${salesTotal.months_with_data} months of sales in this range are synthetic `
+      + `(generated to complete the months, not from SSM's files): ${syntheticMonths.map(periodLabel).join(', ')}. `
+      + 'Sales totals and comparisons on this page include them.'
     : null;
   const idle = data.idle_stock || {};
   const idleSubtitle = [
@@ -1154,62 +1155,54 @@ const Dashboard = () => {
               <span>{rangeGapNote}</span>
             </p>
           )}
-          {/* The top row (HeroKpis.jsx): performance first — annual sales and
-              the allocation, inventory value — then the two operational
-              cards, tinted, with the way to act on them. */}
+          {syntheticNote && (
+            <p className="dash-gap-note" role="note">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>{syntheticNote}</span>
+            </p>
+          )}
+          {/* The top row (HeroKpis.jsx): the annual sales and allocation card
+              on the left; on the right, inventory value and stock cover over
+              the two operational cards, tinted, with the way to act on them. */}
           <div className="hero-kpis dash-section-anchor" id="dash-summary">
             <AnnualSalesCard {...annualCard} />
             <InventoryCard
               value={sohValue.value}
-              lines={inventoryLines}
-              // A count the team judged unusual is kept and says so
-              // (kpis.soh_count_note, Yuan 2026-10-04).
-              flag={sohValue.value !== '—' && kpis.soh_count_note ? { label: 'Unusual count', detail: kpis.soh_count_note } : null}
-              change={sohValue.value !== '—' ? stockCompare : null}
-              cover={coverMeter}
-              tooltip={coverTooltip}
-              basis={BASIS.stock}
+              subtitle={inventorySubtitle}
+              subtitleTitle={inventorySubtitleTitle}
+              asOf={hasStock ? [capitalise(countLabel), sohCoverage].filter(Boolean).join(' · ') : null}
+              change={hasStock ? stockCompare : null}
+              tooltip={inventoryTooltip}
             />
-            <ActionCard
-              tone="orange"
-              title="Below safety stock"
-              value={belowSs.value}
-              unit={belowSs.value === '—' ? undefined : exposure.comparable_count === 1 ? 'SKU' : 'SKUs'}
-              severity={belowSs.value === '—' || ssTier === 'healthy' ? null : ssTier === 'danger' ? 'danger' : 'watch'}
-              lines={belowLines}
-              badge={belowBadge}
-              tooltip={belowSs.value === '—' ? undefined : belowSsTooltip}
-              link={canListAtRisk
-                ? { label: `See the ${exposure.below_count.toLocaleString()} products`, onClick: openAtRisk }
-                : null}
-            >
-              {belowShare && (
-                <ShareBar
-                  inline
-                  parts={belowShare}
-                  label={`${exposure.below_count} of ${exposure.comparable_count} Class A SKUs below safety stock`}
-                />
-              )}
-              <MiniList title="Top sellers among them" figureLabel="Short by" rows={belowTop} />
-            </ActionCard>
-            <ActionCard
-              tone="purple"
-              title="Pending reorder actions"
-              value={lpHidden ? '—' : pendingCount.toLocaleString()}
-              unit={lpHidden ? undefined : pendingCount === 1 ? 'SKU' : 'SKUs'}
-              lines={lpHidden ? [LP_HIDDEN_NOTE] : ['Awaiting a decision', lpCycleLabel ? `${lpCycleLabel} plan` : null]}
-              link={!lpHidden && pendingCount > 0 ? { label: 'Open the order plan', to: '/reorder' } : null}
-            >
-              {pendingParts && (
-                <ShareBar
-                  parts={pendingParts}
-                  label={`${pendingCount} pending SKUs by urgency: `
-                    + pendingParts.map((p) => `${p.value} ${p.label.toLowerCase()}`).join(', ')}
-                />
-              )}
-              {pendingQtyLine && <p className="hero-note">{pendingQtyLine}</p>}
-              <MiniList title="First in line" figureLabel="Order" rows={pendingTop} />
-            </ActionCard>
+            <StockCoverCard
+              cover={inventoryCover}
+              reason={cover.blocked_reason || null}
+              policyWeeks={policyWeeks}
+              // A count the team judged unusual is kept and says so
+              // (kpis.soh_count_note, Yuan 2026-10-04), in the chart's words.
+              flag={hasStock && kpis.soh_count_note ? { label: 'Needs checking', detail: kpis.soh_count_note } : null}
+              tooltip={coverTooltip}
+            />
+            <BelowSafetyCard
+              below={belowBlocked ? null : exposure.below_count}
+              checked={exposure.comparable_count ?? 0}
+              severity={ssTier === 'danger' ? 'danger' : ssTier === 'watch' ? 'watch' : null}
+              asOf={[planLabel, stockCountedLine(exposure.stock_counts), abcCoverage].filter(Boolean).join(' · ')}
+              reason={belowSs.contextLine}
+              tooltip={belowTooltip}
+              // The list is safety_stock_exposure.below_items, the rows the
+              // count was taken from, so it opens the same SKUs.
+              onOpen={canListAtRisk ? openAtRisk : null}
+            />
+            <PendingReordersCard
+              count={lpHidden ? null : pendingCount}
+              reason={LP_HIDDEN_NOTE}
+              asOf={planLabel}
+              parts={pendingParts}
+              orderQty={pendingParts ? reorderPreview.total_order_qty : null}
+              tooltip={pendingTooltip}
+              to="/reorder"
+            />
           </div>
 
           {/* DESCRIPTIVE — what happened: the sales trend across the full
@@ -1241,6 +1234,9 @@ const Dashboard = () => {
                 countDay={countDayKnown ? dayLabel(data.tier_stock_count_date) : null}
                 cycleLabel={lpCycleLabel}
                 coverage={abcCoverage}
+                noRecordReason={pagePrincipal === 'delmonte'
+                  ? 'Del Monte is classed by product category, and a category has no stock record of its own.'
+                  : null}
               />
             </Slot>
           </div>
@@ -1300,6 +1296,7 @@ const Dashboard = () => {
                   weights={reorderPreview.lp_weights}
                   cycleLabel={lpCycleLabel}
                   countLabel={countLabel}
+                  inputsArePlaceholders={Boolean(data.policy_comparison?.inputs_are_placeholders)}
                 />
               </Slot>
             )}

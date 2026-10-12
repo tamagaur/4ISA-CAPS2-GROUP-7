@@ -1,8 +1,9 @@
 // The dashboard's top row (2026-10-10 redesign, after the team's reference
-// mock-up): one wide performance card (annual sales against SSM's supplier
-// allocation), inventory value, and the two operational cards (below safety
-// stock, pending reorder actions), which are tinted so the things to act on
-// read apart from the performance figures.
+// mock-up; 2026-10-11 layout): one wide performance card on the left (annual
+// sales against SSM's supplier allocation) and four small cards in two rows
+// on the right. The top two are what SSM holds (inventory value, stock
+// cover); the bottom two are operational (below safety stock, pending
+// reorders) and tinted, so the things to act on read apart from the rest.
 //
 // Presentation only. Every figure is one GET /dashboard already serves and
 // Dashboard.jsx already computes (kpis, allocation, safety_stock_exposure,
@@ -16,12 +17,13 @@
 //     differ.
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDown, ArrowRight, ArrowUp, Check, AlertTriangle, Info } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpRight, Check, AlertTriangle } from 'lucide-react';
 import InfoTip from './InfoTip';
 import BasisTag from './BasisTag';
 import { Sparkline } from './KPICard';
 import { formatCompactPesos } from './Charts';
 import { formatMonth } from '../utils/formatDate';
+import { coverScale, formatPercent, policyRatio, shareOf } from '../utils/kpiMath';
 import './HeroKpis.css';
 
 const monthName = (period) => (period ? formatMonth(period).split(' ')[0] : null);
@@ -205,144 +207,263 @@ export const AnnualSalesCard = ({
   );
 };
 
-// ── Small visuals that fill the three narrow cards (2026-10-09) ───────────
-// Each draws figures the card already receives from GET /dashboard; none
-// computes anything new beyond a share of a whole the card already states.
+// ── The four KPI cards (2026-10-11 redesign) ──────────────────────────────
+// One skeleton for all four, after the team's reference mock-up: the figure
+// with one supporting line and the date it is for; what supports it (a
+// comparison, a meter, a share); the way to the detail. On the two
+// operational cards (`split`) the supporting figures sit beside the main one
+// when the card is wide enough, and under it otherwise (HeroKpis.css).
+//
+// Presentation only, like the rest of this file. The arithmetic the cards do
+// on GET /dashboard's figures (a ratio, a share, a split) is utils/kpiMath.js.
+// What a card used to spell out in lines of text (the price basis, what moves
+// with the date filter, how a figure is formed) is now in its "?"; warnings
+// about the data (an unusual count, a provisional figure) stay on the card.
 
-// Weeks of cover against SSM's policy: a bar to the cover, a tick at the
-// policy. The scale runs a little past the larger of the two, so neither
-// end sits on the card's edge.
-export const CoverMeter = ({ weeks, policy, provisional = false }) => {
-  if (weeks == null || policy == null) return null;
-  const max = Math.max(weeks, policy) * 1.15 || 1;
-  const times = policy > 0 ? weeks / policy : null;
-  const policyAt = (policy / max) * 100;
-  // The policy label hangs off its tick, kept inside the card at either end.
-  const policyAlign = policyAt > 60 ? 'is-end' : policyAt < 25 ? 'is-start' : '';
-  return (
-    <div className="hero-meter">
-      <div className="hero-meter-head">
-        <span>≈ <strong>{weeks.toFixed(1)} weeks</strong> of cover{provisional ? ' (provisional)' : ''}</span>
-        {times != null && <span className="hero-meter-times">{times.toFixed(1)}× policy</span>}
-      </div>
-      <div
-        className="hero-meter-track"
-        role="img"
-        aria-label={`About ${weeks.toFixed(1)} weeks of cover against SSM's policy of ${policy} weeks`}
-      >
-        <span className="hero-meter-fill" style={{ width: `${(weeks / max) * 100}%` }} />
-        <span className="hero-meter-tick" style={{ left: `${policyAt}%` }} />
-      </div>
-      <div className="hero-meter-scale">
-        <span className={`hero-meter-policy ${policyAlign}`} style={{ left: `${policyAt}%` }}>
-          SSM policy: {policy} wk
-        </span>
-      </div>
-    </div>
-  );
-};
-
-// One whole split into parts (each { key, label, value }), with a legend.
-// Zero parts stay in the legend (a "0 critical" is worth reading) but draw
-// no segment.
-export const ShareBar = ({ parts, label, inline = false }) => {
-  const total = parts.reduce((sum, p) => sum + (p.value || 0), 0);
-  if (!total) return null;
-  return (
-    <div className="hero-share">
-      <div className="hero-share-track" role="img" aria-label={label}>
-        {parts.filter((p) => p.value > 0).map((p) => (
-          <span key={p.key} className={`hero-share-seg is-${p.key}`} style={{ flexGrow: p.value }} />
-        ))}
-      </div>
-      <ul className={`hero-share-legend${inline ? ' is-inline' : ''}`}>
-        {parts.map((p) => (
-          <li key={p.key}>
-            <span className={`hero-share-swatch is-${p.key}`} aria-hidden="true" />
-            <span className="hero-share-label">{p.label}</span>
-            <strong>{(p.value || 0).toLocaleString()}</strong>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
-// A few named rows with one figure each (the products furthest below
-// safety stock), names cut to one line with the full name on hover.
-export const MiniList = ({ title, figureLabel, rows }) => {
-  if (!rows?.length) return null;
-  return (
-    <div className="hero-mini">
-      <div className="hero-mini-head">
-        <span>{title}</span>
-        <span>{figureLabel}</span>
-      </div>
-      <ul>
-        {rows.map((r) => (
-          <li key={r.key}>
-            <span className="hero-mini-name" title={r.name}>{r.name}</span>
-            <span className="hero-mini-figure">{r.figure}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
-// ── Card 2: inventory value ───────────────────────────────────────────────
-export const InventoryCard = ({ value, lines = [], flag = null, change = null, cover = null, tooltip, basis }) => (
-  <HeroCard tone="blue" title="Inventory value" tooltip={tooltip} basis={basis}>
-    <p className="hero-value">{value}</p>
-    <div className="hero-lines">
-      {lines.filter(Boolean).map((line) => <p key={line} className="hero-line">{line}</p>)}
-    </div>
-    {cover && <CoverMeter {...cover} />}
-    <div className="hero-pills hero-pills-foot">
-      {flag && (
-        <span className="hero-pill is-warning">
-          <AlertTriangle size={12} aria-hidden="true" />
-          <span>{flag.label}</span>
-          {flag.detail && <InfoTip label={flag.label} size={11}>{flag.detail}</InfoTip>}
-        </span>
-      )}
-      <ComparePill extras={change} />
-    </div>
-  </HeroCard>
+// A card's "?" text: short paragraphs, the definition first.
+const TipText = ({ lines }) => (
+  <>
+    {lines.filter(Boolean).map((line) => <span key={line} className="hero-tip-line">{line}</span>)}
+  </>
 );
 
-// ── Cards 3 and 4: the operational cards ──────────────────────────────────
-export const ActionCard = ({
-  tone, title, value, unit, lines = [], badge = null, link = null, tooltip, basis, severity = null, children = null,
+export const KpiCard = ({
+  tone, title, tooltip = null, action = false, split = false, primary, detail = null, footer = null,
 }) => (
-  <HeroCard tone={tone} title={title} tooltip={tooltip} basis={basis} action>
-    <p className={`hero-value${severity ? ` is-${severity}` : ''}`}>
-      {value}
+  <section
+    className={`hero-card hero-kpi is-${tone}${action ? ' is-action' : ''}${split ? ' is-split' : ''}`}
+    aria-label={title}
+  >
+    <header className="hero-kpi-head">
+      <span className="hero-card-name">
+        <span className="hero-dot" aria-hidden="true" />
+        <h3 className="hero-card-title">{title}</h3>
+      </span>
+      {tooltip?.some(Boolean) && (
+        <InfoTip label={`About ${title}`} size={14}><TipText lines={tooltip} /></InfoTip>
+      )}
+    </header>
+    <div className="hero-kpi-body">
+      <div className="hero-kpi-primary">{primary}</div>
+      {detail && <div className="hero-kpi-detail">{detail}</div>}
+    </div>
+    {footer && <div className="hero-kpi-foot">{footer}</div>}
+  </section>
+);
+
+// The big figure and its two lines: what it counts, and the date it is for.
+// A figure that can't be shown is "—" with the reason as its line.
+const KpiPrimary = ({ value, unit = null, severity = null, subtitle = null, subtitleTitle, asOf = null }) => (
+  <>
+    <p className="hero-value">
+      <span className={severity ? `is-${severity}` : undefined}>{value}</span>
       {unit && <span className="hero-unit">{unit}</span>}
     </p>
-    <div className="hero-lines">
-      {lines.filter(Boolean).map((line) => <p key={line} className="hero-line">{line}</p>)}
-    </div>
-    {children}
-    {badge && (
-      <div className="hero-pills">
-        <span className={`hero-pill is-${badge.tone || 'info'}`}>
-          {badge.tone === 'info' && <Info size={12} aria-hidden="true" />}
-          <span>{badge.label}</span>
-          {badge.detail && <InfoTip label={badge.label} size={11}>{badge.detail}</InfoTip>}
-        </span>
-      </div>
-    )}
-    {link && (
-      <div className="hero-link-row">
-        {link.to ? (
-          <Link to={link.to} className="hero-link">{link.label} <ArrowRight size={13} aria-hidden="true" /></Link>
-        ) : (
-          <button type="button" className="hero-link" onClick={link.onClick}>
-            {link.label} <ArrowRight size={13} aria-hidden="true" />
-          </button>
-        )}
-      </div>
-    )}
-  </HeroCard>
+    {subtitle && <p className="hero-kpi-sub" title={subtitleTitle}>{subtitle}</p>}
+    {asOf && <p className="hero-kpi-asof">{asOf}</p>}
+  </>
 );
+
+// ── Inventory value ───────────────────────────────────────────────────────
+// `change` is the shared comparison's pill.
+export const InventoryCard = ({
+  value, subtitle = null, subtitleTitle, asOf = null, change = null, tooltip = null,
+}) => (
+  <KpiCard
+    tone="blue"
+    title="Inventory value"
+    tooltip={tooltip}
+    primary={<KpiPrimary value={value} subtitle={subtitle} subtitleTitle={subtitleTitle} asOf={asOf} />}
+    detail={change?.deltaLine ? <div className="hero-pills"><ComparePill extras={change} /></div> : null}
+  />
+);
+
+// ── Stock cover ───────────────────────────────────────────────────────────
+// `cover` is { weeks, provisional } or null (then `reason`); `flag` a reviewed
+// warning about the count ({ label, detail }). The meter runs from 0 to
+// utils/kpiMath.coverScale's end with a tick at the policy's weeks; the fill
+// is solid up to the tick and lighter past it (the cover beyond the policy).
+export const StockCoverCard = ({
+  cover = null, reason = null, policyWeeks = null, flag = null, tooltip = null,
+}) => {
+  const ratio = cover ? policyRatio(cover.weeks, policyWeeks) : null;
+  const scale = cover ? coverScale(cover.weeks, policyWeeks) : null;
+  const fill = scale ? shareOf(cover.weeks, scale) : null;
+  const mark = scale && ratio != null ? shareOf(policyWeeks, scale) : null;
+  return (
+    <KpiCard
+      tone="teal"
+      title="Stock cover"
+      tooltip={tooltip}
+      primary={(
+        <>
+          <p className="hero-value hero-value-tagged">
+            <span>{cover ? `${cover.weeks.toFixed(1)} weeks` : '—'}</span>
+            {cover?.provisional && <span className="hero-kpi-tag">Provisional</span>}
+          </p>
+          {!cover && reason && <p className="hero-kpi-sub">{reason}</p>}
+          {fill != null && (
+            <div className="hero-meter" style={mark != null ? { '--hero-mark': `${mark * 100}%` } : undefined}>
+              <div
+                className="hero-meter-track"
+                role="img"
+                aria-label={`${cover.weeks.toFixed(1)} weeks of stock cover on a scale of 0 to ${scale} weeks`
+                  + `${mark != null ? `; the policy is ${policyWeeks} weeks` : ''}`}
+              >
+                <span className="hero-meter-fill" style={{ width: `${fill * 100}%` }} />
+                {mark != null && (
+                  <>
+                    <span
+                      className={`hero-meter-within${fill > mark ? ' is-cut' : ''}`}
+                      style={{ width: `${Math.min(fill, mark) * 100}%` }}
+                    />
+                    <span className="hero-meter-mark" />
+                  </>
+                )}
+              </div>
+              <div className="hero-meter-axis" aria-hidden="true">
+                <span>0</span>
+                {mark != null && <span className="hero-meter-policy">Policy: {policyWeeks} weeks</span>}
+                <span>{scale}</span>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      detail={ratio != null || flag ? (
+        <div className="hero-pills">
+          {ratio != null && (
+            <span className="hero-pill is-info" title={`${cover.weeks} weeks of cover ÷ the ${policyWeeks}-week policy`}>
+              {ratio.toFixed(1)}× policy
+            </span>
+          )}
+          {flag && (
+            <span className="hero-pill is-warning">
+              <AlertTriangle size={12} aria-hidden="true" />
+              <span>{flag.label}</span>
+              {flag.detail && <InfoTip label={flag.label} size={11}>{flag.detail}</InfoTip>}
+            </span>
+          )}
+        </div>
+      ) : null}
+      // Without a meter the policy is still said, as the old card's footer did.
+      footer={mark == null && policyWeeks != null
+        ? <span className="hero-kpi-foot-note">Policy: {policyWeeks} weeks</span> : null}
+    />
+  );
+};
+
+// ── Below safety stock ────────────────────────────────────────────────────
+// `below` of the `checked` SKUs; null `below` (or nothing checked) is the
+// blocked card, with `reason`. The bar is the same share the percentage prints.
+export const BelowSafetyCard = ({
+  below = null, checked = 0, severity = null, asOf = null, reason = null, tooltip = null, onOpen = null,
+}) => {
+  const share = below == null ? null : shareOf(below, checked);
+  if (share == null) {
+    return (
+      <KpiCard
+        tone="orange"
+        title="Below safety stock"
+        action
+        primary={<KpiPrimary value="—" subtitle={reason} />}
+      />
+    );
+  }
+  return (
+    <KpiCard
+      tone="orange"
+      title="Below safety stock"
+      action
+      split
+      tooltip={tooltip}
+      primary={(
+        <KpiPrimary
+          value={below.toLocaleString()}
+          unit={`/ ${checked.toLocaleString()}`}
+          severity={severity}
+          subtitle={`Class A ${below === 1 ? 'SKU' : 'SKUs'} at risk`}
+          asOf={asOf}
+        />
+      )}
+      detail={(
+        <>
+          <p className="hero-kpi-figure">{formatPercent(share)}</p>
+          <p className="hero-kpi-label">of the {checked.toLocaleString()} {checked === 1 ? 'SKU' : 'SKUs'} checked</p>
+          <div
+            className="hero-kpi-bar"
+            role="img"
+            aria-label={`${below} of ${checked} checked Class A SKUs are below safety stock (${formatPercent(share)})`}
+          >
+            {share > 0 && <span className="hero-kpi-bar-fill" style={{ width: `${share * 100}%` }} />}
+          </div>
+        </>
+      )}
+      footer={onOpen && below > 0 ? (
+        <button type="button" className="hero-link" onClick={onOpen}>
+          View {below.toLocaleString()} {below === 1 ? 'SKU' : 'SKUs'} <ArrowUpRight size={14} aria-hidden="true" />
+        </button>
+      ) : null}
+    />
+  );
+};
+
+// ── Pending reorders ──────────────────────────────────────────────────────
+// `count` null is the card without LP access (`reason`). `parts` is
+// utils/kpiMath.urgencyParts' split of the same pending rows, or null when
+// there is nothing to split; `orderQty` the pieces those rows ask for.
+export const PendingReordersCard = ({
+  count = null, reason = null, asOf = null, parts = null, orderQty = null, tooltip = null, to = '/reorder',
+}) => {
+  if (count == null) {
+    return (
+      <KpiCard
+        tone="purple"
+        title="Pending reorders"
+        action
+        primary={<KpiPrimary value="—" subtitle={reason} />}
+      />
+    );
+  }
+  return (
+    <KpiCard
+      tone="purple"
+      title="Pending reorders"
+      action
+      split
+      tooltip={tooltip}
+      primary={(
+        <KpiPrimary
+          value={count.toLocaleString()}
+          subtitle={`${count === 1 ? 'SKU' : 'SKUs'} awaiting decision`}
+          asOf={asOf}
+        />
+      )}
+      detail={parts ? (
+        <>
+          <ul className="hero-kpi-legend">
+            {parts.map((p) => (
+              <li key={p.key} className={`is-${p.key}`}>
+                <strong>{p.value.toLocaleString()}</strong>
+                <span>{p.label}</span>
+              </li>
+            ))}
+          </ul>
+          <div
+            className="hero-share-track"
+            role="img"
+            aria-label={`${count} pending SKUs by urgency: ${parts.map((p) => `${p.value} ${p.label.toLowerCase()}`).join(', ')}`}
+          >
+            {parts.filter((p) => p.value > 0).map((p) => (
+              <span key={p.key} className={`hero-share-seg is-${p.key}`} style={{ flexGrow: p.value }} />
+            ))}
+          </div>
+          {orderQty > 0 && <p className="hero-kpi-label">{orderQty.toLocaleString()} pcs to order</p>}
+        </>
+      ) : count === 0 ? <p className="hero-note">Nothing is awaiting a decision.</p> : null}
+      footer={count > 0 ? (
+        <Link to={to} className="hero-link">Review plan <ArrowUpRight size={14} aria-hidden="true" /></Link>
+      ) : null}
+    />
+  );
+};

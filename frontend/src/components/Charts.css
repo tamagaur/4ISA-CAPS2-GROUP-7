@@ -266,6 +266,13 @@
   border-top-color: var(--color-text-muted);
 }
 
+/* A year's line style in the legend (Sales vs Inventory Value): the stroke
+   is drawn in SVG with the line's own dash, in the muted ink. */
+.legend-year-line {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
 /* Tooltip swatch for a line series: drawn solid or dashed, as the line is. */
 .chart-tooltip-swatch-line {
   width: 14px;

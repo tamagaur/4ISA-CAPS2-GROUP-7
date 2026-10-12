@@ -643,6 +643,18 @@ def _sales_by_period(
     return _combine_principal_sums(periods, unilever, delmonte, principal)
 
 
+def _not_real_sales_months(db: Session, periods: list[str], principal: str, mode: str) -> set[str]:
+    """The months whose sales figure holds rows that are not SSM's own (filled or
+    generated), for any principal in scope: marts.COUNT_FILLED_AND_GENERATED counts
+    them as sales, and every card and chart that shows the figure must say so."""
+    out: set[str] = set()
+    for who in ("unilever", "delmonte"):
+        if principal in ("all", who):
+            sources = marts.sales_sources_by_period(db, periods, who, mode)
+            out |= {p for p, kinds in sources.items() if any(k != "real" for k in kinds)}
+    return out
+
+
 def _estimate_points(periods: list[str], real: dict, by_principal: dict[str, dict], principal: str) -> dict[str, dict]:
     """A chart's estimated point per month: only where the real value is missing, from the
     principal's non-real rows ({period: {value, kind}}, backend/marts.py). Under 'all' a
@@ -1238,6 +1250,7 @@ def get_dashboard(
 
     periods = _range_periods(db, period, start_period, scope)
     sales_by_period = _sales_by_period(db, periods, scope, mode)
+    not_real_sales = _not_real_sales_months(db, periods, scope, mode)
     # Walk backward from the picker's applied end month to the nearest
     # period WITHIN the selected range that actually has a real sales row,
     # rather than requiring an exact match on the range's literal end —
@@ -1279,6 +1292,9 @@ def get_dashboard(
         "months_in_range": len(periods),
         "months_with_data": len(range_months),
         "missing_months": range_missing,
+        # Months of the total that are not SSM's own data (filled or generated rows,
+        # counted since 2026-10-11): the card says how many.
+        "synthetic_months": [p for p in range_months if p in not_real_sales],
         "blocked_reason": None if range_months else sales_blocked_reason,
     }
     sales_snapshot = {
@@ -1803,7 +1819,7 @@ def get_dashboard(
             "returns_estimated_kind": returns_estimated[p]["kind"] if p in returns_estimated else None,
         }
         point["provenance"] = _point_provenance(
-            point, bool(placeholder and placeholder["start"] <= p <= placeholder["end"])
+            point, bool(placeholder and placeholder["start"] <= p <= placeholder["end"]) or p in not_real_sales
         )
         sales_vs_stock.append(point)
 

@@ -23,6 +23,7 @@ import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import RefreshingNote from './RefreshingNote';
 import InfoTip from './InfoTip';
+import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
 import PageHeader from './ui/PageHeader';
 import { LoadingStatus, SkeletonChart, SkeletonLine, SkeletonTable } from './Skeleton';
 import './CategoryTrends.css';
@@ -188,10 +189,10 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
                   ticks like ₱1.2M. */}
               <XAxis
                 dataKey="period"
-                tickFormatter={axisMonth}
+                tickFormatter={monthName}
                 minTickGap={24}
-                tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
-                height={40}
+                tick={<MonthTick fill={CHART_COLORS.axisLabel} fontSize={11} />}
+                height={40 + MONTH_TICK_EXTRA_HEIGHT}
                 label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 10, fill: CHART_COLORS.axisLabel }}
               />
               <YAxis
@@ -303,6 +304,18 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
                     span more calendar months than its count. */}
                 <th className="table-num">
                   Revenue (₱)
+                  {/* GET /category-trends sums Unilever's product-months with
+                      net sales above zero (backend/routers/category_trends.py),
+                      the ABC ranking's rule, so the categories add up to more
+                      than the Dashboard's net sales (₱392.7M against ₱391.1M
+                      for Mar 2025 – Feb 2026, checked 2026-10-12). */}
+                  {section.principal === 'unilever' && (
+                    <InfoTip label="About these revenue figures">
+                      A product&apos;s month where returns exceeded its sales is left out, as in the ABC ranking. The
+                      categories therefore add up to slightly more than the Dashboard&apos;s sales total, which nets
+                      every return.
+                    </InfoTip>
+                  )}
                   {trailingWindow
                     ? <span className="ct-th-period">{trailingWindow}{trailingGapNote}</span>
                     : <span className="ct-th-period">last {method?.trailing_months} months</span>}

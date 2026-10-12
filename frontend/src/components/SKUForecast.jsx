@@ -23,12 +23,15 @@ import { getForecast } from '../api/forecast';
 import { getForecastAccuracy } from '../api/dashboard';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { describeServedModel, describeFallbackReason } from '../utils/forecastModel';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
 import DateFilter from './DateFilter';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import InfoTip from './InfoTip';
+import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
 import PageHeader from './ui/PageHeader';
 import ProductName from './ProductName';
 import './SKUForecast.css';
@@ -211,6 +214,7 @@ const CustomTooltip = ({ active, payload, label, bandLabel = 'Likely range', ban
 
 const SKUForecast = () => {
   const navigate = useNavigate();
+  const canOpenReorder = usePermissions().hasPermission(P.LP_VIEW);
   const dropdownRef = useRef(null);
 
   // This page's chart has its OWN date range, independent of the shared
@@ -1322,6 +1326,21 @@ const SKUForecast = () => {
               </div>
               <div className="sku-info-right">
                 <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Class {selectedSKU.cat}</span>
+                {/* From the forecast to what was ordered on it. The plan
+                    covers Class A products whose forecast passed the
+                    last-month-guess check (the same test Reliability
+                    states below), so the link shows for those; the Reorder
+                    page says so if the plan has no row for it after all. */}
+                {canOpenReorder && selectedSKU.cat === 'A' && storedForecast?.mase != null && storedForecast.mase < 1 && (
+                  <button
+                    type="button"
+                    className="forecast-plan-link"
+                    onClick={() => navigate(`/reorder?sku=${encodeURIComponent(selectedSKU.code)}`)}
+                  >
+                    See its order recommendation
+                    <ArrowRight size={13} aria-hidden="true" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1912,11 +1931,11 @@ const SKUForecast = () => {
                           dataKey="label"
                           axisLine={true}
                           tickLine={true}
-                          tick={{ fill: '#556070', fontSize: 11 }}
-                          tickFormatter={formatAxisPeriod}
+                          tick={<MonthTick fill="#556070" fontSize={11} />}
+                          tickFormatter={monthName}
                           tickMargin={10}
                           minTickGap={12}
-                          height={44}
+                          height={44 + MONTH_TICK_EXTRA_HEIGHT}
                           label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 10, fill: CHART_COLORS.axisLabel }}
                           // Recharts' default tick-skip anchors from the END
                           // of the axis (interval="preserveEnd") — harmless
