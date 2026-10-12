@@ -26,7 +26,7 @@ const getCatClass = (cat) => {
   }
 };
 
-const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
+const ViewSKUModal = ({ isOpen, sku, onClose, onEdit, onOpenForecast, onOpenReorder }) => {
   // Escape-to-close now comes from the shared <Modal> shell below, along
   // with focus trapping and role="dialog".
   if (!isOpen || !sku) return null;
@@ -200,6 +200,19 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
 
         {/* Modal Footer Actions */}
         <div className="view-sku-modal-footer">
+          {/* Where this product goes next: its sales history and forecast,
+              and its order recommendation when the plan has one. Each is
+              passed only when the page it opens is allowed and applies. */}
+          {onOpenForecast && (
+            <button className="view-sku-btn-close" onClick={() => { onClose(); onOpenForecast(); }}>
+              Sales and forecast
+            </button>
+          )}
+          {onOpenReorder && (
+            <button className="view-sku-btn-close" onClick={() => { onClose(); onOpenReorder(); }}>
+              Order recommendation
+            </button>
+          )}
           <button className="view-sku-btn-close" onClick={onClose}>
             Close
           </button>

@@ -244,16 +244,25 @@ def _tier_shares(current: list[ABCItem]) -> dict[str, float] | None:
     each rounded to 4 dp: Unilever's 2026-02 Class B summed to 0.1493 and
     read 14.9%, where its revenue is 14.99% of the month (0.9498 - 0.7999 =
     0.1499 from the running total, rounded once). None — fall back to the
-    sum — when a row has no cumulative share or the boundaries are out of
-    tier order, so a run without a consistent running total is never
-    differenced into nonsense."""
+    sum — when a row has no cumulative share, the boundaries are out of
+    tier order, or a tier is not one unbroken block of the ranking, so a run
+    without a consistent running total is never differenced into nonsense.
+
+    The unbroken-block case is Unilever's 12-month Tier A basis (migration
+    0044): the tier is set on 12 months but the running total ranks one
+    month, so Class A rows sit as deep as 0.9465 with Class B rows above
+    them. Differencing read A 94.7% / B 0.3% / C 5.0% for 2026-02, where the
+    rows' own shares add up to 81.0% / 14.0% / 4.6% (found 2026-10-12)."""
     if not current or any(i.cumulative_share is None for i in current):
         return None
     bounds: dict[str, float] = {}
+    lowest: dict[str, float] = {}
     for item in current:
-        bounds[item.tier] = max(bounds.get(item.tier, 0.0), float(item.cumulative_share))
+        share = float(item.cumulative_share)
+        bounds[item.tier] = max(bounds.get(item.tier, 0.0), share)
+        lowest[item.tier] = min(lowest.get(item.tier, share), share)
     ordered = sorted(bounds)  # 'A' < 'B' < 'C'
-    if any(bounds[a] > bounds[b] for a, b in zip(ordered, ordered[1:])):
+    if any(bounds[a] > bounds[b] or lowest[b] < bounds[a] for a, b in zip(ordered, ordered[1:])):
         return None
     shares, previous = {}, 0.0
     for tier in ordered:

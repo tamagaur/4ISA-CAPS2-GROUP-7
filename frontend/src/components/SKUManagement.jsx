@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter, List } from 'lucide-react';
 import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
@@ -49,6 +49,9 @@ const SKUManagement = () => {
   // the backend checks POST/PATCH /sku). Without it the list is read-only.
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission(P.SKU_EDIT);
+  // The detail window links to the product's forecast and, when the plan
+  // covers it, its order recommendation.
+  const navigate = useNavigate();
   const [rawItems, setRawItems] = useState([]);
   // When each principal's stock was counted and which LP plan the target
   // stock comes from (GET /sku, 2026-10-03). The Technical Adviser asked
@@ -817,6 +820,14 @@ const SKUManagement = () => {
         sku={selectedSKU}
         onClose={() => setIsViewModalOpen(false)}
         onEdit={canEdit ? handleOpenEditModal : undefined}
+        // Unilever SKUs only: a Del Monte row is a category with no series.
+        onOpenForecast={hasPermission(P.FORECAST_VIEW) && selectedSKU?.principal === 'unilever' && selectedSKU?.grain !== 'category'
+          ? () => navigate(`/forecast?sku=${encodeURIComponent(selectedSKU.code)}`)
+          : undefined}
+        // A target stock means the current plan has a row for it.
+        onOpenReorder={hasPermission(P.LP_VIEW) && selectedSKU?.reorderPt != null
+          ? () => navigate(`/reorder?sku=${encodeURIComponent(selectedSKU.code)}`)
+          : undefined}
       />
 
       <EditSKUModal

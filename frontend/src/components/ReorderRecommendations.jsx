@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useOutletContext, useSearchParams } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown, ChevronRight, CheckCheck, AlertTriangle, Clock, Package,
 } from 'lucide-react';
@@ -178,6 +178,9 @@ const ReorderRecommendations = () => {
   // view only: every recommendation can be reviewed, none acted on.
   const { hasPermission } = usePermissions();
   const canDecide = hasPermission(P.LP_DECIDE);
+  // The detail window links to the product's own page (SKU Forecast).
+  const navigate = useNavigate();
+  const canOpenForecast = hasPermission(P.FORECAST_VIEW);
   const [decisionLog, setDecisionLog] = useState([]);
 
   useEffect(() => {
@@ -353,17 +356,22 @@ const ReorderRecommendations = () => {
     const match = localData
       .filter((item) => String(item.sku) === targetSku)
       .sort((a, b) => (a.planningCycleDate < b.planningCycleDate ? 1 : -1))[0];
+    deepLinkHandled.current = true;
     if (match) {
-      deepLinkHandled.current = true;
       setSelectedCycle(match.planningCycleDate);
       setShowReviewLater(true); // the linked SKU may sit below the top 20
       handleOpenDetails(match);
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('sku');
-        return next;
-      }, { replace: true });
+    } else {
+      // Linked from a product's own page (SKU Forecast, SKU Management) for a
+      // product the plan does not cover: say so, rather than land on the
+      // list with nothing opened.
+      toast.info(`${targetSku} has no order recommendation in the plans listed here.`, 8000);
     }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('sku');
+      return next;
+    }, { replace: true });
   }, [localData, searchParams, setSearchParams]);
 
   const actNowPending = actNowRows.filter((r) => !r.actionStatus).length;
@@ -386,6 +394,10 @@ const ReorderRecommendations = () => {
   // allocation binds, so the total above is the allocation, not the need.
   const pendingRows = cycleRows.filter((item) => !item.actionStatus);
   const cutCount = pendingRows.filter((item) => item.shortUnits > 0).length;
+  // Rows awaiting a decision whose suggested order is 0 pieces: 38 of the 97
+  // in the Mar 2026 plan (checked 2026-10-12). "97 awaiting a decision" reads
+  // as 97 orders without this.
+  const noOrderCount = pendingRows.filter((item) => !((wholeUnits(item.orderQty) || 0) > 0)).length;
   // The LP's own settings (backend/lp_cycle.lp_model_info), so the page's
   // account of how it cuts follows the run rather than a retyped copy.
   const lpInputs = meta?.lpModel?.inputs || {};
@@ -822,10 +834,14 @@ const ReorderRecommendations = () => {
           metricType="recommendation"
           contextLine={cutCount > 0
             ? `${planLabel} · ${cutCount} of ${pendingRows.length} SKUs cut to fit the allocation`
-            : `${planLabel} · suggested by the optimizer`}
-          tooltip={allocationPct != null
+            : noOrderCount > 0
+              ? `${planLabel} · ${pendingRows.length - noOrderCount} SKUs to order, ${noOrderCount} need none`
+              : `${planLabel} · suggested by the optimizer`}
+          tooltip={`${allocationPct != null
             ? `Suggested by the optimizer within the ${allocationPct}% supplier allocation.`
-            : 'Suggested by the optimizer.'}
+            : 'Suggested by the optimizer.'}${noOrderCount > 0
+            ? ` ${noOrderCount} of the ${pendingRows.length} SKUs awaiting a decision have a suggested order of 0 pieces.`
+            : ''}`}
           icon={<ClipboardList size={20} />}
         />
       </div>
@@ -1176,6 +1192,9 @@ const ReorderRecommendations = () => {
         principal={principal}
         lpModel={meta?.lpModel}
         periods={meta || {}}
+        onOpenForecast={canOpenForecast
+          ? (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`)
+          : undefined}
       />
 
       <OverrideReasonModal

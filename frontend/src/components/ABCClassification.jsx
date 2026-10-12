@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useOutletContext, useSearchParams } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import AbcRangeView from './AbcRangeView';
 import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info, Layers } from 'lucide-react';
 import {
@@ -282,6 +282,14 @@ const ABCClassification = () => {
   // (ON HAND instead), so the chart, legend and drill-down show those.
   const { hasPermission } = usePermissions();
   const lpHidden = !hasPermission(P.LP_VIEW);
+  // A product's name opens its sales history and forecast (SKU Forecast), so
+  // the table leads somewhere. Unilever SKUs only: a Del Monte row is a
+  // category, which has no product series to open.
+  const navigate = useNavigate();
+  const canOpenForecast = hasPermission(P.FORECAST_VIEW);
+  const openForecast = (item) => (canOpenForecast && item.principal === 'unilever' && item.sku
+    ? () => navigate(`/forecast?sku=${encodeURIComponent(item.sku)}`)
+    : undefined);
   // Shared principal scope (Topbar's segmented control). Refetches on
   // change via this page's load effect deps.
   const { principal } = dashboardRange;
@@ -587,6 +595,15 @@ const ABCClassification = () => {
     stockCountDate && `Stock counted ${formatDate(stockCountDate)}`,
     !lpHidden && !isDelMonte && planCycle && `target stock from the ${formatMonth(planCycle)} plan`,
   ].filter(Boolean).join(' · ');
+  // The Dashboard and Reorder pages judge the plan on the count that opens
+  // it; this page reads the latest count, so the same question ("how many
+  // Class A products are below safety stock?") gets a different number here
+  // (43 against 10 for the Mar 2026 plan, checked 2026-10-12). Said beside
+  // the count date rather than left for a reader to trip over.
+  const otherCountNote = !lpHidden && !isDelMonte && planCycle && stockCountDate
+    ? 'This is the latest stock count. The Dashboard and Reorder pages judge the plan on the count that opens it, '
+      + 'so their numbers can differ.'
+    : null;
   // The same, short enough for the table's column header.
   const coverHeaderText = [
     stockCountDate && `counted ${formatDate(stockCountDate)}`,
@@ -1098,7 +1115,12 @@ const ABCClassification = () => {
                     {/* The period line (2026-10-03): when the stock was
                         counted and which plan the target stock is from, so
                         no status here reads as "now". */}
-                    {stockBasisText && <p className="abc-pareto-period">{stockBasisText}. Bars: % of each class&apos;s {rowNoun.many}.</p>}
+                    {stockBasisText && (
+                      <p className="abc-pareto-period">
+                        {stockBasisText}. Bars: % of each class&apos;s {rowNoun.many}.
+                        {otherCountNote && <> {otherCountNote}</>}
+                      </p>
+                    )}
                     <p className="abc-pareto-subtitle">
                       {isDelMonte ? (
                         <>
@@ -1615,7 +1637,14 @@ const ABCClassification = () => {
                     className={highlightedSKUId === item.id ? 'highlighted-row-flash' : ''}
                   >
                     <td className="cell-rownum table-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
-                    <td className="cell-product"><ProductName name={item.product} code={codeOf(item)} /></td>
+                    <td className="cell-product">
+                      <ProductName
+                        name={item.product}
+                        code={codeOf(item)}
+                        onOpen={openForecast(item)}
+                        openLabel="Open the sales history and forecast for"
+                      />
+                    </td>
                     <td className={item.brand ? 'cell-muted' : 'cell-empty'}>{item.brand || '—'}</td>
                     <td className="table-center" title={catTitle(item)}>
                       {/* The warning icon always has a reserved slot, so badges

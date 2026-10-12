@@ -1,5 +1,5 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, ArrowRight } from 'lucide-react';
 import Modal from './Modal';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import InfoTip from './InfoTip';
@@ -47,7 +47,7 @@ const COVER_BASIS_NOTE =
 // `periods` — the dates the page read its figures at (GET /recommendations'
 // label_context, passed through by ReorderRecommendations), so each figure
 // here names its period the way the table's headers do.
-const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {} }) => {
+const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {}, onOpenForecast }) => {
   if (!isOpen || !data) return null;
   const plan = data.planningCycleDate ? `${formatMonth(data.planningCycleDate)} plan` : 'this plan';
   const countLabel = periods.stockCountDate
@@ -84,6 +84,14 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {} 
               {data.cases?.order ? ` (${data.cases.order})` : ''} for the {plan}. Below is how the optimizer (LP)
               arrived at this suggestion.
             </p>
+            {/* The product's own page: its sales history, the forecast and
+                how that was made. Passed only with forecast.view. */}
+            {onOpenForecast && (
+              <button type="button" className="reorder-modal-link" onClick={() => onOpenForecast(data.sku)}>
+                See this product&apos;s sales history and forecast
+                <ArrowRight size={13} aria-hidden="true" />
+              </button>
+            )}
           </div>
           <button className="reorder-modal-close" onClick={onClose} aria-label="Close modal">
             <X size={18} />

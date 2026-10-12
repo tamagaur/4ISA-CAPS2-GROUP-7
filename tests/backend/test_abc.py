@@ -554,6 +554,26 @@ def test_class_shares_come_from_the_running_total_not_rounded_row_shares():
     assert sum(summary.values()) == pytest.approx(1.0, abs=1e-6)
 
 
+def test_class_shares_are_summed_when_a_class_is_not_one_block_of_the_ranking():
+    """The 12-month Tier A basis sets the class on 12 months while the running
+    total ranks one month, so a Class A row can rank below Class B rows.
+    Differencing the boundaries then credits A with everything above its
+    deepest row (Unilever 2026-02 read A 94.7% / B 0.3%); the rows' own
+    shares are summed instead."""
+    from backend.routers.abc import _summarize, _tier_shares
+    from backend.schemas.abc import ABCItem
+
+    def row(tier, share, cumulative):
+        return ABCItem(sku_id="x", principal="unilever", tier=tier, tier_period="2026-02",
+                       revenue_share=share, cumulative_share=cumulative, stock_status="NO DATA")
+
+    # Ranked by the month's sales: A, B, then an A product that sold little this month, then C.
+    items = [row("A", 0.50, 0.50), row("B", 0.30, 0.80), row("A", 0.15, 0.95), row("C", 0.05, 1.00)]
+    assert _tier_shares(items) is None
+    summary = {t.tier: t.revenue_share_total for t in _summarize(items, {"unilever": "2026-02"})[0]}
+    assert summary == {"A": pytest.approx(0.65), "B": pytest.approx(0.30), "C": pytest.approx(0.05)}
+
+
 def test_lp_mase_gate_matches_the_forecast_gate():
     from analytics.forecasting.baseline import MASE_GATE
     from backend.routers.abc import LP_MASE_GATE
