@@ -285,6 +285,15 @@ def net_sales_total(db: Session, start: str, end: str, principal: str, mode: str
     return _sum(r["pesos"] for m in months for r in _sales_rows(db, principal, m, mode))
 
 
+def sales_month_span(db: Session, scope: str) -> tuple[str, str] | None:
+    """The first and last month with a sales row of any kind (real, filled or
+    generated) for the scope's principals. Only where to look: which of those
+    rows count as sales is still _sales_rows' rule, month by month."""
+    wanted = _scope_list(scope)
+    months = [k[1] for k in _snapshot(db).sales if k[0] in wanted]
+    return (min(months), max(months)) if months else None
+
+
 # ---------------------------------------------------------------------------
 # Flows: purchases, estimated receipts, returns
 # ---------------------------------------------------------------------------

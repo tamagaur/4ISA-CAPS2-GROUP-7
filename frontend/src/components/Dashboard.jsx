@@ -1258,7 +1258,7 @@ const Dashboard = () => {
                   on the right is unchanged. */}
               <div className="dash-split-host">
                 <div className="dash-split">
-                  <AnnualViewChart />
+                  <AnnualViewChart annual={data.annual_sales} allocation={allocation} note={vatNote} />
                   <SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} syntheticNote={chartSyntheticNote} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} compareNote={chartCompareNote} />
                 </div>
               </div>

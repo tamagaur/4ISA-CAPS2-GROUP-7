@@ -2223,3 +2223,91 @@ def test_day_label():
     assert day_label("2026-04-06") == "Apr 6, 2026"
     assert day_label(None) is None
     assert day_label("not a date") is None
+
+
+# ---- annual_sales (2026-10-12): the Annual View card's bars ---------------------
+# One bar per calendar year = the sum of that year's months, from the same
+# per-month sales every other peso figure on the page reads.
+
+def test_annual_sales_totals_each_year_and_agrees_with_the_allocation_card():
+    sales = {f"2025-{m:02d}": 100.0 for m in range(1, 13)}
+    sales.update({f"2024-{m:02d}": 50.0 for m in (3, 4, 5)})
+    sales.update({"2026-01": 110.0, "2026-02": 120.0})
+    body = _get(FakeSession(latest_sales_period="2026-02", sales=sales), "principal=unilever")
+    annual = body["annual_sales"]
+    assert annual["blocked_reason"] is None and annual["window_years"] == 5
+    years = {y["year"]: y for y in annual["years"]}
+    assert list(years) == [2022, 2023, 2024, 2025, 2026]
+    # A year with nothing on record is null with 0 months, never 0 pesos.
+    assert years[2022]["sales"] is None and years[2022]["months"] == 0
+    assert years[2022]["first_month"] is None and years[2022]["synthetic_months"] == []
+    # A part year is the sum of the months it has: no scaling up to 12.
+    assert years[2024]["sales"] == pytest.approx(150.0) and years[2024]["months"] == 3
+    assert (years[2024]["first_month"], years[2024]["last_month"]) == ("2024-03", "2024-05")
+    assert years[2026]["sales"] == pytest.approx(230.0) and years[2026]["months"] == 2
+    assert (years[2026]["first_month"], years[2026]["last_month"]) == ("2026-01", "2026-02")
+    # The bars and the allocation card are the same sums.
+    assert years[2025]["sales"] == body["allocation"]["basis_sales"] == pytest.approx(1200.0)
+    assert years[2026]["sales"] == body["allocation"]["ytd_sales"]
+    assert annual["earlier_years"] == []
+
+
+@pytest.mark.parametrize("query", ["principal=unilever", "principal=unilever&start_period=2025-06&period=2025-09"])
+def test_annual_sales_does_not_follow_the_date_range(query):
+    sales = {f"2025-{m:02d}": 100.0 for m in range(1, 13)}
+    sales.update({"2026-01": 110.0})
+    annual = _get(FakeSession(latest_sales_period="2026-01", sales=sales), query)["annual_sales"]
+    assert [(y["year"], y["sales"], y["months"]) for y in annual["years"][-2:]] == [(2025, 1200.0, 12), (2026, 110.0, 1)]
+
+
+def test_annual_sales_names_the_synthetic_months_it_counts():
+    """Filled and generated months count as sales up to the last month with
+    real sales (marts.COUNT_FILLED_AND_GENERATED) and each year names them;
+    generated months after it are what the forecasts are for, not sales."""
+    sales = {f"2025-{m:02d}": 100.0 for m in range(1, 11)}
+    generated = {f"2020-{m:02d}": ("generated", 10.0) for m in range(1, 13)}
+    generated.update({"2025-11": ("generated", 40.0), "2025-12": ("filled", 60.0),
+                      "2026-01": ("generated", 999.0), "2025-03": ("generated", 999.0)})
+    session = FakeSession(latest_sales_period="2025-10", sales=sales, estimated_sales={"unilever": generated})
+    annual = _get(session, "principal=unilever")["annual_sales"]
+    years = {y["year"]: y for y in annual["years"]}
+    # Nothing after the last real month (2025-10) is counted, so 2025 is the last year.
+    assert list(years) == [2021, 2022, 2023, 2024, 2025]
+    # 10 real months; the real March is never topped up by its generated row.
+    assert years[2025]["sales"] == pytest.approx(1000.0)
+    assert years[2025]["months"] == 10 and years[2025]["synthetic_months"] == []
+    # A year before the window is named, not dropped silently.
+    assert annual["earlier_years"] == [2020]
+
+
+def test_annual_sales_counts_synthetic_months_inside_real_history():
+    sales = {"2025-01": 100.0, "2025-04": 100.0}
+    generated = {"2025-02": ("generated", 40.0), "2025-03": ("filled", 60.0)}
+    session = FakeSession(latest_sales_period="2025-04", sales=sales, estimated_sales={"unilever": generated})
+    year = _get(session, "principal=unilever")["annual_sales"]["years"][-1]
+    assert year["year"] == 2025 and year["sales"] == pytest.approx(300.0) and year["months"] == 4
+    assert year["synthetic_months"] == ["2025-02", "2025-03"]
+
+
+def test_annual_sales_real_rows_only(real_rows_only):
+    sales = {"2025-01": 100.0, "2025-04": 100.0}
+    generated = {"2025-02": ("generated", 40.0), "2025-03": ("filled", 60.0)}
+    session = FakeSession(latest_sales_period="2025-04", sales=sales, estimated_sales={"unilever": generated})
+    year = _get(session, "principal=unilever")["annual_sales"]["years"][-1]
+    assert year["sales"] == pytest.approx(200.0) and year["months"] == 2 and year["synthetic_months"] == []
+
+
+def test_annual_sales_under_all_needs_both_principals_in_a_month():
+    """_combine_principal_sums: a month one principal has no figure for is not
+    summed as if it were the whole portfolio, so the year says fewer months."""
+    session = FakeSession(latest_sales_period="2025-03", sales={"2025-01": 100.0, "2025-02": 100.0, "2025-03": 100.0})
+    session.delmonte_latest_sales_period = "2025-02"
+    session.delmonte_sales = {"2025-01": 10.0, "2025-02": 20.0}
+    year = _get(session, "principal=all")["annual_sales"]["years"][-1]
+    assert year["year"] == 2025 and year["sales"] == pytest.approx(230.0) and year["months"] == 2
+    assert (year["first_month"], year["last_month"]) == ("2025-01", "2025-02")
+
+
+def test_annual_sales_is_blocked_with_a_reason_when_there_are_no_sales():
+    annual = _get(FakeSession(latest_sales_period=None), "principal=unilever")["annual_sales"]
+    assert annual["years"] == [] and "No " in annual["blocked_reason"]

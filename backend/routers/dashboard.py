@@ -655,6 +655,60 @@ def _not_real_sales_months(db: Session, periods: list[str], principal: str, mode
     return out
 
 
+# The Annual View card shows this many calendar years, ending at the latest
+# year with sales (its title: "5-Year Trend").
+ANNUAL_SALES_YEARS = 5
+
+
+def _annual_sales(db: Session, scope: str, mode: str) -> dict:
+    """Total sales per calendar year for the Annual View card (Audrey,
+    2026-10-12): each year is the sum of its months' sales from
+    _sales_by_period, the same per-month figures the sales cards, the
+    allocation card and the Sales vs Inventory chart read, so a year here
+    can never disagree with them. Nothing is projected and nothing is
+    scaled up: a year with fewer than 12 months on record is the sum of
+    the months it has, and `months` says how many.
+
+    Fixed like the allocation card: it does not follow the date range.
+    Fiscal year = calendar year, as on that card ("FY 2026 sales, Jan-Feb").
+
+    years[]: {year, sales, months, first_month, last_month,
+    synthetic_months}. `sales` is null (never 0) for a year in the window
+    with no month on record. `synthetic_months` are the months counted in
+    `sales` that are not SSM's own figures (_not_real_sales_months); the
+    card must mark them. earlier_years: years with sales that fall before
+    the window, so the card can say they exist."""
+    out: dict = {"years": [], "window_years": ANNUAL_SALES_YEARS, "earlier_years": [], "blocked_reason": None}
+    span = marts.sales_month_span(db, scope)
+    if span is None:
+        out["blocked_reason"] = f"No sales rows for {_scope_label(scope)} at all."
+        return out
+    first_year, last_year = int(span[0][:4]), int(span[1][:4])
+    periods = [f"{y:04d}-{m:02d}" for y in range(first_year, last_year + 1) for m in range(1, 13)]
+    by_period = _sales_by_period(db, periods, scope, mode)
+    not_real = _not_real_sales_months(db, periods, scope, mode)
+    counted = sorted(p for p in periods if by_period.get(p) is not None)
+    if not counted:
+        out["blocked_reason"] = f"No month has a sales figure for {_scope_label(scope)}."
+        return out
+    # The window ends at the latest year a month is counted in, not at the
+    # last row: generated months after the last real month are not sales.
+    end_year = int(counted[-1][:4])
+    start_year = end_year - ANNUAL_SALES_YEARS + 1
+    for year in range(start_year, end_year + 1):
+        months = [p for p in counted if p.startswith(f"{year:04d}-")]
+        out["years"].append({
+            "year": year,
+            "sales": round(sum(by_period[p] for p in months), 2) if months else None,
+            "months": len(months),
+            "first_month": months[0] if months else None,
+            "last_month": months[-1] if months else None,
+            "synthetic_months": [p for p in months if p in not_real],
+        })
+    out["earlier_years"] = sorted({int(p[:4]) for p in counted if int(p[:4]) < start_year})
+    return out
+
+
 def _estimate_points(periods: list[str], real: dict, by_principal: dict[str, dict], principal: str) -> dict[str, dict]:
     """A chart's estimated point per month: only where the real value is missing, from the
     principal's non-real rows ({period: {value, kind}}, backend/marts.py). Under 'all' a
@@ -2303,6 +2357,9 @@ def get_dashboard(
         # Sales against SSM's allocation rule (prior-year sales x 103/105/
         # 108% — client meeting, Sep 2026), per principal.
         "allocation": allocation,
+        # Total sales per calendar year, for the Annual View card beside the
+        # Sales vs Inventory chart (_annual_sales). Fixed, like allocation.
+        "annual_sales": _annual_sales(db, scope, mode),
         # Which LP run the page is showing, and whether it can still be
         # trusted (backend/lp_cycle.py). Every LP-derived figure above is
         # pinned to this cycle; superseded_pending_count says how many

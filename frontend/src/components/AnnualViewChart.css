@@ -4,18 +4,6 @@
   margin-bottom: 8px;
 }
 
-.annual-view-mock {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill, 999px);
-  background: #FFF4DD;
-  color: #B54708;
-  font-size: var(--text-micro, 11px);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
 .annual-view-legend {
   display: flex;
   flex-wrap: wrap;
@@ -37,6 +25,31 @@
 .annual-view-legend-band {
   background: rgba(242, 140, 40, 0.18);
   border-top: 1px dashed #C2410C;
+}
+
+/* The swatch for a bar that counts synthetic months: the bars' own hatch. */
+.annual-view-legend-hatch {
+  background: repeating-linear-gradient(45deg, #8FA3C4 0 3px, #D5DDEA 3px 6px);
+}
+
+/* Which years count synthetic months, and how many: the same amber the
+   cards above use for a figure that is not all SSM's own. */
+.annual-view-synthetic {
+  margin: 0 0 6px;
+  font-size: var(--text-micro, 11px);
+  font-weight: 600;
+  color: #B54708;
+}
+
+.annual-tooltip-synthetic {
+  color: #B54708;
+  font-weight: 600;
+}
+
+.annual-view .chart-title-area h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* The plot takes whatever height the card has left under its header and
