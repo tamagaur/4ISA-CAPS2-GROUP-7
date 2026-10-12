@@ -31,6 +31,48 @@
   background-color: var(--color-border);
 }
 
+.sidebar-toggle-btn:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.sidebar-toggle-logo {
+  display: none;
+}
+
+/* Sidebar closed, on a desktop: the button is the SAN2 logo with no
+   background. It is public/logo-topbar.png, a copy of the sidebar's logo
+   with the silver and white lettering turned to the sidebar's navy (the
+   red is untouched): the original is drawn for a dark ground and all but
+   disappears on this bar's light one. */
+@media (min-width: 901px) {
+  .sidebar-toggle-btn.is-sidebar-closed {
+    height: 36px;
+    padding: 0 6px;
+  }
+
+  .sidebar-toggle-btn.is-sidebar-closed .menu-icon {
+    display: none;
+  }
+
+  .sidebar-toggle-btn.is-sidebar-closed .sidebar-toggle-logo {
+    display: block;
+    height: 32px;
+    width: auto;
+    animation: sidebar-toggle-logo-in 0.25s ease-out;
+  }
+}
+
+@keyframes sidebar-toggle-logo-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-toggle-logo {
+    animation: none !important;
+  }
+}
+
 .breadcrumb-path {
   color: var(--color-text-subtle);
   font-size: 0.9rem;

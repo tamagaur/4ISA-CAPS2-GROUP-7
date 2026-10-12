@@ -140,26 +140,18 @@ const loadCompare = () => {
 };
 
 
-// "Open" means two things by width (Sidebar.css):
-// - desktop: pinned at full width. Closed is the icon rail, which stretches
-//   open on hover, so closed is the default and the menu button pins it,
-//   remembered per browser.
-// - phone/tablet (max-width: 900px): a slide-over. It starts closed so it
-//   doesn't cover the page on first load.
-// Computed once at mount, not live-tracked across resizes.
-const SIDEBAR_PINNED_KEY = 'san2_sidebar_pinned';
-const isNarrow = () => window.matchMedia('(max-width: 900px)').matches;
-const startsWithSidebarOpen = () => {
-  if (isNarrow()) return false;
-  try {
-    return localStorage.getItem(SIDEBAR_PINNED_KEY) === '1';
-  } catch {
-    return false;
-  }
-};
+// On phone/tablet widths the sidebar becomes a slide-over overlay (see
+// Sidebar.css's matching max-width: 900px breakpoint) rather than a
+// permanently docked column, so it shouldn't default open and immediately
+// cover the page on first load there — computed once at mount, not
+// live-tracked across resizes.
+const startsWithSidebarOpen = () => !window.matchMedia('(max-width: 900px)').matches;
 
 const DashboardLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(startsWithSidebarOpen);
+  // True once the menu button has been used, so the page's slide
+  // (Sidebar.css) plays on a toggle and not on first load.
+  const [sidebarAnimated, setSidebarAnimated] = useState(false);
 
   // Warm every page's code in the background once someone is signed in, so
   // only the first page they land on waits on a chunk download.
@@ -298,15 +290,8 @@ const DashboardLayout = () => {
   const canApplyPendingPeriod = isPendingRangeValid && isPendingRangeLongEnough;
 
   const toggleSidebar = () => {
-    const next = !isSidebarOpen;
-    setIsSidebarOpen(next);
-    if (!isNarrow()) {
-      try {
-        localStorage.setItem(SIDEBAR_PINNED_KEY, next ? '1' : '0');
-      } catch {
-        // Private mode or blocked storage: it just isn't remembered.
-      }
-    }
+    setIsSidebarOpen(!isSidebarOpen);
+    setSidebarAnimated(true);
   };
 
   const handleApplyPeriod = () => {
@@ -422,7 +407,7 @@ const DashboardLayout = () => {
   };
 
   return (
-    <div className={`dashboard-layout ${isSidebarOpen ? '' : 'sidebar-closed'}`}>
+    <div className={`dashboard-layout ${isSidebarOpen ? '' : 'sidebar-closed'} ${sidebarAnimated ? 'sidebar-animated' : ''}`}>
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={toggleSidebar}
@@ -437,6 +422,7 @@ const DashboardLayout = () => {
       <div className="main-content">
         <Topbar
           toggleSidebar={toggleSidebar}
+          isSidebarOpen={isSidebarOpen}
           rightSlot={<DataFreshness navKey={`${location.pathname}#${refreshKey}`} onRefresh={handleRefreshData} />}
           startMonth={startMonth}
           startYear={startYear}

@@ -15,109 +15,73 @@
   height: 100vh;
   padding: 1.5rem 0;
   box-shadow: 2px 0 16px rgba(0, 0, 0, 0.18);
-  transition: margin-left 0.3s ease, width 0.3s ease;
+  transition: transform 0.3s ease;
   overflow: hidden;
   white-space: nowrap;
 }
 
-/* ── Desktop: a floating icon rail that stretches open ─────────────────
-   Closed (the default), the sidebar is a 72px rail of icons floating on
-   the page canvas: inset 12px from the window's edges, with rounded
-   corners and a soft shadow. Hovering it or tabbing into it stretches it
-   to full width, and leaving folds it back. The shell around it is a real
-   column of the layout, so the page slides over as it opens instead of
-   being covered (Audrey, 2026-10-01: nothing on the dashboard may be
-   hidden behind it). The topbar's menu button pins it open (is-open).
-   Every icon sits on the rail's centre line (36px) in both states, so
-   nothing jumps sideways while it stretches; only widths and the labels'
-   opacity animate. A short delay before opening keeps a pointer that is
-   just passing by from flashing it open. */
+/* ── Desktop: a docked sidebar, flush to the window's edge ─────────────
+   Full height and full width, a column of the layout that pushes the
+   page; the topbar's menu button slides it away and back, as it did
+   before 2026-10-01. The floating icon rail that stretched open on hover
+   was taken out on 2026-10-11 (Audrey: not a floating bar for now); it is
+   in git at 419506b if it comes back. The spacing further down (icons at
+   27px, the 20px bottom padding) was set for that rail and is unchanged. */
+.sidebar-shell {
+  flex-shrink: 0;
+}
+
+/* Closed means slid away, at every width. Hidden once it has gone, so the
+   Tab key doesn't land on links that are off-screen. */
+.sidebar.is-closed {
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 0.3s ease, visibility 0s linear 0.3s;
+}
+
+/* How it moves on desktop: the column's width changes once, at the start,
+   and the slide itself is only a transform on the sidebar and on the page
+   beside it. Sliding by margin (until 2026-10-11) changed the page's width
+   on every frame, so every chart was measured and redrawn some 18 times
+   per open or close, and the slide stuttered. The page's slide only runs
+   after the menu button has been used (sidebar-animated, set in
+   DashboardLayout.jsx), never on first load. */
 @media (min-width: 901px) {
   .sidebar-shell {
-    flex-shrink: 0;
-    width: 96px; /* 72px rail + 12px gap either side */
-    height: 100%;
-    padding: 12px;
-    box-sizing: border-box;
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
+    position: relative;
+    z-index: 20; /* its shadow stays over the page while both slide */
+    width: 250px;
   }
 
-  .sidebar {
-    width: 100%;
-    height: 100%;
-    border-radius: 18px;
-    border: 1px solid var(--color-nav-border);
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
-    transition: none;
+  .sidebar-shell.is-closed {
+    width: 0;
   }
 
-  .sidebar-shell.is-open,
-  .sidebar-shell.is-closed:focus-within {
-    width: 274px; /* 250px sidebar + the gaps */
-    transition-delay: 0s;
+  .dashboard-layout.sidebar-animated .main-content {
+    animation: main-slide-from-left 0.3s ease;
   }
 
-  /* Labels fade out quickly as the rail folds, and back in once it has
-     started to stretch, so text never shows squeezed mid-animation. */
-  .sidebar-shell.is-closed .nav-item-text,
-  .sidebar-shell.is-closed .modules-title,
-  .sidebar-shell.is-closed .profile-info,
-  .sidebar-shell.is-closed .status-text,
-  .sidebar-shell.is-closed .logout-text {
-    opacity: 0;
-    transition: opacity 0.12s ease;
-  }
-
-  .sidebar-shell.is-closed:focus-within .nav-item-text,
-  .sidebar-shell.is-closed:focus-within .modules-title,
-  .sidebar-shell.is-closed:focus-within .profile-info,
-  .sidebar-shell.is-closed:focus-within .status-text,
-  .sidebar-shell.is-closed:focus-within .logout-text {
-    opacity: 1;
-    transition: opacity 0.2s ease 0.12s;
-  }
-
-  /* The logo: only the swoosh shows on the rail; the full "SAN2" is
-     revealed (not scaled) as the sidebar stretches. */
-  .sidebar-shell.is-closed .sidebar-profile-top {
-    width: 44px;
-    margin-left: 14px;
-  }
-
-  .sidebar-shell.is-closed:focus-within .sidebar-profile-top {
-    width: 202px;
-    margin-left: 24px;
+  .dashboard-layout.sidebar-animated.sidebar-closed .main-content {
+    animation: main-slide-from-right 0.3s ease;
   }
 }
 
-/* Hover only where there is a real pointer: on touch screens a tap would
-   otherwise open it with no way to "leave". */
-@media (min-width: 901px) and (hover: hover) {
-  .sidebar-shell.is-closed:hover {
-    width: 274px;
-    transition-delay: 0.08s;
-  }
+@keyframes main-slide-from-left {
+  from { transform: translateX(-250px); }
+}
 
-  .sidebar-shell.is-closed:hover .nav-item-text,
-  .sidebar-shell.is-closed:hover .modules-title,
-  .sidebar-shell.is-closed:hover .profile-info,
-  .sidebar-shell.is-closed:hover .status-text,
-  .sidebar-shell.is-closed:hover .logout-text {
-    opacity: 1;
-    transition: opacity 0.2s ease 0.16s;
-  }
-
-  .sidebar-shell.is-closed:hover .sidebar-profile-top {
-    width: 202px;
-    margin-left: 24px;
-  }
+@keyframes main-slide-from-right {
+  from { transform: translateX(250px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
-  .sidebar-shell,
   .sidebar-profile-top {
     transition: none !important;
+  }
+
+  .dashboard-layout .main-content {
+    animation: none !important;
   }
 }
 
@@ -141,11 +105,6 @@
     left: 0;
     z-index: 900;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-  }
-
-  /* No rail on phones and tablets: closed means slid away. */
-  .sidebar.is-closed {
-    margin-left: -250px;
   }
 
   .sidebar-backdrop {

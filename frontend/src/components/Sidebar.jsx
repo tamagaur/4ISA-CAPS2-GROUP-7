@@ -125,12 +125,10 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
           page instead of pushing it, with a click-outside-to-close scrim. */}
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
-      {/* Desktop: the shell holds the sidebar's place in the layout — the
-          icon rail's width, or the full width when pinned open with the
-          topbar's menu button. The sidebar inside stretches open over the
-          page on hover or keyboard focus without pushing the page, so charts
-          don't re-flow every time the pointer passes. Below 900px the shell
-          takes no space and the sidebar is the old slide-over. */}
+      {/* Desktop: a docked column that pushes the page; the topbar's menu
+          button slides it away and back. Below 900px the shell takes no
+          space and the sidebar is a slide-over. (The shell is left from the
+          floating icon rail, taken out 2026-10-11 — see Sidebar.css.) */}
       <div className={`sidebar-shell ${isOpen ? 'is-open' : 'is-closed'}`}>
         <aside className={`sidebar ${isOpen ? 'is-open' : 'is-closed'}`} aria-label="Main navigation">
           {/* App identity — the real SAN2 logo (cropped to its own content
