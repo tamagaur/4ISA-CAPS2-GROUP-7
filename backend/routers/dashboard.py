@@ -415,6 +415,11 @@ from backend.routers.recommendations import whole_units
 from backend.stock_status import CRITICAL, NO_DATA, URGENCY_RANK, URGENT
 from backend.stock_units import STOCK_COUNTS_SQL, opening_period, stock_counts
 from backend.response_cache import cached
+from backend import demo_data
+from backend.demo_flag import demo_enabled
+from backend.series_gaps import (
+    REASON_NO_DATA_BEFORE_2023, REASON_NOT_COLLECTED, gap_note as series_gap_note,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -1076,7 +1081,7 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
     range and the counts the month-level marts name, wave 3 the product keys wave
     2 returns. A query missing here still runs, on its own, when the route asks."""
     wave1 = [
-        (marts.SNAPSHOT_SQL, {}),
+        (marts.snapshot_sql(), {}),
         current_cycle_query(scope, mode),
         forecast_generated_query(mode),
         _forecast_counts_query(scope, mode),
@@ -1744,6 +1749,11 @@ def get_dashboard(
         point["provenance"] = _point_provenance(
             point, bool(placeholder and placeholder["start"] <= p <= placeholder["end"])
         )
+        # Why a month has no sales value (backend/series_gaps.py): the series is never zero-filled, a month with
+        # no rows for the whole scope is null, and now says so. Added only where there is a reason; a point with a
+        # value, or one that is also an estimate, carries no key.
+        if point["sales"] is None and point["sales_estimated"] is None:
+            point["sales_reason"] = REASON_NO_DATA_BEFORE_2023 if p < "2023-01" else REASON_NOT_COLLECTED
         sales_vs_stock.append(point)
 
     # The tax basis of the chart's flow lines, for its legend and tooltip.
@@ -2287,6 +2297,18 @@ def get_dashboard(
     payload["lp_hidden"] = False
     if not can_see_lp(db, current_user):
         _strip_lp_fields(payload)
+    # Gap semantics (backend/series_gaps.py): a note, only when a point above carries a reason.
+    note = series_gap_note(pt["sales_reason"] for pt in sales_vs_stock if "sales_reason" in pt)
+    if note:
+        payload["gap_note"] = note
+    # The labelled Del Monte demonstration, behind DM_DEMO_ENABLED (default off). Its own block, with its own
+    # data_source: the rest of this payload is real and stays labelled as it was.
+    if demo_enabled() and scope in ("all", "delmonte"):
+        payload["demonstration"] = demo_data.label({
+            "principal": "delmonte",
+            "index": demo_data.index(db, "delmonte")["series"],
+            "forecasts": demo_data.forecasts(db),
+        })
     return payload
 
 

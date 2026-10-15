@@ -106,6 +106,7 @@ def fill_series(
     seed: int = SEED,
     window_end: str = "2025-12",
     jitter_scale: float = JITTER_SCALE,
+    min_months: int = MIN_MONTHS,
 ) -> SeriesResult:
     """`quantity` / `net_amount`: real month -> value (already summed over regions).
     Months after `window_end` are ignored (the demonstration never runs past the real data)."""
@@ -117,9 +118,9 @@ def fill_series(
     real = sorted(q)
     res.first_real, res.last_real, res.real_months = real[0], real[-1], len(real)
     span = month_index(real[-1]) - month_index(real[0]) + 1
-    if span < MIN_MONTHS:
-        res.excluded_reason = (f"{span} month(s) between first and last real month; "
-                               f"MA3 needs {MIN_MONTHS} and nothing is generated outside the real span")
+    if span < min_months:
+        res.excluded_reason = (f"{span} month(s) between first and last real month; {min_months} needed to have a "
+                               "level and a coefficient of variation of its own to generate from")
         return res
 
     amt = {p: (None if net_amount.get(p) is None else float(net_amount[p])) for p in real}

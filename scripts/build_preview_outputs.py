@@ -253,6 +253,9 @@ def main():
         "placeholder_start": series_df.loc[series_df["is_placeholder"], "month"].min(),
         "placeholder_end": series_df.loc[series_df["is_placeholder"], "month"].max(),
         "placeholder_window": {"rows": int(pw_rows), "quantity_total": float(pw_qty or 0)},
+        # backend/data_mode.preview_outputs() serves only files built on the schema demo back-cast (the older
+        # synthetic_v2 placeholder rows are retired for display, 2026-10-15).
+        "placeholder_source": "demo",
         "forecast_status": forecasts["status"].value_counts().to_dict(),
         "lp_skus": int(len(lp)), "live_reproduction_check": check, "lp_model": lp_model,
     }

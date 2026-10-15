@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF
 from backend import batch
 from backend.data_mode import PREVIEW, REAL
+from backend.demo_flag import demo_enabled
 
 PRINCIPALS = ("unilever", "delmonte")
 
@@ -39,11 +40,31 @@ PESOS_BASIS_LABEL = {
 
 
 def _kind_filter(mode: str, alias: str = "") -> str:
-    """Real rows, plus Unilever's preview placeholder months in preview."""
+    """Real rows, plus the demonstration back-cast months in preview when DM_DEMO_ENABLED is on. The older
+    synthetic_v2 rows are retired for display (2026-10-15); see sales_mart_relation()."""
     a = f"{alias}." if alias else ""
-    if mode == PREVIEW:
+    if mode == PREVIEW and demo_enabled():
         return f"({a}data_kind = 'real' OR {a}preview_placeholder)"
     return f"{a}data_kind = 'real'"
+
+
+_DEMO_SALES_MART = """(
+    SELECT principal, level, product_key, category_path, period, data_kind, source_tag, in_principal_total,
+           preview_placeholder, pieces, pieces_null_rows, pieces_unit_confirmed, pesos, pesos_basis, gsv, source_rows
+    FROM mart.sales_mart WHERE data_kind <> 'generated'
+    UNION ALL
+    SELECT 'unilever'::text, 'product'::text, d.product_key, NULL::text, d.period, 'generated'::text,
+           'demo_backcast'::text, true, true, d.quantity, 0, true, d.net_amount, 'demo_backcast'::text, NULL::numeric, 1
+    FROM demo.unilever_sku_sales d
+    WHERE d.origin = 'backcast' AND d.run_id = (SELECT MAX(run_id) FROM demo.run WHERE principal = 'unilever')
+)"""
+
+
+def sales_mart_relation(mode: str) -> str:
+    """mart.sales_mart verbatim, except in preview with DM_DEMO_ENABLED on: the mart without its retired
+    synthetic_v2 'generated' rows, plus demo.unilever_sku_sales' back-cast rows shaped as mart rows
+    (preview_placeholder = true, so _kind_filter() picks them up)."""
+    return _DEMO_SALES_MART if (mode == PREVIEW and demo_enabled()) else "mart.sales_mart"
 
 
 def _scope_list(scope: str) -> list[str]:
@@ -123,11 +144,12 @@ def status(db: Session) -> dict:
 # one statement, kept on the request's session (Session.info) and answered in memory.
 # One round trip instead of ~25: each query costs the network round trip, ~0.12 s from
 # the team's machines to Supabase, however small it is (measured 2026-10-04).
+# 'generated' rows (the older synthetic_v2 placeholders) are retired for display (2026-10-15): not read here.
 SNAPSHOT_SQL = """
     SELECT 'sales' AS src, principal, period, data_kind, NULL AS source_tag, NULL AS flow,
            pesos, pieces, any_recorded_with_tax AS recorded_with_tax, preview_placeholder AS placeholder,
            NULL::date AS first_date, NULL::date AS last_date, NULL::int AS negative_rows, NULL::bigint AS products
-    FROM mart.sales_month
+    FROM mart.sales_month WHERE data_kind <> 'generated'
     UNION ALL
     SELECT 'stock', principal, period, data_kind, NULL, NULL, pesos, pieces, NULL, NULL,
            first_count_date, count_date, NULL, products
@@ -137,6 +159,22 @@ SNAPSHOT_SQL = """
            NULL, NULL, negative_rows, products
     FROM mart.flow_month
 """
+
+
+_SNAPSHOT_DEMO_ROWS = """
+    UNION ALL
+    SELECT 'sales', 'unilever', period, 'generated', NULL, NULL, SUM(net_amount), SUM(quantity), NULL::boolean, true,
+           NULL::date, NULL::date, NULL::int, NULL::bigint
+    FROM demo.unilever_sku_sales
+    WHERE origin = 'backcast' AND run_id = (SELECT MAX(run_id) FROM demo.run WHERE principal = 'unilever')
+    GROUP BY period
+"""
+
+
+def snapshot_sql() -> str:
+    """SNAPSHOT_SQL verbatim, plus the demonstration back-cast months (as preview placeholders) when DM_DEMO_ENABLED
+    is on. Real-mode readers never see them: _kinds() shows a placeholder row only in preview."""
+    return SNAPSHOT_SQL + _SNAPSHOT_DEMO_ROWS if demo_enabled() else SNAPSHOT_SQL
 
 
 class _Snapshot:
@@ -158,7 +196,7 @@ def _snapshot(db: Session) -> _Snapshot:
     info = getattr(db, "info", None)
     if isinstance(info, dict) and "mart_snapshot" in info:
         return info["mart_snapshot"]
-    snap = _Snapshot(batch.rows(db, SNAPSHOT_SQL))
+    snap = _Snapshot(batch.rows(db, snapshot_sql()))
     if isinstance(info, dict):
         info["mart_snapshot"] = snap
     return snap
@@ -384,7 +422,7 @@ PARETO_SQL = """
     WITH rev AS (
         SELECT s.product_key, SUM(GREATEST(s.pesos, 0)) AS revenue, SUM(s.pieces) AS pieces,
                COUNT(*) AS months_with_sales
-        FROM mart.sales_mart s
+        FROM {sales_mart} s
         WHERE s.principal = :principal AND s.in_principal_total
           AND s.period BETWEEN :start AND :end AND {kind}
         GROUP BY s.product_key
@@ -432,7 +470,7 @@ def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL) 
 
 
 def pareto_query(start: str, end: str, principal: str, mode: str = REAL) -> tuple[str, dict]:
-    return (PARETO_SQL.format(kind=_kind_filter(mode, "s")),
+    return (PARETO_SQL.format(kind=_kind_filter(mode, "s"), sales_mart=sales_mart_relation(mode)),
             {"principal": principal, "start": start, "end": end, "a": TIER_A_CUTOFF, "b": TIER_B_CUTOFF})
 
 
@@ -562,11 +600,11 @@ def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]
 def product_sales(db: Session, start: str, end: str, principal: str, mode: str = REAL) -> list[dict]:
     """Product x month rows for a chart, real and filled (generated too in preview), each
     with its data_kind: Del Monte's product split (DEC-31, filled) is served here only."""
-    kinds = ["real", "filled", "generated"] if mode == PREVIEW else ["real", "filled"]
-    rows = db.execute(text("""
+    kinds = ["real", "filled", "generated"] if (mode == PREVIEW and demo_enabled()) else ["real", "filled"]
+    rows = db.execute(text(f"""
         SELECT s.product_key, pd.sku_code, pd.product_name, s.level, s.period, s.data_kind, s.source_tag,
                s.pesos, s.pieces, s.pieces_unit_confirmed, s.pesos_basis
-        FROM mart.sales_mart s
+        FROM {sales_mart_relation(mode)} s
         LEFT JOIN product_dimension pd ON pd.product_key = s.product_key
         WHERE s.principal = :principal AND s.level = 'product' AND s.period BETWEEN :start AND :end
           AND s.data_kind = ANY(:kinds)

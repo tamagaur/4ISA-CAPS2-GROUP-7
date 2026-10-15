@@ -62,12 +62,20 @@ def test_real_mode_reads_the_real_view_by_its_own_name():
     assert dm.unilever_demand(dm.REAL) == "Unilever_SKU_Demand_Fact_Real"
 
 
-def test_preview_adds_only_placeholder_rows_before_the_first_real_month():
+def test_preview_reads_real_data_alone_when_the_demo_flag_is_off(monkeypatch):
+    """The older synthetic_v2 placeholder rows are retired for display (2026-10-15): preview without
+    DM_DEMO_ENABLED is the real view, by its own name."""
+    monkeypatch.delenv("DM_DEMO_ENABLED", raising=False)
+    assert dm.unilever_demand(dm.PREVIEW) == "Unilever_SKU_Demand_Fact_Real"
+
+
+def test_preview_adds_only_the_demo_backcast_when_the_flag_is_on(monkeypatch):
+    monkeypatch.setenv("DM_DEMO_ENABLED", "1")
     sql = dm.unilever_demand(dm.PREVIEW)
-    assert "is_demo = false" in sql
-    assert "is_demo = true AND calendar_month < (SELECT MIN(calendar_month) FROM Unilever_SKU_Demand_Fact_Real)" in sql
-    # No other way in for a placeholder row: exactly one is_demo = true term.
-    assert sql.count("is_demo = true") == 1
+    assert "FROM Unilever_SKU_Demand_Fact_Real" in sql
+    assert "FROM demo.unilever_sku_sales" in sql and "origin = 'backcast'" in sql
+    # Not the base table, and no older placeholder (is_demo = true) rows by any route.
+    assert "FROM Unilever_SKU_Demand_Fact " not in sql and "is_demo = true" not in sql
 
 
 def test_data_mode_module_never_writes():
@@ -216,7 +224,8 @@ def test_on_request_traits_reproduce_the_stored_segmentation_run(live_db):
 
 
 @LIVE
-def test_placeholder_window_ends_before_the_first_real_month(live_db):
+def test_placeholder_window_ends_before_the_first_real_month(live_db, monkeypatch):
+    monkeypatch.setenv("DM_DEMO_ENABLED", "1")
     window = dm.placeholder_window(live_db)
     if window is None:
         pytest.skip("no placeholder rows before the real data — real history already covers them")
@@ -224,7 +233,8 @@ def test_placeholder_window_ends_before_the_first_real_month(live_db):
 
 
 @LIVE
-def test_category_trends_preview_lengthens_history_without_moving_a_projection():
+def test_category_trends_preview_lengthens_history_without_moving_a_projection(monkeypatch):
+    monkeypatch.setenv("DM_DEMO_ENABLED", "1")
     app.dependency_overrides[get_current_user] = lambda: TokenPayload(
         user_id=1, email="t@local", role="staff", full_name="T")
     try:
@@ -265,7 +275,8 @@ def test_preview_files_become_typed_relations_with_every_column(tmp_path, monkey
         "2,2026-03-01,3.0,,,,,insufficient_data,{}\n", encoding="utf-8")
     (tmp_path / "app_lp.csv").write_text(
         "product_key,planning_cycle_date,q_i,rop_i,ss_i\n1,2026-03-01,12.0,12.0,1.5\n", encoding="utf-8")
-    (tmp_path / "app_meta.json").write_text('{"built_at": "2026-09-24T00:00:00+00:00"}', encoding="utf-8")
+    (tmp_path / "app_meta.json").write_text(
+        '{"built_at": "2026-09-24T00:00:00+00:00", "placeholder_source": "demo"}', encoding="utf-8")
     monkeypatch.setattr(dm, "PREVIEW_OUTPUT_DIR", str(tmp_path))
     monkeypatch.setattr(dm, "_outputs_cache", {"stamp": None, "value": None})
     assert dm.predictive_preview(dm.PREVIEW) is True
@@ -292,3 +303,16 @@ def test_outputs_stale_compares_the_build_fingerprint_with_the_live_placeholder(
     # Files built before the fingerprint existed, or no files at all: unknown.
     assert _outputs_stale({"meta": {}}, {"rows": 8444, "quantity_total": 1.0}) is None
     assert _outputs_stale(None, {"rows": 8444, "quantity_total": 1.0}) is None
+
+
+def test_preview_files_built_on_the_retired_placeholder_are_not_served(tmp_path, monkeypatch):
+    (tmp_path / "app_forecast.csv").write_text(
+        "product_key,forecast_date,forecast_value,confidence_lower,confidence_upper,mape,mase,status,model_params\n"
+        "1,2026-03-01,10.5,,,,,ok,{}\n", encoding="utf-8")
+    (tmp_path / "app_lp.csv").write_text("product_key,planning_cycle_date,q_i,rop_i,ss_i\n1,2026-03-01,1,1,1\n", encoding="utf-8")
+    (tmp_path / "app_meta.json").write_text('{"built_at": "2026-09-29T04:16:02+00:00"}', encoding="utf-8")
+    monkeypatch.setattr(dm, "PREVIEW_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(dm, "_outputs_cache", {"stamp": None, "value": None})
+    assert dm.preview_outputs() is None
+    assert dm.predictive_preview(dm.PREVIEW) is False
+    assert dm.forecast_source(dm.PREVIEW) == ("Forecast_Result", {})

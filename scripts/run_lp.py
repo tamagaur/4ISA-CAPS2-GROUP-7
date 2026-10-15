@@ -726,6 +726,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
+        "--source", choices=["real", "demo"], default="real",
+        help="real (default): exactly the run this script has always made. demo: refused (see check_source): "
+             "the demonstration has no stock count or purchase parameters, so no plan is generated.",
+    )
+    parser.add_argument(
         "--allocation-pct", type=_positive_float, default=p["allocation_pct"],
         help="Supplier allocation as a %% of last year's sales (Sir Abe: 103 minimum, 105 mid, 108 maximum). "
              "A principal's monthly ceiling is its planned products' sales in the calendar year before the "
@@ -821,8 +826,18 @@ def _log_cycle(plan: CyclePlan, allocation_pct: float, prior_year: int) -> None:
     logger.info(f"  warehouse: stock + orders = {s['warehouse_used']:,.0f} of {plan.warehouse_capacity:,.0f} pieces")
 
 
+def check_source(source: str) -> None:
+    """--source real (the default) is the plan this script has always made. The demonstration has no stock count, cost
+    or supplier parameters in schema demo, so --source demo is refused here, before any connection: it never writes
+    lp_run or lp_recommendation. --principal keeps its existing meaning (both | unilever | delmonte)."""
+    if source != "real":
+        raise SystemExit("run_lp: no order plan is generated for the demonstration (schema demo carries no stock count, "
+                         "cost or supplier parameters). Omit --source, or pass --source real.")
+
+
 def main():
     args = build_parser().parse_args()
+    check_source(args.source)
     _log_inputs(args)
 
     load_dotenv(override=False)

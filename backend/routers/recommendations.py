@@ -180,11 +180,13 @@ from sqlalchemy import text
 from analytics.params import abc_method_sql
 from sqlalchemy.orm import Session
 
-from backend import audit
+from backend import audit, demo_data
+from backend.demo_flag import demo_enabled
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import (
     PrincipalQuery,
+    normalize_principal,
     abc_period_params,
     abc_period_pred,
     latest_abc_periods,
@@ -559,6 +561,17 @@ def get_recommendations(
     # lp_recommendation currently holds 430 Unilever rows and ZERO Del
     # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte
     # honestly returns an empty list until the LP is run for Del Monte.
+    if demo_enabled() and normalize_principal(principal) == "delmonte":
+        # Behind DM_DEMO_ENABLED: still no order plan (the demonstration has no stock count, so no plan is generated),
+        # plus the labelled demonstration forecasts (schema demo; backend/demo_data.py).
+        return JSONResponse({
+            **jsonable_encoder(RecommendationsResponse(items=[], count=0)),
+            **demo_data.label({
+                "demo_forecasts": demo_data.forecasts(db),
+                "order_plan": {"available": False, "reason": "the demonstration has no stock count and no purchase "
+                                                              "parameters, so no order plan is generated"},
+            }),
+        })
     if planning_mart.usable(db, mode):
         served = _from_mart(db, status, cycle, from_date, to_date, principal)
         if served is not None:

@@ -32,8 +32,11 @@ real_copy / interpolated / bridged / backcast are kept strictly apart):
                              the 2021-2022 months are generated for
                              visualisation only.
   interpolated               between two real months of the same series.
-  bridged_taxonomy_change    across the 2024-03..2025-02 taxonomy change
-                             (defined; not built, the hole is left unfilled).
+  taxonomy_change_bridge     across the 2024-03..2025-02 taxonomy change:
+                             a pre-2025 Del Monte path carried forward from
+                             its last real month (extrapolation, by decision).
+  no_observation_before_series_start  backcast from 2023-01 for a Del Monte
+                             series first seen later (anchor override).
 
 These helpers only shape what a chart receives. They are not read by
 build_series, the forecast runner, the LP or any analysis.
@@ -47,7 +50,8 @@ REASON_NOT_COLLECTED = "not_collected"
 REASON_CATEGORY_ABSENT = "category_absent"
 REASON_NO_DATA_BEFORE_2023 = "no_data_recorded_before_2023"
 REASON_INTERPOLATED = "interpolated"
-REASON_BRIDGED = "bridged_taxonomy_change"
+REASON_BRIDGED = "taxonomy_change_bridge"
+REASON_NO_OBSERVATION_BEFORE_START = "no_observation_before_series_start"
 
 REASON_TEXT: dict[str, str] = {
     REASON_NO_SALE: (
@@ -70,7 +74,14 @@ REASON_TEXT: dict[str, str] = {
         "back-cast at the series' own level); they are not data and not a result."
     ),
     REASON_INTERPOLATED: "Generated between two real months of the same series, for visualisation only.",
-    REASON_BRIDGED: "Generated across the 2024-03..2025-02 taxonomy change, for visualisation only.",
+    REASON_BRIDGED: (
+        "Del Monte: generated across the 2024-03..2025-02 taxonomy change (the path's last real month carried forward, "
+        "extrapolation by decision), for visualisation only."
+    ),
+    REASON_NO_OBSERVATION_BEFORE_START: (
+        "Del Monte: generated before this series' first real observation (a category relabelled in the 2025 "
+        "taxonomy), for visualisation only."
+    ),
 }
 
 

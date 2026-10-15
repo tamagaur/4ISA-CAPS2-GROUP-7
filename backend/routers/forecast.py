@@ -25,7 +25,7 @@ SKU outside Tier A, or one the runner hasn't reached) — that is NOT a
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -43,6 +43,8 @@ from analytics.params import FORECAST_INTERVAL_LEVEL_PCT, FORECAST_INTERVAL_Z
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal, principal_clause
+from backend import demo_data
+from backend.demo_flag import demo_enabled
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
 from backend.series_gaps import gap_note, unilever_points
 from backend.response_cache import cached
@@ -65,6 +67,11 @@ router = APIRouter(prefix="/forecast", tags=["forecast"])
 def get_forecast(
     sku_id: str,
     principal: str | None = PrincipalQuery,
+    category: str | None = Query(
+        None,
+        description="Del Monte category_path, for the demonstration series (DM_DEMO_ENABLED on only). "
+                    "Ignored otherwise: Del Monte has no product-level forecast.",
+    ),
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(require_permission("forecast.view")),
@@ -82,6 +89,24 @@ def get_forecast(
         {"sku_id": sku_id, **scope_params},
     ).mappings().first()
     if normalize_principal(principal) == "delmonte" or (product_row and product_row["principal"] == "delmonte"):
+        if demo_enabled():
+            # The labelled demonstration series and its MA3 forecast (schema demo; backend/demo_data.py): history with
+            # each point's origin and reason, the one-step forecast with no accuracy figure and no band.
+            demo = demo_data.series_points(db, "delmonte", category or sku_id)
+            if demo is not None:
+                fc = [f for f in demo_data.forecasts(db) if f["category"] == demo["key"]]
+                body = ForecastResponse(
+                    sku_id=sku_id, product_name=demo["key"], principal="delmonte",
+                    forecast=[ForecastPoint(forecast_date=f["forecast_period"] + "-01", forecast_value=f["forecast_quantity"],
+                                            status=f["status"], model_params={"method": f["method"], "demonstration": True})
+                              for f in fc],
+                ).model_dump(mode="json")
+                body["actuals"] = demo["points"]
+                for k in ("data_source", "demonstration", "demonstration_note", "origin_counts", "run", "gap_note"):
+                    body[k] = demo[k]
+                body["forecast_note"] = (None if fc else "No demonstration forecast: this series has no real observation "
+                                                          "at the end of the window (2025-12).")
+                return JSONResponse(body)
         return ForecastResponse(
             sku_id=sku_id,
             product_name=product_row["product_name"] if product_row else None,

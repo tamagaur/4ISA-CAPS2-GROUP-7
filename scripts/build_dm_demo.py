@@ -14,9 +14,11 @@ long read — analytics.config.long_read_db_url):
 WRITES (only with --write): demo.run, demo.dm_category_sales, demo.dm_category_param, demo.dm_forecast,
   demo.dm_excluded. Nothing in public. Unilever is not built: its gaps are real zero-sale months.
 
-Method: analytics/demo/dm_interpolate.py (between two real months, seeded jitter from the series' own CV, no
-extrapolation, MA3 minimum) and analytics/demo/backcast.py (2021-01..2022-12, flat at the series' own level, own
-origin 'backcast'). Window: per category, its own real span, capped at 2025-12 (real Del Monte sales
+Method: analytics/demo/dm_interpolate.py (between two real months, seeded jitter from the series' own CV),
+analytics/demo/backcast.py: 'backcast' (2021-01 up to the month before a series' first real month, flat at its own
+level; the anchor rule is OVERRIDDEN for Del Monte, flagged anchor_override) and 'bridged' (each pre-2025 path carried
+forward from its last real month through 2025-02, across the taxonomy change; extrapolation by decision). A series
+needs 2 real months to have a level and a CV; a 1-month series is named and left out. Window: per category, its own real span, capped at 2025-12 (real Del Monte sales
 end there); the forecast is the one month after it, 2026-01. The demonstration never calls evaluate_sku or
 backtest and stores no error metric.
 """
@@ -37,7 +39,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from analytics.config import long_read_db_url  # noqa: E402
-from analytics.demo.backcast import backcast_series  # noqa: E402
+from analytics.demo.backcast import BRIDGE_END, ANCHOR_PERIOD, backcast_series, bridge_series  # noqa: E402
 from analytics.demo.dm_interpolate import (  # noqa: E402
     GENERATOR_VERSION, JITTER_SCALE, MIN_MONTHS, SEED, fill_series, ma3_one_step, next_month,
 )
@@ -96,19 +98,26 @@ def build(sales, ratio: float, n_ratio: int, lead: dict):
         qty[cat][period] = float(q) if q is not None else None
         amt[cat][period] = float(a) if a is not None else None
         pkey[cat] = pk
-    results = {c: fill_series(c, qty[c], amt[c], SEED, WINDOW_END) for c in sorted(qty)}
+    # min_months=2: a level and a coefficient of variation need two real months (Kelvin 2026-10-15: fill the rest)
+    results = {c: fill_series(c, qty[c], amt[c], SEED, WINDOW_END, min_months=2) for c in sorted(qty)}
     series, params, forecasts, excluded, bc_excluded = [], [], [], [], []
     for c, r in results.items():
         if r.excluded_reason:
             excluded.append((c, r.excluded_reason, r.real_months, r.first_real, r.last_real))
             continue
-        series += [(c, pkey[c], p.period, p.quantity, p.net_amount, p.origin) for p in r.points]
-        # 2021-01..2022-12: no real data on either side. Its own origin, never 'interpolated'.
-        bc = backcast_series(c, qty[c], amt[c], zero_months_in_span=False)
+        series += [(c, pkey[c], p.period, p.quantity, p.net_amount, p.origin, False) for p in r.points]
+        # 2021-01 .. the month before the first real month: no real data on either side. Its own origin, never
+        # 'interpolated'. anchor_override (Del Monte only): a series first seen after 2023-01 is back-cast too, and flagged.
+        bc = backcast_series(c, qty[c], amt[c], zero_months_in_span=False, anchor_override=True, min_real_months=2)
         if bc.excluded_reason:
             bc_excluded.append((c, bc.excluded_reason, bc.real_months, bc.first_real))
         else:
-            series += [(c, pkey[c], p, q, a, "backcast") for p, q, a in bc.points]
+            series += [(c, pkey[c], p, q, a, "backcast", bc.anchor_override) for p, q, a in bc.points]
+        # Across the taxonomy change: a pre-2025 path (first real month before 2025-01) is carried forward from its last
+        # real month through 2025-02. Extrapolation, by decision; origin 'bridged'.
+        if r.first_real < "2025-01" and r.last_real < BRIDGE_END:
+            series += [(c, pkey[c], p, q, a, "bridged", False)
+                       for p, q, a in bridge_series(c, qty[c], amt[c], r.last_real)]
         real_q = {p.period: p.quantity for p in r.points if p.origin == "real_copy"}
         real_pairs = [(p.net_amount, p.quantity) for p in r.points
                       if p.origin == "real_copy" and p.net_amount and p.quantity and p.net_amount > 0 and p.quantity > 0]
@@ -143,9 +152,16 @@ def report(results, series, params, forecasts, excluded, bc_excluded, ratio, n_r
         "categories_in_real_view": len(results), "categories_covered": len(ok), "categories_excluded": len(excluded),
         "months_real": sum(1 for r in series if r[5] == "real_copy"),
         "months_interpolated": sum(1 for r in series if r[5] == "interpolated"),
-        "months_bridged": sum(1 for r in series if r[5] == "bridged"),  # not built: the 2024-03..2025-02 hole stays unfilled
+        "months_bridged": sum(1 for r in series if r[5] == "bridged"),
+        "categories_bridged": len({r[0] for r in series if r[5] == "bridged"}),
         "months_backcast": sum(1 for r in series if r[5] == "backcast"),
+        "months_backcast_standard": sum(1 for r in series if r[5] == "backcast" and not r[6]),
+        "months_backcast_anchor_override": sum(1 for r in series if r[5] == "backcast" and r[6]),
         "categories_backcast": len({r[0] for r in series if r[5] == "backcast"}),
+        "categories_backcast_anchor_override": len({r[0] for r in series if r[5] == "backcast" and r[6]}),
+        "months_by_period": {p: {o: sum(1 for r in series if r[2] == p and r[5] == o)
+                                 for o in ("real_copy", "interpolated", "bridged", "backcast")}
+                             for p in sorted({r[2] for r in series})},
         "backcast_excluded": [{"category": c, "reason": why, "real_months": n} for c, why, n, _ in bc_excluded],
         "fill_blocks": len(fills),
         "anchoring_real_run_longest": max(runs) if runs else None,
@@ -156,7 +172,7 @@ def report(results, series, params, forecasts, excluded, bc_excluded, ratio, n_r
         "excluded": [{"category": c, "reason": why, "real_months": n} for c, why, n, _, _ in excluded],
         "cost_ratio": round(ratio, 6), "cost_ratio_n_products": n_ratio,
         "digest": digest(series),
-        "unilever": {"covered": 0, "reason": "excluded by decision 2026-10-15: gaps are real zero-sale months"},
+        "unilever": {"built_by": "scripts/build_unilever_demo.py", "in_span_gaps": "never filled: real zero-sale months"},
     }
     return rep
 
@@ -171,6 +187,10 @@ def write(db_url: str, rep: dict, series, params, forecasts, excluded, bc_exclud
         cur.execute("SELECT to_regclass('demo.run')")
         if cur.fetchone()[0] is None:
             raise SystemExit("schema demo is not there: apply migration 0052 first")
+        cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema = 'demo' "
+                    "AND table_name = 'dm_category_sales' AND column_name = 'anchor_override'")
+        if cur.fetchone() is None:
+            raise SystemExit("demo.dm_category_sales.anchor_override is not there: apply migration 0054 first")
         cur.execute("SELECT run_id FROM demo.run WHERE label = %s", (LABEL,))
         old = cur.fetchone()
         if old and not replace:
@@ -191,7 +211,7 @@ def write(db_url: str, rep: dict, series, params, forecasts, excluded, bc_exclud
         )
         run_id = cur.fetchone()[0]
         execute_values(cur, "INSERT INTO demo.dm_category_sales (run_id, category_path, product_key, period, quantity, "
-                            "net_amount, origin) VALUES %s", [(run_id, *r) for r in series], page_size=500)
+                            "net_amount, origin, anchor_override) VALUES %s", [(run_id, *r) for r in series], page_size=500)
         execute_values(cur, "INSERT INTO demo.dm_category_param (run_id, category_path, product_key, unit_price, unit_cost, "
                             "lead_time_days, lead_time_source, first_real_period, last_real_period, real_months, "
                             "interpolated_months, forecast_status) VALUES %s", [(run_id, *r) for r in params])
