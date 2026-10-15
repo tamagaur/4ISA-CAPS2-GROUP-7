@@ -44,7 +44,7 @@ EXPECTED_PREDICATE = {
     "scripts/run_lp.py": ("AND {ac_basis}", "WHERE {basis}"),
     "scripts/model_bakeoff.py": ("AND method = %s",),  # abc_method('unilever'), 2026-10-15
     "scripts/arima_bakeoff.py": ("AND method = 'single'",),
-    "scripts/xgboost_bakeoff.py": ("AND method='single'",),
+    "scripts/xgboost_bakeoff.py": ("AND method=%s",),  # abc_method('unilever'), 2026-10-15
     "scripts/bakeoff_to_xlsx.py": ("ac.method='single'",),
     "scripts/check_missing_fast.py": ("abc.method = 'single'",),
     "scripts/check_missing_skus.py": ("abc.method = 'single'",),

@@ -309,8 +309,8 @@ def main() -> int:
         p.error("writing the live mart schema needs --target-public")
     if args.mart_schema != "mart" and not args.mart_schema.startswith("ssm_"):
         p.error("--mart-schema is 'mart' or a scratch schema named ssm_*")
-    from analytics.config import get_settings
-    db_url = get_settings().supabase_db_url
+    from analytics.config import long_read_db_url
+    db_url = long_read_db_url()
 
     from analytics.params import abc_method as current_abc_method
 

@@ -33,6 +33,9 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
 from backend.response_cache import cached
+from backend.series_gaps import (
+    REASON_CATEGORY_ABSENT, REASON_NO_SALE, REASON_NOT_COLLECTED, gap_note, month_range,
+)
 
 router = APIRouter(prefix="/category-trends", tags=["category-trends"])
 
@@ -93,22 +96,43 @@ def trends_for(
         p = _next_month(p)
         ahead.append(p)
 
+    # Chart points only: the history marks a zero that is not a recorded zero with a
+    # `reason` (backend/series_gaps.py). The values, and so the projection, are unchanged.
+    absent_reason = REASON_NO_SALE if principal == "unilever" else REASON_CATEGORY_ABSENT
+    reasons_used: set[str] = set()
     categories = []
     for name, by_period in series.items():
         values = [by_period.get(m, 0.0) for m in observed]
         projection = project_category(values)
+        history = []
+        for m, v in zip(observed, values):
+            point = {"period": m, "revenue": round(v, 2)}
+            if m not in by_period:
+                point["reason"] = absent_reason
+                reasons_used.add(absent_reason)
+            history.append(point)
         categories.append({
             "category": name,
             # The field keeps its name for its callers; the span is
             # TRAILING_MONTHS, the same one the method block reports.
             "revenue_last_12": round(sum(values[-TRAILING_MONTHS:]), 2),
-            "history": [{"period": m, "revenue": round(v, 2)} for m, v in zip(observed, values)],
+            "history": history,
             "projection_periods": ahead if projection.get("available") else [],
             **projection,
         })
     categories.sort(key=lambda c: c["revenue_last_12"], reverse=True)
-    return {"principal": principal, "observed_months": observed, "categories": categories,
-            "series_start": _series_start(principal), "start_period": observed[0], "end_period": observed[-1]}
+    # Calendar months inside the observed range that the principal has no data for at
+    # all are left out of the series (above); name them instead of dropping them silently.
+    skipped = [m for m in month_range(observed[0], observed[-1]) if m not in set(observed)]
+    out = {"principal": principal, "observed_months": observed, "categories": categories,
+           "series_start": _series_start(principal), "start_period": observed[0], "end_period": observed[-1]}
+    if skipped:
+        out["skipped_months"] = [{"period": m, "reason": REASON_NOT_COLLECTED} for m in skipped]
+        reasons_used.add(REASON_NOT_COLLECTED)
+    note = gap_note(reasons_used)
+    if note:
+        out["gap_note"] = note
+    return out
 
 
 @router.get("")

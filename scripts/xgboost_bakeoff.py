@@ -30,6 +30,7 @@ load_dotenv()
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, smape, wape  # noqa: E402
+from analytics.params import abc_method  # noqa: E402
 
 SEAS = 12
 TEST_H = 6
@@ -74,7 +75,7 @@ def _fetch(with_synthetic: bool):
     raw["is_demo"] = raw["is_demo"].astype(bool)
     cur.execute("SELECT product_key FROM abc_classification "
                 "WHERE principal='unilever' AND classification_period=%s AND tier='A' "
-                "AND method='single'", (ABC_PERIOD,))
+                "AND method=%s", (ABC_PERIOD, abc_method("unilever")))
     tier_a = sorted({r[0] for r in cur.fetchall()})
     cur.execute("SELECT product_key, sku_code, product_name FROM product_dimension WHERE principal='unilever'")
     names = {r[0]: (r[1], r[2]) for r in cur.fetchall()}

@@ -54,7 +54,7 @@ from pathlib import Path
 
 import psycopg2
 
-from analytics.config import get_settings
+from analytics.config import get_settings, long_read_db_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKUP_ROOT = REPO_ROOT / "backups"
@@ -134,7 +134,7 @@ def backup_tables(tables: list[str], schema: str = "public",
     out_dir = out_dir or BACKUP_ROOT / f"tables_{ts}"
     (out_dir / "data").mkdir(parents=True, exist_ok=True)
 
-    conn = psycopg2.connect(get_settings().supabase_db_url)
+    conn = psycopg2.connect(long_read_db_url())
     conn.autocommit = False
     ok = True
     manifest: dict = {"created_utc": ts, "schema": schema, "scoped": True,

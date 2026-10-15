@@ -50,7 +50,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 from sqlalchemy import create_engine, text
 
-from analytics.config import get_settings
+from analytics.config import get_settings, long_read_db_url
 from scripts.backup_live_db import BACKUP_ROOT, _list_base_tables, _p, create_backup
 
 # Postgres' and Supabase's own schemas. Every other schema is ours.
@@ -84,7 +84,7 @@ def lit(value: str) -> str:
 
 
 def _readonly_engine():
-    engine = create_engine(get_settings().supabase_db_url).execution_options(postgresql_readonly=True)
+    engine = create_engine(long_read_db_url()).execution_options(postgresql_readonly=True)
     with engine.connect() as conn:
         if conn.execute(text("SHOW transaction_read_only")).scalar() != "on":
             raise SystemExit("Stopped: could not open a read-only connection, and this script must never write.")

@@ -44,6 +44,7 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal, principal_clause
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
+from backend.series_gaps import gap_note, unilever_points
 from backend.response_cache import cached
 
 # The band the forecast runner stores: forecast +/- CONFIDENCE_Z x the served
@@ -136,17 +137,23 @@ def get_forecast(
 
     actual_rows = db.execute(
         text(f"""
-            SELECT calendar_month, quantity_sold
+            SELECT calendar_month, quantity_sold,
+                   (SELECT MIN(calendar_month) FROM {demand}) AS series_start,
+                   (SELECT MAX(calendar_month) FROM {demand}) AS series_end
             FROM {demand}
             WHERE product_key = :product_key
             ORDER BY calendar_month DESC
         """),
         {"product_key": product_key},
     ).mappings().all()
-    actuals = [
-        ActualPoint(period=r["calendar_month"], quantity=_safe_float(r["quantity_sold"], 0.0))
-        for r in reversed(actual_rows)
-    ]
+    # Chart points only (backend/series_gaps.py): a month with no row between the
+    # first and last sale is 0 (no_sale), a blank quantity is null (blank_capture,
+    # never 0), months outside the product's life are null. The forecast path
+    # (build_series, the runner, the LP) does not read this.
+    by_period = {r["calendar_month"]: _safe_float(r["quantity_sold"]) for r in actual_rows}
+    grid = (actual_rows[0].get("series_start"), actual_rows[0].get("series_end")) if actual_rows else (None, None)
+    points = unilever_points(by_period, *grid)
+    actuals = [ActualPoint(**pt) for pt in points]
 
     response = ForecastResponse(
         sku_id=sku_id,
@@ -155,6 +162,7 @@ def get_forecast(
         actuals=actuals,
         forecast=forecast,
         interval=dict(FORECAST_INTERVAL),
+        gap_note=gap_note(pt["reason"] for pt in points if pt["reason"]),
     )
     if mode != PREVIEW:
         return response

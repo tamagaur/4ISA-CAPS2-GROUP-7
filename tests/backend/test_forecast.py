@@ -189,3 +189,29 @@ def test_interval_level_is_the_runners_band():
     with make_client(FakeSession(PRODUCTS, FORECASTS, ACTUALS)) as c:
         body = get(c, "/forecast/21051980?principal=unilever").json()
     assert body["interval"]["level_pct"] == 90
+
+
+def test_actuals_render_a_no_row_month_as_zero_and_a_blank_as_null_with_reasons():
+    """Chart points: Jan sold, Feb has no row (zero sales), Mar blank capture, Apr sold, May+ outside life."""
+    rows = [  # newest first like the query; series_start/series_end are the view's own MIN/MAX
+        {"calendar_month": "2026-04", "quantity_sold": 50.0, "series_start": "2026-01", "series_end": "2026-06"},
+        {"calendar_month": "2026-03", "quantity_sold": None, "series_start": "2026-01", "series_end": "2026-06"},
+        {"calendar_month": "2026-01", "quantity_sold": 10.0, "series_start": "2026-01", "series_end": "2026-06"},
+    ]
+    with make_client(FakeSession(PRODUCTS, FORECASTS, {1: rows})) as c:
+        body = get(c, "/forecast/21051980?principal=unilever").json()
+    by = {a["period"]: a for a in body["actuals"]}
+    assert (by["2026-01"]["quantity"], by["2026-01"]["reason"]) == (10.0, None)
+    assert (by["2026-02"]["quantity"], by["2026-02"]["reason"]) == (0.0, "no_sale")
+    assert (by["2026-03"]["quantity"], by["2026-03"]["reason"]) == (None, "blank_capture")
+    assert by["2026-04"]["quantity"] == 50.0
+    assert (by["2026-05"]["quantity"], by["2026-05"]["reason"]) == (None, "outside_product_lifespan")
+    assert [a["period"] for a in body["actuals"]] == ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"]
+    assert "no_sale" in body["gap_note"] and "Provisional" in body["gap_note"]
+
+
+def test_actuals_without_gaps_carry_no_gap_note():
+    with make_client(FakeSession(PRODUCTS, FORECASTS, ACTUALS)) as c:
+        body = get(c, "/forecast/21051980?principal=unilever").json()
+    assert body["gap_note"] is None
+    assert all(a["reason"] is None for a in body["actuals"])

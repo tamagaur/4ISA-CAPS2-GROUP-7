@@ -33,7 +33,11 @@ class ForecastPoint(BaseModel):
 
 class ActualPoint(BaseModel):
     period: str  # 'YYYY-MM'
-    quantity: float
+    # None only where `reason` says why: blank_capture (a row with a NULL
+    # quantity) or outside_product_lifespan. A zero-sale month is 0.0 with
+    # reason 'no_sale'. Codes: backend/series_gaps.py.
+    quantity: float | None = None
+    reason: str | None = None
 
 
 class ForecastResponse(BaseModel):
@@ -50,3 +54,5 @@ class ForecastResponse(BaseModel):
     # Why there is no forecast at all for this request (Del Monte: no
     # product-level sales), None otherwise.
     blocked_reason: str | None = None
+    # Present when any actual carries a `reason`: what the codes mean.
+    gap_note: str | None = None
