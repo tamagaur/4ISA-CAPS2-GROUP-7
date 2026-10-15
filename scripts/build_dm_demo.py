@@ -15,7 +15,8 @@ WRITES (only with --write): demo.run, demo.dm_category_sales, demo.dm_category_p
   demo.dm_excluded. Nothing in public. Unilever is not built: its gaps are real zero-sale months.
 
 Method: analytics/demo/dm_interpolate.py (between two real months, seeded jitter from the series' own CV, no
-extrapolation, MA3 minimum). Window: per category, its own real span, capped at 2025-12 (real Del Monte sales
+extrapolation, MA3 minimum) and analytics/demo/backcast.py (2021-01..2022-12, flat at the series' own level, own
+origin 'backcast'). Window: per category, its own real span, capped at 2025-12 (real Del Monte sales
 end there); the forecast is the one month after it, 2026-01. The demonstration never calls evaluate_sku or
 backtest and stores no error metric.
 """
@@ -36,6 +37,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from analytics.config import long_read_db_url  # noqa: E402
+from analytics.demo.backcast import backcast_series  # noqa: E402
 from analytics.demo.dm_interpolate import (  # noqa: E402
     GENERATOR_VERSION, JITTER_SCALE, MIN_MONTHS, SEED, fill_series, ma3_one_step, next_month,
 )
@@ -95,12 +97,18 @@ def build(sales, ratio: float, n_ratio: int, lead: dict):
         amt[cat][period] = float(a) if a is not None else None
         pkey[cat] = pk
     results = {c: fill_series(c, qty[c], amt[c], SEED, WINDOW_END) for c in sorted(qty)}
-    series, params, forecasts, excluded = [], [], [], []
+    series, params, forecasts, excluded, bc_excluded = [], [], [], [], []
     for c, r in results.items():
         if r.excluded_reason:
             excluded.append((c, r.excluded_reason, r.real_months, r.first_real, r.last_real))
             continue
         series += [(c, pkey[c], p.period, p.quantity, p.net_amount, p.origin) for p in r.points]
+        # 2021-01..2022-12: no real data on either side. Its own origin, never 'interpolated'.
+        bc = backcast_series(c, qty[c], amt[c], zero_months_in_span=False)
+        if bc.excluded_reason:
+            bc_excluded.append((c, bc.excluded_reason, bc.real_months, bc.first_real))
+        else:
+            series += [(c, pkey[c], p, q, a, "backcast") for p, q, a in bc.points]
         real_q = {p.period: p.quantity for p in r.points if p.origin == "real_copy"}
         real_pairs = [(p.net_amount, p.quantity) for p in r.points
                       if p.origin == "real_copy" and p.net_amount and p.quantity and p.net_amount > 0 and p.quantity > 0]
@@ -116,7 +124,7 @@ def build(sales, ratio: float, n_ratio: int, lead: dict):
             last3 = r.points[-3:]
             forecasts.append((c, pkey[c], next_month(WINDOW_END), round(ma3_one_step(vals), 2), "ma3", len(r.points),
                               sum(1 for p in last3 if p.origin == "interpolated")))
-    return results, series, params, forecasts, excluded
+    return results, series, params, forecasts, excluded, bc_excluded
 
 
 def digest(series) -> str:
@@ -126,15 +134,19 @@ def digest(series) -> str:
     return h.hexdigest()
 
 
-def report(results, series, params, forecasts, excluded, ratio, n_ratio) -> dict:
+def report(results, series, params, forecasts, excluded, bc_excluded, ratio, n_ratio) -> dict:
     ok = {c: r for c, r in results.items() if not r.excluded_reason}
     fills = [f for r in ok.values() for f in r.fills]
     runs = sorted(f.anchoring_run for f in fills)
     rep = {
         "principal": "delmonte",
         "categories_in_real_view": len(results), "categories_covered": len(ok), "categories_excluded": len(excluded),
-        "months_real": sum(r.real_months for r in ok.values()),
-        "months_interpolated": sum(r.interpolated_months for r in ok.values()),
+        "months_real": sum(1 for r in series if r[5] == "real_copy"),
+        "months_interpolated": sum(1 for r in series if r[5] == "interpolated"),
+        "months_bridged": sum(1 for r in series if r[5] == "bridged"),  # not built: the 2024-03..2025-02 hole stays unfilled
+        "months_backcast": sum(1 for r in series if r[5] == "backcast"),
+        "categories_backcast": len({r[0] for r in series if r[5] == "backcast"}),
+        "backcast_excluded": [{"category": c, "reason": why, "real_months": n} for c, why, n, _ in bc_excluded],
         "fill_blocks": len(fills),
         "anchoring_real_run_longest": max(runs) if runs else None,
         "anchoring_real_run_median": statistics.median(runs) if runs else None,
@@ -149,7 +161,7 @@ def report(results, series, params, forecasts, excluded, ratio, n_ratio) -> dict
     return rep
 
 
-def write(db_url: str, rep: dict, series, params, forecasts, excluded, replace: bool) -> int:
+def write(db_url: str, rep: dict, series, params, forecasts, excluded, bc_excluded, replace: bool) -> int:
     conn = psycopg2.connect(db_url, connect_timeout=20)
     try:
         cur = conn.cursor()
@@ -190,6 +202,9 @@ def write(db_url: str, rep: dict, series, params, forecasts, excluded, replace: 
         if excluded:
             execute_values(cur, "INSERT INTO demo.dm_excluded (run_id, category_path, reason, real_months, "
                                 "first_real_period, last_real_period) VALUES %s", [(run_id, *r) for r in excluded])
+        if bc_excluded:
+            execute_values(cur, "INSERT INTO demo.backcast_excluded (run_id, series_key, reason, real_months, "
+                                "first_real_period) VALUES %s", [(run_id, *r) for r in bc_excluded])
         conn.commit()
         return run_id
     except BaseException:
@@ -206,11 +221,11 @@ def main() -> int:
     args = ap.parse_args()
     db_url = long_read_db_url()
     sales, n_ratio, ratio, lead = read_inputs(db_url)
-    results, series, params, forecasts, excluded = build(sales, ratio, n_ratio, lead)
-    rep = report(results, series, params, forecasts, excluded, ratio, n_ratio)
+    results, series, params, forecasts, excluded, bc_excluded = build(sales, ratio, n_ratio, lead)
+    rep = report(results, series, params, forecasts, excluded, bc_excluded, ratio, n_ratio)
     print(json.dumps(rep, indent=1, default=str))
     if args.write:
-        print("[write] demo.run", write(db_url, rep, series, params, forecasts, excluded, args.replace))
+        print("[write] demo.run", write(db_url, rep, series, params, forecasts, excluded, bc_excluded, args.replace))
     else:
         print("[dry] nothing written (pass --write)")
     return 0

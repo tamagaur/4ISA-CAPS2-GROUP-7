@@ -28,3 +28,8 @@ def test_empty_series_and_note():
     assert unilever_points({}) == []
     assert gap_note([]) is None
     assert gap_note(["no_sale"]).startswith("[no_sale]")
+
+
+def test_gap_note_names_every_reason_present_even_from_a_generator():
+    note = gap_note(r for r in ["blank_capture", "no_sale", "no_data_recorded_before_2023"])
+    assert "[no_sale]" in note and "[blank_capture]" in note and "[no_data_recorded_before_2023]" in note

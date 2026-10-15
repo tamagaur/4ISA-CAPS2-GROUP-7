@@ -25,6 +25,7 @@ REL = [
     "public.sales_fact_real", "public.purchase_fact_real", "public.inventory_fact_real", "public.sellout_fact_real",
     "public.unilever_sku_demand_fact_real", "public.salesreturn_fact_real",
     "mart.sales_mart_real", "mart.inventory_mart_real",
+    "public.unilever_sku_demand_fact", "public.sellout_fact",  # base tables incl. the older synthetic_v2 rows
     "public.forecast_result", "public.abc_classification", "public.lp_run", "public.lp_recommendation",
     "mart.forecast_run", "mart.forecast_run_value", "mart.accuracy_mart", "mart.planning_mart",
 ]
@@ -60,6 +61,11 @@ def snapshot(db_url: str) -> dict:
             out["interpolated_months_present_in_sellout_fact_real"] = int(cur.fetchone()[0])
             cur.execute("SELECT COUNT(*) FROM demo.dm_category_sales WHERE origin = 'interpolated'")
             out["interpolated_months_in_demo"] = int(cur.fetchone()[0])
+        # nothing dated before SSM's records (2023-01) may be in a _Real view: that range is back-cast only
+        cur.execute("SELECT COUNT(*) FROM public.unilever_sku_demand_fact_real WHERE calendar_month < '2023-01'")
+        pre = int(cur.fetchone()[0])
+        cur.execute("SELECT COUNT(*) FROM public.sellout_fact_real WHERE _period < '2023-01'")
+        out["real_view_rows_before_2023"] = pre + int(cur.fetchone()[0])
         cur.execute("ROLLBACK")
     finally:
         conn.close()
@@ -82,7 +88,10 @@ def compare(before: dict, after: dict) -> int:
         print(f"{rel:<42}{b['rows']:>12}{a['rows']:>12}{('yes' if same else 'NO'):>11}{('-' if demo is None else demo):>14}")
     leak = after.get("interpolated_months_present_in_sellout_fact_real")
     print(f"generated months found in SellOut_Fact_Real: {leak} of {after.get('interpolated_months_in_demo')}")
+    pre = after.get("real_view_rows_before_2023")
+    print(f"rows dated before 2023-01 in the Unilever / Del Monte _Real views: {pre}")
     bad += 1 if leak else 0
+    bad += 1 if pre else 0
     print("RESULT:", "PASS: nothing generated reached the real path" if bad == 0 else f"FAIL: {bad} difference(s)")
     return 1 if bad else 0
 

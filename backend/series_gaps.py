@@ -26,6 +26,15 @@ reader of the response (a person or a session) does not need the repo's docs.
                              other categories reported. Cause unknown; not
                              read as zero sales.
 
+Demonstration-only reasons (GET /demo/series, behind DM_DEMO_ENABLED; origins
+real_copy / interpolated / bridged / backcast are kept strictly apart):
+  no_data_recorded_before_2023  backcast: SSM's records begin January 2023;
+                             the 2021-2022 months are generated for
+                             visualisation only.
+  interpolated               between two real months of the same series.
+  bridged_taxonomy_change    across the 2024-03..2025-02 taxonomy change
+                             (defined; not built, the hole is left unfilled).
+
 These helpers only shape what a chart receives. They are not read by
 build_series, the forecast runner, the LP or any analysis.
 """
@@ -36,6 +45,9 @@ REASON_BLANK_CAPTURE = "blank_capture"
 REASON_OUTSIDE_LIFESPAN = "outside_product_lifespan"
 REASON_NOT_COLLECTED = "not_collected"
 REASON_CATEGORY_ABSENT = "category_absent"
+REASON_NO_DATA_BEFORE_2023 = "no_data_recorded_before_2023"
+REASON_INTERPOLATED = "interpolated"
+REASON_BRIDGED = "bridged_taxonomy_change"
 
 REASON_TEXT: dict[str, str] = {
     REASON_NO_SALE: (
@@ -53,6 +65,12 @@ REASON_TEXT: dict[str, str] = {
         "Del Monte: this category has no row in a month other categories reported. "
         "Cause unknown; not read as zero sales."
     ),
+    REASON_NO_DATA_BEFORE_2023: (
+        "SSM's records begin in January 2023. These months are generated for visualisation only (a flat "
+        "back-cast at the series' own level); they are not data and not a result."
+    ),
+    REASON_INTERPOLATED: "Generated between two real months of the same series, for visualisation only.",
+    REASON_BRIDGED: "Generated across the 2024-03..2025-02 taxonomy change, for visualisation only.",
 }
 
 
@@ -101,7 +119,8 @@ def unilever_points(
 
 def gap_note(reasons) -> str | None:
     """The top-level note for a response whose points use `reasons`; None when none do."""
-    used = [r for r in REASON_TEXT if r in set(reasons)]
+    present = set(reasons)  # once: `reasons` is often a generator
+    used = [r for r in REASON_TEXT if r in present]
     if not used:
         return None
     return " ".join(f"[{r}] {REASON_TEXT[r]}" for r in used)
