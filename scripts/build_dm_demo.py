@@ -41,7 +41,7 @@ sys.path.insert(0, str(REPO))
 from analytics.config import long_read_db_url  # noqa: E402
 from analytics.demo.backcast import BRIDGE_END, ANCHOR_PERIOD, backcast_series, bridge_series  # noqa: E402
 from analytics.demo.dm_interpolate import (  # noqa: E402
-    GENERATOR_VERSION, JITTER_SCALE, MIN_MONTHS, SEED, fill_series, ma3_one_step, next_month,
+    GENERATOR_VERSION, JITTER_SCALE, MIN_MONTHS, SEED, fill_series, in_canonical_total, ma3_one_step, next_month,
 )
 
 LABEL = "demonstration"
@@ -134,6 +134,41 @@ def build(sales, ratio: float, n_ratio: int, lead: dict):
             forecasts.append((c, pkey[c], next_month(WINDOW_END), round(ma3_one_step(vals), 2), "ma3", len(r.points),
                               sum(1 for p in last3 if p.origin == "interpolated")))
     return results, series, params, forecasts, excluded, bc_excluded
+
+
+def canonical_totals(series) -> dict[str, dict[str, float]]:
+    """Pesos per month over canonical rows only, by origin (the rule of migration 0055)."""
+    out: dict[str, dict[str, float]] = {}
+    for _c, _pk, period, _q, amount, origin, override in series:
+        if amount is None or not in_canonical_total(origin, override):
+            continue
+        slot = out.setdefault(period, {"real_copy": 0.0, "interpolated": 0.0, "bridged": 0.0, "backcast": 0.0})
+        slot[origin] += float(amount)
+    return out
+
+
+def assert_not_inflated(series, sales) -> dict[str, float]:
+    """Fail the build if any month 2023-01..2025-02's canonical total exceeds the real total by more than the
+    interpolated plus bridged contribution. Returns the per-month excess check values for the report."""
+    # The real total of the series that are IN the demonstration. The few series left out (one real month) are not in
+    # any demo total, and a returns-only month of theirs can be negative: comparing with the all-category real total
+    # would blame the demo for that, so the left-out contribution is compared separately by the live test.
+    included = {r[0] for r in series}
+    real: dict[str, float] = {}
+    for cat, _pk, period, _q, amount in sales:
+        if amount is not None and cat in included:
+            real[period] = real.get(period, 0.0) + float(amount)
+    bad = {}
+    totals = canonical_totals(series)
+    for period, t in totals.items():
+        if "2023-01" <= period <= "2025-02":
+            total = sum(t.values())
+            allowed = real.get(period, 0.0) + t["interpolated"] + t["bridged"]
+            if total > allowed + 0.01:
+                bad[period] = round(total - allowed, 2)
+    if bad:
+        raise SystemExit(f"canonical Del Monte total exceeds real + interpolated + bridged in: {bad}")
+    return {p: round(sum(t.values()), 2) for p, t in sorted(totals.items()) if "2023-01" <= p <= "2025-02"}
 
 
 def digest(series) -> str:
@@ -243,6 +278,7 @@ def main() -> int:
     sales, n_ratio, ratio, lead = read_inputs(db_url)
     results, series, params, forecasts, excluded, bc_excluded = build(sales, ratio, n_ratio, lead)
     rep = report(results, series, params, forecasts, excluded, bc_excluded, ratio, n_ratio)
+    rep["canonical_pesos_2023-01_2025-02"] = assert_not_inflated(series, sales)
     print(json.dumps(rep, indent=1, default=str))
     if args.write:
         print("[write] demo.run", write(db_url, rep, series, params, forecasts, excluded, bc_excluded, args.replace))

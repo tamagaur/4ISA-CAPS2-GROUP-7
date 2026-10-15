@@ -45,9 +45,11 @@ def _num(v):
     return None if v is None else float(v)
 
 
-def point(period, quantity, net_amount, origin, reason, generated_before_first_observation=False) -> dict:
+def point(period, quantity, net_amount, origin, reason, generated_before_first_observation=False,
+          in_canonical_total=True) -> dict:
     return {"period": period, "quantity": quantity, "net_amount": net_amount, "origin": origin, "reason": reason,
             "generated_before_first_observation": generated_before_first_observation,
+            "in_canonical_total": in_canonical_total,
             "demonstration": True, "demonstration_note": POINT_NOTE}
 
 
@@ -80,7 +82,8 @@ def series_points(db: Session, principal: str, key: str) -> dict | None:
         ).mappings().all()
     else:
         rows = db.execute(
-            text("SELECT period, quantity, net_amount, origin, anchor_override FROM demo.dm_category_sales "
+            text("SELECT period, quantity, net_amount, origin, anchor_override, in_canonical_total "
+                 "FROM demo.dm_category_sales "
                  "WHERE run_id = :r AND category_path = :k ORDER BY period"), {"r": run["run_id"], "k": key},
         ).mappings().all()
     if not rows:
@@ -103,7 +106,8 @@ def series_points(db: Session, principal: str, key: str) -> dict | None:
             q = _num(r["quantity"])
             points.append(point(r["period"], q, _num(r["net_amount"]), r["origin"],
                                 _dm_reason(r["origin"], r["period"], q),
-                                bool(r["anchor_override"]) and r["origin"] == "backcast"))
+                                bool(r["anchor_override"]) and r["origin"] == "backcast",
+                                bool(r.get("in_canonical_total", True))))
     counts = {o: sum(1 for p in points if p["origin"] == o) for o in ORIGINS}
     return label({
         "principal": principal, "key": key,
@@ -112,6 +116,30 @@ def series_points(db: Session, principal: str, key: str) -> dict | None:
         "origin_counts": counts,
         "points": points,
         "gap_note": gap_note(p["reason"] for p in points if p["reason"]),
+    })
+
+
+def monthly_totals(db: Session) -> dict:
+    """The Del Monte demonstration pesos per month: ONE canonical series (old paths through 2025-02, the five live
+    categories from 2025-03; demo.dm_monthly_total, migration 0055). Each month splits by origin so a reader can see how
+    much of it is generated. The only sanctioned aggregate: never sum demo.dm_category_sales across categories."""
+    run = latest_run(db, "delmonte")
+    if run is None:
+        return label({"principal": "delmonte", "months": []})
+    rows = db.execute(
+        text("SELECT period, pesos, real_pesos, interpolated_pesos, bridged_pesos, backcast_pesos, series, series_left_out "
+             "FROM demo.dm_monthly_total WHERE run_id = :r ORDER BY period"), {"r": run["run_id"]},
+    ).mappings().all()
+    return label({
+        "principal": "delmonte", "run_id": run["run_id"], "basis": "pesos (net_amount), ex-VAT as recorded",
+        "rule": ("one canonical series per month: the pre-2025 paths through 2025-02, the five live 2025 categories "
+                 "from 2025-03; rows generated before a series' own first observation are left out of every total"),
+        "months": [{
+            "period": r["period"], "pesos": _num(r["pesos"]), "real": _num(r["real_pesos"]),
+            "interpolated": _num(r["interpolated_pesos"]), "bridged": _num(r["bridged_pesos"]),
+            "backcast": _num(r["backcast_pesos"]), "series": int(r["series"]), "series_left_out": int(r["series_left_out"]),
+            "demonstration": True, "demonstration_note": POINT_NOTE,
+        } for r in rows],
     })
 
 
@@ -159,5 +187,7 @@ def index(db: Session, principal: str) -> dict:
     payload = {"principal": principal, "run_id": run["run_id"], "series": list(series.values())}
     if principal == "delmonte":
         payload["taxonomy_note"] = ("pre_2025 paths and the 2025 categories describe the same business in two "
-                                    "vocabularies and both are generated over 2023-01..2025-02: do not sum across them.")
+                                    "vocabularies and both are generated over 2023-01..2025-02: do not sum across them. "
+                                    "GET /demo/totals is the one canonical total (rows generated before a series' own "
+                                    "first observation are left out of it).")
     return label(payload)

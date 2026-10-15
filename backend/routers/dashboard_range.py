@@ -36,6 +36,7 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
 from backend.routers.dashboard import _last_12_periods, _month_range, _resolve_sales_anchor
+from backend.series_gaps import gap_note
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -133,9 +134,13 @@ def get_range_yoy(
             "pesos_basis": marts.PESOS_BASIS_LABEL["ex_vat" if who == "delmonte" else "vat_inclusive"],
             "rows": rows,
         })
-    return {"start_period": start, "end_period": end, "label": marts.range_label(start, end),
-            "prior_start_period": prior_start, "prior_end_period": prior_end,
-            "prior_label": marts.range_label(prior_start, prior_end), "principals": out}
+    payload = {"start_period": start, "end_period": end, "label": marts.range_label(start, end),
+               "prior_start_period": prior_start, "prior_end_period": prior_end,
+               "prior_label": marts.range_label(prior_start, prior_end), "principals": out}
+    note = gap_note(v for block in out for r in block["rows"] for k, v in r.items() if k.endswith("_reason"))
+    if note:
+        payload["gap_note"] = note
+    return payload
 
 
 @router.get("/class-changes")

@@ -2307,6 +2307,7 @@ def get_dashboard(
         payload["demonstration"] = demo_data.label({
             "principal": "delmonte",
             "index": demo_data.index(db, "delmonte")["series"],
+            "monthly_totals": demo_data.monthly_totals(db)["months"],
             "forecasts": demo_data.forecasts(db),
         })
     return payload

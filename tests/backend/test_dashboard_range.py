@@ -150,6 +150,43 @@ def test_yoy_compares_the_same_months_a_year_earlier():
     assert body["principals"][0]["prior_pesos"] == 100.0
 
 
+def test_yoy_says_why_a_side_is_empty_sold_nothing_or_outside_lifespan():
+    """Unilever: no real month inside the product's first..last sale months is a real zero (no_sale); no real month
+    outside them is not-on-sale (outside_product_lifespan). The two are not the same thing."""
+    def yoy(_p):
+        base = {"sku_code": "S", "product_name": "P", "category_path": "C", "pieces": None, "prior_pieces": None,
+                "principal_months": 12, "principal_prior_months": 12}
+        return [
+            # sold in 2024-05 and 2026-01, nothing in the current range 2025-03..2026-02? it sold 2026-01: has a month
+            {**base, "product_key": 1, "pesos": None, "months": 0, "prior_pesos": 40.0, "prior_months": 3,
+             "first_period": "2023-01", "last_period": "2026-06"},          # inside its life: sold nothing
+            {**base, "product_key": 2, "pesos": 10.0, "months": 2, "prior_pesos": None, "prior_months": 0,
+             "first_period": "2025-08", "last_period": "2026-02"},          # launched after the prior window
+            {**base, "product_key": 3, "pesos": None, "months": 0, "prior_pesos": 5.0, "prior_months": 1,
+             "first_period": "2023-01", "last_period": "2024-09"},          # discontinued before the current range
+        ]
+    body = get(FakeSession([("WITH cur AS", yoy)]), "/dashboard/yoy?principal=unilever")
+    rows = {r["product_key"]: r for r in body["principals"][0]["rows"]}
+    assert rows[1]["pesos_reason"] == "no_sale" and "prior_pesos_reason" not in rows[1]
+    assert rows[2]["prior_pesos_reason"] == "outside_product_lifespan" and "pesos_reason" not in rows[2]
+    assert rows[3]["pesos_reason"] == "outside_product_lifespan"
+    assert "[no_sale]" in body["gap_note"] and "[outside_product_lifespan]" in body["gap_note"]
+
+
+def test_yoy_del_monte_distinguishes_a_month_nobody_reported_from_a_category_that_is_absent():
+    def yoy(_p):
+        base = {"sku_code": None, "product_name": None, "category_path": "BEVERAGE", "pieces": None, "prior_pieces": None,
+                "first_period": "2025-03", "last_period": "2025-12"}
+        return [{**base, "product_key": 1, "pesos": 10.0, "months": 2, "prior_pesos": None, "prior_months": 0,
+                 "principal_months": 12, "principal_prior_months": 0},
+                {**base, "product_key": 2, "pesos": None, "months": 0, "prior_pesos": 8.0, "prior_months": 1,
+                 "principal_months": 12, "principal_prior_months": 12}]
+    body = get(FakeSession([("WITH cur AS", yoy)]), "/dashboard/yoy?principal=delmonte")
+    rows = {r["product_key"]: r for r in body["principals"][0]["rows"]}
+    assert rows[1]["prior_pesos_reason"] == "not_collected", "no category reported anything in that window"
+    assert rows[2]["pesos_reason"] == "category_absent"
+
+
 def _acc(key, month, forecast, actual, cat="CAT"):
     miss = forecast - actual
     return {"run_id": 2, "forecast_source": "backtest_recreated", "run_label": "b", "cohort": None,
@@ -205,19 +242,22 @@ def test_idle_stock_lists_products_at_the_count_on_or_before_the_end():
     assert params["period"] == "2026-02", "the count on or before the range's end, not the later 2026-03 one"
 
 
-def test_product_sales_label_the_del_monte_split_as_estimated():
+def test_product_sales_no_longer_serve_the_del_monte_split_or_any_generated_row():
+    """Retired 2026-10-15: the DEC-31 product split ('filled', synthetic_category_split) is not served."""
     rows = [{"product_key": 9, "sku_code": "D9", "product_name": "Peaches", "level": "product", "period": "2025-12",
              "data_kind": "filled", "source_tag": "synthetic_category_split", "pesos": 120.0, "pieces": 4.0,
+             "pieces_unit_confirmed": False, "pesos_basis": "ex_vat"},
+            {"product_key": 10, "sku_code": "D10", "product_name": "Real", "level": "product", "period": "2025-12",
+             "data_kind": "real", "source_tag": "real", "pesos": 50.0, "pieces": 2.0,
              "pieces_unit_confirmed": False, "pesos_basis": "ex_vat"}]
-    session = FakeSession([("FROM mart.sales_mart s", rows)], snapshot=[snap("sales", "delmonte", "2025-12", 1.0)])
+    session = FakeSession([("FROM mart.sales_mart", rows)], snapshot=[snap("sales", "delmonte", "2025-12", 1.0)])
     body = get(session, "/dashboard/product-sales?principal=delmonte")
+    assert [r["sku_id"] for r in body["rows"]] == ["D10"] and body["estimated_rows"] == 0
     row = body["rows"][0]
-    assert row["estimated"] is True and row["data_kind"] == "filled" and row["source"] == "synthetic_category_split"
     assert row["pieces"] is None, "Del Monte's quantity unit is unconfirmed"
     assert row["pesos_basis"] == "selling price, ex-VAT"
-    assert body["estimated_rows"] == 1
-    _, params = next((s, p) for s, p in session.calls if "FROM mart.sales_mart s" in s)
-    assert params["kinds"] == ["real", "filled"], "generated rows only in preview"
+    _, params = next((s, p) for s, p in session.calls if "FROM mart.sales_mart" in s)
+    assert params["kinds"] == ["real"], "real rows only (demo back-cast rows only in preview with the flag on)"
 
 
 def test_forecast_runs_mark_the_default_backtest():

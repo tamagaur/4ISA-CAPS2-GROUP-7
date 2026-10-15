@@ -53,3 +53,14 @@ def get_demo_index(
     if not demo_enabled():
         raise HTTPException(status_code=404, detail="Not Found")
     return demo_data.index(db, principal)
+
+
+@router.get("/totals")
+def get_demo_totals(
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(require_permission("forecast.view")),
+) -> dict:
+    """Del Monte demonstration pesos per month: the one canonical series (see demo_data.monthly_totals)."""
+    if not demo_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    return demo_data.monthly_totals(db)

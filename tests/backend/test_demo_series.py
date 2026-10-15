@@ -148,6 +148,34 @@ def test_index_names_each_series_taxonomy_and_warns_against_summing(monkeypatch)
     assert b["data_source"] == "synthetic_demonstration"
 
 
+def test_totals_serve_the_one_canonical_series_with_its_origin_split(monkeypatch):
+    monkeypatch.setenv("DM_DEMO_ENABLED", "1")
+    s = session()
+    base = s.execute
+
+    def execute(stmt, params=None):
+        if "FROM demo.dm_monthly_total" in str(stmt):
+            return R([{"period": "2024-06", "pesos": 100.0, "real_pesos": None, "interpolated_pesos": None,
+                       "bridged_pesos": 100.0, "backcast_pesos": None, "series": 77, "series_left_out": 5}])
+        return base(stmt, params)
+    s.execute = execute
+    with client(s) as c:
+        b = get(c, "/demo/totals").json()
+    m = b["months"][0]
+    assert (m["pesos"], m["bridged"], m["series"], m["series_left_out"]) == (100.0, 100.0, 77, 5)
+    assert b["data_source"] == "synthetic_demonstration" and "single" not in b["rule"] and "canonical" in b["rule"]
+
+
+def test_a_left_out_back_cast_point_is_flagged_not_canonical_on_its_own_series(monkeypatch):
+    monkeypatch.setenv("DM_DEMO_ENABLED", "1")
+    s = session()
+    for r in s.dm:
+        r["in_canonical_total"] = not (r["origin"] == "backcast" and r["anchor_override"])
+    with client(s) as c:
+        pts = {p["period"]: p for p in get(c, "/demo/series?principal=delmonte&key=BEVERAGE").json()["points"]}
+    assert pts["2021-01"]["in_canonical_total"] is False and pts["2025-03"]["in_canonical_total"] is True
+
+
 def test_unknown_series_is_404(monkeypatch):
     monkeypatch.setenv("DM_DEMO_ENABLED", "yes")
     with client(session()) as c:

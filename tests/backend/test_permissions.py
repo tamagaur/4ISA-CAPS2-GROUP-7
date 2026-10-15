@@ -315,9 +315,9 @@ def _routes():
 # Method/path pairs the app serves: 37 = what a flat app.routes walk found under
 # fastapi 0.115.5 at the UIFixes_Audrey merge (2026-10-02); 43 since the data marts
 # added six GET /dashboard/* range routes (2026-10-04); 44 since GET
-# /dashboard/class-changes (2026-10-05, DEC-37); 46 since GET /demo/series and GET /demo/index
+# /dashboard/class-changes (2026-10-05, DEC-37); 47 since GET /demo/series, /demo/index and /demo/totals
 # (2026-10-15, behind DM_DEMO_ENABLED, default off). Change it when a route is added or removed.
-ROUTE_COUNT = 46
+ROUTE_COUNT = 47
 
 
 def test_the_walk_finds_every_route():
@@ -812,7 +812,7 @@ def test_a_failed_probe_denies_rather_than_grants():
 EVERY_PAGE = [("GET", "/auth/me"), ("POST", "/auth/heartbeat"), ("GET", "/data-mode")]
 PAGE_ENDPOINTS = {
     "dashboard.view": [("GET", "/dashboard")],
-    "forecast.view": [("GET", "/abc"), ("GET", "/forecast/12345678"), ("GET", "/demo/series?principal=unilever&key=12345678"), ("GET", "/demo/index?principal=unilever"), ("GET", "/segment?sku=12345678"),
+    "forecast.view": [("GET", "/abc"), ("GET", "/forecast/12345678"), ("GET", "/demo/series?principal=unilever&key=12345678"), ("GET", "/demo/index?principal=unilever"), ("GET", "/demo/totals"), ("GET", "/segment?sku=12345678"),
                       ("GET", "/decomposition?sku=12345678"), ("GET", "/sku")],   # + SkuDemandPatternPanel, useBrandLookup
     "category_trends.view": [("GET", "/category-trends")],
     "sku.view": [("GET", "/sku")],

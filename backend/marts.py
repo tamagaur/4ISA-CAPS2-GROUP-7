@@ -144,12 +144,13 @@ def status(db: Session) -> dict:
 # one statement, kept on the request's session (Session.info) and answered in memory.
 # One round trip instead of ~25: each query costs the network round trip, ~0.12 s from
 # the team's machines to Supabase, however small it is (measured 2026-10-04).
-# 'generated' rows (the older synthetic_v2 placeholders) are retired for display (2026-10-15): not read here.
+# Only 'real' rows are read here. 'generated' (synthetic_v2) and 'filled' sales rows (synthetic_category_split,
+# synthetic_v2_gap) are retired for display (2026-10-15): schema demo is the single display source. Nothing deleted.
 SNAPSHOT_SQL = """
     SELECT 'sales' AS src, principal, period, data_kind, NULL AS source_tag, NULL AS flow,
            pesos, pieces, any_recorded_with_tax AS recorded_with_tax, preview_placeholder AS placeholder,
            NULL::date AS first_date, NULL::date AS last_date, NULL::int AS negative_rows, NULL::bigint AS products
-    FROM mart.sales_month WHERE data_kind <> 'generated'
+    FROM mart.sales_month WHERE data_kind = 'real'
     UNION ALL
     SELECT 'stock', principal, period, data_kind, NULL, NULL, pesos, pieces, NULL, NULL,
            first_count_date, count_date, NULL, products
@@ -247,18 +248,11 @@ def pieces_by_period(db: Session, periods: list[str], principal: str, mode: str 
 
 
 def estimated_sales_by_period(db: Session, periods: list[str], principal: str, mode: str = REAL) -> dict[str, dict]:
-    """Non-real sales per month for ONE principal, for a chart's estimated points:
-    filled rows in real mode, filled and generated rows in preview (minus the
-    placeholder months preview already counts as sales). {period: {value, kind}}."""
-    kinds = ("filled", "generated") if mode == PREVIEW else ("filled",)
-    snap, out = _snapshot(db), {}
-    for p in periods:
-        parts = [(k, snap.sales.get((principal, p, k))) for k in kinds]
-        parts = [(k, r) for k, r in parts
-                 if r is not None and r["pesos"] is not None and not (mode == PREVIEW and r.get("placeholder"))]
-        if parts:
-            out[p] = {"value": sum(float(r["pesos"]) for _, r in parts), "kind": "/".join(sorted(k for k, _ in parts))}
-    return out
+    """Non-real sales per month for ONE principal, for a chart's estimated points. RETIRED 2026-10-15: the filled
+    (synthetic_category_split, synthetic_v2_gap) and generated (synthetic_v2) sales rows are no longer served;
+    schema demo is the single display source for anything generated, and a chart draws it from there. Returns {}.
+    The signature stays so every caller keeps working."""
+    return {}
 
 
 def tax_inclusive_months(db: Session) -> set[str]:
@@ -557,6 +551,19 @@ def class_changes(db: Session, start: str, end: str, compare_start: str, compare
     }
 
 
+def _null_side_reason(principal: str, first: str | None, last: str | None, win_start: str, win_end: str,
+                      principal_months) -> str | None:
+    """Why a year-over-year side has no real month (backend/series_gaps.py vocabulary).
+    Unilever: inside the product's own first..last sale months the product sold nothing (no_sale, a real zero);
+    outside them it was not on sale (outside_product_lifespan). Del Monte has no product lifespan: no category
+    reported anything in the window (not_collected) or only this one is absent (category_absent)."""
+    if principal == "delmonte":
+        return "not_collected" if not principal_months else "category_absent"
+    if first is None or last is None:
+        return None
+    return "outside_product_lifespan" if (last < win_start or first > win_end) else "no_sale"
+
+
 def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]:
     """Per product (Del Monte: category), real net sales over start..end against the same
     months a year earlier. A side with no real month in range is None, never 0."""
@@ -572,18 +579,38 @@ def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]
             FROM mart.sales_mart_real
             WHERE principal = :principal AND in_principal_total AND period BETWEEN :pstart AND :pend
             GROUP BY product_key
+        ), span AS (
+            SELECT product_key, MIN(period) AS first_period, MAX(period) AS last_period
+            FROM mart.sales_mart_real WHERE principal = :principal AND in_principal_total GROUP BY product_key
         )
         SELECT COALESCE(c.product_key, p.product_key) AS product_key, pd.sku_code, pd.product_name,
                pd.category_path, c.pesos AS pesos, c.pieces AS pieces, c.months AS months,
-               p.pesos AS prior_pesos, p.pieces AS prior_pieces, p.months AS prior_months
+               p.pesos AS prior_pesos, p.pieces AS prior_pieces, p.months AS prior_months,
+               sp.first_period, sp.last_period,
+               (SELECT COUNT(DISTINCT period) FROM mart.sales_mart_real
+                 WHERE principal = :principal AND in_principal_total AND period BETWEEN :start AND :end) AS principal_months,
+               (SELECT COUNT(DISTINCT period) FROM mart.sales_mart_real
+                 WHERE principal = :principal AND in_principal_total AND period BETWEEN :pstart AND :pend) AS principal_prior_months
         FROM cur c FULL OUTER JOIN prev p ON p.product_key = c.product_key
+        LEFT JOIN span sp ON sp.product_key = COALESCE(c.product_key, p.product_key)
         LEFT JOIN product_dimension pd ON pd.product_key = COALESCE(c.product_key, p.product_key)
         ORDER BY c.pesos DESC NULLS LAST, COALESCE(c.product_key, p.product_key)
     """), {"principal": principal, "start": start, "end": end, "pstart": prior_start, "pend": prior_end}).mappings().all()
     out = []
     for r in rows:
         cur, prior = r["pesos"], r["prior_pesos"]
-        out.append({
+        item_reasons = {}
+        if cur is None:
+            reason = _null_side_reason(principal, r.get("first_period"), r.get("last_period"), start, end,
+                                       r.get("principal_months"))
+            if reason:
+                item_reasons["pesos_reason"] = reason
+        if prior is None:
+            reason = _null_side_reason(principal, r.get("first_period"), r.get("last_period"), prior_start, prior_end,
+                                       r.get("principal_prior_months"))
+            if reason:
+                item_reasons["prior_pesos_reason"] = reason
+        out.append({**item_reasons,
             "product_key": int(r["product_key"]), "sku_id": r["sku_code"], "product_name": r["product_name"],
             "category_path": r["category_path"],
             "pesos": float(cur) if cur is not None else None,
@@ -600,7 +627,9 @@ def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]
 def product_sales(db: Session, start: str, end: str, principal: str, mode: str = REAL) -> list[dict]:
     """Product x month rows for a chart, real and filled (generated too in preview), each
     with its data_kind: Del Monte's product split (DEC-31, filled) is served here only."""
-    kinds = ["real", "filled", "generated"] if (mode == PREVIEW and demo_enabled()) else ["real", "filled"]
+    # Real rows only, plus the demonstration back-cast rows in preview when DM_DEMO_ENABLED is on. The DEC-31 Del
+    # Monte product split ('filled') and the synthetic_v2 rows are retired for display (2026-10-15), here and below.
+    kinds = ["real", "generated"] if (mode == PREVIEW and demo_enabled()) else ["real"]
     rows = db.execute(text(f"""
         SELECT s.product_key, pd.sku_code, pd.product_name, s.level, s.period, s.data_kind, s.source_tag,
                s.pesos, s.pieces, s.pieces_unit_confirmed, s.pesos_basis
@@ -619,7 +648,7 @@ def product_sales(db: Session, start: str, end: str, principal: str, mode: str =
             "pieces": float(r["pieces"]) if r["pieces"] is not None and r["pieces_unit_confirmed"] else None,
             "pesos_basis": PESOS_BASIS_LABEL.get(r["pesos_basis"], r["pesos_basis"]),
         }
-        for r in rows
+        for r in rows if r["data_kind"] in kinds
     ]
 
 

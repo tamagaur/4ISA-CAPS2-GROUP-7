@@ -165,3 +165,10 @@ def ma3_one_step(values: list[float]) -> float:
     """The deployed MA3 (analytics/forecasting/baseline.moving_average_forecast, window 3)."""
     tail = values[-3:]
     return float(sum(tail) / len(tail))
+
+
+def in_canonical_total(origin: str, anchor_override: bool) -> bool:
+    """Whether a Del Monte demonstration row counts in any aggregate (mirrors demo.dm_category_sales.in_canonical_total,
+    migration 0055). A back-cast row generated before its series' own first observation is left out: the five live 2025
+    categories are the same business as the old paths, which carry 2023-01..2025-02, so counting both doubles it."""
+    return not (origin == "backcast" and anchor_override)

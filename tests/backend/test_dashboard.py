@@ -1957,10 +1957,10 @@ def test_sales_range_total_has_no_pieces_for_del_monte():
     assert cum["pieces"] is None
 
 
-def test_chart_draws_filled_months_as_estimates_never_as_sales():
-    """Coverage hole H1: a month the database holds only as a fill is drawn
-    as an estimate with its kind; the real line and the KPI ignore it, and a
-    month with real sales gets no estimate."""
+def test_filled_and_generated_sales_are_retired_for_display_but_stock_fills_still_draw():
+    """2026-10-15: the filled (synthetic_category_split, synthetic_v2_gap) and generated (synthetic_v2) SALES rows are
+    no longer served; schema demo is the single display source for generated data. A stock fill is a different
+    thing (DEC-31 receipts/stock rates) and is drawn as an estimate as before."""
     periods = _periods()
     session = FakeSession(
         sales={periods[-1]: 500.0},
@@ -1971,17 +1971,16 @@ def test_chart_draws_filled_months_as_estimates_never_as_sales():
     body = _get(session, "principal=unilever")
     pts = {pt["period"]: pt for pt in body["sales_vs_stock"]}
     gap, real = pts[periods[-2]], pts[periods[-1]]
-    assert gap["sales"] is None and gap["sales_estimated"] == 450.0 and gap["sales_estimated_kind"] == "filled"
-    assert gap["provenance"]["sales_estimated"] == "filled"
+    assert gap["sales"] is None and gap["sales_estimated"] is None and gap["sales_estimated_kind"] is None
+    assert gap["provenance"]["sales_estimated"] is None
     assert gap["stock_on_hand"] is None and gap["stock_on_hand_estimated"] == 1_000.0
     assert real["sales"] == 500.0 and real["sales_estimated"] is None
     assert body["kpis"]["sales_cumulative"]["value"] == 500.0, "an estimate never reaches a KPI"
-    assert pts[periods[-3]]["sales_estimated"] is None, "real mode draws filled rows only, never generated ones"
+    assert pts[periods[-3]]["sales_estimated"] is None, "generated rows are never drawn either"
 
 
-def test_estimate_under_all_needs_both_principals_covered():
-    """Under 'all' an estimated point still covers both principals: one side
-    real and the other estimated adds up; one side missing gives no point."""
+def test_sales_estimates_under_all_are_retired_too():
+    """A fill under 'all' no longer adds a sales estimate for either principal (retired 2026-10-15)."""
     periods = _periods()
     session = FakeSession(sales={periods[-1]: 100.0, periods[-2]: 100.0},
                           estimated_sales={"delmonte": {periods[-1]: ("filled", 30.0)}})
@@ -1989,8 +1988,8 @@ def test_estimate_under_all_needs_both_principals_covered():
     session.delmonte_sales = {periods[-3]: 50.0}
     pts = {pt["period"]: pt for pt in _get(session, "")["sales_vs_stock"]}
     assert pts[periods[-1]]["sales"] is None
-    assert pts[periods[-1]]["sales_estimated"] == pytest.approx(130.0)
-    assert pts[periods[-2]]["sales_estimated"] is None, "Del Monte has nothing for that month"
+    assert pts[periods[-1]]["sales_estimated"] is None
+    assert pts[periods[-2]]["sales_estimated"] is None
 
 
 def test_returns_are_served_and_unilevers_rate_fill_is_an_estimate():
