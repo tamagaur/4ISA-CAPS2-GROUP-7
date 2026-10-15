@@ -108,13 +108,28 @@ _ready_cache = {"value": False, "checked_at": 0.0}
 # on her PC. All the code, the user_mfa table and everyone's stored setup are
 # kept; this only makes the app behave as it did before migration 0035:
 # sign-in is password-only and Account security says it isn't available.
-# To turn it back on, set this to False (and make sure MFA_ENCRYPTION_KEY is
-# the same in every .env and on Render).
+#
+# Since 2026-10-15 a server turns it on with MFA_ENABLED=true in its own
+# environment (.env locally, the service's settings on Render), so it can be
+# on for one machine and still paused everywhere else: pushing this code
+# changes nothing on a server whose environment doesn't say so. Before
+# setting MFA_ENABLED=true on a server, make sure its MFA_ENCRYPTION_KEY is
+# the same key as every other .env: a setup stored under one key can't be
+# read with another, and an account with two-step on then can't sign in.
 MFA_PAUSED = True
+_ON = ("1", "true", "yes", "on")
+
+
+def mfa_paused() -> bool:
+    """Paused unless this server's environment says MFA_ENABLED=true."""
+    load_dotenv(override=False)
+    if os.environ.get("MFA_ENABLED", "").strip().lower() in _ON:
+        return False
+    return MFA_PAUSED
 
 
 def mfa_ready(db: Session) -> bool:
-    if MFA_PAUSED:
+    if mfa_paused():
         return False
     if _ready_cache["value"]:
         return True

@@ -51,8 +51,10 @@ def mfa_env(monkeypatch):
     monkeypatch.setenv("MFA_REQUIRED_ROLES", "")
     monkeypatch.setitem(mfa._ready_cache, "value", True)
     # The feature is paused in the app (mfa.MFA_PAUSED); these tests cover
-    # how it behaves when switched back on.
+    # how it behaves when switched back on. MFA_ENABLED empty, not deleted, so
+    # a developer's .env can't decide the outcome.
     monkeypatch.setattr(mfa, "MFA_PAUSED", False)
+    monkeypatch.setenv("MFA_ENABLED", "")
 
 
 # ── The fake database ─────────────────────────────────────────────────────
@@ -600,6 +602,7 @@ def test_paused_means_password_only_even_for_an_account_with_it_on(monkeypatch):
     including an account that has two-step on, and the database isn't even
     asked, exactly like before migration 0035."""
     monkeypatch.setattr(mfa, "MFA_PAUSED", True)
+    monkeypatch.setenv("MFA_ENABLED", "")
 
     class NoQuery:
         def execute(self, *args, **kwargs):
@@ -614,3 +617,14 @@ def test_the_shipped_app_has_two_step_sign_in_paused():
     import importlib
     import backend.mfa as fresh
     assert importlib.reload(fresh).MFA_PAUSED is True
+
+
+@pytest.mark.parametrize("value, paused", [("true", False), ("TRUE", False), ("1", False), ("on", False),
+                                           ("", True), ("false", True), ("no", True)])
+def test_mfa_enabled_in_a_servers_environment_turns_it_on_for_that_server(monkeypatch, value, paused):
+    """2026-10-15: MFA_ENABLED=true turns two-step sign-in on for one server
+    (Audrey's laptop) while the shipped default stays paused, so pushing the
+    code can't switch it on where the environment doesn't say so."""
+    monkeypatch.setattr(mfa, "MFA_PAUSED", True)
+    monkeypatch.setenv("MFA_ENABLED", value)
+    assert mfa.mfa_paused() is paused
