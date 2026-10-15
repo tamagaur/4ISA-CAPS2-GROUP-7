@@ -42,7 +42,7 @@ EXPECTED_PREDICATE = {
     # Tier A readers pin the basis setting (analytics.params, migration 0044)
     "scripts/run_baseline_forecast.py": ("abc.method = %s", "AND method = %s"),
     "scripts/run_lp.py": ("AND {ac_basis}", "WHERE {basis}"),
-    "scripts/model_bakeoff.py": ("AND method = 'single'",),
+    "scripts/model_bakeoff.py": ("AND method = %s",),  # abc_method('unilever'), 2026-10-15
     "scripts/arima_bakeoff.py": ("AND method = 'single'",),
     "scripts/xgboost_bakeoff.py": ("AND method='single'",),
     "scripts/bakeoff_to_xlsx.py": ("ac.method='single'",),
