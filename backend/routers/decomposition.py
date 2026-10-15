@@ -8,7 +8,10 @@ nothing stored, so it always reflects the loaded history.
 
 The series is zero-filled from the SKU's first month on record to the
 latest Unilever month (a month with no row is a zero-sale month, the same
-convention as the forecast runner's build_series). Del Monte has no SKU
+convention as the forecast runner's build_series). A month that HAS a row
+with a blank quantity is NaN, never a zero: the lag-12 label skips it and
+STL reports the SKU as not computable (analytics/forecasting/decomposition).
+Del Monte has no SKU
 series (DEC-03), so a Del Monte product is a 404 here, like GET /forecast.
 
 X-Data-Mode: preview reads the SKU's 2021-22 placeholder months too, so the
@@ -45,17 +48,20 @@ def _next_month(period: str) -> str:
 
 def _monthly_series(db: Session, demand: str, product_key) -> tuple[list[str], list[float]]:
     """('YYYY-MM' periods, pieces) from the product's first month on record to
-    the latest month in `demand`, a month with no row as 0."""
+    the latest month in `demand`, a month with no row as 0 and a month whose
+    row has a blank quantity as NaN (a blank capture, not a zero)."""
     rows = db.execute(
         text(f"""
-            SELECT calendar_month AS period, SUM(quantity_sold) AS qty
+            SELECT calendar_month AS period,
+                   CASE WHEN COUNT(*) FILTER (WHERE quantity_sold IS NULL) > 0 THEN NULL
+                        ELSE SUM(quantity_sold) END AS qty
             FROM {demand} WHERE product_key = :product_key
             GROUP BY calendar_month ORDER BY calendar_month
         """),
         {"product_key": product_key},
     ).mappings().all()
     latest = db.execute(text(f"SELECT MAX(calendar_month) FROM {demand}")).scalar()
-    by_period = {r["period"]: float(r["qty"] or 0) for r in rows}
+    by_period = {r["period"]: (float("nan") if r["qty"] is None else float(r["qty"])) for r in rows}
     periods: list[str] = []
     if rows and latest:
         p = rows[0]["period"]

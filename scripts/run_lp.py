@@ -384,7 +384,16 @@ def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float
     documented-assumption move granularity.business_days_in_month() itself
     makes for "business day" = weekday), not a fabricated number — but it
     IS an assumption, so it is logged per-product, not silently applied.
+
+    A month whose row has a blank quantity (total_quantity NaN) is a blank
+    capture, not a zero: it is left out of sigma here (the same rule as
+    analytics/classification/orchestrate_abc.py, which drops a blank
+    net_amount), and counted in the log.
     """
+    blank = demand_df["total_quantity"].isna()
+    if blank.any():
+        logger.info(f"    {int(blank.sum())} blank-capture month(s) excluded from sigma (not zero sales).")
+        demand_df = demand_df[~blank]
     if principal == "delmonte":
         monthly_df = demand_df.rename(columns={"period": "_period", "total_quantity": "quantity"})[["_period", "quantity"]]
         if len(monthly_df) < 2:
@@ -418,11 +427,13 @@ def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float
 
 def fetch_demand_history(cur, product_keys: list[int]) -> pd.DataFrame:
     """DEMAND_QUERY as a frame: product_key, sku_code, principal, period,
-    total_quantity (pieces), total_amount (pesos)."""
+    total_quantity (pieces), total_amount (pesos). A month whose row has a
+    blank quantity keeps total_quantity NaN (a blank capture, never a zero):
+    _sigma_d_for_product leaves it out, and the prior-year sum skips it."""
     cur.execute(DEMAND_QUERY, (product_keys,))
     df = pd.DataFrame(cur.fetchall(), columns=["product_key", "sku_code", "principal", "period", "total_quantity", "total_amount"])
-    for col in ("total_quantity", "total_amount"):
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    df["total_quantity"] = pd.to_numeric(df["total_quantity"], errors="coerce")
+    df["total_amount"] = pd.to_numeric(df["total_amount"], errors="coerce").fillna(0)
     return df
 
 
