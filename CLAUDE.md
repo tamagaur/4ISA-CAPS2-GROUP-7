@@ -48,6 +48,7 @@ Advisers: Sir Catubag (technical)
 - **Frontend broken after a pull? Run `python scripts/smoke_api.py` first** (read-only, ~10s, drives all 17 frontend-facing routes × 3 principal scopes against live). All PASS = the bug is in the frontend. Diagnosis, known-good null shapes for Del Monte, and the two gotchas (stale `starlette` pin; `--schema` now required on `orchestrate_abc.py`/`orchestrate_segment.py`) are in `reports/FRONTEND_HANDOFF_2026-09-20.md`. Verified 2026-09-20: 17/17 routes 200, `npm run build` exit 0.
 
 ## Why data is missing (read before investigating gaps)
+Detail, with the queried figures: [docs/DEMO_DATA.md](docs/DEMO_DATA.md). Three rules without opening it: **Unilever gaps render as zero and are never filled; Del Monte gaps are filled and labelled; `demo.*` is the only display source for generated data and `synthetic_v2` is retired.**
 **Unilever: a month with no sales row = the product sold nothing. Render it as ZERO. Never fill it, never generate a value for it.**
 **Del Monte: a missing month = a collection failure. Never zero, never filled by real-path code.**
 - UNILEVER (provisional until SSM confirms its sales listing omits zero-sale months). Evidence, `Unilever_SKU_Demand_Fact_Real`, 2026-10-15:
