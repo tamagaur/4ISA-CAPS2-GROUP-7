@@ -69,6 +69,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, smape, wape  # noqa: E402
+from analytics.params import abc_method  # noqa: E402
 
 SEAS = 12
 REAL_START = "2023-01"          # first month of genuine per-SKU Unilever data
@@ -116,8 +117,8 @@ def fetch(with_synthetic: bool):
     cur.execute("""
         SELECT product_key FROM abc_classification
         WHERE principal = 'unilever' AND classification_period = %s AND tier = 'A'
-          AND method = 'single'
-    """, (ABC_PERIOD,))
+          AND method = %s
+    """, (ABC_PERIOD, abc_method("unilever")))
     tier_a = sorted({r[0] for r in cur.fetchall()})
 
     cur.execute("SELECT product_key, sku_code, product_name FROM product_dimension WHERE principal = 'unilever'")

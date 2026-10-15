@@ -61,13 +61,13 @@ def _fetch(with_synthetic: bool):
     cur = c.cursor()
     if with_synthetic:
         cur.execute("""
-            SELECT product_key, calendar_month, COALESCE(quantity_sold, 0), is_demo
+            SELECT product_key, calendar_month, quantity_sold, is_demo
             FROM unilever_sku_demand_fact
             WHERE calendar_month <= (SELECT MAX(calendar_month) FROM unilever_sku_demand_fact_real)
             ORDER BY 1, 2
         """)
     else:
-        cur.execute("SELECT product_key, calendar_month, COALESCE(quantity_sold, 0), FALSE "
+        cur.execute("SELECT product_key, calendar_month, quantity_sold, FALSE "
                     "FROM unilever_sku_demand_fact_real ORDER BY 1, 2")
     raw = pd.DataFrame(cur.fetchall(), columns=["pk", "m", "q", "is_demo"])
     raw["q"] = raw["q"].astype(float)
@@ -83,12 +83,13 @@ def _fetch(with_synthetic: bool):
 
 
 def build_panel(raw: pd.DataFrame, tier_a: list[int]) -> pd.DataFrame:
-    """One row per (sku, month) with a zero-filled monthly grid and
-    lag / rolling / calendar features. Only Tier A SKUs."""
+    """One row per (sku, month) on a monthly grid and lag / rolling / calendar
+    features. Only Tier A SKUs. A month with no row is 0; a row whose
+    quantity_sold is NULL is a blank capture and stays NaN (never a zero)."""
     frames = []
     for pk, g in raw[raw.pk.isin(tier_a)].groupby("pk"):
         s = pd.Series(g["q"].to_numpy(float), index=pd.to_datetime(g["m"] + "-01")).sort_index()
-        s = s.resample("MS").asfreq().fillna(0.0)
+        s = s.reindex(pd.date_range(s.index.min(), s.index.max(), freq="MS"), fill_value=0.0)  # fills absent months only; a NaN row stays NaN
         df = pd.DataFrame({"pk": pk, "date": s.index, "q": s.values})
         for L in (1, 2, 3, 6, 12):
             df[f"lag{L}"] = df["q"].shift(L)
@@ -171,7 +172,7 @@ def main():
     # xgboost predictions per (sku, origin)
     preds = {pk: {} for pk in tier_a}
     for t in origins:
-        tr = panel[(panel["date"] < t) & panel[FEATURES].notna().all(axis=1)]
+        tr = panel[(panel["date"] < t) & panel[FEATURES].notna().all(axis=1) & panel["q"].notna()]
         te = panel[(panel["date"] == t) & panel[FEATURES].notna().all(axis=1)]
         dtrain = xgb.DMatrix(tr[FEATURES].to_numpy(), label=tr["q"].to_numpy())
         dtest = xgb.DMatrix(te[FEATURES].to_numpy())
@@ -190,9 +191,10 @@ def main():
         n = len(x) - r0                       # REAL months only
         nonzero = int((series.iloc[r0:] > 0).sum())
         origin_pos = [i for i, d in enumerate(series.index) if d in origins and i >= r0]
-        if n < 14 or len(origin_pos) < 3:
+        blank_months = int(np.isnan(x[r0:]).sum())  # blank captures in the real span: unavailable, not zero
+        if n < 14 or len(origin_pos) < 3 or blank_months:
             rows.append(dict(pk=pk, sku=names.get(pk, (None,))[0], name=names.get(pk, (None, None))[1],
-                             months=n, nonzero=nonzero, evaluable=False))
+                             months=n, nonzero=nonzero, evaluable=False, blank_months=blank_months))
             continue
         first = origin_pos[0]
         actual = x[origin_pos]
