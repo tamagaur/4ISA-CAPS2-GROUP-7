@@ -28,6 +28,7 @@ Advisers: Sir Catubag (technical)
 ## Hard rules
 1. **Data interface rule**: model code reads the `_Real` views (schema.sql:698-714 — `Sales_Fact_Real`, `Inventory_Fact_Real`, `Unilever_SKU_Demand_Fact_Real`, etc.), never the base fact tables directly and never raw files. These views structurally exclude `is_demo=true` rows (`WHERE is_demo = false`), so a real-vs-synthetic mixup is a query-target mistake, not a filter a caller can forget. (`get_demand_series()` does not exist anywhere in this codebase — corrected 2026-08.)
 2. **Anti-fabrication rule (sanctioned exception)**: no invented numbers in manuscript/defense/reported results. Synthetic data (is_demo=true) IS approved for frontend validation only — don't relitigate, adviser already approved it. **Generated/filled data never feeds KPIs, forecasts, ABC or the LP; charts may show it labelled as estimated.**
+   **Sanctioned demonstration path (approved by Kelvin, 2026-10-15; Sir Catubag informed — recorded here so a later session does not revert it):** a labelled Del Monte demonstration pipeline may write generated data, but only to the separate `demo` schema, every row `is_demo=true` and `fill_source='synthetic_dm_pipeline_demo'`, with no accuracy metrics (no mape/mase/wape, no confidence bands; a schema test enforces it), in its own `demo.run`, never in a real cohort, and exposed only behind an explicit API demonstration flag (`demonstration: true`, `data_source: "synthetic_demonstration"`). Generated months sit between two real months of the same series (interpolated, no extrapolation). Unilever is excluded: its gaps are real zero-sale months (see "Why data is missing"). Nothing generated reaches a `_Real` view, a real forecast, accuracy or the LP, and results from it are never presented as real.
 3. **No fabricated metrics as fallback, ever.** If a real computation isn't possible (e.g. <12mo history, model exception), the correct value is a flagged "insufficient data" status — never a hardcoded number pretending to be measured.
 4. **Hard gates**: M0, M2, M3 are human-review checkpoints. Don't cross a gate in one session — stop and report at gate boundaries.
 5. **Commit only on your own branch; merge or push only when asked.**
@@ -38,13 +39,34 @@ Advisers: Sir Catubag (technical)
 
 ## Known open items (2026-09)
 - Retired: run_sarima.py (dead code, not deployed — deployed method is MA3, run_baseline_forecast.py:748). Confirmed bugs on record if it's ever revived: fast_grid override disables seasonality, fabricated MAPE=15.0 fallbacks in 2 paths, loose 5x overshoot guard, and scripts/generate_sarima_artifact.py queries `fr.forecast_quantity` but the real column is `forecast_value` (schema.sql:418) — will crash as-is. None of this is on the deployed path.
-- Del Monte sell_out taxonomy break Jan 2025: 94 distinct `category_path` values pre-2025, 57 post-2025 (verified live 2026-08, corrected from the earlier "~87 to 5" estimate — do not assert whether the two sets overlap without checking again). Adviser ruling needed on DEC-03 vocabulary.
+- Del Monte sell_out taxonomy break Jan 2025: **82** distinct `category_path` values with real rows before 2025 (2023-01..2024-02), **5** from 2025-03 (BEVERAGE, CULINARY, DAIRY, FRUITS, INNOVATION), 87 distinct in all — queried on `SellOut_Fact_Real` 2026-10-15. The earlier "94 pre-2025, 57 post-2025" (2026-08) counted distinct strings across the whole table, not real rows in the window; do not quote it. No mapping exists between the two sets and there are no real rows 2024-03..2025-02. Adviser ruling needed on DEC-03 vocabulary.
 - ssis_summary: no product/SKU grain anywhere in the family (95.6% of 1.95M rows are product-less outlet×day×invoice sales value); 0 real DB rows trace to it. `source_of_truth.yaml`'s `sales.unilever` entry removed 2026-09-09 (Phase 1) as a dead mapping — see reports/PROJECT_STATE_2026-09.md §8.
 - Safety stock uses monthly σ for Unilever SKU grain (daily series impossible per DEC-03) — needs adviser ruling.
 - LP blocked on 4 missing cost params from SSM: procurement cost, storage cost, warehouse capacity, supplier ceilings.
 - Backend: all 18 routes across 11 routers are DB-backed (verified 2026-08 — no mock/hardcoded return anywhere in backend/routers/*.py). Real Pydantic schema shapes: `backend/schemas/*.py` (11 modules — the definitions themselves are the source of truth). **Corrected 2026-09-20**: this line used to point at `reports/BACKEND_HANDOFF.md`, which has never existed. `reports/API_CONTRACTS.md` is NOT a substitute — it is a Phase 0 *draft spec* of endpoints the mind map wanted, still says "Unilever-only", and pre-dates the principal param being restored 2026-09-17.
 - Frontend: `frontend/src/components/Dashboard.jsx` calls `getDashboardData()` (`frontend/src/api/dashboard.js`) against live `GET /dashboard` — verified 2026-09-11 by reading the file directly (zero `MOCK_*` references, real `useEffect`/`useState` fetch). Corrected from an earlier claim that it was static mock data.
 - **Frontend broken after a pull? Run `python scripts/smoke_api.py` first** (read-only, ~10s, drives all 17 frontend-facing routes × 3 principal scopes against live). All PASS = the bug is in the frontend. Diagnosis, known-good null shapes for Del Monte, and the two gotchas (stale `starlette` pin; `--schema` now required on `orchestrate_abc.py`/`orchestrate_segment.py`) are in `reports/FRONTEND_HANDOFF_2026-09-20.md`. Verified 2026-09-20: 17/17 routes 200, `npm run build` exit 0.
+
+## Why data is missing (read before investigating gaps)
+**Unilever: a month with no sales row = the product sold nothing. Render it as ZERO. Never fill it, never generate a value for it.**
+**Del Monte: a missing month = a collection failure. Never zero, never filled by real-path code.**
+- UNILEVER (provisional until SSM confirms its sales listing omits zero-sale months). Evidence, `Unilever_SKU_Demand_Fact_Real`, 2026-10-15:
+  4,473 in-span gap-months across 714 of 1,807 products; gap rate 38.3% in the lowest volume quartile vs 5.7-9.5% in the other three; gaps come in
+  long contiguous runs (4 of 526 multi-gap products have a regular interval); no clustering in real time (8-22% every month), so no collection outage.
+  Chart endpoints return such a month as `quantity: 0` with `reason: "no_sale"`; `build_series`, the forecast runner and the LP are unchanged.
+- DEL MONTE. 226 of 272 in-span gap-months fall in months where every category is absent at once (2023-07, 2023-10, 2023-12, 2025-05, -07, -10, -11):
+  a collection failure, not behaviour. Also: no product-level sales exist at all (the Sales Register is invoice-level); the category taxonomy changed
+  in Jan 2025 from 82 paths to 5 with no mapping; real sales stop at 2025-12. Product-level Del Monte forecasting is permanently impossible from
+  these sources.
+- NULL QUANTITY. A row that exists with `quantity_sold` NULL is a blank capture: excluded everywhere, never read as zero (71 rows, 63 SKUs).
+  The STL endpoint returns `available: false` for a SKU with a blank after its first sale (59 of the 63): expected, not a bug.
+- API. Every chart-feeding endpoint (`/forecast/{sku}` actuals, `/decomposition` series, `/category-trends` history and `skipped_months`) puts a
+  `reason` on each missing or zero point and a `gap_note` on the response: `no_sale`, `blank_capture`, `outside_product_lifespan` (before the first or
+  after the last sale; value null), `not_collected` (Del Monte, no category reported), `category_absent` (Del Monte category missing in a reported
+  month). Codes and text: `backend/series_gaps.py`.
+- DEL MONTE CARDS THAT ARE EMPTY ON PURPOSE: safety stock, reorder point, order plan, forecast accuracy, dead stock and policy comparison all need
+  per-product forecasts that cannot exist for Del Monte. They are not unfinished work. Only the labelled demonstration path (`demo` schema,
+  rule 2) shows anything there.
 
 ## Data realities
 - Del Monte genuine data starts Jan 2023 (not 2021)
