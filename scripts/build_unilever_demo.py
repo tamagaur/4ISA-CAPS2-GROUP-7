@@ -22,9 +22,14 @@ window still leave the SKU excluded. Reading only real_copy (plus real in-span z
 is expected to be close to the real Forecast_Result for the same SKU; build_dm_demo.py's report compares them.
 Not wired into any endpoint: Unilever's real forecast already exists and nothing here replaces it.
 
-READS: Unilever_SKU_Demand_Fact_Real only (one read-only transaction, direct URL). WRITES (--write): demo.run (one
-run per principal, label 'demonstration_unilever'), demo.unilever_sku_sales, demo.backcast_excluded,
-demo.unilever_sku_forecast.
+SCOPE (Kelvin, 2026-10-16): pinned to Tier A as of the current cycle, the same set and basis the real path uses
+(scripts/run_baseline_forecast.py:162-176 fetch_tier_a, analytics.params.abc_method) — this demo shows the real
+system working with complete data, not a wider-scope system. A product that drops in/out of Tier A between
+cycles is picked up the next time this is rerun; it does not track a frozen cohort.
+
+READS: Unilever_SKU_Demand_Fact_Real joined to ABC_Classification (Tier A only) (one read-only transaction,
+direct URL). WRITES (--write): demo.run (one run per principal, label 'demonstration_unilever'),
+demo.unilever_sku_sales, demo.backcast_excluded, demo.unilever_sku_forecast.
 """
 from __future__ import annotations
 
@@ -45,16 +50,31 @@ sys.path.insert(0, str(REPO))
 from analytics.config import long_read_db_url  # noqa: E402
 from analytics.demo.backcast import backcast_series  # noqa: E402
 from analytics.demo.dm_interpolate import GENERATOR_VERSION, JITTER_SCALE, SEED, ma3_one_step, next_month  # noqa: E402
+from analytics.params import abc_method  # noqa: E402
 from backend.series_gaps import unilever_points  # noqa: E402
 
 LABEL = "demonstration_unilever"
 APPROVED_BY, APPROVED_ON = "Kelvin", "2026-10-15"
+PRINCIPAL = "unilever"
+
+# Tier A scope (Kelvin, 2026-10-16): the real path (scripts/run_baseline_forecast.py:162-176 fetch_tier_a) only
+# ever forecasts the ~189 Unilever Tier A SKUs. This demo exists to show that same system working with complete
+# data, not a wider-scope system, so it is pinned to the same ABC_Classification tier='A' set at the same
+# latest-usable classification_period (<= the real view's own max month), via analytics.params.abc_method().
+ABC_PERIOD_SQL = """
+    SELECT MAX(classification_period) FROM ABC_Classification
+    WHERE principal = %s AND method = %s
+      AND classification_period <= (SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real)
+"""
 
 SQL = """
-    SELECT product_key, sku_code, calendar_month,
-           CASE WHEN COUNT(*) FILTER (WHERE quantity_sold IS NULL) > 0 THEN NULL ELSE SUM(quantity_sold) END,
-           SUM(net_amount)
-    FROM Unilever_SKU_Demand_Fact_Real GROUP BY product_key, sku_code, calendar_month
+    SELECT f.product_key, f.sku_code, f.calendar_month,
+           CASE WHEN COUNT(*) FILTER (WHERE f.quantity_sold IS NULL) > 0 THEN NULL ELSE SUM(f.quantity_sold) END,
+           SUM(f.net_amount)
+    FROM Unilever_SKU_Demand_Fact_Real f
+    JOIN ABC_Classification abc ON abc.product_key = f.product_key
+        AND abc.principal = %s AND abc.method = %s AND abc.classification_period = %s AND abc.tier = 'A'
+    GROUP BY f.product_key, f.sku_code, f.calendar_month
 """
 
 
@@ -66,7 +86,12 @@ def read_inputs(db_url: str):
         cur.execute("SET TRANSACTION READ ONLY")
         cur.execute("SHOW transaction_read_only")
         assert cur.fetchone()[0] == "on"
-        cur.execute(SQL)
+        cur.execute(ABC_PERIOD_SQL, (PRINCIPAL, abc_method(PRINCIPAL)))
+        row = cur.fetchone()
+        if not row or row[0] is None:
+            raise SystemExit("No usable Tier A classification_period found for Unilever.")
+        abc_period = row[0]
+        cur.execute(SQL, (PRINCIPAL, abc_method(PRINCIPAL), abc_period))
         rows = cur.fetchall()
         cur.execute("ROLLBACK")
     finally:
