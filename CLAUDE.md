@@ -46,6 +46,20 @@ Advisers: Sir Catubag (technical)
    `warehouse_capacity` would conflate two different quantity units, DEC-31). `run_lp --source demo` is now
    accepted for `--principal delmonte` only (still refused for `unilever`/`both`); `/recommendations` and
    `/dashboard` now serve `order_plan.available: true` with items once that run has been written.
+   **Audit fix, Kelvin, 2026-10-16 (B1/B2/B3):** "no reader serves a non-real sales row any more" above was
+   scoped to `mart.sales_mart` only and missed two siblings still reading the retired synthetic family straight
+   out of the fact tables: `mart.flow_month`'s `returns` (synthetic_v2/synthetic_v2_gap/synthetic_rate_transfer/
+   synthetic_branch_adjacent — Unilever has no real returns at all, so with the demo switch off its whole
+   Returns line was 100% synthetic) and `mart.inventory_mart`'s stock pesos (same family, both principals, in
+   preview too). `backend/marts.flow_by_period` now never estimates `returns`; `estimated_stock_by_period`
+   always returns `{}` (same retirement as `estimated_sales_by_period`, no demo stock/returns analog is wired
+   into this chart). Separately, `backend/marts._unranked_side` (class-changes) and `pareto()`'s "ranked
+   nothing" message used to treat "no real sales row in the range" as a real zero for every principal; for Del
+   Monte that is two different things — a genuine zero vs the Mar2024-Feb2025 taxonomy-break gap where nothing
+   was collected at all — and conflating them fabricated a joined category's whole revenue as growth. Fixed:
+   `principal_collected()` checks whether the principal has any real row at all in the range; `_unranked_side`
+   returns `None`/`not_collected` (not `0.0`) for Del Monte when it doesn't, and `pareto_blocked_reason()` gives
+   the right cause (`not_collected` vs "nothing sold" vs "returns matched or exceeded sales everywhere").
 3. **No fabricated metrics as fallback, ever.** If a real computation isn't possible (e.g. <12mo history, model exception), the correct value is a flagged "insufficient data" status — never a hardcoded number pretending to be measured.
 4. **Hard gates**: M0, M2, M3 are human-review checkpoints. Don't cross a gate in one session — stop and report at gate boundaries.
 5. **Commit only on your own branch; merge or push only when asked.**

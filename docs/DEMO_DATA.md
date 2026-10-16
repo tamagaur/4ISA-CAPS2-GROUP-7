@@ -120,6 +120,18 @@ file's table above, and this session did not change it. Do not confuse the two: 
 - The filled sales rows in `mart.sales_mart` (3,130 `synthetic_category_split`, 4 `synthetic_v2_gap`) and the
   generated ones (914 Del Monte, the Unilever 2026-03..08 placeholders) are no longer served: no estimated sales
   points on the dashboard chart, and `/dashboard/product-sales` for Del Monte is empty.
+- **2026-10-16 (B1):** two siblings of this retirement were missed the first time, because they read the fact
+  tables' `is_demo`/`fill_source` straight into `mart.flow_month` and `mart.inventory_mart` instead of going
+  through `mart.sales_mart`. `backend.marts.flow_by_period` was still turning filled `returns` rows (always
+  `synthetic_v2` / `synthetic_v2_gap` / `synthetic_rate_transfer` / `synthetic_branch_adjacent` — `salesreturn_fact`
+  has no other fill_source) into `returns_estimated`, so with the demo switch off Unilever's whole Returns line
+  (it has no real returns at all) was 100% synthetic for every month 2021-01..2026-02, and Del Monte's was
+  synthetic for 18 months. `estimated_stock_by_period` was doing the same for `stock_on_hand_estimated`, both
+  principals, worse in preview (adds `generated`/`synthetic_v2`). Both are retired now: `flow_by_period` never
+  estimates `returns` (it still does for `estimated_receipts` — that one is a genuine derived figure,
+  `derived_receipt_fact`, not synthetic placeholder data, and keeps working exactly as before); 
+  `estimated_stock_by_period` always returns `{}`, same retirement as `estimated_sales_by_period` above. Neither
+  returns/stock chart line has a `demo.*` replacement wired in — a gap just shows nothing, not a wrong number.
 
 ## 6. Why Unilever is not filled
 
