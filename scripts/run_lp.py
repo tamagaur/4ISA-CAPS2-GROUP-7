@@ -111,9 +111,10 @@ import math
 import os
 import subprocess
 import sys
+from collections import Counter
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -837,16 +838,15 @@ def _log_cycle(plan: CyclePlan, allocation_pct: float, prior_year: int) -> None:
 def check_source(source: str, principal: str) -> None:
     """--source real (the default) is the plan this script has always made; it never touches schema demo.
 
-    --source demo (Kelvin, 2026-10-16, migration 0056): the Del Monte demonstration only (--principal delmonte).
-    It is refused for any other --principal, before any connection, with the same wording this always had: there
-    is still no real order plan for Del Monte outside the demonstration, and 'both'/'unilever' + --source demo
-    would otherwise silently plan nothing while looking like a normal run."""
+    --source demo (Kelvin, 2026-10-16, migrations 0056/0057): --principal delmonte (demo forecast AND demo stock,
+    analytics/demo/prescriptive.py) or --principal unilever (demo forecast, REAL stock — _run_demo_lp_unilever).
+    'both' + --source demo is refused, before any connection: each principal's demo plan uses a different mix of
+    real and generated inputs and must never be silently combined into one run that looks like a normal cycle."""
     if source == "real":
         return
-    if principal != "delmonte":
-        raise SystemExit("run_lp: no order plan is generated for the demonstration (schema demo carries no stock count, "
-                         "cost or supplier parameters) outside --principal delmonte. Omit --source, or pass "
-                         "--source real.")
+    if principal not in ("delmonte", "unilever"):
+        raise SystemExit("run_lp: no order plan is generated for the demonstration outside --principal delmonte "
+                         "or --principal unilever. Omit --source, or pass --source real.")
 
 
 def _run_demo_lp(write: bool) -> int:
@@ -938,11 +938,126 @@ def _run_demo_lp(write: bool) -> int:
     return 0
 
 
+def _run_demo_lp_unilever(write: bool) -> int:
+    """--source demo --principal unilever: the dominant forecast cohort of demo.unilever_sku_forecast (the one
+    forecast_period most SKUs share — most reach the same last real month) against REAL stock on hand and REAL
+    cost (scripts/run_lp.py's own fetchers: fetch_stock_counts, opening_counts, fetch_stock_and_cost — the real
+    path's data, untouched) and DEMO sigma (the demonstration's own sales history, including the 2021-22
+    back-cast — expected to move sigma; see docs/DEMO_DATA.md). plan_cycle() is the real LP, unchanged, run with
+    PLACEHOLDERS' real Unilever defaults (warehouse capacity, allocation %). Writes demo.unilever_sku_lp only;
+    never touches lp_run, LP_Recommendation or Forecast_Result. Report-only unless --write."""
+    db_url = long_read_db_url()
+    conn = psycopg2.connect(db_url, connect_timeout=20)
+    try:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute("SELECT run_id FROM demo.run WHERE principal = 'unilever' AND label = 'demonstration_unilever' "
+                    "ORDER BY run_id DESC LIMIT 1")
+        row = cur.fetchone()
+        if row is None:
+            raise SystemExit("run_lp --source demo --principal unilever: no Unilever demonstration run exists yet "
+                             "(python -m scripts.build_unilever_demo --write --replace first).")
+        run_id = row[0]
+        cur.execute("SELECT forecast_period, COUNT(*) FROM demo.unilever_sku_forecast WHERE run_id = %s "
+                    "GROUP BY forecast_period ORDER BY COUNT(*) DESC LIMIT 1", (run_id,))
+        dominant = cur.fetchone()
+        if dominant is None:
+            raise SystemExit("run_lp --source demo --principal unilever: the demonstration run has no forecast rows.")
+        forecast_period = dominant[0]
+        cur.execute("SELECT product_key, sku_code, forecast_quantity FROM demo.unilever_sku_forecast "
+                    "WHERE run_id = %s AND forecast_period = %s", (run_id, forecast_period))
+        forecasts = {int(pk): (sku, float(fq)) for pk, sku, fq in cur.fetchall()}
+        product_keys = list(forecasts)
+        cur.execute("SELECT product_key, period, quantity, net_amount FROM demo.unilever_sku_sales "
+                    "WHERE run_id = %s AND product_key = ANY(%s)", (run_id, product_keys))
+        demo_sales = cur.fetchall()
+
+        year, month = (int(x) for x in forecast_period.split("-"))
+        planning_cycle_date = date(year, month, 1)
+        stock_period = opening_period(planning_cycle_date)
+        stock_counts = fetch_stock_counts(cur, stock_period)
+        usable, refused = opening_counts(planning_cycle_date, {"unilever"}, stock_counts)
+        if "unilever" not in usable:
+            raise SystemExit(f"run_lp --source demo --principal unilever: {refused.get('unilever')}")
+        stock_and_cost = fetch_stock_and_cost(cur, product_keys, stock_period)
+        cur.execute("ROLLBACK")
+    finally:
+        conn.close()
+
+    demand_df = pd.DataFrame(demo_sales, columns=["product_key", "period", "total_quantity", "total_amount"])
+    demand_df["total_quantity"] = pd.to_numeric(demand_df["total_quantity"], errors="coerce")
+    demand_df["total_amount"] = pd.to_numeric(demand_df["total_amount"], errors="coerce").fillna(0)
+
+    args = argparse.Namespace(**PLACEHOLDERS)
+    prior_year = basis_year(planning_cycle_date)
+    products, skipped = [], []
+    for pk in product_keys:
+        sku_id, forecast = forecasts[pk]
+        product_demand = demand_df[demand_df["product_key"] == pk].assign(sku_code=sku_id)
+        sigma_d, reason = _sigma_d_for_product(product_demand, "unilever")
+        if sigma_d is None:
+            skipped.append((sku_id, reason))
+            continue
+        product, reason = product_input(pk, sku_id, "unilever", forecast, sigma_d, stock_and_cost,
+                                         demand_df, prior_year=prior_year, stock_period=stock_period)
+        if product is None:
+            skipped.append((sku_id, reason))
+            continue
+        products.append(product)
+
+    plan = plan_cycle(products, args, planning_cycle_date=None) if products else None
+    rows = []
+    if plan is not None:
+        for p, s in zip(plan.products, plan.skus):
+            rows.append((run_id, p.product_key, p.sku_id, forecast_period, s.demand, p.stock_on_hand, p.sigma_d,
+                        s.safety_stock, s.target_stock, (plan.orders or {}).get(s.sku_id, 0.0)))
+
+    print(json.dumps({
+        "run_id": run_id, "forecast_period": forecast_period, "stock_period": stock_period,
+        "planned": len(rows), "skipped": len(skipped), "skipped_reasons": dict(Counter(r for _s, r in skipped)),
+        "rows": [{"sku_id": r[2], "forecast": round(r[4], 2), "stock_on_hand": round(r[5], 2),
+                  "sigma_d": round(r[6], 4), "safety_stock": round(r[7], 2), "target_stock": round(r[8], 2),
+                  "order_qty": round(r[9], 2)} for r in rows[:10]],
+        "note": "first 10 of %d rows shown" % len(rows),
+    }, indent=1, default=str))
+
+    if not write:
+        print("[dry] nothing written (pass --write)")
+        return 0
+    if not rows:
+        print("[write] nothing to write")
+        return 0
+    wconn = psycopg2.connect(db_url, connect_timeout=20)
+    try:
+        wcur = wconn.cursor()
+        wcur.execute("SHOW default_transaction_read_only")
+        if wcur.fetchone()[0] != "off":
+            raise SystemExit("default_transaction_read_only is on for this connection; refusing to write")
+        wcur.execute("SELECT to_regclass('demo.unilever_sku_lp')")
+        if wcur.fetchone()[0] is None:
+            raise SystemExit("demo.unilever_sku_lp is not there: apply migration 0057 first")
+        wcur.execute("DELETE FROM demo.unilever_sku_lp WHERE run_id = %s", (run_id,))
+        execute_values(
+            wcur,
+            "INSERT INTO demo.unilever_sku_lp (run_id, product_key, sku_code, period, forecast_quantity, "
+            "stock_on_hand, sigma_d, safety_stock, target_stock, order_qty) VALUES %s", rows,
+        )
+        wconn.commit()
+    except BaseException:
+        wconn.rollback()
+        raise
+    finally:
+        wconn.close()
+    print(f"[write] demo.unilever_sku_lp run_id {run_id}: {len(rows)} row(s)")
+    return 0
+
+
 def main():
     args = build_parser().parse_args()
     check_source(args.source, args.principal)
     if args.source == "demo":
-        return _run_demo_lp(args.write)
+        return _run_demo_lp_unilever(args.write) if args.principal == "unilever" else _run_demo_lp(args.write)
     _log_inputs(args)
 
     load_dotenv(override=False)

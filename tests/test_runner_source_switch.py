@@ -91,10 +91,10 @@ def test_lp_demo_source_is_refused_before_any_connection_for_the_default_princip
     assert "no order plan" in str(e.value)
 
 
-def test_lp_demo_source_is_refused_for_unilever(monkeypatch):
+def test_lp_demo_source_is_refused_for_both_principals(monkeypatch):
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://u:p@localhost:1/db")
     monkeypatch.setattr(rlp.psycopg2, "connect", _boom)
-    monkeypatch.setattr(sys, "argv", ["run_lp.py", "--source", "demo", "--principal", "unilever"])
+    monkeypatch.setattr(sys, "argv", ["run_lp.py", "--source", "demo", "--principal", "both"])
     with pytest.raises(SystemExit) as e:
         rlp.main()
     assert "no order plan" in str(e.value)
@@ -105,5 +105,14 @@ def test_lp_demo_source_for_delmonte_runs_the_demo_builder_and_never_opens_the_r
     monkeypatch.setattr(rlp.psycopg2, "connect", _boom)
     monkeypatch.setattr(rlp, "_run_demo_lp", lambda write: seen.setdefault("write", write) or 0)
     monkeypatch.setattr(sys, "argv", ["run_lp.py", "--source", "demo", "--principal", "delmonte"])
+    rlp.main()
+    assert seen == {"write": False}  # report-only unless --write
+
+
+def test_lp_demo_source_for_unilever_runs_its_own_demo_builder_and_never_opens_the_real_path(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(rlp.psycopg2, "connect", _boom)
+    monkeypatch.setattr(rlp, "_run_demo_lp_unilever", lambda write: seen.setdefault("write", write) or 0)
+    monkeypatch.setattr(sys, "argv", ["run_lp.py", "--source", "demo", "--principal", "unilever"])
     rlp.main()
     assert seen == {"write": False}  # report-only unless --write

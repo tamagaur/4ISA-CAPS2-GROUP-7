@@ -113,6 +113,27 @@ def get_forecast(
             principal="delmonte",
             blocked_reason=DEL_MONTE_NO_FORECAST,
         )
+    if demo_enabled() and (normalize_principal(principal) == "unilever"
+                           or (product_row and product_row["principal"] == "unilever")):
+        # The labelled demonstration series and its MA3 forecast (schema demo; backend/demo_data.py), the same
+        # source as the chart (so charts and forecasts come from the same source, Kelvin 2026-10-16). Unilever's
+        # REAL Forecast_Result is unaffected: this table is never read outside this toggle.
+        demo = demo_data.series_points(db, "unilever", sku_id)
+        if demo is not None:
+            fc = demo_data.unilever_forecast(db, sku_id)
+            body = ForecastResponse(
+                sku_id=sku_id, product_name=product_row["product_name"] if product_row else None, principal="unilever",
+                forecast=[ForecastPoint(forecast_date=fc["forecast_period"] + "-01", forecast_value=fc["forecast_quantity"],
+                                        status=fc["status"], model_params={"method": fc["method"], "demonstration": True})]
+                        if fc else [],
+            ).model_dump(mode="json")
+            body["actuals"] = demo["points"]
+            for k in ("data_source", "demonstration", "demonstration_note", "origin_counts", "run", "gap_note"):
+                body[k] = demo[k]
+            body["forecast_note"] = (None if fc else "No demonstration forecast for this SKU: fewer than 3 real "
+                                                      "months, or more than one blank-capture month in the window.")
+            return JSONResponse(body)
+
     if product_row is None:
         scope_label = principal or "any principal"
         raise HTTPException(status_code=404, detail=f"No product found for '{sku_id}' ({scope_label})")

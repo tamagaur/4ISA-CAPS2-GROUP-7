@@ -14,10 +14,13 @@ sales (analytics/demo/backcast.py).
 FORECAST (migration 0056, Kelvin 2026-10-16): the SAME one-step MA3 the Del Monte side uses
 (analytics.demo.dm_interpolate.ma3_one_step), over each SKU's last 3 months up to its own last real month,
 real-zero-filled in-span the same way backend/series_gaps.unilever_points does for the API. A SKU whose window has
-fewer than 3 months, or a blank-capture month (quantity NULL) inside it, is named and left out — never rescued
-with an invented value. Reading only real_copy months means this forecast is expected to be close to the real
-Forecast_Result for the same SKU (both read the same last-3-real-months window); build_dm_demo.py's report
-compares them. Not wired into any endpoint: Unilever's real forecast already exists and nothing here replaces it.
+fewer than 3 months is named and left out. A SINGLE blank-capture month (quantity NULL) inside the window
+(Kelvin, 2026-10-16) is filled for the forecast only — the mean of the window's other two months — flagged
+blank_capture_filled (migration 0057); the chart itself never shows it filled (demo.unilever_sku_sales is
+untouched: a blank capture is "not zero, no value shown", not a gap to generate into). Two or more blanks in the
+window still leave the SKU excluded. Reading only real_copy (plus real in-span zeros) months means this forecast
+is expected to be close to the real Forecast_Result for the same SKU; build_dm_demo.py's report compares them.
+Not wired into any endpoint: Unilever's real forecast already exists and nothing here replaces it.
 
 READS: Unilever_SKU_Demand_Fact_Real only (one read-only transaction, direct URL). WRITES (--write): demo.run (one
 run per principal, label 'demonstration_unilever'), demo.unilever_sku_sales, demo.backcast_excluded,
@@ -28,6 +31,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import statistics
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -92,12 +96,24 @@ def build(rows):
         last3 = unilever_points(qty[pk])[-3:]
         if len(last3) < 3:
             forecast_excluded.append((sku[pk], f"{len(last3)} real month(s); 3 needed for MA3", len(last3)))
-        elif any(p["quantity"] is None for p in last3):
-            forecast_excluded.append((sku[pk], "a blank-capture month falls in the last 3 real months", len(last3)))
-        else:
-            last_period = last3[-1]["period"]
-            forecasts.append((pk, sku[pk], next_month(last_period),
-                              round(ma3_one_step([p["quantity"] for p in last3]), 2), "ma3", len(last3)))
+            continue
+        quantities = [p["quantity"] for p in last3]
+        blanks = [i for i, q in enumerate(quantities) if q is None]
+        blank_filled = False
+        if len(blanks) == 1:
+            # One blank-capture month in the averaging window (Kelvin, 2026-10-16): filled for THIS FORECAST ONLY,
+            # as the mean of the window's other two real/zero months — never written back to demo.unilever_sku_sales,
+            # so the chart still shows it blank (REASON_BLANK_CAPTURE: "not zero, no value is shown or filled in").
+            others = [q for i, q in enumerate(quantities) if i != blanks[0]]
+            quantities[blanks[0]] = statistics.fmean(others)
+            blank_filled = True
+        elif blanks:
+            forecast_excluded.append((sku[pk], "more than one blank-capture month in the last 3 real months",
+                                      len(last3)))
+            continue
+        last_period = last3[-1]["period"]
+        forecasts.append((pk, sku[pk], next_month(last_period), round(ma3_one_step(quantities), 2), "ma3",
+                          len(last3), blank_filled))
     return series, excluded, forecasts, forecast_excluded
 
 
@@ -118,9 +134,11 @@ def report(series, excluded, forecasts, forecast_excluded, n_products) -> dict:
                                             "first real month after 2023-01" if r.startswith("first real month") else r
                                             for _, r, _, _ in excluded).items()},
         "forecast_rows": len(forecasts), "forecast_excluded": len(forecast_excluded),
+        "forecast_blank_filled": sum(1 for r in forecasts if r[6]),
         "forecast_excluded_by_reason": dict(Counter(r for _, r, _ in forecast_excluded)),
-        "forecast_note": ("one-step MA3 over each SKU's own last 3 real months (real_copy + real in-span zeros); "
-                          "not wired into any endpoint, Unilever's real Forecast_Result is unaffected"),
+        "forecast_note": ("one-step MA3 over each SKU's own last 3 real months (real_copy + real in-span zeros, "
+                          "one blank-capture month filled for this average only); not wired into any endpoint, "
+                          "Unilever's real Forecast_Result is unaffected"),
         "digest": h.hexdigest(),
     }
 
@@ -157,7 +175,7 @@ def write(db_url: str, rep: dict, series, excluded, forecasts, replace: bool) ->
                                 "first_real_period) VALUES %s", [(run_id, *r) for r in excluded], page_size=1000)
         if forecasts:
             execute_values(cur, "INSERT INTO demo.unilever_sku_forecast (run_id, product_key, sku_code, forecast_period, "
-                                "forecast_quantity, method, history_months) VALUES %s",
+                                "forecast_quantity, method, history_months, blank_capture_filled) VALUES %s",
                            [(run_id, *r) for r in forecasts], page_size=1000)
         conn.commit()
         return run_id
@@ -198,7 +216,7 @@ def compare_to_real_forecast(db_url: str, forecasts) -> dict:
         conn.close()
 
     buckets: dict[str, list[tuple[float, float, bool]]] = {"ma3": [], "other_method": []}
-    for pk, _sku, period, qty, _m, _h in forecasts:
+    for pk, _sku, period, qty, _m, _h, _bf in forecasts:
         if pk not in real:
             continue
         real_period, real_value, real_method = real[pk]

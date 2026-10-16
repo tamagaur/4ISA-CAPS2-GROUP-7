@@ -112,7 +112,7 @@ def test_unilever_backcast_apart_and_zero_sale_months_not_generated(monkeypatch)
     with client(session()) as c:
         b = get(c, "/demo/series?principal=unilever&key=S1").json()
     assert b["data_source"] == "synthetic_demonstration" and b["demonstration"] is True and b["demonstration_note"]
-    assert b["origin_counts"] == {"real_copy": 2, "interpolated": 0, "bridged": 0, "backcast": 1}
+    assert b["origin_counts"] == {"real_copy": 2, "interpolated": 0, "bridged": 0, "backcast": 1, "forward_filled": 0}
     pts = {p["period"]: p for p in b["points"]}
     assert pts["2021-01"]["origin"] == "backcast" and pts["2021-01"]["reason"] == "no_data_recorded_before_2023"
     assert (pts["2023-02"]["quantity"], pts["2023-02"]["origin"], pts["2023-02"]["reason"]) == (0.0, None, "no_sale")
@@ -126,7 +126,7 @@ def test_del_monte_four_origins_are_separate_with_their_own_reasons(monkeypatch)
     monkeypatch.setenv("DM_DEMO_ENABLED", "1")
     with client(session()) as c:
         b = get(c, "/demo/series?principal=delmonte&key=/A").json()
-    assert b["origin_counts"] == {"real_copy": 2, "interpolated": 1, "bridged": 1, "backcast": 1}
+    assert b["origin_counts"] == {"real_copy": 2, "interpolated": 1, "bridged": 1, "backcast": 1, "forward_filled": 0}
     reasons = {p["period"]: p["reason"] for p in b["points"]}
     assert reasons["2023-02"] == "interpolated" and reasons["2021-01"] == "no_data_recorded_before_2023"
     assert reasons["2024-03"] == "taxonomy_change_bridge"

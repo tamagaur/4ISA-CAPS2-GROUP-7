@@ -2311,6 +2311,8 @@ def get_dashboard(
             "forecasts": demo_data.forecasts(db),
             "stock": demo_data.stock(db),
             "order_plan": demo_data.order_plan(db),
+            "policy_comparison": demo_data.policy_comparison(db),
+            "dead_stock": demo_data.dead_stock(db),
         })
     return payload
 

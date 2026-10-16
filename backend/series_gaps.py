@@ -52,6 +52,7 @@ REASON_NO_DATA_BEFORE_2023 = "no_data_recorded_before_2023"
 REASON_INTERPOLATED = "interpolated"
 REASON_BRIDGED = "taxonomy_change_bridge"
 REASON_NO_OBSERVATION_BEFORE_START = "no_observation_before_series_start"
+REASON_FORWARD_FILLED = "series_gap_forward_filled"
 
 REASON_TEXT: dict[str, str] = {
     REASON_NO_SALE: (
@@ -81,6 +82,10 @@ REASON_TEXT: dict[str, str] = {
     REASON_NO_OBSERVATION_BEFORE_START: (
         "Del Monte: generated before this series' first real observation (a category relabelled in the 2025 "
         "taxonomy), for visualisation only."
+    ),
+    REASON_FORWARD_FILLED: (
+        "Del Monte: this live category's real data stops before the demonstration window ends; generated flat "
+        "at its own level from its last real month onward (not a taxonomy change), for visualisation only."
     ),
 }
 
