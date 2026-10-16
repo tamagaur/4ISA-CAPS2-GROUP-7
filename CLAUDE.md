@@ -14,6 +14,11 @@ https://github.com/4ISA-Capstone-Group-7/SSM-DSD — remote `group7`, base branc
 Each session works in its own worktree on a branch named `kelvin/<name>`.
 Migrations: 0046 (planning mart `mart.planning_mart`, part of DEC-36, 2026-10-05) is the latest on public, after 0044 (Tier A basis `t12m_new`, DEC-38, 2026-10-05), 0043 (mart stock-limited rule, DEC-36), 0042 (in-transit stock + review flag, DEC-33/34) and 0041 (data marts, schema `mart`, DEC-36), all 2026-10-04. 0045 (`Product_Dimension.unit_cost` + `lead_time_days`) and 0047 (`planning_stale` knows the Tier A basis) are now used too (files on kelvin-etl; whether they are applied to public is not recorded here). 0048-0051 are applied (app schema, planning-mart tier anchor, inventory index + month marts, stability_group pattern). 0052-0055 (schema `demo`: the labelled demonstration pipeline, its back-cast, the Del Monte bridge, `anchor_override` and the canonical-total column and view; rule 2) are applied 2026-10-15. 0056 (`demo.dm_category_stock`, `demo.unilever_sku_forecast`, `demo.dm_category_lp` — Del Monte stock, the Unilever demonstration forecast, and the Del Monte demonstration order plan; rule 2 extended by Kelvin 2026-10-16) and 0057 (`forward_filled` origin, `demo.dm_category_lp.stock_source`, `demo.unilever_sku_forecast.blank_capture_filled`, `demo.unilever_sku_lp` — DAIRY's forecast, the Unilever demonstration order plan on real stock, and the "no empty card" standing instruction) are applied 2026-10-16. The next free number is 0058.
 
+## Branch convention (canonical repo: 4ISA-Capstone-Group-7/SSM_DSD, underscore)
+`Main-Final` is the integration branch and receives merges via pull request only — nobody pushes directly to it.
+Backend work goes to `Main-BE`; frontend work goes to `Main-FE`. (This is a team convention, not a
+GitHub-enforced rule: branch protection needs GitHub Pro or a public repo, and this repo stays private.)
+
 ## Stack
 Python/pandas ETL, FastAPI backend, Next.js/Tailwind frontend, Supabase (Postgres), Vercel (frontend host), Render (backend host).
 
