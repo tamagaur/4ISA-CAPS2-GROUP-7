@@ -32,6 +32,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF, classify_abc
+from backend import marts
 from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
@@ -56,14 +57,14 @@ def _month_minus(period: str, months: int) -> str:
 _QUERIES = {
     ("unilever", "brand"): """
         SELECT COALESCE(pd.brand, 'NO BRAND') AS name, SUM(s.pesos) AS revenue, COUNT(DISTINCT s.product_key) AS products
-        FROM mart.sales_mart s JOIN Product_Dimension pd ON pd.product_key = s.product_key
+        FROM {sales_mart} s JOIN Product_Dimension pd ON pd.product_key = s.product_key
         WHERE s.principal = 'unilever' AND s.level = 'product' AND {kind}
           AND s.period > :start AND s.period <= :end AND s.pesos > 0
         GROUP BY 1
     """,
     ("unilever", "category"): """
         SELECT COALESCE(pd.category_path, 'UNCLASSIFIED') AS name, SUM(s.pesos) AS revenue, COUNT(DISTINCT s.product_key) AS products
-        FROM mart.sales_mart s JOIN Product_Dimension pd ON pd.product_key = s.product_key
+        FROM {sales_mart} s JOIN Product_Dimension pd ON pd.product_key = s.product_key
         WHERE s.principal = 'unilever' AND s.level = 'product' AND {kind}
           AND s.period > :start AND s.period <= :end AND s.pesos > 0
         GROUP BY 1
@@ -90,9 +91,12 @@ def pareto_for(db: Session, principal: str, grain: str, period: str | None, mont
     end = min(period, latest) if (period and latest) else (period or latest)
     if end is None:
         return {"principal": principal, "rows": [], "blocked_reason": f"No sales data for {principal}."}
-    kind = "(s.data_kind = 'real' OR s.preview_placeholder)" if mode == PREVIEW else "s.data_kind = 'real'"
+    # The older synthetic_v2 placeholders are retired for display (2026-10-15): preview adds only the
+    # demonstration back-cast, and only when DM_DEMO_ENABLED is on (backend/marts.py).
+    kind = marts._kind_filter(mode, "s")
     rows = db.execute(
-        text(query.format(kind=kind)), {"start": _month_minus(end, months), "end": end}
+        text(query.format(kind=kind, sales_mart=marts.sales_mart_relation(mode))),
+        {"start": _month_minus(end, months), "end": end},
     ).mappings().all()
     df = pd.DataFrame(
         [{"sku_id": r["name"], "total_revenue": float(r["revenue"]), "products": int(r["products"])} for r in rows],

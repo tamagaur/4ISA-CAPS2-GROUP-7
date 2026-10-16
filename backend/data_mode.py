@@ -60,6 +60,7 @@ from sqlalchemy.orm import Session
 
 from analytics.classification.abc import classify_abc
 from analytics.params import PLACEHOLDERS
+from backend.demo_flag import demo_enabled
 from analytics.classification.orchestrate_abc import _split_negative_revenue, _split_zero_revenue
 from analytics.params import abc_method
 from analytics.segmentation.traits import (
@@ -106,21 +107,29 @@ def get_data_mode(
 
 REAL_UNILEVER_DEMAND = "Unilever_SKU_Demand_Fact_Real"
 _FIRST_REAL_MONTH = "(SELECT MIN(calendar_month) FROM Unilever_SKU_Demand_Fact_Real)"
-# Same columns as the _Real view (both are SELECT * of the base table), so it
-# drops into any FROM that names the view. Postgres 17 needs no alias on a
-# FROM subquery; call sites that already alias the view keep their alias.
+# RETIRED 2026-10-15 (Kelvin): preview no longer reads the older synthetic_v2 placeholder rows (is_demo = true
+# in Unilever_SKU_Demand_Fact). schema `demo` is the single source of anything displayed that is generated:
+# the real view plus demo.unilever_sku_sales' back-cast rows (2021-01..2022-12, origin 'backcast'), the same
+# columns as the _Real view so it drops into any FROM that names the view. Postgres 17 needs no alias on a FROM
+# subquery; call sites that already alias the view keep their alias. Nothing is deleted from the base table.
+_DEMO_UNILEVER_RUN = "(SELECT MAX(run_id) FROM demo.run WHERE principal = 'unilever')"
 PREVIEW_UNILEVER_DEMAND = (
-    "(SELECT * FROM Unilever_SKU_Demand_Fact"
-    " WHERE is_demo = false"
-    f" OR (is_demo = true AND calendar_month < {_FIRST_REAL_MONTH}))"
+    "(SELECT demand_key, product_key, sku_code, calendar_month, region, quantity_sold, net_amount, is_demo,"
+    " _src_file, _src_sheet FROM Unilever_SKU_Demand_Fact_Real"
+    " UNION ALL"
+    " SELECT NULL::bigint, product_key, sku_code, period, 'la_union'::text, quantity, net_amount, true,"
+    " 'demo.unilever_sku_sales'::text, origin FROM demo.unilever_sku_sales"
+    f" WHERE origin = 'backcast' AND run_id = {_DEMO_UNILEVER_RUN})"
 )
 
 
 def unilever_demand(mode: str) -> str:
     """The relation to read Unilever demand from. Real mode returns the
     view's name verbatim, so real-mode SQL is character-for-character what
-    it was before preview existed."""
-    return PREVIEW_UNILEVER_DEMAND if mode == PREVIEW else REAL_UNILEVER_DEMAND
+    it was before preview existed. Preview adds the demonstration back-cast
+    only when DM_DEMO_ENABLED is on (default off): with it off, preview reads
+    real data alone."""
+    return PREVIEW_UNILEVER_DEMAND if (mode == PREVIEW and demo_enabled()) else REAL_UNILEVER_DEMAND
 
 
 def placeholder_window(db: Session) -> dict | None:
@@ -129,11 +138,13 @@ def placeholder_window(db: Session) -> dict | None:
     history already reaches back past them). rows + quantity_total are the
     fingerprint scripts/build_preview_outputs.py records, so a rebuilt
     placeholder shows up as outdated what-if files (preview_block)."""
+    if not demo_enabled():
+        return None
     row = db.execute(text(f"""
-        SELECT MIN(calendar_month) AS start, MAX(calendar_month) AS last, COUNT(*) AS n,
-               SUM(quantity_sold) AS qty, {_FIRST_REAL_MONTH} AS first_real_month
-        FROM Unilever_SKU_Demand_Fact
-        WHERE is_demo = true AND calendar_month < {_FIRST_REAL_MONTH}
+        SELECT MIN(period) AS start, MAX(period) AS last, COUNT(*) AS n,
+               SUM(quantity) AS qty, {_FIRST_REAL_MONTH} AS first_real_month
+        FROM demo.unilever_sku_sales
+        WHERE origin = 'backcast' AND run_id = {_DEMO_UNILEVER_RUN} AND period < {_FIRST_REAL_MONTH}
     """)).mappings().first()
     if not row or not row["n"]:
         return None
@@ -232,6 +243,11 @@ def preview_outputs() -> dict | None:
     if _outputs_cache["stamp"] != stamp:
         with open(paths[2], encoding="utf-8") as f:
             meta = json.load(f)
+        # RETIRED 2026-10-15: files built on the older synthetic_v2 placeholder rows are not served. A build records
+        # placeholder_source 'demo' only when it ran on the schema demo back-cast (scripts/build_preview_outputs.py).
+        if meta.get("placeholder_source") != "demo":
+            _outputs_cache.update(stamp=stamp, value=None)
+            return None
         _outputs_cache.update(stamp=stamp, value={
             "forecasts": pd.read_csv(paths[0], dtype={"forecast_date": str}),
             "lp": pd.read_csv(paths[1], dtype={"planning_cycle_date": str}),

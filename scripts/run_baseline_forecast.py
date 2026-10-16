@@ -323,14 +323,44 @@ def evaluate_sku(series: pd.Series, gap_months=None) -> dict:
 # --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--principal", choices=["unilever"], default="unilever",
-                        help="Fixed to unilever (Del Monte has no real SKU grain, DEC-03).")
+    parser.add_argument("--principal", choices=["unilever", "delmonte"], default="unilever",
+                        help="unilever (default): the real forecast. delmonte is accepted only with --source demo "
+                             "(Del Monte has no real SKU grain, DEC-03).")
+    parser.add_argument("--source", choices=["real", "demo"], default="real",
+                        help="real (default): exactly the run this script has always made. demo: the labelled Del "
+                             "Monte demonstration only (CLAUDE.md rule 2): reads demo.*, writes demo.* and never "
+                             "Forecast_Result.")
     parser.add_argument("--write", action="store_true", default=False,
                         help="Additionally upsert Forecast_Result for status='ok' SKUs "
-                             "(rule_method pick). OFF by default - this run is report-only.")
-    args = parser.parse_args()
+                             "(rule_method pick). OFF by default - this run is report-only. With --source demo: "
+                             "replace the demonstration run in schema demo.")
+    return parser
+
+
+def resolve_target(principal: str, source: str) -> str:
+    """The only two valid targets: ('unilever', 'real') and ('delmonte', 'demo'). Anything else stops here, before a
+    connection is opened. Returns the source."""
+    if source == "real" and principal != "unilever":
+        raise SystemExit("--principal delmonte needs --source demo: Del Monte has no real SKU grain (DEC-03), so there is "
+                         "no real forecast to run.")
+    if source == "demo" and principal != "delmonte":
+        raise SystemExit("--source demo is the Del Monte demonstration only (--principal delmonte).")
+    return source
+
+
+def _run_demo(write: bool) -> int:
+    """--source demo: build the Del Monte demonstration forecast (schema demo only). Never touches Forecast_Result."""
+    from scripts import build_dm_demo
+    sys.argv = ["build_dm_demo"] + (["--write", "--replace"] if write else [])
+    return build_dm_demo.main()
+
+
+def main():
+    args = build_parser().parse_args()
+    if resolve_target(args.principal, args.source) == "demo":
+        return _run_demo(args.write)
 
     conn = connect()
     cur = conn.cursor()

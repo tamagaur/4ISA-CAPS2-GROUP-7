@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF
 from backend import batch
 from backend.data_mode import PREVIEW, REAL
+from backend.demo_flag import demo_enabled
 
 PRINCIPALS = ("unilever", "delmonte")
 
@@ -47,8 +48,16 @@ PESOS_BASIS_LABEL = {
 # line, range totals and the range's Pareto. Stock cards, forecast accuracy, class changes
 # and the stored ABC, forecast and LP tables still read real rows only, and every payload
 # says which months are not SSM's data (sales_vs_stock[].provenance,
-# kpis.sales_cumulative.synthetic_months). Set to False to go back to real rows only.
-COUNT_FILLED_AND_GENERATED = True
+# kpis.sales_cumulative.synthetic_months).
+#
+# OFF since 2026-10-15 (kelvin-etl a1b5465, approved by Kelvin, Sir Catubag informed;
+# CLAUDE.md hard rule 2 and docs/DEMO_DATA.md): the filled and generated (synthetic_v2)
+# sales rows are retired for display, and schema demo is the only display source for
+# generated data, shown in preview with DM_DEMO_ENABLED on. The snapshot no longer even
+# loads those rows (SNAPSHOT_SQL reads real sales only). Turning this back on would count
+# the retired rows in the range Pareto and let demo rows into real mode: a team decision,
+# not a code change.
+COUNT_FILLED_AND_GENERATED = False
 # A filled or generated month counts only up to the last month with real sales for either
 # principal (Feb 2026 today). The generator also wrote months after it (to Aug/Sep 2026);
 # those are not gaps in SSM's history but the months the forecasts are for, and counting
@@ -57,15 +66,35 @@ _LAST_REAL_SALES_MONTH_SQL = "SELECT MAX(period) FROM mart.sales_month WHERE dat
 
 
 def _kind_filter(mode: str, alias: str = "") -> str:
-    """Which mart rows count as sales: every kind (COMPLETE MONTHS above); with that
-    off, real rows, plus Unilever's preview placeholder months in preview."""
+    """Real rows, plus the demonstration back-cast months in preview when DM_DEMO_ENABLED is on. The older
+    synthetic_v2 rows are retired for display (2026-10-15); see sales_mart_relation(). With
+    COUNT_FILLED_AND_GENERATED on (off since the same day), the retired filled and generated rows too."""
     a = f"{alias}." if alias else ""
     if COUNT_FILLED_AND_GENERATED:
         return (f"({a}data_kind = 'real' OR ({a}data_kind IN ('filled', 'generated') "
                 f"AND {a}period <= ({_LAST_REAL_SALES_MONTH_SQL})))")
-    if mode == PREVIEW:
+    if mode == PREVIEW and demo_enabled():
         return f"({a}data_kind = 'real' OR {a}preview_placeholder)"
     return f"{a}data_kind = 'real'"
+
+
+_DEMO_SALES_MART = """(
+    SELECT principal, level, product_key, category_path, period, data_kind, source_tag, in_principal_total,
+           preview_placeholder, pieces, pieces_null_rows, pieces_unit_confirmed, pesos, pesos_basis, gsv, source_rows
+    FROM mart.sales_mart WHERE data_kind <> 'generated'
+    UNION ALL
+    SELECT 'unilever'::text, 'product'::text, d.product_key, NULL::text, d.period, 'generated'::text,
+           'demo_backcast'::text, true, true, d.quantity, 0, true, d.net_amount, 'demo_backcast'::text, NULL::numeric, 1
+    FROM demo.unilever_sku_sales d
+    WHERE d.origin = 'backcast' AND d.run_id = (SELECT MAX(run_id) FROM demo.run WHERE principal = 'unilever')
+)"""
+
+
+def sales_mart_relation(mode: str) -> str:
+    """mart.sales_mart verbatim, except in preview with DM_DEMO_ENABLED on: the mart without its retired
+    synthetic_v2 'generated' rows, plus demo.unilever_sku_sales' back-cast rows shaped as mart rows
+    (preview_placeholder = true, so _kind_filter() picks them up)."""
+    return _DEMO_SALES_MART if (mode == PREVIEW and demo_enabled()) else "mart.sales_mart"
 
 
 def _scope_list(scope: str) -> list[str]:
@@ -145,11 +174,13 @@ def status(db: Session) -> dict:
 # one statement, kept on the request's session (Session.info) and answered in memory.
 # One round trip instead of ~25: each query costs the network round trip, ~0.12 s from
 # the team's machines to Supabase, however small it is (measured 2026-10-04).
+# Only 'real' rows are read here. 'generated' (synthetic_v2) and 'filled' sales rows (synthetic_category_split,
+# synthetic_v2_gap) are retired for display (2026-10-15): schema demo is the single display source. Nothing deleted.
 SNAPSHOT_SQL = """
     SELECT 'sales' AS src, principal, period, data_kind, NULL AS source_tag, NULL AS flow,
            pesos, pieces, any_recorded_with_tax AS recorded_with_tax, preview_placeholder AS placeholder,
            NULL::date AS first_date, NULL::date AS last_date, NULL::int AS negative_rows, NULL::bigint AS products
-    FROM mart.sales_month
+    FROM mart.sales_month WHERE data_kind = 'real'
     UNION ALL
     SELECT 'stock', principal, period, data_kind, NULL, NULL, pesos, pieces, NULL, NULL,
            first_count_date, count_date, NULL, products
@@ -159,6 +190,22 @@ SNAPSHOT_SQL = """
            NULL, NULL, negative_rows, products
     FROM mart.flow_month
 """
+
+
+_SNAPSHOT_DEMO_ROWS = """
+    UNION ALL
+    SELECT 'sales', 'unilever', period, 'generated', NULL, NULL, SUM(net_amount), SUM(quantity), NULL::boolean, true,
+           NULL::date, NULL::date, NULL::int, NULL::bigint
+    FROM demo.unilever_sku_sales
+    WHERE origin = 'backcast' AND run_id = (SELECT MAX(run_id) FROM demo.run WHERE principal = 'unilever')
+    GROUP BY period
+"""
+
+
+def snapshot_sql() -> str:
+    """SNAPSHOT_SQL verbatim, plus the demonstration back-cast months (as preview placeholders) when DM_DEMO_ENABLED
+    is on. Real-mode readers never see them: _kinds() shows a placeholder row only in preview."""
+    return SNAPSHOT_SQL + _SNAPSHOT_DEMO_ROWS if demo_enabled() else SNAPSHOT_SQL
 
 
 class _Snapshot:
@@ -180,7 +227,7 @@ def _snapshot(db: Session) -> _Snapshot:
     info = getattr(db, "info", None)
     if isinstance(info, dict) and "mart_snapshot" in info:
         return info["mart_snapshot"]
-    snap = _Snapshot(batch.rows(db, SNAPSHOT_SQL))
+    snap = _Snapshot(batch.rows(db, snapshot_sql()))
     if isinstance(info, dict):
         info["mart_snapshot"] = snap
     return snap
@@ -258,19 +305,11 @@ def pieces_by_period(db: Session, periods: list[str], principal: str, mode: str 
 
 
 def estimated_sales_by_period(db: Session, periods: list[str], principal: str, mode: str = REAL) -> dict[str, dict]:
-    """Non-real sales per month for ONE principal, for a chart's estimated points:
-    filled rows in real mode, filled and generated rows in preview, minus every row
-    sales_by_period already counts as sales (all of them under COMPLETE MONTHS, so
-    this is then empty). {period: {value, kind}}."""
-    kinds = ("filled", "generated") if mode == PREVIEW else ("filled",)
-    snap, out, last_real = _snapshot(db), {}, _last_real_sales_month(db)
-    for p in periods:
-        parts = [(k, snap.sales.get((principal, p, k))) for k in kinds]
-        parts = [(k, r) for k, r in parts
-                 if r is not None and r["pesos"] is not None and not _kinds(mode, r, last_real)]
-        if parts:
-            out[p] = {"value": sum(float(r["pesos"]) for _, r in parts), "kind": "/".join(sorted(k for k, _ in parts))}
-    return out
+    """Non-real sales per month for ONE principal, for a chart's estimated points. RETIRED 2026-10-15: the filled
+    (synthetic_category_split, synthetic_v2_gap) and generated (synthetic_v2) sales rows are no longer served;
+    schema demo is the single display source for anything generated, and a chart draws it from there. Returns {}.
+    The signature stays so every caller keeps working."""
+    return {}
 
 
 def tax_inclusive_months(db: Session) -> set[str]:
@@ -445,7 +484,7 @@ PARETO_SQL = """
     WITH rev AS (
         SELECT s.product_key, SUM(GREATEST(s.pesos, 0)) AS revenue, SUM(s.pieces) AS pieces,
                COUNT(*) AS months_with_sales
-        FROM mart.sales_mart s
+        FROM {sales_mart} s
         WHERE s.principal = :principal AND s.in_principal_total
           AND s.period BETWEEN :start AND :end AND {kind}
         GROUP BY s.product_key
@@ -493,7 +532,7 @@ def pareto(db: Session, start: str, end: str, principal: str, mode: str = REAL) 
 
 
 def pareto_query(start: str, end: str, principal: str, mode: str = REAL) -> tuple[str, dict]:
-    return (PARETO_SQL.format(kind=_kind_filter(mode, "s")),
+    return (PARETO_SQL.format(kind=_kind_filter(mode, "s"), sales_mart=sales_mart_relation(mode)),
             {"principal": principal, "start": start, "end": end, "a": TIER_A_CUTOFF, "b": TIER_B_CUTOFF})
 
 
@@ -580,6 +619,19 @@ def class_changes(db: Session, start: str, end: str, compare_start: str, compare
     }
 
 
+def _null_side_reason(principal: str, first: str | None, last: str | None, win_start: str, win_end: str,
+                      principal_months) -> str | None:
+    """Why a year-over-year side has no real month (backend/series_gaps.py vocabulary).
+    Unilever: inside the product's own first..last sale months the product sold nothing (no_sale, a real zero);
+    outside them it was not on sale (outside_product_lifespan). Del Monte has no product lifespan: no category
+    reported anything in the window (not_collected) or only this one is absent (category_absent)."""
+    if principal == "delmonte":
+        return "not_collected" if not principal_months else "category_absent"
+    if first is None or last is None:
+        return None
+    return "outside_product_lifespan" if (last < win_start or first > win_end) else "no_sale"
+
+
 def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]:
     """Per product (Del Monte: category), real net sales over start..end against the same
     months a year earlier. A side with no real month in range is None, never 0."""
@@ -595,18 +647,38 @@ def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]
             FROM mart.sales_mart_real
             WHERE principal = :principal AND in_principal_total AND period BETWEEN :pstart AND :pend
             GROUP BY product_key
+        ), span AS (
+            SELECT product_key, MIN(period) AS first_period, MAX(period) AS last_period
+            FROM mart.sales_mart_real WHERE principal = :principal AND in_principal_total GROUP BY product_key
         )
         SELECT COALESCE(c.product_key, p.product_key) AS product_key, pd.sku_code, pd.product_name,
                pd.category_path, c.pesos AS pesos, c.pieces AS pieces, c.months AS months,
-               p.pesos AS prior_pesos, p.pieces AS prior_pieces, p.months AS prior_months
+               p.pesos AS prior_pesos, p.pieces AS prior_pieces, p.months AS prior_months,
+               sp.first_period, sp.last_period,
+               (SELECT COUNT(DISTINCT period) FROM mart.sales_mart_real
+                 WHERE principal = :principal AND in_principal_total AND period BETWEEN :start AND :end) AS principal_months,
+               (SELECT COUNT(DISTINCT period) FROM mart.sales_mart_real
+                 WHERE principal = :principal AND in_principal_total AND period BETWEEN :pstart AND :pend) AS principal_prior_months
         FROM cur c FULL OUTER JOIN prev p ON p.product_key = c.product_key
+        LEFT JOIN span sp ON sp.product_key = COALESCE(c.product_key, p.product_key)
         LEFT JOIN product_dimension pd ON pd.product_key = COALESCE(c.product_key, p.product_key)
         ORDER BY c.pesos DESC NULLS LAST, COALESCE(c.product_key, p.product_key)
     """), {"principal": principal, "start": start, "end": end, "pstart": prior_start, "pend": prior_end}).mappings().all()
     out = []
     for r in rows:
         cur, prior = r["pesos"], r["prior_pesos"]
-        out.append({
+        item_reasons = {}
+        if cur is None:
+            reason = _null_side_reason(principal, r.get("first_period"), r.get("last_period"), start, end,
+                                       r.get("principal_months"))
+            if reason:
+                item_reasons["pesos_reason"] = reason
+        if prior is None:
+            reason = _null_side_reason(principal, r.get("first_period"), r.get("last_period"), prior_start, prior_end,
+                                       r.get("principal_prior_months"))
+            if reason:
+                item_reasons["prior_pesos_reason"] = reason
+        out.append({**item_reasons,
             "product_key": int(r["product_key"]), "sku_id": r["sku_code"], "product_name": r["product_name"],
             "category_path": r["category_path"],
             "pesos": float(cur) if cur is not None else None,
@@ -623,11 +695,13 @@ def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]
 def product_sales(db: Session, start: str, end: str, principal: str, mode: str = REAL) -> list[dict]:
     """Product x month rows for a chart, real and filled (generated too in preview), each
     with its data_kind: Del Monte's product split (DEC-31, filled) is served here only."""
-    kinds = ["real", "filled", "generated"] if mode == PREVIEW else ["real", "filled"]
-    rows = db.execute(text("""
+    # Real rows only, plus the demonstration back-cast rows in preview when DM_DEMO_ENABLED is on. The DEC-31 Del
+    # Monte product split ('filled') and the synthetic_v2 rows are retired for display (2026-10-15), here and below.
+    kinds = ["real", "generated"] if (mode == PREVIEW and demo_enabled()) else ["real"]
+    rows = db.execute(text(f"""
         SELECT s.product_key, pd.sku_code, pd.product_name, s.level, s.period, s.data_kind, s.source_tag,
                s.pesos, s.pieces, s.pieces_unit_confirmed, s.pesos_basis
-        FROM mart.sales_mart s
+        FROM {sales_mart_relation(mode)} s
         LEFT JOIN product_dimension pd ON pd.product_key = s.product_key
         WHERE s.principal = :principal AND s.level = 'product' AND s.period BETWEEN :start AND :end
           AND s.data_kind = ANY(:kinds)
@@ -642,7 +716,7 @@ def product_sales(db: Session, start: str, end: str, principal: str, mode: str =
             "pieces": float(r["pieces"]) if r["pieces"] is not None and r["pieces_unit_confirmed"] else None,
             "pesos_basis": PESOS_BASIS_LABEL.get(r["pesos_basis"], r["pesos_basis"]),
         }
-        for r in rows
+        for r in rows if r["data_kind"] in kinds
     ]
 
 

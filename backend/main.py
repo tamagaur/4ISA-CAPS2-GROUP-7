@@ -34,7 +34,7 @@ from backend.api_errors import ApiError, api_error_handler
 from backend.client_ip import RealClientIPMiddleware
 from backend.deps import check_db_connection, get_db
 from backend.routers import (
-    abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, forecast, fsn,
+    abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
     inventory, pareto, permissions, policy_comparison, recommendations, segment, sku, two_factor, users,
 )
 
@@ -127,6 +127,7 @@ app.include_router(pareto.router)
 app.include_router(decomposition.router)
 app.include_router(category_trends.router)
 app.include_router(data_mode.router)
+app.include_router(demo.router)
 
 
 @app.get("/health", tags=["health"])

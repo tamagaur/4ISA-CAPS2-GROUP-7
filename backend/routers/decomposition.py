@@ -8,7 +8,10 @@ nothing stored, so it always reflects the loaded history.
 
 The series is zero-filled from the SKU's first month on record to the
 latest Unilever month (a month with no row is a zero-sale month, the same
-convention as the forecast runner's build_series). Del Monte has no SKU
+convention as the forecast runner's build_series). A month that HAS a row
+with a blank quantity is NaN, never a zero: the lag-12 label skips it and
+STL reports the SKU as not computable (analytics/forecasting/decomposition).
+Del Monte has no SKU
 series (DEC-03), so a Del Monte product is a 404 here, like GET /forecast.
 
 X-Data-Mode: preview reads the SKU's 2021-22 placeholder months too, so the
@@ -34,6 +37,7 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 from backend.response_cache import cached
+from backend.series_gaps import gap_note, unilever_points
 
 router = APIRouter(prefix="/decomposition", tags=["decomposition"])
 
@@ -43,26 +47,39 @@ def _next_month(period: str) -> str:
     return f"{y + 1:04d}-01" if m == 12 else f"{y:04d}-{m + 1:02d}"
 
 
-def _monthly_series(db: Session, demand: str, product_key) -> tuple[list[str], list[float]]:
-    """('YYYY-MM' periods, pieces) from the product's first month on record to
-    the latest month in `demand`, a month with no row as 0."""
+def _fetch_by_period(db: Session, demand: str, product_key) -> tuple[dict[str, float | None], str | None]:
+    """({'YYYY-MM': pieces or None for a blank quantity} for each month that has a
+    row, latest month in `demand`)."""
     rows = db.execute(
         text(f"""
-            SELECT calendar_month AS period, SUM(quantity_sold) AS qty
+            SELECT calendar_month AS period,
+                   CASE WHEN COUNT(*) FILTER (WHERE quantity_sold IS NULL) > 0 THEN NULL
+                        ELSE SUM(quantity_sold) END AS qty
             FROM {demand} WHERE product_key = :product_key
             GROUP BY calendar_month ORDER BY calendar_month
         """),
         {"product_key": product_key},
     ).mappings().all()
     latest = db.execute(text(f"SELECT MAX(calendar_month) FROM {demand}")).scalar()
-    by_period = {r["period"]: float(r["qty"] or 0) for r in rows}
+    return {r["period"]: (None if r["qty"] is None else float(r["qty"])) for r in rows}, latest
+
+
+def _grid(by_period: dict[str, float | None], latest: str | None) -> tuple[list[str], list[float]]:
+    """('YYYY-MM' periods, pieces) from the product's first month on record to
+    `latest`, a month with no row as 0 and a month whose row has a blank
+    quantity as NaN (a blank capture, not a zero)."""
     periods: list[str] = []
-    if rows and latest:
-        p = rows[0]["period"]
+    if by_period and latest:
+        p = min(by_period)
         while p <= latest:
             periods.append(p)
             p = _next_month(p)
-    return periods, [by_period.get(p, 0.0) for p in periods]
+    return periods, [float("nan") if by_period.get(p, 0.0) is None else by_period.get(p, 0.0) for p in periods]
+
+
+def _monthly_series(db: Session, demand: str, product_key) -> tuple[list[str], list[float]]:
+    """('YYYY-MM' periods, pieces): see _grid."""
+    return _grid(*_fetch_by_period(db, demand, product_key))
 
 
 @router.get("")
@@ -83,12 +100,19 @@ def get_decomposition(
     if product is None:
         raise HTTPException(status_code=404, detail=f"No Unilever SKU '{sku}' in scope — STL needs a SKU-level series.")
 
-    periods, values = _monthly_series(db, demand, product["product_key"])
+    by_period, latest = _fetch_by_period(db, demand, product["product_key"])
+    periods, values = _grid(by_period, latest)
     summary = stl_summary(periods, values)
     real_values = values if demand == unilever_demand(REAL) else _monthly_series(
         db, unilever_demand(REAL), product["product_key"])[1]
+    # `series`: the chart's raw monthly points with a `reason` on every zero or
+    # missing one (backend/series_gaps.py). Chart data only; STL above is unchanged.
+    points = unilever_points(by_period, grid_end=latest)
     payload = {"sku_id": sku, "method": {"name": "STL", "period": PERIOD, "robust": True, "min_months": MIN_MONTHS},
-               **summary, "yearly_pattern": yearly_pattern(real_values)}
+               **summary, "yearly_pattern": yearly_pattern(real_values), "series": points}
+    note = gap_note(pt["reason"] for pt in points if pt["reason"])
+    if note:
+        payload["gap_note"] = note
     if mode == PREVIEW:
         payload["data_mode"] = preview_block(db)
     return payload

@@ -69,6 +69,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, smape, wape  # noqa: E402
+from analytics.params import abc_method  # noqa: E402
 
 SEAS = 12
 REAL_START = "2023-01"          # first month of genuine per-SKU Unilever data
@@ -95,7 +96,7 @@ def fetch(with_synthetic: bool):
     if with_synthetic:
         # base table, is_demo included - DIAGNOSTIC path only
         cur.execute("""
-            SELECT product_key, calendar_month, COALESCE(quantity_sold, 0) AS q, is_demo
+            SELECT product_key, calendar_month, quantity_sold AS q, is_demo
             FROM unilever_sku_demand_fact
             WHERE calendar_month <= %s
             ORDER BY product_key, calendar_month
@@ -103,19 +104,21 @@ def fetch(with_synthetic: bool):
         df = pd.DataFrame(cur.fetchall(), columns=["product_key", "calendar_month", "q", "is_demo"])
     else:
         cur.execute("""
-            SELECT product_key, calendar_month, COALESCE(quantity_sold, 0) AS q
+            SELECT product_key, calendar_month, quantity_sold AS q
             FROM unilever_sku_demand_fact_real
             ORDER BY product_key, calendar_month
         """)
         df = pd.DataFrame(cur.fetchall(), columns=["product_key", "calendar_month", "q"])
         df["is_demo"] = False
+    # A row with quantity_sold NULL is a blank capture: NaN here, never a zero
+    # (build_series keeps it NaN; backtest_sku leaves it out).
     df["q"] = df["q"].astype(float)
 
     cur.execute("""
         SELECT product_key FROM abc_classification
         WHERE principal = 'unilever' AND classification_period = %s AND tier = 'A'
-          AND method = 'single'
-    """, (ABC_PERIOD,))
+          AND method = %s
+    """, (ABC_PERIOD, abc_method("unilever")))
     tier_a = sorted({r[0] for r in cur.fetchall()})
 
     cur.execute("SELECT product_key, sku_code, product_name FROM product_dimension WHERE principal = 'unilever'")
@@ -133,9 +136,13 @@ def _last_real_month(cur) -> str:
 # series
 # --------------------------------------------------------------------------- #
 def build_series(g: pd.DataFrame) -> pd.Series:
+    """Monthly series: a month with NO row is 0 (a zero-sale month); a month
+    whose row has a blank quantity stays NaN (a blank capture, not a sale of
+    zero) and is left out downstream."""
     idx = pd.to_datetime(g["calendar_month"] + "-01")
     s = pd.Series(g["q"].to_numpy(float), index=idx).sort_index()
-    return s.resample("MS").asfreq().fillna(0.0)
+    full = s.resample("MS").asfreq()
+    return full.where(full.index.isin(s.index), 0.0)
 
 
 # --------------------------------------------------------------------------- #
@@ -275,15 +282,21 @@ def backtest_sku(real: pd.Series, train_series: pd.Series, test_months: int,
     if len(origins) < 3:
         return None
 
+    # Blank captures are excluded, not zeroed: an origin whose actual is blank
+    # is not scored (for any model, so all models share the same points), and a
+    # blank month is dropped from the training window and the MASE scale.
+    origins = [t for t in origins if not np.isnan(real.loc[t])]
+    if len(origins) < 3:
+        return None
     actuals = np.array([real.loc[t] for t in origins], dtype=float)
-    scale = naive_scale(real[real.index < origins[0]].to_numpy(float))
+    scale = naive_scale(real[real.index < origins[0]].dropna().to_numpy(float))
 
     out = {}
     for name, fn in MODELS.items():
         preds = []
         guarded = 0
         for t in origins:
-            tr = train_series[train_series.index < t].to_numpy(float)
+            tr = train_series[train_series.index < t].dropna().to_numpy(float)
             if len(tr) < 12:
                 preds.append(np.nan)
                 continue

@@ -73,16 +73,18 @@ def yearly_pattern(values: list[float]) -> dict:
     y = np.asarray(values, dtype=float)
     sold = np.flatnonzero(y > 0)
     y = y[int(sold[0]):] if sold.size else y[:0]
-    n = len(y)
+    # A NaN is a month captured blank (a row that exists with no quantity): left
+    # out of the test, never a zero. n counts the months actually observed.
+    n = int(np.count_nonzero(~np.isnan(y)))
     out = {"label": LABEL_SHORT, "repeats_yearly": None, "acf_lag12": None, "acf_bound": None,
-           "months": int(n), "min_months": YEARLY_ACF_MIN_MONTHS}
+           "months": n, "min_months": YEARLY_ACF_MIN_MONTHS, "blank_months": int(len(y) - n)}
     if n < YEARLY_ACF_MIN_MONTHS:
         return out
     bound = YEARLY_ACF_Z / np.sqrt(n)
     out["acf_bound"] = round(float(bound), 3)
-    if np.std(y) <= 0:
+    if np.nanstd(y) <= 0:
         return {**out, "label": LABEL_NO_PATTERN, "repeats_yearly": False}
-    r12 = float(acf(y, nlags=PERIOD, fft=False)[PERIOD])
+    r12 = float(acf(y, nlags=PERIOD, fft=False, missing="conservative")[PERIOD])
     repeats = bool(r12 > bound)
     return {**out, "label": LABEL_REPEATS if repeats else LABEL_NO_PATTERN,
             "repeats_yearly": repeats, "acf_lag12": round(r12, 3)}
@@ -100,6 +102,19 @@ def stl_summary(periods: list[str], values: list[float]) -> dict:
     start = int(sold[0])
     y = y[start:]
     periods = list(periods[start:])
+    # STL needs an unbroken series. A blank capture is not a zero, and filling
+    # it any other way would invent a number, so the SKU gets a flagged status.
+    blanks = int(np.isnan(y).sum())
+    if blanks:
+        return {
+            "available": False,
+            "reason": (
+                f"{blanks} month(s) in this SKU's record were left blank when captured (not zero sales); "
+                "the decomposition needs an unbroken series and no value is filled in."
+            ),
+            "months": int(len(y)),
+            "blank_months": blanks,
+        }
     if len(y) < MIN_MONTHS:
         return {
             "available": False,

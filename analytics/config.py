@@ -73,3 +73,20 @@ def get_settings(dotenv_path: str | None = None) -> Settings:
         supabase_key=values["SUPABASE_KEY"],
     )
 
+
+def long_read_db_url() -> str:
+    """The URL for a LONG read or a backup: SUPABASE_DIRECT_URL when it is set,
+    else the pooler URL (SUPABASE_DB_URL).
+
+    The :6543 transaction pooler drops a connection that sits on a long query
+    ("SSL SYSCALL error: EOF detected": 2026-10-15, twice in a row on
+    fetch_demand; the direct URL ran the same reads clean, and had been
+    breaking runs for over a week). Use this for reads that take more than a
+    few seconds. SUPABASE_DIRECT_URL does not resolve from every network, so a
+    script that must run anywhere keeps the pooler as the fallback. Never use
+    it to change how a connection is configured: the rules on session-level
+    SET (CLAUDE.md hard rule 7) apply to both URLs."""
+    _load_env_file()
+    direct = os.environ.get("SUPABASE_DIRECT_URL", "").strip()
+    return direct or get_settings().supabase_db_url
+

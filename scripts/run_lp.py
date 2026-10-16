@@ -384,7 +384,16 @@ def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float
     documented-assumption move granularity.business_days_in_month() itself
     makes for "business day" = weekday), not a fabricated number — but it
     IS an assumption, so it is logged per-product, not silently applied.
+
+    A month whose row has a blank quantity (total_quantity NaN) is a blank
+    capture, not a zero: it is left out of sigma here (the same rule as
+    analytics/classification/orchestrate_abc.py, which drops a blank
+    net_amount), and counted in the log.
     """
+    blank = demand_df["total_quantity"].isna()
+    if blank.any():
+        logger.info(f"    {int(blank.sum())} blank-capture month(s) excluded from sigma (not zero sales).")
+        demand_df = demand_df[~blank]
     if principal == "delmonte":
         monthly_df = demand_df.rename(columns={"period": "_period", "total_quantity": "quantity"})[["_period", "quantity"]]
         if len(monthly_df) < 2:
@@ -418,11 +427,13 @@ def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float
 
 def fetch_demand_history(cur, product_keys: list[int]) -> pd.DataFrame:
     """DEMAND_QUERY as a frame: product_key, sku_code, principal, period,
-    total_quantity (pieces), total_amount (pesos)."""
+    total_quantity (pieces), total_amount (pesos). A month whose row has a
+    blank quantity keeps total_quantity NaN (a blank capture, never a zero):
+    _sigma_d_for_product leaves it out, and the prior-year sum skips it."""
     cur.execute(DEMAND_QUERY, (product_keys,))
     df = pd.DataFrame(cur.fetchall(), columns=["product_key", "sku_code", "principal", "period", "total_quantity", "total_amount"])
-    for col in ("total_quantity", "total_amount"):
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    df["total_quantity"] = pd.to_numeric(df["total_quantity"], errors="coerce")
+    df["total_amount"] = pd.to_numeric(df["total_amount"], errors="coerce").fillna(0)
     return df
 
 
@@ -715,6 +726,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
+        "--source", choices=["real", "demo"], default="real",
+        help="real (default): exactly the run this script has always made. demo: refused (see check_source): "
+             "the demonstration has no stock count or purchase parameters, so no plan is generated.",
+    )
+    parser.add_argument(
         "--allocation-pct", type=_positive_float, default=p["allocation_pct"],
         help="Supplier allocation as a %% of last year's sales (Sir Abe: 103 minimum, 105 mid, 108 maximum). "
              "A principal's monthly ceiling is its planned products' sales in the calendar year before the "
@@ -810,8 +826,18 @@ def _log_cycle(plan: CyclePlan, allocation_pct: float, prior_year: int) -> None:
     logger.info(f"  warehouse: stock + orders = {s['warehouse_used']:,.0f} of {plan.warehouse_capacity:,.0f} pieces")
 
 
+def check_source(source: str) -> None:
+    """--source real (the default) is the plan this script has always made. The demonstration has no stock count, cost
+    or supplier parameters in schema demo, so --source demo is refused here, before any connection: it never writes
+    lp_run or lp_recommendation. --principal keeps its existing meaning (both | unilever | delmonte)."""
+    if source != "real":
+        raise SystemExit("run_lp: no order plan is generated for the demonstration (schema demo carries no stock count, "
+                         "cost or supplier parameters). Omit --source, or pass --source real.")
+
+
 def main():
     args = build_parser().parse_args()
+    check_source(args.source)
     _log_inputs(args)
 
     load_dotenv(override=False)

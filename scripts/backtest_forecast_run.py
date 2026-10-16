@@ -10,7 +10,7 @@ the forecast history (mart.forecast_run, migration 0041) as forecast_source
 
 WHAT IT RUNS. The production path, exactly as the 2026-10-03 reports did: real Unilever demand
 read the way the forecast runner reads it (scripts/run_baseline_forecast.fetch_demand: the
-_Real view, a blank quantity summed as 0), the runner's build_series, and for every product x
+_Real view, a blank quantity left out as NaN, never summed as 0 — 749d232), the runner's build_series, and for every product x
 test month the router (analytics/forecasting/router.route) on the history before that month,
 the bin re-worked every month (kelvin/forecast-error-business b4f6b77, run_followups.py
 long_window; kelvin/model-audit 36a5548, common.backtest). Window 2023-10..2026-02. A month
@@ -31,9 +31,11 @@ TWO COHORTS, two runs:
                labelled, never quoted alone.
 
 VERIFIED BEFORE ANY WRITE. Each run's rows are compared with the report's own rows when its
-git-ignored output is on this machine (--reference-dir), and its headline metrics, recomputed
-with the report's rules (kelvin/model-audit headline_pesos.py), with the committed
-headline_two_cohorts.csv. A mismatch stops the script: nothing is written.
+git-ignored output is on this machine (REF_AT_THE_TIME / REF_107 below), and its headline metrics,
+recomputed with the report's rules (kelvin/model-audit headline_pesos.py) except that a blank
+quantity is left out, with the committed headline: headline_two_cohorts.csv on kelvin/model-audit
+for at_the_time, config/forecast_cohorts/tier_a_2026-02_headline_blank_missing.csv for
+tier_a_2026_02 (the report's file predates the blank-quantity rule, 749d232). A mismatch stops the script: nothing is written.
 
 Writes (--write) go to <mart-schema>.forecast_run / forecast_run_value in one transaction,
 then the marts are refreshed. Re-running replaces a run with the same label (--replace).
@@ -66,6 +68,10 @@ from scripts.run_baseline_forecast import build_series, fetch_demand  # noqa: E4
 WINDOW = list(pd.date_range("2023-10-01", "2026-02-01", freq="MS"))
 COHORT_107 = REPO / "config" / "forecast_cohorts" / "tier_a_2026-02_scored_107.csv"
 HEADLINE_REF = "kelvin/model-audit:reports/diagnostics/model_audit_2026-10-03/headline_two_cohorts.csv"
+# tier_a_2026_02's headline under the CURRENT blank-quantity rule (749d232, blank left out), re-baselined
+# 2026-10-15. The report's own headline_two_cohorts.csv above summed a blank as 0, so the two differ on
+# 134 of 2419 forecast rows (median WAPE 0.268602 -> 0.267802); the report file is left as published.
+HEADLINE_107_CURRENT = REPO / "config" / "forecast_cohorts" / "tier_a_2026-02_headline_blank_missing.csv"
 REF_AT_THE_TIME = "C:/Users/kyuan/dsd-model-audit/reports/diagnostics/model_audit_2026-10-03/local/asof_cohort_backtest.csv"
 REF_107 = ("C:/Users/kyuan/dsd-forecast-error-business/reports/diagnostics/forecast_error_business_2026-10-03/"
            "local/longwindow_per_product_month.csv")
@@ -85,6 +91,7 @@ RUNS = {
         "cohort": "the 107 products Tier A as of 2026-02 and scored 2025-09..2026-02; XGBoost pool Tier A as of 2026-02",
         "headline_column": "today's Tier A (Tier A as of 2026-02, the ~27% figure)",
         "reference": REF_107, "ref_value": "forecast", "tol": TOL_CSV,
+        "headline_file": HEADLINE_107_CURRENT,
         "abc_method": "single",  # pinned: this cohort IS the ABC-single 107, never re-based
     },
 }
@@ -177,8 +184,9 @@ def run_tier_a_2026_02(series, tier_by) -> pd.DataFrame:
 
 
 def headline(bt: pd.DataFrame, money: pd.DataFrame) -> dict:
-    """kelvin/model-audit headline_pesos.metrics, the report's rules (blank quantity = 0 in
-    the actual; price = SUM(net_amount) / SUM(quantity) over the product's scored months)."""
+    """kelvin/model-audit headline_pesos.metrics, the report's rules except one: a blank
+    quantity is left out of the scored months (749d232), where the report summed it as 0.
+    Price = SUM(net_amount) / SUM(quantity) over the product's scored months."""
     test = bt[["product_key", "month"]].merge(money, on=["product_key", "month"], how="left")
     g = test.groupby("product_key")[["quantity_raw", "net_amount"]].sum()
     px = (g.net_amount / g.quantity_raw).where((g.quantity_raw > 0) & (g.net_amount > 0))
@@ -231,7 +239,10 @@ def verify(name: str, spec: dict, bt: pd.DataFrame, money: pd.DataFrame, expect_
             raise SystemExit(f"[{name}] regenerated rows do not match the reference: {result}")
     else:
         result["reference_rows"] = "not on this machine"
-    ref_head = reference_headline(spec["headline_column"])
+    if spec.get("headline_file"):
+        ref_head = pd.read_csv(spec["headline_file"]).set_index("measure")["value"].astype(float).to_dict()
+    else:
+        ref_head = reference_headline(spec["headline_column"])
     got = headline(bt, money)
     result["headline"] = got
     if ref_head is not None:
@@ -298,8 +309,8 @@ def main() -> int:
         p.error("writing the live mart schema needs --target-public")
     if args.mart_schema != "mart" and not args.mart_schema.startswith("ssm_"):
         p.error("--mart-schema is 'mart' or a scratch schema named ssm_*")
-    from analytics.config import get_settings
-    db_url = get_settings().supabase_db_url
+    from analytics.config import long_read_db_url
+    db_url = long_read_db_url()
 
     from analytics.params import abc_method as current_abc_method
 

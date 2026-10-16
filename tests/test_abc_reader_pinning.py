@@ -31,6 +31,9 @@ ALLOWLIST = {
         "either method blocks the delete, so it must not filter",
     "scripts/smoke_api.py":
         "HTTP-only route driver, issues no SQL — names the table in its docstring only",
+    "scripts/verify_demo_isolation.py":
+        "whole-table row-count + hash fingerprint before/after the demo build, proving abc_classification did not "
+        "move - rows of either method must be compared, so it must not filter",
     "scripts/rehearse_fills.py":
         "whole-table md5 fingerprint, scratch vs public, proving the fill step left the table untouched — "
         "rows of either method must be compared, so it must not filter",
@@ -42,9 +45,9 @@ EXPECTED_PREDICATE = {
     # Tier A readers pin the basis setting (analytics.params, migration 0044)
     "scripts/run_baseline_forecast.py": ("abc.method = %s", "AND method = %s"),
     "scripts/run_lp.py": ("AND {ac_basis}", "WHERE {basis}"),
-    "scripts/model_bakeoff.py": ("AND method = 'single'",),
+    "scripts/model_bakeoff.py": ("AND method = %s",),  # abc_method('unilever'), 2026-10-15
     "scripts/arima_bakeoff.py": ("AND method = 'single'",),
-    "scripts/xgboost_bakeoff.py": ("AND method='single'",),
+    "scripts/xgboost_bakeoff.py": ("AND method=%s",),  # abc_method('unilever'), 2026-10-15
     "scripts/bakeoff_to_xlsx.py": ("ac.method='single'",),
     "scripts/check_missing_fast.py": ("abc.method = 'single'",),
     "scripts/check_missing_skus.py": ("abc.method = 'single'",),

@@ -320,9 +320,10 @@ def _routes():
 # fastapi 0.115.5 at the UIFixes_Audrey merge (2026-10-02), plus the 9 two-step
 # sign-in routes (/auth/login/verify, /auth/login/setup[/confirm], /auth/mfa*,
 # /users/{user_id}/mfa/reset) merged in 2026-10-03, plus the seven GET /dashboard/*
-# range routes the data marts added (2026-10-04/05). Change it when a route is
-# added or removed.
-ROUTE_COUNT = 53
+# range routes the data marts added (2026-10-04/05), plus GET /demo/series, /demo/index
+# and /demo/totals (kelvin-etl, 2026-10-15, behind DM_DEMO_ENABLED, default off).
+# Change it when a route is added or removed.
+ROUTE_COUNT = 56
 
 
 def test_the_walk_finds_every_route():
@@ -818,7 +819,7 @@ def test_a_failed_probe_denies_rather_than_grants():
 EVERY_PAGE = [("GET", "/auth/me"), ("POST", "/auth/heartbeat"), ("GET", "/data-mode")]
 PAGE_ENDPOINTS = {
     "dashboard.view": [("GET", "/dashboard")],
-    "forecast.view": [("GET", "/abc"), ("GET", "/forecast/12345678"), ("GET", "/segment?sku=12345678"),
+    "forecast.view": [("GET", "/abc"), ("GET", "/forecast/12345678"), ("GET", "/demo/series?principal=unilever&key=12345678"), ("GET", "/demo/index?principal=unilever"), ("GET", "/demo/totals"), ("GET", "/segment?sku=12345678"),
                       ("GET", "/decomposition?sku=12345678"), ("GET", "/sku")],   # + SkuDemandPatternPanel, useBrandLookup
     "category_trends.view": [("GET", "/category-trends")],
     "sku.view": [("GET", "/sku")],

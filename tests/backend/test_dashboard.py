@@ -1993,11 +1993,13 @@ def real_rows_only(monkeypatch):
     monkeypatch.setattr(marts, "COUNT_FILLED_AND_GENERATED", False)
 
 
-def test_complete_months_count_filled_and_generated_sales_and_say_so():
-    """2026-10-11 (Audrey; approved by Kelvin for the frontend): a month SSM
-    sent no file for shows the database's filled or generated figure as its
-    sales, in the line and the range total, and is named as not SSM's data.
-    A month with real sales is never topped up."""
+def test_complete_months_switch_is_off_since_the_demo_rule():
+    """The 2026-10-11 COMPLETE MONTHS switch (a month with no file showed its
+    filled or generated figure as sales) is off since 2026-10-15: those sales
+    rows are retired for display and schema demo is the only display source for
+    generated data (CLAUDE.md hard rule 2, docs/DEMO_DATA.md). A month with no
+    real sales is a gap again, and nothing is marked synthetic."""
+    assert marts.COUNT_FILLED_AND_GENERATED is False
     periods = _periods()
     session = FakeSession(
         sales={periods[-1]: 500.0},
@@ -2005,21 +2007,15 @@ def test_complete_months_count_filled_and_generated_sales_and_say_so():
     )
     body = _get(session, "principal=unilever")
     pts = {pt["period"]: pt for pt in body["sales_vs_stock"]}
-    gap, real = pts[periods[-2]], pts[periods[-1]]
-    assert gap["sales"] == 450.0 and gap["sales_estimated"] is None
-    assert gap["provenance"]["sales"] == "synthetic"
-    assert real["sales"] == 500.0 and real["provenance"]["sales"] == "real"
+    assert pts[periods[-2]]["sales"] is None
+    assert pts[periods[-1]]["sales"] == 500.0 and pts[periods[-1]]["provenance"]["sales"] == "real"
     total = body["kpis"]["sales_cumulative"]
-    assert total["value"] == 950.0 and total["months_with_data"] == 2
-    assert total["synthetic_months"] == [periods[-2]]
+    assert total["value"] == 500.0 and total["months_with_data"] == 1
+    assert total["synthetic_months"] == []
 
     sql, _ = _sql_for(session, "WITH rev AS")
-    assert "s.data_kind IN ('filled', 'generated')" in sql
-    # Nothing after the last month with real sales: those months are what the
-    # forecasts are for, not gaps in SSM's history.
-    assert "s.period <= (SELECT MAX(period) FROM mart.sales_month WHERE data_kind = 'real')" in sql
-    assert marts._kinds("real", {"data_kind": "generated", "period": "2026-03"}, "2026-02") is False
-    assert marts._kinds("real", {"data_kind": "generated", "period": "2026-02"}, "2026-02") is True
+    assert "'filled', 'generated'" not in sql
+    assert marts._kinds("real", {"data_kind": "generated", "period": "2026-02"}, "2026-02") is False
 
 
 def test_abc_ranking_reads_real_rows_only(real_rows_only):
@@ -2061,10 +2057,10 @@ def test_sales_range_total_has_no_pieces_for_del_monte():
     assert cum["pieces"] is None
 
 
-def test_chart_draws_filled_months_as_estimates_never_as_sales(real_rows_only):
-    """Coverage hole H1: a month the database holds only as a fill is drawn
-    as an estimate with its kind; the real line and the KPI ignore it, and a
-    month with real sales gets no estimate."""
+def test_filled_and_generated_sales_are_retired_for_display_but_stock_fills_still_draw():
+    """2026-10-15: the filled (synthetic_category_split, synthetic_v2_gap) and generated (synthetic_v2) SALES rows are
+    no longer served; schema demo is the single display source for generated data. A stock fill is a different
+    thing (DEC-31 receipts/stock rates) and is drawn as an estimate as before."""
     periods = _periods()
     session = FakeSession(
         sales={periods[-1]: 500.0},
@@ -2075,17 +2071,16 @@ def test_chart_draws_filled_months_as_estimates_never_as_sales(real_rows_only):
     body = _get(session, "principal=unilever")
     pts = {pt["period"]: pt for pt in body["sales_vs_stock"]}
     gap, real = pts[periods[-2]], pts[periods[-1]]
-    assert gap["sales"] is None and gap["sales_estimated"] == 450.0 and gap["sales_estimated_kind"] == "filled"
-    assert gap["provenance"]["sales_estimated"] == "filled"
+    assert gap["sales"] is None and gap["sales_estimated"] is None and gap["sales_estimated_kind"] is None
+    assert gap["provenance"]["sales_estimated"] is None
     assert gap["stock_on_hand"] is None and gap["stock_on_hand_estimated"] == 1_000.0
     assert real["sales"] == 500.0 and real["sales_estimated"] is None
     assert body["kpis"]["sales_cumulative"]["value"] == 500.0, "an estimate never reaches a KPI"
-    assert pts[periods[-3]]["sales_estimated"] is None, "real mode draws filled rows only, never generated ones"
+    assert pts[periods[-3]]["sales_estimated"] is None, "generated rows are never drawn either"
 
 
-def test_estimate_under_all_needs_both_principals_covered(real_rows_only):
-    """Under 'all' an estimated point still covers both principals: one side
-    real and the other estimated adds up; one side missing gives no point."""
+def test_sales_estimates_under_all_are_retired_too():
+    """A fill under 'all' no longer adds a sales estimate for either principal (retired 2026-10-15)."""
     periods = _periods()
     session = FakeSession(sales={periods[-1]: 100.0, periods[-2]: 100.0},
                           estimated_sales={"delmonte": {periods[-1]: ("filled", 30.0)}})
@@ -2093,8 +2088,8 @@ def test_estimate_under_all_needs_both_principals_covered(real_rows_only):
     session.delmonte_sales = {periods[-3]: 50.0}
     pts = {pt["period"]: pt for pt in _get(session, "")["sales_vs_stock"]}
     assert pts[periods[-1]]["sales"] is None
-    assert pts[periods[-1]]["sales_estimated"] == pytest.approx(130.0)
-    assert pts[periods[-2]]["sales_estimated"] is None, "Del Monte has nothing for that month"
+    assert pts[periods[-1]]["sales_estimated"] is None
+    assert pts[periods[-2]]["sales_estimated"] is None
 
 
 def test_returns_are_served_and_unilevers_rate_fill_is_an_estimate():
@@ -2260,10 +2255,11 @@ def test_annual_sales_does_not_follow_the_date_range(query):
     assert [(y["year"], y["sales"], y["months"]) for y in annual["years"][-2:]] == [(2025, 1200.0, 12), (2026, 110.0, 1)]
 
 
-def test_annual_sales_names_the_synthetic_months_it_counts():
-    """Filled and generated months count as sales up to the last month with
-    real sales (marts.COUNT_FILLED_AND_GENERATED) and each year names them;
-    generated months after it are what the forecasts are for, not sales."""
+def test_annual_sales_counts_real_months_only_since_the_demo_rule():
+    """Since 2026-10-15 the filled and generated sales rows are retired for
+    display (marts.COUNT_FILLED_AND_GENERATED off): a year is the sum of its
+    real months, and a year with only generated rows has no sales, not a
+    synthetic total."""
     sales = {f"2025-{m:02d}": 100.0 for m in range(1, 11)}
     generated = {f"2020-{m:02d}": ("generated", 10.0) for m in range(1, 13)}
     generated.update({"2025-11": ("generated", 40.0), "2025-12": ("filled", 60.0),
@@ -2271,22 +2267,22 @@ def test_annual_sales_names_the_synthetic_months_it_counts():
     session = FakeSession(latest_sales_period="2025-10", sales=sales, estimated_sales={"unilever": generated})
     annual = _get(session, "principal=unilever")["annual_sales"]
     years = {y["year"]: y for y in annual["years"]}
-    # Nothing after the last real month (2025-10) is counted, so 2025 is the last year.
+    # The window ends at the last year with a real month (2025).
     assert list(years) == [2021, 2022, 2023, 2024, 2025]
-    # 10 real months; the real March is never topped up by its generated row.
     assert years[2025]["sales"] == pytest.approx(1000.0)
     assert years[2025]["months"] == 10 and years[2025]["synthetic_months"] == []
-    # A year before the window is named, not dropped silently.
-    assert annual["earlier_years"] == [2020]
+    # 2020 has generated rows only: no sales, so not an earlier year with sales either.
+    assert years[2021]["sales"] is None and annual["earlier_years"] == []
 
 
-def test_annual_sales_counts_synthetic_months_inside_real_history():
+def test_annual_sales_leaves_retired_fills_inside_real_history_out():
     sales = {"2025-01": 100.0, "2025-04": 100.0}
     generated = {"2025-02": ("generated", 40.0), "2025-03": ("filled", 60.0)}
     session = FakeSession(latest_sales_period="2025-04", sales=sales, estimated_sales={"unilever": generated})
     year = _get(session, "principal=unilever")["annual_sales"]["years"][-1]
-    assert year["year"] == 2025 and year["sales"] == pytest.approx(300.0) and year["months"] == 4
-    assert year["synthetic_months"] == ["2025-02", "2025-03"]
+    # Two real months, and "2 of 12 months" on the card: the gap is shown, not filled.
+    assert year["year"] == 2025 and year["sales"] == pytest.approx(200.0) and year["months"] == 2
+    assert year["synthetic_months"] == []
 
 
 def test_annual_sales_real_rows_only(real_rows_only):
