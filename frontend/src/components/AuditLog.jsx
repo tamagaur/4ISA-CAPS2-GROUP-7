@@ -157,7 +157,7 @@ const AuditLog = () => {
             Sign-ins are counted from the first recorded sign-in
             {users.meta.first_login_at ? ` (${formatDate(users.meta.first_login_at)})` : ''}; nothing earlier is
             on record. A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
-            30 minutes without activity. Older sign-ins have no measured length.
+            4 hours without activity. Older sign-ins have no measured length.
           </p>
           <SectionStatus loading={users.loading} error={users.error} label="sign-ins by user" columns={5} />
           {!users.loading && !users.error && (

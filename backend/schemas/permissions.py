@@ -13,6 +13,19 @@ class MeResponse(BaseModel):
     full_name: str
     role: str
     permissions: list[str]  # effective keys, sorted
+    # The My profile page (backend/profile.py): the account's picture as a
+    # data URL, and whether this server can store one (migration 0058).
+    avatar_data_url: str | None = None
+    profile_pictures: bool = False
+
+
+class ProfileUpdate(BaseModel):
+    """PATCH /auth/me body: a field left out is unchanged; avatar_data_url
+    null removes the picture. Anything else is refused (422)."""
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str | None = None
+    avatar_data_url: str | None = None
 
 
 class CatalogEntry(BaseModel):

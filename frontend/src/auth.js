@@ -303,7 +303,7 @@ export function logout() {
 // Tells the backend the signed-in user is still here, which is what a
 // session's length on the Audit Log page is measured from. Beats every
 // minute and when the tab becomes visible again; a hidden tab stays quiet,
-// and after 30 idle minutes the backend closes the session. Returns the
+// and after 4 idle hours (backend/sessions.py) the backend closes the session. Returns the
 // cleanup for a useEffect.
 const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 

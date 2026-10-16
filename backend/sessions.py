@@ -17,8 +17,10 @@ from sqlalchemy.orm import Session
 # A session with no heartbeat for this long is over. The frontend beats every
 # 60s while the page is visible, so only a hidden or closed tab goes this
 # quiet; without the cut-off a tab left open overnight would read as one
-# 8-hour session (tokens last 8h).
-SESSION_IDLE_MINUTES = 30
+# 8-hour session (tokens last 8h). 4 hours since 2026-10-16 (was 30 min):
+# Audrey, so people working in another window aren't signed out every half
+# hour; the 8-hour token limit still applies.
+SESSION_IDLE_MINUTES = 4 * 60
 
 # Closes the session at its last activity if it has been idle too long, so
 # the idle gap is never counted as part of it.

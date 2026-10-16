@@ -67,6 +67,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend import account_links, audit, mailer, mfa
+from backend import profile as user_profile
 from backend.api_errors import ApiError
 from backend.auth_utils import (
     create_access_token,
@@ -104,7 +105,7 @@ from backend.schemas.auth import (
     SetPasswordRequest,
     TokenRequest,
 )
-from backend.schemas.permissions import MeResponse
+from backend.schemas.permissions import MeResponse, ProfileUpdate
 from backend.schemas.users import UserOut
 from backend.sessions import CLOSE_IF_IDLE_SQL, SESSION_IDLE_MINUTES, revoke_user_sessions
 
@@ -505,6 +506,10 @@ def me(
     Until migration 0034 is applied this answers 404 permissions_not_ready,
     which the frontend treats as "keep today's behaviour" (backend/
     permissions.py, BEFORE MIGRATION 0034 IS APPLIED)."""
+    return _me_response(db, current_user)
+
+
+def _me_response(db: Session, current_user: TokenPayload) -> MeResponse:
     if not permissions_ready(db):
         raise ApiError(404, NOT_READY, code="permissions_not_ready")
     return MeResponse(
@@ -513,7 +518,42 @@ def me(
         full_name=current_user.full_name,
         role=current_user.role,
         permissions=sorted(permissions_for(db, current_user)),
+        avatar_data_url=user_profile.read_avatar(db, current_user.user_id),
+        profile_pictures=user_profile.pictures_ready(db),
     )
+
+
+@router.patch("/me", response_model=MeResponse)
+def update_me(
+    body: ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+) -> MeResponse:
+    """The signed-in person's own display name and picture (the My profile
+    page; backend/profile.py has the rules). Audited as "Edit Profile"."""
+    fields = body.model_dump(exclude_unset=True)
+    if not fields:
+        raise ApiError(422, "Nothing to change.", code="nothing_to_change")
+    name = user_profile.clean_name(fields["full_name"]) if "full_name" in fields else None
+    set_avatar = "avatar_data_url" in fields
+    avatar = None
+    if set_avatar and fields["avatar_data_url"] is not None:
+        avatar = user_profile.check_avatar(fields["avatar_data_url"])
+    user_profile.update(db, current_user.user_id, full_name=name, avatar=avatar, set_avatar=set_avatar)
+    changes = []
+    if name is not None and name != current_user.full_name:
+        changes.append(f"Display name: {current_user.full_name} -> {name}")
+    if set_avatar:
+        changes.append("Picture changed" if avatar else "Picture removed")
+    audit.record(db, "Edit Profile", "; ".join(changes) or "No change", actor=current_user)
+    db.commit()
+    me = _me_response(db, current_user)
+    updates = {}
+    if name is not None:
+        updates["full_name"] = name
+    if set_avatar:
+        updates["avatar_data_url"] = avatar
+    return me.model_copy(update=updates) if updates else me
 
 
 EMAIL_TAKEN = "A user with this email already exists."

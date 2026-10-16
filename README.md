@@ -295,10 +295,7 @@ Information and Computing Sciences, University of Santo Tomas. Capstone,
 
 | Member | Role |
 |---|---|
-| Yuan | ETL, database schema, Supabase, orchestration, pipeline decisions, demonstration data |
-| Maika | Frontend, authentication, deployment, backend |
+| Kelvin (Yuan) | ETL, database schema, Supabase, orchestration, pipeline decisions, demonstration data, frontend integration (`kelvin-etl` branch) |
+| Maica | Frontend, authentication, deployment, backend |
 | Audrey | Backend endpoints, backend and frontend, LP |
 | Thea | Models, manuscript, SSM liaison, frontend design |
-| Kelvin | Frontend integration (`kelvin-etl` branch) |
-
-Technical adviser: Sir Catubag.

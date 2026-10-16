@@ -12,6 +12,7 @@ import PermissionsProvider from './permissions/PermissionsProvider';
 import { usePermissions } from './permissions/context';
 import { P, PAGES } from './permissions/keys';
 import { pageLoaders } from './pageLoaders';
+import { SignInHandoff } from './components/AuthHandoff';
 import './App.css';
 
 // Pages load on demand; the Suspense boundary lives in DashboardLayout
@@ -28,6 +29,8 @@ const DataUpload = lazy(pageLoaders.upload);
 const UserManagement = lazy(pageLoaders.users);
 // The section B cards on sample data (admin only, not in the navigation).
 const PendingPreview = lazy(() => import('./components/PendingPreview'));
+// Your own display name and picture, from your name in the sidebar.
+const ProfilePage = lazy(() => import('./components/ProfilePage'));
 
 const routeTitles = {
   '/login': 'SAN2 | Login',
@@ -42,6 +45,7 @@ const routeTitles = {
   '/upload': 'SAN2 | Data Management',
   '/users': 'SAN2 | User Management',
   '/preview': 'SAN2 | Card preview (sample data)',
+  '/profile': 'SAN2 | My profile',
 };
 
 function DynamicTitle() {
@@ -72,6 +76,9 @@ function App() {
     <ToastProvider>
     <div className="App">
       <DynamicTitle />
+      {/* The "Signing in…" screen, over the change from the login page to
+          the first page and until that page has loaded. */}
+      <SignInHandoff />
       <Routes>
         <Route path="/login" element={<Login />} />
         {/* Public like /login: whoever uses these has no session yet. */}
@@ -97,6 +104,8 @@ function App() {
           <Route path="upload" element={guard(P.UPLOAD_RUN, <DataUpload />)} />
           <Route path="users" element={guard(P.USERS_MANAGE, <UserManagement />)} />
           <Route path="preview" element={guard(P.USERS_MANAGE, <PendingPreview />)} />
+          {/* Anyone signed in may edit their own profile. */}
+          <Route path="profile" element={<ProfilePage />} />
         </Route>
         {/* Unknown or retired URLs land on the dashboard instead of a
             blank page. */}

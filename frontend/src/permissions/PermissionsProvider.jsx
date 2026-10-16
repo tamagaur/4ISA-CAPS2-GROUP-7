@@ -25,19 +25,30 @@ import './AccessGate.css';
 
 const PermissionsProvider = ({ children }) => {
   const navigate = useNavigate();
-  const [state, setState] = useState({ status: 'loading', role: null, permissions: [], legacy: false, error: '' });
+  const [state, setState] = useState({ status: 'loading', role: null, permissions: [], legacy: false, error: '', profile: null });
 
   const refresh = useCallback(async () => {
     try {
       const me = await getMe();
       const role = me?.role ?? null;
       const permissions = Array.isArray(me?.permissions) ? me.permissions : [];
-      // Unchanged access keeps the same state, so a re-check (below) doesn't
-      // re-render the whole app.
+      // Who this is, for the sidebar and the My profile page (ProfilePage.jsx).
+      const profile = {
+        userId: me?.user_id ?? null,
+        email: me?.email ?? null,
+        fullName: me?.full_name ?? null,
+        role,
+        avatar: me?.avatar_data_url ?? null,
+        profilePictures: Boolean(me?.profile_pictures),
+      };
+      // Unchanged access and details keep the same state, so a re-check
+      // (below) doesn't re-render the whole app.
       setState((prev) => (prev.status === 'ready' && !prev.legacy && prev.role === role
         && prev.permissions.length === permissions.length && prev.permissions.every((k, i) => k === permissions[i])
+        && prev.profile && prev.profile.fullName === profile.fullName && prev.profile.avatar === profile.avatar
+        && prev.profile.email === profile.email && prev.profile.profilePictures === profile.profilePictures
         ? prev
-        : { status: 'ready', role, permissions, legacy: false, error: '' }));
+        : { status: 'ready', role, permissions, legacy: false, error: '', profile }));
     } catch (err) {
       // No /auth/me on this backend yet: keep the access the app gave before.
       if (err?.status === 404) {
@@ -48,6 +59,7 @@ const PermissionsProvider = ({ children }) => {
           permissions: role === 'staff' ? LEGACY_STAFF_ACCESS : [],
           legacy: true,
           error: '',
+          profile: null,
         });
         return;
       }
@@ -56,7 +68,7 @@ const PermissionsProvider = ({ children }) => {
       // to show yet, stops at the error.
       setState((prev) => (prev.status === 'ready'
         ? prev
-        : { status: 'error', role: null, permissions: [], legacy: false, error: err.message }));
+        : { status: 'error', role: null, permissions: [], legacy: false, error: err.message, profile: null }));
     }
   }, []);
 
@@ -104,9 +116,12 @@ const PermissionsProvider = ({ children }) => {
       // An admin always has everything (the proposal's rule); anyone else
       // has what /auth/me lists. No key means no access.
       hasPermission: (key) => state.role === 'admin' || (Boolean(key) && granted.has(key)),
+      // { userId, email, fullName, role, avatar, profilePictures } from
+      // /auth/me; null on a backend without it.
+      profile: state.profile,
       refresh,
     };
-  }, [state.role, state.permissions, state.legacy, refresh]);
+  }, [state.role, state.permissions, state.legacy, state.profile, refresh]);
 
   if (state.status === 'loading') {
     return (

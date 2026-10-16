@@ -500,7 +500,7 @@ def test_heartbeat_closes_an_idle_session_first_then_extends_it(client, fake_ses
     assert resp.status_code == 204
     (idle_sql, idle_params), (beat_sql, beat_params) = fake_session.session_updates
     assert "end_reason = 'idle'" in idle_sql
-    assert idle_params == {"session_id": sid, "idle_minutes": 30}
+    assert idle_params == {"session_id": sid, "idle_minutes": 240}
     assert "SET last_seen_at = now()" in beat_sql and "ended_at = now()" not in beat_sql
     assert beat_params == {"session_id": sid}
 

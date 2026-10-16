@@ -272,6 +272,7 @@ def test_frontend_dev_mock_presets_match():
 
 SIGN_IN_ONLY = {
     ("GET", "/auth/me"), ("POST", "/auth/heartbeat"), ("POST", "/auth/logout"),
+    ("PATCH", "/auth/me"),  # your own name and picture (backend/profile.py, My profile)
     ("GET", "/data-mode"),  # the data-mode banner on every page
     # Your own two-step sign-in (backend/routers/two_factor.py).
     ("GET", "/auth/mfa"), ("POST", "/auth/mfa/setup"), ("POST", "/auth/mfa/confirm"),
@@ -321,9 +322,10 @@ def _routes():
 # sign-in routes (/auth/login/verify, /auth/login/setup[/confirm], /auth/mfa*,
 # /users/{user_id}/mfa/reset) merged in 2026-10-03, plus the seven GET /dashboard/*
 # range routes the data marts added (2026-10-04/05), plus GET /demo/series, /demo/index
-# and /demo/totals (kelvin-etl, 2026-10-15, behind DM_DEMO_ENABLED, default off).
+# and /demo/totals (kelvin-etl, 2026-10-15, behind DM_DEMO_ENABLED, default off),
+# plus PATCH /auth/me (the My profile page, 2026-10-16).
 # Change it when a route is added or removed.
-ROUTE_COUNT = 56
+ROUTE_COUNT = 57
 
 
 def test_the_walk_finds_every_route():
@@ -454,6 +456,9 @@ def test_me_lists_the_effective_permissions():
     assert body == {
         "user_id": 2, "email": "user2@ssmcapstone.com", "full_name": "User 2", "role": "staff",
         "permissions": sorted((set(PRESETS["staff"]) | {"audit_log.view"}) - {"lp.view"}),
+        # The My profile page's fields (backend/profile.py): no picture set,
+        # and this fake store has no picture column (migration 0058).
+        "avatar_data_url": None, "profile_pictures": False,
     }
 
 

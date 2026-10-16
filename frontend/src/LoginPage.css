@@ -256,6 +256,43 @@
   stroke-width: 2.4;
 }
 
+/* The password pages (Forgot password, Set password): their links under
+   the card in the same blue as "Forgot password?", the hint under a
+   field, the email in the subtitle, and a field with no icon keeps the
+   usual padding. */
+.login-page .auth-links {
+  margin-top: clamp(16px, 2.8vh, 24px);
+}
+
+.login-page .auth-links .auth-link {
+  color: var(--login-link);
+  font-size: 14.5px;
+  text-decoration: underline;
+  text-decoration-color: rgba(47, 93, 184, 0.45);
+  text-underline-offset: 3px;
+}
+
+.login-page .auth-links .auth-link:hover {
+  color: #1F4A9E;
+  text-decoration-color: currentColor;
+}
+
+.login-page .auth-hint {
+  color: var(--login-muted);
+}
+
+.login-page .subtitle strong {
+  color: var(--login-ink);
+}
+
+.login-page .auth-card-message {
+  margin-top: 4px;
+}
+
+.login-page .input-group:not(:has(.input-icon)) input {
+  padding-left: 18px;
+}
+
 /* "For authorized … staff only.", with a small lock. */
 .login-page .auth-notice {
   display: flex;

@@ -150,6 +150,14 @@
   color: white;
   font-weight: 600;
   font-size: 1.1rem;
+  overflow: hidden;
+}
+
+/* The profile picture, when one is set (My profile), in the initials' box. */
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .blue-avatar {
@@ -277,13 +285,17 @@
 
 .sidebar-profile-bottom {
   display: flex;
-  align-items: center;
-  gap: 0.8rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
   margin-bottom: 1rem;
 }
 
-/* The profile opens Account security (two-step sign-in). */
+/* Your name and picture, a button that opens My profile. */
 .sidebar-profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
   width: 100%;
   background: none;
   border: none;
@@ -296,6 +308,11 @@
   cursor: pointer;
 }
 
+.sidebar-profile-btn:hover .profile-name,
+.sidebar-profile-btn:focus-visible .profile-name {
+  text-decoration: underline;
+}
+
 .sidebar-profile-btn:hover,
 .sidebar-profile-btn:focus-visible {
   background-color: var(--color-nav-item-hover-bg);
@@ -306,15 +323,33 @@
   outline-offset: 1px;
 }
 
+/* "Account security", a button of its own under the name: opens the
+   two-step sign-in dialog. */
 .profile-security {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  margin: 0 0 0 0.25rem;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
   color: var(--color-nav-item);
+  font-family: inherit;
   font-size: 0.7rem;
-  margin-top: 0.1rem;
+  text-align: left;
+  cursor: pointer;
 }
 
-.sidebar-profile-btn:hover .profile-security {
+.profile-security:hover {
   color: var(--color-nav-item-hover-text);
   text-decoration: underline;
+}
+
+.profile-security:focus-visible {
+  outline: 2px solid var(--color-nav-item-active-rail);
+  outline-offset: 2px;
 }
 
 /* The two-step sign-in state on that line (Sidebar.jsx, GET /auth/mfa).
@@ -324,11 +359,8 @@
    Both wrap onto a second line in the 250px sidebar rather than clip. */
 .profile-security.is-pending,
 .profile-security.is-protected {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   max-width: 100%;
-  margin-top: 0.3rem;
+  margin-top: 0.15rem;
   line-height: 1.25;
   white-space: normal;
   text-decoration: none;
@@ -345,8 +377,8 @@
   font-weight: 600;
 }
 
-.sidebar-profile-btn:hover .profile-security.is-pending,
-.sidebar-profile-btn:focus-visible .profile-security.is-pending {
+.profile-security.is-pending:hover,
+.profile-security.is-pending:focus-visible {
   background: rgba(244, 178, 102, 0.24);
   color: #FFC98A;
   text-decoration: none;
@@ -365,7 +397,7 @@
   font-weight: 600;
 }
 
-.sidebar-profile-btn:hover .profile-security.is-protected {
+.profile-security.is-protected:hover {
   color: var(--color-nav-item-hover-text);
   text-decoration: none;
 }

@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Headset, Lock, LockKeyhole, Mail } from 'lucide-react';
+import { ArrowRight, Lock, LockKeyhole, Mail } from 'lucide-react';
 import {
   confirmLoginMfaSetup, isDeviceRemembered, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup, verifyLoginCode,
 } from './auth';
 import TwoStepCodeForm from './components/TwoStepCodeForm';
 import TwoStepSetup from './components/TwoStepSetup';
 import RecoveryCodes from './components/RecoveryCodes';
-import AuthHandoff, { holdForHandoff } from './components/AuthHandoff';
-import './Login.css';
-import './LoginPage.css';
+import { beginHandoff, holdForHandoff } from './components/AuthHandoff';
+import AuthShell from './components/AuthShell';
 
 const Login = () => {
   const location = useLocation();
@@ -42,10 +41,10 @@ const Login = () => {
   // null = the password form.
   const [mfa, setMfa] = useState(null);
   // The password (and code) accepted: the hand-off screen ("Signing in to
-  // the dashboard…") for a moment, then the dashboard.
-  const [handoff, setHandoff] = useState(null);
+  // the dashboard…", shown by App.jsx's SignInHandoff) for a moment, then
+  // the dashboard, with the screen staying up until the dashboard is in.
   const enterDashboard = async () => {
-    setHandoff('in');
+    beginHandoff('in');
     await holdForHandoff();
     navigate('/');
   };
@@ -162,25 +161,13 @@ const Login = () => {
     );
   };
 
-  // The look (2026-10-16, Audrey's twilight prototype) lives in
-  // LoginPage.css under .login-page, so Forgot password and Set password,
-  // which share Login.css, keep theirs: the evening warehouse yard across
-  // the whole page (a CSS background, so it never takes a click), the
-  // brand row top left, and the frosted-glass card, which is CSS over real
-  // form fields, not a picture of one.
+  // The look (2026-10-16, Audrey's twilight prototype): the evening
+  // warehouse yard, the logo top left and the frosted-glass card are
+  // AuthShell, shared with Forgot password and Set password; the card is
+  // CSS over real form fields, not a picture of one.
   return (
-    <div className="login-container login-page">
-      {handoff && <AuthHandoff kind={handoff} />}
-      {/* The logo, top left, with "Corporation" in white for the dark sky;
-          the card's copy below is the standard one. */}
-      <div className="login-brand">
-        <img src="/images/login-logo-red-light.png" alt="SAN2 Corporation" className="login-brand-logo" />
-      </div>
-
-      <div className="login-stage">
-        <div className="login-card">
-          <img src="/images/login-logo-red.png" alt="SAN2 Corporation" className="login-card-logo" />
-          {mfa ? renderSecondStep() : (
+    <AuthShell>
+      {mfa ? renderSecondStep() : (
             <>
               <h2>
                 Welcome <span className="page-title-accent">back</span>
@@ -270,17 +257,7 @@ const Login = () => {
               </p>
             </>
           )}
-
-          <div className="login-help">
-            <span className="login-help-icon"><Headset aria-hidden="true" /></span>
-            <p>
-              <strong>Having trouble?</strong>
-              <span>Contact your system administrator.</span>
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   );
 };
 

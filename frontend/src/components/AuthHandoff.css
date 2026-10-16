@@ -82,8 +82,19 @@
   to { transform: rotate(360deg); }
 }
 
+/* Going: fades over the page that is now in. */
+.auth-handoff.is-ending {
+  animation: auth-handoff-out 240ms ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes auth-handoff-out {
+  to { opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .auth-handoff,
+  .auth-handoff.is-ending,
   .auth-handoff-panel,
   .auth-handoff-ring {
     animation: none;

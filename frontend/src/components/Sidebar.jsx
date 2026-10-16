@@ -116,8 +116,11 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
   const currentUser = getCurrentUser();
   // Role and tabs come from /auth/me (PermissionsProvider), not the login
   // token, so a change an admin makes shows on the next click.
-  const { role, hasPermission } = usePermissions();
-  const displayName = currentUser?.fullName || currentUser?.email || 'Signed in';
+  const { role, hasPermission, profile } = usePermissions();
+  // The name and picture as /auth/me has them now (a save on the My
+  // profile page shows at once); the login token is the fallback.
+  const displayName = profile?.fullName || currentUser?.fullName || currentUser?.email || 'Signed in';
+  const avatarUrl = profile?.avatar || null;
   const displayRole = role ? role.toUpperCase() : '';
 
   const handleConfirmLogout = async () => {
@@ -207,31 +210,44 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
 
           {/* Bottom Profile */}
           <div className="sidebar-bottom">
-            <button
-              type="button"
-              className="sidebar-profile-bottom sidebar-profile-btn"
-              onClick={() => setShowSecurity(true)}
-              title="Account security"
-            >
-              <div className="avatar blue-avatar">{getInitials(displayName)}</div>
-              <div className="profile-info">
-                <span className="profile-name">{displayName}</span>
-                <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
+            {/* Your name and picture open My profile (/profile); the line
+                under them opens Account security (two-step sign-in). */}
+            <div className="sidebar-profile-bottom">
+              <button
+                type="button"
+                className="sidebar-profile-btn"
+                onClick={() => navigate('/profile')}
+                title="My profile"
+              >
+                <div className="avatar blue-avatar" aria-hidden="true">
+                  {avatarUrl ? <img src={avatarUrl} alt="" className="avatar-img" /> : getInitials(displayName)}
+                </div>
+                <div className="profile-info">
+                  <span className="profile-name">{displayName}</span>
+                  <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className={`profile-security${securityState ? ` is-${securityState}` : ''}`}
+                onClick={() => setShowSecurity(true)}
+                title="Account security"
+              >
                 {securityState === 'pending' && (
-                  <span className="profile-security is-pending">
+                  <>
                     <AlertTriangle size={12} aria-hidden="true" />
                     Account security: Action required
-                  </span>
+                  </>
                 )}
                 {securityState === 'protected' && (
-                  <span className="profile-security is-protected">
+                  <>
                     <CheckCircle2 size={12} aria-hidden="true" />
                     Account security: <strong>Protected</strong>
-                  </span>
+                  </>
                 )}
-                {!securityState && <span className="profile-security">Account security</span>}
-              </div>
-            </button>
+                {!securityState && 'Account security'}
+              </button>
+            </div>
             
             {/* Was a hardcoded green "SYS ONLINE" (shown even with the backend
                 down) next to the computer's real date, which disagreed with the
