@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from backend.data_mode import (
     PREVIEW,
+    demo_data_enabled,
     forecast_source,
     get_data_mode,
     predictive_preview,
@@ -44,7 +45,6 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal, principal_clause
 from backend import demo_data
-from backend.demo_flag import demo_enabled
 from backend.schemas.forecast import ActualPoint, ForecastPoint, ForecastResponse
 from backend.series_gaps import gap_note, unilever_points
 from backend.response_cache import cached
@@ -89,7 +89,7 @@ def get_forecast(
         {"sku_id": sku_id, **scope_params},
     ).mappings().first()
     if normalize_principal(principal) == "delmonte" or (product_row and product_row["principal"] == "delmonte"):
-        if demo_enabled():
+        if demo_data_enabled(mode):
             # The labelled demonstration series and its MA3 forecast (schema demo; backend/demo_data.py): history with
             # each point's origin and reason, the one-step forecast with no accuracy figure and no band.
             demo = demo_data.series_points(db, "delmonte", category or sku_id)
@@ -113,8 +113,8 @@ def get_forecast(
             principal="delmonte",
             blocked_reason=DEL_MONTE_NO_FORECAST,
         )
-    if demo_enabled() and (normalize_principal(principal) == "unilever"
-                           or (product_row and product_row["principal"] == "unilever")):
+    if demo_data_enabled(mode) and (normalize_principal(principal) == "unilever"
+                                     or (product_row and product_row["principal"] == "unilever")):
         # The labelled demonstration series and its MA3 forecast (schema demo; backend/demo_data.py), the same
         # source as the chart (so charts and forecasts come from the same source, Kelvin 2026-10-16). Unilever's
         # REAL Forecast_Result is unaffected: this table is never read outside this toggle.

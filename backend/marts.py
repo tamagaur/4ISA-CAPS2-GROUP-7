@@ -583,8 +583,20 @@ def class_changes(db: Session, start: str, end: str, compare_start: str, compare
     entered_items = sorted((item(k, "entered") for k in entered), key=lambda i: (-(i["revenue"] or 0), i["product_key"]))
     left_items = sorted((item(k, "left") for k in left), key=lambda i: (-(i["compare_revenue"] or 0), i["product_key"]))
 
-    def total(items: list[dict], field: str) -> float:
+    def total(items: list[dict], field: str) -> float | None:
+        """None when any item's side is unknown (not_collected or a blank-capture month,
+        both carried as revenue None) rather than summing it as a fabricated 0 (B2, 2026-10-16:
+        a Del Monte range with nothing collected used to total ₱0, which read as a real zero
+        rather than 'nothing to add up')."""
+        if any(i[field] is None for i in items):
+            return None
         return round(sum(i[field] or 0.0 for i in items), 2)
+
+    def total_reason(items: list[dict], field: str, note_field: str) -> str | None:
+        reasons = {i[note_field] for i in items if i[field] is None}
+        if not reasons:
+            return None
+        return reasons.pop() if len(reasons) == 1 else "mixed: " + "; ".join(sorted(reasons))
 
     return {
         "principal": principal,
@@ -595,9 +607,13 @@ def class_changes(db: Session, start: str, end: str, compare_start: str, compare
         "stayed_count": len(a_now & a_before),
         "entered_count": len(entered_items), "left_count": len(left_items),
         "entered_revenue": total(entered_items, "revenue"),
+        "entered_revenue_reason": total_reason(entered_items, "revenue", "class_note"),
         "entered_compare_revenue": total(entered_items, "compare_revenue"),
+        "entered_compare_revenue_reason": total_reason(entered_items, "compare_revenue", "compare_class_note"),
         "left_revenue": total(left_items, "revenue"),
+        "left_revenue_reason": total_reason(left_items, "revenue", "class_note"),
         "left_compare_revenue": total(left_items, "compare_revenue"),
+        "left_compare_revenue_reason": total_reason(left_items, "compare_revenue", "compare_class_note"),
         "entered": entered_items, "left": left_items,
     }
 
