@@ -43,6 +43,7 @@ from analytics.demo.backcast import BRIDGE_END, ANCHOR_PERIOD, backcast_series, 
 from analytics.demo.dm_interpolate import (  # noqa: E402
     GENERATOR_VERSION, JITTER_SCALE, MIN_MONTHS, SEED, fill_series, in_canonical_total, ma3_one_step, next_month,
 )
+from analytics.demo.stock import generate_category_stock  # noqa: E402
 
 LABEL = "demonstration"
 WINDOW_END = "2025-12"
@@ -100,25 +101,31 @@ def build(sales, ratio: float, n_ratio: int, lead: dict):
         pkey[cat] = pk
     # min_months=2: a level and a coefficient of variation need two real months (Kelvin 2026-10-15: fill the rest)
     results = {c: fill_series(c, qty[c], amt[c], SEED, WINDOW_END, min_months=2) for c in sorted(qty)}
-    series, params, forecasts, excluded, bc_excluded = [], [], [], [], []
+    series, params, forecasts, excluded, bc_excluded, stock = [], [], [], [], [], []
     for c, r in results.items():
         if r.excluded_reason:
             excluded.append((c, r.excluded_reason, r.real_months, r.first_real, r.last_real))
             continue
-        series += [(c, pkey[c], p.period, p.quantity, p.net_amount, p.origin, False) for p in r.points]
+        cat_rows = [(c, pkey[c], p.period, p.quantity, p.net_amount, p.origin, False) for p in r.points]
         # 2021-01 .. the month before the first real month: no real data on either side. Its own origin, never
         # 'interpolated'. anchor_override (Del Monte only): a series first seen after 2023-01 is back-cast too, and flagged.
         bc = backcast_series(c, qty[c], amt[c], zero_months_in_span=False, anchor_override=True, min_real_months=2)
         if bc.excluded_reason:
             bc_excluded.append((c, bc.excluded_reason, bc.real_months, bc.first_real))
         else:
-            series += [(c, pkey[c], p, q, a, "backcast", bc.anchor_override) for p, q, a in bc.points]
+            cat_rows += [(c, pkey[c], p, q, a, "backcast", bc.anchor_override) for p, q, a in bc.points]
         # Across the taxonomy change: a pre-2025 path (first real month before 2025-01) is carried forward from its last
         # real month through 2025-02. Extrapolation, by decision; origin 'bridged'.
         if r.first_real < "2025-01" and r.last_real < BRIDGE_END:
-            series += [(c, pkey[c], p, q, a, "bridged", False)
-                       for p, q, a in bridge_series(c, qty[c], amt[c], r.last_real)]
-        real_q = {p.period: p.quantity for p in r.points if p.origin == "real_copy"}
+            cat_rows += [(c, pkey[c], p, q, a, "bridged", False)
+                         for p, q, a in bridge_series(c, qty[c], amt[c], r.last_real)]
+        series += cat_rows
+        # Stock on hand: generated against this category's OWN demand across the same window as the sales fill
+        # (analytics/demo/stock.py). No real anchor exists at this grain (migration 0056), so this covers every
+        # period the sales fill covers, whatever its origin.
+        demand_by_period = {row[2]: row[3] for row in cat_rows}
+        stock += [(c, pkey[c], sp.period, sp.quantity_on_hand, sp.months_of_cover)
+                  for sp in generate_category_stock(c, demand_by_period, cv=r.cv)]
         real_pairs = [(p.net_amount, p.quantity) for p in r.points
                       if p.origin == "real_copy" and p.net_amount and p.quantity and p.net_amount > 0 and p.quantity > 0]
         price = (sum(a for a, _ in real_pairs) / sum(q for _, q in real_pairs)) if real_pairs else None
@@ -133,7 +140,7 @@ def build(sales, ratio: float, n_ratio: int, lead: dict):
             last3 = r.points[-3:]
             forecasts.append((c, pkey[c], next_month(WINDOW_END), round(ma3_one_step(vals), 2), "ma3", len(r.points),
                               sum(1 for p in last3 if p.origin == "interpolated")))
-    return results, series, params, forecasts, excluded, bc_excluded
+    return results, series, params, forecasts, excluded, bc_excluded, stock
 
 
 def canonical_totals(series) -> dict[str, dict[str, float]]:
@@ -178,12 +185,16 @@ def digest(series) -> str:
     return h.hexdigest()
 
 
-def report(results, series, params, forecasts, excluded, bc_excluded, ratio, n_ratio) -> dict:
+def report(results, series, params, forecasts, excluded, bc_excluded, stock, ratio, n_ratio) -> dict:
     ok = {c: r for c, r in results.items() if not r.excluded_reason}
     fills = [f for r in ok.values() for f in r.fills]
     runs = sorted(f.anchoring_run for f in fills)
     rep = {
         "principal": "delmonte",
+        "stock_rows": len(stock), "stock_categories": len({r[0] for r in stock}),
+        "stock_note": ("generated against this category's own demand (origin generated_months_of_cover, "
+                       "migration 0056): no real Del Monte category-level stock count exists anywhere in SSM's "
+                       "data (Inventory_Fact_Real is SKU grain only and carries no category_path)."),
         "categories_in_real_view": len(results), "categories_covered": len(ok), "categories_excluded": len(excluded),
         "months_real": sum(1 for r in series if r[5] == "real_copy"),
         "months_interpolated": sum(1 for r in series if r[5] == "interpolated"),
@@ -212,7 +223,7 @@ def report(results, series, params, forecasts, excluded, bc_excluded, ratio, n_r
     return rep
 
 
-def write(db_url: str, rep: dict, series, params, forecasts, excluded, bc_excluded, replace: bool) -> int:
+def write(db_url: str, rep: dict, series, params, forecasts, excluded, bc_excluded, stock, replace: bool) -> int:
     conn = psycopg2.connect(db_url, connect_timeout=20)
     try:
         cur = conn.cursor()
@@ -226,6 +237,9 @@ def write(db_url: str, rep: dict, series, params, forecasts, excluded, bc_exclud
                     "AND table_name = 'dm_category_sales' AND column_name = 'anchor_override'")
         if cur.fetchone() is None:
             raise SystemExit("demo.dm_category_sales.anchor_override is not there: apply migration 0054 first")
+        cur.execute("SELECT to_regclass('demo.dm_category_stock')")
+        if cur.fetchone()[0] is None:
+            raise SystemExit("demo.dm_category_stock is not there: apply migration 0056 first")
         cur.execute("SELECT run_id FROM demo.run WHERE label = %s", (LABEL,))
         old = cur.fetchone()
         if old and not replace:
@@ -260,6 +274,9 @@ def write(db_url: str, rep: dict, series, params, forecasts, excluded, bc_exclud
         if bc_excluded:
             execute_values(cur, "INSERT INTO demo.backcast_excluded (run_id, series_key, reason, real_months, "
                                 "first_real_period) VALUES %s", [(run_id, *r) for r in bc_excluded])
+        if stock:
+            execute_values(cur, "INSERT INTO demo.dm_category_stock (run_id, category_path, product_key, period, "
+                                "quantity_on_hand, months_of_cover) VALUES %s", [(run_id, *r) for r in stock], page_size=500)
         conn.commit()
         return run_id
     except BaseException:
@@ -276,12 +293,12 @@ def main() -> int:
     args = ap.parse_args()
     db_url = long_read_db_url()
     sales, n_ratio, ratio, lead = read_inputs(db_url)
-    results, series, params, forecasts, excluded, bc_excluded = build(sales, ratio, n_ratio, lead)
-    rep = report(results, series, params, forecasts, excluded, bc_excluded, ratio, n_ratio)
+    results, series, params, forecasts, excluded, bc_excluded, stock = build(sales, ratio, n_ratio, lead)
+    rep = report(results, series, params, forecasts, excluded, bc_excluded, stock, ratio, n_ratio)
     rep["canonical_pesos_2023-01_2025-02"] = assert_not_inflated(series, sales)
     print(json.dumps(rep, indent=1, default=str))
     if args.write:
-        print("[write] demo.run", write(db_url, rep, series, params, forecasts, excluded, bc_excluded, args.replace))
+        print("[write] demo.run", write(db_url, rep, series, params, forecasts, excluded, bc_excluded, stock, args.replace))
     else:
         print("[dry] nothing written (pass --write)")
     return 0

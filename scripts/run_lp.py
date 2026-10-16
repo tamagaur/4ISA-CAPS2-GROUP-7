@@ -105,6 +105,7 @@ same transaction as the cycle's upserts (retire_stale_pending).
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import math
 import os
@@ -118,12 +119,14 @@ from pathlib import Path
 import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
-from psycopg2.extras import Json
+from psycopg2.extras import Json, execute_values
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from analytics.etl.granularity import business_days_in_month, resolve_delmonte_category_grain, resolve_unilever_sku_grain
 from analytics.allocation import basis_year, monthly_allocation
+from analytics.config import long_read_db_url
+from analytics.demo.prescriptive import plan_category, sigma_d_for_category
 from analytics.optimization.lp import (
     SKUInput, build_lp_model, compute_safety_stock, solve_lp, target_stock, weekly_demand,
 )
@@ -727,8 +730,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--source", choices=["real", "demo"], default="real",
-        help="real (default): exactly the run this script has always made. demo: refused (see check_source): "
-             "the demonstration has no stock count or purchase parameters, so no plan is generated.",
+        help="real (default): exactly the run this script has always made. demo: the Del Monte demonstration "
+             "order plan only (--principal delmonte; see check_source), reading and writing schema demo only.",
+    )
+    parser.add_argument(
+        "--write", action="store_true", default=False,
+        help="--source demo only: write demo.dm_category_lp. OFF by default — that run is report-only. "
+             "Ignored (the real path's write behavior is --dry-run, unchanged) with --source real.",
     )
     parser.add_argument(
         "--allocation-pct", type=_positive_float, default=p["allocation_pct"],
@@ -826,18 +834,115 @@ def _log_cycle(plan: CyclePlan, allocation_pct: float, prior_year: int) -> None:
     logger.info(f"  warehouse: stock + orders = {s['warehouse_used']:,.0f} of {plan.warehouse_capacity:,.0f} pieces")
 
 
-def check_source(source: str) -> None:
-    """--source real (the default) is the plan this script has always made. The demonstration has no stock count, cost
-    or supplier parameters in schema demo, so --source demo is refused here, before any connection: it never writes
-    lp_run or lp_recommendation. --principal keeps its existing meaning (both | unilever | delmonte)."""
-    if source != "real":
+def check_source(source: str, principal: str) -> None:
+    """--source real (the default) is the plan this script has always made; it never touches schema demo.
+
+    --source demo (Kelvin, 2026-10-16, migration 0056): the Del Monte demonstration only (--principal delmonte).
+    It is refused for any other --principal, before any connection, with the same wording this always had: there
+    is still no real order plan for Del Monte outside the demonstration, and 'both'/'unilever' + --source demo
+    would otherwise silently plan nothing while looking like a normal run."""
+    if source == "real":
+        return
+    if principal != "delmonte":
         raise SystemExit("run_lp: no order plan is generated for the demonstration (schema demo carries no stock count, "
-                         "cost or supplier parameters). Omit --source, or pass --source real.")
+                         "cost or supplier parameters) outside --principal delmonte. Omit --source, or pass "
+                         "--source real.")
+
+
+def _run_demo_lp(write: bool) -> int:
+    """--source demo --principal delmonte: analytics/demo/prescriptive.py's order-up-to over the demonstration's
+    own forecast and stock (migration 0056). Reads and writes schema demo only; never touches lp_run,
+    LP_Recommendation or Forecast_Result. Report-only unless --write."""
+    db_url = long_read_db_url()
+    conn = psycopg2.connect(db_url, connect_timeout=20)
+    try:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute("SELECT run_id, window_end FROM demo.run WHERE principal = 'delmonte' AND label = 'demonstration' "
+                    "ORDER BY run_id DESC LIMIT 1")
+        row = cur.fetchone()
+        if row is None:
+            cur.execute("ROLLBACK")
+            raise SystemExit("run_lp --source demo: no Del Monte demonstration run exists yet "
+                             "(python -m scripts.build_dm_demo --write --replace first).")
+        run_id, window_end = row
+        cur.execute("SELECT category_path, product_key, forecast_period, forecast_quantity FROM demo.dm_forecast "
+                    "WHERE run_id = %s", (run_id,))
+        forecasts = cur.fetchall()
+        cur.execute("SELECT category_path, quantity_on_hand FROM demo.dm_category_stock "
+                    "WHERE run_id = %s AND period = %s", (run_id, window_end))
+        stock = dict(cur.fetchall())
+        cur.execute("SELECT category_path, period, quantity FROM demo.dm_category_sales "
+                    "WHERE run_id = %s AND quantity IS NOT NULL", (run_id,))
+        sales_rows = cur.fetchall()
+        cur.execute("ROLLBACK")
+    finally:
+        conn.close()
+
+    sales_by_cat: dict[str, dict[str, float]] = {}
+    for cat, period, qty in sales_rows:
+        sales_by_cat.setdefault(cat, {})[period] = float(qty)
+
+    plans, skipped = [], []
+    for cat, pk, period, fq in forecasts:
+        if cat not in stock:
+            skipped.append((cat, "no stock row for the opening period " + window_end))
+            continue
+        sigma_d = sigma_d_for_category(sales_by_cat.get(cat, {}))
+        if sigma_d is None:
+            skipped.append((cat, "fewer than 2 months of demonstration sales to derive a sigma from"))
+            continue
+        plan = plan_category(cat, float(fq), float(stock[cat]), sigma_d)
+        plans.append((run_id, cat, pk, period, plan))
+
+    print(json.dumps({
+        "run_id": run_id, "window_end": window_end, "planned": len(plans), "skipped": skipped,
+        "plans": [{"category": c, "period": p, "forecast_quantity": pl.forecast_quantity,
+                   "stock_on_hand": pl.stock_on_hand, "sigma_d": round(pl.sigma_d, 4),
+                   "safety_stock": round(pl.safety_stock, 2), "target_stock": round(pl.target_stock, 2),
+                   "order_qty": round(pl.order_qty, 2)}
+                  for _r, c, _pk, p, pl in plans],
+    }, indent=1))
+
+    if not write:
+        print("[dry] nothing written (pass --write)")
+        return 0
+    if not plans:
+        print("[write] nothing to write")
+        return 0
+    wconn = psycopg2.connect(db_url, connect_timeout=20)
+    try:
+        wcur = wconn.cursor()
+        wcur.execute("SHOW default_transaction_read_only")
+        if wcur.fetchone()[0] != "off":
+            raise SystemExit("default_transaction_read_only is on for this connection; refusing to write")
+        wcur.execute("SELECT to_regclass('demo.dm_category_lp')")
+        if wcur.fetchone()[0] is None:
+            raise SystemExit("demo.dm_category_lp is not there: apply migration 0056 first")
+        wcur.execute("DELETE FROM demo.dm_category_lp WHERE run_id = %s", (run_id,))
+        execute_values(
+            wcur,
+            "INSERT INTO demo.dm_category_lp (run_id, category_path, product_key, period, forecast_quantity, "
+            "stock_on_hand, sigma_d, safety_stock, target_stock, order_qty) VALUES %s",
+            [(r, c, pk, p, pl.forecast_quantity, pl.stock_on_hand, pl.sigma_d, pl.safety_stock, pl.target_stock,
+              pl.order_qty) for r, c, pk, p, pl in plans],
+        )
+        wconn.commit()
+    except BaseException:
+        wconn.rollback()
+        raise
+    finally:
+        wconn.close()
+    print(f"[write] demo.dm_category_lp run_id {run_id}: {len(plans)} row(s)")
+    return 0
 
 
 def main():
     args = build_parser().parse_args()
-    check_source(args.source)
+    check_source(args.source, args.principal)
+    if args.source == "demo":
+        return _run_demo_lp(args.write)
     _log_inputs(args)
 
     load_dotenv(override=False)

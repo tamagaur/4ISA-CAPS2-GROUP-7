@@ -143,6 +143,58 @@ def monthly_totals(db: Session) -> dict:
     })
 
 
+def stock(db: Session) -> list[dict]:
+    """The Del Monte demonstration stock on hand, every row labelled. There is no real anchor at this grain
+    (migration 0056): Inventory_Fact_Real is SKU grain only and carries no category_path, so every row's origin
+    is 'generated_months_of_cover' — a seeded draw against the category's own demonstration demand, never a copy
+    of anything real."""
+    run = latest_run(db, "delmonte")
+    if run is None:
+        return []
+    rows = db.execute(
+        text("SELECT category_path, period, quantity_on_hand, months_of_cover FROM demo.dm_category_stock "
+             "WHERE run_id = :r ORDER BY category_path, period"), {"r": run["run_id"]},
+    ).mappings().all()
+    return [{
+        "category": r["category_path"], "period": r["period"], "quantity_on_hand": _num(r["quantity_on_hand"]),
+        "months_of_cover": _num(r["months_of_cover"]), "origin": "generated_months_of_cover",
+        "demonstration": True, "demonstration_note": POINT_NOTE,
+    } for r in rows]
+
+
+ORDER_PLAN_NOTE = (
+    "Order-plan rows rest on generated demand AND generated stock — two layers deep. Del Monte has no "
+    "SSM-confirmed warehouse capacity or supplier allocation (unlike the real Unilever LP), so this is a plain "
+    "order-up-to (safety stock + target stock, no allocation/warehouse ceiling)."
+)
+
+
+def order_plan(db: Session) -> dict:
+    """The Del Monte demonstration order plan: analytics/demo/prescriptive.py's safety stock, target stock and
+    order quantity. 'available' is False until scripts.run_lp --source demo --principal delmonte --write has run
+    for the current demonstration build."""
+    run = latest_run(db, "delmonte")
+    if run is None:
+        return {"available": False, "reason": "no Del Monte demonstration run exists"}
+    rows = db.execute(
+        text("SELECT category_path, period, forecast_quantity, stock_on_hand, sigma_d, safety_stock, target_stock, "
+             "order_qty FROM demo.dm_category_lp WHERE run_id = :r ORDER BY category_path"), {"r": run["run_id"]},
+    ).mappings().all()
+    if not rows:
+        return {"available": False, "reason": "the demonstration order plan has not been run yet "
+                                               "(scripts.run_lp --source demo --principal delmonte --write)"}
+    return {
+        "available": True, "demonstration_note": ORDER_PLAN_NOTE,
+        "items": [{
+            "category": r["category_path"], "period": r["period"],
+            "forecast_quantity": _num(r["forecast_quantity"]), "stock_on_hand": _num(r["stock_on_hand"]),
+            "sigma_d": _num(r["sigma_d"]), "safety_stock": _num(r["safety_stock"]),
+            "target_stock": _num(r["target_stock"]), "order_qty": _num(r["order_qty"]),
+            "demonstration": True, "demonstration_note": POINT_NOTE,
+        } for r in rows],
+    }
+
+
 def forecasts(db: Session) -> list[dict]:
     """The Del Monte demonstration forecasts (one-step MA3), every row labelled. No metric and no band."""
     run = latest_run(db, "delmonte")

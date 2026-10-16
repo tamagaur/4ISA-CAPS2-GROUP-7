@@ -1,14 +1,18 @@
 # Demonstration data (schema `demo`)
 
 Everything generated that the app can display lives in schema `demo`. It is synthetic, labelled, and off by default.
-Approved by Kelvin on 2026-10-15 (Sir Catubag informed). The rule is in `CLAUDE.md` hard rule 2; this file is the
-detail. Figures below were queried from the live database on 2026-10-15 (migrations 0052-0055 applied).
+Approved by Kelvin on 2026-10-15 (Sir Catubag informed) and extended by Kelvin on 2026-10-16 to stock and the
+order plan. The rule is in `CLAUDE.md` hard rule 2; this file is the detail. Sales/forecast figures were queried
+from the live database on 2026-10-15 (migrations 0052-0055); stock, the Unilever forecast and the order plan were
+queried 2026-10-16 (migration 0056).
 
-**Read first: three rules**
+**Read first: four rules**
 1. Unilever gaps render as **zero** and are never filled.
 2. Del Monte gaps are **filled and labelled** (`interpolated`, `bridged`, `backcast`).
 3. `demo.*` is the **only** display source for generated data. The older `synthetic_v2` rows are retired for
    display (nothing deleted).
+4. Del Monte stock on hand has **no real anchor at all** (every row is generated — see §9): it is a different
+   kind of generated data than sales, not a copy or an interpolation of anything real.
 
 ## 1. What is in `demo.*`
 
@@ -118,7 +122,57 @@ false`.
 month at the end of the window (2025-12). Of the 82 covered series, 77 end at or before 2024-02 (64 exactly at
 2024-02, 13 earlier), DAIRY ends 2025-06, and 4 reach 2025-12.
 
-## 8. API reason codes
+## 8. Del Monte stock on hand (migration 0056)
+
+There is **no real Del Monte stock count at category grain anywhere in SSM's data**, confirmed live 2026-10-16:
+`Inventory_Fact_Real` for Del Monte is SKU grain only (597 products, 5,541 rows, 2023-01..2025-12) and 0 of those
+597 SKU rows carry a `category_path` (it is NULL on every one). So `demo.dm_category_stock` has no `real_copy`
+origin at all — every row's origin is `generated_months_of_cover`.
+
+Method (`analytics/demo/stock.py`): a seeded draw centred on SSM's own stated policy, "about 3 weeks of sales in
+stock" (Sir Abe; `analytics.params.POLICY_COVER_WEEKS`, the same constant the real LP's `--target-weeks` default
+uses — 3 weeks / `WEEKS_PER_MONTH` ≈ 0.690 months of cover), jittered by the category's own coefficient of
+variation (same `JITTER_SCALE=0.25` as the sales generator), then multiplied by that category's own
+demonstration demand for that month (whatever origin the sales generator produced). Live: 4,144 rows, 82
+categories, run_id 5 (the same run as the Del Monte sales/forecast build — `python -m scripts.build_dm_demo
+--write --replace` now writes stock too).
+
+## 9. Unilever demonstration forecast (migration 0056)
+
+A one-step MA3 per SKU (`scripts/build_unilever_demo.py`), over each SKU's own last 3 real months — real sales
+copied plus real in-span zeros, the same window `backend/series_gaps.unilever_points` renders — never the
+back-cast. **Not wired into any endpoint**: Unilever's real `Forecast_Result` is unaffected and stays the only
+forecast the app serves for Unilever.
+
+Live, run_id 6: 1,396 of 1,807 SKUs forecast (411 excluded: 378 with fewer than 3 real months, 33 with a
+blank-capture month inside the window). Measured against `Forecast_Result` (189 Tier A SKUs; the real deployed
+model is per-SKU, not always MA3 — short-lived SKUs get MA3, medium TSB, long an XGBoost+MA3 average,
+`model_params.method`): of 179 SKUs comparable, the 36 whose real row **is** `ma3` match with **median
+difference 0.0** (max 459.67, one outlier); the 143 whose real row uses a different method differ by a median
+8.53% — a model-routing difference, not a demo-generation bug. "Barely differs from real" holds exactly where the
+real path also used MA3, and only there.
+
+## 10. Del Monte demonstration order plan (migration 0056)
+
+`analytics/demo/prescriptive.py`: the real formulas (`analytics.optimization.lp.compute_safety_stock` /
+`target_stock`, the same `SERVICE_Z` and the same review/lead-day placeholders the real LP applies) over the
+demonstration's own forecast (§7) and stock (§8) — **two layers of generated input**, said explicitly in every
+row's `demonstration_note`, not just a generic synthetic flag. **No allocation or warehouse ceiling**: Del Monte
+has neither an SSM-confirmed yearly allocation nor a warehouse capacity, and reusing Unilever's real
+`warehouse_capacity` (3.8M pieces, measured from Unilever's own stock history) would conflate two different
+businesses and quantity units (DEC-31: Del Monte's unit is unconfirmed). `order_qty` is a plain order-up-to:
+`max(0, target_stock - stock_on_hand)`, floored at `target_weeks` of the month's own demand since there is no
+portfolio LP here to enforce SSM's "3 weeks of cover" softly instead.
+
+Live, run_id 5 (same run as the sales/stock/forecast build): 4 rows — one per category with a forecast (§7).
+`BEVERAGE`, `CULINARY` and `FRUITS` order 0 (the generated stock, drawn around the same ~3-week policy the order
+plan targets, already sits above target); `INNOVATION` orders 5.52. This is the honest result of using SSM's
+same stated policy figure for both the stock draw and the order target — not a bug, and not adjusted to look
+busier. Run with `python -m scripts.run_lp --source demo --principal delmonte --write`; served at
+`GET /recommendations?principal=delmonte` (`order_plan.available`) and in `GET /dashboard`'s `demonstration`
+block, behind `DM_DEMO_ENABLED`.
+
+## 11. API reason codes
 
 Defined once in `backend/series_gaps.py` (text and vocabulary); read that file rather than a copy here. Chart
 endpoints: `no_sale`, `blank_capture`, `outside_product_lifespan`, `not_collected`, `category_absent`. Demonstration

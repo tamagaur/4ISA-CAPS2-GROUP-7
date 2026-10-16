@@ -562,14 +562,15 @@ def get_recommendations(
     # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte
     # honestly returns an empty list until the LP is run for Del Monte.
     if demo_enabled() and normalize_principal(principal) == "delmonte":
-        # Behind DM_DEMO_ENABLED: still no order plan (the demonstration has no stock count, so no plan is generated),
-        # plus the labelled demonstration forecasts (schema demo; backend/demo_data.py).
+        # Behind DM_DEMO_ENABLED: the labelled demonstration forecasts, stock and order plan (schema demo;
+        # backend/demo_data.py; migration 0056). order_plan.available is False until the demo order plan has
+        # actually been run (scripts.run_lp --source demo --principal delmonte --write).
         return JSONResponse({
             **jsonable_encoder(RecommendationsResponse(items=[], count=0)),
             **demo_data.label({
                 "demo_forecasts": demo_data.forecasts(db),
-                "order_plan": {"available": False, "reason": "the demonstration has no stock count and no purchase "
-                                                              "parameters, so no order plan is generated"},
+                "demo_stock": demo_data.stock(db),
+                "order_plan": demo_data.order_plan(db),
             }),
         })
     if planning_mart.usable(db, mode):

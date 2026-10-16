@@ -1,6 +1,7 @@
 """
-scripts/build_unilever_demo.py — Unilever's side of the labelled demonstration: real months copied at SKU grain and
-the 2021-01..2022-12 back-cast, into schema `demo` (migrations 0052, 0053). CLAUDE.md hard rule 2.
+scripts/build_unilever_demo.py — Unilever's side of the labelled demonstration: real months copied at SKU grain,
+the 2021-01..2022-12 back-cast, and a one-step MA3 forecast per SKU, into schema `demo` (migrations 0052, 0053,
+0056). CLAUDE.md hard rule 2.
 
     python -m scripts.build_unilever_demo               # compute + report, write nothing (default)
     python -m scripts.build_unilever_demo --write [--replace]
@@ -10,8 +11,17 @@ rendered as 0 by the API (backend/series_gaps.py), never generated. The only gen
 2021-2022 back-cast, origin 'backcast', for SKUs whose first real month is 2023-01 and that have >= 3 months with
 sales (analytics/demo/backcast.py).
 
+FORECAST (migration 0056, Kelvin 2026-10-16): the SAME one-step MA3 the Del Monte side uses
+(analytics.demo.dm_interpolate.ma3_one_step), over each SKU's last 3 months up to its own last real month,
+real-zero-filled in-span the same way backend/series_gaps.unilever_points does for the API. A SKU whose window has
+fewer than 3 months, or a blank-capture month (quantity NULL) inside it, is named and left out — never rescued
+with an invented value. Reading only real_copy months means this forecast is expected to be close to the real
+Forecast_Result for the same SKU (both read the same last-3-real-months window); build_dm_demo.py's report
+compares them. Not wired into any endpoint: Unilever's real forecast already exists and nothing here replaces it.
+
 READS: Unilever_SKU_Demand_Fact_Real only (one read-only transaction, direct URL). WRITES (--write): demo.run (one
-run per principal, label 'demonstration_unilever'), demo.unilever_sku_sales, demo.backcast_excluded.
+run per principal, label 'demonstration_unilever'), demo.unilever_sku_sales, demo.backcast_excluded,
+demo.unilever_sku_forecast.
 """
 from __future__ import annotations
 
@@ -30,7 +40,8 @@ sys.path.insert(0, str(REPO))
 
 from analytics.config import long_read_db_url  # noqa: E402
 from analytics.demo.backcast import backcast_series  # noqa: E402
-from analytics.demo.dm_interpolate import GENERATOR_VERSION, JITTER_SCALE, SEED  # noqa: E402
+from analytics.demo.dm_interpolate import GENERATOR_VERSION, JITTER_SCALE, SEED, ma3_one_step, next_month  # noqa: E402
+from backend.series_gaps import unilever_points  # noqa: E402
 
 LABEL = "demonstration_unilever"
 APPROVED_BY, APPROVED_ON = "Kelvin", "2026-10-15"
@@ -67,7 +78,7 @@ def build(rows):
         qty[pk][month] = None if q is None else float(q)
         amt[pk][month] = None if a is None else float(a)
         sku[pk] = code
-    series, excluded = [], []
+    series, excluded, forecasts, forecast_excluded = [], [], [], []
     for pk in sorted(qty):
         for month in sorted(qty[pk]):
             series.append((pk, sku[pk], month, qty[pk][month], amt[pk][month], "real_copy"))
@@ -76,11 +87,21 @@ def build(rows):
             excluded.append((sku[pk], bc.excluded_reason, bc.real_months, bc.first_real))
         else:
             series += [(pk, sku[pk], p, q, a, "backcast") for p, q, a in bc.points]
-    return series, excluded
+        # One-step MA3 over the real series only (real_copy + real zeros in-span), the same window the API renders
+        # (backend/series_gaps.unilever_points): last 3 months up to this SKU's own last real month.
+        last3 = unilever_points(qty[pk])[-3:]
+        if len(last3) < 3:
+            forecast_excluded.append((sku[pk], f"{len(last3)} real month(s); 3 needed for MA3", len(last3)))
+        elif any(p["quantity"] is None for p in last3):
+            forecast_excluded.append((sku[pk], "a blank-capture month falls in the last 3 real months", len(last3)))
+        else:
+            last_period = last3[-1]["period"]
+            forecasts.append((pk, sku[pk], next_month(last_period),
+                              round(ma3_one_step([p["quantity"] for p in last3]), 2), "ma3", len(last3)))
+    return series, excluded, forecasts, forecast_excluded
 
 
-def report(series, excluded, n_products) -> dict:
-    by_reason = Counter(r.split(":")[0] if r.startswith("first real month") else r for _, r, _, _ in excluded)
+def report(series, excluded, forecasts, forecast_excluded, n_products) -> dict:
     h = hashlib.sha256()
     for row in sorted(series, key=lambda r: (r[0], r[2])):
         h.update(repr(row).encode("utf-8"))
@@ -96,32 +117,37 @@ def report(series, excluded, n_products) -> dict:
                                         for k, v in Counter(
                                             "first real month after 2023-01" if r.startswith("first real month") else r
                                             for _, r, _, _ in excluded).items()},
+        "forecast_rows": len(forecasts), "forecast_excluded": len(forecast_excluded),
+        "forecast_excluded_by_reason": dict(Counter(r for _, r, _ in forecast_excluded)),
+        "forecast_note": ("one-step MA3 over each SKU's own last 3 real months (real_copy + real in-span zeros); "
+                          "not wired into any endpoint, Unilever's real Forecast_Result is unaffected"),
         "digest": h.hexdigest(),
     }
 
 
-def write(db_url: str, rep: dict, series, excluded, replace: bool) -> int:
+def write(db_url: str, rep: dict, series, excluded, forecasts, replace: bool) -> int:
     conn = psycopg2.connect(db_url, connect_timeout=20)
     try:
         cur = conn.cursor()
         cur.execute("SHOW default_transaction_read_only")
         if cur.fetchone()[0] != "off":
             raise SystemExit("default_transaction_read_only is on; refusing to write")
-        cur.execute("SELECT to_regclass('demo.unilever_sku_sales')")
+        cur.execute("SELECT to_regclass('demo.unilever_sku_forecast')")
         if cur.fetchone()[0] is None:
-            raise SystemExit("demo.unilever_sku_sales is not there: apply migration 0053 first")
+            raise SystemExit("demo.unilever_sku_forecast is not there: apply migration 0056 first")
         cur.execute("SELECT run_id FROM demo.run WHERE label = %s", (LABEL,))
         old = cur.fetchone()
         if old and not replace:
             raise SystemExit(f"run {LABEL!r} exists (run_id {old[0]}); pass --replace")
         if old:
             cur.execute("DELETE FROM demo.run WHERE run_id = %s", (old[0],))
+        forecast_target = max(r[2] for r in forecasts) if forecasts else "n/a"
         cur.execute(
             """INSERT INTO demo.run (label, principal, seed, generator_version, jitter_scale, window_end, forecast_target,
                                      cost_ratio, cost_ratio_source, approved_by, approved_on, notes)
-               VALUES (%s,'unilever',%s,%s,%s,'2026-02','n/a',0,'not used: no cost or forecast is built for Unilever',%s,%s,%s)
+               VALUES (%s,'unilever',%s,%s,%s,'2026-02',%s,0,'not used: Unilever cost is never generated',%s,%s,%s)
                RETURNING run_id""",
-            (LABEL, SEED, GENERATOR_VERSION, JITTER_SCALE, APPROVED_BY, APPROVED_ON, json.dumps(rep)),
+            (LABEL, SEED, GENERATOR_VERSION, JITTER_SCALE, forecast_target, APPROVED_BY, APPROVED_ON, json.dumps(rep)),
         )
         run_id = cur.fetchone()[0]
         execute_values(cur, "INSERT INTO demo.unilever_sku_sales (run_id, product_key, sku_code, period, quantity, net_amount, "
@@ -129,6 +155,10 @@ def write(db_url: str, rep: dict, series, excluded, replace: bool) -> int:
         if excluded:
             execute_values(cur, "INSERT INTO demo.backcast_excluded (run_id, series_key, reason, real_months, "
                                 "first_real_period) VALUES %s", [(run_id, *r) for r in excluded], page_size=1000)
+        if forecasts:
+            execute_values(cur, "INSERT INTO demo.unilever_sku_forecast (run_id, product_key, sku_code, forecast_period, "
+                                "forecast_quantity, method, history_months) VALUES %s",
+                           [(run_id, *r) for r in forecasts], page_size=1000)
         conn.commit()
         return run_id
     except BaseException:
@@ -138,6 +168,57 @@ def write(db_url: str, rep: dict, series, excluded, replace: bool) -> int:
         conn.close()
 
 
+def compare_to_real_forecast(db_url: str, forecasts) -> dict:
+    """How close the demo forecast is to the real one for the same SKU (Kelvin, 2026-10-16: 'report the actual
+    difference rather than assuming it'). Reads Forecast_Result (real path; only run_baseline_forecast's real
+    writes ever touch it) at each product's own latest forecast_date; does not write anything.
+
+    Forecast_Result only has a row for the ~189 Tier A SKUs (analytics.params.abc_method), and the real deployed
+    choice is per-SKU, not always MA3 (2026-09-21 routing: short-lived SKUs get MA3, medium TSB, long an
+    XGBoost+MA3 average — model_params.method says which). This demo always uses plain MA3, so the two are only
+    expected to be close where the real row ALSO used 'ma3'; split the comparison by that so a routing difference
+    is not misread as a demo-generation bug."""
+    if not forecasts:
+        return {"compared": 0}
+    import statistics as _stats
+
+    conn = psycopg2.connect(db_url, connect_timeout=20)
+    try:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute(
+            "SELECT DISTINCT ON (product_key) product_key, forecast_date, forecast_value, model_params "
+            "FROM Forecast_Result ORDER BY product_key, forecast_date DESC"
+        )
+        real = {pk: (fd.isoformat()[:7], float(fv), (mp or {}).get("method") if isinstance(mp, dict) else None)
+                for pk, fd, fv, mp in cur.fetchall()}
+        cur.execute("ROLLBACK")
+    finally:
+        conn.close()
+
+    buckets: dict[str, list[tuple[float, float, bool]]] = {"ma3": [], "other_method": []}
+    for pk, _sku, period, qty, _m, _h in forecasts:
+        if pk not in real:
+            continue
+        real_period, real_value, real_method = real[pk]
+        bucket = "ma3" if real_method == "ma3" else "other_method"
+        buckets[bucket].append((qty, real_value, real_period == period))
+
+    def summarize(rows):
+        if not rows:
+            return {"compared": 0}
+        diffs = [abs(q - v) for q, v, _ in rows]
+        pct = [abs(q - v) / abs(v) * 100 for q, v, _ in rows if v]
+        return {
+            "compared": len(rows), "same_forecast_period": sum(1 for *_, sp in rows if sp),
+            "median_abs_diff": round(_stats.median(diffs), 4), "max_abs_diff": round(max(diffs), 4),
+            "median_pct_diff": round(_stats.median(pct), 4) if pct else None,
+        }
+
+    return {"vs_real_ma3_rows": summarize(buckets["ma3"]), "vs_real_other_method_rows": summarize(buckets["other_method"])}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true")
@@ -145,11 +226,12 @@ def main() -> int:
     args = ap.parse_args()
     db_url = long_read_db_url()
     rows = read_inputs(db_url)
-    series, excluded = build(rows)
-    rep = report(series, excluded, len({r[0] for r in rows}))
+    series, excluded, forecasts, forecast_excluded = build(rows)
+    rep = report(series, excluded, forecasts, forecast_excluded, len({r[0] for r in rows}))
+    rep["vs_real_forecast_result"] = compare_to_real_forecast(db_url, forecasts)
     print(json.dumps(rep, indent=1))
     if args.write:
-        print("[write] demo.run", write(db_url, rep, series, excluded, args.replace))
+        print("[write] demo.run", write(db_url, rep, series, excluded, forecasts, args.replace))
     else:
         print("[dry] nothing written (pass --write)")
     return 0

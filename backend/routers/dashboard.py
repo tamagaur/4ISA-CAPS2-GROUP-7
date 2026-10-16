@@ -2309,6 +2309,8 @@ def get_dashboard(
             "index": demo_data.index(db, "delmonte")["series"],
             "monthly_totals": demo_data.monthly_totals(db)["months"],
             "forecasts": demo_data.forecasts(db),
+            "stock": demo_data.stock(db),
+            "order_plan": demo_data.order_plan(db),
         })
     return payload
 

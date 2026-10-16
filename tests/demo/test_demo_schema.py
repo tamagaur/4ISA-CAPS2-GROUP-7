@@ -9,7 +9,8 @@ SQL = (MIG / "0052_demo_schema.sql").read_text(encoding="utf-8")
 SQL_ALL = "\n".join(f.read_text(encoding="utf-8") for f in sorted(MIG.glob("005[2-9]_demo*.sql")))
 FORBIDDEN = re.compile(r"(mape|mase|wape|smape|rmse|mae|bias|confidence|lower|upper|interval|ci_lo|ci_hi)", re.I)
 EXPECTED_TABLES = {"demo.run", "demo.dm_category_sales", "demo.dm_category_param", "demo.dm_forecast",
-                   "demo.dm_excluded", "demo.unilever_sku_sales", "demo.backcast_excluded"}
+                   "demo.dm_excluded", "demo.unilever_sku_sales", "demo.backcast_excluded",
+                   "demo.dm_category_stock", "demo.unilever_sku_forecast", "demo.dm_category_lp"}
 
 
 def _strip_comments(sql: str) -> str:
