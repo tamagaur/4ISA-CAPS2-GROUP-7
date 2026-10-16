@@ -117,6 +117,17 @@ def test_pareto_lists_the_products_in_each_class_for_the_range():
     assert uni["pareto_check"]["top_count"] == 1
 
 
+def test_pareto_handles_a_partial_year_window():
+    session = FakeSession([
+        ("WITH rev AS", _ranked("unilever", [(1, 500.0, 0.5, 0.5, "A"), (2, 300.0, 0.3, 0.8, "B"),
+                                             (3, 150.0, 0.15, 0.95, "B"), (4, 50.0, 0.05, 1.0, "C")])),
+    ])
+    body = get(session, "/dashboard/pareto?principal=unilever&period=2025-04&start_period=2025-01")
+    classes = {c["tier"]: c for c in body["principals"][0]["classes"]}
+    assert (classes["A"]["count"], classes["B"]["count"], classes["C"]["count"]) == (1, 2, 1)
+    assert classes["C"]["products"][0]["cumulative_share"] == pytest.approx(1.0)
+
+
 def test_pareto_counts_a_returns_heavy_month_as_zero():
     """One revenue rule everywhere (Yuan, 2026-10-05): the stored ABC run's, orchestrate_abc.py:208."""
     from backend.marts import PARETO_SQL
