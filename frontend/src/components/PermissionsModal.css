@@ -5,7 +5,7 @@
 
 .perm-status {
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-size: 0.98rem;
 }
 
 .perm-note {
@@ -14,7 +14,7 @@
   border-radius: 8px;
   background-color: var(--color-surface-sunken);
   color: var(--color-text-body);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .perm-group {
@@ -26,7 +26,7 @@
 
 .perm-group-title {
   padding: 0 0.35rem;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -70,20 +70,20 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   font-weight: 600;
   color: var(--color-text-heading);
 }
 
 .perm-desc {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text-muted);
 }
 
 .perm-change {
   border-radius: 999px;
   padding: 0.1rem 0.5rem;
-  font-size: 0.66rem;
+  font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -101,7 +101,7 @@
 
 .perm-summary {
   margin: 0.1rem 0 0;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-muted);
 }
 

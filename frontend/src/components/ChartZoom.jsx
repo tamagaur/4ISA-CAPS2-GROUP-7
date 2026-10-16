@@ -328,7 +328,7 @@ export function pointLabels(view, entries, { key = 'period' } = {}) {
         textAnchor={anchor}
         className="chart-end-label"
         fill="var(--color-text, #1a202c)"
-        fontSize={10.5}
+        fontSize={11}
         fontWeight={600}
       >
         {match.text}

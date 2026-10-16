@@ -164,7 +164,7 @@
   background-color: var(--color-info);
   width: 32px;
   height: 32px;
-  font-size: 0.9rem;
+  font-size: 0.98rem;
 }
 
 .profile-info {
@@ -178,12 +178,18 @@
 .profile-name {
   font-weight: 600;
   color: var(--color-nav-heading);
-  font-size: 0.95rem;
+  font-size: 1rem;
+  /* A long name ("Mikhaella Audrey Bugayong") wraps onto a second line
+     rather than running under the sidebar's edge (.sidebar is nowrap for
+     the labels' slide animation). */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 .profile-role {
   color: var(--color-nav-subheading);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -206,7 +212,7 @@
 
 .modules-title {
   color: var(--color-nav-group-label);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.08em;
 }
@@ -229,8 +235,9 @@
   border-radius: 8px;
   color: var(--color-nav-item);
   text-decoration: none;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
+  line-height: 1.4;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
@@ -253,6 +260,7 @@
 .nav-item.active {
   background-color: var(--color-nav-item-active-bg);
   color: var(--color-nav-item-active-text);
+  font-weight: 600;
   box-shadow: inset 2px 0 0 var(--color-nav-item-active-rail);
 }
 
@@ -271,7 +279,7 @@
 }
 
 .nav-badge {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   opacity: 0.85;
 }
 
@@ -337,7 +345,7 @@
   background: none;
   color: var(--color-nav-item);
   font-family: inherit;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   text-align: left;
   cursor: pointer;
 }
@@ -413,7 +421,7 @@
   margin-bottom: 1rem;
   /* Puts the 6px dot on the rail's 36px centre line. */
   padding-left: 13px;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
 }
 
 .status-indicator {
@@ -454,7 +462,7 @@
   border: none;
   border-radius: 6px;
   padding: 0.6rem;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   cursor: pointer;
   transition: opacity 0.2s;
 }
@@ -477,7 +485,7 @@
   background: none;
   border: none;
   color: var(--color-nav-item);
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   font-weight: 500;
   padding: 0.5rem 0 0.5rem 8px;
   cursor: pointer;
@@ -580,7 +588,7 @@
 
 .logout-modal-body p {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   color: var(--color-text-body);
   line-height: 1.5;
 }
@@ -600,7 +608,7 @@
   background-color: var(--color-surface);
   color: var(--color-text-body);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -617,7 +625,7 @@
   background-color: var(--color-brand-primary);
   color: var(--color-surface);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;

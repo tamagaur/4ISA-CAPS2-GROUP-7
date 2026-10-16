@@ -72,7 +72,7 @@
 }
 
 .edit-sku-modal-subtitle {
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-subtle);
   margin: 0;
   line-height: 1.4;
@@ -134,7 +134,7 @@
 }
 
 .edit-form-label {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--color-text-muted);
@@ -152,7 +152,7 @@
   background-color: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text);
   outline: none;
   box-sizing: border-box;
@@ -180,7 +180,7 @@
   background-color: var(--color-warning-bg);
   border: 1px solid var(--color-warning-border);
   color: var(--color-warning-text);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   line-height: 1.5;
 }
 
@@ -223,14 +223,14 @@
 }
 
 .no-changes-msg {
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--color-text);
   margin: 0;
 }
 
 .no-changes-subtext {
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-slate-400);
   margin: 0;
 }
@@ -243,7 +243,7 @@
 }
 
 .changed-summary-title {
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   font-weight: 700;
   color: var(--color-text-body);
   margin-bottom: 0.3rem;
@@ -253,7 +253,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   background-color: var(--color-surface-raised);
   padding: 0.5rem 0.8rem;
   border-radius: 6px;
@@ -299,7 +299,7 @@
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   color: var(--color-text-heading);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
@@ -318,7 +318,7 @@
   background-color: var(--color-brand-accent);
   border: none;
   color: var(--color-surface);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;

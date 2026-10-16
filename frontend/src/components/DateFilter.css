@@ -27,7 +27,7 @@
   border: 1.5px solid var(--color-brand-primary);
   border-radius: 8px;
   color: var(--color-brand-primary);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
   line-height: 1.45;
   /* fit-content hugs the message on wide screens (no full-width blob for a
@@ -79,7 +79,7 @@
   border: none;
   border-radius: 8px;
   padding: 0.5rem 1rem;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--color-surface);
   cursor: pointer;
@@ -102,7 +102,7 @@
    CRITICAL badge) elsewhere on the same screen; matches .refresh-btn's
    weight now instead of outranking it. */
 .date-single-label {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -143,7 +143,7 @@
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 0.8rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-text-body);
   cursor: pointer;

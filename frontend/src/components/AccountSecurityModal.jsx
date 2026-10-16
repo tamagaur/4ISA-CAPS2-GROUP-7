@@ -6,7 +6,7 @@ import TwoStepCodeForm from './TwoStepCodeForm';
 import RecoveryCodes from './RecoveryCodes';
 import { useToast } from './ToastProvider';
 import {
-  confirmMfaSetup, disableMfa, getMfaStatus, replaceRecoveryCodes, startMfaSetup,
+  confirmMfaSetup, disableMfa, getMfaStatus, MFA_STATUS_EVENT, replaceRecoveryCodes, startMfaSetup,
 } from '../api/mfa';
 import { getCurrentUser } from '../auth';
 import './TwoStep.css';
@@ -37,6 +37,7 @@ const AccountSecurityModal = ({ isOpen, onClose, onStatusChange }) => {
       const fresh = await getMfaStatus();
       setStatus(fresh);
       onStatusChange?.(fresh);
+      window.dispatchEvent(new CustomEvent(MFA_STATUS_EVENT, { detail: fresh }));
     } catch (err) {
       setLoadError(err.message || 'Could not load two-step sign-in.');
     }

@@ -29,7 +29,7 @@
 
 .du-page-subtitle {
   color: var(--color-text-body);
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   margin: 0;
   line-height: 1.6;
   max-width: 850px;
@@ -43,7 +43,7 @@
 }
 
 .du-section-label {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   color: var(--color-text-muted);
@@ -62,7 +62,7 @@
   color: var(--color-text-body);
   padding: 0.4rem 1rem;
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   font-family: monospace;
 }
@@ -101,7 +101,7 @@
 }
 
 .du-card-label {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--color-text-subtle);
@@ -116,7 +116,7 @@
 }
 
 .du-card-desc {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text-muted);
   margin: 0;
 }
@@ -167,7 +167,7 @@
 }
 
 .du-dropzone-subtext {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text-muted);
   margin: 0;
 }
@@ -183,7 +183,7 @@
   border: 1px solid var(--color-info);
   border-radius: 6px;
   padding: 0.6rem 1.4rem;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s, color 0.2s;
@@ -236,7 +236,7 @@
 }
 
 .du-item-name {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--color-text-heading);
   overflow: hidden;
@@ -245,7 +245,7 @@
 }
 
 .du-item-size {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-subtle);
 }
 
@@ -274,7 +274,7 @@
 }
 
 .du-item-status {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-success-ui);
 }
@@ -324,7 +324,7 @@
   background-color: var(--color-warning-bg);
   border: 1px solid var(--color-warning-border);
   border-radius: 10px;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   line-height: 1.5;
   color: var(--color-warning-text);
 }
@@ -344,7 +344,7 @@
   border: 1px solid var(--color-warning-border);
   border-radius: 20px;
   padding: 0.2rem 0.7rem;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   white-space: nowrap;
 }

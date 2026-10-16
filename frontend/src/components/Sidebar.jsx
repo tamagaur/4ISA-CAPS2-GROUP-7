@@ -16,7 +16,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { logout, getCurrentUser, API_URL } from '../auth';
-import { getMfaStatus } from '../api/mfa';
+import { getMfaStatus, MFA_STATUS_EVENT } from '../api/mfa';
 import { usePermissions } from '../permissions/context';
 import { permissionForPath } from '../permissions/keys';
 import Modal from './Modal';
@@ -110,7 +110,13 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
     getMfaStatus()
       .then((status) => { if (!cancelled) setMfaStatus(status); })
       .catch(() => { if (!cancelled) setMfaStatus(null); });
-    return () => { cancelled = true; };
+    // A change made from the My profile page's copy of the dialog.
+    const onStatus = (event) => setMfaStatus(event.detail);
+    window.addEventListener(MFA_STATUS_EVENT, onStatus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(MFA_STATUS_EVENT, onStatus);
+    };
   }, []);
   const securityState = mfaStatus?.available ? (mfaStatus.enabled ? 'protected' : 'pending') : null;
   const currentUser = getCurrentUser();

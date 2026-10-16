@@ -29,7 +29,7 @@
   border-radius: 999px;
   background-color: var(--color-surface-sunken);
   border: 1px solid var(--color-border);
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -49,7 +49,7 @@
 
 .reorder-page-subtitle {
   color: var(--color-text-subtle);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin: 0;
   letter-spacing: 0.02em;
 }
@@ -76,7 +76,7 @@
   padding: 0.55rem 1.15rem;
   border: 1px solid transparent;
   background: transparent;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: #3b6fe0;
@@ -102,7 +102,7 @@
 .reorder-tab-count {
   background-color: var(--color-brand-primary);
   color: var(--color-surface);
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 700;
   padding: 0.1rem 0.4rem;
   border-radius: 10px;
@@ -156,7 +156,7 @@
 }
 
 .reorder-card-label {
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   color: var(--color-text-subtle);
@@ -172,7 +172,7 @@
 }
 
 .reorder-card-desc {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-subtle);
   margin-top: 0.3rem;
 }
@@ -272,7 +272,7 @@
 /* Group header rows: "Act now" and the collapsible "Review later". */
 .data-table .reorder-group-row td {
   padding: 0.45rem 1rem;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -329,14 +329,14 @@
   margin: 0;
   padding: 0.4rem 0.75rem;
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text-body);
   background-color: var(--color-surface-sunken);
 }
 
 .reorder-pending-label {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -365,7 +365,7 @@
 /* Decision Log */
 .reorder-log-reason {
   max-width: 320px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.4;
 }
 
@@ -389,7 +389,7 @@
 }
 
 .loading-text {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
   font-style: italic;
 }
@@ -464,7 +464,7 @@
 
 .reorder-accept-body {
   margin: 0 0 1.3rem 0;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-body);
   line-height: 1.5;
 }
@@ -477,7 +477,7 @@
 /* Why the last Accept didn't save, kept after the red X gives way. */
 .reorder-accept-error {
   margin: -0.6rem 0 1rem 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-danger-text);
 }
 
@@ -486,7 +486,7 @@
   flex: 1;
   padding: 0.6rem;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -518,7 +518,7 @@
 .reorder-short-note {
   display: block;
   margin-top: 2px;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--color-severity-urgent);
   white-space: nowrap;
@@ -531,7 +531,7 @@
 .reorder-cell-note {
   display: block;
   margin-top: 2px;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 400;
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -544,7 +544,7 @@
 .data-table thead th .reorder-th-period {
   display: block;
   margin-top: 2px;
-  font-size: 0.66rem;
+  font-size: 0.79rem;
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;

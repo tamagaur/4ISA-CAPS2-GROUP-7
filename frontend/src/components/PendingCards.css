@@ -3,7 +3,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -23,13 +23,13 @@
 
 .pending-error-line {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1rem;
   color: var(--color-text-heading);
 }
 
 .pending-error-direction {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text-muted);
 }
 
@@ -45,7 +45,7 @@
   padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid transparent;
-  font-size: 0.76rem;
+  font-size: 0.86rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -73,7 +73,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 6px;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
 }
 
@@ -99,7 +99,7 @@
   border-radius: 999px;
   background-color: rgba(245, 166, 35, 0.14);
   color: #8a5a00;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -110,7 +110,7 @@
   align-items: flex-start;
   gap: 6px;
   margin: 8px 0 0;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-body);
 }
 
@@ -140,7 +140,7 @@
   gap: 12px;
   padding: 9px 0;
   border-bottom: 1px solid #EEF1F4;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .pending-change-list li:last-child {
@@ -149,7 +149,7 @@
 
 .pending-change-empty {
   margin: 8px 0 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text-muted);
 }
 
@@ -188,7 +188,7 @@
   border: 1px dashed var(--color-warning, #f5a623);
   border-radius: 10px;
   background-color: rgba(245, 166, 35, 0.1);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-body);
 }
 
@@ -210,13 +210,13 @@
 
 .pending-preview-where {
   margin: 0 0 4px;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-muted);
 }
 
 .pending-preview-table {
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
 }
 
 .pending-preview-table th,
@@ -227,7 +227,7 @@
 }
 
 .pending-preview-table th {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-muted);
@@ -244,6 +244,6 @@
 /* SKU Forecast: a product with no scored forecast in the page's range. */
 .forecast-accuracy-none {
   margin: 14px 0 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text-muted);
 }

@@ -258,7 +258,7 @@ const DateFilter = ({
         </select>
       </div>
 
-      <span style={{ color: '#667085', fontSize: '0.85rem', margin: '0 4px' }}>to</span>
+      <span style={{ color: '#667085', fontSize: '0.95rem', margin: '0 4px' }}>to</span>
 
       <div className="date-select-btn" style={{ position: 'relative' }}>
         <Calendar size={14} />

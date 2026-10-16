@@ -135,7 +135,7 @@
 
 .dashboard-header p {
   color: var(--color-text-subtle);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   margin: 0;
 }
 
@@ -252,14 +252,14 @@
   margin: auto;
   padding: 2rem;
   text-align: center;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-subtle);
 }
 
 .dashboard-chart-footnote {
   margin: 0;
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-subtle);
 }
 
@@ -277,7 +277,7 @@
 
 .dashboard-error-state p {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1rem;
   color: var(--color-text-body);
   font-weight: 600;
 }
@@ -288,7 +288,7 @@
   border: none;
   border-radius: 8px;
   padding: 0.6rem 1.5rem;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -549,7 +549,7 @@
   border: 1px solid var(--color-border-strong);
   border-radius: 999px;
   color: var(--color-text-muted);
-  font-size: 0.62rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -558,7 +558,7 @@
 .dash-kind {
   align-self: flex-start;
   color: var(--color-text-subtle);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -607,7 +607,7 @@
 
 .dash-footnote {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-muted);
 }
 
@@ -626,7 +626,7 @@
   border-radius: 8px;
   background: var(--color-warning-bg, #fdf6e3);
   color: var(--color-text-strong, #3f3a2e);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.45;
 }
 
@@ -638,7 +638,7 @@
 
 @media (max-width: 640px) {
   .dash-stale-note {
-    font-size: 0.76rem;
+    font-size: 0.86rem;
   }
 }
 
@@ -927,12 +927,12 @@
 
   /* Small labels up to a readable size. */
   .dashboard .abc-share-values {
-    font-size: 0.8rem;
+    font-size: 0.9rem;
   }
 
   .dashboard .pending-card-label,
   .dashboard .chart-unit {
-    font-size: 0.75rem;
+    font-size: 0.86rem;
   }
 }
 

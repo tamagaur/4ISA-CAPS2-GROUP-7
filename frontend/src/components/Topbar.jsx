@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Check, Calendar, FlaskConical } from 'lucide-react';
 import { DEFAULT_PRINCIPAL, SELECTABLE_PRINCIPALS } from '../principals';
 import { DATA_MODES, isPreviewMode } from '../dataMode';
+import Greeting from './ui/Greeting';
 import './Topbar.css';
 
 const Topbar = ({
@@ -43,11 +44,14 @@ const Topbar = ({
     pendingEndYear === realWorldYear;
   const isForecastPage = location.pathname === '/forecast';
 
-  // Principal filter is only meaningful on analytics & management pages.
-  // Admin-only pages (audit log, data upload, user management) operate
-  // across all data and have no per-principal view, so it's hidden there.
-  const ADMIN_PAGES = ['/audit-log', '/upload', '/users'];
-  const showPrincipalFilter = !ADMIN_PAGES.includes(location.pathname);
+  // The principal filter (and the synthetic-data switch beside it) only
+  // where a page has a per-principal view: the dashboard and the analysis
+  // and inventory pages. The admin pages (audit log, data upload, user
+  // management), the card preview and My profile show the same thing
+  // whichever principal is picked, so neither control appears there
+  // (Audrey, 2026-10-16).
+  const PAGES_WITHOUT_PRINCIPAL = ['/audit-log', '/upload', '/users', '/preview', '/profile'];
+  const showPrincipalFilter = !PAGES_WITHOUT_PRINCIPAL.includes(location.pathname);
 
   return (
     <header className="topbar">
@@ -134,6 +138,11 @@ const Topbar = ({
           </button>
         )}
       </div>
+
+      {/* "Good afternoon, Mikhaella!" (ui/Greeting.jsx), between the
+          filters and the Refresh block; on its own line when the bar is
+          too narrow for all three. */}
+      <Greeting />
 
       {rightSlot}
 

@@ -1976,7 +1976,7 @@ const SKUForecast = () => {
                           tickMargin={10}
                           minTickGap={12}
                           height={44 + MONTH_TICK_EXTRA_HEIGHT}
-                          label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                          label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 11, fill: CHART_COLORS.axisLabel }}
                           // Recharts' default tick-skip anchors from the END
                           // of the axis (interval="preserveEnd") — harmless
                           // at the old fixed ~12-point series, but with a
@@ -2004,7 +2004,7 @@ const SKUForecast = () => {
                           tickFormatter={formatAxisQty}
                           width={60}
                           tickMargin={8}
-                          label={{ value: 'Pieces', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                          label={{ value: 'Pieces', angle: -90, position: 'insideLeft', fontSize: 11, fill: CHART_COLORS.axisLabel }}
                         />
                         <Tooltip content={<CustomTooltip bandLabel={bandLabel} bandLevel={bandLevel} />} />
 
@@ -2017,7 +2017,7 @@ const SKUForecast = () => {
                             x={lastPlottedActualPeriod}
                             stroke={CHART_COLORS.axisLabel}
                             strokeDasharray="4 4"
-                            label={{ value: 'Forecast starts', position: 'insideTopRight', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                            label={{ value: 'Forecast starts', position: 'insideTopRight', fontSize: 11, fill: CHART_COLORS.axisLabel }}
                           />
                         )}
 

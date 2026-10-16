@@ -60,8 +60,9 @@ table td.table-center {
   background-color: #F8FAFC;
   border-bottom: 1px solid var(--color-border);
   padding: 10px 16px;
-  font-size: var(--text-micro);
+  font-size: var(--text-table-header);
   font-weight: 600;
+  line-height: 1.4;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-subtle);
@@ -72,6 +73,8 @@ table td.table-center {
 /* Rows about 48px tall at 13.5px text; a separator, no vertical rules. */
 .data-table tbody td {
   padding: 12px 16px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
   border-bottom: 1px solid #EDF0F4;
   vertical-align: middle;
 }
@@ -154,7 +157,7 @@ table td.table-center {
 
 .data-table .cell-rownum {
   color: var(--color-slate-400);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -202,7 +205,7 @@ table td.table-center {
 
 .data-table .cell-muted {
   color: var(--color-text-muted);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   white-space: nowrap;
 }
 
@@ -272,7 +275,7 @@ table td.table-center {
   background-color: var(--color-surface);
   color: var(--color-text-body);
   font-family: inherit;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 500;
   line-height: 1.2;
   cursor: pointer;
@@ -348,7 +351,7 @@ table td.table-center {
 }
 
 .table-pagination-info {
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
@@ -376,7 +379,7 @@ table td.table-center {
   border: 1px solid var(--color-border);
   background-color: var(--color-surface);
   border-radius: 6px;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   font-family: inherit;
   color: var(--color-text-body);
@@ -395,7 +398,7 @@ table td.table-center {
 }
 
 .table-pagination-page-label {
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   font-weight: 600;
   color: var(--color-text);
   white-space: nowrap;
@@ -406,7 +409,7 @@ table td.table-center {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
@@ -415,7 +418,7 @@ table td.table-center {
   border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 0.3rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   font-family: inherit;
   color: var(--color-text);
@@ -445,7 +448,7 @@ table td.table-center {
 }
 
 .page-jump-label {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
@@ -455,7 +458,7 @@ table td.table-center {
   padding: 0.3rem 0.4rem;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-family: inherit;
   color: var(--color-text);
   background-color: var(--color-surface);
@@ -484,7 +487,7 @@ table td.table-center {
   background-color: var(--color-surface);
   color: var(--color-text-body);
   font-family: inherit;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.12s, border-color 0.12s, color 0.12s;
@@ -515,20 +518,27 @@ table td.table-center {
    terracotta: red was doing triple duty as CRITICAL, brand accent and this
    accent word, so every page title opened on an alarm colour. */
 .page-title-accent {
-  font-family: var(--font-serif);
+  font-family: var(--font-accent);
   font-style: italic;
-  font-weight: 600;
+  font-weight: 500;
+  /* Newsreader's italic sits a little small beside Inter bold; sized up
+     and with its optical size following the title's. */
+  font-size: 1.08em;
+  font-optical-sizing: auto;
+  letter-spacing: 0;
   color: var(--color-nav-bg);
 }
 
 :root {
   --font-inter: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --font-primary: var(--font-inter);
   /* Serif accent font — every page title's one accented word (e.g.
      "Inventory *pulse*", "Audit *log*") uses this via .page-title-accent
      below, instead of the plain color-only span every page used before,
      or the two pages (Audit Log, User Management) that fell back to
      system Georgia, which isn't loaded and renders differently per OS. */
-  --font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-accent: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-serif: var(--font-accent);
 
   /* Data Visualization Color Tokens */
   --color-critical: #D9534F;
@@ -680,6 +690,19 @@ table td.table-center {
   --color-abc-deep: #701a75;
 }
 
+/* Form controls don't inherit the page font on their own. */
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+/* Chart text (Recharts draws SVG <text>): the page font, with digits of
+   one width so axis labels line up. */
+.recharts-wrapper text,
+.recharts-surface text {
+  font-family: var(--font-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 html, body, #root, .App {
   margin: 0;
   padding: 0;
@@ -695,8 +718,9 @@ html, body, #root, .App {
      height instead. */
   height: 100vh;
   height: 100dvh;
-  font-family: var(--font-inter);
-  font-size: 14px; /* Standard dashboard density */
+  font-family: var(--font-primary);
+  font-size: 14px; /* Standard dashboard density: the root every rem size scales from */
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--color-surface-raised);
@@ -871,7 +895,7 @@ html, body, #root, .App {
   border-radius: 999px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-text-body);
 }
@@ -1176,6 +1200,6 @@ html, body, #root, .App {
   border-radius: 4px;
   background: var(--color-surface-sunken);
   color: var(--color-text-body);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   line-height: 1.4;
 }

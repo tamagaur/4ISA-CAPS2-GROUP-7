@@ -82,7 +82,7 @@ const GROUP_SHARE = 0.74;
 // a share of the bar's width.
 const SHOULDER_SHARE = 0.3;
 
-const AXIS_TITLE = { fontSize: 10, fontWeight: 600, fill: CHART_COLORS.axisLabel };
+const AXIS_TITLE = { fontSize: 11, fontWeight: 600, fill: CHART_COLORS.axisLabel };
 // Room for the "Month" title under the ticks, as on the card's other views.
 const X_AXIS_HEIGHT = 44;
 
@@ -250,7 +250,7 @@ const PurchasesComparisonChart = ({
                 dataKey="month"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: narrow ? 9 : 10, fill: CHART_COLORS.axisLabel }}
+                tick={{ fontSize: narrow ? 9.5 : 11, fill: CHART_COLORS.axisLabel }}
                 dy={10}
                 interval={0}
                 height={X_AXIS_HEIGHT}
@@ -261,7 +261,7 @@ const PurchasesComparisonChart = ({
                 axisLine={false}
                 tickLine={false}
                 width={yAxisWidth}
-                tick={{ fontSize: narrow ? 9 : 10, fill: CHART_COLORS.axisLabel }}
+                tick={{ fontSize: narrow ? 9.5 : 11, fill: CHART_COLORS.axisLabel }}
                 tickFormatter={(v) => formatCompactPesos(v)}
                 domain={[0, ticks[ticks.length - 1]]}
                 ticks={ticks}

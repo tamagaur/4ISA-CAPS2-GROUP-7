@@ -36,7 +36,7 @@
 
 .user-mgmt-subtitle {
   color: var(--color-text-subtle);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin: 0;
   max-width: 600px;
   line-height: 1.5;
@@ -51,7 +51,7 @@
   border: none;
   padding: 0.6rem 1.2rem;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -70,7 +70,7 @@
   background-color: var(--color-danger-bg);
   border: 1px solid var(--color-danger-border);
   color: var(--color-brand-primary);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   padding: 0.8rem 1.2rem;
   border-radius: 8px;
 }
@@ -98,7 +98,7 @@
   border-bottom: 1px solid var(--color-border);
   text-align: left;
   padding: 10px 16px;
-  font-size: var(--text-micro);
+  font-size: var(--text-table-header);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--color-text-subtle);
@@ -135,7 +135,7 @@
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -151,7 +151,7 @@
 
 .user-mgmt-date-cell {
   color: var(--color-text-muted);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -176,14 +176,14 @@
   border: 1px solid var(--color-warning-border);
   background-color: var(--color-warning-bg);
   color: var(--color-warning-text);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .user-mgmt-status-active {
   color: var(--color-text-muted);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
 }
 
 /* Scoped under the table so it outranks `.user-mgmt-table th`'s left
@@ -326,7 +326,7 @@
 }
 
 .user-mgmt-confirm-body {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-slate-500);
   line-height: 1.5;
   margin: 0 0 1rem 0;
@@ -350,7 +350,7 @@
   border: none;
   padding: 0.6rem 1.5rem;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.15s ease;
@@ -388,7 +388,7 @@
   background-color: var(--color-warning-bg);
   border: 1px solid var(--color-warning-border);
   color: var(--color-warning-text);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.45;
   padding: 0.6rem 0.8rem;
   border-radius: 8px;
@@ -412,7 +412,7 @@
   background-color: var(--color-surface-raised);
   color: var(--color-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
 }
 
 .user-mgmt-share-input:focus {
@@ -429,7 +429,7 @@
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   color: var(--color-text-heading);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 600;
   cursor: pointer;
   padding: 0.6rem 0.9rem;
@@ -443,7 +443,7 @@
 }
 
 .user-mgmt-share-hint {
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-muted);
   margin: -0.5rem 0 1rem 0;
   text-align: left;
@@ -456,7 +456,7 @@
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   color: var(--color-text-heading);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   padding: 0.6rem 1.4rem;
@@ -473,7 +473,7 @@
   background-color: var(--color-danger-bg);
   border: 1px solid var(--color-danger-border);
   color: var(--color-brand-primary);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   padding: 0.6rem 0.8rem;
   border-radius: 8px;
   margin-bottom: 0.8rem;
@@ -482,7 +482,7 @@
 /* Two-step sign-in column (backend/mfa.py). */
 .user-mgmt-mfa {
   display: inline-block;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
@@ -532,4 +532,9 @@
 
 .user-mgmt-name-info .user-mgmt-avatar {
   color: var(--color-text-body);
+}
+
+/* Digits of one width in every cell (counts, dates, durations line up). */
+.user-mgmt-table td {
+  font-variant-numeric: tabular-nums;
 }

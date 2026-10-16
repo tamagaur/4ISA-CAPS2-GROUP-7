@@ -160,10 +160,10 @@ const YearTick = ({ x, y, payload, rows }) => {
     <g transform={`translate(${x},${y})`}>
       <text dy={12} textAnchor="middle" fill={CHART_COLORS.axisLabel} fontSize={11}>{payload.value}</text>
       {row?.span && (
-        <text dy={25} textAnchor="middle" fill={BAND_INK} fontSize={10} fontWeight={600}>{row.span}</text>
+        <text dy={25} textAnchor="middle" fill={BAND_INK} fontSize={11} fontWeight={600}>{row.span}</text>
       )}
       {row && row.value == null && (
-        <text dy={25} textAnchor="middle" fill={CHART_COLORS.axisLabel} fontSize={10}>no data</text>
+        <text dy={25} textAnchor="middle" fill={CHART_COLORS.axisLabel} fontSize={11}>no data</text>
       )}
     </g>
   );
@@ -184,7 +184,7 @@ const BarValue = ({ x, y, width, value }) => {
   return (
     <g>
       <text {...text} fontSize={11} className="annual-view-value">{formatCompactPesos(value)}</text>
-      <text {...text} fontSize={10} className="annual-view-value-short" aria-hidden="true">{short}</text>
+      <text {...text} fontSize={11} className="annual-view-value-short" aria-hidden="true">{short}</text>
     </g>
   );
 };
@@ -306,7 +306,7 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
                     fill={BAND_COLOR}
                     fillOpacity={0.12}
                     stroke="none"
-                    label={{ value: `${fy(band.year)} target ${band.pcts}`, position: 'top', fill: BAND_INK, fontSize: 10, offset: 4, className: 'annual-view-band-label' }}
+                    label={{ value: `${fy(band.year)} target ${band.pcts}`, position: 'top', fill: BAND_INK, fontSize: 11, offset: 4, className: 'annual-view-band-label' }}
                   />
                 )}
                 {band && <ReferenceLine y={band.line} stroke={BAND_INK} strokeDasharray="5 4" />}

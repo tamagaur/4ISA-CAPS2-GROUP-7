@@ -70,7 +70,7 @@
 .save-result-message {
   margin: 0;
   max-width: 34ch;
-  font-size: 0.875rem;
+  font-size: 0.96rem;
   line-height: 1.5;
   color: var(--color-text-body);
 }

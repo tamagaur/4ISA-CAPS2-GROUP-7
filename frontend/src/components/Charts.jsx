@@ -51,7 +51,7 @@ const formatAxisPeriod = (period) => {
 // helper, so the titles share a size, colour and placement. The Y title is
 // centred on the axis (textAnchor middle, which Recharts 3 lets a label
 // override) rather than starting at its middle and running off the top.
-const AXIS_TITLE = { fontSize: 10, fontWeight: 600, fill: CHART_COLORS.axisLabel };
+const AXIS_TITLE = { fontSize: 11, fontWeight: 600, fill: CHART_COLORS.axisLabel };
 const yAxisTitle = (value) => ({ value, angle: -90, position: 'insideLeft', textAnchor: 'middle', ...AXIS_TITLE });
 const xAxisTitle = (value) => ({ value, position: 'insideBottom', offset: 0, ...AXIS_TITLE });
 // The X axis grows from Recharts' default 30px to fit its title under the
@@ -127,13 +127,13 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
                 <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }} dy={10} tickFormatter={formatAxisPeriod} />
+                <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }} dy={10} tickFormatter={formatAxisPeriod} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
                   domain={[0, 'auto']}
-                  tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
-                  label={{ value: 'Weeks of stock', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                  tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }}
+                  label={{ value: 'Weeks of stock', angle: -90, position: 'insideLeft', fontSize: 11, fill: CHART_COLORS.axisLabel }}
                 />
                 <Tooltip content={<CoverTooltip policyTarget={policyTarget} />} />
                 <Area type="monotone" dataKey="base" stackId="cover" stroke="none" fill="transparent" {...chartAnim()} />
@@ -142,7 +142,7 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
                   y={policyTarget}
                   stroke={STATUS_TIERS.loss}
                   strokeDasharray="4 4"
-                  label={{ value: `our rule: ${policyTarget} weeks`, position: 'insideTopRight', fontSize: 10, fill: STATUS_TIERS.loss }}
+                  label={{ value: `our rule: ${policyTarget} weeks`, position: 'insideTopRight', fontSize: 11, fill: STATUS_TIERS.loss }}
                 />
                 <Area
                   type="monotone"
@@ -201,9 +201,9 @@ const AllocationTooltip = ({ active, payload }) => {
       backgroundColor: '#ffffff', border: '1px solid #e2e8f0', padding: '0.6rem 0.8rem',
       borderRadius: '8px', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.08)',
     }}>
-      <p style={{ fontWeight: 700, color: '#1a202c', margin: '0 0 0.3rem 0', fontSize: '0.8rem' }}>{row.sku}</p>
-      <p style={{ margin: '0.1rem 0', fontSize: '0.75rem', color: '#4a5568' }}>Allocation: {row.allocationCases} cases</p>
-      <p style={{ margin: '0.1rem 0', fontSize: '0.75rem', color: '#4a5568' }}>Forecast: {row.forecastCases} cases</p>
+      <p style={{ fontWeight: 700, color: '#1a202c', margin: '0 0 0.3rem 0', fontSize: '0.9rem' }}>{row.sku}</p>
+      <p style={{ margin: '0.1rem 0', fontSize: '0.86rem', color: '#4a5568' }}>Allocation: {row.allocationCases} cases</p>
+      <p style={{ margin: '0.1rem 0', fontSize: '0.86rem', color: '#4a5568' }}>Forecast: {row.forecastCases} cases</p>
       {/* Ink text with the status swatch beside it — the colour marks the
           direction, the words stay readable. */}
       <p className="chart-tooltip-row" style={{ marginTop: '0.35rem', fontWeight: 700 }}>
@@ -286,7 +286,7 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
               domain={domain}
               ticks={axisTicks}
               tickFormatter={tickFormatter}
-              tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+              tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }}
               axisLine={false}
               tickLine={false}
             />
@@ -523,6 +523,24 @@ const RETURNS_METRICS = ['returns', 'retest'];
 // Which views draw each estimate: a sales or stock estimate rides with its
 // own metric (and with Both); returns stay in their own view.
 const ESTIMATE_VIEWS = { salesest: ['both', 'sales'], stockest: ['both', 'inventory'] };
+
+// A table heading from a metric's label: the name with its unit on the
+// first line, and the part after " · " (the price basis), " — " (what an
+// estimate is made from) or in brackets on a second, smaller line.
+//   "Monthly sales · selling price, VAT-inclusive"
+//     -> { label: "Monthly sales (₱)", sub: "selling price, VAT-inclusive" }
+//   "Inventory value (at last purchase price)"
+//     -> { label: "Inventory value (₱)", sub: "at last purchase price" }
+const tableHead = (name, unit = '₱') => {
+  const cut = [' · ', ' — '].map((sep) => name.indexOf(sep)).filter((i) => i >= 0);
+  if (cut.length) {
+    const at = Math.min(...cut);
+    return { label: `${name.slice(0, at)} (${unit})`, sub: name.slice(at + 3) };
+  }
+  const bracket = name.match(/^(.*?) \((.*)\)$/);
+  if (bracket) return { label: `${bracket[1]} (${unit})`, sub: bracket[2] };
+  return { label: `${name} (${unit})`, sub: null };
+};
 
 // "Nov 2025", and the metric's own name without its basis ("Sales"): the
 // legend already says the price basis, the tooltip says which month.
@@ -1035,29 +1053,37 @@ export const SalesVsStockWidget = ({
 
   // The table keeps the months in order, one row each, with both metrics
   // whatever the control shows — every column names its unit (₱), and the
-  // stock column's count day rides with its value.
+  // stock column's count day rides with its value. A heading is the
+  // metric's name with the unit, and its basis or estimate note on a
+  // second line (tableHead), so no heading runs the table wide.
   const hasCountDays = data.some((pt) => pt.stockCountDay);
+  const pesos = (v) => formatCompactPesos(v);
   const tableColumns = [
     { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
-    { key: 'sales', label: `${salesLabel} (₱)`, format: (v) => formatCompactPesos(v) },
-    { key: 'stockOnHand', label: `${INVENTORY_LABEL} (₱)`, format: (v) => formatCompactPesos(v) },
+    { key: 'sales', ...tableHead(salesLabel), format: pesos },
+    { key: 'stockOnHand', ...tableHead(INVENTORY_LABEL), format: pesos },
     ...(hasCountDays
       ? [{ key: 'stockCountDay', label: 'Stock counted on', format: (v) => v, align: 'left' }]
       : []),
-    ...(hasReceived ? [{ key: 'received', label: `${receivedLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasReceived ? [{ key: 'received', ...tableHead(receivedLabel), format: pesos }] : []),
     ...(hasEstimated
       ? [{
           key: 'receivedEstimated',
-          label: `${ESTIMATED_LABEL} (₱)`,
-          format: (v) => (v < 0 ? '₱0 (negative estimate)' : formatCompactPesos(v)),
+          ...tableHead(ESTIMATED_LABEL),
+          format: (v) => (v < 0 ? '₱0 (negative estimate)' : pesos(v)),
         }]
       : []),
-    ...(hasSalesEst ? [{ key: 'salesEstimated', label: `${salesEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
-    ...(hasStockEst ? [{ key: 'stockEstimated', label: `${stockEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
-    ...(hasReturns ? [{ key: 'returns', label: `${returnsLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
-    ...(hasReturnsEst ? [{ key: 'returnsEstimated', label: `${returnsEstLabel} (₱)`, format: (v) => formatCompactPesos(v) }] : []),
+    ...(hasSalesEst ? [{ key: 'salesEstimated', ...tableHead(salesEstLabel), format: pesos }] : []),
+    ...(hasStockEst ? [{ key: 'stockEstimated', ...tableHead(stockEstLabel), format: pesos }] : []),
+    ...(hasReturns ? [{ key: 'returns', ...tableHead(returnsLabel), format: pesos }] : []),
+    ...(hasReturnsEst ? [{ key: 'returnsEstimated', ...tableHead(returnsEstLabel), format: pesos }] : []),
     ...(data.some((pt) => pt.stockUnusual && pt.stockOnHand != null)
-      ? [{ key: 'stockUnusual', label: 'Stock note', format: (v) => `Needs checking: ${v}`, align: 'left' }]
+      ? [{
+          key: 'stockUnusual',
+          label: 'Stock note',
+          align: 'left',
+          note: { lead: 'Needs checking', title: (row) => `Stock count, ${plainPeriod(row.period)}` },
+        }]
       : []),
   ];
 
@@ -1239,7 +1265,7 @@ export const SalesVsStockWidget = ({
                           tickFormatter={(v) => AXIS_MONTHS[v - 1] ?? ''}
                           axisLine={false}
                           tickLine={false}
-                          tick={showMonths ? { fontSize: wide ? 10 : 9.5, fill: CHART_COLORS.axisLabel } : false}
+                          tick={showMonths ? { fontSize: wide ? 11 : 9.5, fill: CHART_COLORS.axisLabel } : false}
                           dy={10}
                           interval={0}
                           height={showMonths ? X_AXIS_TITLED_HEIGHT : 6}
@@ -1249,7 +1275,7 @@ export const SalesVsStockWidget = ({
                           axisLine={false}
                           tickLine={false}
                           width={phone ? 46 : 64}
-                          tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                          tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }}
                           tickFormatter={(v) => formatCompactPesos(v)}
                           label={phone ? undefined : yAxisTitle('Pesos (₱)')}
                           domain={panel.yTicks ? [panel.yTicks[0], panel.yTicks[panel.yTicks.length - 1]] : [0, 'auto']}
@@ -2074,7 +2100,7 @@ const MonthYearTick = ({ x, y, payload, rows, step, slot }) => {
   const before = rows[i - step];
   const startsYear = !before || yearOf(before.period) !== year;
   const month = (
-    <text x={x} y={y + 14} textAnchor="middle" fontSize={slot * step < 26 ? 9.5 : 10.5} fill={CHART_COLORS.axisLabel}>
+    <text x={x} y={y + 14} textAnchor="middle" fontSize={slot * step < 26 ? 9.5 : 11} fill={CHART_COLORS.axisLabel}>
       {AXIS_MONTHS[monthOf(row.period) - 1]}
     </text>
   );
@@ -2414,7 +2440,7 @@ export const PortfolioForecastWidget = ({
                       axisLine={false}
                       tickLine={false}
                       domain={['auto', 'auto']}
-                      tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                      tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }}
                       tickFormatter={(v) => formatCompactQty(v, 2)}
                       label={yAxisTitle('Pieces')}
                     />
@@ -2435,7 +2461,7 @@ export const PortfolioForecastWidget = ({
                           position: sec.key === 'future'
                             ? 'insideTopLeft'
                             : sec.key === 'present' && narrowSlots ? 'insideTopRight' : 'insideTop',
-                          fontSize: narrowSlots ? 9 : 10,
+                          fontSize: narrowSlots ? 9.5 : 11,
                           fontWeight: 700,
                           letterSpacing: narrowSlots ? 0.3 : 1,
                           fill: CHART_COLORS.axisLabel,

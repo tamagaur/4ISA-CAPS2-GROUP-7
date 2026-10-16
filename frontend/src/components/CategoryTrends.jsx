@@ -208,13 +208,13 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
                 minTickGap={24}
                 tick={<MonthTick fill={CHART_COLORS.axisLabel} fontSize={11} />}
                 height={40 + MONTH_TICK_EXTRA_HEIGHT}
-                label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 11, fill: CHART_COLORS.axisLabel }}
               />
               <YAxis
                 tickFormatter={formatRevenue}
                 tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                 width={64}
-                label={{ value: 'Revenue (₱)', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                label={{ value: 'Revenue (₱)', angle: -90, position: 'insideLeft', fontSize: 11, fill: CHART_COLORS.axisLabel }}
               />
               <Tooltip content={<TrendTooltip placeholder={placeholder} rows={data} />} />
               {/* The projection's likely range: an invisible base up to the
@@ -233,7 +233,7 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
                   x={lastActualPeriod}
                   stroke={CHART_COLORS.axisLabel}
                   strokeDasharray="4 4"
-                  label={{ value: 'Projection starts', position: 'insideTopRight', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                  label={{ value: 'Projection starts', position: 'insideTopRight', fontSize: 11, fill: CHART_COLORS.axisLabel }}
                 />
               )}
               <Line dataKey="actual" name="Revenue" stroke={CHART_COLORS.salesSeries} strokeWidth={2} strokeLinecap="round" dot={seriesDot({ color: CHART_COLORS.salesSeries, r: 3 })} connectNulls={false} isAnimationActive={false} label={actualLabels} />

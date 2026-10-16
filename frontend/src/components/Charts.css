@@ -29,6 +29,7 @@
   align-items: center;
   margin: 0 0 4px;
   font-size: var(--text-card-title);
+  line-height: 1.4;
   color: var(--color-text);
   font-weight: 600;
 }
@@ -59,7 +60,7 @@
   padding: 0.05rem 0.35rem;
   border: 1px solid var(--color-border, #e3e0d8);
   border-radius: 4px;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 500;
   color: var(--color-text-muted);
   vertical-align: middle;
@@ -71,7 +72,7 @@
    one. Same muted size as the axis titles. */
 .bar-scale-note {
   margin: 0 0 0.35rem;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 600;
   color: var(--color-text-subtle);
 }
@@ -96,7 +97,7 @@
   padding: 0.28rem 0.7rem;
   border: none;
   background: transparent;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-slate-500);
   cursor: pointer;
@@ -125,7 +126,7 @@
   border: 1px solid #fecaca;
   border-radius: 16px;
   padding: 0.28rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(197, 48, 48, 0.08);
@@ -161,14 +162,14 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-slate-500);
   font-weight: 600;
 }
 
 .chart-picker-select {
   padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   border-radius: 6px;
   border: 1px solid var(--color-border-strong);
   background-color: var(--color-surface);
@@ -216,7 +217,7 @@
    notice"), generated from the data — never hardcoded copy. */
 .chart-insight {
   margin: 0.35rem 0 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.5;
   color: var(--color-text-body);
 }
@@ -306,7 +307,7 @@
   background: transparent;
   padding: 0.26rem 0.6rem;
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -346,27 +347,173 @@
 .chart-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
 }
 
 .chart-table th,
 .chart-table td {
-  padding: 0.4rem 0.65rem;
+  padding: 0.4rem 0.55rem;
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
+/* Headings wrap onto two or three lines rather than running the table
+   wider than its card (Audrey, 2026-10-16): the cells stay on one line,
+   so the columns are as wide as their figures, and the headings fold to
+   fit above them. */
 .chart-table thead th {
   position: sticky;
   top: 0;
   background: var(--color-surface-raised);
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-size: var(--text-table-header);
+  font-weight: 600;
+  line-height: 1.3;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--color-text-subtle);
   text-align: left;
+  vertical-align: bottom;
+  white-space: normal;
   z-index: 1;
+}
+
+/* A column of sentences folds onto a few lines, so it never sets the
+   table's width. */
+.chart-table td.table-wrap {
+  white-space: normal;
+  min-width: 8rem;
+  max-width: 26rem;
+  line-height: 1.4;
+}
+
+/* A note column: the start of the note on one line, cut with an ellipsis,
+   and "See more" beside it opening the whole note in a dialog. */
+.chart-note {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+
+.chart-note-preview {
+  display: inline-block;
+  max-width: 6.5rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.chart-note-preview strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.chart-note-more {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chart-note-more:hover {
+  text-decoration: underline;
+}
+
+.chart-note-more:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* The note's dialog: a small white card over a dim page. */
+.chart-note-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: rgba(15, 23, 42, 0.45);
+}
+
+.chart-note-dialog {
+  width: 100%;
+  max-width: 480px;
+  padding: 20px 22px 22px;
+  border-radius: 14px;
+  background-color: var(--color-surface);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+.chart-note-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.chart-note-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-text);
+}
+
+.chart-note-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: -4px -6px 0 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.chart-note-close:hover {
+  background-color: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.chart-note-lead {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #B54708;
+}
+
+.chart-note-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text-body);
+}
+
+/* The heading's second line: the price basis, what an estimate is from. */
+.chart-table-th-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text-muted);
 }
 
 .chart-table thead th.table-num {
@@ -396,7 +543,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
 }
 
@@ -434,7 +581,7 @@
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text);
 }
 
@@ -511,12 +658,12 @@
 }
 
 .abc-bar-label {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
 }
 
 .abc-bar-count {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--color-slate-500);
   flex: 1;
@@ -524,7 +671,7 @@
 }
 
 .abc-bar-share {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-text);
   min-width: 3.5rem;
@@ -546,7 +693,7 @@
 
 .abc-bar-instruction {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
 }
 
@@ -555,7 +702,7 @@
   padding: 0.6rem 0.9rem;
   background-color: var(--color-surface-raised);
   border-radius: 8px;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
   line-height: 1.4;
 }
@@ -583,7 +730,7 @@
   border: none;
   background: none;
   padding: 0.3rem 0.75rem;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-text-subtle);
   border-radius: 999px;
@@ -622,7 +769,7 @@
   border: 1px solid var(--color-border);
   background-color: var(--color-surface);
   padding: 0.3rem 0.65rem;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-text-body);
   border-radius: 999px;
@@ -651,12 +798,12 @@
 @media (max-width: 480px) {
   .card-principal-option {
     padding: 0.28rem 0.55rem;
-    font-size: 0.68rem;
+    font-size: 0.79rem;
   }
 
   .card-filter-reset {
     padding: 0.28rem 0.55rem;
-    font-size: 0.68rem;
+    font-size: 0.79rem;
   }
 }
 
@@ -684,7 +831,7 @@
 }
 
 .portfolio-stat-label {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -698,7 +845,7 @@
 }
 
 .portfolio-stat-scope {
-  font-size: 0.95rem;
+  font-size: 1rem;
 }
 
 /* ── Stock status by ABC tier — horizontal composition bars ───────────── */
@@ -747,7 +894,7 @@
 .tier-stock-detail {
   margin: 0;
   min-height: 1.5em;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   line-height: 1.5;
   color: var(--color-text-body);
 }
@@ -776,7 +923,7 @@
 .tier-stock-label {
   flex: 0 0 auto;
   width: 1rem;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--color-text-body);
 }
@@ -813,7 +960,7 @@
   align-items: flex-start;
   gap: 8px;
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   line-height: 1.5;
   color: var(--color-text-body);
 }
@@ -847,7 +994,7 @@
 }
 
 .tier-stock-empty {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: var(--color-text-subtle);
   padding-left: 0.5rem;
   align-self: center;
@@ -892,7 +1039,7 @@
 }
 
 .reorder-mini-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -917,7 +1064,7 @@
 
 .reorder-mini-table th {
   text-align: left;
-  font-size: 0.62rem;
+  font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -934,7 +1081,7 @@
 .reorder-mini-table td {
   padding: 0.7rem 0.4rem;
   border-bottom: 1px solid #EEF1F4;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text);
   vertical-align: middle;
   white-space: nowrap;
@@ -967,7 +1114,7 @@
   }
 
   .reorder-mini-table td {
-    font-size: 0.72rem;
+    font-size: 0.82rem;
   }
 
   .reorder-mini-table .urgency-badge-mini {
@@ -998,7 +1145,7 @@
 }
 
 .reorder-mini-product .product-name-code {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
 }
 
 .reorder-mini-view-all {
@@ -1009,7 +1156,7 @@
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--color-border);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-info);
   text-decoration: none;
@@ -1023,7 +1170,7 @@
   display: inline-block;
   padding: 0.22rem 0.55rem;
   border-radius: 4px;
-  font-size: 0.6rem;
+  font-size: 0.79rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1045,7 +1192,7 @@
 }
 
 .reorder-priorities-title {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--color-text);
 }
@@ -1054,7 +1201,7 @@
    takes its own line under the title instead of squeezing in beside it. */
 .reorder-priorities-caption {
   flex-basis: 100%;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   line-height: 1.45;
   color: var(--color-text-subtle);
 }
@@ -1075,7 +1222,7 @@
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text);
   min-width: 0;
 }
@@ -1090,7 +1237,7 @@
 /* Pushes the percentage to the far right, leaving label + "?" grouped
    together on the left (the info icon belongs to the label, not the value). */
 .reorder-priority-pct {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--color-text);
   margin-left: auto;
@@ -1138,7 +1285,7 @@
 
 .abc-share-label {
   grid-area: label;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-text-body);
 }
@@ -1158,7 +1305,7 @@
 
 .abc-share-values {
   grid-area: values;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -1248,7 +1395,7 @@
   border-radius: 6px;
   background: none;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
   cursor: pointer;
 }
@@ -1309,7 +1456,7 @@
   align-items: center;
   gap: 0.45rem;
   margin: 0 0 0.35rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--color-text);
 }
@@ -1321,7 +1468,7 @@
 
 .abc-tier-card-role {
   margin: 0 0 0.65rem;
-  font-size: 0.74rem;
+  font-size: 0.84rem;
   line-height: 1.4;
   color: var(--color-text-body);
 }
@@ -1332,7 +1479,7 @@
   align-items: center;
   gap: 0.3rem;
   margin-top: 0.75rem;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-brand-primary);
   text-decoration: none;
@@ -1396,13 +1543,13 @@ button.abc-tier-card-link {
 }
 
 .abc-tier-card-revenue.is-unavailable {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-muted);
 }
 
 .abc-tier-card-note {
   margin: 0.1rem 0 0;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
 }
 
@@ -1411,7 +1558,7 @@ button.abc-tier-card-link {
   margin: 0.7rem 0 0;
   padding-top: 0.7rem;
   border-top: 1px solid var(--color-border);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   line-height: 1.45;
   color: var(--color-text-body);
 }
@@ -1434,11 +1581,11 @@ button.abc-tier-card-link {
   }
   .abc-tier-card-insight {
     grid-column: 1 / -1;
-    font-size: 0.85rem;
+    font-size: 0.95rem;
   }
   .abc-tier-card-name {
     margin-bottom: 0.6rem;
-    font-size: 0.9rem;
+    font-size: 0.98rem;
   }
   .abc-tier-card-skus {
     font-size: 2.3rem;
@@ -1451,7 +1598,7 @@ button.abc-tier-card-link {
   }
   .abc-tier-card-note {
     margin-top: 0.25rem;
-    font-size: 0.8rem;
+    font-size: 0.9rem;
   }
 }
 
@@ -1461,7 +1608,7 @@ button.abc-tier-card-link {
 @container (min-width: 620px) {
   .abc-tier-card-name {
     margin-bottom: 0.75rem;
-    font-size: 0.95rem;
+    font-size: 1rem;
   }
   .abc-tier-card-body {
     grid-template-columns: none;
@@ -1479,7 +1626,7 @@ button.abc-tier-card-link {
   }
   .abc-tier-card-note {
     margin-top: 0.3rem;
-    font-size: 0.85rem;
+    font-size: 0.95rem;
   }
   .abc-tier-card-insight {
     grid-column: auto;
@@ -1489,7 +1636,7 @@ button.abc-tier-card-link {
     padding: 0 0 0 1.5rem;
     border-top: 0;
     border-left: 1px solid var(--color-border);
-    font-size: 0.9rem;
+    font-size: 0.98rem;
   }
 }
 
@@ -1507,7 +1654,7 @@ button.abc-tier-card-link {
   background: var(--color-surface);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
   font-family: var(--font-inter);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   line-height: 1.35;
   color: var(--color-text-body);
   white-space: nowrap;
@@ -1562,7 +1709,7 @@ button.abc-tier-card-link {
 }
 
 .policy-headline-text {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-body);
 }
 
@@ -1572,7 +1719,7 @@ button.abc-tier-card-link {
   border-left: 3px solid var(--color-warning);
   border-radius: 6px;
   background-color: var(--color-surface-raised);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   line-height: 1.45;
   color: var(--color-text-muted);
 }
@@ -1596,7 +1743,7 @@ button.abc-tier-card-link {
 }
 
 .policy-bar-label {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--color-text-body);
 }
@@ -1619,7 +1766,7 @@ button.abc-tier-card-link {
 }
 
 .policy-bar-value {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
@@ -1727,7 +1874,7 @@ button.abc-tier-card-link {
   flex-wrap: wrap;
   gap: 0.5rem 1.5rem;
   margin: -0.25rem 0 0.5rem calc(12rem + 0.75rem);
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-body);
 }
 
@@ -1782,7 +1929,7 @@ button.abc-tier-card-link {
 
 .policy-stat-value small {
   margin-left: 2px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text-muted);
 }
@@ -2018,7 +2165,7 @@ button.abc-tier-card-link {
 .alloc-metric.is-achieved { background: #F1EDFF; }
 
 .alloc-metric-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2102,14 +2249,14 @@ button.abc-tier-card-link {
 /* What a panel shows, above it. */
 .yoy-panel-caption {
   margin: 0.4rem 0 0;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-text);
 }
 
 .yoy-panel-empty {
   margin: 0.25rem 0 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
 }
 

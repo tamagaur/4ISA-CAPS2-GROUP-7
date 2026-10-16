@@ -33,13 +33,13 @@
   align-items: center;
   gap: 0.45rem;
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--color-text);
 }
 
 .sku-pattern-compact .sku-pattern-title {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -49,7 +49,7 @@
   border-radius: 999px;
   border: 1px solid var(--color-border);
   background-color: var(--color-surface-sunken);
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 600;
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -105,7 +105,7 @@
 }
 
 .sku-pattern-tile-desc {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
   line-height: 1.4;
 }
@@ -113,7 +113,7 @@
 
 .sku-pattern-note {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
   line-height: 1.45;
 }
@@ -123,14 +123,14 @@
    the explanation reads as subordinate to the name. */
 .sku-pattern-bin {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   line-height: 1.45;
   color: var(--color-text-muted);
 }
 
 .sku-pattern-bin-label {
   margin-right: 0.45rem;
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -148,7 +148,7 @@
 
 .sku-pattern-empty-title {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--color-text-body);
 }
