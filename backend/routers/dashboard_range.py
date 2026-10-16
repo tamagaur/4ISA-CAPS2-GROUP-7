@@ -97,8 +97,7 @@ def get_range_pareto(
             "pesos_basis": marts.PESOS_BASIS_LABEL["ex_vat" if who == "delmonte" else "vat_inclusive"],
             "pareto_check": pareto_check([r["share"] for r in rows], [r["cumulative_share"] for r in rows]),
             "classes": classes,
-            "blocked_reason": None if rows else f"No {who} product sold more than it took back in "
-                                                 f"{marts.range_label(start, end)}.",
+            "blocked_reason": None if rows else marts.pareto_blocked_reason(db, start, end, who, mode),
         })
     payload = {"start_period": start, "end_period": end, "label": marts.range_label(start, end),
                "cutoffs": {"A": TIER_A_CUTOFF, "B": TIER_B_CUTOFF}, "principals": out}

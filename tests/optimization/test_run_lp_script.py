@@ -174,8 +174,13 @@ def test_dry_run_is_transaction_scoped_never_session_scoped():
     server connection, and the next client handed it can't write — it broke
     the app's sign-ins on 2026-09-28. The dry run must stay one READ ONLY
     transaction that nothing commits: with autocommit off, psycopg2 discards
-    it on conn.close() and on any error exit, so no path can leave it open."""
-    source = (Path(__file__).resolve().parents[2] / "scripts/run_lp.py").read_text(encoding="utf-8")
+    it on conn.close() and on any error exit, so no path can leave it open.
+
+    Scoped to main() (the real path, --source real): _run_demo_lp (--source demo) is a separate function, its own
+    short-lived connections to schema demo only via the direct URL, never the :6543 pooler — a real commit there
+    (--write) is unrelated to this pooler-session concern."""
+    full_source = (Path(__file__).resolve().parents[2] / "scripts/run_lp.py").read_text(encoding="utf-8")
+    source = full_source[full_source.index("\ndef main():"):]
     assert "conn.set_session(readonly" not in source  # the comment may name it; the call must not
     assert "conn.set_session(autocommit=not args.dry_run)" in source
     assert source.count('cur.execute("SET TRANSACTION READ ONLY")') == 1

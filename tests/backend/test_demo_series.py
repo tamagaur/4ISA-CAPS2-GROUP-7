@@ -26,9 +26,10 @@ class R:
 
 
 class FakeSession:
-    def __init__(self, runs, unilever=None, dm=None, forecasts=None, params=None, products=None):
+    def __init__(self, runs, unilever=None, dm=None, forecasts=None, params=None, products=None, stock=None, lp=None):
         self.runs, self.unilever, self.dm = runs, unilever or [], dm or []
         self.forecasts, self.params, self.products = forecasts or [], params or [], products or {}
+        self.stock, self.lp = stock or [], lp or []
 
     def execute(self, stmt, params=None):
         sql, params = str(stmt), params or {}
@@ -52,6 +53,10 @@ class FakeSession:
             return R(self.params)
         if "FROM demo.dm_forecast" in sql:
             return R(self.forecasts)
+        if "FROM demo.dm_category_stock" in sql:
+            return R(self.stock)
+        if "FROM demo.dm_category_lp" in sql:
+            return R(self.lp)
         if "FROM Product_Dimension" in sql:
             row = self.products.get(params.get("sku_id"))
             return R([row] if row else [])
@@ -107,7 +112,7 @@ def test_unilever_backcast_apart_and_zero_sale_months_not_generated(monkeypatch)
     with client(session()) as c:
         b = get(c, "/demo/series?principal=unilever&key=S1").json()
     assert b["data_source"] == "synthetic_demonstration" and b["demonstration"] is True and b["demonstration_note"]
-    assert b["origin_counts"] == {"real_copy": 2, "interpolated": 0, "bridged": 0, "backcast": 1}
+    assert b["origin_counts"] == {"real_copy": 2, "interpolated": 0, "bridged": 0, "backcast": 1, "forward_filled": 0}
     pts = {p["period"]: p for p in b["points"]}
     assert pts["2021-01"]["origin"] == "backcast" and pts["2021-01"]["reason"] == "no_data_recorded_before_2023"
     assert (pts["2023-02"]["quantity"], pts["2023-02"]["origin"], pts["2023-02"]["reason"]) == (0.0, None, "no_sale")
@@ -121,7 +126,7 @@ def test_del_monte_four_origins_are_separate_with_their_own_reasons(monkeypatch)
     monkeypatch.setenv("DM_DEMO_ENABLED", "1")
     with client(session()) as c:
         b = get(c, "/demo/series?principal=delmonte&key=/A").json()
-    assert b["origin_counts"] == {"real_copy": 2, "interpolated": 1, "bridged": 1, "backcast": 1}
+    assert b["origin_counts"] == {"real_copy": 2, "interpolated": 1, "bridged": 1, "backcast": 1, "forward_filled": 0}
     reasons = {p["period"]: p["reason"] for p in b["points"]}
     assert reasons["2023-02"] == "interpolated" and reasons["2021-01"] == "no_data_recorded_before_2023"
     assert reasons["2024-03"] == "taxonomy_change_bridge"
@@ -209,4 +214,20 @@ def test_recommendations_for_del_monte_add_the_labelled_forecasts_and_still_no_p
     assert b["items"] == [] and b["count"] == 0
     assert b["data_source"] == "synthetic_demonstration" and b["demonstration"] is True
     assert b["demo_forecasts"][0]["category"] == "BEVERAGE" and b["demo_forecasts"][0]["demonstration"] is True
-    assert b["order_plan"]["available"] is False
+    assert b["demo_stock"] == []
+    assert b["order_plan"]["available"] is False and "run_lp" in b["order_plan"]["reason"]
+
+
+def test_recommendations_for_del_monte_serves_the_order_plan_once_run_lp_has_run(monkeypatch):
+    monkeypatch.setenv("DM_DEMO_ENABLED", "1")
+    s = session()
+    s.stock = [{"category_path": "BEVERAGE", "period": "2025-12", "quantity_on_hand": 500.0, "months_of_cover": 0.7}]
+    s.lp = [{"category_path": "BEVERAGE", "period": "2026-01", "forecast_quantity": 3418.82, "stock_on_hand": 500.0,
+             "sigma_d": 12.5, "safety_stock": 16.0, "target_stock": 600.0, "order_qty": 100.0}]
+    with client(s) as c:
+        b = get(c, "/recommendations?principal=delmonte").json()
+    assert b["demo_stock"][0]["quantity_on_hand"] == 500.0 and b["demo_stock"][0]["origin"] == "generated_months_of_cover"
+    assert b["order_plan"]["available"] is True
+    item = b["order_plan"]["items"][0]
+    assert (item["category"], item["order_qty"], item["target_stock"]) == ("BEVERAGE", 100.0, 600.0)
+    assert "generated demand AND generated stock" in b["order_plan"]["demonstration_note"]

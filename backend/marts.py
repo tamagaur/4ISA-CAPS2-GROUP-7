@@ -339,7 +339,12 @@ def sales_month_span(db: Session, scope: str) -> tuple[str, str] | None:
 
 def flow_by_period(db: Session, periods: list[str], principal: str, flow: str) -> dict[str, dict]:
     """{period: {real, estimated, estimated_kind, estimated_source, negative_rows, products}}
-    for ONE principal. real = real rows' pesos; estimated = filled rows' pesos."""
+    for ONE principal. real = real rows' pesos; estimated = filled rows' pesos — except
+    'returns', whose only non-real source is the retired synthetic fill (salesreturn_fact's
+    fill_source is always one of synthetic_v2 / synthetic_v2_gap / synthetic_rate_transfer /
+    synthetic_branch_adjacent — every value its CHECK constraint allows; there is no
+    legitimate derived-returns estimate like estimated_receipts has). Retired 2026-10-16
+    (rule 2, B1): returns never surfaces an estimate, real mode or preview."""
     snap = _snapshot(db)
     out = {}
     for p in periods:
@@ -349,7 +354,7 @@ def flow_by_period(db: Session, periods: list[str], principal: str, flow: str) -
             value = _f(r["pesos"])
             if r["data_kind"] == "real":
                 slot["real"] = value if slot["real"] is None or value is None else slot["real"] + value
-            elif r["data_kind"] == "filled" and value is not None:
+            elif flow != "returns" and r["data_kind"] == "filled" and value is not None:
                 slot["estimated"] = (slot["estimated"] or 0.0) + value
                 slot["estimated_kind"] = "filled"
                 slot["estimated_source"] = r["source_tag"]
@@ -401,17 +406,13 @@ def stock_pieces_at(db: Session, period: str | None, principal: str) -> float | 
 
 def estimated_stock_by_period(db: Session, periods: list[str], principal: str, mode: str = REAL) -> dict[str, dict]:
     """Non-real stock pesos per count month for ONE principal, for the chart's estimated
-    points: filled and generated rows (generated only in preview when COMPLETE MONTHS is
-    off). Drawn apart from the real line and labelled; no stock card reads them.
-    {period: {value, kind}}."""
-    kinds = ("filled", "generated") if mode == PREVIEW or COUNT_FILLED_AND_GENERATED else ("filled",)
-    snap, out = _snapshot(db), {}
-    for p in periods:
-        parts = [(k, snap.stock.get((principal, p, k))) for k in kinds]
-        parts = [(k, r) for k, r in parts if r is not None and r["pesos"] is not None]
-        if parts:
-            out[p] = {"value": sum(float(r["pesos"]) for _, r in parts), "kind": "/".join(sorted(k for k, _ in parts))}
-    return out
+    points. RETIRED 2026-10-16 (rule 2, B1): mart.inventory_mart's filled/generated rows all
+    come from is_demo=true inventory_fact rows (synthetic_v2, synthetic_v2_gap,
+    synthetic_branch_adjacent — every fill_source inventory_fact allows) — the retired
+    synthetic family, never served, real mode or preview. schema demo is the single display
+    source for anything generated, and this chart series has no demo stock analog wired in.
+    Returns {}. The signature stays so every caller keeps working."""
+    return {}
 
 
 def stock_coverage(db: Session, period: str | None, scope: str) -> list[str]:
@@ -536,6 +537,27 @@ def pareto_query(start: str, end: str, principal: str, mode: str = REAL) -> tupl
             {"principal": principal, "start": start, "end": end, "a": TIER_A_CUTOFF, "b": TIER_B_CUTOFF})
 
 
+def pareto_blocked_reason(db: Session, start: str, end: str, principal: str, mode: str = REAL) -> str:
+    """Why pareto() ranked nothing for one principal over the range (B3, 2026-10-16): two
+    different causes that used to share one wrong message ('no product sold more than it
+    took back'). No real sales row at all in the range means Del Monte wasn't collected, or
+    Unilever genuinely sold nothing; rows present but every one net-sold <= 0 means returns
+    matched or exceeded sales everywhere — the original wording, kept for that case only."""
+    label = range_label(start, end)
+    sql = f"""
+        SELECT EXISTS (
+            SELECT 1 FROM {sales_mart_relation(mode)} s
+            WHERE s.principal = :principal AND s.in_principal_total
+              AND s.period BETWEEN :start AND :end AND {_kind_filter(mode, 's')}
+        ) AS present
+    """
+    row = batch.first(db, sql, {"principal": principal, "start": start, "end": end})
+    if not (row and row["present"]):
+        return (f"No {principal} sales were collected in {label}." if principal == "delmonte"
+                else f"No {principal} product sold anything in {label}.")
+    return f"No {principal} product sold more than it took back in {label}."
+
+
 # Why chosen products have no rank in either of two ranges: months on file and blank
 # amounts, for the side of a class change where pareto() has no row for the product.
 RANGE_REVENUE_SQL = """
@@ -551,14 +573,36 @@ RANGE_REVENUE_SQL = """
 """
 
 
-def _unranked_side(row: dict | None, prefix: str) -> tuple[float | None, str]:
-    """(revenue, why it has no class) for a product pareto() did not rank in a range."""
+def _unranked_side(row: dict | None, prefix: str, principal: str, principal_collected: bool) -> tuple[float | None, str]:
+    """(revenue, why it has no class) for a product pareto() did not rank in a range.
+    months == 0 can mean two different things: Unilever genuinely sold nothing (0.0 is
+    correct), or — Del Monte's 2024-03..2025-02 taxonomy-break gap — nothing was collected
+    for the WHOLE principal that range, so 0.0 would be fabricated (the product's real
+    revenue, wherever it is ranked, would then read as 100% growth/decline). `not_collected`
+    only fires when `principal_collected` says the principal has no real month at all in
+    this range; a Del Monte category simply missing from an otherwise-reported range is
+    still a real, counted zero."""
     months = int(row[f"{prefix}months"] or 0) if row else 0
     if months == 0:
+        if principal == "delmonte" and not principal_collected:
+            return None, "not_collected"
         return 0.0, "no sales in the range"
     if row[f"{prefix}has_blank"]:
         return None, "a month with a blank sales amount, so it is not ranked"
     return 0.0, "returns matched or exceeded sales in every month it has, so it is not ranked"
+
+
+PRINCIPAL_MONTHS_SQL = """
+    SELECT COUNT(DISTINCT period) AS months FROM mart.sales_mart_real
+    WHERE principal = :principal AND in_principal_total AND period BETWEEN :start AND :end
+"""
+
+
+def principal_collected(db: Session, principal: str, start: str, end: str) -> bool:
+    """Whether at least one real sales row exists for the principal anywhere in the range —
+    distinguishes 'nothing was collected' from 'rows exist but nobody net-sold' (B2, 2026-10-16)."""
+    row = batch.first(db, PRINCIPAL_MONTHS_SQL, {"principal": principal, "start": start, "end": end})
+    return bool(row and row["months"])
 
 
 def class_changes(db: Session, start: str, end: str, compare_start: str, compare_end: str, principal: str) -> dict:
@@ -574,16 +618,21 @@ def class_changes(db: Session, start: str, end: str, compare_start: str, compare
     entered, left = a_now - a_before, a_before - a_now
     unranked = sorted({k for k in entered if k not in before} | {k for k in left if k not in now})
     sums = {}
+    now_collected = before_collected = True
     if unranked:
         sums = {int(r["product_key"]): r for r in db.execute(text(RANGE_REVENUE_SQL), {
             "principal": principal, "keys": unranked, "start": start, "end": end,
             "cstart": compare_start, "cend": compare_end}).mappings().all()}
+        if principal == "delmonte":
+            now_collected = principal_collected(db, principal, start, end)
+            before_collected = principal_collected(db, principal, compare_start, compare_end)
 
     def item(key: int, change: str) -> dict:
         n, b = now.get(key), before.get(key)
         ref = n or b
-        revenue, note = (n["revenue"], None) if n else _unranked_side(sums.get(key), "")
-        compare_revenue, compare_note = (b["revenue"], None) if b else _unranked_side(sums.get(key), "compare_")
+        revenue, note = (n["revenue"], None) if n else _unranked_side(sums.get(key), "", principal, now_collected)
+        compare_revenue, compare_note = (b["revenue"], None) if b else _unranked_side(
+            sums.get(key), "compare_", principal, before_collected)
         both = revenue is not None and compare_revenue is not None
         return {
             "change": change, "product_key": key, "sku_id": ref["sku_id"], "product_name": ref["product_name"],

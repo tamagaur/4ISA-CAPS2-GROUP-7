@@ -1818,13 +1818,17 @@ def get_dashboard(
     # Preview's placeholder sales months (Unilever, before the first real month).
     placeholder = placeholder_window(db) if mode == PREVIEW and scope in ("all", "unilever") else None
 
-    # Coverage hole H1 (reports/diagnostics/coverage_check_2026-10-03.md): the
-    # chart drew only real rows, so months the database holds as fills stayed
-    # empty. Each line now also carries an *_estimated value where its real one
-    # is missing — filled rows, plus generated (placeholder) rows in preview —
-    # with the kind, for the chart to draw as an estimate. The real lines and
-    # every KPI are unchanged. H4: Unilever's returns (a rate fill) and Del
-    # Monte's returns are served too, as their own line.
+    # Coverage hole H1 (reports/diagnostics/coverage_check_2026-10-03.md) used to fill sales,
+    # stock and returns gaps from mart's filled/generated rows. Retired 2026-10-16 (rule 2,
+    # B1): every one of those rows traces to the old synthetic_v2 family, which `demo.*`
+    # superseded as the single display source for anything generated — so
+    # estimated_sales_by_period and estimated_stock_by_period now always return {} and
+    # flow_by_period never estimates 'returns'. sales_estimated / stock_on_hand_estimated /
+    # returns_estimated below stay in the response shape (None when there's nothing to
+    # estimate) so the frontend doesn't need a contract change. Sales still shows demo.*'s
+    # 2021-22 back-cast in preview, but through the plain `sales` field (sales_by_period
+    # widens 'real' to include preview_placeholder rows) — not through sales_estimated.
+    # Stock and returns have no demo.* analog wired into this series at all.
     in_scope = [who for who in ("unilever", "delmonte") if scope in ("all", who)]
 
     def by_principal(estimate_fn, real_fn) -> dict:
@@ -1965,9 +1969,14 @@ def get_dashboard(
     # multiplies shares by ranked_total, never total.
     range_text = marts.range_label(range_start, range_end)
     if not abc_coverage:
+        # One reason per principal in scope (B3, 2026-10-16): a principal with no real sales
+        # row at all in the range (Del Monte: not collected; Unilever: nothing sold) is a
+        # different cause from one with rows that never net-sold above zero, and the old
+        # single message named the wrong one for Del Monte's taxonomy-break gap.
+        reasons = dict.fromkeys(marts.pareto_blocked_reason(db, range_start, range_end, who, mode) for who in ranked)
         abc_revenue = {"period": range_end, "start_period": range_start, "end_period": range_end, "label": range_text,
                        "basis": "range", "total": None, "ranked_total": None,
-                       "blocked_reason": f"No product sold more than it took back for {_scope_label(scope)} in {range_text}."}
+                       "blocked_reason": " ".join(reasons)}
     elif len(abc_coverage) > 1:
         abc_revenue = {"period": range_end, "start_period": range_start, "end_period": range_end, "label": range_text,
                        "basis": "range", "total": None, "ranked_total": None,
@@ -2443,6 +2452,10 @@ def get_dashboard(
             "index": demo_data.index(db, "delmonte")["series"],
             "monthly_totals": demo_data.monthly_totals(db)["months"],
             "forecasts": demo_data.forecasts(db),
+            "stock": demo_data.stock(db),
+            "order_plan": demo_data.order_plan(db),
+            "policy_comparison": demo_data.policy_comparison(db),
+            "dead_stock": demo_data.dead_stock(db),
         })
     return payload
 

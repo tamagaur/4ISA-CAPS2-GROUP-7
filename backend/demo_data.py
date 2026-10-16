@@ -24,8 +24,10 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from analytics.params import POLICY_COVER_WEEKS as POLICY_WEEKS
+from analytics.params import WEEKS_PER_MONTH as AVG_WEEKS_PER_MONTH
 from backend.series_gaps import (
-    REASON_BLANK_CAPTURE, REASON_BRIDGED, REASON_INTERPOLATED, REASON_NO_DATA_BEFORE_2023,
+    REASON_BLANK_CAPTURE, REASON_BRIDGED, REASON_FORWARD_FILLED, REASON_INTERPOLATED, REASON_NO_DATA_BEFORE_2023,
     REASON_NO_OBSERVATION_BEFORE_START, gap_note, unilever_points,
 )
 
@@ -33,7 +35,7 @@ DATA_SOURCE = "synthetic_demonstration"
 NOTE = ("Synthetic demonstration data (approved by Kelvin 2026-10-15): generated for visualisation only. "
         "It is not SSM data, not a forecast result and not an accuracy figure.")
 POINT_NOTE = "synthetic demonstration"
-ORIGINS = ("real_copy", "interpolated", "bridged", "backcast")
+ORIGINS = ("real_copy", "interpolated", "bridged", "backcast", "forward_filled")
 
 
 def label(payload: dict) -> dict:
@@ -65,6 +67,8 @@ def _dm_reason(origin, period, q):
         return REASON_INTERPOLATED
     if origin == "bridged":
         return REASON_BRIDGED
+    if origin == "forward_filled":
+        return REASON_FORWARD_FILLED
     if origin == "backcast":
         return REASON_NO_DATA_BEFORE_2023 if period < "2023-01" else REASON_NO_OBSERVATION_BEFORE_START
     return REASON_BLANK_CAPTURE if q is None else None
@@ -143,6 +147,93 @@ def monthly_totals(db: Session) -> dict:
     })
 
 
+def stock(db: Session) -> list[dict]:
+    """The Del Monte demonstration stock on hand, every row labelled. There is no real anchor at this grain
+    (migration 0056): Inventory_Fact_Real is SKU grain only and carries no category_path, so every row's origin
+    is 'generated_months_of_cover' — a seeded draw against the category's own demonstration demand, never a copy
+    of anything real."""
+    run = latest_run(db, "delmonte")
+    if run is None:
+        return []
+    rows = db.execute(
+        text("SELECT category_path, period, quantity_on_hand, months_of_cover FROM demo.dm_category_stock "
+             "WHERE run_id = :r ORDER BY category_path, period"), {"r": run["run_id"]},
+    ).mappings().all()
+    return [{
+        "category": r["category_path"], "period": r["period"], "quantity_on_hand": _num(r["quantity_on_hand"]),
+        "months_of_cover": _num(r["months_of_cover"]), "origin": "generated_months_of_cover",
+        "demonstration": True, "demonstration_note": POINT_NOTE,
+    } for r in rows]
+
+
+ORDER_PLAN_NOTE = (
+    "Order-plan rows rest on generated demand AND generated stock — two layers deep. Del Monte has no "
+    "SSM-confirmed warehouse capacity or supplier allocation (unlike the real Unilever LP), so this is a plain "
+    "order-up-to (safety stock + target stock, no allocation/warehouse ceiling)."
+)
+
+
+def order_plan(db: Session) -> dict:
+    """The Del Monte demonstration order plan: analytics/demo/prescriptive.py's safety stock, target stock and
+    order quantity. 'available' is False until scripts.run_lp --source demo --principal delmonte --write has run
+    for the current demonstration build."""
+    run = latest_run(db, "delmonte")
+    if run is None:
+        return {"available": False, "reason": "no Del Monte demonstration run exists"}
+    rows = db.execute(
+        text("SELECT category_path, period, forecast_quantity, stock_on_hand, sigma_d, safety_stock, target_stock, "
+             "order_qty FROM demo.dm_category_lp WHERE run_id = :r ORDER BY category_path"), {"r": run["run_id"]},
+    ).mappings().all()
+    if not rows:
+        return {"available": False, "reason": "the demonstration order plan has not been run yet "
+                                               "(scripts.run_lp --source demo --principal delmonte --write)"}
+    return {
+        "available": True, "demonstration_note": ORDER_PLAN_NOTE,
+        "items": [{
+            "category": r["category_path"], "period": r["period"],
+            "forecast_quantity": _num(r["forecast_quantity"]), "stock_on_hand": _num(r["stock_on_hand"]),
+            "sigma_d": _num(r["sigma_d"]), "safety_stock": _num(r["safety_stock"]),
+            "target_stock": _num(r["target_stock"]), "order_qty": _num(r["order_qty"]),
+            "demonstration": True, "demonstration_note": POINT_NOTE,
+        } for r in rows],
+    }
+
+
+UNILEVER_ORDER_PLAN_NOTE = (
+    "Demo forecast, REAL stock: this plan's demand side comes from the demonstration (the MA3 forecast, and a "
+    "sigma computed over the demonstration's full history including the 2021-22 back-cast), but stock on hand "
+    "and cost per piece are Unilever's REAL count and REAL cost — real inventory exists and is good, so none of "
+    "it is generated. That is a different confidence than Del Monte's plan, which rests on generated demand AND "
+    "generated stock. Not Unilever's real LP: the real LP_Recommendation is unaffected."
+)
+
+
+def unilever_order_plan(db: Session) -> dict:
+    """The Unilever demonstration order plan: scripts/run_lp.py's --source demo --principal unilever
+    (demo.unilever_sku_lp, migration 0057). 'available' is False until that run has been written."""
+    run = latest_run(db, "unilever")
+    if run is None:
+        return {"available": False, "reason": "no Unilever demonstration run exists"}
+    rows = db.execute(
+        text("SELECT sku_code, period, forecast_quantity, stock_on_hand, sigma_d, safety_stock, target_stock, "
+             "order_qty FROM demo.unilever_sku_lp WHERE run_id = :r ORDER BY sku_code"), {"r": run["run_id"]},
+    ).mappings().all()
+    if not rows:
+        return {"available": False, "reason": "the demonstration order plan has not been run yet "
+                                               "(scripts.run_lp --source demo --principal unilever --write)"}
+    return {
+        "available": True, "demonstration_note": UNILEVER_ORDER_PLAN_NOTE, "stock_source": "real",
+        "sku_count": len(rows),
+        "items": [{
+            "sku_id": r["sku_code"], "period": r["period"],
+            "forecast_quantity": _num(r["forecast_quantity"]), "stock_on_hand": _num(r["stock_on_hand"]),
+            "sigma_d": _num(r["sigma_d"]), "safety_stock": _num(r["safety_stock"]),
+            "target_stock": _num(r["target_stock"]), "order_qty": _num(r["order_qty"]),
+            "demonstration": True, "demonstration_note": POINT_NOTE,
+        } for r in rows],
+    }
+
+
 def forecasts(db: Session) -> list[dict]:
     """The Del Monte demonstration forecasts (one-step MA3), every row labelled. No metric and no band."""
     run = latest_run(db, "delmonte")
@@ -158,6 +249,27 @@ def forecasts(db: Session) -> list[dict]:
         "history_months": int(r["history_months"]), "generated_months_in_average": int(r["interpolated_in_window"]),
         "status": "ok", "demonstration": True, "demonstration_note": POINT_NOTE,
     } for r in rows]
+
+
+def unilever_forecast(db: Session, sku_code: str) -> dict | None:
+    """The demonstration's one-step MA3 forecast for one Unilever SKU (migration 0056), or None when this SKU
+    has no demo forecast (fewer than 3 real months, or more than one blank-capture month in its MA3 window —
+    scripts/build_unilever_demo.py). Not Unilever's real forecast: this table is never read by the real path."""
+    run = latest_run(db, "unilever")
+    if run is None:
+        return None
+    r = db.execute(
+        text("SELECT forecast_period, forecast_quantity, method, history_months, blank_capture_filled "
+             "FROM demo.unilever_sku_forecast WHERE run_id = :r AND sku_code = :k"), {"r": run["run_id"], "k": sku_code},
+    ).mappings().first()
+    if r is None:
+        return None
+    return {
+        "forecast_period": r["forecast_period"], "forecast_quantity": _num(r["forecast_quantity"]),
+        "method": r["method"], "history_months": int(r["history_months"]),
+        "blank_capture_filled": bool(r["blank_capture_filled"]),
+        "status": "ok", "demonstration": True, "demonstration_note": POINT_NOTE,
+    }
 
 
 def index(db: Session, principal: str) -> dict:
@@ -191,3 +303,68 @@ def index(db: Session, principal: str) -> dict:
                                     "GET /demo/totals is the one canonical total (rows generated before a series' own "
                                     "first observation are left out of it).")
     return label(payload)
+
+
+def policy_comparison(db: Session) -> dict:
+    """The Del Monte demonstration version of GET /policy-comparison / dashboard.py's policy_comparison band:
+    the demo order plan's target/safety stock (demo.dm_category_lp) against SSM's own 3-week rule, in units —
+    same formula (POLICY_WEEKS x forecast / AVG_WEEKS_PER_MONTH), same 'target vs rule' framing as the real one.
+    Pesos are left out: the demo order plan's categories have no confirmed quantity unit either (DEC-31)."""
+    run = latest_run(db, "delmonte")
+    if run is None:
+        return {"available": False, "reason": "no Del Monte demonstration run exists"}
+    rows = db.execute(
+        text("SELECT forecast_quantity, safety_stock, target_stock FROM demo.dm_category_lp WHERE run_id = :r"),
+        {"r": run["run_id"]},
+    ).mappings().all()
+    if not rows:
+        return {"available": False, "reason": "the demonstration order plan has not been run yet "
+                                               "(scripts.run_lp --source demo --principal delmonte --write)"}
+    lp_units = sum(float(r["safety_stock"]) for r in rows)
+    target_units = sum(float(r["target_stock"]) for r in rows)
+    forecast_units = sum(float(r["forecast_quantity"]) for r in rows)
+    rule_units = POLICY_WEEKS * forecast_units / AVG_WEEKS_PER_MONTH
+    return {
+        "available": True, "demonstration": True, "demonstration_note": ORDER_PLAN_NOTE,
+        "category_count": len(rows),
+        "lp_target_stock_units": round(target_units, 2), "lp_safety_stock_units": round(lp_units, 2),
+        "rule_stock_units": round(rule_units, 2),
+        "target_vs_rule_pct": round((rule_units - target_units) / rule_units * 100, 1) if rule_units > 0 else None,
+        "categories_above_rule": sum(1 for r in rows if float(r["target_stock"]) >
+                                     POLICY_WEEKS * float(r["forecast_quantity"]) / AVG_WEEKS_PER_MONTH),
+        "rule_weeks": POLICY_WEEKS,
+    }
+
+
+DEAD_STOCK_NOTE = (
+    "A demonstration-only heuristic (Kelvin, 2026-10-16), not the real dashboard's tier_stock bucket: Del Monte "
+    "has no ABC tier (it is not in the ABC cohort) and no stock_status flag, so this classes each category by "
+    "its generated months_of_cover against the SAME policy centre the stock draw and the order plan both use "
+    "(analytics.demo.stock.CENTER_MONTHS_OF_COVER): dead_stock > 2x centre, critical < 0.5x centre, else in_stock."
+)
+
+
+def dead_stock(db: Session) -> dict:
+    """Del Monte demonstration dead-stock classification, every one of the 82 generated categories (not only the
+    5 with a forecast — this needs only stock + demand, which all 82 have). See DEAD_STOCK_NOTE for the rule."""
+    from analytics.demo.stock import CENTER_MONTHS_OF_COVER
+
+    run = latest_run(db, "delmonte")
+    if run is None:
+        return {"available": False, "reason": "no Del Monte demonstration run exists"}
+    rows = db.execute(
+        text("SELECT DISTINCT ON (category_path) category_path, period, months_of_cover "
+             "FROM demo.dm_category_stock WHERE run_id = :r ORDER BY category_path, period DESC"),
+        {"r": run["run_id"]},
+    ).mappings().all()
+    if not rows:
+        return {"available": False, "reason": "no demonstration stock exists for this run"}
+    items = []
+    for r in rows:
+        cover = float(r["months_of_cover"])
+        label_ = ("dead_stock" if cover > 2 * CENTER_MONTHS_OF_COVER
+                 else "critical" if cover < 0.5 * CENTER_MONTHS_OF_COVER else "in_stock")
+        items.append({"category": r["category_path"], "period": r["period"], "months_of_cover": round(cover, 4),
+                      "status": label_, "demonstration": True, "demonstration_note": POINT_NOTE})
+    counts = {k: sum(1 for i in items if i["status"] == k) for k in ("dead_stock", "critical", "in_stock")}
+    return {"available": True, "demonstration_note": DEAD_STOCK_NOTE, "counts": counts, "items": items}

@@ -171,6 +171,7 @@ the LP doesn't round to cases, and nothing here does either.
 from __future__ import annotations
 
 import datetime
+import json
 import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -605,14 +606,15 @@ def get_recommendations(
     # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte
     # honestly returns an empty list until the LP is run for Del Monte.
     if demo_enabled() and normalize_principal(principal) == "delmonte":
-        # Behind DM_DEMO_ENABLED: still no order plan (the demonstration has no stock count, so no plan is generated),
-        # plus the labelled demonstration forecasts (schema demo; backend/demo_data.py).
+        # Behind DM_DEMO_ENABLED: the labelled demonstration forecasts, stock and order plan (schema demo;
+        # backend/demo_data.py; migration 0056). order_plan.available is False until the demo order plan has
+        # actually been run (scripts.run_lp --source demo --principal delmonte --write).
         return JSONResponse({
             **jsonable_encoder(RecommendationsResponse(items=[], count=0)),
             **demo_data.label({
                 "demo_forecasts": demo_data.forecasts(db),
-                "order_plan": {"available": False, "reason": "the demonstration has no stock count and no purchase "
-                                                              "parameters, so no order plan is generated"},
+                "demo_stock": demo_data.stock(db),
+                "order_plan": demo_data.order_plan(db),
             }),
         })
     if planning_mart.usable(db, mode):
@@ -623,7 +625,7 @@ def get_recommendations(
             newest = max((c["cycle"] for c in served.stock_counts if c.get("cycle")), default=None)
             labels = label_context(db, opening_period(newest) if newest else None,
                                    latest_abc_period(db, principal), principal)
-            return served.model_copy(update=labels)
+            return _attach_demo_unilever(served.model_copy(update=labels), db, principal)
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     present = _present(db)
     select_sql, lp_params = select_one(mode, present)
@@ -665,12 +667,12 @@ def get_recommendations(
             # Nothing pending at all: 'current' has nothing to scope to, so
             # returning every decided row would contradict the filter's
             # promise. An empty list with the reason is the honest answer.
-            return _with_data_mode(RecommendationsResponse(
+            return _attach_demo_unilever(_with_data_mode(RecommendationsResponse(
                 items=[], count=0, planning_cycle_date=None,
                 superseded_count=0, freshness=freshness, lp_model=lp_model_info(),  # no cycle: defaults
                 stock_counts=[],
                 **labels,
-            ), db, mode)
+            ), db, mode), db, principal)
         cycles, cycle_clause = [current], CURRENT_CYCLE_CLAUSE
     else:
         # Each cycle against its own opening count, so the audit view runs
@@ -710,7 +712,7 @@ def get_recommendations(
         principals = sorted({r["principal"] for r in cycle_rows})
         counts.extend(stock_counts(db, opening_period(planning_cycle), principals, cycle=planning_cycle))
     items = [_to_item(r, present) for r in rows]
-    return _with_data_mode(RecommendationsResponse(
+    return _attach_demo_unilever(_with_data_mode(RecommendationsResponse(
         items=items,
         count=len(items),
         planning_cycle_date=freshness["cycle_date"],
@@ -721,7 +723,7 @@ def get_recommendations(
         stock_counts=counts,
         **labels,
         tier_a_periods=tier_a_periods(abc_periods_shown),
-    ), db, mode)
+    ), db, mode), db, principal)
 
 
 # The planning mart is built on migration 0042's table and columns.
@@ -777,6 +779,19 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
         stock_counts=counts,
         tier_a_periods=tier_a_periods(abc_periods_shown),
     )
+
+
+def _attach_demo_unilever(result, db: Session, principal: str | None):
+    """Adds the Unilever demonstration order plan (demo forecast, REAL stock; backend/demo_data.py,
+    migration 0057) beside the real items, for principal 'unilever', None or 'all' — it never replaces them:
+    Unilever's real recommendations are good and stay exactly as they are. Off when DM_DEMO_ENABLED is off, or
+    for a Del Monte-only request (which already gets its own demo block, see the delmonte branch above)."""
+    if not (demo_enabled() and normalize_principal(principal) in (None, "all", "unilever")):
+        return result
+    extra = {"demo_unilever": demo_data.unilever_order_plan(db)}
+    if isinstance(result, JSONResponse):
+        return JSONResponse({**json.loads(result.body), **extra})
+    return JSONResponse({**jsonable_encoder(result), **extra})
 
 
 def _with_data_mode(response: RecommendationsResponse, db: Session, mode: str):

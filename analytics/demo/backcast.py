@@ -128,11 +128,20 @@ def bridge_series(
     seed: int = SEED,
     jitter_scale: float = JITTER_SCALE,
     min_real_months: int = 2,
+    seed_prefix: str = "bridge",
 ) -> list[tuple[str, float, float | None]]:
-    """Extend one pre-2025 Del Monte path forward from its last real month to `end` (2025-02), across the taxonomy
-    change: flat at the path's own level, seeded jitter from its own CV, no trend. This IS extrapolation (real data on
-    one side only); rule 14 is suspended for this window by Kelvin's decision of 2026-10-15. Returns [] when the path
-    has too few real months to have a level and a CV. Origin 'bridged', API reason taxonomy_change_bridge."""
+    """Extend one Del Monte path forward from its last real month to `end`: flat at the path's own level, seeded
+    jitter from its own CV, no trend. This IS extrapolation (real data on one side only); rule 14 is suspended for
+    this window by Kelvin's decision of 2026-10-15. Returns [] when the path has too few real months to have a
+    level and a CV, or is already real through `end`.
+
+    Two callers, two meanings, kept apart by `seed_prefix` (their RNG streams never collide) and by the ORIGIN the
+    caller tags the result with — this function only computes the flat-plus-jitter values, never the origin:
+      bridge (default, end=BRIDGE_END=2025-02): a pre-2025 path across the January-2025 taxonomy change.
+        Origin 'bridged', API reason taxonomy_change_bridge.
+      forward_fill (end=WINDOW_END, seed_prefix='forward_fill'): a LIVE 2025 category whose real data simply
+        stops before the window ends (Kelvin, 2026-10-16) — not a taxonomy change, so never the same origin.
+        Origin 'forward_filled'."""
     real = [float(v) for p, v in quantity.items() if v is not None and p <= last_real]
     if len(real) < min_real_months or last_real >= end:
         return []
@@ -141,7 +150,7 @@ def bridge_series(
     pairs = [(net_amount.get(p), quantity[p]) for p in quantity
              if quantity[p] and quantity[p] > 0 and net_amount.get(p) and net_amount[p] > 0]
     price = (sum(a for a, _ in pairs) / sum(q for _, q in pairs)) if pairs else None
-    rng = series_rng(seed, "bridge|" + key)
+    rng = series_rng(seed, f"{seed_prefix}|{key}")
     out, p = [], next_month(last_real)
     while p <= end:
         q = round(max(0.0, level + rng.gauss(0.0, jitter_scale * cv * level)), 2)
