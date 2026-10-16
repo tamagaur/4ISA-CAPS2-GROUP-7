@@ -15,7 +15,7 @@
 // for staff. So this can deploy ahead of the backend without changing
 // anyone's access, and it switches over by itself once /auth/me exists.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { getMe } from '../api/permissions';
 import { PERMISSION_DENIED_EVENT, getCurrentUser, logout } from '../auth';
@@ -30,13 +30,14 @@ const PermissionsProvider = ({ children }) => {
   const refresh = useCallback(async () => {
     try {
       const me = await getMe();
-      setState({
-        status: 'ready',
-        role: me?.role ?? null,
-        permissions: Array.isArray(me?.permissions) ? me.permissions : [],
-        legacy: false,
-        error: '',
-      });
+      const role = me?.role ?? null;
+      const permissions = Array.isArray(me?.permissions) ? me.permissions : [];
+      // Unchanged access keeps the same state, so a re-check (below) doesn't
+      // re-render the whole app.
+      setState((prev) => (prev.status === 'ready' && !prev.legacy && prev.role === role
+        && prev.permissions.length === permissions.length && prev.permissions.every((k, i) => k === permissions[i])
+        ? prev
+        : { status: 'ready', role, permissions, legacy: false, error: '' }));
     } catch (err) {
       // No /auth/me on this backend yet: keep the access the app gave before.
       if (err?.status === 404) {
@@ -61,6 +62,29 @@ const PermissionsProvider = ({ children }) => {
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  // Re-checked while signed in (2026-10-16): an admin's change in User
+  // Management applies on the server at once, so the menu and buttons follow
+  // within a page change, a return to the tab, or a minute, not only after a
+  // reload or a refused request.
+  const location = useLocation();
+  const ready = state.status === 'ready';
+  useEffect(() => {
+    if (ready) refresh();
+    // A path change is the trigger; ready/refresh only guard it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    const timer = setInterval(onVisible, 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      clearInterval(timer);
+    };
   }, [refresh]);
 
   useEffect(() => {

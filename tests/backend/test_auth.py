@@ -386,7 +386,7 @@ def test_register_invites_without_a_password(client, fake_session, fake_users, o
 
 
 def test_register_hands_back_the_link_when_email_fails(client, monkeypatch):
-    def fail(to, subject, body):
+    def fail(to, subject, body, **_):
         raise mailer.MailError("Email isn't set up on the server yet, so nothing was sent.")
 
     monkeypatch.setattr(mailer, "send", fail)

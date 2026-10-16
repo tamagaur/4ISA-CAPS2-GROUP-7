@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowRight, Headset, Lock, LockKeyhole, Mail } from 'lucide-react';
 import {
-  confirmLoginMfaSetup, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup, verifyLoginCode,
+  confirmLoginMfaSetup, isDeviceRemembered, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup, verifyLoginCode,
 } from './auth';
 import TwoStepCodeForm from './components/TwoStepCodeForm';
 import TwoStepSetup from './components/TwoStepSetup';
 import RecoveryCodes from './components/RecoveryCodes';
+import AuthHandoff, { holdForHandoff } from './components/AuthHandoff';
 import './Login.css';
+import './LoginPage.css';
 
 const Login = () => {
   const location = useLocation();
@@ -18,6 +21,12 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // "Remember me" (2026-10-16, on the password form; it was on the code
+  // step): skip the authenticator code on this browser for REMEMBER_DAYS.
+  // Pre-ticked for an email this browser already remembers, until the
+  // person changes it themselves.
+  const [remember, setRemember] = useState(false);
+  const [rememberTouched, setRememberTouched] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   // Explains an involuntary bounce back to this page. auth.js sets the flag
@@ -32,6 +41,14 @@ const Login = () => {
   //   { step: 'codes', codes }             setup done: save the recovery codes
   // null = the password form.
   const [mfa, setMfa] = useState(null);
+  // The password (and code) accepted: the hand-off screen ("Signing in to
+  // the dashboard…") for a moment, then the dashboard.
+  const [handoff, setHandoff] = useState(null);
+  const enterDashboard = async () => {
+    setHandoff('in');
+    await holdForHandoff();
+    navigate('/');
+  };
 
   useEffect(() => {
     try {
@@ -54,13 +71,13 @@ const Login = () => {
     setError('');
     setIsSubmitting(true);
     try {
-      const data = await login(email, password);
+      const data = await login(email, password, { remember });
       if (data.mfa_step === 'verify') {
         setMfa({ step: 'verify', token: data.mfa_token });
       } else if (data.mfa_step === 'setup') {
         setMfa({ step: 'setup', token: data.mfa_token, setup: await startLoginMfaSetup(data.mfa_token) });
       } else {
-        navigate('/');
+        await enterDashboard();
       }
     } catch (err) {
       setError(err.message || 'Login failed. Please try again.');
@@ -90,11 +107,11 @@ const Login = () => {
     }
   };
 
-  // "Remember me" ticked: this browser isn't asked for the code again for
-  // REMEMBER_DAYS (the password still is).
+  // "Remember me" (ticked on the password form): this browser isn't asked
+  // for the code again for REMEMBER_DAYS (the password still is).
   const handleVerify = withExpiry(async (code, { remember = false } = {}) => {
     await verifyLoginCode(mfa.token, code, { email, remember });
-    navigate('/');
+    await enterDashboard();
   });
 
   const handleSetupConfirm = withExpiry(async (code) => {
@@ -108,7 +125,7 @@ const Login = () => {
         <>
           <h2>Save your recovery <span className="page-title-accent">codes</span></h2>
           <p className="subtitle">Two-step sign-in is on.</p>
-          <RecoveryCodes codes={mfa.codes} email={email} onDone={() => navigate('/')} doneLabel="Continue" variant="login" />
+          <RecoveryCodes codes={mfa.codes} email={email} onDone={enterDashboard} doneLabel="Continue" variant="login" />
         </>
       );
     }
@@ -124,17 +141,16 @@ const Login = () => {
           {isSetup
             ? 'Your account needs a code from your phone each time you sign in. Set it up to continue.'
             : 'Enter the 6-digit code from your authenticator app.'}
+          {!isSetup && remember && ` This device will be remembered for ${REMEMBER_DAYS} days.`}
         </p>
         {isSetup ? (
           <TwoStepSetup setup={mfa.setup} onConfirm={handleSetupConfirm} variant="login" />
         ) : (
           <TwoStepCodeForm
-            onSubmit={handleVerify}
+            onSubmit={(code) => handleVerify(code, { remember })}
             submitLabel="Verify"
             allowRecovery
             variant="login"
-            rememberLabel="Remember me"
-            rememberHint={`Don't ask for a code on this device for ${REMEMBER_DAYS / 7} weeks. Your password is still needed. Leave unticked on a shared computer.`}
           />
         )}
         <div className="auth-links">
@@ -146,25 +162,32 @@ const Login = () => {
     );
   };
 
+  // The look (2026-10-16, Audrey's twilight prototype) lives in
+  // LoginPage.css under .login-page, so Forgot password and Set password,
+  // which share Login.css, keep theirs: the evening warehouse yard across
+  // the whole page (a CSS background, so it never takes a click), the
+  // brand row top left, and the frosted-glass card, which is CSS over real
+  // form fields, not a picture of one.
   return (
-    <div className="login-container">
-      <div className="login-left">
-        <div className="logo-section">
-          <img src="/logo.png" alt="SAN2 Corporation Logo" className="logo-image" />
-          <p className="dashboard-title">Inventory Decision Support Dashboard</p>
-          <ul className="login-feature-list">
-            <li>Per-SKU demand forecasting</li>
-            <li>ABC-classified replenishment</li>
-            <li>Reorder recommendations</li>
-          </ul>
-        </div>
+    <div className="login-container login-page">
+      {handoff && <AuthHandoff kind={handoff} />}
+      {/* The logo, top left, with "Corporation" in white for the dark sky;
+          the card's copy below is the standard one. */}
+      <div className="login-brand">
+        <img src="/images/login-logo-red-light.png" alt="SAN2 Corporation" className="login-brand-logo" />
       </div>
 
-      <div className="login-right">
+      <div className="login-stage">
         <div className="login-card">
+          <img src="/images/login-logo-red.png" alt="SAN2 Corporation" className="login-card-logo" />
           {mfa ? renderSecondStep() : (
             <>
-              <h2>Welcome <span className="page-title-accent">back</span></h2>
+              <h2>
+                Welcome <span className="page-title-accent">back</span>
+                <svg className="login-title-spark" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 13V6M9.2 14.8l5-5M11 19h7" />
+                </svg>
+              </h2>
               <p className="subtitle">Sign in with your assigned account</p>
 
               <form onSubmit={handleSubmit} className="login-form">
@@ -178,19 +201,26 @@ const Login = () => {
                 )}
                 {error && <div className="error-message" role="alert">{error}</div>}
                 <div className="input-group">
+                  <Mail className="input-icon" aria-hidden="true" />
                   <input
                     type="email"
                     placeholder="Email address"
+                    aria-label="Email address"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (!rememberTouched) setRemember(isDeviceRemembered(e.target.value));
+                    }}
                     required
                   />
                 </div>
 
                 <div className="input-group password-group">
+                  <LockKeyhole className="input-icon" aria-hidden="true" />
                   <input
                     type={showPassword ? "text" : "password"}
                     placeholder="Password"
+                    aria-label="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -215,21 +245,40 @@ const Login = () => {
                   </button>
                 </div>
 
-                <div className="login-forgot-row">
+                <div className="login-forgot-row login-options-row">
+                  <label className="login-remember">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(e) => { setRemember(e.target.checked); setRememberTouched(true); }}
+                    />
+                    <span>Remember this Device?</span>
+                  </label>
                   <Link to="/forgot-password" className="auth-link">Forgot password?</Link>
                 </div>
 
                 <button type="submit" className={`submit-btn ${isSubmitting ? 'submitting' : ''}`} disabled={isSubmitting}>
-                  {isSubmitting ? 'Signing In...' : 'Sign In'}
+                  {isSubmitting ? 'Signing In...' : (
+                    <>Sign In <ArrowRight className="submit-btn-arrow" aria-hidden="true" /></>
+                  )}
                 </button>
               </form>
 
-              <p className="auth-notice">For authorized SSM purchasing staff only.</p>
+              <p className="auth-notice">
+                <Lock className="auth-notice-icon" aria-hidden="true" />
+                For authorized SSM purchasing staff only.
+              </p>
             </>
           )}
-        </div>
 
-        <p className="help-text">Having trouble? Contact your system administrator.</p>
+          <div className="login-help">
+            <span className="login-help-icon"><Headset aria-hidden="true" /></span>
+            <p>
+              <strong>Having trouble?</strong>
+              <span>Contact your system administrator.</span>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

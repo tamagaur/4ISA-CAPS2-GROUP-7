@@ -323,12 +323,24 @@ def test_wrong_codes_lock_like_wrong_passwords(client, db):
     for _ in range(MAX_FAILURES_PER_EMAIL - 1):
         res = client.post("/auth/login/verify", json={"mfa_token": token, "code": "000000"})
         assert res.status_code == 401
-        assert res.json()["detail"] == "That code didn't work. Check the app and try again."
+        assert res.json()["detail"] == "Invalid code. Please enter a valid 6-digit code from your authenticator app."
     locked = client.post("/auth/login/verify", json={"mfa_token": token, "code": "000000"})
     assert locked.status_code == 429 and "Retry-After" in locked.headers
     assert any(a["action"] == "Sign-in Locked" for a in db.audit)
     # The lock covers the password step too.
     assert password_step(client).status_code == 429
+
+
+def test_a_wrong_code_is_called_invalid_and_signs_no_one_in(client, db):
+    turn_on(db, 1)
+    token = password_step(client).json()["mfa_token"]
+    app = client.post("/auth/login/verify", json={"mfa_token": token, "code": "000 000"})
+    assert app.status_code == 401
+    assert app.json()["detail"] == "Invalid code. Please enter a valid 6-digit code from your authenticator app."
+    recovery = client.post("/auth/login/verify", json={"mfa_token": token, "code": "abcde-fghjk"})
+    assert recovery.status_code == 401
+    assert recovery.json()["detail"] == "Invalid recovery code. Please enter one of your unused recovery codes."
+    assert db.sessions == []
 
 
 def test_a_right_password_does_not_reset_the_wrong_code_count(client, db):
@@ -434,11 +446,11 @@ def test_a_new_password_or_a_new_setup_ends_remembering(client, db):
     assert mfa.issue_remember_token(db, 1, old_hash) is None
 
 
-def test_remembering_ends_after_two_weeks(client, db):
+def test_remembering_ends_after_seven_days(client, db):
     remember_token = remember_device(client, db)
     claims = jwt.decode(remember_token, mfa._remember_key(), algorithms=["HS256"])
     left = datetime.fromtimestamp(claims["exp"], timezone.utc) - datetime.now(timezone.utc)
-    assert timedelta(days=13, hours=23) < left <= timedelta(days=14)
+    assert timedelta(days=6, hours=23) < left <= timedelta(days=7)
 
     expired = jwt.encode({**claims, "exp": datetime.now(timezone.utc) - timedelta(seconds=1)},
                          mfa._remember_key(), algorithm="HS256")

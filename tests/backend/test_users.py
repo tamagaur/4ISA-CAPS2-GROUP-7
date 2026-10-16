@@ -373,7 +373,7 @@ def test_send_link_sends_a_reset_for_an_active_account(client, session, outbox):
 
 
 def test_send_link_hands_back_the_link_when_email_fails(client, monkeypatch):
-    def fail(to, subject, body):
+    def fail(to, subject, body, **_):
         raise mailer.MailError("The email couldn't be sent, so share the link another way.")
 
     monkeypatch.setattr(mailer, "send", fail)

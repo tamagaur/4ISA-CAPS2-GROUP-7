@@ -1,4 +1,5 @@
 import React from 'react';
+import SectionLede from './ui/SectionLede';
 import { X, ArrowRight } from 'lucide-react';
 import Modal from './Modal';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
@@ -77,6 +78,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
             <h3 className="reorder-modal-title">
               <ProductName name={data.product} code={data.sku} />
             </h3>
+            <SectionLede>Why this quantity</SectionLede>
             {/* Pieces, the LP's unit, with the rough case count beside it
                 (worked out once on the row by ReorderRecommendations). */}
             <p className="reorder-modal-subtitle">

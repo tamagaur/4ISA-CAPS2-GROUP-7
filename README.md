@@ -1,32 +1,34 @@
-# SSM Decision Support Dashboard
+# SSM Decision Support Dashboard (DSD)
 
-A decision support dashboard that replaces SSM's blanket three-week
-safety-stock rule with per-SKU replenishment recommendations.
+A decision support dashboard that replaces San San Marketing's blanket
+three-week safety-stock rule with data-driven, per-product replenishment
+recommendations.
 
 ## Overview
 
-San San Marketing (SSM) currently orders and holds inventory for every
-SKU under one blanket rule: three weeks of safety stock, regardless of
-how fast or slow that SKU actually moves. This ties up working capital on
-slow movers and still causes Bad Orders (stockouts/spoilage) on fast,
-perishable ones — the rule doesn't distinguish between them.
+San San Marketing (SSM), an FMCG distributor in Urdaneta, Pangasinan, orders
+and holds stock for every product under one rule: about three weeks of
+safety stock, however fast or slow the product moves. That traps working
+capital in slow movers and still leaves fast, perishable products short.
 
-This project replaces that rule with a per-SKU pipeline: classify SKUs by
-revenue contribution (ABC/Pareto), forecast demand for the highest-priority
-tier, derive a safety stock and reorder point from that forecast, then
-optimize how much of the manufacturer's allocation to actually accept
-against three competing objectives (holding cost, service level,
-spoilage cost) using linear programming.
+The DSD replaces that rule with a pipeline: rank products by their share of
+revenue (ABC/Pareto), forecast next month's demand for the top sellers,
+derive each product's safety stock and target stock from its own forecast,
+then plan how much to order with a multi-objective linear program (cost
+0.45, service level 0.35, storage 0.20). The dashboard presents all of it in
+plain language for SSM's staff, from "how have sales and stock changed" down
+to "what should we order now".
 
-Scope is two principals — **Unilever Philippines** and **Del Monte
-Philippines** — and they are not treated the same way. Unilever's data
-supports real per-SKU demand (a dedicated SKU-level sales file exists).
-Del Monte's does not — its sales data is invoice-level only, with no SKU
-column anywhere in that file family, so allocating a monthly total down
-to SKU would be fabricating a number the data doesn't support. Del Monte
-is forecast at **category grain** instead. This asymmetry is a deliberate
-project decision (DEC-03 in `ARCHITECTURE.md`), not an inconsistency —
-it trips people up if they assume both principals work the same way.
+Scope is two principals, **Unilever Philippines** and **Del Monte
+Philippines**, and they are not treated the same way:
+
+- **Unilever** has real sales per product (SKU) per month, so it gets the
+  whole pipeline: classes, forecasts, safety stock and an order plan.
+- **Del Monte** has no product-level sales at all. Its sales register is
+  invoice-level, and its monthly sell-out is by product category only. It is
+  ranked and charted by category, and the cards that need per-product
+  forecasts (safety stock, order plan, forecast accuracy) are empty for it
+  on purpose (DEC-03 in [`ARCHITECTURE.md`](ARCHITECTURE.md)).
 
 ## Pipeline
 
@@ -34,285 +36,269 @@ it trips people up if they assume both principals work the same way.
 flowchart LR
     A[Raw files<br/>data/raw/] --> B[Extract]
     B --> C[staging/<br/>Parquet + manifest]
-    C --> D[Transform]
-    D --> E[(Supabase)]
-    E --> F[Analytics<br/>ABC · per-SKU forecasts · Safety Stock/ROP · LP]
+    C --> D[Transform + Load]
+    D --> E[(Supabase<br/>public · mart · demo)]
+    E --> F[Analytics<br/>ABC · forecasts · safety stock · LP]
     F --> E
     E --> G[FastAPI backend]
     G --> H[React + Vite dashboard]
-
-    style A fill:#2d5,stroke:#333
-    style B fill:#2d5,stroke:#333
-    style C fill:#2d5,stroke:#333
-    style D fill:#2d5,stroke:#333
-    style E fill:#2d5,stroke:#333
-    style F fill:#2d5,stroke:#333
-    style G fill:#2d5,stroke:#333
-    style H fill:#2d5,stroke:#333
 ```
 
-🟢 Runs against real SSM files and the live Supabase database (as of 2026-09-21) — Raw files, Extract, staging/, Transform, Supabase, Analytics (ABC, per-SKU forecasts, safety stock/ROP, LP), FastAPI, dashboard.
-🟡 Every stage is still started by hand (e.g. `scripts/run_baseline_forecast.py`, `scripts/run_lp.py`) — there is no automatic end-to-end run yet.
+Every stage runs against SSM's real files and the live Supabase database.
+Each stage is still started by hand (for example
+`scripts/run_baseline_forecast.py`, then `scripts/run_lp.py`); there is no
+automatic end-to-end run.
 
-## Getting Started
+**Forecasting.** A router picks each product's method from how many months
+of sales it has (`analytics/forecasting/router.py`):
+
+| Sales months | Method served |
+|---|---|
+| fewer than 3 | provisional trailing average |
+| 3 to 11 | 3-month moving average (MA3) |
+| 12 to 23 | TSB (for intermittent demand) |
+| 24 or more | average of the global XGBoost model and MA3 |
+
+MA3 is computed for every product as the benchmark. On real Top-seller
+data, TSB and the XGBoost+MA3 average tie with MA3; they are served because
+they use each product's full history, not because they were shown to be
+more accurate. The forecast run stored on 2026-10-05 served 189 products:
+104 with the XGBoost+MA3 average, 37 with MA3, 34 with TSB, 9 with a
+trailing average and 5 with no order.
+
+## Getting started
 
 ### Prerequisites
 
-- Python 3.12+ (developed and tested on 3.13). The pinned `xgboost==3.4.1`
-  requires 3.12 or newer. On Python 3.11, install `xgboost==3.2.0` instead —
-  the newest release that still supports 3.11.
-- No system-level dependencies beyond Python and pip
+- Python 3.13 (`.python-version`). 3.12 also works; on 3.11 install
+  `xgboost==3.2.0` instead of the pinned version.
+- Node.js and npm for the frontend (React 19, Vite 8, Recharts 3).
+- Access to the team's Supabase project (connection strings go in `.env`).
 
-### 1. Clone and check out the real trunk
+### 1. Clone
 
 ```bash
 git clone <repo-url>
-cd Capstone-Project
-git checkout group7/kelvin-etl
+cd <repo-folder>
 ```
-
-`master` is a stub trunk — none of the real ETL, Transform, or backend
-work has been merged into it yet. Work off `group7/kelvin-etl`, which is
-where all real work actually lives.
-
-**Corrected 2026-09-20.** This used to say `AUDREY-TRY-MERGE`. That branch
-still exists but was last updated 2026-08-17 and is **197 commits behind**
-`kelvin-etl`, with nothing unique to it (`git rev-list --left-right --count
-AUDREY-TRY-MERGE...kelvin-etl` returns `0  197`). Checking it out put you a
-month back. Everything it had is already in `kelvin-etl`.
 
 ### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
+cd frontend && npm install && cd ..
 ```
 
-`lxml` was added 2026-08 — required to parse the Unilever La Union file,
-which is actually an MHTML web archive despite its `.xls` extension. If
-you installed before this date, re-run the command above even if you
-think you're already set up.
+### 3. Create `.env`
 
-`xgboost` became a pipeline dependency on 2026-09-21 — the long-history
-forecasts (`analytics/forecasting/global_model.py`) use it. If you set up
-before then, re-run the install; without it the forecasting tests and
-`scripts/run_baseline_forecast.py` fail with `No module named 'xgboost'`.
+Copy [`.env.example`](.env.example) to `.env` and fill it in. `.env` is
+git-ignored; never commit it.
 
-### 3. Get the source data in place
+| Setting | What it is for |
+|---|---|
+| `SUPABASE_DB_URL`, `SUPABASE_DIRECT_URL`, `SUPABASE_KEY` | The database (pooler on port 6543; the direct URL on 5432 when 6543 is blocked) |
+| `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `JWT_EXPIRY_HOURS` | Sign-in tokens |
+| `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL` | Which frontend may call the API, and where email links point |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Invitation and password-reset emails |
+| `MFA_ENCRYPTION_KEY`, `MFA_REQUIRED_ROLES`, `MFA_ENABLED` | Two-step sign-in. Paused unless `MFA_ENABLED=true`; every server must share the same key |
+| `DM_DEMO_ENABLED` | Serves the labelled synthetic data behind the dashboard's "Include synthetic data" switch. Off by default (see below) |
+| `APP_ENV` | `production` hides the API's `/docs` pages |
 
-`data/raw/` and `staging/` are both gitignored — neither client files nor
-Extract's output are ever committed. Everyone on the team has the same
-shared "SAN SAN Marketing" folder; copy it in, keeping the subfolder
-structure:
+### 4. Run the backend and the frontend
 
 ```bash
-cp -r "SAN SAN Marketing/Del Monte" "data/raw/Del Monte"
-cp -r "SAN SAN Marketing/SSIS" "data/raw/SSIS"
-cp -r "SAN SAN Marketing/Unilever" "data/raw/Unilever"
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-`UnileverLaUnionSalesperSKU2023to2026.xls` must end up inside
-`data/raw/Unilever/` specifically. Without it, the `unilever_sku` family
-stages 0 rows and looks broken even though the code is fine — it's a
-missing-file problem, not a bug, but it's easy to mistake for one.
+```bash
+cd frontend
+npm run dev -- --port 5173
+```
 
-### 4. Run Extract
+Open http://localhost:5173. The frontend calls `VITE_API_URL`, which
+defaults to `http://localhost:8000`.
+
+### 5. Check the API
+
+```bash
+python scripts/smoke_api.py
+```
+
+Read-only and quick: it calls every route the frontend uses, for each
+principal, against the live database. All PASS means a broken page is a
+frontend problem.
+
+### 6. Run the tests
+
+```bash
+pytest tests/
+cd frontend && npm test
+```
+
+Tests keep `DM_DEMO_ENABLED` off unless a test turns it on itself, so a
+local `.env` with the switch on does not change their results.
+
+### 7. Re-run the pipeline (only when the data changes)
+
+`data/raw/` and `staging/` are git-ignored: SSM's files are never
+committed. Copy the shared "SAN SAN Marketing" folder into `data/raw/`,
+keeping its `Del Monte`, `SSIS` and `Unilever` subfolders, then:
 
 ```bash
 python -m analytics.etl.extract.driver
 ```
 
-Takes a few minutes — the real corpus is 1,000+ sheets across 194 files.
-You'll know it worked when the output ends with something like:
+Database changes are made only through the numbered migrations in
+`analytics/db/migrations/` (the latest is 0057; the next free number is
+0058) and `scripts/run_canonical_load.py`, after a backup.
 
-```
-Staged 1042 sheet(s) across 7 families to .../staging
-Sheets scanned: 1042
-Staged: 1042
-Rejected: 0
-```
+## Real data and synthetic data
 
-This writes `staging/_manifest.json`, `staging/_extract_qc.md`, and one
-Parquet file per staged sheet.
+The dashboard has a switch in the top bar, **Include synthetic data**.
 
-### 5. Run the tests
+- **Off (the default):** every page shows SSM's real data only. Models read
+  the `_Real` views (`Unilever_SKU_Demand_Fact_Real`, `SellOut_Fact_Real`,
+  ...), which leave out every generated row.
+- **On:** charts add clearly labelled synthetic (generated) data from the
+  `demo` schema: Unilever's Jan 2021 – Dec 2022 back-cast, and Del Monte's
+  months SSM did not collect, its Jan 2025 change of categories and its
+  2021–22 back-cast. Generated months are drawn dotted or hatched and say how
+  they were made. They never feed real KPIs, forecasts, ABC classes or the
+  real order plan, and never appear in the manuscript.
+- The switch works only on a server with `DM_DEMO_ENABLED=true`. Elsewhere
+  it is greyed out.
 
-```bash
-pytest tests/ -v
-```
+Rules behind the numbers (detail in [`docs/DEMO_DATA.md`](docs/DEMO_DATA.md)):
 
-Expected as of 2026-09-23: **554 passed / 8 skipped / 0 failed** (with
-`xgboost` installed and `.env` pointing at the live database). The old
-`Users` vs `users` casing failures are fixed. Any failure now means
-something is wrong — see Troubleshooting.
+- **No real data before January 2023**, for either principal.
+- **Unilever:** a month with no sales row means the product sold nothing.
+  It is shown as zero ("No sale this month") and never filled in.
+- **Del Monte:** a missing month is a collection failure ("Not collected"),
+  never zero. Real sell-out covers 17 of the 36 months from January 2023 to
+  December 2025: nothing was collected from March 2024 to February 2025, or
+  in 7 other months.
+- Each chart point that is zero or empty carries its reason, explained under
+  the chart.
 
-If you see tests skipping that you expected to run, it almost always means
-step 3 or step 4 wasn't done yet — several tests are gated on `data/raw/`
-or `staging/` actually existing. (This step previously said "109 passed",
-which pre-dated the backend and analytics suites.)
+## Deployment
+
+- Frontend: Vercel (`frontend/vercel.json`).
+- Backend: Render, Python 3.13.
+- Both deploy from a branch on GitHub. Set the same `.env` values on Render,
+  including `MFA_ENCRYPTION_KEY` and, to offer the switch, `DM_DEMO_ENABLED`.
 
 ## Troubleshooting
 
-**The dashboard breaks after you pull.** Run `python scripts/smoke_api.py` first
-(read-only, ~10s, writes nothing). It drives all 17 frontend-facing routes
-against the live database and tells you whether the fault is backend or
-frontend. All PASS means the bug is in the frontend — see
-[reports/FRONTEND_HANDOFF_2026-09-20.md](reports/FRONTEND_HANDOFF_2026-09-20.md)
-for the diagnosis, the Del Monte null shapes, and the known gotchas.
+**A page breaks after you pull.** Run `python scripts/smoke_api.py` first.
+All PASS means the problem is in the frontend; see
+[`reports/FRONTEND_HANDOFF_2026-09-20.md`](reports/FRONTEND_HANDOFF_2026-09-20.md).
 
-**Forecasting tests fail to import (`No module named 'xgboost'`).** Re-run
-`pip install -r requirements.txt` — see step 2 for the Python 3.11 case.
+**The sidebar says SYS OFFLINE but data loads.** An ad blocker (Brave or
+uBlock's EasyPrivacy list) blocks `onrender.com/health`. Allow it or ignore
+the label.
 
-**`test_abc_schema_contract` lists key columns several times.** Fixed
-2026-09-21: the live database also holds experiment schemas
-(`ssm_abc_repro`, `ssm_synth_v2`, `ssm_abc_phase2`) with copies of the
-tables, and the test now reads only `public`.
+**Database connections hang on some networks.** Port 6543 (the pooler) is
+blocked on some networks; use the direct URL on port 5432 for read-only
+checks.
 
-**A family stages 0 rows.** Check two things: the file is under the
-subfolder its principal implies (Del Monte / SSIS / Unilever), and its
-filename matches what the driver looks for. `unilever_sku` in particular
-needs the exact file `UnileverLaUnionSalesperSKU2023to2026.xls` inside
-`data/raw/Unilever/` — see step 3 above.
+**The "Include synthetic data" switch is greyed out.** The server has
+`DM_DEMO_ENABLED` off. Set it to `true` and restart the backend; it reads
+`.env` only at start.
 
-**`daily_sales_report` always stages 0 rows.** This is expected, not a
-bug. No files in the current corpus match the real daily-report naming
-convention ("DAILY SALES REPORT MM.DD.YYYY.xlsx") — the folders named
-"DAILY REPORT - ..." under `data/raw/Del Monte/` are actually ordinary
-monthly Sales Register files under a misleading folder name.
+**Known issue (2026-10-16): forecasts with the demo switch on.** With
+`DM_DEMO_ENABLED=true`, `GET /forecast/{sku}` serves the demonstration
+series and forecast for Unilever products even when the dashboard's switch
+is off. A fix is in progress on `kelvin-etl`. Until it lands, keep the
+setting off on any server where real forecasts must show.
 
-**Tests skip unexpectedly.** `data/raw/` or `staging/` isn't populated —
-redo steps 3 and 4 before assuming something's broken.
+**Known issue (2026-10-16): 98 failing backend tests.** The fake database in
+`tests/backend/test_dashboard.py` and `test_dashboard_range.py` does not yet
+answer the new "was anything collected in this range" query
+(`backend/marts.py`, `principal_collected`). The app itself is unaffected.
+In the same run, the dashboard, recommendation, demo, LP and data-mode
+suites passed 326 tests.
 
-**`ModuleNotFoundError: No module named 'lxml'` when parsing the
-Unilever file.** You installed dependencies before 2026-08 — re-run
+**`No module named 'xgboost'` or `'lxml'`.** Re-run
 `pip install -r requirements.txt`.
+
+**A file family stages 0 rows.** Check the file sits in its principal's
+subfolder and keeps its exact name. `unilever_sku` needs
+`UnileverLaUnionSalesperSKU2023to2026.xls` inside `data/raw/Unilever/` (it
+is an MHTML file with an `.xls` extension).
 
 ## Repository structure
 
 ```
-analytics/            Installable Python package — the full batch pipeline
-  etl/                 Extract, Transform, Clean, Load, granularity resolution
-    extract/           One parser module per source file family (7 families)
-  classification/      ABC/Pareto SKU classification
-  forecasting/          SARIMA demand forecasting
-  optimization/         Safety stock, ROP, and LP replenishment optimization
-  db/                    schema.sql, SQLAlchemy models, date-dimension seeder
-  _coerce.py             Shared numeric-parsing helpers (Extract + Transform)
-
-backend/               FastAPI app — JWT-authenticated routers and Pydantic
-                        schemas reading Supabase (dashboard, forecast, ABC,
-                        reorder recommendations, SKUs, users, audit log)
-
-frontend/              Vite + React dashboard — login, sidebar, and pages for
-                        Dashboard, SKU Forecast, Category Trends,
-                        SKU Management, ABC Classification, Reorder Recs,
-                        Audit Log, Data Management, User Management
-
-config/                column_maps/*.yaml (per-doc-type header mappings),
-                        source_of_truth.yaml (DEC-04 dedup rules),
-                        alias_tables/ (label normalization)
-
-profiling/              File-format detection and header-sniffing primitives
-                        Extract's parsers are built on
-
-data/
-  raw/                   Source xlsx/csv files — gitignored, never committed
-  interim/, processed/   Currently empty — not yet used by any pipeline stage
-
-staging/                Extract's output — gitignored, regenerated locally
-                        (_manifest.json, _extract_qc.md, one Parquet per sheet)
-
-tests/                  pytest suite, mirrors the analytics/ package structure
-
-docs/erd/               Entity-relationship diagram assets
-
-ARCHITECTURE.md         The actual technical source of truth — architecture
-                        decisions, stage contracts, known gaps, change log
+analytics/        The batch pipeline (installable Python package)
+  etl/              Extract (one parser per file family), Transform, Load
+  classification/   ABC/Pareto classification
+  forecasting/      Router, MA3, TSB, global XGBoost model, category trends
+  optimization/     Safety stock, target stock and the LP
+  demo/             The labelled synthetic demonstration (back-cast, stock, plans)
+  db/               schema.sql and the numbered migrations
+backend/          FastAPI app: authentication, permissions, routers, marts
+frontend/         React + Vite dashboard
+  src/components/   Dashboard, SKU Forecast, Category Trends, SKU Management,
+                    ABC Classification, Reorder Recommendations, Audit Log,
+                    Data Management, User Management
+config/           Column maps, source-of-truth rules, alias tables
+scripts/          Runners: load, forecast, LP, demo builds, smoke test
+docs/             DEMO_DATA.md (synthetic data rules), ERD assets
+reports/          Audits, diagnostics and hand-off notes
+tests/            pytest suites (backend, analytics, demo)
+data/raw/         SSM's source files: git-ignored, never committed
+ARCHITECTURE.md   Decision register (DEC-01 onward), stage contracts, known gaps
+CLAUDE.md         Working rules for the codebase
 ```
 
-## Project status
+## Project status (2026-10-16)
 
-As of 2026-08, from an actual `pytest tests/ -v` run (**109 passed**, 0
-failed) and a real Extract run against the full corpus:
-
-**Extract — runs today, verified against real data.**
-1,042 sheets staged across 7 document families, 0 rejects. 4 checksum
-mismatches flagged (confirmed to be errors in SSM's own source
-spreadsheets — stale `SUM()` formula ranges — not Extract bugs).
-
-**Transform — implemented and tested, no orchestrating driver yet.**
-Individual functions (`transform_fact`, `apply_column_map`,
-`dedup_facts`, the granularity resolvers) are correct and verified
-against real staged data for `purchase_order` and `unilever_sku`
-specifically. Nothing currently calls these functions automatically over
-the whole manifest — there's no `analytics/etl/transform/driver.py`
-equivalent to Extract's driver yet. One open data-quality question is
-blocking full trust in `sales_register`: its "Invoice Num" and "REFNBR"
-columns turned out to hold two different real values in ~86% of rows
-where both are populated, not two names for the same field — see
-`ARCHITECTURE.md`'s 2026-08 changelog for the evidence. Waiting on
-clarification from SSM.
-
-**Load — written, never run against a live database.** No Supabase
-project exists yet for this pipeline to write to.
-
-**Analytics (ABC, SARIMA, safety stock/ROP, LP) — implemented,
-fixture-tested only.** 22 passing unit tests across the three modules,
-but none has processed real staged or loaded data end-to-end, because
-there's no live database yet for them to read from.
-
-**Backend (FastAPI) — scaffolding only.** The app and all 5 routers
-exist and mount correctly; every endpoint currently returns a stub
-(empty list or similar) rather than querying Supabase.
-
-**Frontend (Vite + React) — UI built, not integration-tested.**
-Login, dashboard layout, and pages for all major modules exist as real
-components. Whether they're wired to real API responses versus
-placeholder data hasn't been verified as part of this work.
-
-Test breakdown by module:
-
-| Module | Tests |
-|---|---|
-| tests/etl/test_extract.py | 46 |
-| tests/etl/test_transform.py | 20 |
-| tests/etl/test_granularity.py | 11 |
-| tests/classification/test_abc.py | 8 |
-| tests/optimization/test_lp.py | 8 |
-| tests/forecasting/test_sarima.py | 6 |
-| tests/etl/test_clean.py | 4 |
-| tests/test_transform_config.py | 3 |
-| tests/etl/test_load.py | 3 |
-| **Total** | **109** |
+- Real data for both principals is loaded in Supabase. The dashboard reads it
+  through data marts (schema `mart`), and every frontend route passes the
+  smoke test.
+- Unilever Top sellers (Class A as of Feb 2026): 189 products, forecast on
+  2026-10-05. The March 2026 plan has 97 pending recommendations.
+- The order plan's cost and capacity inputs are placeholders until SSM
+  confirms procurement cost, storage cost, warehouse capacity and supplier
+  ceilings.
+- The Top-seller basis (Class A over the last 12 months, plus new products
+  that are Class A over the last 3) awaits the technical adviser's
+  confirmation (DEC-38).
+- The labelled synthetic demonstration (migrations 0052–0057) is in the
+  database behind `DM_DEMO_ENABLED`. Its newest cards (demo stock, demo order
+  plans) are served by the API but not yet drawn on the dashboard.
+- Two-step sign-in is built and paused by default (`MFA_ENABLED`).
 
 ## Key decisions
 
-Full decision register, stage contracts, and known gaps live in
-[`ARCHITECTURE.md`](ARCHITECTURE.md) — this is just the handful that
-trip people up if they don't know about them going in:
+The full register is in [`ARCHITECTURE.md`](ARCHITECTURE.md). The ones that
+surprise people:
 
-- **Grain differs per principal (DEC-03).** Unilever forecasts at SKU
-  grain; Del Monte forecasts at category grain. Not an inconsistency —
-  Del Monte's source data genuinely doesn't support SKU-level numbers.
-- **One system-of-record per fact per principal (DEC-04).** Several file
-  families contain overlapping/duplicate views of the same transactions
-  (e.g. daily vs. monthly Sales Register). Only one view per fact is
-  ever loaded; the rest are staged for audit but never promoted.
-- **Models call a single demand-series interface, never a file path
-  directly** — a team convention (not yet enforced in code as of
-  2026-08) meant to make swapping the data source from local Parquet to
-  Supabase a config change instead of a rewrite.
-- **Hard human-review gates between pipeline stages** — also a team
-  convention: work is not supposed to cross from one pipeline stage into
-  the next without an explicit review. `ARCHITECTURE.md`'s change log
-  notes one place this was skipped in practice (Transform work proceeding
-  past the Extract checkpoint), which is exactly the class of problem
-  these gates exist to prevent.
+- **Grain differs per principal (DEC-03).** Unilever per product, Del Monte
+  per category. Del Monte's data cannot support product-level numbers.
+- **One source of truth per fact per principal (DEC-04).** Files that
+  overlap are staged for audit, but only one view of each fact is loaded.
+- **Models read the `_Real` views, never the base tables.** Generated rows
+  are excluded by the view itself, so mixing real and synthetic data is not
+  something a caller can forget to filter.
+- **No invented numbers.** When a figure cannot be computed (too little
+  history, a model error), the page says why instead of showing a stand-in
+  value.
+- **Human review gates** between pipeline stages: work does not move to the
+  next stage without a review.
 
 ## Team
 
-**3ISA Group 7** — BS Information Systems (IS-BA track), College of
-Information and Computing Sciences, University of Santo Tomas.
-Capstone, 2025–2026.
+**4ISA Capstone Group 7**, BS Information Systems (IS-BA track), College of
+Information and Computing Sciences, University of Santo Tomas. Capstone,
+2025–2026. Client: San San Marketing.
 
-Members: Kelvin, Thea, Maika, Audrey.
-Adviser: Sir Catubag.
+| Member | Role |
+|---|---|
+| Yuan | ETL, database schema, Supabase, orchestration, pipeline decisions, demonstration data |
+| Maika | Frontend, authentication, deployment, backend |
+| Audrey | Backend endpoints, backend and frontend, LP |
+| Thea | Models, manuscript, SSM liaison, frontend design |
+| Kelvin | Frontend integration (`kelvin-etl` branch) |
+
+Technical adviser: Sir Catubag.

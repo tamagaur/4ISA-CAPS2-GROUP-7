@@ -469,6 +469,24 @@
   min-width: 0;
 }
 
+/* Two slots side by side share their two rows, heading and card, so both
+   cards start on one line even when one heading wraps onto a second line.
+   ("Which products entered or left the top sellers?" wraps beside "Is any
+   stock sitting idle?", and its card sat 24px lower.) Each slot holds
+   exactly a heading and one card. */
+@supports (grid-template-rows: subgrid) {
+  .dash-row > .dash-slot {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 2;
+    row-gap: 0;
+  }
+
+  .dash-row > .dash-slot > .dash-kind-row {
+    align-self: start;
+  }
+}
+
 /* Analytics-type tag, and in preview mode the "Real data only" tag beside
    it. Deliberately quiet — they label the widget for a reviewer without
    competing with the widget's own title. */
@@ -766,7 +784,8 @@
 
 /* The analytical cards below the top row share its look (2026-10-10):
    white, a very light border, large radius, almost no shadow. */
-.dashboard .dash-slot > .chart-widget {
+.dashboard .dash-slot > .chart-widget,
+.dashboard .dash-split > .chart-widget {
   border: 1px solid #E7EBF0;
   border-radius: 18px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
@@ -800,5 +819,229 @@
 @container (min-width: 980px) {
   .dash-split {
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
+
+/* Charts without their describing sentences (Dashboard.jsx's
+   SHOW_CHART_DESCRIPTIONS, off since 2026-10-13): a card keeps its title,
+   switches, legend and plot. Hidden: every sentence under a card's title,
+   the generated takeaways (forecast, forecast accuracy, allocation) and the
+   how-to-read notes, with the pending-reorders paragraph under the
+   Active / dead stock bars. Kept: whatever warns, which is a synthetic-months
+   line, a coverage or missing-data note (.chart-placeholder-note), the
+   reason a comparison or an answer can't be drawn, and the allocation's
+   "not yet confirmed" line. */
+.dashboard-plain .chart-title-area p:not(.chart-placeholder-note):not(.chart-insight-synthetic):not(.chart-insight-reason):not(.section-lede),
+.dashboard-plain .portfolio-insight-strip,
+.dashboard-plain .fc-answer,
+.dashboard-plain .fc-chart-sub,
+.dashboard-plain .alloc-answer:not(.alloc-answer-reason),
+.dashboard-plain .bar-scale-note,
+.dashboard-plain .tier-stock-pending-note,
+.dashboard-plain .range-source {
+  display: none;
+}
+
+/* The page's main question, under its title (2026-10-15). */
+.dash-main-question {
+  max-width: 78ch;
+  margin: var(--space-3) 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-body, var(--color-text-muted));
+}
+
+.dash-main-question strong {
+  color: var(--color-text);
+}
+
+/* The ABC card sits beside the taller top-seller changes card: its ring
+   and class card start under its title instead of floating mid-card. */
+.dash-row-abc .chart-widget-body {
+  justify-content: flex-start;
+}
+
+/* The step's one plain sentence, on its own line under the question. */
+.dash-kind-row .dash-question-hint {
+  flex-basis: 100%;
+  order: 10;
+  max-width: 80ch;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+/* ── Phones and touch screens (2026-10-15) ──────────────────────────────
+   Checked at 360, 390 and 768px with a phone's viewport: nothing ran off
+   the side of the screen. These fix what was cramped, cut off, or too small
+   to read or tap. */
+@media (max-width: 600px) {
+  /* A little less padding inside the cards, so the charts get the width. */
+  .dashboard {
+    --card-padding: 16px;
+  }
+
+  .dashboard .hero-card {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* Suggested orders: "356,287" ran out of its box with three boxes in a
+     row. Critical and urgent side by side, pieces to order across. */
+  .dashboard .reorder-mini-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .dashboard .reorder-mini-chip:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  /* Stock with no sale: the two figures stay side by side (stacked, the
+     second kept the divider meant to sit between them). */
+  .dashboard .range-stat-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 14px 16px;
+  }
+
+  .dashboard .range-stat-row .range-stat {
+    padding-right: 14px;
+  }
+
+  .dashboard .range-stat-row .range-stat + .range-stat {
+    padding-left: 14px;
+  }
+
+  /* The top-seller changes show their first three products a side; "Show
+     all" opens the rest, as before. */
+  .dashboard .pending-change-list li:nth-child(n + 4) {
+    display: none;
+  }
+
+  /* The thin rule between the years and the line styles in a chart key
+     lands at the end of a wrapped line on a phone. */
+  .dashboard .legend-divider {
+    display: none;
+  }
+
+  /* Small labels up to a readable size. */
+  .dashboard .abc-share-values {
+    font-size: 0.8rem;
+  }
+
+  .dashboard .pending-card-label,
+  .dashboard .chart-unit {
+    font-size: 0.75rem;
+  }
+}
+
+/* Fingers, not a mouse pointer: every control at least about 32px tall to
+   tap. The small "?" icons keep their size and get a larger invisible
+   target around them. */
+@media (pointer: coarse) {
+  .dashboard .info-tip-btn {
+    position: relative;
+  }
+
+  .dashboard .info-tip-btn::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+  }
+
+  .dashboard .chart-view-toggle button,
+  .dashboard .legend-toggle,
+  .dashboard .abc-legend-btn {
+    min-height: 32px;
+  }
+
+  .dashboard .dash-section-nav .segmented-item {
+    min-height: 36px;
+  }
+
+  .dashboard .range-card-action,
+  .dashboard .abc-tier-card-link,
+  .dashboard .hero-link,
+  .dashboard .reorder-mini-view-all {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* The allocation levels and the footnote's link to the Reorder page. */
+  .dashboard .hero-level {
+    min-height: 34px;
+  }
+
+  .dashboard .dash-footnote .band-link {
+    display: inline-block;
+    padding-block: 8px;
+  }
+}
+
+/* ── Section headings and cards (2026-10-16, after the reference picture
+   Audrey shared): no step numbers. Each question is a large navy heading
+   with a thin accent rule running to the right edge and its one plain
+   sentence underneath; each card has a thin accent line along its top and
+   one key word of its title in the accent (ui.css .title-accent). ───────── */
+.dash-kind-row {
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: 16px;
+  padding-left: 0;
+}
+
+.dash-kind-row::before {
+  display: none;
+}
+
+.dash-question {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--color-nav-bg);
+}
+
+.dash-question-rule {
+  flex: 1 1 32px;
+  min-width: 24px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--color-brand-strong) 0%, #E9A23B 35%, rgba(233, 162, 59, 0) 100%);
+}
+
+.dash-kind-row .dash-kind {
+  margin-left: 0;
+}
+
+.dash-kind-row .dash-question-hint {
+  margin-top: -2px;
+}
+
+.dash-slot > .chart-widget {
+  position: relative;
+}
+
+.dash-slot > .chart-widget::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: linear-gradient(90deg, var(--color-brand-strong) 0%, #E9A23B 40%, rgba(233, 162, 59, 0) 85%);
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  .dash-question {
+    flex: 1 1 100%;
+    font-size: 19px;
+  }
+
+  .dash-question-rule {
+    display: none;
   }
 }

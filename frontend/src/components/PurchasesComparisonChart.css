@@ -1,0 +1,76 @@
+/* The "Purchases" view of the Sales vs Inventory Value card
+   (PurchasesComparisonChart.jsx): a sales and a purchases bar per month,
+   with the previous year's sales as a wider pale bar behind the sales bar. */
+.purchases-compare {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The legend, with the "Mock data" pill at the far end; the pill drops
+   under the legend when the card is too narrow for both. */
+.purchases-compare-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.purchases-compare-top .purchases-compare-legend {
+  margin-top: 0;
+}
+
+.purchases-compare-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.purchases-compare-mock {
+  flex-shrink: 0;
+  margin-bottom: 0.6rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  background: #FFF4DD;
+  color: #B54708;
+  font-size: var(--text-micro, 11px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Only this box scrolls sideways, and only when the card is narrower than
+   the plot's minimum width (a phone). The page never does. */
+.purchases-compare-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.purchases-compare-scroll:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.purchases-compare-note {
+  margin: 0.35rem 0 0;
+  font-size: var(--text-micro, 11px);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.purchases-compare-tooltip-month {
+  margin: 0 0 0.25rem;
+  font-weight: 700;
+}
+
+/* Label on the left, pesos on the right, so the three amounts line up. */
+.purchases-compare-tooltip-row strong {
+  margin-left: auto;
+  padding-left: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}

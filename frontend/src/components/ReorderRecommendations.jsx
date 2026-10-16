@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import SectionLede from './ui/SectionLede';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { isPreviewMode } from '../dataMode';
 import {
   Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown, ChevronRight, CheckCheck, AlertTriangle, Clock, Package,
 } from 'lucide-react';
@@ -136,7 +138,7 @@ const ReorderRecommendations = () => {
   // Shared principal scope (Topbar's segmented control). lp_recommendation
   // has no Del Monte rows yet, so 'delmonte' renders this page's normal
   // empty state rather than an error.
-  const { principal } = useOutletContext() || {};
+  const { principal, dataMode } = useOutletContext() || {};
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -217,6 +219,9 @@ const ReorderRecommendations = () => {
           abcPeriod: res.abc_period || null,
           coverSalesStart: res.cover_sales_start || null,
           coverSalesEnd: res.cover_sales_end || null,
+          // Del Monte with the server's demonstration switch on: why the
+          // synthetic data has no order plan either (GET /recommendations).
+          demoOrderPlan: res.demonstration ? res.order_plan || null : null,
         });
       })
       .catch((err) => {
@@ -793,6 +798,7 @@ const ReorderRecommendations = () => {
           now, amber = watch, slate = no data, indigo = model output. */}
       {/* The four figures as the shared KPI card (UI pass): urgency colour on
           the icon tile only, one short line each, the rest behind the "?". */}
+      <SectionLede className="is-standalone">What needs action now</SectionLede>
       <div className="kpi-strip reorder-summary-grid">
         <KPICard
           title="Act now"
@@ -853,6 +859,7 @@ const ReorderRecommendations = () => {
       <div className="reorder-how">
         <div className="reorder-how-text">
           <span className="reorder-how-title">How this was optimized</span>
+          <SectionLede>How the order sizes were chosen</SectionLede>
           <p className="reorder-table-note">
             The LP orders each SKU up to its target stock, net of what is on hand. Only when the supplier allocation
             can&apos;t cover every SKU does it cut some orders, and then
@@ -936,6 +943,7 @@ const ReorderRecommendations = () => {
       </div>
 
       {/* Table */}
+      <SectionLede className="is-standalone">Every suggested order, most urgent first</SectionLede>
       <div className="data-table-card">
         <table className="data-table reorder-table">
           <thead>
@@ -1026,6 +1034,8 @@ const ReorderRecommendations = () => {
                 <td colSpan={COLUMN_COUNT}>
                   {principal === 'delmonte'
                     ? 'The LP does not plan Del Monte: it has no SKU-level sales to forecast, so there are no reorder recommendations for it.'
+                      + (isPreviewMode(dataMode) && meta?.demoOrderPlan?.reason
+                        ? ` The synthetic data has no order plan either: ${meta.demoOrderPlan.reason}.` : '')
                     : meta?.cycleDate
                       ? 'No pending recommendations for this planning cycle.'
                       : 'No LP run has produced pending recommendations for this scope yet.'}
@@ -1039,6 +1049,8 @@ const ReorderRecommendations = () => {
   );
 
   const renderDecisionLogTab = () => (
+    <>
+    <SectionLede className="is-standalone">Who decided what, and when</SectionLede>
     <div className="data-table-card">
       <table className="data-table reorder-table reorder-log-table">
         <thead>
@@ -1078,6 +1090,7 @@ const ReorderRecommendations = () => {
         </tbody>
       </table>
     </div>
+    </>
   );
 
   const bulkQty = (pendingBulk?.rows || []).reduce((sum, r) => sum + (wholeUnits(r.orderQty) || 0), 0);

@@ -5,6 +5,7 @@
 // against the same months a year earlier (GET /dashboard/yoy), the
 // per-product year-over-year he asked for.
 import React, { useEffect, useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import { ArrowRight, X } from 'lucide-react';
 import Modal from './Modal';
 import ProductName from './ProductName';
@@ -13,13 +14,36 @@ import { getRangePareto, getRangeYoy } from '../api/dashboard';
 import ParetoCurve from './ParetoCurve';
 import { labelForPrincipal } from '../principals';
 import './AtRiskProductsModal.css';
+import { gapLabel } from '../utils/gapReasons';
 
 const pct = (share, digits = 1) => (share == null ? '—' : `${(share * 100).toFixed(digits)}%`);
 
 // "+12.4%" / "−8.0%" against the same months a year earlier; "new" when the
-// product had no sales then, "—" when there is nothing to compare.
+// product was not on sale then, and the backend's reason when it was but has
+// no figure (pesos_reason / prior_pesos_reason, backend/series_gaps.py):
+// "No sale a year earlier", "Not collected a year earlier".
+const YOY_NOW = {
+  no_sale: 'No sale in this period',
+  outside_product_lifespan: 'Not on sale in this period',
+  not_collected: 'Not collected',
+  category_absent: 'Not reported',
+};
+const YOY_PRIOR = {
+  no_sale: 'No sale a year earlier',
+  not_collected: 'Not collected a year earlier',
+  category_absent: 'Not reported a year earlier',
+  blank_capture: 'Not recorded a year earlier',
+};
+
 export const yoyText = (row) => {
-  if (!row || row.pesos == null) return { text: '—', tone: null };
+  if (!row || row.pesos == null) {
+    const r = row?.pesos_reason;
+    return { text: r ? YOY_NOW[r] || gapLabel(r) : '—', tone: null };
+  }
+  if (row.prior_pesos == null && row.prior_pesos_reason && row.prior_pesos_reason !== 'outside_product_lifespan') {
+    const r = row.prior_pesos_reason;
+    return { text: YOY_PRIOR[r] || `${gapLabel(r)} a year earlier`, tone: null };
+  }
   if (row.prior_pesos == null || row.prior_pesos <= 0) return { text: 'new', tone: null };
   const change = (row.pesos - row.prior_pesos) / row.prior_pesos;
   // Fewer months of sales a year earlier than now is not a like-for-like
@@ -70,6 +94,7 @@ const ClassProductsModal = ({ isOpen, onClose, tier, args, onOpenProduct, onOpen
       <div className="at-risk-header">
         <div>
           <h3 id="class-products-title" className="at-risk-title">Class {tier} products</h3>
+          <SectionLede>Who is behind this class</SectionLede>
           <p className="at-risk-subtitle">
             Ranked on sales over {pareto?.label || 'the selected range'}, highest first · pesos at{' '}
             {blocks[0]?.pesos_basis || 'selling price'}

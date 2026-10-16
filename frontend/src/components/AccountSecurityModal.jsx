@@ -17,7 +17,10 @@ import './TwoStep.css';
 // new recovery codes.
 const RECOVERY_LOW = 3;
 
-const AccountSecurityModal = ({ isOpen, onClose }) => {
+// `onStatusChange` gets every status this dialog loads (on open, and after
+// setup, new codes or turning it off), so the sidebar's "Account security"
+// line can follow it.
+const AccountSecurityModal = ({ isOpen, onClose, onStatusChange }) => {
   const toast = useToast();
   const email = getCurrentUser()?.email;
   const [status, setStatus] = useState(null);
@@ -31,11 +34,13 @@ const AccountSecurityModal = ({ isOpen, onClose }) => {
   const load = useCallback(async () => {
     setLoadError('');
     try {
-      setStatus(await getMfaStatus());
+      const fresh = await getMfaStatus();
+      setStatus(fresh);
+      onStatusChange?.(fresh);
     } catch (err) {
       setLoadError(err.message || 'Could not load two-step sign-in.');
     }
-  }, []);
+  }, [onStatusChange]);
 
   useEffect(() => {
     if (!isOpen) return;

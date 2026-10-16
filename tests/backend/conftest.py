@@ -71,7 +71,10 @@ def _mfa_not_applied(request, monkeypatch):
 def outbox(monkeypatch):
     sent: list[dict] = []
     monkeypatch.setattr(
-        mailer, "send", lambda to, subject, body: sent.append({"to": to, "subject": subject, "body": body})
+        mailer, "send",
+        lambda to, subject, body, html=None, inline_images=None: sent.append(
+            {"to": to, "subject": subject, "body": body, "html": html, "inline_images": inline_images}
+        ),
     )
     monkeypatch.setattr(mailer, "is_configured", lambda: True)
     return sent

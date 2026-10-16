@@ -23,3 +23,18 @@ export function getForecast(skuId, { principal } = {}) {
     return res.json();
   });
 }
+
+// The synthetic view, Del Monte (schema demo, CLAUDE.md rule 2): one product
+// category's demonstration history and its 3-month-average forecast, from
+// GET /forecast/{category}?principal=delmonte&category=. Every point says how
+// it was made (`origin`); no accuracy and no range come with it. Null when the
+// server's DM_DEMO_ENABLED switch is off.
+export function getDemoCategoryForecast(category) {
+  const path = `/forecast/${encodeURIComponent(category)}?principal=delmonte&category=${encodeURIComponent(category)}`;
+  return cachedRequest(path, async () => {
+    const res = await apiFetch(path);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error('Failed to fetch the category forecast');
+    return res.json();
+  });
+}

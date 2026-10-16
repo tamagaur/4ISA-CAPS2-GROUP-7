@@ -5,6 +5,7 @@
 // detail behind every aggregate). The figures are GET /dashboard's (or the
 // range route's) as served; nothing here recomputes one.
 import React, { useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, X } from 'lucide-react';
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -28,7 +29,7 @@ const signedPesos = (value) => `${value >= 0 ? '+' : '−'}${formatCompactPesos(
 // A product list behind a card's figure, in the at-risk list's frame.
 // columns: [{ key, label, sub, render(row) }]; the first column is the product.
 export const ProductListModal = ({
-  isOpen, onClose, title, subtitle, columns, rows, loading, error, footnote, onOpenProduct, openLabel,
+  isOpen, onClose, title, lede, subtitle, columns, rows, loading, error, footnote, onOpenProduct, openLabel,
   firstColumnLabel = 'Product',
 }) => {
   if (!isOpen) return null;
@@ -43,6 +44,7 @@ export const ProductListModal = ({
       <div className="at-risk-header">
         <div>
           <h3 id="range-list-title" className="at-risk-title">{title}</h3>
+          {lede && <SectionLede>{lede}</SectionLede>}
           {subtitle && <p className="at-risk-subtitle">{subtitle}</p>}
         </div>
         <button type="button" className="at-risk-close" onClick={onClose} aria-label="Close">
@@ -103,11 +105,12 @@ const Stat = ({ label, value, sub }) => (
 
 // scope: the principals a figure covers when narrower than the page's filter
 // ("Unilever only" under All principals), from the payload's coverage.
-const CardShell = ({ title, lead, scope, children, blocked }) => (
+const CardShell = ({ title, lede, lead, scope, children, blocked }) => (
   <div className={`chart-widget${blocked ? ' chart-widget-empty' : ''}`}>
     <div className="chart-header">
       <div className="chart-title-area">
         <h4>{title}</h4>
+        {lede && <SectionLede>{lede}</SectionLede>}
         {lead && <p>{lead}</p>}
         {scope && <p className="chart-placeholder-note">{scope}</p>}
       </div>
@@ -124,6 +127,10 @@ const IDLE_PREVIEW = 5;
 
 export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
   if (!idle) return null;
+  // Named for what it is, in plain words (2026-10-15).
+  const title = idle.window_rule_months
+    ? <span>Stock with <span className="title-accent">no sale</span> in {idle.window_rule_months} months</span>
+    : <span><span className="title-accent">Idle</span> stock</span>;
   // The same measure at the comparison period's count ("how long has this
   // been happening?", the Technical Adviser, 2 Oct 2026). `prior` is the
   // idle_stock block of GET /dashboard for the date bar's "Compare with"
@@ -133,10 +140,10 @@ export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
     && (prior.count_date !== idle.count_date || prior.count_period !== idle.count_period);
   const priorChange = priorUsable ? idle.products - prior.products : 0;
   const priorLine = priorUsable
-    ? `At the stock ${prior.count_date ? `counted ${formatDate(prior.count_date)}` : `${formatMonth(prior.count_period)} count`}: `
-      + `${prior.products.toLocaleString()} products${prior.pesos != null ? `, ${formatCompactPesos(prior.pesos)}` : ''}. `
-      + (priorChange === 0 ? 'The same number now.'
-        : `${Math.abs(priorChange).toLocaleString()} ${priorChange > 0 ? 'more' : 'fewer'} now.`)
+    ? `At the earlier stock count (${prior.count_date ? formatDate(prior.count_date) : formatMonth(prior.count_period)}): `
+      + `${prior.products.toLocaleString()} products${prior.pesos != null ? ` worth ${formatCompactPesos(prior.pesos)}` : ''}, `
+      + (priorChange === 0 ? 'the same number as now.'
+        : `${Math.abs(priorChange).toLocaleString()} ${priorChange < 0 ? 'more' : 'fewer'} than now.`)
     : null;
   const window = idle.window_start && idle.window_end
     ? `${formatMonth(idle.window_start)} – ${formatMonth(idle.window_end)}`
@@ -145,14 +152,15 @@ export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
     : idle.count_period ? `${formatMonth(idle.count_period)} count` : null;
   if (idle.blocked_reason) {
     return (
-      <CardShell title="Idle stock" blocked>
+      <CardShell title={title} lede="Money stuck in stock that isn't moving" blocked>
         <p className="range-blocked">{idle.blocked_reason}</p>
       </CardShell>
     );
   }
   return (
     <CardShell
-      title="Idle stock"
+      title={title}
+      lede="Money stuck in stock that isn't moving"
       scope={scope}
       lead={`Products on hand in the stock ${counted || 'count'} that sold nothing in ${window}.`}
     >
@@ -242,7 +250,7 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
   if (!accuracy) return null;
   if (accuracy.blocked_reason || !accuracy.products) {
     return (
-      <CardShell title="Forecast accuracy" blocked>
+      <CardShell title={<span>How <span className="title-accent">close</span> the forecasts were</span>} lede="Where the forecast was right, and where it missed" blocked>
         <p className="range-blocked">{accuracy.blocked_reason || 'No forecasts were checked against sales in this range.'}</p>
       </CardShell>
     );
@@ -272,9 +280,10 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
   return (
     <div className="chart-widget fc-card">
       <div className="fc-head">
-        <h4 className="fc-title">Forecast accuracy</h4>
+        <h4 className="fc-title"><span>How <span className="title-accent">close</span> the forecasts were</span></h4>
         <span className="fc-period">{accuracy.label}</span>
       </div>
+      <SectionLede>Where the forecast was right, and where it missed</SectionLede>
       {scope && <p className="chart-placeholder-note">{scope}</p>}
 
       {/* 1. The answer, in plain words. */}
@@ -314,6 +323,7 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
           <div className="fc-chart-head">
             <div>
               <p className="fc-chart-title">Forecast vs. Actual Sales</p>
+              <SectionLede>The forecast against what really sold</SectionLede>
               <p className="fc-chart-sub">Monthly comparison · pesos at {String(accuracy.pesos_basis || '').split(' (')[0]}</p>
             </div>
             <div className="fc-chart-tools">
@@ -325,7 +335,11 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
             </div>
           </div>
           {view === 'table' ? (
-            <ChartTable columns={tableColumns} rows={months} caption="Forecast and actual sales by month, in pesos" />
+            // In the chart's own box, so the card is the same height in
+            // both views; the table scrolls inside it.
+            <div className="fc-chart fc-chart-table">
+              <ChartTable columns={tableColumns} rows={months} caption="Forecast and actual sales by month, in pesos" />
+            </div>
           ) : (
             <div
               className="fc-chart"
@@ -333,7 +347,7 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
               aria-label={`Line chart of monthly actual sales and forecast in pesos, ${accuracy.label}. Use the Table view for the exact figures.`}
             >
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={months} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <LineChart data={months} margin={{ top: 8, right: 24, left: 0, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke={CHART_COLORS.gridline} />
                   <XAxis
                     dataKey="period"
@@ -380,6 +394,7 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
             forecasts lean, not stock that was counted as excess or sales that were actually lost.
           </InfoTip>
         </p>
+        <SectionLede>Too high, or too low?</SectionLede>
         <div className="fc-miss-cards">
           {[
             { key: 'over', label: 'Forecast too high', note: 'Forecast above sales — risk of too much stock', value: over, color: COLORS.forecast },
@@ -407,8 +422,8 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
       {runs.count > 0 && (
         <button type="button" className="fc-action" onClick={onOpenList}>
           <span>
-            <strong>{runs.count.toLocaleString()} products</strong> were over-forecast for {runs.run_months} or more months
-            in a row — review them
+            <strong>{runs.count.toLocaleString()} products</strong> had forecasts that were too high {runs.run_months} or
+            more months in a row — check them before ordering
           </span>
           <ArrowRight size={14} aria-hidden="true" />
         </button>
@@ -502,7 +517,8 @@ export const ClassChanges = ({ changes, onOpen }) => {
   const multi = changes.principals.length > 1;
   return (
     <CardShell
-      title="Class A changes"
+      title={<span><span className="title-accent">Changes</span> in the top sellers</span>}
+      lede="Where changes happened"
       lead={`${changes.label} against ${changes.compare_label}: products that entered or left the top sellers, `
         + 'with the change in each one’s revenue between the two periods.'}
     >
@@ -519,14 +535,20 @@ export const ClassChanges = ({ changes, onOpen }) => {
                 </p>
               )}
               <p className="range-note">
-                Class A: {p.compare_class_a_count.toLocaleString()} → {p.class_a_count.toLocaleString()} {p.grain === 'sku' ? 'products' : 'categories'}
-                {' '}({p.stayed_count.toLocaleString()} stayed). Entered: {formatCompactPesos(p.entered_compare_revenue)} →{' '}
-                {formatCompactPesos(p.entered_revenue)}. Left: {formatCompactPesos(p.left_compare_revenue)} →{' '}
-                {formatCompactPesos(p.left_revenue)}. Pesos at {p.pesos_basis}.
+                Top sellers: {p.compare_class_a_count.toLocaleString()} {p.grain === 'sku' ? 'products' : 'categories'} a year
+                earlier, {p.class_a_count.toLocaleString()} now ({p.stayed_count.toLocaleString()} stayed).{' '}
+                {/* A side with nobody in it says so, rather than "sold ₱0 and ₱0". */}
+                {(p.entered || []).length > 0
+                  ? `The ones that joined sold ${formatCompactPesos(p.entered_compare_revenue)} a year earlier and ${formatCompactPesos(p.entered_revenue)} now. `
+                  : 'None joined. '}
+                {(p.left || []).length > 0
+                  ? `The ones that left sold ${formatCompactPesos(p.left_compare_revenue)} a year earlier and ${formatCompactPesos(p.left_revenue)} now. `
+                  : 'None left. '}
+                Pesos at {p.pesos_basis}.
               </p>
               <div className="pending-change-grid">
-                <ChangeList title="Entered Class A" icon={<ArrowUpRight size={12} aria-hidden="true" />} items={byChange(p.entered || [])} onOpen={onOpen} />
-                <ChangeList title="Left Class A" icon={<ArrowDownRight size={12} aria-hidden="true" />} items={byChange(p.left || [])} onOpen={onOpen} />
+                <ChangeList title="Joined the top sellers" icon={<ArrowUpRight size={12} aria-hidden="true" />} items={byChange(p.entered || [])} onOpen={onOpen} />
+                <ChangeList title="Left the top sellers" icon={<ArrowDownRight size={12} aria-hidden="true" />} items={byChange(p.left || [])} onOpen={onOpen} />
               </div>
               <p className="range-source">{p.revenue_rule}</p>
             </>

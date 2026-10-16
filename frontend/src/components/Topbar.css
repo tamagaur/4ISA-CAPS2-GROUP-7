@@ -291,6 +291,15 @@
   color: var(--color-brand-primary);
 }
 
+/* No synthetic data on this server (DM_DEMO_ENABLED off): the title says so. */
+.data-mode-toggle:disabled,
+.data-mode-toggle:disabled:hover {
+  cursor: not-allowed;
+  opacity: 0.55;
+  border-color: var(--color-border);
+  color: var(--color-text-body);
+}
+
 .data-mode-toggle-track {
   position: relative;
   width: 26px;

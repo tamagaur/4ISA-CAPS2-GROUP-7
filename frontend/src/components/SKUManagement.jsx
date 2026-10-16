@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import SectionLede from './ui/SectionLede';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter, List } from 'lucide-react';
 import KPICard from './KPICard';
@@ -447,6 +448,7 @@ const SKUManagement = () => {
         {/* The shared KPI card (UI pass): one short line each, the longer
             notes behind the "?". A master-list count has no month: its
             period is "now", said in the first card's line. */}
+        <SectionLede className="is-standalone">Gaps in the product list</SectionLede>
         <div className="kpi-strip sku-summary-grid">
           {loading ? <SkeletonStatCards count={4} cardClassName="kpi-card" /> : (<>
           <KPICard
@@ -700,6 +702,7 @@ const SKUManagement = () => {
             )}
 
             {/* Table */}
+            <SectionLede className="is-standalone">Every product and its details</SectionLede>
             <div className="data-table-card">
               <table className="data-table sku-table">
                 <thead>

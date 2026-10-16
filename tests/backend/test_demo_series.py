@@ -13,7 +13,9 @@ def env(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret-do-not-use-in-prod")
     monkeypatch.setenv("JWT_ALGORITHM", "HS256")
     monkeypatch.setenv("JWT_EXPIRY_HOURS", "1")
-    monkeypatch.delenv("DM_DEMO_ENABLED", raising=False)
+    # Empty, not deleted: a request that runs load_dotenv(override=False) (auth_utils, mfa) would
+    # otherwise bring back a laptop .env's DM_DEMO_ENABLED=true and turn the switch on mid-test.
+    monkeypatch.setenv("DM_DEMO_ENABLED", "")
     yield
     app.dependency_overrides.clear()
 

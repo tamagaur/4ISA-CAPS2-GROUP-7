@@ -1,22 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import PageHeader from './ui/PageHeader';
 import AtRiskProductsModal from './AtRiskProductsModal';
 import ClassProductsModal from './ClassProductsModal';
 import {
-  ClassChanges, DelMonteProductSalesCard, ForecastErrorSummaryCard, IdleStockCard, ProductListModal,
-  CATEGORY_MISS_COLUMNS, DEMO_PRODUCT_SALES_LABEL, IDLE_COLUMNS, OVER_RUN_COLUMNS, PRODUCT_SALES_COLUMNS,
+  ClassChanges, ForecastErrorSummaryCard, IdleStockCard, ProductListModal,
+  CATEGORY_MISS_COLUMNS, IDLE_COLUMNS, OVER_RUN_COLUMNS,
 } from './RangeCards';
 import RangePicker from './RangePicker';
 import { AnnualSalesCard, BelowSafetyCard, InventoryCard, PendingReordersCard, StockCoverCard } from './HeroKpis';
 import { formatCompactCount, urgencyParts } from '../utils/kpiMath';
 import {
-  SalesVsStockWidget, ABCDonutWidget, CategoryStockBarWidget,
+  SalesVsStockWidget, ABCDonutWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
-  AllocationWidget, formatCompactPesos,
+  formatCompactPesos,
 } from './Charts';
 import {
-  getClassChanges, getDashboardData, getForecastAccuracy, getIdleStock, getProductSales, peekDashboardData,
+  getClassChanges, getDashboardData, getForecastAccuracy, getIdleStock, peekDashboardData,
 } from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
 import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
@@ -29,9 +30,13 @@ import BasisTag, { FOLLOWS_RANGE } from './BasisTag';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
+import { DemoForecastList } from './DemoForecasts';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
-import { ArrowRight, AlertTriangle } from 'lucide-react';
+import { ArrowRight, AlertTriangle, CalendarX } from 'lucide-react';
+import EmptyState from './ui/EmptyState';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 import TierBasisLabel from './TierBasisLabel';
 import AnnualViewChart from './AnnualViewChart';
 import './Dashboard.css';
@@ -205,16 +210,73 @@ const safetyStockMetricType = (rate) => {
 // of those two figures yet, so they can't be shown side by side from data.
 // The widget and its props are untouched; set this to true to bring it back.
 const SHOW_POLICY_CARD = false;
+// The sentences that describe or interpret a chart are hidden for now
+// (Audrey, 2026-10-13): the line under each card's title, the generated
+// takeaways and the how-to-read notes, leaving a card its title, switches,
+// legend and plot. What warns stays: synthetic months, missing data, an
+// assumption SSM has not confirmed. Nothing is taken out of the widgets;
+// the list of what is hidden is under .dashboard-plain in Dashboard.css.
+// Set this to true to bring every sentence back.
+const SHOW_CHART_DESCRIPTIONS = false;
+
+// The origins a demonstration month is made of (GET /dashboard's
+// demonstration.monthly_totals: real / interpolated / bridged / backcast
+// pesos), in that order; null for a month that is not from it.
+const DEMO_ORIGINS = ['real', 'interpolated', 'bridged', 'backcast'];
+const demoOrigins = (month) => (month ? DEMO_ORIGINS.filter((k) => month[k] != null) : null);
+
+// With synthetic data on, Del Monte: each year's bar also counts the
+// demonstration's months with no real sales (its canonical monthly totals;
+// never a sum of its category series, docs/DEMO_DATA.md) and lists them as
+// synthetic, so AnnualViewChart hatches the bar and says how many. Real
+// months keep their real figures. Unilever's generated months come in
+// annual_sales itself.
+const withDemoYears = (annual, demonstration) => {
+  const generated = demonstration?.demonstration
+    ? (demonstration.monthly_totals || []).filter((m) => m.real == null && m.pesos != null)
+    : [];
+  if (!annual?.years || generated.length === 0) return annual;
+  return {
+    ...annual,
+    years: annual.years.map((y) => {
+      const extra = generated.filter((m) => m.period.startsWith(`${y.year}-`));
+      if (extra.length === 0) return y;
+      const periods = [y.first_month, y.last_month, ...extra.map((m) => m.period)].filter(Boolean).sort();
+      return {
+        ...y,
+        sales: Math.round(((y.sales ?? 0) + extra.reduce((sum, m) => sum + m.pesos, 0)) * 100) / 100,
+        months: y.months + extra.length,
+        first_month: periods[0],
+        last_month: periods[periods.length - 1],
+        synthetic_months: [...(y.synthetic_months || []), ...extra.map((m) => m.period)].sort(),
+      };
+    }),
+  };
+};
 
 // GET /dashboard's sales_vs_stock as the hero chart's rows. Used for the
 // page's own range and for the comparison period's, so both lines are read
 // the same way (count days only where the counts record one; flagged counts
 // keep their reason).
-const chartPoints = (payload) => {
+const chartPoints = (payload, { synthetic = false } = {}) => {
   if (!payload) return [];
   const counts = (payload.kpis?.stock_counts || []).filter((c) => c.available);
   const dayKnown = counts.length === 0 || counts.every((c) => c.counted_on);
   const flags = new Map((payload.stock_on_hand_flags || []).map((f) => [f.period, f.reason]));
+  // With synthetic data on (the Topbar switch) and the server's demonstration
+  // switch on, Del Monte's generated months come in a block of their own (GET
+  // /dashboard's demonstration, schema demo; CLAUDE.md rule 2), never in the
+  // real sales line. A month with no real sales takes the demonstration's
+  // canonical monthly total as its estimate, drawn dotted beside the real
+  // line, with how it was made for the tooltip.
+  const demo = synthetic && payload.demonstration?.demonstration
+    ? new Map((payload.demonstration.monthly_totals || []).map((m) => [m.period, m]))
+    : null;
+  const demoMonth = (pt) => (demo && pt.sales == null ? demo.get(pt.period) ?? null : null);
+  // Retired synthetic_v2 stock (kind 'generated') is left out: synthetic data
+  // comes from schema demo only, and the demonstration has no stock. The
+  // backend still sends it in preview (post-merge data check, item B1).
+  const retiredStock = (pt) => String(pt.stock_on_hand_estimated_kind || '').includes('generated');
   return (payload.sales_vs_stock || []).map((pt) => ({
     period: pt.period,
     sales: pt.sales,
@@ -228,10 +290,11 @@ const chartPoints = (payload) => {
     // The marts' estimates for months with no real figure, and returns
     // (DEC-31; 'filled' in real mode, 'generated' in preview): the chart and
     // its table only, labelled by kind, never a KPI.
-    salesEstimated: pt.sales_estimated ?? null,
-    salesEstimatedKind: pt.sales_estimated_kind ?? null,
-    stockEstimated: pt.stock_on_hand_estimated ?? null,
-    stockEstimatedKind: pt.stock_on_hand_estimated_kind ?? null,
+    salesEstimated: demoMonth(pt)?.pesos ?? pt.sales_estimated ?? null,
+    salesEstimatedKind: demoMonth(pt) ? 'demonstration' : (pt.sales_estimated_kind ?? null),
+    salesOrigin: demoOrigins(demoMonth(pt)),
+    stockEstimated: retiredStock(pt) ? null : (pt.stock_on_hand_estimated ?? null),
+    stockEstimatedKind: retiredStock(pt) ? null : (pt.stock_on_hand_estimated_kind ?? null),
     returns: pt.returns ?? null,
     returnsEstimated: pt.returns_estimated ?? null,
     returnsEstimatedKind: pt.returns_estimated_kind ?? null,
@@ -239,6 +302,9 @@ const chartPoints = (payload) => {
     // The month's sales are not SSM's own figure: a filled or generated row
     // counted so the month isn't a gap (backend/marts.py, COMPLETE MONTHS).
     salesSynthetic: pt.provenance?.sales === 'synthetic',
+    // Why the month has no sales figure (backend/series_gaps.py, kelvin-etl
+    // 2026-10-15): not_collected (Del Monte) or no data before 2023.
+    salesReason: pt.sales_reason ?? null,
   }));
 };
 
@@ -256,20 +322,30 @@ const comparePill = (now, then, label) => {
   };
 };
 
+// What each kind of question is called on screen. The analytics terms
+// (descriptive, predictive, prescriptive) stay in data-kind for the styles
+// and for reviewers; SSM's staff read the plain words (Audrey, 2026-10-15).
+const KIND_LABEL = { Descriptive: 'Looking back', Predictive: 'Looking ahead', Prescriptive: 'What to do' };
+
+// Each question is a section heading (2026-10-16, no step numbers): the
+// question, a thin accent rule running to the right, then the period tag
+// and the kind; its one plain sentence on the line below.
 const Slot = ({ kind, question, hint, realOnly = false, basis = null, children }) => (
   <div className="dash-slot" data-kind={kind}>
     <span className="dash-kind-row">
       {question && <span className="dash-question">{question}</span>}
-      {hint && <span className="dash-question-hint">{hint}</span>}
+      <span className="dash-question-rule" aria-hidden="true" />
       {/* Whether this card moves with the date filter, and if not, what it
           is pinned to (BasisTag). */}
       {basis && <span className="dash-basis"><BasisTag {...basis} /></span>}
-      <span className="dash-kind">{kind}</span>
+      <span className="dash-kind">{KIND_LABEL[kind] || kind}</span>
       {realOnly && (
-        <span className="dash-real-only" title="Preview adds placeholder months to the descriptive views only. This card reads real data.">
+        <span className="dash-real-only" title="Synthetic data reaches the charts that show history only. This card reads real data.">
           Real data only
         </span>
       )}
+      {/* The step in one plain sentence, on its own line under the question. */}
+      {hint && <span className="dash-question-hint">{hint}</span>}
     </span>
     {children}
   </div>
@@ -281,14 +357,14 @@ const Slot = ({ kind, question, hint, realOnly = false, basis = null, children }
 // blank for the whole /dashboard request (measured 5.4–7.1s). Each card sits
 // in a .dash-slot like the real ones (that is where their 360px minimum
 // height comes from) and takes its widget's shape, in page order: sales
-// trend; ABC ring and tier bars; portfolio forecast and reorder list; policy
-// bars beside the allocation bars. Row classes repeat (two dash-row-even),
+// trend; ABC ring beside the top-seller changes; forecast beside its
+// accuracy; the order list beside idle stock. Row classes repeat (two dash-row-even),
 // so keys come from the index, not the class.
 const DASHBOARD_SKELETON_ROWS = [
   ['dash-row-trend', [{ variant: 'line' }]],
-  ['dash-row-abc', [{ variant: 'donut' }, { variant: 'hbars', rows: 3 }]],
-  ['dash-row-even', [{ variant: 'line' }, { variant: 'list', rows: 3 }]],
-  ['dash-row-even', [{ variant: 'hbars', rows: 2, height: 120 }, { variant: 'hbars', rows: 4, height: 160 }]],
+  ['dash-row-abc', [{ variant: 'donut' }, { variant: 'list', rows: 4 }]],
+  ['dash-row-even', [{ variant: 'line' }, { variant: 'line' }]],
+  ['dash-row-even', [{ variant: 'list', rows: 3 }, { variant: 'list', rows: 4 }]],
 ];
 
 const DashboardSkeleton = () => (
@@ -314,15 +390,36 @@ const DashboardSkeleton = () => (
 // id sits on the row it names; the hint (the chip's tooltip) says which part
 // of that story the section tells.
 const DASH_SECTIONS = [
-  { id: 'dash-summary', label: 'Summary', hint: 'The four headline numbers' },
-  { id: 'dash-sales', label: 'Sales & inventory', hint: 'What happened: monthly sales against inventory value (₱, at last purchase price)' },
-  { id: 'dash-abc', label: 'ABC classes', hint: 'What happened: which products earn the most, and their stock status' },
-  { id: 'dash-forecast', label: 'Forecast & reorder', hint: "What's next and what to do: the demand forecast and the reorder list" },
+  { id: 'dash-summary', label: 'Summary', hint: 'The headline numbers' },
+  { id: 'dash-sales', label: 'Sales & stock', hint: 'How sales and the value of stock changed over time' },
+  { id: 'dash-abc', label: 'Top products', hint: 'The products that bring in most of the sales, and which joined or left them' },
+  { id: 'dash-forecast', label: 'Forecast', hint: 'How much the top sellers will sell next, and how close past forecasts were' },
+  { id: 'dash-order', label: 'What to order', hint: 'What to order now, and the money in stock that is not selling' },
   // The 3-week comparison is named only while its card is shown.
-  { id: 'dash-policy', label: 'Client policy', hint: SHOW_POLICY_CARD
-    ? "What to do: the LP safety stock against SSM's 3-week policy, and sales against the supplier allocation"
-    : 'Sales against the supplier allocation' },
+  ...(SHOW_POLICY_CARD ? [{ id: 'dash-policy', label: 'The 3-week rule', hint: "The plan's safety stock against SSM's 3-week rule" }] : []),
 ];
+
+// The one plain sentence under each step's question (Audrey, 2026-10-15:
+// the page tells one story for SSM's staff, from which products matter to
+// what to order, as Sir Catubag asked on 2 Oct). No figures here: every
+// number is on the cards, with its period and unit.
+const STORY = {
+  sales: 'Start here. Sales for each year on the left; on the right, sales each month beside the value of the '
+    + 'stock in the warehouse, one colour per year.',
+  abc: 'A small group of products brings in most of the sales. These top sellers are the ones the system '
+    + 'forecasts and plans orders for, so check how many are running low.',
+  changes: 'Products that moved into or out of the top sellers, compared with the same months a year earlier, '
+    + 'and how much their sales changed.',
+  forecast: 'Expected demand for the top sellers the system can forecast reliably, in pieces. The shaded band is '
+    + 'where actual sales should land about 9 times in 10.',
+  accuracy: 'Past forecasts against what actually sold, in pesos. Too high risks extra stock; too low risks '
+    + 'running out.',
+  order: 'The suggested order for each top seller this cycle, most urgent first. Critical means its stock is '
+    + 'already below its safety level.',
+  idle: (months) => `Products in the warehouse with no sale in the last ${months ? `${months} months` : 'few months'}, `
+    + 'valued at what SSM last paid for them. This is money that could be freed up.',
+};
+
 const DASH_SECTION_IDS = DASH_SECTIONS.map((s) => s.id);
 
 // The reason on the LP cards for an account without lp.view (GET
@@ -407,7 +504,9 @@ const DashSectionNav = ({ active, enabled }) => {
 
 const Dashboard = () => {
   const isAdmin = usePermissions().role === 'admin';
-  const { startMonth, startYear, endMonth, endYear, principal, dataMode, compare = COMPARE_MODES.YEAR } = useOutletContext() || {};
+  const {
+    startMonth, startYear, endMonth, endYear, principal, dataMode, compare = COMPARE_MODES.YEAR, handleResetToToday,
+  } = useOutletContext() || {};
   const preview = isPreviewMode(dataMode);
   const period = toPeriod(endMonth, endYear);
   const startPeriod = toPeriod(startMonth, startYear);
@@ -442,6 +541,8 @@ const Dashboard = () => {
     return cached ? { key: requestKey, data: cached } : null;
   });
   const [error, setError] = useState(null); // { key, message }
+  // Bumped by "Try again" on a failed load, to re-run the fetch below.
+  const [attempt, setAttempt] = useState(0);
   // The list behind "N below safety stock" (AtRiskProductsModal).
   const [showAtRisk, setShowAtRisk] = useState(false);
   // The class whose products are listed for the range (ClassProductsModal), or null.
@@ -453,7 +554,6 @@ const Dashboard = () => {
   const [rangeList, setRangeList] = useState(null);
   // Del Monte's estimated product sales (GET /dashboard/product-sales), on
   // the Del Monte view only.
-  const [productSales, setProductSales] = useState(null); // { key, data }
   const navigate = useNavigate();
   const loadedKey = loaded?.key;
 
@@ -472,12 +572,12 @@ const Dashboard = () => {
         if (!cancelled) setLoaded({ key: requestKey, data: res });
       })
       .catch((err) => {
-        if (!cancelled) setError({ key: requestKey, message: err.message || 'Failed to load dashboard data' });
+        if (!cancelled) setError({ key: requestKey, message: describeLoadError(err) });
       });
     return () => {
       cancelled = true;
     };
-  }, [requestKey, loadedKey, period, startPeriod, principal]);
+  }, [requestKey, loadedKey, period, startPeriod, principal, attempt]);
 
   useEffect(() => {
     if (!versusKey || loadedKey !== requestKey) return undefined;
@@ -502,18 +602,7 @@ const Dashboard = () => {
     return () => { cancelled = true; };
   }, [requestKey, period, startPeriod, principal]);
 
-  useEffect(() => {
-    if (principal !== 'delmonte') return undefined;
-    let cancelled = false;
-    getProductSales({ period, startPeriod, principal })
-      .then((res) => { if (!cancelled) setProductSales({ key: requestKey, data: res }); })
-      .catch(() => { if (!cancelled) setProductSales({ key: requestKey, data: null }); });
-    return () => { cancelled = true; };
-  }, [requestKey, period, startPeriod, principal]);
-
   // Opens a range card's product list, fetched on demand for the same range.
-  // 'sales' arrives with its rows (the card already holds them).
-  const openSalesList = (rows) => setRangeList({ kind: 'sales', rows, loading: false, error: null });
   const openRangeList = (kind) => {
     setRangeList({ kind, rows: [], loading: true, error: null });
     const request = kind === 'idle'
@@ -542,7 +631,39 @@ const Dashboard = () => {
 
   // Also above the early returns (hooks). The section chips only work once
   // the sections exist, so they stay disabled under the skeleton or an error.
-  const sectionsReady = Boolean(loaded) && !currentError;
+  // A range with no data (2026-10-16): no month of sales and nothing on the
+  // chart, real or estimated. 'all' = nothing to show at all (no stock count
+  // either), so the page says why instead of a page of blanks; 'sales' = no
+  // sales, but a stock count stands, so the cards stay under a note. Never a
+  // made-up 0 (CLAUDE.md hard rule 3).
+  const rangeEmpty = (() => {
+    if (!loaded || loaded.key !== requestKey) return null;
+    const d = loaded.data || {};
+    const sales = d.kpis?.sales_cumulative;
+    if (!sales || sales.months_with_data !== 0) return null;
+    const points = Array.isArray(d.sales_vs_stock) ? d.sales_vs_stock : [];
+    const shown = (p) => [p.sales, p.stock_on_hand, p.sales_estimated, p.stock_on_hand_estimated].some((v) => v != null);
+    if (points.some(shown)) return null;
+    return d.kpis?.soh_value != null ? 'sales' : 'all';
+  })();
+  const emptyReason = (() => {
+    if (!rangeEmpty) return null;
+    const d = loaded.data;
+    const latest = d.latest_data_period_by_principal?.[pagePrincipal] || d.latest_data_period;
+    if (period && period < `${FIRST_DATA_YEAR}-01`) {
+      return `SSM's records start in January ${FIRST_DATA_YEAR}, so there is nothing to show before then.`;
+    }
+    if (latest && startPeriod > latest) {
+      return `The latest month with ${labelForPrincipal(pagePrincipal)} sales is ${periodLabel(latest)}; `
+        + "later months haven't been loaded yet.";
+    }
+    return `No sales were recorded for ${labelForPrincipal(pagePrincipal)} in these months.`;
+  })();
+  const latestRangeAction = handleResetToToday && (
+    <button type="button" className="btn btn-primary" onClick={handleResetToToday}>Go to the latest data</button>
+  );
+
+  const sectionsReady = Boolean(loaded) && !currentError && rangeEmpty !== 'all';
   const toolbarRef = useRef(null);
   const { active: activeSection, stuck: toolbarStuck } = useSectionSpy(toolbarRef, sectionsReady);
 
@@ -559,7 +680,14 @@ const Dashboard = () => {
   // scrolls.
   const header = (
     <>
-      <PageHeader title="Inventory" accent="pulse" subtitle="Inventory and ordering overview — SSM Urdaneta warehouse" />
+      <PageHeader title="Inventory" accent="pulse" subtitle="Inventory and ordering overview — SSM Urdaneta warehouse">
+        {/* The question the whole page answers, before any number (Sir
+            Catubag, 2 Oct: a reader measures every card against it). */}
+        <p className="dash-main-question">
+          This page answers one question: <strong className="title-accent">how much of each product should SSM order</strong>, so that stock
+          neither runs out nor sits unsold? Read it from top to bottom, one step at a time.
+        </p>
+      </PageHeader>
       <div className={`dash-toolbar${toolbarStuck ? ' is-stuck' : ''}`} ref={toolbarRef}>
         <DashSectionNav active={activeSection} enabled={sectionsReady} />
         <RangePicker />
@@ -572,7 +700,7 @@ const Dashboard = () => {
       <div className="dashboard">
         <div className="dashboard-content">
           {header}
-          <p className="dashboard-empty-note" role="alert">Failed to load dashboard data: {currentError}</p>
+          <LoadError what="the dashboard" message={currentError} onRetry={() => setAttempt((n) => n + 1)} />
         </div>
       </div>
     );
@@ -584,7 +712,27 @@ const Dashboard = () => {
         <div className="dashboard-content">
           {header}
           <LoadingStatus>Loading dashboard data…</LoadingStatus>
+          <SlowLoadNotice />
           <DashboardSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (rangeEmpty === 'all') {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-content">
+          {header}
+          <EmptyState
+            role="status"
+            icon={CalendarX}
+            title={`No data for ${startMonth} ${startYear} – ${endMonth} ${endYear}`}
+            actions={latestRangeAction}
+          >
+            <p>{emptyReason}</p>
+            <p>Pick another range above, or jump to the latest months that have data.</p>
+          </EmptyState>
         </div>
       </div>
     );
@@ -709,9 +857,9 @@ const Dashboard = () => {
 
   // The hero chart's rows (chartPoints), and the comparison period's when one
   // is chosen, with the reason when it can't be drawn.
-  const salesVsStock = chartPoints(data);
+  const salesVsStock = chartPoints(data, { synthetic: preview });
   const chartCompare = versus && !versus.beforeData && prior?.data
-    ? { points: chartPoints(prior.data), label: versus.label, shift: versus.shift }
+    ? { points: chartPoints(prior.data, { synthetic: preview }), label: versus.label, shift: versus.shift }
     : null;
   const chartCompareNote = !versus ? null
     : versus.beforeData ? `No comparison line: the data starts Jan ${preview ? PLACEHOLDER_START.year : FIRST_DATA_YEAR}.`
@@ -733,19 +881,15 @@ const Dashboard = () => {
   const abcCovered = data.abc_coverage || [];
   const abcUnits = abcCovered.length === 1 && abcCovered[0] === 'delmonte'
     ? 'categories'
-    : abcCovered.includes('delmonte') ? 'items' : 'SKUs';
-
-  const tierStock = (data.tier_stock || []).map((t) => ({
-    tier: t.tier,
-    inStock: t.in_stock,
-    deadStock: t.dead_stock,
-    noData: t.no_data,
-    pendingReorderCount: t.pending_reorder_count,
-  }));
+    : abcCovered.includes('delmonte') ? 'items' : 'products';
 
   // The page's own payload, so the card and the MASE reliability count
   // (GET /dashboard's forecast block) describe the page's principal.
   const portfolioForecast = data.portfolio_forecast || {};
+  // With synthetic data on, Del Monte: the demonstration's category forecasts
+  // (GET /dashboard's demonstration.forecasts), shown under the empty card.
+  const demoForecasts = preview && pagePrincipal === 'delmonte' && data.demonstration?.demonstration
+    ? data.demonstration.forecasts || [] : [];
   const forecastReliability = data.forecast || null;
   // A real-only forecast card in preview has nothing in the placeholder
   // months by construction — dropped rather than drawn as a blank run.
@@ -851,7 +995,6 @@ const Dashboard = () => {
   // The range cards (RangeCards.jsx). Class A changes arrive on their own
   // request; only the answer for the range on screen is shown.
   const rangeChanges = classChanges?.key === loaded.key ? classChanges.data : null;
-  const dmProductSales = pagePrincipal === 'delmonte' && productSales?.key === loaded.key ? productSales.data : null;
   const openForecast = (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`);
 
   // ── The shared comparison on the two value cards ─────────────────────
@@ -926,16 +1069,6 @@ const Dashboard = () => {
         + '"Compare with" period\'s months on their own years\' lines.',
     },
     abc: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Classes are ranked on sales over the whole range.` },
-    // Checked live 2026-10-09: the bars read the count at the range's end
-    // (tier_stock_period), like the Inventory card; only the pending-reorder
-    // figures inside them come from the current plan.
-    tierStock: {
-      label: 'Range-end count',
-      follows: true,
-      detail: `${FOLLOWS_RANGE} It reads the warehouse status flags in the stock count at the end of the range`
-        + `${data.tier_stock_count_date ? ` (counted ${dayLabel(data.tier_stock_count_date)})` : ''}; `
-        + 'the pending-reorder figures in it are from the current plan.',
-    },
     classChanges: {
       label: 'Range vs a year earlier',
       follows: true,
@@ -1102,7 +1235,11 @@ const Dashboard = () => {
   const rangeGapNote = salesTotal && salesTotal.months_in_range > 1 && gapMonths.length > 0
     ? `${pagePrincipal === ALL_PRINCIPALS ? 'Both principals have' : `${labelForPrincipal(pagePrincipal)} has`} sales on record for `
       + `${salesTotal.months_with_data} of the ${salesTotal.months_in_range} months in this range. `
-      + `No sales on record in ${gapMonths.map(periodLabel).join(', ')}: totals and comparisons cover the other months only.`
+      // With synthetic data on, Del Monte's charts fill those months from the
+      // demonstration, so the list gives way to what is real and what is not.
+      + (preview && data.demonstration?.demonstration
+        ? `Totals and comparisons count those months only; the charts draw the other ${gapMonths.length} as synthetic.`
+        : `No sales on record in ${gapMonths.map(periodLabel).join(', ')}: totals and comparisons cover the other months only.`)
     : null;
   // Months whose sales are generated or filled, not SSM's files (counted
   // since 2026-10-11 so the months are complete). Said once, here, so no
@@ -1124,7 +1261,7 @@ const Dashboard = () => {
   const overRunSubtitle = [data.forecast_accuracy?.label, overRuns.rule].filter(Boolean).join(' · ');
 
   return (
-    <div className="dashboard">
+    <div className={`dashboard${SHOW_CHART_DESCRIPTIONS ? '' : ' dashboard-plain'}`}>
       <div className="dashboard-content">
         {header}
 
@@ -1132,6 +1269,21 @@ const Dashboard = () => {
           <RefreshingNote>
             Updating to {startMonth} {startYear} – {endMonth} {endYear}…
           </RefreshingNote>
+        )}
+        {isRefreshing && <SlowLoadNotice key={requestKey} />}
+
+        {/* The range has no sales, but a stock count stands: the cards stay,
+            and this says why the sales figures are blank. */}
+        {!isRefreshing && rangeEmpty === 'sales' && (
+          <EmptyState
+            compact
+            role="status"
+            icon={CalendarX}
+            title={`No sales data for ${startMonth} ${startYear} – ${endMonth} ${endYear}`}
+            actions={latestRangeAction}
+          >
+            <p>{emptyReason} The stock figures below are from the latest count before this range.</p>
+          </EmptyState>
         )}
 
         <div
@@ -1245,28 +1397,29 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* DESCRIPTIVE — what happened: the sales trend across the full
-              row, then the ABC mix beside each tier's warehouse status. */}
+          {/* Step 1 — what happened: yearly sales beside the monthly sales and
+              stock chart, across the full row. */}
           <div className="dash-row dash-row-trend dash-section-anchor" id="dash-sales">
-            <Slot kind="Descriptive" question="What happened?" hint="Sales and inventory value over time" basis={BASIS.chart}>
+            <Slot kind="Descriptive" question={<>How have sales and stock <span className="title-accent">changed</span> over time?</>} hint={STORY.sales} basis={BASIS.chart}>
               {/* Two cards in one row (layout pass, 2026-10-12): the Annual
                   View bars at about 40% and the Sales vs Inventory chart at
                   about 60%, stacked where the row is too narrow (.dash-split,
                   a container query, so the menu opening narrows it too). The
-                  Annual View shows MOCK figures until its fiscal-year
-                  totals, FY26 pace and target band are specified; the chart
-                  on the right is unchanged. */}
+                  bars are each calendar year's sales (GET /dashboard's
+                  annual_sales). */}
               <div className="dash-split-host">
                 <div className="dash-split">
-                  <AnnualViewChart annual={data.annual_sales} allocation={allocation} note={vatNote} />
-                  <SalesVsStockWidget data={salesVsStock} placeholder={placeholder} insight={data.sales_vs_stock_insight} syntheticNote={chartSyntheticNote} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} compareNote={chartCompareNote} />
+                  <AnnualViewChart annual={preview ? withDemoYears(data.annual_sales, data.demonstration) : data.annual_sales} allocation={allocation} note={vatNote} />
+                  <SalesVsStockWidget data={salesVsStock} gapNote={data.gap_note ?? null} placeholder={placeholder} insight={data.sales_vs_stock_insight} syntheticNote={chartSyntheticNote} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} compareNote={chartCompareNote} />
                 </div>
               </div>
             </Slot>
           </div>
 
-          <div className="dash-row dash-row-abc dash-section-anchor" id="dash-abc">
-            <Slot kind="Descriptive" question="Which products matter most?" basis={BASIS.abc}>
+          {/* Steps 2 and 3 — which products matter: the classes for the range,
+              beside the products that joined or left the top sellers. */}
+          <div className={`dash-row ${rangeChanges ? 'dash-row-abc' : 'dash-row-trend'} dash-section-anchor`} id="dash-abc">
+            <Slot kind="Descriptive" question={<>Which products bring in <span className="title-accent">most of the sales</span>?</>} hint={STORY.abc} basis={BASIS.abc}>
               <ABCDonutWidget
                 data={abcMix}
                 revenue={data.abc_revenue}
@@ -1283,47 +1436,17 @@ const Dashboard = () => {
                 onOpenClass={setListedClass}
               />
             </Slot>
-            <Slot kind="Descriptive" question="Is any of our stock dead?" basis={BASIS.tierStock}>
-              <CategoryStockBarWidget
-                data={tierStock}
-                note={placeholderNote(data.abc_revenue?.period)}
-                period={data.tier_stock_period}
-                countDay={countDayKnown ? dayLabel(data.tier_stock_count_date) : null}
-                cycleLabel={lpCycleLabel}
-                coverage={abcCoverage}
-                noRecordReason={pagePrincipal === 'delmonte'
-                  ? 'Del Monte is classed by product category, and a category has no stock record of its own.'
-                  : null}
-              />
-            </Slot>
+            {rangeChanges && (
+              <Slot kind="Descriptive" question={<>Which products <span className="title-accent">joined or left</span> the top sellers?</>} hint={STORY.changes} basis={BASIS.classChanges}>
+                <ClassChanges changes={rangeChanges} onOpen={openForecast} />
+              </Slot>
+            )}
           </div>
 
-          {/* Which products entered or left Class A against the same months a
-              year before, and the stock that has not moved: both answer for
-              the selected range (data marts, 2026-10-04/05). */}
-          {(rangeChanges || data.idle_stock) && (
-            <div className={`dash-row dash-row-top ${rangeChanges && data.idle_stock ? 'dash-row-even' : 'dash-row-trend'}`}>
-              {rangeChanges && (
-                <Slot kind="Descriptive" question="Which products entered or left the top sellers?" basis={BASIS.classChanges}>
-                  <ClassChanges changes={rangeChanges} onOpen={openForecast} />
-                </Slot>
-              )}
-              {data.idle_stock && (
-                <Slot kind="Descriptive" question="Is any stock sitting idle?" basis={BASIS.idle}>
-                  <IdleStockCard
-                    idle={data.idle_stock}
-                    prior={prior?.data?.idle_stock ?? null}
-                    scope={coverageNote(data.idle_stock.coverage, pagePrincipal)}
-                    onOpenList={() => openRangeList('idle')}
-                  />
-                </Slot>
-              )}
-            </div>
-          )}
-
-          {/* PREDICTIVE + PRESCRIPTIVE — what next, and what to do */}
-          <div className={`dash-row ${lpHidden ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-forecast">
-            <Slot kind="Predictive" question="What will happen next?" hint="Demand forecast" realOnly={portfolioRealOnly} basis={BASIS.forecast}>
+          {/* Steps 4 and 5 — what comes next: the forecast for the top sellers,
+              beside how close past forecasts came. */}
+          <div className={`dash-row ${data.forecast_accuracy ? 'dash-row-even' : 'dash-row-trend'} dash-section-anchor`} id="dash-forecast">
+            <Slot kind="Predictive" question={<>How much will the top sellers <span className="title-accent">sell next</span>?</>} hint={STORY.forecast} realOnly={portfolioRealOnly && demoForecasts.length === 0} basis={BASIS.forecast}>
               <PortfolioForecastWidget
                 series={portfolioSeries}
                 gatedSkuCount={portfolioForecast.gated_sku_count ?? 0}
@@ -1342,28 +1465,10 @@ const Dashboard = () => {
                 insight={forecastBeyondRange ? null : portfolioForecast.insight}
                 forecastNote={forecastNote}
               />
+              {demoForecasts.length > 0 && <DemoForecastList forecasts={demoForecasts} />}
             </Slot>
-            {!lpHidden && (
-              <Slot kind="Prescriptive" question="What should we do?" hint="What to order, and how much" realOnly={preview && realOnly.has('reorder_preview')} basis={BASIS.plan}>
-                <ReorderRecommendationWidget
-                  rows={reorderRows}
-                  cycle={lpCycleLabel}
-                  criticalCount={reorderPreview.critical_count ?? 0}
-                  urgentCount={reorderPreview.urgent_count ?? 0}
-                  totalOrderQty={reorderPreview.total_order_qty ?? 0}
-                  weights={reorderPreview.lp_weights}
-                  cycleLabel={lpCycleLabel}
-                  countLabel={countLabel}
-                  inputsArePlaceholders={Boolean(data.policy_comparison?.inputs_are_placeholders)}
-                />
-              </Slot>
-            )}
-          </div>
-
-          {/* How far off the forecasts were over the range, right under the forecast it checks. */}
-          {data.forecast_accuracy && (
-            <div className="dash-row dash-row-trend">
-              <Slot kind="Predictive" question="How far off were the forecasts?" hint="Forecast against actual sales" basis={BASIS.accuracy}>
+            {data.forecast_accuracy && (
+              <Slot kind="Predictive" question={<>How <span className="title-accent">close</span> were past forecasts?</>} hint={STORY.accuracy} basis={BASIS.accuracy}>
                 <ForecastErrorSummaryCard
                   accuracy={data.forecast_accuracy}
                   scope={coverageNote(data.forecast_accuracy.coverage, pagePrincipal)}
@@ -1371,30 +1476,51 @@ const Dashboard = () => {
                   onOpenCategories={() => openRangeList('category')}
                 />
               </Slot>
+            )}
+          </div>
+
+          {/* Steps 6 and 7 — what to do: this cycle's order, beside the money in
+              stock that has stopped selling (Sir Catubag, 2 Oct: what to order,
+              then what it costs or saves). */}
+          {(!lpHidden || data.idle_stock) && (
+            <div className={`dash-row ${!lpHidden && data.idle_stock ? 'dash-row-even' : 'dash-row-trend'} dash-section-anchor`} id="dash-order">
+              {!lpHidden && (
+                <Slot kind="Prescriptive" question={<>What should we <span className="title-accent">order now</span>?</>} hint={STORY.order} realOnly={preview && realOnly.has('reorder_preview')} basis={BASIS.plan}>
+                  <ReorderRecommendationWidget
+                    rows={reorderRows}
+                    cycle={lpCycleLabel}
+                    criticalCount={reorderPreview.critical_count ?? 0}
+                    urgentCount={reorderPreview.urgent_count ?? 0}
+                    totalOrderQty={reorderPreview.total_order_qty ?? 0}
+                    weights={reorderPreview.lp_weights}
+                    cycleLabel={lpCycleLabel}
+                    countLabel={countLabel}
+                    inputsArePlaceholders={Boolean(data.policy_comparison?.inputs_are_placeholders)}
+                  />
+                </Slot>
+              )}
+              {data.idle_stock && (
+                <Slot kind="Descriptive" question={<>How much <span className="title-accent">money is stuck</span> in stock that is not selling?</>} hint={STORY.idle(data.idle_stock.window_rule_months)} basis={BASIS.idle}>
+                  <IdleStockCard
+                    idle={data.idle_stock}
+                    prior={prior?.data?.idle_stock ?? null}
+                    scope={coverageNote(data.idle_stock.coverage, pagePrincipal)}
+                    onOpenList={() => openRangeList('idle')}
+                  />
+                </Slot>
+              )}
             </div>
           )}
 
-          {/* Del Monte's product sales: estimates only, labelled as a demo. */}
-          {dmProductSales && (
-            <div className="dash-row dash-row-trend">
-              <Slot kind="Descriptive" question="Which Del Monte products sell most?" hint="Estimated" basis={rangeBasis}>
-                <DelMonteProductSalesCard sales={dmProductSales} onOpenList={openSalesList} />
-              </Slot>
-            </div>
-          )}
-
-          {/* PRESCRIPTIVE — the policy question this project exists to answer,
-              beside SSM's own allocation rule applied to the sales data */}
-          <div className={`dash-row ${lpHidden || !SHOW_POLICY_CARD ? 'dash-row-trend' : 'dash-row-even'} dash-section-anchor`} id="dash-policy">
-            {SHOW_POLICY_CARD && !lpHidden && (
-              <Slot kind="Prescriptive" question="Is the 3-week rule working?" realOnly={preview && realOnly.has('policy_comparison')}>
+          {/* The policy question this project exists to answer, once its
+              comparison is corrected (SHOW_POLICY_CARD). */}
+          {SHOW_POLICY_CARD && !lpHidden && (
+            <div className="dash-row dash-row-trend dash-section-anchor" id="dash-policy">
+              <Slot kind="Prescriptive" question={<>Is the <span className="title-accent">3-week rule</span> working?</>} realOnly={preview && realOnly.has('policy_comparison')}>
                 <PolicyComparisonWidget comparison={data.policy_comparison} />
               </Slot>
-            )}
-            <Slot kind="Descriptive" question="Are sales keeping pace with the allocation?" basis={BASIS.allocation}>
-              <AllocationWidget allocation={data.allocation} />
-            </Slot>
-          </div>
+            </div>
+          )}
 
           {/* Where Unilever's two data sets come from (3 Oct 2026 analysis):
               every figure that sets stock against sales rests on this match. */}
@@ -1406,9 +1532,9 @@ const Dashboard = () => {
           )}
           {!lpHidden && (
             <p className="dash-footnote">
-              Reorder Recs ranks every pending recommendation by revenue at risk and shows the top 20 as
-              &ldquo;Act now&rdquo;.{' '}
-              <Link to="/reorder" className="band-link">Open Reorder Recs <ArrowRight size={12} /></Link>
+              The Reorder page lists every suggested order and puts the 20 with the most sales at risk first,
+              under &ldquo;Act now&rdquo;.{' '}
+              <Link to="/reorder" className="band-link">Open the Reorder page <ArrowRight size={12} /></Link>
             </p>
           )}
         </div>
@@ -1420,12 +1546,14 @@ const Dashboard = () => {
         error={rangeList?.error}
         rows={rangeList?.rows || []}
         {...(rangeList?.kind === 'idle' ? {
-          title: 'Idle stock',
+          title: data.idle_stock?.window_rule_months ? `Stock with no sale in ${data.idle_stock.window_rule_months} months` : 'Idle stock',
+          lede: "Money stuck in stock that isn't moving",
           subtitle: idleSubtitle,
           columns: IDLE_COLUMNS,
           footnote: 'Most stock value first.',
         } : rangeList?.kind === 'category' ? {
           title: 'Forecast misses by category',
+          lede: 'Which categories the forecast misses most',
           subtitle: [data.forecast_accuracy?.label, 'Unilever products with a scored forecast',
             data.forecast_accuracy?.pesos_basis ? `pesos at ${String(data.forecast_accuracy.pesos_basis).split(' (')[0]}` : null]
             .filter(Boolean).join(' · '),
@@ -1433,13 +1561,9 @@ const Dashboard = () => {
           firstColumnLabel: 'Category',
           footnote: 'Largest misses in pesos first. A category can be too high in some months and too low in others; '
             + 'the net miss in pieces says which way it leaned overall.',
-        } : rangeList?.kind === 'sales' ? {
-          title: 'Del Monte product sales (demo)',
-          subtitle: [dmProductSales?.label, DEMO_PRODUCT_SALES_LABEL].filter(Boolean).join(' · '),
-          columns: PRODUCT_SALES_COLUMNS,
-          footnote: 'Highest estimated sales first. Every figure here is an estimate, not a sale on record.',
         } : {
           title: 'Products over-forecast several months in a row',
+          lede: 'Where the forecast keeps overshooting',
           subtitle: overRunSubtitle,
           columns: OVER_RUN_COLUMNS,
           footnote: 'Largest surplus first. Click a product to open its forecast.',

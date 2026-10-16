@@ -1,4 +1,5 @@
 import React, { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -17,6 +18,9 @@ import { isPlaceholderPeriod } from '../dataMode';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
 import InfoTip from './InfoTip';
 import ProductName from './ProductName';
+import PurchasesComparisonChart from './PurchasesComparisonChart';
+import GapNote from './GapNote';
+import { gapLabel, originLabel } from '../utils/gapReasons';
 import './Charts.css';
 
 // Legend entry for the placeholder band (utils/placeholderBand.jsx).
@@ -175,6 +179,11 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
 // the two can never disagree on formatting.
 export function formatCompactPesos(value) {
   const abs = Math.abs(value);
+  // A five-year total passes ₱1 billion (2026-10-16): ₱1.51B, not ₱1511.7M.
+  if (abs >= 1_000_000_000) {
+    const billions = abs / 1_000_000_000;
+    return `₱${Number.isInteger(billions) ? billions : Math.round(billions * 100) / 100}B`;
+  }
   if (abs >= 1_000_000) {
     const millions = abs / 1_000_000;
     return `₱${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;
@@ -390,6 +399,8 @@ const pesoTicks = (values) => {
 
 // Month ticks shrink on a narrow card so twelve of them still fit.
 const YOY_WIDE_PX = 700;
+// Below this the card is on a phone.
+const YOY_PHONE_PX = 480;
 const useElementWidth = (ref) => {
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
@@ -494,11 +505,15 @@ const MetricLineSwatch = ({ metric, color = 'currentColor', width = 28, classNam
 const ESTIMATE_KIND_TEXT = {
   filled: 'estimated (filled gap)',
   generated: 'Synthetic — SSM data not received',
+  // Del Monte's synthetic demonstration months (GET /dashboard's
+  // demonstration block, schema demo), drawn only with synthetic data on.
+  demonstration: 'synthetic',
 };
 const estimateLabel = (base, kinds) => {
   const set = [...new Set(kinds.filter(Boolean))];
   if (set.length === 1 && set[0] === 'generated') return `${base} — ${ESTIMATE_KIND_TEXT.generated}`;
   if (set.length === 1 && set[0] === 'filled') return `${base} — ${ESTIMATE_KIND_TEXT.filled}`;
+  if (set.length === 1 && set[0] === 'demonstration') return `${base} — ${ESTIMATE_KIND_TEXT.demonstration}`;
   return `${base} — estimated (filled gap or synthetic)`;
 };
 // Returns get a view of their own: they run at a few percent of sales, so on
@@ -523,9 +538,13 @@ const SalesStockTooltip = ({ active, payload, label, baseLabels = {}, yearRank =
     .filter((p) => p.type !== 'none' && p.value != null)
     .sort((a, b) => Number(slotOf(b.dataKey)) - Number(slotOf(a.dataKey))
       || METRIC_ORDER.indexOf(metricOf(a.dataKey)) - METRIC_ORDER.indexOf(metricOf(b.dataKey)));
-  if (!rows.length) return null;
-  const row = rows[0].payload || {};
+  const row = (rows[0] || payload[0])?.payload || {};
   const metas = Object.keys(yearRank).map((slot) => row[`meta_${slot}`]).filter(Boolean);
+  // Why a year has no sales figure this month (GET /dashboard's
+  // sales_vs_stock[].sales_reason): on the sales plot only, like the
+  // synthetic-month note, and even when no year has a figure to list.
+  const gaps = showPlaceholder ? metas.filter((m) => m.salesReason) : [];
+  if (!rows.length && !gaps.length) return null;
   return (
     <div className="chart-tooltip">
       <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>
@@ -548,8 +567,12 @@ const SalesStockTooltip = ({ active, payload, label, baseLabels = {}, yearRank =
                 the day it was actually counted can be a week later. */}
             {metricOf(p.dataKey) === 'stock' && meta?.stockCountDay && ` · counted ${meta.stockCountDay}`}
             {metricOf(p.dataKey) === 'recest' && ' · estimated'}
+            {/* A synthetic demonstration month says how it was made instead
+                (its origins: interpolated, bridged, back-cast). */}
             {['salesest', 'stockest', 'retest'].includes(metricOf(p.dataKey)) && meta?.kinds?.[metricOf(p.dataKey)]
-              && ` · ${ESTIMATE_KIND_TEXT[meta.kinds[metricOf(p.dataKey)]] || 'estimated'}`}
+              && (meta.kinds[metricOf(p.dataKey)] === 'demonstration'
+                ? ` · ${(meta.salesOrigin || []).map(originLabel).join(' and ') || 'generated'}`
+                : ` · ${ESTIMATE_KIND_TEXT[meta.kinds[metricOf(p.dataKey)]] || 'estimated'}`)}
             {metricOf(p.dataKey) === 'recest' && meta?.estWasNegative && ' · negative estimate, shown as 0'}
             {metricOf(p.dataKey) === 'recest' && meta?.estNegativeSkus > 0
               && ` · ${meta.estNegativeSkus.toLocaleString()} products had a negative estimate`}
@@ -562,6 +585,11 @@ const SalesStockTooltip = ({ active, payload, label, baseLabels = {}, yearRank =
       {rows.some((p) => metricOf(p.dataKey) === 'stock') && metas.filter((m) => m.stockUnusual).map((m) => (
         <p key={m.period} className="chart-tooltip-placeholder chart-tooltip-note">
           Needs checking, {formatAxisPeriod(m.period)}: {m.stockUnusual}
+        </p>
+      ))}
+      {gaps.map((m) => (
+        <p key={`gap-${m.period}`} className="chart-tooltip-placeholder chart-tooltip-note">
+          No sales figure, {formatAxisPeriod(m.period)}: {gapLabel(m.salesReason).toLowerCase()}
         </p>
       ))}
       {showPlaceholder && metas.some((m) => m.placeholder) && (
@@ -665,7 +693,7 @@ const INVENTORY_LABEL = 'Inventory value (at last purchase price)';
 // A point's `stockUnusual` is the reason a stock count was flagged (GET
 // /dashboard's stock_on_hand_flags): marked, never dropped.
 export const SalesVsStockWidget = ({
-  data = [], emptyReason, placeholder = null, insight = null, note = null, basis = null,
+  data = [], emptyReason, placeholder = null, insight = null, note = null, basis = null, gapNote = null,
   // Which of the months the sentence quotes are synthetic, if any.
   syntheticNote = null,
   compare = null, compareNote = null, rangeLabel = null,
@@ -730,7 +758,11 @@ export const SalesVsStockWidget = ({
   const returnsLabel = withBasis('Returns', 'returns');
   const returnsEstLabel = estimateLabel('Returns', kindsOf('returnsEstimatedKind'));
   const widgetRef = useRef(null);
-  const wide = useElementWidth(widgetRef) >= YOY_WIDE_PX;
+  const widgetWidth = useElementWidth(widgetRef);
+  const wide = widgetWidth >= YOY_WIDE_PX;
+  // A phone: the peso axis drops its rotated title (the ticks and each
+  // panel's caption already say pesos) and gives the plot the width.
+  const phone = widgetWidth > 0 && widgetWidth < YOY_PHONE_PX;
 
   // The calendar rows: one per month, Jan to Dec, each year's values in
   // that year's slot. A month a year doesn't have (Mar–Dec of a year that
@@ -768,6 +800,8 @@ export const SalesVsStockWidget = ({
               period: pt.period,
               stockCountDay: pt.stockCountDay ?? null,
               stockUnusual: pt.stockUnusual ?? null,
+              salesReason: pt.salesReason ?? null,
+              salesOrigin: pt.salesOrigin ?? null,
               placeholder: isPlaceholderPeriod(pt.period, placeholder) || Boolean(pt.salesSynthetic),
               estWasNegative: pt.receivedEstimated != null && pt.receivedEstimated < 0,
               estNegativeSkus: pt.receivedEstimatedNegativeSkus ?? null,
@@ -903,6 +937,18 @@ export const SalesVsStockWidget = ({
   // Every other view is one metric family on one plot. A panel with no
   // figure in these months says so rather than drawing an empty axis.
   const split = metricView === 'both';
+  // The Purchases view is its own bar chart (PurchasesComparisonChart.jsx,
+  // layout pass 2026-10-13): sales and purchases side by side per month,
+  // with the same month's sales a year before as a pale bar behind the
+  // sales bar. It draws mock values for now, so nothing above feeds it but
+  // the year its bars are named for, the latest one this view holds, and
+  // the colours of that year and the one before: the same colour a year
+  // has on the lines of the other views. Which year the bars really stand
+  // for is part of the date rules still to come.
+  const purchasesPreview = metricView === 'purchases' && (hasReceived || hasEstimated);
+  const purchasesYear = Number(legendSlots[0] ?? slots[0]) || null;
+  const purchasesColors = purchasesYear ? yearColors([purchasesYear, purchasesYear - 1]) : {};
+  const purchasesColor = (y) => slotColors[y] ?? purchasesColors[y];
   const panels = useMemo(() => {
     const build = (key, caption, list) => {
       const values = rows.flatMap((r) => list.map((sr) => r[sr.key]));
@@ -1035,7 +1081,10 @@ export const SalesVsStockWidget = ({
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`} ref={widgetRef}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Sales vs Inventory Value (₱)</h4>
+          <h4><span>Sales vs <span className="title-accent">Inventory Value</span> (₱)</span></h4>
+          <SectionLede>
+            {purchasesPreview ? 'What came in, month by month' : 'When sales and stock pulled apart'}
+          </SectionLede>
           {/* GET /dashboard's vat_note — only under All principals, where the
               combined pesos mix Unilever's VAT-inclusive amounts with Del
               Monte's VAT-exclusive ones. */}
@@ -1044,26 +1093,35 @@ export const SalesVsStockWidget = ({
               chart plots (sales_vs_stock_insight). */}
           {insight?.text && <p className="chart-insight">{insight.text}</p>}
           {insight?.text && syntheticNote && <p className="chart-insight chart-insight-synthetic">{syntheticNote}</p>}
-          {hasData && view === 'chart' && <p className="chart-insight">{yearsLine}</p>}
-          {hasData && compareLine && view === 'chart' && <p className="chart-insight">{compareLine}</p>}
+          {/* Both lines describe the year lines, which the Purchases view's
+              bar chart doesn't draw. */}
+          {hasData && view === 'chart' && !purchasesPreview && <p className="chart-insight">{yearsLine}</p>}
+          {hasData && compareLine && view === 'chart' && !purchasesPreview && <p className="chart-insight chart-insight-reason">{compareLine}</p>}
         </div>
         {hasData && (
           <div className="chart-header-controls">
-            {view === 'chart' && (
-              <div className="chart-view-toggle" role="group" aria-label="Metrics shown">
-                {metricViews.map(([key, text]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={metricView === key ? 'active' : ''}
-                    aria-pressed={metricView === key}
-                    onClick={() => setMetricView(key)}
-                  >
-                    {text}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* The Table view lists every metric, so this control has
+                nothing to switch there. It keeps its place, unseen, instead
+                of leaving: on a phone the header lost a row without it and
+                the card was 62px shorter in the Table view. */}
+            <div
+              className={`chart-view-toggle${view === 'chart' ? '' : ' is-reserved'}`}
+              role="group"
+              aria-label="Metrics shown"
+              aria-hidden={view === 'chart' ? undefined : true}
+            >
+              {metricViews.map(([key, text]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={metricView === key ? 'active' : ''}
+                  aria-pressed={metricView === key}
+                  onClick={() => setMetricView(key)}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
             <ChartViewToggle view={view} onChange={setView} label="Sales vs inventory value: chart or table" />
           </div>
         )}
@@ -1072,13 +1130,28 @@ export const SalesVsStockWidget = ({
       {!hasData ? (
         <p className="dashboard-empty-note">{emptyReason || 'No data available for this range'}</p>
       ) : view === 'table' ? (
-        <ChartTable
-          columns={tableColumns}
-          rows={data}
-          caption="Sales versus inventory value at last purchase price by month, in pesos (₱)"
-        />
+        // Every view sits in .yoy-body, one height for all of them
+        // (2026-10-13): the card used to be up to 145px shorter outside the
+        // "Both" view, which resized the Annual View card beside it and
+        // moved the rest of the page. The table scrolls inside that height.
+        <div className="yoy-body">
+          <ChartTable
+            columns={tableColumns}
+            rows={data}
+            caption="Sales versus inventory value at last purchase price by month, in pesos (₱)"
+          />
+        </div>
+      ) : purchasesPreview ? (
+        <div className="yoy-body">
+          <PurchasesComparisonChart
+            year={purchasesYear}
+            previousYear={purchasesYear ? purchasesYear - 1 : null}
+            color={purchasesYear ? purchasesColor(purchasesYear) : undefined}
+            previousColor={purchasesYear ? purchasesColor(purchasesYear - 1) : undefined}
+          />
+        </div>
       ) : (
-        <>
+        <div className="yoy-body">
           {/* Two keys, not eight: the year's colour, then the line style of
               whatever shares a plot. Each entry is a switch: click it to
               hide or show those lines, hover it to bring them forward. */}
@@ -1166,7 +1239,7 @@ export const SalesVsStockWidget = ({
                           tickFormatter={(v) => AXIS_MONTHS[v - 1] ?? ''}
                           axisLine={false}
                           tickLine={false}
-                          tick={showMonths ? { fontSize: wide ? 10 : 8.5, fill: CHART_COLORS.axisLabel } : false}
+                          tick={showMonths ? { fontSize: wide ? 10 : 9.5, fill: CHART_COLORS.axisLabel } : false}
                           dy={10}
                           interval={0}
                           height={showMonths ? X_AXIS_TITLED_HEIGHT : 6}
@@ -1175,10 +1248,10 @@ export const SalesVsStockWidget = ({
                         <YAxis
                           axisLine={false}
                           tickLine={false}
-                          width={64}
+                          width={phone ? 46 : 64}
                           tick={{ fontSize: 10, fill: CHART_COLORS.axisLabel }}
                           tickFormatter={(v) => formatCompactPesos(v)}
-                          label={yAxisTitle('Pesos (₱)')}
+                          label={phone ? undefined : yAxisTitle('Pesos (₱)')}
                           domain={panel.yTicks ? [panel.yTicks[0], panel.yTicks[panel.yTicks.length - 1]] : [0, 'auto']}
                           ticks={panel.yTicks ?? undefined}
                         />
@@ -1244,8 +1317,19 @@ export const SalesVsStockWidget = ({
               </React.Fragment>
             );
           })}
-        </>
+        </div>
       )}
+      {/* What the empty months mean (GET /dashboard's gap_note). */}
+      {/* With synthetic data on (Del Monte), the notes below are about the
+          real line: say what the dotted one is first. */}
+      {hasData && view === 'chart' && !purchasesPreview && points.some((pt) => pt.salesEstimatedKind === 'demonstration') && (
+        <p className="gap-note" role="note">
+          <strong>Synthetic.</strong> The dotted sales lines fill the months SSM has no figures for with generated
+          figures, because synthetic data is on. The solid lines are SSM&apos;s own data, and the notes below are about
+          them.
+        </p>
+      )}
+      {hasData && view === 'chart' && !purchasesPreview && <GapNote note={gapNote} />}
     </div>
   );
 };
@@ -1359,8 +1443,8 @@ const AbcTierCard = ({ facts, atRisk = null, onOpenClass = null }) => {
           the reorder plan, or when nothing is measurable. */}
       {facts.tier === 'A' && atRisk && (
         <button type="button" className="abc-tier-card-link abc-tier-card-atrisk" onClick={atRisk.onOpen}>
-          {atRisk.below.toLocaleString()} of the {atRisk.measurable.toLocaleString()} with a stock count are below
-          safety stock — <span className="abc-tier-card-nowrap">see which <ArrowRight size={12} aria-hidden="true" /></span>
+          {atRisk.below.toLocaleString()} of the {atRisk.measurable.toLocaleString()} we could check are running below
+          their safety stock — <span className="abc-tier-card-nowrap">see which <ArrowRight size={12} aria-hidden="true" /></span>
         </button>
       )}
       {/* "Which ones?" — the products behind this class's count, one click
@@ -1538,7 +1622,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>
-            ABC classification
+            <span>Top, middle and low <span className="title-accent">sellers</span> (A, B, C)</span>
             {/* The cut-offs are GET /dashboard's abc_rules (the ABC run's own
                 constants), never restated here. How a class is decided sits
                 behind the "?" (UI pass, 2026-10-08); the line below keeps the
@@ -1557,6 +1641,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
               </InfoTip>
             )}
           </h4>
+          <SectionLede>Who carries the sales</SectionLede>
           <p>
             {rules
               ? `Class A = the top sellers that together make ${Math.round(rules.tier_a_cutoff * 100)}% of revenue`
@@ -1882,7 +1967,7 @@ export const CategoryStockBarWidget = ({
               /dashboard's tier_stock pending counts for the LP's current
               cycle, grouped by each SKU's tier in the latest ABC run. */}
           {hasPending && (
-            <p className="chart-placeholder-note">
+            <p className="chart-placeholder-note tier-stock-pending-note">
               Pending reorder recommendations in the {cycleLabel ? `${cycleLabel} plan` : 'LP\'s current plan'}, in SKUs:{' '}
               {data.map((row) => `${row.tier} ${(row.pendingReorderCount || 0).toLocaleString()}`).join(' · ')}.
               {' '}The LP plans Class A
@@ -1960,9 +2045,11 @@ const FORECAST_SECTION_STYLE = {
   present: { label: 'Present', narrowLabel: 'Now', fill: 'var(--color-brand-primary, #c53030)', fillOpacity: 0.05 },
   future: { label: 'Future', fill: COLORS.forecast, fillOpacity: 0.06 },
 };
-// Every month is labelled while a month name fits its slot; only below this
-// width per month (a phone) are labels thinned, to every 2nd or 3rd month.
-const MONTH_LABEL_MIN_PX = 17.5;
+// Every month is labelled while a month name fits its slot at a readable
+// size; only below this width per month (a phone) are labels thinned, to
+// every 2nd or 3rd month. Was 17.5: at a phone's ~19px per month all
+// thirteen names showed at 8.5px, run together (2026-10-15).
+const MONTH_LABEL_MIN_PX = 24;
 // Below this width per month, "PRESENT" no longer fits its one-month band:
 // it reads "NOW", set against the band's right edge, so it and "FUTURE"
 // (set against its left edge) sit either side of the rule between them
@@ -1987,7 +2074,7 @@ const MonthYearTick = ({ x, y, payload, rows, step, slot }) => {
   const before = rows[i - step];
   const startsYear = !before || yearOf(before.period) !== year;
   const month = (
-    <text x={x} y={y + 14} textAnchor="middle" fontSize={slot < 20 ? 8.5 : slot < 26 ? 9.5 : 10.5} fill={CHART_COLORS.axisLabel}>
+    <text x={x} y={y + 14} textAnchor="middle" fontSize={slot * step < 26 ? 9.5 : 10.5} fill={CHART_COLORS.axisLabel}>
       {AXIS_MONTHS[monthOf(row.period) - 1]}
     </text>
   );
@@ -2208,7 +2295,7 @@ export const PortfolioForecastWidget = ({
           {/* The unit is PIECES here and pesos on the chart above it; the
               y-axis reads "120k" in both, so it is named in the heading. */}
           <h4>
-            Portfolio demand forecast <span className="chart-unit">pieces</span>
+            <span><span className="title-accent">Forecast</span> demand, top sellers</span> <span className="chart-unit">pieces</span>
             {gatedSkuCount != null && tierACount ? (
               <InfoTip label="Which SKUs are summed">
                 {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} Class A SKUs: `
@@ -2219,6 +2306,7 @@ export const PortfolioForecastWidget = ({
               </InfoTip>
             ) : null}
           </h4>
+          <SectionLede>What the top sellers will need next</SectionLede>
           <p>
             {seriesSpan ? `Pieces per month, ${seriesSpan}` : 'Pieces per month'}
             {gatedSkuCount != null && tierACount
@@ -2259,17 +2347,21 @@ export const PortfolioForecastWidget = ({
           )}
 
           {view === 'table' ? (
-            <ChartTable
-              columns={tableColumns}
-              rows={series}
-              caption="Actual demand and forecast by month, in pieces"
-            />
+            // In the plot's place and at the plot's height, so the card is
+            // the same size in both views; the table scrolls inside.
+            <div className="chart-container chart-table-box">
+              <ChartTable
+                columns={tableColumns}
+                rows={series}
+                caption="Actual demand and forecast by month, in pieces"
+              />
+            </div>
           ) : (
             <>
               <ul className="custom-legend custom-legend-top">
                 <li className="legend-item">
                   <span className="legend-line" style={{ borderTopColor: CHART_COLORS.salesSeries }} />
-                  Actual demand (past and present)
+                  Actual sales
                 </li>
                 {/* Only when a forecast is drawn: a range ending before the
                     latest month shows history alone (forecastNote). */}
@@ -2279,9 +2371,15 @@ export const PortfolioForecastWidget = ({
                       <span className="legend-line legend-line-dashed" style={{ borderTopColor: COLORS.forecast }} />
                       Forecast (future)
                     </li>
-                    <li className="legend-item">
+                    {/* The band assumes each product's miss is independent of the
+                        others' (GET /dashboard's combined half-widths); said on
+                        hover, the legend stays plain. */}
+                    <li
+                      className="legend-item"
+                      title="Assumes each product's forecast misses on its own; if products move together, the real range is wider."
+                    >
                       <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
-                      Approx. 90% range (if SKUs miss independently)
+                      Likely range: about 9 times in 10
                     </li>
                   </>
                 )}
@@ -2516,7 +2614,8 @@ export const ReorderRecommendationWidget = ({
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Reorder recommendations</h4>
+          <h4><span>Suggested <span className="title-accent">orders</span></span></h4>
+          <SectionLede>What to order, most urgent first</SectionLede>
           {/* GET /dashboard's reorder_preview has been scoped to the LP's
               current cycle since 2026-09-23 (backend/lp_cycle.py), the same
               rows Reorder Recs lists by default. */}
@@ -2540,11 +2639,11 @@ export const ReorderRecommendationWidget = ({
                 would imply a good/bad judgment that doesn't exist. */}
             <div className="reorder-mini-chip">
               <span className="reorder-mini-value" style={{ color: SEMANTIC.act }}>{criticalCount}</span>
-              <span className="reorder-mini-label">Critical SKUs</span>
+              <span className="reorder-mini-label">Critical products</span>
             </div>
             <div className="reorder-mini-chip">
               <span className="reorder-mini-value" style={{ color: SEMANTIC.watch }}>{urgentCount}</span>
-              <span className="reorder-mini-label">Urgent SKUs</span>
+              <span className="reorder-mini-label">Urgent products</span>
             </div>
             <div className="reorder-mini-chip">
               <span className="reorder-mini-value">{totalOrderQty.toLocaleString()}</span>
@@ -2559,11 +2658,11 @@ export const ReorderRecommendationWidget = ({
               control" (backend/routers/dashboard.py). */}
           <div className="reorder-priorities reorder-priorities-compact">
             <div className="reorder-priorities-header">
-              <span className="reorder-priorities-title">How this was optimized</span>
+              <span className="reorder-priorities-title">How the order was worked out</span>
               <span className="reorder-priorities-caption">
-                Each SKU is ordered up to its target stock; these weights only decide which SKUs come up short when the
-                supplier allocation can&apos;t cover every order.
-                {inputsArePlaceholders && ' The plan\u2019s cost and capacity inputs are placeholders until SSM confirms them.'}
+                Each product is ordered up to its target stock. These priorities only matter when the supplier
+                can&apos;t fill every order: they decide which products get less.
+                {inputsArePlaceholders && ' Cost and capacity figures are placeholders until SSM confirms them.'}
               </span>
             </div>
             {LP_PRIORITY_ROWS.map((p) => (
@@ -2634,7 +2733,7 @@ export const ReorderRecommendationWidget = ({
               to the full Reorder Recs page, where the complete list,
               Accept/Dismiss actions, and decision log actually live. */}
           <Link to="/reorder" className="reorder-mini-view-all">
-            View all recommendations
+            See all suggested orders
             <ArrowRight size={14} />
           </Link>
         </>
@@ -2869,7 +2968,7 @@ export const AllocationWidget = ({ allocation }) => {
           {statement
             ? <p className="alloc-answer">{statement}</p>
             : (
-              <p className="alloc-answer">
+              <p className="alloc-answer alloc-answer-reason">
                 No {latestYear} sales are loaded yet
                 {a.latest_month ? ` (the latest month on record is ${formatMonth(a.latest_month)})` : ''}, so there is
                 nothing to compare with the {latestYear} allocation yet.

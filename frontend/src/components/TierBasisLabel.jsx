@@ -8,8 +8,8 @@ import './TierBasisLabel.css';
 // only when the map is missing.
 
 const BASIS = {
-  Unilever: 'Tier A = Class A over the last 12 months + new products Class A over the last 3 (pending TA confirmation)',
-  'Del Monte': 'Tier A = Class A in that month',
+  Unilever: 'Top sellers = Class A over the last 12 months, plus new products that are Class A over the last 3 (pending adviser confirmation)',
+  'Del Monte': 'Top sellers = Class A in that month',
 };
 
 const PRINCIPAL_LABEL = { unilever: 'Unilever', delmonte: 'Del Monte' };
@@ -44,10 +44,10 @@ export function latestPeriod(periods, fallback) {
 
 export function tierBasisText(periods, period) {
   const entries = Object.entries(periods || {});
-  if (entries.length === 0) return period ? `Tiers as of ${formatMonth(period)}` : null;
+  if (entries.length === 0) return period ? `Classes as of ${formatMonth(period)}` : null;
   if (entries.length === 1) {
     const [name, p] = entries[0];
-    return `Tiers as of ${formatMonth(p)}${BASIS[name] ? ` · ${BASIS[name]}` : ''}`;
+    return `Classes as of ${formatMonth(p)}${BASIS[name] ? ` · ${BASIS[name]}` : ''}`;
   }
   return entries.map(([name, p]) => `${name} as of ${formatMonth(p)}`).join(' · ');
 }

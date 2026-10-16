@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import { useOutletContext } from 'react-router-dom';
 import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import {
@@ -28,6 +29,8 @@ import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
 import PageHeader from './ui/PageHeader';
 import { LoadingStatus, SkeletonChart, SkeletonLine, SkeletonTable } from './Skeleton';
 import './CategoryTrends.css';
+import GapNote from './GapNote';
+import { gapLabel } from '../utils/gapReasons';
 
 // formatCompactPesos is unsigned by design (callers such as "falling ₱42k a
 // month" supply the direction in words). Revenue itself can be negative when
@@ -62,13 +65,18 @@ const axisMonth = (period) => {
   return y ? `${m} · ${y}` : period;
 };
 
-const TrendTooltip = ({ active, payload, label, placeholder }) => {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
+const TrendTooltip = ({ active, payload, label, placeholder, rows = [] }) => {
+  if (!active) return null;
+  // A month with no value on any line (a Del Monte month the category didn't
+  // report) has no payload; its row still says why.
+  const p = payload?.[0]?.payload || rows.find((r) => r.period === label);
+  if (!p) return null;
   return (
     <div className="ct-tooltip">
       <p className="ct-tooltip-title">{axisMonth(label)}</p>
+      {p.reason && <p className="ct-tooltip-gap">{gapLabel(p.reason)}</p>}
       {p.actual != null && <p>Revenue: {formatRevenue(p.actual)}</p>}
+      {p.actual == null && (p.reason === 'category_absent' || p.reason === 'not_collected') && <p>Revenue: not reported</p>}
       {p.fitted != null && <p>Trend line: {formatCompactPesos(p.fitted)}</p>}
       {p.projection != null && p.actual == null && <p>Projected trend: {formatCompactPesos(p.projection)}</p>}
       {p.bandLow != null && p.bandHigh != null && p.bandHigh > p.bandLow && p.actual == null && (
@@ -91,7 +99,13 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
     const offset = history.length - fitted.length;
     const rows = history.map((h, i) => ({
       period: h.period,
-      actual: h.revenue,
+      // A Del Monte month the category didn't report comes as 0 so the trend
+      // can be fitted, but the backend says it is not zero sales
+      // (category_absent / not_collected): the line breaks there instead of
+      // dropping to 0. A Unilever no-sale month is a real 0 and stays.
+      actual: h.reason === 'category_absent' || h.reason === 'not_collected' ? null : h.revenue,
+      // Why the month is 0 or empty (backend/series_gaps.py), for the tooltip.
+      reason: h.reason ?? null,
       fitted: i >= offset ? fitted[i - offset] : null,
       projection: null,
       bandLow: null,
@@ -202,7 +216,7 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
                 width={64}
                 label={{ value: 'Revenue (₱)', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
               />
-              <Tooltip content={<TrendTooltip placeholder={placeholder} />} />
+              <Tooltip content={<TrendTooltip placeholder={placeholder} rows={data} />} />
               {/* The projection's likely range: an invisible base up to the
                   low bound, then the visible band on top of it (the same
                   stacking the portfolio forecast's cone uses), so the
@@ -276,6 +290,7 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
     <section className="ct-card">
       <div className="ct-card-header">
         <h3 className="ct-card-title">{labelForPrincipal(section.principal)}</h3>
+        <SectionLede>Every category's direction at a glance</SectionLede>
         <p className="ct-card-subtitle">
           {observed.length
             ? `${observed.length} month${observed.length === 1 ? '' : 's'} with data, ${formatMonth(observed[0])} – ${formatMonth(observed[observed.length - 1])}.`
@@ -406,10 +421,19 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
               </span>
             )}
           </h4>
+          <SectionLede>Where this category is heading</SectionLede>
           <CategoryChart category={current} method={method} placeholder={placeholder} />
           {!current.available && <p className="ct-note">{current.reason}</p>}
         </div>
       )}
+      {/* Months no category reported at all (Del Monte collection failures),
+          left off the chart's axis, and what every reason means. */}
+      {section.skipped_months?.length > 0 && (
+        <p className="ct-note">
+          Not collected, no category reported: {section.skipped_months.map((m) => formatMonth(m.period)).join(', ')}.
+        </p>
+      )}
+      <GapNote note={section.gap_note} />
     </section>
   );
 };

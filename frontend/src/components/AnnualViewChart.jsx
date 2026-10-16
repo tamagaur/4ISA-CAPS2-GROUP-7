@@ -17,6 +17,7 @@
 // Fixed, like the allocation card: the date filter and the comparison
 // setting do not change it.
 import React from 'react';
+import SectionLede from './ui/SectionLede';
 import {
   Bar,
   BarChart,
@@ -35,6 +36,7 @@ import { formatCompactPesos } from '../utils/formatters';
 import { GRID_PROPS } from './ChartZoom';
 import InfoTip from './InfoTip';
 import './AnnualViewChart.css';
+import { FIRST_DATA_YEAR } from '../dataCoverage';
 
 // Muted slate for past years, the dashboard's navy for the allocation's base
 // year, orange for the year still in progress.
@@ -126,7 +128,11 @@ const AnnualTooltip = ({ active, payload, band }) => {
         FY {row.year}{row.span ? ` · ${row.span}` : ''}
       </p>
       {row.value == null ? (
-        <p className="tooltip-item">No sales on record</p>
+        <p className="tooltip-item">
+          {row.year < FIRST_DATA_YEAR
+            ? `No data recorded before ${FIRST_DATA_YEAR}: SSM\u2019s records start in January ${FIRST_DATA_YEAR}`
+            : 'No sales on record'}
+        </p>
       ) : (
         <>
           <p className="tooltip-item">{formatCompactPesos(row.value)} total sales</p>
@@ -165,22 +171,21 @@ const YearTick = ({ x, y, payload, rows }) => {
 
 // The figure above each bar, on a white halo so the band's dashed line
 // (which sits just above the tallest bars) never strikes through it.
+//
+// On a phone the bars stand about 50px apart and "₱384.8M" beside
+// "₱387.3M" ran into each other. Each bar carries its figure twice, in full
+// and rounded to the whole million (₱385M, a size smaller), and the card's
+// width picks which one shows (AnnualViewChart.css). The tooltip always has
+// the decimal.
 const BarValue = ({ x, y, width, value }) => {
   if (value == null) return null;
+  const text = { x: x + width / 2, y: y - 6, textAnchor: 'middle', fill: '#344054', fontWeight: 600, stroke: '#fff', strokeWidth: 3, paintOrder: 'stroke' };
+  const short = Math.abs(value) >= 1_000_000 ? `₱${Math.round(value / 1_000_000)}M` : formatCompactPesos(value);
   return (
-    <text
-      x={x + width / 2}
-      y={y - 6}
-      textAnchor="middle"
-      fill="#344054"
-      fontSize={11}
-      fontWeight={600}
-      stroke="#fff"
-      strokeWidth={3}
-      paintOrder="stroke"
-    >
-      {formatCompactPesos(value)}
-    </text>
+    <g>
+      <text {...text} fontSize={11} className="annual-view-value">{formatCompactPesos(value)}</text>
+      <text {...text} fontSize={10} className="annual-view-value-short" aria-hidden="true">{short}</text>
+    </g>
   );
 };
 
@@ -191,6 +196,7 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
   const ytd = rows.find((r) => r.role === 'ytd');
   const base = rows.find((r) => r.role === 'base');
   const synthetic = rows.filter((r) => r.synthetic > 0);
+  const noRecords = rows.filter((r) => r.value == null && r.year < FIRST_DATA_YEAR);
   const earlier = annual?.earlier_years || [];
 
   const top = Math.max(0, ...rows.map((r) => r.value ?? 0), band?.high ?? 0);
@@ -199,15 +205,15 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
   const ceiling = Math.max(step, Math.ceil((top * 1.12) / step) * step);
   const ticks = Array.from({ length: Math.round(ceiling / step) + 1 }, (_, i) => i * step);
 
-  const title = `Annual View: ${rows.length ? `${rows.length}-Year ` : ''}Trend`
-    + (band ? ` vs. ${fy(band.year)} Target Band` : '');
+  // Plain words for SSM's staff (2026-10-15); was "Annual View: 5-Year
+  // Trend vs. FY26 Target Band".
 
   return (
     <div className={`chart-widget annual-view${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>
-            {title}
+            <span>Sales <span className="title-accent">per year</span>{band ? `, against the ${fy(band.year)} target` : ''}</span>
             <InfoTip label="About the Annual View" size={13}>
               Each bar is one calendar year&apos;s total sales in pesos (January to December), added up from the
               same monthly sales as the cards above. It does not change with the date filter. A year with fewer
@@ -225,6 +231,7 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
               {note && <> {note}.</>}
             </InfoTip>
           </h4>
+          <SectionLede>Each year at a glance, against the target</SectionLede>
         </div>
       </div>
 
@@ -252,6 +259,14 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
             <p className="annual-view-synthetic">
               Synthetic months, not SSM&apos;s own figures:{' '}
               {synthetic.map((r) => `${r.key} ${r.synthetic} of ${r.months}`).join(' · ')}
+            </p>
+          )}
+          {/* An empty year has no bar, so no tooltip: its reason is said here
+              (SSM's records start in Jan 2023; kelvin-etl's no_data_recorded_before_2023). */}
+          {noRecords.length > 0 && (
+            <p className="annual-view-gap">
+              {noRecords.map((r) => r.key).join(' and ')}: no data recorded. SSM&apos;s records start in January{' '}
+              {FIRST_DATA_YEAR}.
             </p>
           )}
           <div className="chart-container annual-view-plot">
@@ -291,7 +306,7 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
                     fill={BAND_COLOR}
                     fillOpacity={0.12}
                     stroke="none"
-                    label={{ value: `${fy(band.year)} target ${band.pcts}`, position: 'top', fill: BAND_INK, fontSize: 10, offset: 4 }}
+                    label={{ value: `${fy(band.year)} target ${band.pcts}`, position: 'top', fill: BAND_INK, fontSize: 10, offset: 4, className: 'annual-view-band-label' }}
                   />
                 )}
                 {band && <ReferenceLine y={band.line} stroke={BAND_INK} strokeDasharray="5 4" />}

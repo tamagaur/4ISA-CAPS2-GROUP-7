@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import {
   ComposedChart,
   Bar,
@@ -115,6 +116,7 @@ export const ParetoCard = ({ principal, period }) => {
       <div className="abcb-card-header">
         <div>
           <h3 className="abcb-card-title">What drives revenue — by {grain}</h3>
+          <SectionLede>What moves, and who is behind it</SectionLede>
           <p className="abcb-card-subtitle">
             Pareto of revenue at {grain} level, ranked with the same measure and 80% / 95% cutoffs as the SKU table.
           </p>
@@ -297,6 +299,7 @@ export const AbcFsnMatrix = ({
       <div className="abcb-card-header">
         <div>
           <h3 className="abcb-card-title">Movement × value (fast, slow or non-moving, by ABC class)</h3>
+          <SectionLede>Which classes keep selling, and which sit still</SectionLede>
           <p className="abcb-card-subtitle">
             How often each class actually sells, over{' '}
             {windowText

@@ -116,13 +116,13 @@ function extractErrorMessage(body, fallback) {
 // ── "Remember me" on the code step (backend/mfa.py, REMEMBER_DAYS) ────────
 // Ticking it at the code step makes the backend hand this browser a
 // remember_token. Sent with the next sign-ins, it skips the code (never the
-// password) for 14 days; the backend checks it and ignores a stale one. One
+// password) for 7 days; the backend checks it and ignores a stale one. One
 // token per email, so two people sharing a computer don't replace each
 // other's. Kept through sign-out on purpose: that is the point of it. It
 // goes when it expires, or when that person next passes the code step with
 // the box unticked.
 const REMEMBER_KEY = 'dsd_remembered_devices';
-export const REMEMBER_DAYS = 14;
+export const REMEMBER_DAYS = 7;
 
 function readRemembered() {
   try {
@@ -155,8 +155,16 @@ function getRememberToken(email) {
   return token;
 }
 
-export async function login(email, password) {
-  const rememberToken = getRememberToken(email);
+// Whether this browser is remembered for `email` (the sign-in page ticks
+// "Remember me" for it).
+export const isDeviceRemembered = (email) => Boolean(getRememberToken(email));
+
+// `remember` is the sign-in page's "Remember me" box (2026-10-16: it moved
+// there from the code step). Unticked, this browser forgets `email` and the
+// code is asked again; ticked, a remembered browser skips the code.
+export async function login(email, password, { remember = true } = {}) {
+  if (!remember) writeRemembered(rememberKeyFor(email), null);
+  const rememberToken = remember ? getRememberToken(email) : null;
   const res = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

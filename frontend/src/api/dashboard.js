@@ -24,7 +24,10 @@ export function getDashboardData(args = {}, { force = false } = {}) {
   return cachedRequest(path, async () => {
     const res = await apiFetch(path);
     if (!res.ok) {
-      throw new Error('Failed to fetch dashboard data');
+      // The status lets the page say why in plain words (ui/LoadError.jsx).
+      const err = new Error('Failed to fetch dashboard data');
+      err.status = res.status;
+      throw err;
     }
     return res.json();
   }, { force });

@@ -1,0 +1,30 @@
+/* What a chart's missing or zero months mean (GapNote.jsx). */
+.gap-note {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--color-border-strong, #D0D5DD);
+  background: var(--color-surface-sunken, #F8FAFC);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.gap-note p {
+  margin: 0;
+}
+
+.gap-note p + p {
+  margin-top: 4px;
+}
+
+.gap-note strong {
+  color: var(--color-text);
+}
+
+/* A month's reason inside a chart tooltip. */
+.tooltip-gap,
+.ct-tooltip-gap {
+  font-style: italic;
+  color: var(--color-text-muted);
+}

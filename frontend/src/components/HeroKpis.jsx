@@ -16,6 +16,7 @@
 //     (Dashboard.jsx fetches it), and is left out when the months on record
 //     differ.
 import React, { useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import { Link } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ArrowUpRight, Check, AlertTriangle } from 'lucide-react';
 import InfoTip from './InfoTip';
@@ -48,6 +49,16 @@ const ComparePill = ({ extras }) => {
   return <Pill text={extras.deltaLine} direction={extras.trendDirection} tone={extras.deltaTone} />;
 };
 
+// One line under each card's title: what the reader learns from it
+// (ui/SectionLede.jsx, 2026-10-16).
+const HERO_LEDE = {
+  'Annual sales and allocation': 'How the year is pacing against the target',
+  'Inventory value': 'Money sitting on the shelves',
+  'Stock cover': 'How long the stock will last',
+  'Below safety stock': 'Top sellers close to running out',
+  'Pending reorders': 'Orders waiting on a decision',
+};
+
 // The card frame: top accent, coloured dot, title, the period basis tag.
 // `action` cards (things to act on) get a tinted surface.
 export const HeroCard = ({ tone, title, tooltip, basis, action = false, className = '', children }) => (
@@ -62,6 +73,7 @@ export const HeroCard = ({ tone, title, tooltip, basis, action = false, classNam
       </span>
       {basis && <span className="hero-card-basis"><BasisTag {...basis} /></span>}
     </header>
+    {HERO_LEDE[title] && <SectionLede className="hero-card-lede">{HERO_LEDE[title]}</SectionLede>}
     {children}
   </section>
 );
@@ -158,7 +170,7 @@ export const AnnualSalesCard = ({
             {pace && <span className="hero-progress-pace" style={{ left: `${pace * 100}%` }} title={`Even pace by ${lastName}`} />}
           </div>
           <div className="hero-progress-labels">
-            <span>FY {a.basis_year} base: {formatCompactPesos(a.basis_sales)}</span>
+            <span>FY {a.basis_year} base: {formatCompactPesos(a.basis_sales)}{a.basis_months < 12 ? ` (${a.basis_months} of 12 months)` : ''}</span>
             <span>
               FY {year}: {formatCompactPesos(a.ytd_sales)} · {Math.round(share * 100)}% of the {level.pct}% target
             </span>
@@ -250,6 +262,7 @@ export const KpiCard = ({
         <InfoTip label={`About ${title}`} size={14}><TipText lines={tooltip} /></InfoTip>
       )}
     </header>
+    {HERO_LEDE[title] && <SectionLede className="hero-card-lede">{HERO_LEDE[title]}</SectionLede>}
     <div className="hero-kpi-body">
       <div className="hero-kpi-primary">{primary}</div>
       {detail && <div className="hero-kpi-detail">{detail}</div>}
@@ -389,18 +402,18 @@ export const BelowSafetyCard = ({
           value={below.toLocaleString()}
           unit={`/ ${checked.toLocaleString()}`}
           severity={severity}
-          subtitle={`Class A ${below === 1 ? 'SKU' : 'SKUs'} at risk`}
+          subtitle={`${below === 1 ? 'Top seller' : 'Top sellers'} below safety stock`}
           asOf={asOf}
         />
       )}
       detail={(
         <>
           <p className="hero-kpi-figure">{formatPercent(share)}</p>
-          <p className="hero-kpi-label">of the {checked.toLocaleString()} {checked === 1 ? 'SKU' : 'SKUs'} checked</p>
+          <p className="hero-kpi-label">of the {checked.toLocaleString()} {checked === 1 ? 'top seller' : 'top sellers'} checked</p>
           <div
             className="hero-kpi-bar"
             role="img"
-            aria-label={`${below} of ${checked} checked Class A SKUs are below safety stock (${formatPercent(share)})`}
+            aria-label={`${below} of ${checked} checked top sellers are below safety stock (${formatPercent(share)})`}
           >
             {share > 0 && <span className="hero-kpi-bar-fill" style={{ width: `${share * 100}%` }} />}
           </div>
@@ -408,7 +421,7 @@ export const BelowSafetyCard = ({
       )}
       footer={onOpen && below > 0 ? (
         <button type="button" className="hero-link" onClick={onOpen}>
-          View {below.toLocaleString()} {below === 1 ? 'SKU' : 'SKUs'} <ArrowUpRight size={14} aria-hidden="true" />
+          See {below === 1 ? 'the product' : `the ${below.toLocaleString()} products`} <ArrowUpRight size={14} aria-hidden="true" />
         </button>
       ) : null}
     />
@@ -442,7 +455,7 @@ export const PendingReordersCard = ({
       primary={(
         <KpiPrimary
           value={count.toLocaleString()}
-          subtitle={`${count === 1 ? 'SKU' : 'SKUs'} awaiting decision`}
+          subtitle={`${count === 1 ? 'Product' : 'Products'} awaiting a decision`}
           asOf={asOf}
         />
       )}

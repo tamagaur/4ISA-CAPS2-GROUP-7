@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import { ArrowUpRight, ArrowDownRight, Minus, Activity, CalendarRange, Waves } from 'lucide-react';
 import { getSegment } from '../api/segment';
 import { getDecomposition } from '../api/analytics';
@@ -166,6 +167,7 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
         <Activity size={15} aria-hidden="true" />
         Demand pattern
       </h4>
+      <SectionLede>How this product's sales behave</SectionLede>
       {/* The months the volatility, trend and history tiles measure:
           traits.py reads the monthly pieces from the SKU's first sale up to
           the cohort month (the ABC run the cohort was drawn from). */}

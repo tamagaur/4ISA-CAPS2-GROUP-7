@@ -300,6 +300,12 @@
   height: 240px;
 }
 
+/* The Table view takes the chart's place at the chart's height. */
+.fc-chart-table {
+  display: flex;
+  flex-direction: column;
+}
+
 /* Where the misses went: label | bar | value on one line, stacked on a phone. */
 .fc-misses {
   display: flex;

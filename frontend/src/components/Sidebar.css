@@ -162,6 +162,9 @@
 .profile-info {
   display: flex;
   flex-direction: column;
+  /* May shrink beside the avatar, so a long line under the name (the
+     "Action required" pill) wraps instead of running off the sidebar. */
+  min-width: 0;
 }
 
 .profile-name {
@@ -312,6 +315,63 @@
 .sidebar-profile-btn:hover .profile-security {
   color: var(--color-nav-item-hover-text);
   text-decoration: underline;
+}
+
+/* The two-step sign-in state on that line (Sidebar.jsx, GET /auth/mfa).
+   Off: an amber pill with a warning triangle, "Action required"; the
+   amber is light enough to read on the navy (about 9:1) where the brand
+   red would not be. On: a green check and "Protected", quiet, no pill.
+   Both wrap onto a second line in the 250px sidebar rather than clip. */
+.profile-security.is-pending,
+.profile-security.is-protected {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  margin-top: 0.3rem;
+  line-height: 1.25;
+  white-space: normal;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.profile-security.is-pending {
+  align-self: flex-start;
+  padding: 3px 8px 3px 6px;
+  border: 1px solid rgba(244, 178, 102, 0.4);
+  border-radius: 999px;
+  background: rgba(244, 178, 102, 0.14);
+  color: #F4B266;
+  font-weight: 600;
+}
+
+.sidebar-profile-btn:hover .profile-security.is-pending,
+.sidebar-profile-btn:focus-visible .profile-security.is-pending {
+  background: rgba(244, 178, 102, 0.24);
+  color: #FFC98A;
+  text-decoration: none;
+}
+
+.profile-security.is-protected {
+  color: var(--color-nav-subheading);
+}
+
+.profile-security.is-protected svg {
+  color: #5ED39A;
+}
+
+.profile-security.is-protected strong {
+  color: #5ED39A;
+  font-weight: 600;
+}
+
+.sidebar-profile-btn:hover .profile-security.is-protected {
+  color: var(--color-nav-item-hover-text);
+  text-decoration: none;
+}
+
+.profile-security svg {
+  flex: none;
 }
 
 .sidebar-status {

@@ -528,6 +528,118 @@
   line-height: 1.55;
 }
 
+/* SectionLede.jsx (2026-10-16): the one-line "what you learn here" under a
+   section's or chart's title, the same on every page. */
+.section-lede {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+/* EmptyState.jsx (2026-10-16): the body column, the action row, the
+   failed-load tone (LoadError.jsx) and the compact strip above a page's
+   cards. */
+.empty-state-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.empty-state-text p {
+  margin: 0 0 4px;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.empty-state-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.empty-state.is-error .empty-state-icon {
+  background-color: var(--color-danger-bg-strong);
+  color: var(--color-danger-text);
+}
+
+.empty-state.is-compact {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-surface-sunken);
+}
+
+.empty-state.is-compact .empty-state-icon {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  flex-shrink: 0;
+  background-color: var(--color-surface);
+}
+
+.empty-state.is-compact .empty-state-body {
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.empty-state.is-compact .empty-state-text {
+  max-width: none;
+}
+
+.empty-state.is-compact .empty-state-actions {
+  justify-content: flex-start;
+  margin-top: var(--space-2);
+}
+
+.empty-state-spin {
+  animation: empty-state-spin 0.9s linear infinite;
+}
+
+@keyframes empty-state-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* SlowLoadNotice.jsx: a load past ~8 s (the live server waking up). */
+.slow-load-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 var(--space-4);
+  padding: 10px 14px;
+  border: 1px solid var(--color-severity-urgent-border);
+  border-radius: 10px;
+  background-color: var(--color-severity-urgent-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.slow-load-notice svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--color-severity-urgent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-state-spin {
+    animation: none;
+  }
+}
+
 /* ── Notes: one quiet line for a data caveat ──────────────────────────── */
 .ui-note {
   display: flex;
@@ -560,4 +672,20 @@
 .ui-note.is-info {
   background-color: var(--badge-info-bg);
   color: var(--badge-info-fg);
+}
+
+/* A lede with no title above it (a KPI row, a table): it stands in as the
+   section's caption, so it gets room below instead of above. */
+.section-lede.is-standalone {
+  margin: 4px 0 10px;
+}
+
+/* One key word of a card's title in the accent (2026-10-16): the logo red
+   into a deep amber, both 4.6:1 or more on white. */
+.title-accent {
+  background: linear-gradient(90deg, #C74E3D 0%, #B4581C 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: #C74E3D;
+  -webkit-text-fill-color: transparent;
 }

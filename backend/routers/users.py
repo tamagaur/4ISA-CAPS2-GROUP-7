@@ -167,7 +167,8 @@ def send_link(
     db.commit()
 
     problem = account_links.send_link_email(
-        purpose=purpose, email=user["email"], full_name=user["full_name"], token=token, minutes=minutes
+        purpose=purpose, email=user["email"], full_name=user["full_name"], token=token, minutes=minutes,
+        expires_at=expires_at, invited_by=current_user.full_name, role=user["role"],
     )
     return SendLinkResponse(
         purpose=purpose,

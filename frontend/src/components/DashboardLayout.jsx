@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import PeriodContextStrip from './PeriodContextStrip';
 import { COMPARE_MODES, COMPARE_STORAGE_KEY, isValidCompare, periodFromParam, periodToParam } from '../periodFilter';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, FlaskConical } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -11,13 +11,13 @@ import { getDataModeInfo } from '../api/dataMode';
 import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
 import ErrorBoundary from './ErrorBoundary';
-import { usePermissions } from '../permissions/context';
+import PageTransition from './PageTransition';
 import { MOCK_PERMISSIONS } from '../api/mocks/permissionsMock';
 import { LoadingStatus, PageSkeleton } from './Skeleton';
-import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal, labelForPrincipal } from '../principals';
+import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal } from '../principals';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
 import {
-  DATA_MODES, PLACEHOLDER_PRINCIPAL, PLACEHOLDER_START, getDataMode, isPreviewMode, setDataMode as storeDataMode,
+  DATA_MODES, PLACEHOLDER_START, getDataMode, isPreviewMode, setDataMode as storeDataMode,
 } from '../dataMode';
 import './DashboardLayout.css';
 
@@ -190,6 +190,10 @@ const DashboardLayout = () => {
   // what-if forecasts and LP the predictive and prescriptive cards show.
   // Null in real mode, and while the request is in flight.
   const [previewInfo, setPreviewInfo] = useState(null);
+  // Whether this server has synthetic data to show at all (DM_DEMO_ENABLED):
+  // null until GET /data-mode answers. The Topbar switch is greyed out when
+  // it has none, and the banner says so if the view is on anyway.
+  const [syntheticAvailable, setSyntheticAvailable] = useState(null);
 
   // Applied range: the saved one, or the 12-month default ending "today".
   const [startMonth, setStartMonth] = useState(initialRange.startMonth);
@@ -238,7 +242,6 @@ const DashboardLayout = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const isAdmin = usePermissions().role === 'admin';
 
   // Top-bar Refresh: drop every cached response and remount the current page
   // so its effects fetch again. Remounting (rather than asking each page to
@@ -250,16 +253,23 @@ const DashboardLayout = () => {
     setRefreshKey((k) => k + 1);
   };
 
-  // Refetched on every mode flip and Refresh, like the pages themselves.
+  // Asked as the synthetic view on load, on every mode flip and on Refresh, so
+  // the switch knows whether there is anything to show before it is used:
+  // the generated window is null when the server's DM_DEMO_ENABLED is off.
   useEffect(() => {
-    if (!isPreviewMode(dataMode)) {
-      setPreviewInfo(null);
-      return undefined;
-    }
+    if (!isPreviewMode(dataMode)) setPreviewInfo(null);
     let cancelled = false;
-    getDataModeInfo()
-      .then((info) => { if (!cancelled) setPreviewInfo(info); })
-      .catch(() => { if (!cancelled) setPreviewInfo(null); });
+    getDataModeInfo({ preview: true })
+      .then((info) => {
+        if (cancelled) return;
+        setSyntheticAvailable(Boolean(info?.placeholder));
+        if (isPreviewMode(dataMode)) setPreviewInfo(info);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSyntheticAvailable(null);
+        setPreviewInfo(null);
+      });
     return () => { cancelled = true; };
   }, [dataMode, refreshKey]);
 
@@ -350,19 +360,17 @@ const DashboardLayout = () => {
   };
 
   // Flipping the mode switches to that mode's own range: the one saved for
-  // it, else its default — all of Jan 2021 – today in preview, the usual
-  // 12 months in real mode (whose picker can't show 2021-22 at all).
-  // Turning preview on also switches to Unilever, the one principal with
-  // placeholder months — under All, the both-principals-or-nothing rule
-  // leaves those months blank. Every cached response is dropped and the
-  // page remounts, like the Refresh button.
+  // it, else its default — all of Jan 2021 – today with synthetic data, the
+  // usual 12 months in real mode (whose picker can't show 2021-22 at all).
+  // The principal stays: since the demonstration data (2026-10-15) both
+  // principals have synthetic months. Every cached response is dropped and
+  // the page remounts, like the Refresh button.
   const handleDataModeChange = (next) => {
     if (next === dataMode) return;
     const mode = storeDataMode(next);
     setDataModeState(mode);
     const range = getDefaultDateRange(mode);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
-    if (isPreviewMode(mode)) setPrincipal(PLACEHOLDER_PRINCIPAL);
     invalidateCache();
     setRefreshKey((k) => k + 1);
   };
@@ -445,28 +453,36 @@ const DashboardLayout = () => {
           setPrincipal={setPrincipal}
           dataMode={dataMode}
           onDataModeChange={handleDataModeChange}
+          syntheticAvailable={syntheticAvailable}
         />
-        {/* On every page for as long as preview is on — a placeholder month
-            must never be readable as SSM's own figure. */}
+        {/* On every page for as long as synthetic data is on: a generated
+            month must never be readable as SSM's own figure (CLAUDE.md rule
+            2). What it adds differs by principal: Unilever's 2021-22 back-cast
+            rides in the real payloads, marked; Del Monte's comes in a block of
+            its own and is drawn apart from the real figures. */}
         {isPreviewMode(dataMode) && (
           <div className="preview-banner" role="status">
             <FlaskConical size={16} aria-hidden="true" className="preview-banner-icon" />
             <p className="preview-banner-text">
-              <strong>Preview: Jan 2021 – Dec 2022 is placeholder data, not SSM&apos;s.</strong>{' '}
-              Those months are synthetic Unilever sales, added so the dashboard can be seen over five years.
-              {previewInfo?.outputs
-                ? <> Forecasts, reorder recommendations and safety stock are a what-if run of the same models on that
-                  five-year history (built {String(previewInfo.outputs.built_at).slice(0, 10)}) — never saved, not for decisions.</>
-                : <> Forecasts, reorder recommendations and safety stock still use real data only.</>}
-              {/* GET /data-mode compares the placeholder the what-if files
-                  were built on with the one in the database now. */}
-              {previewInfo?.outputs_stale && (
-                <> <strong>That what-if run is outdated:</strong> the placeholder data has changed since it was built,
-                  so those figures may not match the months shown.
-                  {isAdmin ? ' Rebuild it with scripts/build_preview_outputs.py.' : ' Let an admin know.'}</>
-              )}
-              {principal !== PLACEHOLDER_PRINCIPAL && (
-                <> The placeholder is Unilever&apos;s, so under {labelForPrincipal(principal)} those months stay empty.</>
+              {syntheticAvailable === false ? (
+                <>
+                  <strong>Synthetic data is not switched on for this server,</strong> so every page still shows
+                  SSM&apos;s real data only.
+                </>
+              ) : principal === 'delmonte' ? (
+                <>
+                  <strong>Showing Del Monte&apos;s real data plus synthetic data, which is not SSM&apos;s.</strong>{' '}
+                  The months SSM did not collect, the Jan 2025 change of categories and Jan 2021 – Dec 2022 are filled
+                  with generated figures, drawn dotted and marked synthetic wherever they appear. The cards at the top
+                  stay real.
+                </>
+              ) : (
+                <>
+                  <strong>Showing Unilever&apos;s real data plus synthetic data, which is not SSM&apos;s.</strong>{' '}
+                  SSM&apos;s records start in January {FIRST_DATA_YEAR}, so Jan 2021 – Dec 2022 are generated: each
+                  product held at its own average, with no trend. They are marked on every chart, and the sales totals
+                  that count them say so. Forecasts, reorder plans and safety stock use real data only.
+                </>
               )}
             </p>
             <button type="button" className="preview-banner-btn" onClick={() => handleDataModeChange(DATA_MODES.REAL)}>
@@ -482,9 +498,15 @@ const DashboardLayout = () => {
           range={{ startMonth, startYear, endMonth, endYear }}
           compare={compare}
         />
+        {/* The routed page, faded out and in on every change of page
+            (PageTransition renders the outlet). Keyed on the refresh count
+            as the outlet was, so Refresh rebuilds the page and it enters
+            again. */}
         <ErrorBoundary resetKey={`${location.pathname}:${refreshKey}`}>
-          <Suspense fallback={<PageLoadingFallback />}>
-            <Outlet key={refreshKey} context={{
+          <PageTransition
+            key={refreshKey}
+            fallback={<PageLoadingFallback />}
+            context={{
               startMonth, startYear, endMonth, endYear,
               pendingStartMonth, setPendingStartMonth,
               pendingStartYear, setPendingStartYear,
@@ -495,9 +517,9 @@ const DashboardLayout = () => {
               updatePeriodImmediately, realWorldPeriod, applyPreset,
               compare, setCompare,
               principal, setPrincipal,
-              dataMode, previewInfo,
-            }} />
-          </Suspense>
+              dataMode, previewInfo, syntheticAvailable,
+            }}
+          />
         </ErrorBoundary>
       </div>
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import SectionLede from './ui/SectionLede';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Search, Star, ArrowRight, Clock, Filter, X, ArrowUp, ArrowDown, Minus, AlertTriangle } from 'lucide-react';
 import {
@@ -36,6 +37,9 @@ import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
 import PageHeader from './ui/PageHeader';
 import ProductName from './ProductName';
 import './SKUForecast.css';
+import GapNote from './GapNote';
+import { DemoCategoryForecast } from './DemoForecasts';
+import { gapLabel } from '../utils/gapReasons';
 import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCards';
 
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
@@ -177,6 +181,9 @@ const CustomTooltip = ({ active, payload, label, bandLabel = 'Likely range', ban
     return (
       <div className="forecast-tooltip">
         <p className="tooltip-label">{formatAxisPeriod(label)}</p>
+        {payload[0]?.payload?.reason && (
+          <p className="tooltip-item tooltip-gap">{gapLabel(payload[0].payload.reason)}</p>
+        )}
         {displayPayload.map((entry, index) => {
           if (entry.dataKey === 'ci') {
             // Zero-width at the anchor point (see chartData) — that's the
@@ -242,6 +249,9 @@ const SKUForecast = () => {
   // range starting there starts at the first real month here instead, and
   // one lying wholly inside them falls back to all real months.
   const previewOn = isPreviewMode(dashboardRange.dataMode);
+  // Synthetic data on, and the server has some (DM_DEMO_ENABLED): Del Monte
+  // then shows the demonstration's category forecasts in place of its message.
+  const syntheticOn = previewOn && dashboardRange.syntheticAvailable === true;
   const whatIf = previewOn && Boolean(dashboardRange.previewInfo?.outputs);
   const realFloor = previewOn && !whatIf;
   const seedRange = (() => {
@@ -599,7 +609,16 @@ const SKUForecast = () => {
     getForecast(selectedSKU.code, { principal })
       .then((res) => {
         if (cancelled) return;
-        setForecastResult(res);
+        // Since kelvin-etl (2026-10-15) GET /forecast sends every month of a
+        // common grid: months before the product's first sale or after its
+        // last come as empty points (reason outside_product_lifespan). This
+        // page works from the product's own months (its date span, the
+        // year-earlier comparison, the last actual), so those are dropped
+        // here, once. A zero-sale month (no_sale, 0) and a blank capture
+        // (null) stay, with their reasons.
+        setForecastResult(res
+          ? { ...res, actuals: (res.actuals || []).filter((a) => a.reason !== 'outside_product_lifespan') }
+          : res);
         setForecastFor({ sku: selectedSKU.code, principal });
       })
       .catch((err) => {
@@ -860,7 +879,9 @@ const SKUForecast = () => {
     const lastYearOf = (period) => {
       const prior = yearEarlier(period);
       if (firstRecord == null || prior < firstRecord) return null;
-      return qtyAll.get(prior) ?? 0;
+      // A month with no row inside the history is 0; a blank capture (a row
+      // whose quantity was never recorded) stays empty, never 0.
+      return qtyAll.has(prior) ? qtyAll.get(prior) : 0;
     };
 
     const actualPoints = [];
@@ -875,6 +896,8 @@ const SKUForecast = () => {
             label: currentPeriod,
             actual: sortedActuals[actualIndex].quantity,
             lastYear: lastYearOf(currentPeriod),
+            // Why this month is 0 or empty (backend/series_gaps.py), for the tooltip.
+            reason: sortedActuals[actualIndex].reason ?? null,
           });
           actualIndex++;
         } else {
@@ -1054,7 +1077,8 @@ const SKUForecast = () => {
         {/* Del Monte: the message REPLACES the picker and everything under
             it. Its ABC rows are product categories, and listing them here
             as if they were SKUs led to a request that could only 404. */}
-        {isDelMonte && (
+        {isDelMonte && syntheticOn && <DemoCategoryForecast />}
+        {isDelMonte && !syntheticOn && (
           <div className="forecast-empty-state">
             <div className="forecast-empty-icon">
               <Search size={28} strokeWidth={1.6} />
@@ -1379,6 +1403,7 @@ const SKUForecast = () => {
                 buys elsewhere is pointer-events off over stale reorder and
                 SKU links, and this card holds a chart, not navigation. The
                 note above states the staleness on its own. */}
+            <SectionLede className="is-standalone">Past sales and the forecast, side by side</SectionLede>
             <div
               className="forecast-chart-container"
               key={`chart-${selectedSKU?.code || 'none'}`}
@@ -1530,6 +1555,7 @@ const SKUForecast = () => {
                       "accuracy of the latest run" and "how many points" (always
                       1) aren't meaningful headline numbers the way they
                       were for the old multi-point SARIMA forecast. */}
+                  <SectionLede className="is-standalone">Next month in one number</SectionLede>
                   <div className="forecast-accuracy-row">
                     {servedModel && servedModel.kind !== 'forecast' ? (
                       /* A provisional average (under 3 sales months) or a
@@ -1707,6 +1733,7 @@ const SKUForecast = () => {
                   {servedModel?.kind === 'forecast' && derivedForecast?.source === 'stored' && (
                     <div className="forecast-howmade">
                       <span className="forecast-howmade-title">How this forecast was made</span>
+                      <SectionLede>Where the number comes from</SectionLede>
                       <dl className="forecast-howmade-list">
                         <div className="forecast-howmade-item">
                           <dt>Model</dt>
@@ -2077,6 +2104,12 @@ const SKUForecast = () => {
                       the dash via a background gradient rendered as a lumpy
                       bowtie at this size. */}
                   <ChartZoomSlider zoom={zoom} />
+                  {/* What the chart's zero and empty months mean, in the
+                      backend's words: only the reasons still on the chart. */}
+                  <GapNote
+                    note={forecastResult?.gap_note}
+                    codes={new Set((forecastResult?.actuals || []).map((a) => a.reason).filter(Boolean))}
+                  />
                   </>
                   )}
                 </>

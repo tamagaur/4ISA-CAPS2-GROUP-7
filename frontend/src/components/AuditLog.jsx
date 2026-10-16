@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SectionLede from './ui/SectionLede';
 import { getAuditLog, getAuditUserSummary } from '../api/auditLog';
 import { formatDate, formatDateTime } from '../utils/formatDate';
 import { LoadingStatus, SkeletonTable } from './Skeleton';
@@ -151,6 +152,7 @@ const AuditLog = () => {
               </span>
             )}
           </div>
+          <SectionLede className="is-standalone">Who uses the system</SectionLede>
           <p className="audit-section-note">
             Sign-ins are counted from the first recorded sign-in
             {users.meta.first_login_at ? ` (${formatDate(users.meta.first_login_at)})` : ''}; nothing earlier is
@@ -222,6 +224,7 @@ const AuditLog = () => {
               {!changes.loading && !changes.error && changesSpan ? `, ${changesSpan}` : ''}
             </span>
           </div>
+          <SectionLede className="is-standalone">What changed, and who changed it</SectionLede>
           <p className="audit-section-note">
             SKU edits, reorder decisions, user account changes and password or sign-in events, newest first.
           </p>

@@ -7,6 +7,7 @@
 // month's plan and run, so this view leaves them out and says where they
 // are, instead of pairing a range ranking with one month's stock.
 import React, { useEffect, useMemo, useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Info, Search, X } from 'lucide-react';
 import KPICard from './KPICard';
@@ -124,6 +125,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
         return (
           <React.Fragment key={block.principal}>
             {multi && <h3 className="abc-range-principal">{labelForPrincipal(block.principal)}</h3>}
+            <SectionLede className="is-standalone">How the products split by value</SectionLede>
             <div className="kpi-strip abc-summary-grid abc-range-kpis">
               {(block.classes || []).map((cls) => (
                 <KPICard
@@ -160,6 +162,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
                 </span>
               </p>
             )}
+            <SectionLede className="is-standalone">How few products make most of the sales</SectionLede>
             <ParetoCurve block={block} cutoffs={pareto?.cutoffs} label={label} />
           </React.Fragment>
         );
@@ -199,6 +202,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
         </div>
       </div>
 
+      <SectionLede className="is-standalone">Every product, ranked by sales value</SectionLede>
       <div className="data-table-card">
         <table className="data-table abc-table">
           <thead>

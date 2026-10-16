@@ -11,6 +11,7 @@
 // the Class A products, the ones the order plan covers, the ones with a
 // stock count, and the ones below safety stock.
 import React from 'react';
+import SectionLede from './ui/SectionLede';
 import { ArrowRight, X } from 'lucide-react';
 import Modal from './Modal';
 import ProductName from './ProductName';
@@ -53,6 +54,7 @@ const AtRiskProductsModal = ({
       <div className="at-risk-header">
         <div>
           <h3 id="at-risk-title" className="at-risk-title">Class A products below safety stock</h3>
+          <SectionLede>Which top sellers are at risk</SectionLede>
           <p className="at-risk-subtitle">
             Stock on hand against each product&apos;s safety stock, in pieces
             {planLabel ? ` · ${planLabel}` : ''}{countDay ? ` · stock counted ${countDay}` : ''}

@@ -30,6 +30,9 @@ const Topbar = ({
   setPrincipal = () => {},
   dataMode = DATA_MODES.REAL,
   onDataModeChange = () => {},
+  // Whether this server has synthetic data to show (DashboardLayout asks GET
+  // /data-mode): false greys the switch out; null while unknown.
+  syntheticAvailable = null,
 }) => {
   const preview = isPreviewMode(dataMode);
   const location = useLocation();
@@ -104,23 +107,29 @@ const Topbar = ({
           </div>
         )}
 
-        {/* Preview mode (src/dataMode.js): adds Unilever's 2021-22
-            placeholder months. Same pages as the principal filter; the
-            banner under this bar says what it changes whenever it is on. */}
+        {/* Real data, or real data plus the labelled synthetic demonstration
+            data (src/dataMode.js; schema demo, CLAUDE.md rule 2), asked for by
+            Kelvin on 2026-10-16. Same pages as the principal filter; the
+            banner under this bar says what it adds whenever it is on. Greyed
+            out while the server has no synthetic data to show, unless it is
+            already on, so it can always be turned off. */}
         {showPrincipalFilter && (
           <button
             type="button"
             role="switch"
             aria-checked={preview}
-            aria-label="5-year preview with 2021–22 placeholder data"
+            aria-label="Include synthetic data"
+            disabled={!preview && syntheticAvailable === false}
             className={`data-mode-toggle${preview ? ' is-on' : ''}`}
             onClick={() => onDataModeChange(preview ? DATA_MODES.REAL : DATA_MODES.PREVIEW)}
             title={preview
-              ? 'On: Jan 2021 – Dec 2022 is placeholder data. Click to go back to real data only.'
-              : 'See the dashboard over five years, with Jan 2021 – Dec 2022 filled by placeholder (synthetic) Unilever data. For viewing only, not for decisions.'}
+              ? 'On: real data plus synthetic data, marked as synthetic on every chart. Click to go back to real data only.'
+              : syntheticAvailable === false
+                ? 'Synthetic data is not switched on for this server.'
+                : "Show SSM's real data plus synthetic (generated) data for the months SSM has no figures for. For viewing only, not for decisions."}
           >
             <FlaskConical size={14} aria-hidden="true" />
-            <span className="data-mode-toggle-label">5-year preview</span>
+            <span className="data-mode-toggle-label">Include synthetic data</span>
             <span className="data-mode-toggle-track" aria-hidden="true"><span className="data-mode-toggle-thumb" /></span>
           </button>
         )}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import SectionLede from './ui/SectionLede';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import AbcRangeView from './AbcRangeView';
 import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info, Layers } from 'lucide-react';
@@ -1014,6 +1015,7 @@ const ABCClassification = () => {
           {/* Summary Cards */}
           {/* The shared KPI card (UI pass): the count, its measured shares
               on one line, carried-forward rows as a second quiet line. */}
+          <SectionLede className="is-standalone">How the products split by value</SectionLede>
           <div className="kpi-strip abc-summary-grid">
             {['A', 'B', 'C'].map((cat) => (
               <KPICard
@@ -1112,6 +1114,7 @@ const ABCClassification = () => {
                     <h3 className="abc-pareto-title">
                       {`${panel.label ? `${panel.label} — ` : ''}${lpHidden ? 'Stock status' : 'Cover vs target stock'}, by class`}
                     </h3>
+                    <SectionLede>Which classes have too much or too little stock</SectionLede>
                     {/* The period line (2026-10-03): when the stock was
                         counted and which plan the target stock is from, so
                         no status here reads as "now". */}
@@ -1292,6 +1295,7 @@ const ABCClassification = () => {
                   <h3 className="abc-pareto-title">
                     {`${panel.label ? `${panel.label} — ` : ''}Drill-down · Class ${selectedClass} ${lpHidden ? 'stock status' : 'cover vs target stock'}`}
                   </h3>
+                  <SectionLede>Where the stock problems sit within a class</SectionLede>
                 </div>
                 {stockBasisText && <p className="abc-pareto-period">{stockBasisText}.</p>}
                 {/* Tab buttons — same class-switching as clicking the chart,
@@ -1604,6 +1608,7 @@ const ABCClassification = () => {
           )}
 
           {/* Table */}
+          <SectionLede className="is-standalone">Every product, ranked by sales value</SectionLede>
           <div className="data-table-card">
             <table className="data-table abc-table">
               <thead>

@@ -243,6 +243,12 @@
   flex-shrink: 0;
 }
 
+/* A control that has nothing to switch in the current view keeps its room
+   in the header, so the header (and the card) stays the same size. */
+.chart-view-toggle.is-reserved {
+  visibility: hidden;
+}
+
 /* Two segmented controls side by side in a card header (the hero chart's
    metric control beside its Chart/Table toggle); they wrap on a phone. */
 .chart-header-controls {
@@ -321,6 +327,20 @@
   overflow: auto;
   border: 1px solid var(--color-border);
   border-radius: 8px;
+}
+
+/* A table standing where its card's plot was: it takes the plot's height
+   (a 0px basis, so its own rows never set the card's height) and scrolls
+   inside it. Without this a card that isn't stretched by a neighbour grew
+   with the table's rows when Chart was switched to Table. */
+.chart-table-box {
+  display: flex;
+  flex-direction: column;
+  flex-basis: 0;
+}
+
+.chart-table-box > .chart-table-wrap {
+  flex: 1 1 0;
 }
 
 .chart-table {
@@ -2116,4 +2136,45 @@ button.abc-tier-card-link {
 .legend-toggle.is-off {
   opacity: 0.45;
   text-decoration: line-through;
+}
+
+/* Sales vs Inventory Value keeps one height whatever it shows: the two
+   panels of "Both", a single plot, the Purchases bars or the table. Until
+   2026-10-13 only "Both" was this tall; switching to any other view made
+   the card up to 145px shorter (236px on a phone), and the Annual View
+   card beside it and every card below moved with it. The legend, plots
+   and notes share the height (the lower panel keeps 44px more than the
+   upper for its month axis), and the table scrolls inside it. */
+.yoy-body {
+  display: flex;
+  flex-direction: column;
+  height: 500px;
+  min-height: 0;
+}
+
+/* A phone's legend wraps onto more lines; a little less height keeps the
+   card from filling the whole screen. */
+@media (max-width: 600px) {
+  .yoy-body { height: 470px; }
+}
+
+.chart-widget .yoy-body .chart-container-yoy {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
+
+.chart-widget .yoy-body .chart-container-yoy.is-lower {
+  flex-basis: 44px;
+}
+
+.yoy-body .purchases-compare {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.yoy-body .purchases-compare-scroll {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
 }

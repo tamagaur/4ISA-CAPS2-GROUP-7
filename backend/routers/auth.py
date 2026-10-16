@@ -50,7 +50,7 @@ who knows the password guess codes forever, 4 at a time.
 
 REMEMBER ME (2026-10-11, backend/mfa.py): /auth/login/verify with
 remember_device also returns a remember_token. The browser keeps it and
-sends it with later sign-ins; for mfa.REMEMBER_DAYS (14) a right password
+sends it with later sign-ins; for mfa.REMEMBER_DAYS (7) a right password
 plus that token skips the code. A new password or a new authenticator setup
 ends it. Both the remembering and each skipped code go to the audit log.
 """
@@ -342,7 +342,16 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
 
 # ── The second step ────────────────────────────────────────────────────────
 STEP_EXPIRED = "This sign-in took too long. Please sign in again."
-WRONG_CODE = "That code didn't work. Check the app and try again."
+# Says plainly that the code is invalid and what to enter instead (Audrey,
+# 2026-10-16). The same box takes a recovery code, which gets its own words.
+WRONG_CODE = "Invalid code. Please enter a valid 6-digit code from your authenticator app."
+WRONG_RECOVERY_CODE = "Invalid recovery code. Please enter one of your unused recovery codes."
+
+
+def wrong_code_message(code: str) -> str:
+    """WRONG_CODE when digits were typed (an app code), WRONG_RECOVERY_CODE
+    otherwise (the recovery box: letters, digits and a dash)."""
+    return WRONG_CODE if mfa.normalize_code(code).isdigit() else WRONG_RECOVERY_CODE
 
 
 def _pending_account(db: Session, mfa_token: str, step: str):
@@ -367,7 +376,7 @@ def _check_not_locked(email: str, client_ip: str) -> None:
         raise _too_many_attempts(wait)
 
 
-def _wrong_code(db: Session, email: str, client_ip: str) -> HTTPException:
+def _wrong_code(db: Session, email: str, client_ip: str, message: str = WRONG_CODE) -> HTTPException:
     """Counts a wrong code like a wrong password; the exception to raise."""
     db.rollback()
     # record_failure returns a Lock (its length and which limit tripped)
@@ -380,7 +389,7 @@ def _wrong_code(db: Session, email: str, client_ip: str) -> HTTPException:
         )
         _record_lockout(db, email, client_ip, lock)
         return _too_many_attempts(lock.seconds)
-    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=WRONG_CODE)
+    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
 
 
 @router.post("/login/verify", response_model=LoginResponse, response_model_exclude_none=True)
@@ -398,7 +407,7 @@ def login_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends
         logger.error("Can't check a code for account %s (MFA_ENCRYPTION_KEY).", account["user_id"])
         raise MFA_UNAVAILABLE from None
     if method is None:
-        raise _wrong_code(db, account["email"], client_ip)
+        raise _wrong_code(db, account["email"], client_ip, wrong_code_message(body.code))
     if method == "recovery":
         left = mfa.status(db, account["user_id"])["recovery_left"]
         audit.record(db, "Recovery Code Used", f"{left} recovery code{'' if left == 1 else 's'} left",
@@ -549,7 +558,8 @@ def register(
     # The admin gets the link to pass on instead.
     problem = account_links.send_link_email(
         purpose="invite", email=row["email"], full_name=row["full_name"], token=token,
-        minutes=account_links.INVITE_MINUTES,
+        minutes=account_links.INVITE_MINUTES, expires_at=expires_at,
+        invited_by=current_user.full_name, role=row["role"],
     )
     return InviteResponse(
         user=UserOut(**dict(row), status="invited"),

@@ -26,7 +26,7 @@ from backend import audit, mfa
 from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.login_limiter import login_limiter
-from backend.routers.auth import WRONG_CODE, _record_lockout, _too_many_attempts
+from backend.routers.auth import WRONG_CODE, _record_lockout, _too_many_attempts, wrong_code_message
 from backend.schemas.auth import MfaCodeRequest, MfaSetupResponse, MfaStatus, RecoveryCodesResponse
 
 router = APIRouter(prefix="/auth/mfa", tags=["auth"])
@@ -65,7 +65,7 @@ def _check_code(db: Session, user: TokenPayload, code: str, client_ip: str) -> s
         if lock is not None:
             _record_lockout(db, user.email, client_ip, lock)
             raise _too_many_attempts(lock.seconds)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=WRONG_CODE)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=wrong_code_message(code))
     return method
 
 

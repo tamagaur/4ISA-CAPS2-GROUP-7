@@ -11,13 +11,17 @@ import {
   X,
   ClipboardList,
   Users,
-  ChartLine
+  ChartLine,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 import { logout, getCurrentUser, API_URL } from '../auth';
+import { getMfaStatus } from '../api/mfa';
 import { usePermissions } from '../permissions/context';
 import { permissionForPath } from '../permissions/keys';
 import Modal from './Modal';
 import AccountSecurityModal from './AccountSecurityModal';
+import AuthHandoff, { holdForHandoff } from './AuthHandoff';
 import './Sidebar.css';
 
 // Initials for the bottom-profile avatar, e.g. "Audrey Bugayong" -> "AB".
@@ -88,8 +92,27 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
   }, []);
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  // Log out confirmed: the hand-off screen ("Logging out of the
+  // dashboard…") over everything for a moment, then the sign-out.
+  const [loggingOut, setLoggingOut] = useState(false);
   // Your own two-step sign-in, opened from your name below.
   const [showSecurity, setShowSecurity] = useState(false);
+  // Whether it is on, for the "Account security" line under your name
+  // (GET /auth/mfa, the same answer the dialog reads): "Action required"
+  // while it is off, "Protected" once it is on. Null until it has
+  // loaded, or when the server has two-step sign-in paused (available:
+  // false), when the line just says "Account security": there is nothing
+  // to act on. The dialog hands back the fresh status after any change,
+  // so the line follows without a second request.
+  const [mfaStatus, setMfaStatus] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    getMfaStatus()
+      .then((status) => { if (!cancelled) setMfaStatus(status); })
+      .catch(() => { if (!cancelled) setMfaStatus(null); });
+    return () => { cancelled = true; };
+  }, []);
+  const securityState = mfaStatus?.available ? (mfaStatus.enabled ? 'protected' : 'pending') : null;
   const currentUser = getCurrentUser();
   // Role and tabs come from /auth/me (PermissionsProvider), not the login
   // token, so a change an admin makes shows on the next click.
@@ -97,8 +120,13 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
   const displayName = currentUser?.fullName || currentUser?.email || 'Signed in';
   const displayRole = role ? role.toUpperCase() : '';
 
-  const handleConfirmLogout = () => {
+  const handleConfirmLogout = async () => {
     setShowLogoutModal(false);
+    // The screen first, with the session still whole beneath it (a fetch
+    // in those moments must not be taken for an expired session); then
+    // the sign-out and the login page.
+    setLoggingOut(true);
+    await holdForHandoff();
     logout();
     navigate('/login');
   };
@@ -123,6 +151,7 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
       {/* Only rendered (and only visible, via Sidebar.css's max-width: 900px
           block) on the overlay breakpoint, so the sidebar can slide over the
           page instead of pushing it, with a click-outside-to-close scrim. */}
+      {loggingOut && <AuthHandoff kind="out" />}
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
       {/* Desktop: a docked column that pushes the page; the topbar's menu
@@ -188,7 +217,19 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
               <div className="profile-info">
                 <span className="profile-name">{displayName}</span>
                 <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
-                <span className="profile-security">Account security</span>
+                {securityState === 'pending' && (
+                  <span className="profile-security is-pending">
+                    <AlertTriangle size={12} aria-hidden="true" />
+                    Account security: Action required
+                  </span>
+                )}
+                {securityState === 'protected' && (
+                  <span className="profile-security is-protected">
+                    <CheckCircle2 size={12} aria-hidden="true" />
+                    Account security: <strong>Protected</strong>
+                  </span>
+                )}
+                {!securityState && <span className="profile-security">Account security</span>}
               </div>
             </button>
             
@@ -210,7 +251,7 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
         </aside>
       </div>
 
-      <AccountSecurityModal isOpen={showSecurity} onClose={() => setShowSecurity(false)} />
+      <AccountSecurityModal isOpen={showSecurity} onClose={() => setShowSecurity(false)} onStatusChange={setMfaStatus} />
 
       {/* Logout Confirmation Modal Popup */}
       {showLogoutModal && (

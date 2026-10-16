@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import SectionLede from './ui/SectionLede';
 import { Upload, FileText, AlertTriangle } from 'lucide-react';
 import PageHeader from './ui/PageHeader';
 import './DataUpload.css';
@@ -103,6 +104,7 @@ const DataUpload = () => {
         </div>
 
         {/* Target Files Cards */}
+        <SectionLede className="is-standalone">Where the data comes from</SectionLede>
         <div className="du-cards-grid">
           <div className="du-file-card">
             <div className="du-card-header">
@@ -156,6 +158,7 @@ const DataUpload = () => {
         {uploads.length > 0 && (
           <div className="du-upload-section">
             <span className="du-section-label">Staged Files</span>
+            <SectionLede className="is-standalone">What's ready to load</SectionLede>
             <div className="du-upload-list">
               {uploads.map((file) => (
                 <div className="du-upload-item" key={file.id}>

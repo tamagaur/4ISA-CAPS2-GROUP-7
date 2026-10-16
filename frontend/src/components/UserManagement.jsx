@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import SectionLede from './ui/SectionLede';
 import {
   Plus, Pencil, Trash2, AlertTriangle, Mail, KeyRound, Link2, Copy, Check, Loader2, ShieldCheck, ShieldOff,
 } from 'lucide-react';
@@ -297,7 +298,7 @@ const UserManagement = () => {
         <PageHeader
           title="User"
           accent="management"
-          subtitle="Manage access to SAN2 Inventory DSS: invite, edit and remove accounts, and choose what each person can open and do. New users get an email link to set their own password."
+          subtitle="Manage access to the SSM Decision Support Dashboard: invite, edit and remove accounts, and choose what each person can open and do. New users get an email link to set their own password."
           actions={(
             <button type="button" className="btn btn-primary" onClick={handleOpenAdd}>
               <Plus size={16} aria-hidden="true" />
@@ -314,6 +315,7 @@ const UserManagement = () => {
         )}
 
         {loading && <LoadingStatus>Loading users…</LoadingStatus>}
+        <SectionLede className="is-standalone">Who has access</SectionLede>
         <div className="user-mgmt-table-wrapper">
           <table className="user-mgmt-table">
             <thead>

@@ -643,6 +643,11 @@ table td.table-center {
 
   /* Brand */
   --color-brand-hover: #D14B39;
+  /* A filled button with white text: the logo's own red (the swoosh,
+     #C74E3D) is 4.6:1, where brand-primary is 3.5:1 and accent 2.7:1 and
+     read as washed out on a white card (2026-10-16). Hover is 5.8:1. */
+  --color-brand-strong: #C74E3D;
+  --color-brand-strong-hover: #B03F2F;
 
   /* Feedback — danger */
   --color-danger-bg: #fff5f5;

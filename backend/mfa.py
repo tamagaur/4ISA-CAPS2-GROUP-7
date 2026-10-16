@@ -301,7 +301,7 @@ def _row(db: Session, user_id: int):
 # Nothing is stored on the server (no table, no migration). The cost: one
 # device can't be forgotten from the server on its own, only all of an
 # account's at once, by the changes above.
-REMEMBER_DAYS = 14
+REMEMBER_DAYS = 7  # was 14 until 2026-10-16 (Audrey)
 
 
 def _remember_key() -> str:

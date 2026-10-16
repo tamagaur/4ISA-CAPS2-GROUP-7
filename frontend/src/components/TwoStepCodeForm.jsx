@@ -1,5 +1,10 @@
-import React, { useId, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import './TwoStep.css';
+
+// The server's own words come first (backend/routers/auth.py WRONG_CODE /
+// WRONG_RECOVERY_CODE); these only stand in when it gave none.
+const INVALID_CODE = 'Invalid code. Please enter a valid 6-digit code from your authenticator app.';
+const INVALID_RECOVERY_CODE = 'Invalid recovery code. Please enter one of your unused recovery codes.';
 
 // The one code box every two-step sign-in screen uses: signing in, finishing
 // setup, turning it off, new recovery codes (backend/mfa.py). onSubmit gets
@@ -21,6 +26,7 @@ const TwoStepCodeForm = ({
   variant,
 }) => {
   const inputId = useId();
+  const inputRef = useRef(null);
   const [code, setCode] = useState('');
   const [remember, setRemember] = useState(false);
   const [useRecovery, setUseRecovery] = useState(false);
@@ -41,8 +47,10 @@ const TwoStepCodeForm = ({
     try {
       await onSubmit(code.trim(), { remember: Boolean(rememberLabel) && remember });
     } catch (err) {
-      setError(err.message || "That code didn't work. Please try again.");
+      setError(err.message || (useRecovery ? INVALID_RECOVERY_CODE : INVALID_CODE));
+      // Cleared, with the cursor back in the box for the next code.
       setCode('');
+      inputRef.current?.focus();
     } finally {
       setBusy(false);
     }
@@ -56,6 +64,7 @@ const TwoStepCodeForm = ({
 
   const input = (
     <input
+      ref={inputRef}
       id={inputId}
       className={isLogin ? 'twostep-login-input' : 'twostep-code-input'}
       type="text"
@@ -75,7 +84,11 @@ const TwoStepCodeForm = ({
 
   return (
     <form className={isLogin ? 'login-form' : 'twostep-code-form'} onSubmit={handleSubmit}>
-      {error && <div className={isLogin ? 'error-message' : 'twostep-error'} role="alert">{error}</div>}
+      {error && (
+        <div className={`${isLogin ? 'error-message' : 'twostep-error'} twostep-code-error`} role="alert">
+          {error}
+        </div>
+      )}
       {isLogin ? <div className="input-group">{input}</div> : input}
       {rememberLabel && (
         <label className="twostep-remember">
