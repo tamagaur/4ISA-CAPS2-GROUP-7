@@ -7,6 +7,9 @@ backend/permissions.py).
   DELETE /users/{user_id}
   POST   /users/{user_id}/send-link  a new invite (invite pending) or a
                                      password reset link (active account)
+  POST   /users/me/avatar            the signed-in user's own profile
+                                     picture (any authenticated account, not
+                                     just users.manage — see backend/avatar.py)
 
 Creating an account goes through POST /auth/register (backend/routers/auth.py),
 which owns the permission and duplicate-email checks for create.
@@ -23,13 +26,13 @@ the last admin is refused explicitly (409 last_admin).
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend import account_links, audit
+from backend import account_links, audit, avatar
 from backend.api_errors import ApiError
-from backend.deps import TokenPayload, get_db
+from backend.deps import TokenPayload, get_current_user, get_db
 from backend.permissions import LAST_ADMIN, admin_count, require_permission
 from backend.schemas.auth import SendLinkResponse
 from backend.schemas.users import UserOut, UserUpdate
@@ -38,7 +41,7 @@ from backend.sessions import revoke_user_sessions
 router = APIRouter(prefix="/users", tags=["users"])
 
 USER_COLUMNS = (
-    "user_id, email, full_name, role, created_at, "
+    "user_id, email, full_name, role, created_at, avatar_path, "
     "CASE WHEN password_hash IS NULL THEN 'invited' ELSE 'active' END AS status"
 )
 _FIELD_LABELS = {"email": "email", "full_name": "name", "role": "role"}
@@ -65,6 +68,51 @@ def list_users(
 ) -> list[UserOut]:
     rows = db.execute(text(f"SELECT {USER_COLUMNS} FROM users ORDER BY user_id")).mappings().all()
     return [UserOut(**row) for row in rows]
+
+
+@router.post("/me/avatar", response_model=UserOut)
+def upload_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+) -> UserOut:
+    """Sets the signed-in user's own profile picture. Never another user's —
+    the target is always current_user.user_id from the auth dependency, not
+    a value the request body could supply.
+
+    Image bytes never reach Postgres: the upload is validated, re-encoded to
+    a 128x128 WebP (which also strips any EXIF/GPS data) and put in the
+    `avatars` Storage bucket (backend/avatar.py); only the resulting object
+    path is written here.
+    """
+    content_length = request.headers.get("content-length")
+    if content_length is not None and content_length.isdigit() and int(content_length) > avatar.MAX_AVATAR_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="Image must be 2 MB or smaller.",
+        )
+    raw = avatar.read_capped(file.file)
+    webp = avatar.to_avatar_webp(raw)
+    object_name = avatar.new_object_name(current_user.user_id)
+    avatar.upload(object_name, webp)
+
+    old_avatar_path = db.execute(
+        text("SELECT avatar_path FROM users WHERE user_id = :user_id"), {"user_id": current_user.user_id}
+    ).scalar()
+    row = db.execute(
+        text(f"UPDATE users SET avatar_path = :avatar_path WHERE user_id = :user_id RETURNING {USER_COLUMNS}"),
+        {"avatar_path": object_name, "user_id": current_user.user_id},
+    ).mappings().first()
+    db.commit()
+
+    # Each upload gets a fresh random object name, so the old one is now an
+    # orphan in Storage. Delete it only after the new path is durably
+    # committed; a failed delete logs and continues (backend/avatar.py).
+    if old_avatar_path:
+        avatar.delete(old_avatar_path)
+
+    return UserOut(**row)
 
 
 @router.patch("/{user_id}", response_model=UserOut)

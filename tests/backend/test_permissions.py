@@ -274,6 +274,7 @@ SIGN_IN_ONLY = {
     ("GET", "/auth/me"), ("POST", "/auth/heartbeat"), ("POST", "/auth/logout"),
     ("GET", "/sku"),        # product and brand names for the ABC, Reorder and SKU Forecast pages
     ("GET", "/data-mode"),  # the data-mode banner on every page
+    ("POST", "/users/me/avatar"),  # any signed-in account sets its OWN picture; no users.manage needed
 }
 PUBLIC = {
     ("POST", "/auth/login"), ("GET", "/auth/forgot-password"), ("POST", "/auth/forgot-password"),
@@ -316,8 +317,9 @@ def _routes():
 # fastapi 0.115.5 at the UIFixes_Audrey merge (2026-10-02); 43 since the data marts
 # added six GET /dashboard/* range routes (2026-10-04); 44 since GET
 # /dashboard/class-changes (2026-10-05, DEC-37); 47 since GET /demo/series, /demo/index and /demo/totals
-# (2026-10-15, behind DM_DEMO_ENABLED, default off). Change it when a route is added or removed.
-ROUTE_COUNT = 47
+# (2026-10-15, behind DM_DEMO_ENABLED, default off); 48 since POST /users/me/avatar (2026-10-17,
+# migration 0058). Change it when a route is added or removed.
+ROUTE_COUNT = 48
 
 
 def test_the_walk_finds_every_route():

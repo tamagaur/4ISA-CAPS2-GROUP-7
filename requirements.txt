@@ -47,6 +47,11 @@ pydantic==2.10.1
 python-dotenv==1.2.2  # 2026-09-30: from 1.0.1 (PYSEC-2026-2270, fixed in 1.2.2).
                       # Release 2026-03-01, >7 days old.
 httpx==0.28.1
+Pillow==11.0.0  # backend/avatar.py: decodes and re-encodes profile-picture uploads to
+                # 128x128 WebP server-side. Release 2024-10-15, >7 days old.
+python-multipart==0.0.20  # FastAPI/Starlette need this to parse the multipart upload
+                          # body for POST /users/me/avatar (UploadFile). Long-stable
+                          # release, well over 7 days old.
 
 # --- Auth (Story #89) ---
 email-validator==2.2.0  # required at runtime by pydantic's EmailStr (used in backend/schemas/auth.py)

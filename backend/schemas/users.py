@@ -20,6 +20,10 @@ class UserOut(BaseModel):
     # 'invited' until the person sets a password through their invite link.
     status: Literal["active", "invited"] = "active"
     created_at: datetime
+    # Path inside the Supabase Storage "avatars" bucket; null when there is no
+    # picture, so the frontend shows its initials fallback instead of a
+    # placeholder image or an empty string (migration 0058).
+    avatar_path: str | None = None
 
 
 class UserUpdate(BaseModel):
